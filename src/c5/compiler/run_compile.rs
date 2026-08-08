@@ -242,7 +242,7 @@ impl Compiler {
         // the emit target's conventions.
         crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target)
             .map_err(|m| self.compile_err(m))?;
-        let mut scratch: alloc::vec::Vec<engine::AsmSection> = alloc::vec::Vec::new();
+        let mut scratch = engine::AsmSectionSink::default();
         let aarch64 = matches!(
             self.target,
             crate::Target::MacOSAarch64

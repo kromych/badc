@@ -1650,7 +1650,7 @@ pub(crate) fn lower(
     let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
-    let mut asm_sections: Vec<super::ssa::emit_common::AsmSection> = Vec::new();
+    let mut asm_sections = super::ssa::emit_common::AsmSectionSink::default();
     // File-scope asm section blocks precede the per-function ones
     // (`.align` takes a power-of-two exponent on aarch64).
     super::ssa::emit_common::materialize_file_asm(
@@ -2285,7 +2285,7 @@ pub(crate) fn lower(
 
     Ok(Build {
         emitted_relocs: Vec::new(),
-        asm_sections,
+        asm_sections: asm_sections.into_sections(),
         // The aarch64 ALTERNATIVE replacement is appended to `.text` (a
         // deferred region), not a separately loaded section, so no
         // main-stream reference crosses into a pushed section here.

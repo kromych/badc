@@ -780,8 +780,8 @@ pub(crate) fn emit_function(
     let user_extern_data_refs_snapshot = user_extern_data_refs.len();
     let asm_extern_call_sites_snapshot = asm_extern_call_sites.len();
     // The section sink merges by name, so a rollback restores its full
-    // per-section state rather than a length (see [`restore_asm_sections`]).
-    let asm_sections_snapshot = super::ssa::emit_common::snapshot_asm_sections(asm_sections);
+    // per-section state rather than a length (see [`AsmSectionSink::restore`]).
+    let asm_sections_snapshot = asm_sections.snapshot();
     let pending_func_fixups_snapshot = pending_func_fixups.len();
     let tls_index_fixups_snapshot = tls_index_fixups.len();
     let macho_tlv_fixups_snapshot = macho_tlv_fixups.len();
@@ -1039,10 +1039,7 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                        super::ssa::emit_common::restore_asm_sections(
-                            asm_sections,
-                            &asm_sections_snapshot,
-                        );
+                        asm_sections.restore(&asm_sections_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1092,10 +1089,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                    super::ssa::emit_common::restore_asm_sections(
-                        asm_sections,
-                        &asm_sections_snapshot,
-                    );
+                    asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1162,7 +1156,7 @@ pub(crate) fn emit_function(
                 data_fixups.truncate(data_fixups_snapshot);
                 user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                 asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
+                asm_sections.restore(&asm_sections_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 tls_index_fixups.truncate(tls_index_fixups_snapshot);
                 elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1208,7 +1202,7 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-            super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
+            asm_sections.restore(&asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1281,10 +1275,7 @@ pub(crate) fn emit_function(
                             data_fixups.truncate(data_fixups_snapshot);
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                            super::ssa::emit_common::restore_asm_sections(
-                                asm_sections,
-                                &asm_sections_snapshot,
-                            );
+                            asm_sections.restore(&asm_sections_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
                             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1357,10 +1348,7 @@ pub(crate) fn emit_function(
                             data_fixups.truncate(data_fixups_snapshot);
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                            super::ssa::emit_common::restore_asm_sections(
-                                asm_sections,
-                                &asm_sections_snapshot,
-                            );
+                            asm_sections.restore(&asm_sections_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
                             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1414,10 +1402,7 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                        super::ssa::emit_common::restore_asm_sections(
-                            asm_sections,
-                            &asm_sections_snapshot,
-                        );
+                        asm_sections.restore(&asm_sections_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1449,10 +1434,7 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                        super::ssa::emit_common::restore_asm_sections(
-                            asm_sections,
-                            &asm_sections_snapshot,
-                        );
+                        asm_sections.restore(&asm_sections_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1501,10 +1483,7 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                        super::ssa::emit_common::restore_asm_sections(
-                            asm_sections,
-                            &asm_sections_snapshot,
-                        );
+                        asm_sections.restore(&asm_sections_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1534,7 +1513,7 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-            super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
+            asm_sections.restore(&asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1549,7 +1528,7 @@ pub(crate) fn emit_function(
     // block's now-final text offset. Scoped to this function's contribution
     // via the entry snapshot; only this pass's relocs survived the loop.
     super::ssa::emit_common::resolve_asm_goto_relocs(
-        asm_sections,
+        asm_sections.relocs_mut(),
         &asm_sections_snapshot,
         &|bid| block_offsets[bid as usize],
     );
@@ -1585,7 +1564,7 @@ pub(crate) fn emit_function(
         }
     }
     super::ssa::emit_common::resolve_asm_deferred_relocs(
-        asm_sections,
+        asm_sections.relocs_mut(),
         &asm_sections_snapshot,
         &|idx| deferred_bases[idx as usize],
     );
@@ -1618,10 +1597,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                    super::ssa::emit_common::restore_asm_sections(
-                        asm_sections,
-                        &asm_sections_snapshot,
-                    );
+                    asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1646,7 +1622,7 @@ pub(crate) fn emit_function(
                 data_fixups.truncate(data_fixups_snapshot);
                 user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                 asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
+                asm_sections.restore(&asm_sections_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 tls_index_fixups.truncate(tls_index_fixups_snapshot);
                 elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1681,7 +1657,7 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-            super::ssa::emit_common::restore_asm_sections(asm_sections, &asm_sections_snapshot);
+            asm_sections.restore(&asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
             elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1699,10 +1675,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                    super::ssa::emit_common::restore_asm_sections(
-                        asm_sections,
-                        &asm_sections_snapshot,
-                    );
+                    asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1721,10 +1694,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                    super::ssa::emit_common::restore_asm_sections(
-                        asm_sections,
-                        &asm_sections_snapshot,
-                    );
+                    asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1743,10 +1713,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                    super::ssa::emit_common::restore_asm_sections(
-                        asm_sections,
-                        &asm_sections_snapshot,
-                    );
+                    asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -1765,10 +1732,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
-                    super::ssa::emit_common::restore_asm_sections(
-                        asm_sections,
-                        &asm_sections_snapshot,
-                    );
+                    asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     elf_tpoff_fixups.truncate(elf_tpoff_snapshot);
@@ -3010,7 +2974,7 @@ fn emit_inline_asm_aarch64(
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    asm_sections: &mut Vec<super::ssa::emit_common::AsmSection>,
+    asm_sections: &mut super::ssa::emit_common::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     deferred_regions: &mut Vec<DeferredAsmRegion>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
@@ -9574,6 +9538,7 @@ fn a64_access_size(
 
 #[cfg(test)]
 mod tests {
+    use super::super::ssa::emit_common::AsmSectionSink;
     use super::*;
     use crate::Compiler;
 
@@ -9593,7 +9558,7 @@ mod tests {
                     ldrb w5, [x3, :lo12:ext_obj]\nbl ext_func\nret\n.popsection\n";
         let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
         encode_a64_file_asm_section_code(&mut blocks).unwrap();
-        let mut sink = Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -9664,7 +9629,7 @@ mod tests {
         let text = prepare_file_asm_text(text, AsmComments::A64).unwrap();
         let mut blocks = extract_file_scope_asm_sections(&text, true).unwrap();
         encode_a64_file_asm_section_code(&mut blocks).unwrap();
-        let mut sink = Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -9728,7 +9693,7 @@ mod tests {
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
-        let mut asm_sections = Vec::new();
+        let mut asm_sections = AsmSectionSink::default();
         let mut asm_extern_call_sites = Vec::new();
         let mut text_align: usize = 16;
         let ok = {
@@ -9905,7 +9870,7 @@ mod tests {
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
-        let mut asm_sections = Vec::new();
+        let mut asm_sections = AsmSectionSink::default();
         let mut asm_extern_call_sites = Vec::new();
         let mut text_align: usize = 16;
         let ok = {
@@ -9981,7 +9946,7 @@ mod tests {
         let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
             alloc::collections::BTreeMap::new();
         let mut elf_tpoff = Vec::new();
-        let mut asm_sections = Vec::new();
+        let mut asm_sections = AsmSectionSink::default();
         let mut asm_extern_call_sites = Vec::new();
         let mut text_align: usize = 16;
         let ok = {

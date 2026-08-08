@@ -27,7 +27,7 @@ pub(crate) struct EmitCtx<'a> {
     pub(crate) prologue_native: &'a mut alloc::collections::BTreeMap<usize, usize>,
     /// Named sections accumulated from inline-asm `.pushsection` data
     /// directives; the object writers append them to the emitted object.
-    pub(crate) asm_sections: &'a mut alloc::vec::Vec<AsmSection>,
+    pub(crate) asm_sections: &'a mut AsmSectionSink,
     /// Branch sites an inline-asm `call`/`jmp` (`bl`/`b`) aimed at a symbol
     /// this unit does not define. The callee's address is a link-time
     /// decision, so each site becomes a call relocation against the name.
@@ -1418,39 +1418,134 @@ pub(crate) struct AsmSectionsSnapshot {
     per_section: alloc::vec::Vec<(usize, usize, usize, u32, bool)>,
 }
 
-/// Record the sink's outer length and each existing section's bytes,
-/// relocs, labels, alignment, and instruction-boundary state.
-pub(crate) fn snapshot_asm_sections(sink: &[AsmSection]) -> AsmSectionsSnapshot {
-    AsmSectionsSnapshot {
-        len: sink.len(),
-        per_section: sink
-            .iter()
-            .map(|s| {
-                (
-                    s.bytes.len(),
-                    s.relocs.len(),
-                    s.labels.len(),
-                    s.align,
-                    s.after_insn,
-                )
-            })
-            .collect(),
+/// The accumulated inline-asm sections and the indexes that make a lookup
+/// against them independent of how much the sink already holds. A unit's
+/// file-scope asm can push a uniquely named section and a label per
+/// exported symbol -- modpost's `.vmlinux.export.c` pushes tens of
+/// thousands of both -- and every [`materialize_asm_sections`] call has to
+/// resolve a section identity and the labels earlier calls defined, so
+/// scanning the sink for either makes a unit quadratic in its own asm.
+#[derive(Debug, Default)]
+pub(crate) struct AsmSectionSink {
+    sections: alloc::vec::Vec<AsmSection>,
+    /// `(name, flags, sh_type)` identity -> index into `sections`.
+    by_key: hashbrown::HashMap<alloc::string::String, usize>,
+    /// Label name -> its section's identity key and its offset there.
+    /// Carries only labels of completed calls: that is what a call's
+    /// location expressions resolve against, its own coming from the
+    /// measurement. Keyed by identity rather than index so a lookup stays
+    /// disjoint from a mutable borrow of the section being laid out.
+    labels: AsmSinkLabels,
+}
+
+/// Label name -> (owning section's identity key, offset within it).
+pub(crate) type AsmSinkLabels =
+    hashbrown::HashMap<alloc::string::String, (alloc::string::String, i64)>;
+
+impl core::ops::Deref for AsmSectionSink {
+    type Target = [AsmSection];
+
+    fn deref(&self) -> &[AsmSection] {
+        &self.sections
     }
 }
 
-/// Restore the sink to a prior [`snapshot_asm_sections`]: drop sections
-/// created since, and truncate each pre-existing section's contents.
-pub(crate) fn restore_asm_sections(
-    sink: &mut alloc::vec::Vec<AsmSection>,
-    snap: &AsmSectionsSnapshot,
-) {
-    sink.truncate(snap.len);
-    for (s, &(bytes, relocs, labels, align, after_insn)) in sink.iter_mut().zip(&snap.per_section) {
-        s.bytes.truncate(bytes);
-        s.relocs.truncate(relocs);
-        s.labels.truncate(labels);
-        s.align = align;
-        s.after_insn = after_insn;
+impl AsmSectionSink {
+    /// Mutable access for the relocation-retarget passes. Section identity
+    /// and the label lists are indexed, so a caller must not add, remove,
+    /// or rename either through this.
+    pub(crate) fn relocs_mut(&mut self) -> &mut [AsmSection] {
+        &mut self.sections
+    }
+
+    /// The accumulated sections, for the object writers. The indexes serve
+    /// materialization only and are dropped with the sink.
+    pub(crate) fn into_sections(self) -> alloc::vec::Vec<AsmSection> {
+        self.sections
+    }
+
+    /// Index of the section carrying `b`'s identity, if the sink has one.
+    fn index_of(&self, b: &AsmSectionBlock) -> Option<usize> {
+        self.by_key.get(&section_key(b)).copied()
+    }
+
+    /// Index of `b`'s section, appending an empty one when the sink holds
+    /// no section of that identity yet.
+    fn get_or_insert(&mut self, b: &AsmSectionBlock) -> usize {
+        let key = section_key(b);
+        if let Some(&i) = self.by_key.get(&key) {
+            return i;
+        }
+        self.sections.push(AsmSection {
+            name: b.name.clone(),
+            flags: b.flags.clone(),
+            sh_type: b.sh_type.clone(),
+            bytes: alloc::vec::Vec::new(),
+            relocs: alloc::vec::Vec::new(),
+            labels: alloc::vec::Vec::new(),
+            align: 1,
+            after_insn: true,
+        });
+        let i = self.sections.len() - 1;
+        self.by_key.insert(key, i);
+        i
+    }
+
+    /// Publish the labels section `sec_idx` gained past `from`, so the next
+    /// call resolves them. Runs once a call's pending entries are settled.
+    fn publish_labels(&mut self, sec_idx: usize, from: usize) {
+        let sec = &self.sections[sec_idx];
+        let key = section_key_of(sec);
+        for l in &sec.labels[from..] {
+            self.labels
+                .insert(l.name.clone(), (key.clone(), l.offset as i64));
+        }
+    }
+
+    /// Record the sink's outer length and each existing section's bytes,
+    /// relocs, labels, alignment, and instruction-boundary state.
+    pub(crate) fn snapshot(&self) -> AsmSectionsSnapshot {
+        AsmSectionsSnapshot {
+            len: self.sections.len(),
+            per_section: self
+                .sections
+                .iter()
+                .map(|s| {
+                    (
+                        s.bytes.len(),
+                        s.relocs.len(),
+                        s.labels.len(),
+                        s.align,
+                        s.after_insn,
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    /// Restore the sink to a prior [`AsmSectionSink::snapshot`]: drop
+    /// sections created since, and truncate each pre-existing section's
+    /// contents. The indexes shed exactly what the truncation drops. A
+    /// snapshot the sink has already shrunk past restores nothing, so a
+    /// caller may restore the same one more than once.
+    pub(crate) fn restore(&mut self, snap: &AsmSectionsSnapshot) {
+        for s in self.sections.drain(snap.len.min(self.sections.len())..) {
+            self.by_key.remove(&section_key_of(&s));
+            for l in &s.labels {
+                self.labels.remove(&l.name);
+            }
+        }
+        for (s, &(bytes, relocs, labels, align, after_insn)) in
+            self.sections.iter_mut().zip(&snap.per_section)
+        {
+            s.bytes.truncate(bytes);
+            s.relocs.truncate(relocs);
+            for l in s.labels.drain(labels.min(s.labels.len())..) {
+                self.labels.remove(&l.name);
+            }
+            s.align = align;
+            s.after_insn = after_insn;
+        }
     }
 }
 
@@ -4275,6 +4370,11 @@ fn section_key(b: &AsmSectionBlock) -> alloc::string::String {
     alloc::format!("{}\u{0}{}\u{0}{:?}", b.name, b.flags, b.sh_type)
 }
 
+/// The same identity key for a section already in the sink.
+fn section_key_of(s: &AsmSection) -> alloc::string::String {
+    alloc::format!("{}\u{0}{}\u{0}{:?}", s.name, s.flags, s.sh_type)
+}
+
 /// Block processing order: stable by subsection number, so a section's
 /// subsection-1 blocks lay out after every subsection-0 block while blocks
 /// of one subsection keep their source order. Measurement and
@@ -4296,7 +4396,7 @@ fn section_expr_leaf(
     key: &str,
     here: i64,
     measured: &SectionLabelOffsets,
-    sink_labels: &alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)>,
+    sink_labels: &AsmSinkLabels,
     num_unique: &alloc::collections::BTreeMap<&str, alloc::string::String>,
     label_off: &dyn Fn(&str) -> Option<LabelLoc>,
 ) -> Option<AsmExprLeaf> {
@@ -4496,7 +4596,7 @@ pub(crate) fn measure_asm_section_offsets(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
     align_is_p2: bool,
-    sink: &[AsmSection],
+    sink: &AsmSectionSink,
 ) -> Result<SectionLabelOffsets, alloc::string::String> {
     match measure_round(blocks, const_of, align_is_p2, sink, None) {
         (Ok(m), false) => Ok(m),
@@ -4525,7 +4625,7 @@ fn measure_round(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
     align_is_p2: bool,
-    sink: &[AsmSection],
+    sink: &AsmSectionSink,
     prev: Option<&SectionLabelOffsets>,
 ) -> (Result<SectionLabelOffsets, alloc::string::String>, bool) {
     let mut unresolved_fill = false;
@@ -4544,7 +4644,7 @@ fn measure_round_inner(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
     align_is_p2: bool,
-    sink: &[AsmSection],
+    sink: &AsmSectionSink,
     prev: Option<&SectionLabelOffsets>,
     unresolved_fill: &mut bool,
 ) -> Result<SectionLabelOffsets, alloc::string::String> {
@@ -4567,11 +4667,9 @@ fn measure_round_inner(
         // A section already holding bytes in the sink continues at its
         // current length, so measured offsets, alignment gaps, and the
         // location counter agree with the materialized layout.
-        let mut at = *lens.entry(key.clone()).or_insert_with(|| {
-            sink.iter()
-                .find(|s| s.name == b.name && s.flags == b.flags && s.sh_type == b.sh_type)
-                .map_or(0, |s| s.bytes.len() as i64)
-        });
+        let mut at = *lens
+            .entry(key.clone())
+            .or_insert_with(|| sink.index_of(b).map_or(0, |i| sink[i].bytes.len() as i64));
         for item in &b.items {
             match item {
                 AsmSectionItem::Label(name) => {
@@ -4757,7 +4855,7 @@ pub(crate) fn materialize_asm_sections(
     operand_sym: &dyn Fn(u8) -> Option<(AsmSectionTarget, i64)>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
     align_is_p2: bool,
-    sink: &mut alloc::vec::Vec<AsmSection>,
+    sink: &mut AsmSectionSink,
 ) -> Result<alloc::vec::Vec<MaterializedLabel>, alloc::string::String> {
     // GNU as numeric labels (`2:`, `14470:`) are local to one asm instance;
     // the same digits recur across every expansion of a macro like the bug
@@ -4790,46 +4888,27 @@ pub(crate) fn materialize_asm_sections(
     // the earlier `.altinstructions`) folds to a constant. Seeded with the
     // sink lengths so the offsets are the materialized ones.
     let measured = measure_asm_section_offsets(blocks, const_of, align_is_p2, sink)?;
-    // Labels earlier statements defined in the sink, resolvable by this
-    // call's location expressions (`.size f, . - f` with `f:` in a prior
-    // template). Snapshotted here because the loop holds `sink` mutably.
-    let sink_labels: alloc::collections::BTreeMap<
-        alloc::string::String,
-        (alloc::string::String, i64),
-    > = sink
-        .iter()
-        .flat_map(|s| {
-            let key = alloc::format!("{}\u{0}{}\u{0}{:?}", s.name, s.flags, s.sh_type);
-            s.labels
-                .iter()
-                .filter(|l| l.offset != PENDING_LABEL)
-                .map(move |l| (l.name.clone(), (key.clone(), l.offset as i64)))
-        })
-        .collect();
     let mut defined: alloc::vec::Vec<MaterializedLabel> = alloc::vec::Vec::new();
     let mut weak_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
+    // Sections this call merges into, with the label count each had on
+    // first touch. Pending entries never outlive a call, so this is also
+    // the exact set the settle pass below has to inspect.
+    let mut touched: alloc::vec::Vec<(usize, usize)> = alloc::vec::Vec::new();
     for &bi in &subsection_order(blocks) {
         let b = &blocks[bi];
-        let sec_idx = match sink
-            .iter()
-            .position(|s| s.name == b.name && s.flags == b.flags && s.sh_type == b.sh_type)
-        {
-            Some(i) => i,
-            None => {
-                sink.push(AsmSection {
-                    name: b.name.clone(),
-                    flags: b.flags.clone(),
-                    sh_type: b.sh_type.clone(),
-                    bytes: alloc::vec::Vec::new(),
-                    relocs: alloc::vec::Vec::new(),
-                    labels: alloc::vec::Vec::new(),
-                    align: 1,
-                    after_insn: true,
-                });
-                sink.len() - 1
-            }
-        };
-        let sec = &mut sink[sec_idx];
+        let sec_idx = sink.get_or_insert(b);
+        // Labels earlier statements defined, resolvable by this call's
+        // location expressions (`.size f, . - f` with `f:` in a prior
+        // template). Borrowed apart from the section being laid out.
+        let AsmSectionSink {
+            sections,
+            labels: sink_labels,
+            ..
+        } = &mut *sink;
+        if !touched.iter().any(|&(i, _)| i == sec_idx) {
+            touched.push((sec_idx, sections[sec_idx].labels.len()));
+        }
+        let sec = &mut sections[sec_idx];
         for item in &b.items {
             // `.align`'s argument is a byte count on x86 ELF, a
             // power-of-two exponent on AArch64 (GNU as convention).
@@ -4916,7 +4995,7 @@ pub(crate) fn materialize_asm_sections(
                             &key,
                             here,
                             &measured,
-                            &sink_labels,
+                            sink_labels,
                             &num_unique,
                             label_off,
                         )
@@ -5090,7 +5169,7 @@ pub(crate) fn materialize_asm_sections(
                             &key,
                             cur,
                             &measured,
-                            &sink_labels,
+                            sink_labels,
                             &num_unique,
                             label_off,
                         )
@@ -5187,7 +5266,7 @@ pub(crate) fn materialize_asm_sections(
                                         &key,
                                         here,
                                         &measured,
-                                        &sink_labels,
+                                        sink_labels,
                                         &num_unique,
                                         label_off,
                                     )
@@ -5250,7 +5329,7 @@ pub(crate) fn materialize_asm_sections(
                                         &key,
                                         here,
                                         &measured,
-                                        &sink_labels,
+                                        sink_labels,
                                         &num_unique,
                                         label_off,
                                     ) {
@@ -5408,7 +5487,7 @@ pub(crate) fn materialize_asm_sections(
                                 &key,
                                 0,
                                 &measured,
-                                &sink_labels,
+                                sink_labels,
                                 &num_unique,
                                 label_off,
                             ),
@@ -5481,8 +5560,12 @@ pub(crate) fn materialize_asm_sections(
     }
     // `.weak` binds a matching section label weak; a name defined in no
     // section is a unit-level weak symbol the file-scope parse records.
+    // TODO: this stays a whole-sink scan. The label index cannot serve it as
+    // written: a `.weak` naming a label of its own statement has to see a
+    // definition this call has not published yet. Templates carrying `.weak`
+    // skip the loop entirely, so it is not on the export-table path.
     for name in &weak_names {
-        for s in sink.iter_mut() {
+        for s in sink.sections.iter_mut() {
             for l in s.labels.iter_mut().filter(|l| l.name == *name) {
                 l.weak = true;
             }
@@ -5492,7 +5575,10 @@ pub(crate) fn materialize_asm_sections(
     // not a definition here; it defines no section symbol. A `.type` / `.size`
     // that stays pending named a label the section never defines -- rejected
     // (a forward `.type` before its label was filled in by the definition).
-    for s in sink.iter_mut() {
+    // Only this call's sections can hold a pending entry: every call drops
+    // its own below, so none survives into the next.
+    for &(sec_idx, _) in &touched {
+        let s = &mut sink.sections[sec_idx];
         if let Some(l) = s.labels.iter().find(|l| {
             l.offset == PENDING_LABEL && (l.sym_type != AsmSymType::NoType || l.size.is_some())
         }) {
@@ -5502,6 +5588,9 @@ pub(crate) fn materialize_asm_sections(
             ));
         }
         s.labels.retain(|l| l.offset != PENDING_LABEL);
+    }
+    for &(sec_idx, from) in &touched {
+        sink.publish_labels(sec_idx, from);
     }
     Ok(defined)
 }
@@ -5584,7 +5673,7 @@ pub(crate) fn materialize_file_asm(
     align_is_p2: bool,
     comments: AsmComments,
     encode_code: &dyn Fn(&mut [AsmSectionBlock]) -> Result<(), alloc::string::String>,
-    sink: &mut alloc::vec::Vec<AsmSection>,
+    sink: &mut AsmSectionSink,
 ) -> Result<(), alloc::string::String> {
     for text in templates {
         let stripped = strip_asm_comments(text, comments);
@@ -6690,7 +6779,7 @@ mod asm_section_tests {
         assert_eq!(blocks[0].name, ".discard.t");
         assert_eq!(blocks[0].flags, "aw");
         assert_eq!(blocks[0].sh_type.as_deref(), Some("progbits"));
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|idx| (idx == 0).then_some(42),
@@ -6746,7 +6835,7 @@ mod asm_section_tests {
         // alignment when the gap is larger. Matches GNU as byte-for-byte.
         let mat = |text: &str, aarch64: bool| -> alloc::vec::Vec<u8> {
             let (_code, blocks) = extract_asm_sections(text, aarch64).unwrap().unwrap();
-            let mut sink = alloc::vec::Vec::new();
+            let mut sink = AsmSectionSink::default();
             materialize_asm_sections(
                 &blocks,
                 &|_| None,
@@ -7092,7 +7181,7 @@ mod asm_section_tests {
                     .quad .\n\
                     .popsection\n";
         let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7169,7 +7258,7 @@ mod asm_section_tests {
         // length, keeping measurement and materialization in agreement.
         let t1 = ".pushsection .t,\"ax\"\nf:\n.byte 1, 2, 3\n.popsection\n";
         let t2 = ".pushsection .t,\"ax\"\n.balign 4\ng:\n.byte 9\n.size f, g - f\n.popsection\n";
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         for t in [t1, t2] {
             let (_code, blocks) = extract_asm_sections(t, false).unwrap().unwrap();
             materialize_asm_sections(
@@ -7295,7 +7384,7 @@ mod asm_section_tests {
         );
         let text = ".pushsection .altinstructions,\"a\"\n.hword (1 << 15) | (%0)\n.popsection\n";
         let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|idx| (idx == 0).then_some(37),
@@ -7308,7 +7397,7 @@ mod asm_section_tests {
         .unwrap();
         assert_eq!(sink[0].bytes, alloc::vec![0x25, 0x80]);
         // A non-constant operand leaves the expression unresolved.
-        let mut sink2 = alloc::vec::Vec::new();
+        let mut sink2 = AsmSectionSink::default();
         let err = materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7346,7 +7435,7 @@ mod asm_section_tests {
         // offset, as for the unparenthesised reference.
         let text = "1: nop\n.pushsection __ex_table,\"a\"\n.long (1b) - .\n.popsection\n";
         let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7420,7 +7509,7 @@ mod asm_section_tests {
             extract_asm_sections(".pushsection .x,\"a\"\n.word 1b - .\n.popsection\n", true)
                 .unwrap()
                 .unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7444,7 +7533,7 @@ mod asm_section_tests {
                     .byte 2b - 1b\n.short 2b - 1b\n.long 2b - 1b\n.byte 1b - 2b\n\
                     .popsection\n";
         let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7477,7 +7566,7 @@ mod asm_section_tests {
                     .pushsection .altinstr_replacement,\"ax\"\n\
                     774:\n.byte 0x0f,0x01,0xca\n775:\n.popsection\n";
         let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7507,7 +7596,7 @@ mod asm_section_tests {
         let text = "1: nop\n.pushsection .a,\"a\"\n.byte 774f - 1b\n.popsection\n\
                     .pushsection .b,\"ax\"\n774:\n.byte 0\n.popsection\n";
         let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         let err = materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7553,7 +7642,8 @@ mod asm_section_tests {
         let text = ".pushsection .altinstr_replacement,\"ax\"\n\
                     774:\n.byte 0x0f,0x01,0xca\n775:\n.popsection\n";
         let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let m = measure_asm_section_offsets(&blocks, &|_| None, false, &[]).unwrap();
+        let m = measure_asm_section_offsets(&blocks, &|_| None, false, &AsmSectionSink::default())
+            .unwrap();
         assert_eq!(m.offset("774f"), Some(0));
         assert_eq!(m.offset("775f"), Some(3));
         assert_eq!(m.section("774f"), m.section("775f"), "same section");
@@ -7564,7 +7654,7 @@ mod asm_section_tests {
         // A distance outside the field width is rejected, not truncated.
         let text = "1: nop\n2: nop\n.pushsection .x,\"a\"\n.byte 2b - 1b\n.popsection\n";
         let (_c, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         let err = materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7749,7 +7839,7 @@ mod asm_section_tests {
         let text = "nop\n.section .fixup,\"ax\"\n.quad handler\n.previous\nnop\n";
         let (code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(code, "nop\nnop\n");
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7768,7 +7858,7 @@ mod asm_section_tests {
         // push is rejected.
         let text = ".pushsection .a,\"a\"\n.long 1\n.popsection\n.pushsection .a,\"a\"\n.long 2\n.popsection\n";
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7794,7 +7884,7 @@ mod asm_section_tests {
         // (rejected, non-power-of-two) byte count under the x86 one.
         let text = ".pushsection .t,\"a\"\n.align 3\n.byte 1\n.popsection";
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7806,7 +7896,7 @@ mod asm_section_tests {
         )
         .unwrap();
         assert_eq!(sink[0].align, 8);
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         assert!(
             materialize_asm_sections(
                 &blocks,
@@ -7822,7 +7912,7 @@ mod asm_section_tests {
         // `.align 8` under the x86 convention is 8 bytes.
         let text = ".pushsection .t,\"a\"\n.align 8\n.byte 1\n.popsection";
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7844,7 +7934,7 @@ mod asm_section_tests {
         let text = ".section \".export\",\"a\"\n                    first:\n                    .asciz \"GPL\"\n                    .balign 8\n                    .globl second\n                    second: .quad 0\n                    .globl nowhere\n                    .previous\n";
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(blocks[0].name, ".export");
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7896,7 +7986,7 @@ mod asm_section_tests {
                     .size tramp, . - tramp\n\
                     .popsection\n";
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7918,7 +8008,7 @@ mod asm_section_tests {
     fn section_type_object_and_bad_forms_rejected() {
         let materialize = |text: &str| {
             let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-            let mut sink = alloc::vec::Vec::new();
+            let mut sink = AsmSectionSink::default();
             materialize_asm_sections(
                 &blocks,
                 &|_| None,
@@ -7954,7 +8044,7 @@ mod asm_section_tests {
     fn duplicate_section_label_is_rejected() {
         let text = ".pushsection .t,\"a\"\ndup:\n.quad 0\ndup:\n.popsection\n";
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         let err = materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -7976,7 +8066,7 @@ mod asm_section_tests {
         let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(blocks[0].name, ".initcall7.init");
         assert_eq!(blocks[0].flags, "a");
-        let mut sink = alloc::vec::Vec::new();
+        let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -8207,6 +8297,117 @@ mod asm_section_tests {
         ));
         assert!(ty("f STT_TLS").unwrap_err().contains("unsupported"));
         assert!(ty("f").unwrap_err().contains("expects"));
+    }
+
+    /// The export-table shape modpost generates: two file-scope templates
+    /// per exported symbol, one pushing a section every symbol shares and
+    /// one pushing a section named after the symbol. A unit carries tens of
+    /// thousands of these, so the per-call lookups against the accumulated
+    /// sink -- the section identity and the labels earlier templates
+    /// defined -- have to be indexed; scanning it made the unit quadratic
+    /// in its own asm statements. At this count a scan does not finish in
+    /// the time the whole suite takes.
+    #[test]
+    fn file_scope_asm_sink_lookups_are_indexed() {
+        const N: usize = 4000;
+        let templates: alloc::vec::Vec<alloc::string::String> = (0..N)
+            .map(|i| {
+                alloc::format!(
+                    "\t.section \"__ksymtab_strings\",\"aMS\",%progbits,1\n\
+                     __kstrtab_s{i}:\n\t.asciz \"s{i}\"\n\t.previous\n\
+                     \t.section \"___ksymtab+s{i}\", \"a\"\n\t.balign 4\n\
+                     __ksymtab_s{i}:\n\t.long s{i}- .\n\t.long __kstrtab_s{i}- .\n\
+                     \t.previous\n"
+                )
+            })
+            .collect();
+        let mut sink = AsmSectionSink::default();
+        materialize_file_asm(&templates, true, AsmComments::A64, &|_| Ok(()), &mut sink).unwrap();
+        // One shared strings section plus one per symbol.
+        assert_eq!(sink.len(), N + 1);
+        let strs = sink
+            .iter()
+            .find(|s| s.name == "__ksymtab_strings")
+            .expect("the shared strings section");
+        assert_eq!(strs.labels.len(), N);
+        // Each name is `s`, the index digits, and the `.asciz` terminator.
+        assert_eq!(
+            strs.bytes.len(),
+            (0..N).map(|i| i.to_string().len() + 2).sum::<usize>()
+        );
+        // Each per-symbol section holds the two relative references, both
+        // as relocations against the named symbol.
+        let sec = sink
+            .iter()
+            .find(|s| s.name == "___ksymtab+s3999")
+            .expect("the last symbol's section");
+        assert_eq!(sec.bytes.len(), 8);
+        assert_eq!(sec.labels.len(), 1);
+        assert_eq!(sec.relocs.len(), 2);
+    }
+
+    /// A location expression resolves a label an earlier template defined,
+    /// and a snapshot restore drops the sections and the labels it created
+    /// so a later template does not resolve against undone work.
+    #[test]
+    fn sink_labels_span_templates_and_unwind() {
+        let mat = |text: &str, sink: &mut AsmSectionSink| {
+            materialize_file_asm(
+                &[alloc::string::String::from(text)],
+                true,
+                AsmComments::A64,
+                &|_| Ok(()),
+                sink,
+            )
+        };
+        let mut sink = AsmSectionSink::default();
+        mat(
+            "\t.section \"t\",\"a\"\nfirst:\n\t.long 0\n\t.long 0\n\t.previous\n",
+            &mut sink,
+        )
+        .unwrap();
+        // A difference to `first`, defined by the template above, folds:
+        // the sink supplies its section and offset.
+        mat(
+            "\t.section \"t\",\"a\"\nsecond:\n\t.long 0\n\t.size second, second - first\n\t.previous\n",
+            &mut sink,
+        )
+        .unwrap();
+        let sized = |s: &AsmSectionSink, n: &str| {
+            s.iter()
+                .flat_map(|x| &x.labels)
+                .find(|l| l.name == n)
+                .and_then(|l| l.size)
+        };
+        assert_eq!(sized(&sink, "second"), Some(8));
+        let snap = sink.snapshot();
+        mat(
+            "\t.section \"v\",\"a\"\nlater:\n\t.long 0\n\t.previous\n",
+            &mut sink,
+        )
+        .unwrap();
+        assert_eq!(sink.len(), 2);
+        sink.restore(&snap);
+        assert_eq!(sink.len(), 1);
+        // `later` went with the section the restore dropped, so a difference
+        // to it no longer folds. A rejected template leaves its bytes behind
+        // for the caller to unwind, so take a snapshot over it.
+        let before_err = sink.snapshot();
+        assert!(
+            mat(
+                "\t.section \"t\",\"a\"\nthird:\n\t.long 0\n\t.size third, third - later\n\t.previous\n",
+                &mut sink,
+            )
+            .is_err()
+        );
+        sink.restore(&before_err);
+        // `first` survived the restore and still resolves.
+        mat(
+            "\t.section \"t\",\"a\"\nfourth:\n\t.long 0\n\t.size fourth, fourth - first\n\t.previous\n",
+            &mut sink,
+        )
+        .unwrap();
+        assert_eq!(sized(&sink, "fourth"), Some(12));
     }
 }
 

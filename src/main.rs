@@ -296,6 +296,7 @@ fn run() {
     let mut mstrict_align = false;
     let mut fpic = false;
     let mut code_model = badc::CodeModel::Small;
+    let mut code_model_tiny = false;
     let mut hardening = badc::Hardening::NONE;
     // `--export-all` exports every non-static function in the dynamic
     // symbol table / export trie of native output, so a runtime
@@ -625,10 +626,19 @@ fn run() {
                 code_model = match &s["-mcmodel=".len()..] {
                     "small" => badc::CodeModel::Small,
                     "kernel" => badc::CodeModel::Kernel,
+                    // aarch64 `tiny` narrows the layout contract to
+                    // ±1MiB; the small-model form stays valid under it,
+                    // so it lowers as small. Validated against the
+                    // target below.
+                    "tiny" => {
+                        code_model_tiny = true;
+                        badc::CodeModel::Small
+                    }
                     other => {
                         eprint_diagnostic(format!(
                             "badc: error: unsupported code model `{other}` in \
-                             `-mcmodel=` (supported: small, kernel)"
+                             `-mcmodel=` (supported: small, kernel; \
+                             aarch64 also: tiny)"
                         ));
                         std::process::exit(1);
                     }
@@ -839,6 +849,15 @@ fn run() {
     // are position-independent and cannot carry an absolute text
     // reference, and `-fPIC` contradicts it the same way (gcc rejects
     // the combination).
+    // `tiny` is an aarch64 model (gcc: tiny/small/large there,
+    // small/kernel/medium/large on x86-64).
+    if code_model_tiny && target != badc::Target::LinuxAarch64 {
+        eprint_diagnostic(
+            "badc: error: `-mcmodel=tiny` requires an aarch64 ELF target \
+             (--target=linux-aarch64)",
+        );
+        std::process::exit(1);
+    }
     if code_model == badc::CodeModel::Kernel {
         if target != badc::Target::LinuxX64 {
             eprint_diagnostic(

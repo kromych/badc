@@ -10307,6 +10307,57 @@ int main(void) { return 0; }
 }
 
 #[test]
+fn const_scalar_chain_initializer_folds_to_values() {
+    // A static initializer reading a const-qualified scalar takes its
+    // value (GNU practice; gcc folds the chain), not its address: the
+    // etnaviv module's buffer-size chain got an 8-byte ABS64-relocated
+    // slot over a 4-byte u32, overlapping the next object. The address
+    // form still requires `&` or an array's decay.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"typedef unsigned u32;
+static const u32 image_data_size = 64 * 6;
+static const u32 output_offset = (image_data_size + 63) & ~63u;
+static const u32 shader_offset = ((output_offset + image_data_size) + 63) & ~63u;
+static const u32 shader_size = 16 * 4;
+static const u32 buffer_size = shader_offset + shader_size;
+static const u32 *addr_still_relocates = &buffer_size;
+u32 read_all(void) { return buffer_size + shader_offset + *addr_still_relocates; }
+int main(void) { return 0; }
+"#;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let ro = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rodata")
+            .unwrap_or_else(|| panic!("{target:?}: .rodata missing"));
+        let words: Vec<u32> = ro
+            .3
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
+        for want in [0x300u32, 0x340] {
+            assert!(
+                words.contains(&want),
+                "{target:?}: {want:#x} not in .rodata words {words:x?}"
+            );
+        }
+        // Exactly the pointer object relocates; the value chain must not.
+        let relas = sections
+            .iter()
+            .filter(|(n, _, _, _)| n == ".rela.rodata" || n == ".rela.data")
+            .map(|s| s.3.len() / 24)
+            .sum::<usize>();
+        assert_eq!(relas, 1, "{target:?}: only &buffer_size may relocate");
+    }
+}
+
+#[test]
 fn inline_asm_string_directives_follow_gas() {
     // `.ascii`/`.asciz`/`.string` take a comma-separated operand list;
     // adjacent literals concatenate as in C; escapes cover the C set

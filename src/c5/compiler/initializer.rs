@@ -807,8 +807,10 @@ impl Compiler {
         // opens a cast (`(T*)&g`) is skipped whole -- the cast only
         // retypes the address, which is the same constant value. A
         // grouping `(` is matched by the trailing `)` consumed below.
+        let mut ampersands = 0usize;
         loop {
             if self.lex.tk == Token::AndOp {
+                ampersands += 1;
                 self.next()?;
             } else if self.lex.tk == '(' {
                 let paren_snap = self.lex.snapshot();
@@ -874,6 +876,7 @@ impl Compiler {
         }
         let mut off = self.symbols[sym_idx].val;
         let mut cur_ty = self.symbols[sym_idx].type_;
+        let base_zero_len = self.symbols[sym_idx].is_zero_len_array;
         // A subscript at level `i` of a multi-dimensional array strides by
         // `product(array_dims[i+1..]) * sizeof(element)` -- the first index
         // spans whole sub-arrays, the innermost one element (C99
@@ -966,13 +969,25 @@ impl Compiler {
         // dimension remains) that decays to the address of its first element.
         // The caller uses this to accept a bare `g.arr` pointer initializer.
         // A 1D array records its extent in `cur_array_size` with empty
-        // `cur_dims`; a multi-dim one lists every dimension in `cur_dims`.
+        // `cur_dims` (`-1` for a flexible or zero-length member, which
+        // still decays); a multi-dim one lists every dimension in
+        // `cur_dims`. A zero-length base object records array-ness in
+        // its own flag.
         let rank = if cur_dims.is_empty() {
-            (cur_array_size > 0) as usize
+            (cur_array_size != 0 || (level == 0 && base_zero_len)) as usize
         } else {
             cur_dims.len()
         };
         let final_is_array = level < rank;
+        // An address constant needs an `&` or an array's decay (C99
+        // 6.6p9, 6.3.2.1p3). A bare non-array designation names a
+        // value: the caller's evaluator folds it when something (a
+        // const-qualified scalar) makes it constant.
+        if ampersands == 0 && !final_is_array {
+            self.restore_lex(snap);
+            self.truncate_data(data_snap);
+            return Ok(None);
+        }
         Ok(Some((off, sym_idx, final_is_array)))
     }
 
@@ -1692,6 +1707,15 @@ impl Compiler {
                 return Ok((0, InitElemReloc::Code(tr_idx)));
             }
             if class == Token::Glo as i64 {
+                // A scalar global names its value, not its address (the
+                // address spelling is `&name`): defer to the shared
+                // evaluator, which folds a const-qualified object the
+                // way gcc does and rejects the rest, absorbing any
+                // trailing operator chain. Only an array (including a
+                // zero-length one) decays here.
+                if self.symbols[idx].array_size == 0 && !self.symbols[idx].is_zero_len_array {
+                    return self.parse_constant_init_scalar();
+                }
                 // Bare global identifier in a static initializer.
                 // For array globals (`static const char name[] =
                 // "..."`) this is the array-decay rule: the value

@@ -139,7 +139,6 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_a64_comments.c", "linux-x64"),       // aarch64 comment syntax
     ("inline_asm_a64_sysreg_families.c", "linux-x64"), // aarch64 named/indexed sysregs + S-form
     ("inline_asm_a64_at_sys.c", "linux-x64"),         // aarch64 `at` / generic `sys`
-    ("file_scope_asm_a64_relocs.c", "linux-x64"),     // aarch64 stp/adr/literal-ldr bodies
     ("file_scope_asm_local_labels.c", "linux-aarch64"), // x86-64 div/ret fastop fragments
     ("file_scope_asm_local_label_branch.c", "linux-aarch64"), // x86-64 lock cmpxchg + jcc to a section label
     ("file_scope_asm_sym_riprel.c", "linux-aarch64"), // x86-64 `sym(%rip)` displacement expressions

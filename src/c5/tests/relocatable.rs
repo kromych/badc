@@ -404,8 +404,11 @@ fn comment_section_is_a_mergeable_single_line_identification() {
     };
     let mut found = false;
     for i in 0..ehdr.e_shnum as usize {
-        let sh: Elf64Shdr =
-            read_struct(&bytes, ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize).unwrap();
+        let sh: Elf64Shdr = read_struct(
+            &bytes,
+            ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize,
+        )
+        .unwrap();
         if name_at(sh.sh_name as usize) != ".comment" {
             continue;
         }

@@ -38,12 +38,15 @@ mod image;
 pub(crate) mod lds;
 #[cfg(feature = "std")]
 pub(crate) mod lds_link;
+pub(crate) mod ld_driver;
 #[cfg(feature = "std")]
 pub(crate) mod link;
 #[cfg(feature = "std")]
 pub(crate) mod map;
 #[cfg(feature = "std")]
 pub(crate) mod object;
+#[cfg(feature = "std")]
+pub(crate) mod relocatable;
 #[cfg(feature = "std")]
 mod synth_build;
 
@@ -61,6 +64,7 @@ pub use lds::{LinkerScript, parse_linker_script};
 pub use lds_link::{
     LdsEmit, LdsObject, LdsOptions, LdsResult, OrphanHandling, link_with_script, parse_lds_object,
 };
+pub use ld_driver::{is_ld_invocation, run_ld};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use link::{
@@ -76,6 +80,11 @@ pub use map::{ArchiveInclusion, render_link_map};
 pub use object::{
     NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, SharedLibrary,
     is_elf_object, parse_native_elf, parse_shared_library,
+};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use relocatable::{
+    EtRel, LdScript, RelinkOptions, link_relocatable, parse_et_rel, parse_module_script,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

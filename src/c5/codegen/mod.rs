@@ -1272,10 +1272,37 @@ pub struct InitFiniArrays {
     pub fini: Option<(u64, u64)>,
 }
 
+/// Stream a resolved relocation's site or target lives in. `Data`
+/// offsets index the unified data stream (read-only prefix, then
+/// writable data, then the zero-fill region); the ELF writer maps
+/// them onto `.rodata` / `.data` / `.bss`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EmitStream {
+    Text,
+    Data,
+}
+
+/// One resolved relocation carried into a final ELF image under
+/// `--emit-relocs`: the KASLR-style consumers read the surviving
+/// `.rela.*` sections to locate every fixed-up slot.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct EmittedFinalReloc {
+    pub site: EmitStream,
+    /// Site offset within its stream.
+    pub site_offset: u64,
+    /// ELF relocation type as applied.
+    pub rtype: u32,
+    pub target: EmitStream,
+    /// Resolved target offset within the target stream (`S + A`).
+    pub addend: i64,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Build {
     /// Machine code, ready to be placed in `__TEXT,__text`.
     pub text: Vec<u8>,
+    /// `--emit-relocs` records; empty unless the link requested them.
+    pub emitted_relocs: Vec<EmittedFinalReloc>,
     /// Data-import copy relocations resolved against the merged symbol
     /// table (multi-TU link path). Each names a host data symbol to
     /// export at a local data/bss slot the image defines, bound with an

@@ -142,6 +142,12 @@ const STT_FUNC: u8 = 2;
 /// `STT_OBJECT` symbol type -- a data object. Used for the defined
 /// data symbols a COPY relocation binds to the host's object.
 const STT_OBJECT: u8 = 1;
+/// `STT_SECTION` -- the per-section symbols the `--emit-relocs`
+/// relocation entries reference.
+const STT_SECTION: u8 = 3;
+/// `SHF_INFO_LINK` -- sh_info names the section the relocations
+/// patch.
+const SHF_INFO_LINK: u64 = 0x40;
 const SHN_UNDEF: u16 = 0;
 
 /// `PT_LOAD` segment alignment. The loader mmaps each segment at
@@ -339,13 +345,15 @@ enum Sec {
     Tbss,
     Bss,
     Debug,
+    RelaText,
+    RelaData,
     Symtab,
     Strtab,
     Shstrtab,
 }
 
 /// Emission order. `Sec::Debug` stands for the whole `.debug_*` run.
-const SECTION_ORDER: [Sec; 20] = [
+const SECTION_ORDER: [Sec; 22] = [
     Sec::Null,
     Sec::Interp,
     Sec::Dynsym,
@@ -363,6 +371,8 @@ const SECTION_ORDER: [Sec; 20] = [
     Sec::Tbss,
     Sec::Bss,
     Sec::Debug,
+    Sec::RelaText,
+    Sec::RelaData,
     Sec::Symtab,
     Sec::Strtab,
     Sec::Shstrtab,
@@ -370,7 +380,7 @@ const SECTION_ORDER: [Sec; 20] = [
 
 struct SectionPlan {
     /// Headers each slot of [`SECTION_ORDER`] contributes.
-    counts: [usize; 20],
+    counts: [usize; 22],
 }
 
 /// Which optional sections an image carries. `dwarf` is a count because
@@ -384,12 +394,14 @@ struct SectionsPresent {
     tbss: bool,
     bss: bool,
     dwarf: usize,
+    rela_text: bool,
+    rela_data: bool,
     plt_symtab: bool,
 }
 
 impl SectionPlan {
     fn new(p: SectionsPresent) -> Self {
-        let mut counts = [1usize; 20];
+        let mut counts = [1usize; 22];
         let mut set =
             |s: Sec, n: usize| counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()] = n;
         set(Sec::GnuVersion, p.versions as usize);
@@ -400,6 +412,8 @@ impl SectionPlan {
         set(Sec::Tbss, p.tbss as usize);
         set(Sec::Bss, p.bss as usize);
         set(Sec::Debug, p.dwarf);
+        set(Sec::RelaText, p.rela_text as usize);
+        set(Sec::RelaData, p.rela_data as usize);
         set(Sec::Symtab, p.plt_symtab as usize);
         set(Sec::Strtab, p.plt_symtab as usize);
         Self { counts }
@@ -2093,29 +2107,166 @@ pub(super) fn write(
     // payloads degenerate to the SHT_SYMTAB sentinel + the empty
     // string.
     let emit_plt_symtab = !build.plt_trampoline_offsets.is_empty();
+    // `--emit-relocs` payloads: entries reference the section symbols
+    // the static symtab carries, so requesting them forces a symtab.
+    let er_text: Vec<&crate::c5::codegen::EmittedFinalReloc> = build
+        .emitted_relocs
+        .iter()
+        .filter(|r| matches!(r.site, crate::c5::codegen::EmitStream::Text))
+        .collect();
+    let er_data: Vec<&crate::c5::codegen::EmittedFinalReloc> = build
+        .emitted_relocs
+        .iter()
+        .filter(|r| matches!(r.site, crate::c5::codegen::EmitStream::Data))
+        .collect();
+    let has_rela_text = !er_text.is_empty();
+    let has_rela_data = !er_data.is_empty();
+    let emit_symtab = emit_plt_symtab || has_rela_text || has_rela_data;
+    let has_data = data_size > 0;
+    let has_tdata = has_tls && tdata_size > 0;
+    let has_tbss = has_tls && tbss_size > 0;
+    let has_bss = build.bss_size > 0;
+    let plan = SectionPlan::new(SectionsPresent {
+        versions: has_versions,
+        rodata: has_rodata,
+        tdata: has_tdata,
+        data: has_data,
+        tbss: has_tbss,
+        bss: has_bss,
+        dwarf: if emit_dwarf { 5 } else { 0 },
+        rela_text: has_rela_text,
+        rela_data: has_rela_data,
+        plt_symtab: emit_symtab,
+    });
+    // Section symbols the emitted relocations reference: (plan index,
+    // vaddr), in symtab order right after the sentinel.
+    let sec_syms: Vec<(Sec, u64)> = if has_rela_text || has_rela_data {
+        let mut v = alloc::vec![(Sec::Text, code_vmaddr)];
+        if has_rodata {
+            v.push((Sec::RoData, rodata_vmaddr));
+        }
+        if has_data {
+            v.push((Sec::Data, data_vmaddr));
+        }
+        if has_bss {
+            v.push((Sec::Bss, bss_vmaddr));
+        }
+        v
+    } else {
+        Vec::new()
+    };
+    // Symbol index of a target stream's section symbol and the addend
+    // rebased into that section. Data offsets index the unified
+    // stream: read-only prefix, then .data, then the zero-fill region.
+    let sec_sym_idx =
+        |sec: Sec| -> u64 { 1 + sec_syms.iter().position(|&(s, _)| s == sec).unwrap() as u64 };
+    let map_data_off = |d: u64| -> (Sec, u64) {
+        if d < ro_len {
+            (Sec::RoData, d)
+        } else if d < file_data_len {
+            (Sec::Data, d - ro_len)
+        } else {
+            (Sec::Bss, d - file_data_len)
+        }
+    };
+    let site_vaddr = |r: &crate::c5::codegen::EmittedFinalReloc| -> u64 {
+        match r.site {
+            crate::c5::codegen::EmitStream::Text => code_vmaddr + stub_len + r.site_offset,
+            crate::c5::codegen::EmitStream::Data => {
+                let (sec, off) = map_data_off(r.site_offset);
+                let base = sec_syms
+                    .iter()
+                    .find(|&&(s, _)| s == sec)
+                    .map(|&(_, v)| v)
+                    .unwrap_or(0);
+                base + off
+            }
+        }
+    };
+    let build_rela = |list: &[&crate::c5::codegen::EmittedFinalReloc]| -> Vec<u8> {
+        let mut b = Vec::with_capacity(list.len() * ELF64_RELA_SIZE as usize);
+        for r in list {
+            let (sym, addend) = match r.target {
+                crate::c5::codegen::EmitStream::Text => {
+                    (sec_sym_idx(Sec::Text), stub_len as i64 + r.addend)
+                }
+                crate::c5::codegen::EmitStream::Data => {
+                    let (sec, off) = map_data_off(r.addend as u64);
+                    (sec_sym_idx(sec), off as i64)
+                }
+            };
+            b.extend_from_slice(&site_vaddr(r).to_le_bytes());
+            b.extend_from_slice(&((sym << 32) | r.rtype as u64).to_le_bytes());
+            b.extend_from_slice(&addend.to_le_bytes());
+        }
+        b
+    };
+    let rela_text_bytes = build_rela(&er_text);
+    let rela_data_bytes = build_rela(&er_data);
     let trampoline_size: u64 = match machine {
         super::Machine::Aarch64 => 12, // adrp + ldr + br
         super::Machine::X86_64 => 6,   // jmp qword ptr [rip+disp32]
     };
-    let (plt_symtab_bytes, plt_strtab_bytes) = if emit_plt_symtab {
+    let (mut plt_symtab_bytes, plt_strtab_bytes) = if emit_plt_symtab {
         build_plt_symtab(build, dwarf_text_vmaddr, trampoline_size, text_shndx)
+    } else if emit_symtab {
+        let mut st = Vec::with_capacity(ELF64_SYM_SIZE as usize);
+        write_struct(
+            &mut st,
+            &Elf64Sym {
+                st_name: 0,
+                st_info: 0,
+                st_other: 0,
+                st_shndx: 0,
+                st_value: 0,
+                st_size: 0,
+            },
+        );
+        (st, alloc::vec![0u8])
     } else {
         (Vec::new(), alloc::vec![0u8])
     };
+    if emit_symtab && !sec_syms.is_empty() {
+        // Section symbols land right after the sentinel; the reloc
+        // entries above indexed them as 1..=n in `sec_syms` order.
+        let mut prefix: Vec<u8> = Vec::with_capacity(sec_syms.len() * ELF64_SYM_SIZE as usize);
+        for &(sec, vaddr) in &sec_syms {
+            write_struct(
+                &mut prefix,
+                &Elf64Sym {
+                    st_name: 0,
+                    st_info: STT_SECTION,
+                    st_other: 0,
+                    st_shndx: plan.index_of(sec),
+                    st_value: vaddr,
+                    st_size: 0,
+                },
+            );
+        }
+        let at = ELF64_SYM_SIZE as usize;
+        plt_symtab_bytes.splice(at..at, prefix);
+    }
     let post_dwarf_off = dwarf_frame_off + dwarf_sections.debug_frame.len() as u64;
-    let (symtab_off, strtab_off, shstrtab_off) = if emit_plt_symtab {
+    let (rela_text_off, rela_data_off, post_rela_off) = if has_rela_text || has_rela_data {
+        let t = round_up(post_dwarf_off, 8);
+        let d = t + rela_text_bytes.len() as u64;
+        (t, d, d + rela_data_bytes.len() as u64)
+    } else {
+        (post_dwarf_off, post_dwarf_off, post_dwarf_off)
+    };
+    let (symtab_off, strtab_off, shstrtab_off) = if emit_symtab {
         // .symtab requires 8-byte alignment (each Elf64_Sym is 24
         // bytes). The file body pads to `symtab_off` before
         // emitting the bytes; .strtab and .shstrtab sit immediately
         // after with no further padding.
-        let s = round_up(post_dwarf_off, 8);
+        let s = round_up(post_rela_off, 8);
         let st = s + plt_symtab_bytes.len() as u64;
         let sh = st + plt_strtab_bytes.len() as u64;
         (s, st, sh)
     } else {
-        // No PLT symtab -> .shstrtab abuts DWARF directly,
+        // No static symtab -> .shstrtab abuts DWARF directly,
         // matching the pre-#61 layout.
-        (post_dwarf_off, post_dwarf_off, post_dwarf_off)
+        (post_rela_off, post_rela_off, post_rela_off)
     };
     // .shstrtab content: NUL + section names. The empty name at the
     // front backs the SHT_NULL sentinel (sh_name=0). The catalog lists
@@ -2156,7 +2307,13 @@ pub(super) fn write(
     // Always paired -- a SHT_SYMTAB section's `sh_link` must
     // reference a real strtab. Only emitted when there are
     // trampolines to name.
-    let plt_symtab_name_idx_in_shstrtab = if emit_plt_symtab {
+    if has_rela_text {
+        shstrtab_names.push(".rela.text");
+    }
+    if has_rela_data {
+        shstrtab_names.push(".rela.data");
+    }
+    let plt_symtab_name_idx_in_shstrtab = if emit_symtab {
         shstrtab_names.push(".symtab");
         shstrtab_names.push(".strtab");
         Some(shstrtab_names.len() - 2)
@@ -2187,25 +2344,6 @@ pub(super) fn write(
     // .hash + .rela.dyn + .text + (optional .tdata) +
     // .dynamic + .got + (optional .data) + (optional .tbss) +
     // (optional .bss) + 5 .debug_* + .shstrtab. Counted dynamically.
-    let has_data = data_size > 0;
-    let has_tdata = has_tls && tdata_size > 0;
-    let has_tbss = has_tls && tbss_size > 0;
-    let has_bss = build.bss_size > 0;
-    // Section-header indices of the allocated sections, in the order
-    // emitted below: .text=6, then optional .tdata, .dynamic, .got, then
-    // optional .data, .tbss, .bss. Used to attribute each .dynsym export
-    // to its real section. `ver_shdrs` / `text_shndx` are computed near
-    // `has_versions` above so the PLT symtab can share the shifted index.
-    let plan = SectionPlan::new(SectionsPresent {
-        versions: has_versions,
-        rodata: has_rodata,
-        tdata: has_tdata,
-        data: has_data,
-        tbss: has_tbss,
-        bss: has_bss,
-        dwarf: if emit_dwarf { 5 } else { 0 },
-        plt_symtab: emit_plt_symtab,
-    });
     let rodata_shndx: u16 = plan.index_of(Sec::RoData);
     let data_shndx: u16 = plan.index_of(Sec::Data);
     let bss_shndx: u16 = plan.index_of(Sec::Bss);
@@ -2727,7 +2865,16 @@ pub(super) fn write(
     out.extend_from_slice(&dwarf_sections.debug_frame);
 
     // ---- PLT-trampoline static symbol table. ----
-    if emit_plt_symtab {
+    if has_rela_text || has_rela_data {
+        while (out.len() as u64) < rela_text_off {
+            out.push(0);
+        }
+        out.extend_from_slice(&rela_text_bytes);
+        debug_assert_eq!(out.len() as u64, rela_data_off);
+        out.extend_from_slice(&rela_data_bytes);
+        debug_assert_eq!(out.len() as u64, post_rela_off);
+    }
+    if emit_symtab {
         // Pad to 8 so each Elf64_Sym lands aligned.
         while (out.len() as u64) < symtab_off {
             out.push(0);
@@ -3178,6 +3325,49 @@ pub(super) fn write(
         }
     }
 
+    // `--emit-relocs` sections: the resolved relocations re-emitted
+    // against the section symbols in .symtab.
+    if has_rela_text || has_rela_data {
+        let symtab_shdr_idx = plan.index_of(Sec::Symtab) as u32;
+        let mut rela = |kind: Sec, name: &str, off: u64, bytes: &[u8], target: Sec| {
+            if bytes.is_empty() {
+                return;
+            }
+            emit_shdr(
+                &mut out,
+                &plan,
+                &mut shdr_cursor,
+                kind,
+                &Elf64Shdr {
+                    sh_name: name_off(name),
+                    sh_type: SHT_RELA,
+                    sh_flags: SHF_INFO_LINK,
+                    sh_addr: 0,
+                    sh_offset: off,
+                    sh_size: bytes.len() as u64,
+                    sh_link: symtab_shdr_idx,
+                    sh_info: plan.index_of(target) as u32,
+                    sh_addralign: 8,
+                    sh_entsize: ELF64_RELA_SIZE,
+                },
+            );
+        };
+        rela(
+            Sec::RelaText,
+            ".rela.text",
+            rela_text_off,
+            &rela_text_bytes,
+            Sec::Text,
+        );
+        rela(
+            Sec::RelaData,
+            ".rela.data",
+            rela_data_off,
+            &rela_data_bytes,
+            Sec::Data,
+        );
+    }
+
     // PLT-trampoline static symbol table. `.symtab`'s
     // `sh_info` field must point one past the last LOCAL symbol;
     // we only emit locals, so it's `n_symbols` (sentinel + one
@@ -3454,6 +3644,8 @@ mod tests {
                 tbss: bits & 8 != 0,
                 bss: bits & 16 != 0,
                 dwarf: if bits & 32 != 0 { 5 } else { 0 },
+                rela_text: bits & 64 != 0,
+                rela_data: bits & 2 != 0,
                 plt_symtab: bits & 1 != 0,
             });
             // Independent restatement of the unconditional set: NULL,
@@ -3467,6 +3659,8 @@ mod tests {
             expected += (bits & 8 != 0) as usize; // .tbss
             expected += (bits & 16 != 0) as usize; // .bss
             expected += if bits & 32 != 0 { 5 } else { 0 }; // .debug_*
+            expected += (bits & 64 != 0) as usize; // .rela.text
+            expected += (bits & 2 != 0) as usize; // .rela.data
             expected += 2 * (bits & 1 != 0) as usize; // .symtab + .strtab
             assert_eq!(plan.len(), expected, "bits={bits}");
             for s in [Sec::Null, Sec::Text, Sec::Dynamic, Sec::Got, Sec::Shstrtab] {
@@ -3520,6 +3714,7 @@ mod tests {
         use super::super::{ResolvedImport, ResolvedImports};
         use crate::c5::codegen::ResolvedDylib;
         Build {
+            emitted_relocs: Vec::new(),
             text_align: 16,
             orphaned_data: None,
             stopped_at_data_liveness: false,

@@ -36,8 +36,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::c5::codegen::{
-    Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, FuncFixup, GotFixup,
-    OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target,
+    Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, EmitStream,
+    EmittedFinalReloc, FuncFixup, GotFixup, OutputKind, ResolvedDylib, ResolvedImport,
+    ResolvedImports, Target,
 };
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
@@ -75,6 +76,7 @@ pub fn write_native_image_from_merged(
         shared_lib_name,
         false,
         false,
+        false,
     )
 }
 
@@ -93,6 +95,7 @@ pub fn write_native_image_from_merged_ex(
     shared_lib_name: Option<&str>,
     export_all: bool,
     export_data: bool,
+    emit_relocs: bool,
 ) -> Result<Vec<u8>, C5Error> {
     let (program, build) = synth_program_and_build(
         merged,
@@ -104,6 +107,7 @@ pub fn write_native_image_from_merged_ex(
         shared_lib_name,
         export_all,
         export_data,
+        emit_relocs,
     )?;
     write_native_image(&program, &build, target)
 }
@@ -119,6 +123,7 @@ fn synth_program_and_build(
     shared_lib_name: Option<&str>,
     export_all: bool,
     export_data: bool,
+    emit_relocs: bool,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
     // A shared library has no process entry point (ELF ET_DYN sets
@@ -365,7 +370,79 @@ fn synth_program_and_build(
         Vec::new()
     };
 
+    // `--emit-relocs`: every resolved relocation carried into the
+    // final image. Import-bound sites are omitted -- they patch to
+    // PLT stubs the writer lays out, and a PLT32-class entry is
+    // position-independent anyway.
+    let emitted_relocs: Vec<EmittedFinalReloc> = if emit_relocs {
+        let (abs64, prel32) = match merged.machine {
+            NativeMachine::X86_64 => (
+                crate::c5::object::elf_reloc_types::R_X86_64_64,
+                R_X86_64_PC32,
+            ),
+            NativeMachine::Aarch64 => (
+                crate::c5::object::elf_reloc_types::R_AARCH64_ABS64,
+                crate::c5::object::elf_reloc_types::R_AARCH64_PREL32,
+            ),
+        };
+        let target_of = |t: MergedTarget| -> (EmitStream, i64) {
+            match t {
+                MergedTarget::Text(o) => (EmitStream::Text, o),
+                MergedTarget::Data(o) => (EmitStream::Data, o),
+            }
+        };
+        let mut v = Vec::new();
+        for r in &merged.applied_text_relocs {
+            v.push(EmittedFinalReloc {
+                site: EmitStream::Text,
+                site_offset: r.text_offset,
+                rtype: r.rtype,
+                target: EmitStream::Text,
+                addend: r.target_text_offset,
+            });
+        }
+        for p in &merged.pending_imports {
+            if p.import_index != usize::MAX {
+                continue;
+            }
+            let target = match p.target_section {
+                NativeSymSection::Text => EmitStream::Text,
+                _ => EmitStream::Data,
+            };
+            v.push(EmittedFinalReloc {
+                site: EmitStream::Text,
+                site_offset: p.text_offset,
+                rtype: p.rtype,
+                target,
+                addend: p.addend,
+            });
+        }
+        for d in &merged.data_abs_relocs {
+            let (target, addend) = target_of(d.target);
+            v.push(EmittedFinalReloc {
+                site: EmitStream::Data,
+                site_offset: d.slot_offset,
+                rtype: abs64,
+                target,
+                addend,
+            });
+        }
+        for d in &merged.data_pcrel_relocs {
+            let (target, addend) = target_of(d.target);
+            v.push(EmittedFinalReloc {
+                site: EmitStream::Data,
+                site_offset: d.slot_offset,
+                rtype: prel32,
+                target,
+                addend,
+            });
+        }
+        v
+    } else {
+        Vec::new()
+    };
     let build = Build {
+        emitted_relocs,
         orphaned_data: None,
         stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
@@ -1058,6 +1135,7 @@ mod tests {
             },
         );
         MergedNative {
+            applied_text_relocs: Vec::new(),
             text_align: 16,
             // aarch64: `mov w0, #42; ret`.
             text: alloc::vec![0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6],

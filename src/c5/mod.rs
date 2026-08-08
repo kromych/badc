@@ -63,6 +63,9 @@ pub use linker::{
 #[cfg(feature = "full")]
 #[allow(unused_imports)]
 pub use linker::{ArchiveMember, read_archive, write_archive};
+#[cfg(all(feature = "full", feature = "std"))]
+#[allow(unused_imports)]
+pub use linker::{is_ld_invocation, run_ld};
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]

@@ -249,6 +249,22 @@ fn main() {
 fn run() {
     let raw: Vec<String> = std::env::args().collect();
 
+    // Linker-driver dispatch: invoked as `ld` (argv[0]) or with a
+    // leading `--ld`, the remaining arguments follow GNU ld's
+    // surface so a build system can set `LD=badc --ld` or symlink
+    // `ld` to badc.
+    if badc::is_ld_invocation(
+        raw.first().map(String::as_str).unwrap_or(""),
+        raw.get(1).map(String::as_str),
+    ) {
+        let skip = if raw.get(1).map(String::as_str) == Some("--ld") {
+            2
+        } else {
+            1
+        };
+        std::process::exit(badc::run_ld(&raw[skip..]));
+    }
+
     // Mode selection: at most one of the mode-picking flags
     // may appear. We track the *first* seen so an error
     // message can name both flags.
@@ -321,6 +337,10 @@ fn run() {
     // data globals). ELF only; macOS already exports executable globals,
     // Windows has no analogue.
     let mut export_data = false;
+    // `--emit-relocs` -- keep the resolved relocations in the final
+    // ELF image as `.rela.*` sections (GNU ld -q), for consumers that
+    // relocate the image wholesale (the x86 KASLR relocs tool).
+    let mut emit_relocs = false;
     // `--gnu` -- define the GCC identity macros (`__GNUC__` etc.).
     let mut gnu = false;
     let mut gnu89_inline = false;
@@ -681,6 +701,8 @@ fn run() {
                     }
                 };
             }
+            // Keep resolved relocations in the final ELF image (ld -q).
+            "--emit-relocs" => emit_relocs = true,
             // Export every non-static function (dlopen/dlsym visibility).
             "--export-all" => export_all = true,
             // Export every defined non-static global (function and data)
@@ -2014,6 +2036,7 @@ fn run() {
             shared_lib_name,
             export_all,
             export_data,
+            emit_relocs,
         );
         let bytes = match write_result {
             Ok(b) => b,

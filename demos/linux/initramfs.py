@@ -178,7 +178,7 @@ static const char *const modules[] = { @MODULES@ };
    fails with ENOENT; the list carries no dependency order. */
 static void load_modules(void)
 {
-    static char done[512];
+    static char done[sizeof modules / sizeof modules[0]];
     unsigned n, i, pass, loaded = 0, progress;
 
     for (n = 0; modules[n]; n++)
@@ -193,6 +193,10 @@ static void load_modules(void)
 
             if (done[i])
                 continue;
+            /* Named before the load, so an init that never returns leaves
+               the module it stopped in as the last line on the console. */
+            printf("BADC-MODULE %%s loading pass=%%u\n", modules[i], pass);
+            fflush(stdout);
             fd = open(modules[i], O_RDONLY);
             if (fd < 0) {
                 printf("BADC-MODULE %%s open errno=%%d\n", modules[i], errno);

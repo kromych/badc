@@ -269,27 +269,6 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	mov	x17, #0xff              // =255
-               	and	x0, x21, x17
-               	mov	x17, #0xff              // =255
-               	and	x1, x22, x17
-               	add	x0, x0, x1
-               	mov	x17, #0xff              // =255
-               	and	x1, x23, x17
-               	add	x0, x0, x1
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	cmp	x0, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x11               // =17
-               	ldp	x29, x30, [sp, #0x60]
-               	ldp	x24, x25, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x70
-               	ret
                	mov	x0, #0x0                // =0
                	mov	x0, #0x11               // =17
                	bl	<addr>

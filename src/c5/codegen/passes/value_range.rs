@@ -87,26 +87,135 @@ impl Range {
 
 /// Expression identity: `(tag, a, b, imm)`. Two instructions with the
 /// same key compute the same value wherever both are in scope, because
-/// their operands are SSA values. Only pure integer arithmetic gets a
-/// structural key; everything else keys on its own value id.
+/// their operands are SSA values. Pure integer arithmetic and
+/// non-volatile loads get a structural key over canonical operand ids;
+/// everything else keys on its own canonical id. A load key names the
+/// value memory held at the read, so facts under one are only sound
+/// until something writes memory; the walk in [`run_one`] wipes them at
+/// every potential write and at every join.
 type Key = (u8, u32, u32, i64);
 
 fn opaque_key(v: ValueId) -> Key {
     (0, v, 0, 0)
 }
 
-fn key_of(insts: &[Inst], v: ValueId) -> Key {
+fn is_load_key(k: Key) -> bool {
+    (5..=7).contains(&k.0)
+}
+
+/// Canonical id per value: the first instruction computing the same
+/// pure expression. Address chains re-materialised per block
+/// (`LocalAddr` + constant offset, the same field read twice) collapse
+/// onto one identity, which is what lets a branch fact recorded for one
+/// read reach the other.
+fn value_numbers(insts: &[Inst]) -> Vec<ValueId> {
+    let mut canon: Vec<ValueId> = (0..insts.len() as ValueId).collect();
+    let mut table: BTreeMap<Key, ValueId> = BTreeMap::new();
+    for i in 0..insts.len() {
+        let c = |v: ValueId| canon.get(v as usize).copied().unwrap_or(v);
+        // Address-materialisation immediates (`ImmData`, `ImmCode`,
+        // `ImmExtCode`, `TlsAddr`) stay on their own ids: their operand
+        // is a placeholder a per-instruction fixup resolves, so equal
+        // operands can name different symbols.
+        let key: Key = match &insts[i] {
+            Inst::Imm(k) => (1, 0, 0, *k),
+            Inst::LocalAddr(off) => (5, 0, 0, *off),
+            Inst::ParamRef { idx, kind } => (7, *idx as u32, load_kind_code(*kind), 0),
+            Inst::Extend { value, kind } if !matches!(kind, LoadKind::F32 | LoadKind::F64) => {
+                (8, c(*value), load_kind_code(*kind), 0)
+            }
+            Inst::BinopI { op, lhs, rhs_imm } if is_pure_int(*op) => {
+                (9, c(*lhs), binop_code(*op), *rhs_imm)
+            }
+            Inst::Binop { op, lhs, rhs } if is_pure_int(*op) => {
+                (10, c(*lhs), c(*rhs), binop_code(*op).into())
+            }
+            _ => continue,
+        };
+        match table.get(&key) {
+            Some(&first) => canon[i] = first,
+            None => {
+                table.insert(key, i as ValueId);
+            }
+        }
+    }
+    canon
+}
+
+/// Key for a value read as an operand. A load keys on its own id: the
+/// value is whatever memory held when the load ran, which no expression
+/// over the current memory state describes once something has written
+/// in between.
+fn key_of(insts: &[Inst], canon: &[ValueId], v: ValueId) -> Key {
+    let c = |x: ValueId| canon.get(x as usize).copied().unwrap_or(x);
     match insts.get(v as usize) {
         Some(Inst::Imm(k)) => (1, 0, 0, *k),
-        Some(Inst::Extend { value, kind }) => (2, *value, load_kind_code(*kind), 0),
+        Some(Inst::Extend { value, kind }) => (2, c(*value), load_kind_code(*kind), 0),
         Some(Inst::BinopI { op, lhs, rhs_imm }) if is_pure_int(*op) => {
-            (3, *lhs, binop_code(*op), *rhs_imm)
+            (3, c(*lhs), binop_code(*op), *rhs_imm)
         }
         Some(Inst::Binop { op, lhs, rhs }) if is_pure_int(*op) => {
-            (4, *lhs, *rhs, binop_code(*op).into())
+            (4, c(*lhs), c(*rhs), binop_code(*op).into())
         }
-        _ => opaque_key(v),
+        _ => opaque_key(c(v)),
     }
+}
+
+/// Positional key for what a load of this shape produces from the
+/// current memory state. Sound to read or write only at a walk point
+/// where the described load's execution is not separated from the
+/// point by a potential memory write; [`run_one`] wipes these keys at
+/// every such write and every join.
+fn load_expr_key(insts: &[Inst], canon: &[ValueId], v: ValueId) -> Option<Key> {
+    let c = |x: ValueId| canon.get(x as usize).copied().unwrap_or(x);
+    match insts.get(v as usize) {
+        Some(Inst::Load {
+            addr,
+            disp,
+            kind,
+            volatile: false,
+        }) => Some((5, c(*addr), load_kind_code(*kind), *disp as i64)),
+        Some(Inst::LoadLocal {
+            off,
+            kind,
+            volatile: false,
+        }) => Some((6, 0, load_kind_code(*kind), *off)),
+        Some(Inst::LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+        }) => Some((
+            7,
+            c(*base),
+            c(*index),
+            ((*scale as i64) << 8) | load_kind_code(*kind) as i64,
+        )),
+        _ => None,
+    }
+}
+
+/// Whether an instruction may write memory (or transfer control to code
+/// that can), ending the validity of every load-keyed fact. Volatile
+/// loads read strictly per the abstract machine but write nothing.
+fn writes_memory(inst: &Inst) -> bool {
+    matches!(
+        inst,
+        Inst::Store { .. }
+            | Inst::StoreLocal { .. }
+            | Inst::StoreIndexed { .. }
+            | Inst::SegStore { .. }
+            | Inst::Call { .. }
+            | Inst::CallIndirect { .. }
+            | Inst::CallExt { .. }
+            | Inst::TailExt(_)
+            | Inst::Mcpy { .. }
+            | Inst::AtomicRmw { .. }
+            | Inst::AtomicCas { .. }
+            | Inst::Intrinsic { .. }
+            | Inst::InlineAsm { .. }
+            | Inst::AllocaInit(_)
+    )
 }
 
 fn load_kind_code(k: LoadKind) -> u32 {
@@ -220,6 +329,21 @@ impl Facts {
             };
         }
     }
+
+    /// Drop every load-keyed fact (undo-logged): memory may have
+    /// changed, so what a read produced no longer bounds what the same
+    /// read produces next.
+    fn wipe_loads(&mut self) {
+        let stale: Vec<Key> = self
+            .live
+            .iter()
+            .filter(|(k, r)| is_load_key(**k) && !r.is_universe())
+            .map(|(k, _)| *k)
+            .collect();
+        for key in stale {
+            self.set(key, UNIVERSE);
+        }
+    }
 }
 
 /// Answer a comparison from its operand ranges, or `None` when the
@@ -297,6 +421,16 @@ fn decide(op: BinOp, a: Range, b: Range) -> Option<bool> {
 fn implied(op: BinOp, k: i128, holds: bool, current: Range) -> Option<Range> {
     let unsigned = comparison(op)?;
     if unsigned && !(current.non_negative() && k >= 0) {
+        // An unsigned bound below a non-negative k still pins the sign
+        // bit clear, so it is the signed interval [0, k) whatever the
+        // current range says.
+        if k >= 0 {
+            return match (op, holds) {
+                (BinOp::Ult, true) | (BinOp::Uge, false) => Some(Range { lo: 0, hi: k - 1 }),
+                (BinOp::Ule, true) | (BinOp::Ugt, false) => Some(Range { lo: 0, hi: k }),
+                _ => None,
+            };
+        }
         return None;
     }
     let (lo, hi) = (current.lo, current.hi);
@@ -313,10 +447,25 @@ fn implied(op: BinOp, k: i128, holds: bool, current: Range) -> Option<Range> {
     })
 }
 
+/// Interval addition / subtraction on the 64-bit register reading.
+/// A bound that leaves the representable range means the operation can
+/// wrap, and a wrapped interval says nothing.
+fn arith(a: Range, b: Range, sub: bool) -> Range {
+    let (lo, hi) = if sub {
+        (a.lo - b.hi, a.hi - b.lo)
+    } else {
+        (a.lo + b.lo, a.hi + b.hi)
+    };
+    if lo < i64::MIN as i128 || hi > i64::MAX as i128 {
+        return UNIVERSE;
+    }
+    Range { lo, hi }
+}
+
 /// Forward bounds for an instruction, given its operands' ranges and
 /// the entry range of each parameter.
-fn eval(insts: &[Inst], facts: &Facts, inst: &Inst, params: &[Range]) -> Range {
-    let range_of = |v: ValueId| facts.get(key_of(insts, v));
+fn eval(insts: &[Inst], canon: &[ValueId], facts: &Facts, inst: &Inst, params: &[Range]) -> Range {
+    let range_of = |v: ValueId| facts.get(key_of(insts, canon, v));
     match inst {
         Inst::Imm(k) => Range::exact(*k),
         // A floating-point widening produces no integer, so it carries
@@ -352,6 +501,8 @@ fn eval(insts: &[Inst], facts: &Facts, inst: &Inst, params: &[Range]) -> Range {
                     },
                 }
             }
+            BinOp::Add => arith(range_of(*lhs), Range::exact(*rhs_imm), false),
+            BinOp::Sub => arith(range_of(*lhs), Range::exact(*rhs_imm), true),
             _ => UNIVERSE,
         },
         Inst::Binop { op, lhs, rhs } => match op {
@@ -368,6 +519,8 @@ fn eval(insts: &[Inst], facts: &Facts, inst: &Inst, params: &[Range]) -> Range {
                     _ => UNIVERSE,
                 }
             }
+            BinOp::Add => arith(range_of(*lhs), range_of(*rhs), false),
+            BinOp::Sub => arith(range_of(*lhs), range_of(*rhs), true),
             _ => UNIVERSE,
         },
         // A width-limited read cannot produce a value outside the width
@@ -404,7 +557,10 @@ fn eval(insts: &[Inst], facts: &Facts, inst: &Inst, params: &[Range]) -> Range {
 /// parameter ranges and the interprocedural join needs no fixed point.
 pub(crate) fn arg_range(insts: &[Inst], v: ValueId) -> Range {
     match insts.get(v as usize) {
-        Some(inst) => eval(insts, &Facts::default(), inst, &[]),
+        // No facts are in scope, so operand keys are never looked up
+        // and the canonical map is irrelevant; the empty slice keys
+        // every operand on its own id.
+        Some(inst) => eval(insts, &[], &Facts::default(), inst, &[]),
         None => UNIVERSE,
     }
 }
@@ -412,7 +568,15 @@ pub(crate) fn arg_range(insts: &[Inst], v: ValueId) -> Range {
 /// Facts the edge from `pred` into its single successor carries: the
 /// branch condition's own value, and the range its comparison implies
 /// for the compared expression.
-fn apply_edge(func: &FunctionSsa, facts: &mut Facts, pred: BlockId, holds: bool) {
+fn apply_edge(
+    func: &FunctionSsa,
+    canon: &[ValueId],
+    facts: &mut Facts,
+    load_epoch: &[u64],
+    epoch: u64,
+    pred: BlockId,
+    holds: bool,
+) {
     let cond = match func.blocks[pred as usize].terminator {
         Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => cond,
         _ => return,
@@ -421,7 +585,7 @@ fn apply_edge(func: &FunctionSsa, facts: &mut Facts, pred: BlockId, holds: bool)
     // The branch tests the condition against zero, so the taken edge
     // says only that it is not zero -- `if (x & 4)` reaches its body
     // with the value 4, not 1.
-    let key = key_of(insts, cond);
+    let key = key_of(insts, canon, cond);
     let current = facts.get(key);
     let cond_range = if holds {
         implied(BinOp::Ne, 0, true, current)
@@ -435,7 +599,7 @@ fn apply_edge(func: &FunctionSsa, facts: &mut Facts, pred: BlockId, holds: bool)
     let (op, lhs, rhs_range) = match insts.get(cond as usize) {
         Some(Inst::BinopI { op, lhs, rhs_imm }) => (*op, *lhs, Range::exact(*rhs_imm)),
         Some(Inst::Binop { op, lhs, rhs }) => {
-            let r = facts.get(key_of(insts, *rhs));
+            let r = facts.get(key_of(insts, canon, *rhs));
             if r.lo != r.hi {
                 return;
             }
@@ -443,10 +607,18 @@ fn apply_edge(func: &FunctionSsa, facts: &mut Facts, pred: BlockId, holds: bool)
         }
         _ => return,
     };
-    let key = key_of(insts, lhs);
+    let key = key_of(insts, canon, lhs);
     let current = facts.get(key);
     if let Some(r) = implied(op, rhs_range.lo, holds, current) {
         facts.narrow(key, r);
+        // The compared value is what memory held when the load ran, so
+        // the bound describes a later load of the same expression only
+        // while nothing can have written in between.
+        if load_epoch.get(lhs as usize) == Some(&epoch)
+            && let Some(ek) = load_expr_key(insts, canon, lhs)
+        {
+            facts.narrow(ek, r);
+        }
     }
 }
 
@@ -461,6 +633,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
     }
     let idom = crate::c5::codegen::ssa::mem2reg::dominators(func);
     let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
+    let canon = value_numbers(func.insts.as_slice());
     // Dominator-tree children, so the walk visits each block once with
     // its dominators' facts in scope.
     let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
@@ -471,25 +644,37 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
     }
     let mut facts = Facts::default();
     let mut folded: Vec<(u32, i64)> = Vec::new();
-    // Explicit stack: `Enter(b)` walks the block, `Leave(mark)` drops
-    // the facts its subtree contributed.
+    // Walk-position memory epoch: bumped at every potential write. A
+    // load's recorded epoch says whether its value still equals what a
+    // load of the same expression would produce here.
+    let mut epoch: u64 = 1;
+    let mut load_epoch: Vec<u64> = alloc::vec![0; func.insts.len()];
+    // Explicit stack: `Enter(b)` walks the block, `Leave(mark, epoch)`
+    // drops the facts its subtree contributed and restores the walk
+    // position's epoch. The epoch is path state like the facts: a
+    // sibling subtree's writes are not on this path, and SSA dominance
+    // keeps its values out of this path's operands, so the numeric
+    // reuse after a rewind is unobservable.
     enum Step {
         Enter(BlockId),
-        Leave(usize),
+        Leave(usize, u64),
     }
     let mut stack = alloc::vec![Step::Enter(0)];
     while let Some(step) = stack.pop() {
         let b = match step {
-            Step::Leave(mark) => {
+            Step::Leave(mark, at) => {
                 facts.rewind(mark);
+                epoch = at;
                 continue;
             }
             Step::Enter(b) => b,
         };
         let mark = facts.mark();
-        stack.push(Step::Leave(mark));
+        stack.push(Step::Leave(mark, epoch));
         // A block reached from one predecessor carries that edge's
-        // condition; with more than one predecessor the paths disagree.
+        // condition; with more than one predecessor the paths disagree,
+        // and a joined-over path may have written the memory a load
+        // fact describes.
         if let [p] = preds[b as usize][..] {
             let holds = match func.blocks[p as usize].terminator {
                 Terminator::Bz {
@@ -505,33 +690,53 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
                 _ => None,
             };
             if let Some(holds) = holds {
-                apply_edge(func, &mut facts, p, holds);
+                apply_edge(func, &canon, &mut facts, &load_epoch, epoch, p, holds);
             }
+        } else {
+            facts.wipe_loads();
+            epoch += 1;
         }
         let range = func.blocks[b as usize].inst_range.clone();
         for pc in range.start..range.end {
             let inst = &func.insts[pc as usize];
-            let key = key_of(func.insts.as_slice(), pc);
-            let r = eval(func.insts.as_slice(), &facts, inst, params).meet(facts.get(key));
+            if writes_memory(inst) {
+                facts.wipe_loads();
+                epoch += 1;
+            }
+            let key = key_of(func.insts.as_slice(), &canon, pc);
+            let ekey = load_expr_key(func.insts.as_slice(), &canon, pc);
+            let mut r =
+                eval(func.insts.as_slice(), &canon, &facts, inst, params).meet(facts.get(key));
+            // At the load itself the positional fact is current, so the
+            // value it produces meets it, and the value read here is
+            // what the expression produces until the next write.
+            if let Some(ek) = ekey {
+                r = r.meet(facts.get(ek));
+                load_epoch[pc as usize] = epoch;
+            }
             let decided = match inst {
                 Inst::BinopI { op, lhs, rhs_imm } => decide(
                     *op,
-                    facts.get(key_of(func.insts.as_slice(), *lhs)),
+                    facts.get(key_of(func.insts.as_slice(), &canon, *lhs)),
                     Range::exact(*rhs_imm),
                 ),
                 Inst::Binop { op, lhs, rhs } => decide(
                     *op,
-                    facts.get(key_of(func.insts.as_slice(), *lhs)),
-                    facts.get(key_of(func.insts.as_slice(), *rhs)),
+                    facts.get(key_of(func.insts.as_slice(), &canon, *lhs)),
+                    facts.get(key_of(func.insts.as_slice(), &canon, *rhs)),
                 ),
                 _ => None,
             };
-            match decided {
+            let r = match decided {
                 Some(v) => {
                     folded.push((pc, v as i64));
-                    facts.set(key, Range::exact(v as i64));
+                    Range::exact(v as i64)
                 }
-                None => facts.set(key, r),
+                None => r,
+            };
+            facts.set(key, r);
+            if let Some(ek) = ekey {
+                facts.set(ek, r);
             }
         }
         for &c in &children[b as usize] {
@@ -601,6 +806,168 @@ mod tests {
         let mut f = fresh(insts(LoadKind::I32), 1);
         assert!(run_one(&mut f, &[Range { lo: 0, hi: 1000 }]));
         assert!(matches!(f.insts[1], Inst::Imm(1)));
+    }
+
+    /// A dominating unsigned guard on a loaded field bounds what a
+    /// re-materialised load of the same field produces (the kernel's
+    /// min() type check reads the field once for the guard and once for
+    /// the value), and a store in between ends the fact.
+    #[test]
+    fn guarded_field_reload_carries_the_bound_until_a_store() {
+        use crate::c5::ir::StoreKind;
+        // b0: a = LocalAddr(-1); x = Load[a+8]; c = x >=u 100; Bz c -> b2 else b1
+        // b1: return
+        // b2: a' = LocalAddr(-1); [store a'+8 when poisoned]
+        //     y = Load[a'+8]; y >= 0; return
+        let build = |poison: bool| {
+            let mut insts = alloc::vec![
+                Inst::LocalAddr(-1),
+                Inst::Load {
+                    addr: 0,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+                Inst::BinopI {
+                    op: BinOp::Uge,
+                    lhs: 1,
+                    rhs_imm: 100,
+                },
+                Inst::LocalAddr(-1),
+            ];
+            if poison {
+                insts.push(Inst::Store {
+                    addr: 3,
+                    disp: 8,
+                    value: 2,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                });
+            }
+            let load = insts.len() as u32;
+            insts.push(Inst::Load {
+                addr: 3,
+                disp: 8,
+                kind: LoadKind::I64,
+                volatile: false,
+            });
+            insts.push(Inst::BinopI {
+                op: BinOp::Ge,
+                lhs: load,
+                rhs_imm: 0,
+            });
+            let n = insts.len() as u32;
+            let block = |range: core::ops::Range<u32>, t: Terminator| Block {
+                start_pc: 0,
+                inst_range: range,
+                terminator: t,
+                exit_acc: 0,
+            };
+            FunctionSsa {
+                inst_src: vec![(0, 0); n as usize],
+                f32_values: vec![false; n as usize],
+                insts,
+                blocks: vec![
+                    block(
+                        0..3,
+                        Terminator::Bz {
+                            cond: 2,
+                            target: 2,
+                            fall_through: 1,
+                        },
+                    ),
+                    block(3..3, Terminator::Return(crate::c5::ir::NO_VALUE)),
+                    block(3..n, Terminator::Return(n - 1)),
+                ],
+                ..FunctionSsa::default()
+            }
+        };
+        let mut clean = build(false);
+        assert!(run_one(&mut clean, &[]), "the guarded reload must fold");
+        assert!(
+            matches!(clean.insts[5], Inst::Imm(1)),
+            "x <u 100 pins the reload to [0, 99], so y >= 0 is 1"
+        );
+        let mut poisoned = build(true);
+        run_one(&mut poisoned, &[]);
+        assert!(
+            matches!(poisoned.insts[6], Inst::BinopI { .. }),
+            "a store between the guard and the reload must end the fact"
+        );
+    }
+
+    /// A branch fact about a load taken before an intervening write
+    /// describes that value, not the expression: a fresh load of the
+    /// same slot after the write must not inherit the bound (inlined
+    /// asm helpers reuse one output slot, so the shape is common).
+    #[test]
+    fn stale_load_fact_does_not_reach_a_fresh_load() {
+        use crate::c5::ir::StoreKind;
+        let insts = alloc::vec![
+            Inst::LocalAddr(-1),
+            Inst::Load {
+                addr: 0,
+                disp: 8,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            // The write separating the load from the branch that
+            // tests it.
+            Inst::Store {
+                addr: 0,
+                disp: 8,
+                value: 1,
+                kind: StoreKind::I64,
+                volatile: false,
+            },
+            Inst::BinopI {
+                op: BinOp::Uge,
+                lhs: 1,
+                rhs_imm: 100,
+            },
+            Inst::LocalAddr(-1),
+            Inst::Load {
+                addr: 4,
+                disp: 8,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::BinopI {
+                op: BinOp::Ge,
+                lhs: 5,
+                rhs_imm: 0,
+            },
+        ];
+        let n = insts.len() as u32;
+        let block = |range: core::ops::Range<u32>, t: Terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator: t,
+            exit_acc: 0,
+        };
+        let mut f = FunctionSsa {
+            inst_src: vec![(0, 0); n as usize],
+            f32_values: vec![false; n as usize],
+            insts,
+            blocks: vec![
+                block(
+                    0..4,
+                    Terminator::Bz {
+                        cond: 3,
+                        target: 2,
+                        fall_through: 1,
+                    },
+                ),
+                block(4..4, Terminator::Return(crate::c5::ir::NO_VALUE)),
+                block(4..n, Terminator::Return(n - 1)),
+            ],
+            ..FunctionSsa::default()
+        };
+        run_one(&mut f, &[]);
+        assert!(
+            matches!(f.insts[6], Inst::BinopI { .. }),
+            "the bound belongs to the pre-store value, not the reload"
+        );
     }
 
     /// A floating parameter's entry value is not an integer, so an

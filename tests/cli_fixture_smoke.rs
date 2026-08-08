@@ -71,6 +71,7 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "addr_fold_pruned_arm_dce.c",
     "const_struct_array_inline_accessor.c",
     "local_template_byte_probe.c",
+    "range_guard_field_reload.c",
 ];
 
 /// Fixtures whose body carries inline asm specific to one ISA. The

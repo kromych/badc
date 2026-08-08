@@ -93,20 +93,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
-               	mov	x17, #0x3               // =3
-               	and	x0, x0, x17
-               	lsl	x0, x0, #62
-               	asr	x0, x0, #62
-               	add	x0, x0, #0x2
-               	sxtw	x0, w0
-               	cmp	x0, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0xe                // =14
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	sub	x0, x29, #0x10
                	ldr	w1, [x0]
                	mov	x17, #0xfff8            // =65528
@@ -184,30 +170,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	w1, w0
-               	mov	x17, #0x7               // =7
-               	and	x1, x1, x17
-               	lsl	x1, x1, #61
-               	asr	x1, x1, #61
-               	cmp	x1, #0x0
-               	b.le	<addr>
-               	mov	x0, #0x18               // =24
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	w0, w0
-               	asr	x0, x0, #11
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x1f, lsl #16
-               	and	x0, x0, x17
-               	lsl	x0, x0, #43
-               	asr	x0, x0, #43
-               	cmp	x0, #0x0
-               	b.lt	<addr>
-               	mov	x0, #0x19               // =25
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	sub	x0, x29, #0x18
                	ldr	w1, [x0]
                	mov	x17, #0xf000            // =61440
@@ -276,21 +238,6 @@ Disassembly of section .text:
                	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x21               // =33
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
-               	asr	x0, x0, #12
-               	mov	x17, #0x3               // =3
-               	and	x0, x0, x17
-               	lsl	x0, x0, #62
-               	asr	x0, x0, #62
-               	add	x0, x0, #0x6
-               	sxtw	x0, w0
-               	cmp	x0, #0x5
-               	b.eq	<addr>
-               	mov	x0, #0x22               // =34
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

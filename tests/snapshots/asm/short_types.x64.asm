@@ -50,29 +50,6 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	(%rax,%rdx), %rsi
-               	movslq	%esi, %rsi
-               	movswq	%si, %rsi
-               	cmpq	$0x4a8, %rsi            # imm = 0x4A8
-               	je	<addr>
-               	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movq	%rax, %rsi
-               	subq	%rdx, %rsi
-               	movslq	%esi, %rsi
-               	movswq	%si, %rsi
-               	cmpq	$0x4fc, %rsi            # imm = 0x4FC
-               	je	<addr>
-               	movl	$0x4, %eax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
                	leaq	(%rdx,%rdx,2), %rcx
                	movslq	%ecx, %rcx
                	movswq	%cx, %rcx

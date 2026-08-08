@@ -69,22 +69,6 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x50
                	ret
                	sub	x20, x29, #0x8
-               	ldrsw	x0, [x20]
-               	cmp	x0, #0x3
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
-               	ret
-               	ldrsw	x0, [x20, #0x4]
-               	cmp	x0, #0x4
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x50
-               	ret
                	mov	x0, #0x1e               // =30
                	bl	<addr>
                	str	w0, [x20]

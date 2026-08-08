@@ -700,13 +700,6 @@ Disassembly of section .text:
                	movzbq	%sil, %rsi
                	andq	%rsi, %rdx
                	orq	%rax, %rdx
-               	movslq	%ecx, %rax
-               	cmpq	$0x1, %rax
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	movl	$0x1, %eax
-               	testq	%rsi, %rsi
-               	jne	<addr>
                	movslq	%edx, %rax
                	testq	%rax, %rax
                	setne	%al
@@ -739,7 +732,6 @@ Disassembly of section .text:
                	addq	$0x1d0, %rsp            # imm = 0x1D0
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	movl	$0xde, %eax

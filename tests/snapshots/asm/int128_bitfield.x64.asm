@@ -1516,8 +1516,7 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	shrq	$0x24, %rdx
                	andq	$0xfffffff, %rdx        # imm = 0xFFFFFFF
-               	leaq	0x1(%rdx), %rsi
-               	movq	%rsi, %rdx
+               	incq	%rdx
                	andq	$0xfffffff, %rdx        # imm = 0xFFFFFFF
                	shlq	$0x24, %rdx
                	movabsq	$0xfffffffff, %r11      # imm = 0xFFFFFFFFF
@@ -1567,18 +1566,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movq	%rdx, %rax
-               	shrq	$0x24, %rax
-               	andq	$0xfffffff, %rax        # imm = 0xFFFFFFF
-               	shlq	$0x24, %rax
-               	movq	%rax, %rdx
-               	sarq	$0x24, %rdx
-               	testq	%rdx, %rdx
-               	setl	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
+               	xorq	%rax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6e, %eax

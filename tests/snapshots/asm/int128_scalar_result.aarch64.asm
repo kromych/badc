@@ -580,11 +580,6 @@ Disassembly of section .text:
                	cset	x3, lo
                	and	x2, x2, x3
                	orr	x2, x0, x2
-               	sxtw	x0, w1
-               	cmp	x0, #0x1
-               	cset	x3, ne
-               	mov	x0, #0x1                // =1
-               	cbnz	x3, <addr>
                	sxtw	x0, w2
                	cmp	x0, #0x0
                	cset	x0, ne
@@ -606,7 +601,6 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x1e0
                	ret
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	mov	x0, #0xde               // =222

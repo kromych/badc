@@ -1485,6 +1485,66 @@ fn has_include_next_resumes_after_the_current_entry() {
     assert!(out.contains("NEXT_MISSING"), "{out}");
 }
 
+#[test]
+fn foreign_header_sharing_a_bundled_name_keeps_search_path_order() {
+    // An OS source tree carries its own `linux/cdrom.h` and
+    // `linux/fs.h`, names the embedded registry also has. The tree's
+    // cdrom.h is not part of the compiler's own header set, so its
+    // `#include <linux/fs.h>` must resolve through `-I` to the tree's
+    // fs.h, not be pulled into the embedded set by the closed-set
+    // rule. Classification is by the including file's provenance;
+    // a spelling collision with a bundled name must not reclassify it.
+    let base = std::env::temp_dir().join(format!("badc-ostree-{}", std::process::id()));
+    let lnx = base.join("linux");
+    std::fs::create_dir_all(&lnx).unwrap();
+    std::fs::write(
+        lnx.join("cdrom.h"),
+        "#ifndef _OS_CDROM_H\n#define _OS_CDROM_H\n#include <linux/fs.h>\n\
+         int os_tree_cdrom_marker;\n#endif\n",
+    )
+    .unwrap();
+    std::fs::write(
+        lnx.join("fs.h"),
+        "#ifndef _OS_FS_H\n#define _OS_FS_H\nint os_tree_fs_marker;\n#endif\n",
+    )
+    .unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    let out = pp.process("#include <linux/cdrom.h>\n").unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("os_tree_cdrom_marker"), "{out}");
+    assert!(
+        out.contains("os_tree_fs_marker"),
+        "the tree's cdrom.h must reach the tree's fs.h:\n{out}"
+    );
+    assert!(
+        !out.contains("file_clone_range"),
+        "the embedded linux/fs.h must stay out of a foreign tree's chain:\n{out}"
+    );
+}
+
+#[test]
+fn bundled_header_resolves_bundled_includes_over_search_paths() {
+    // The closed-set rule itself: a header served from the embedded
+    // set resolves the bundled names it includes within the set, even
+    // when a `-I` directory shadows one of them. The embedded
+    // `linux/fs.h` includes `<linux/ioctl.h>`; a poisoned copy on the
+    // search path must not be spliced into it. The direct include of a
+    // name the search path does not carry falls through to the
+    // embedded set as before.
+    let base = std::env::temp_dir().join(format!("badc-poison-{}", std::process::id()));
+    let lnx = base.join("linux");
+    std::fs::create_dir_all(&lnx).unwrap();
+    std::fs::write(lnx.join("ioctl.h"), "#error poisoned ioctl.h\n").unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    let out = pp
+        .process("#include <linux/fs.h>\n")
+        .expect("the embedded fs.h must keep its own ioctl.h");
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("file_clone_range"), "{out}");
+}
+
 /// The computed-include macro chain of the tests below: the header
 /// name is assembled from a parameter inside `<dir/n.h>`, so a
 /// digit-leading argument substitutes as the tokens `1x` `.` `h`.

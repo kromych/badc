@@ -100,7 +100,7 @@ impl Preprocessor {
         name: &str,
         form: IncludeForm,
         filename: &str,
-    ) -> Option<(String, String)> {
+    ) -> Option<(String, String, bool)> {
         if form.next {
             // `#include_next` resumes past the search-path entry that
             // supplied the current file, so the including file's own
@@ -126,13 +126,13 @@ impl Preprocessor {
     /// the resolved body.
     pub(super) fn finish_include(
         &mut self,
-        resolved: Option<(String, String)>,
+        resolved: Option<(String, String, bool)>,
         name: &str,
         line_no: usize,
         filename: &str,
         out: &mut String,
     ) -> Result<(), C5Error> {
-        let Some((content, resolved_path)) = resolved else {
+        let Some((content, resolved_path, own)) = resolved else {
             // Missing header is a hard error, as in gcc/clang: the
             // directive cannot perform the replacement C99 6.10.2
             // requires, and continuing with an empty body miscompiles.
@@ -180,14 +180,19 @@ impl Preprocessor {
         // levels as the minimum a translator must support.
         const MAX_INCLUDE_DEPTH: usize = 200;
         if self.include_stack.len() >= MAX_INCLUDE_DEPTH {
-            let chain = self.include_stack.join(" -> ");
+            let chain = self
+                .include_stack
+                .iter()
+                .map(|(n, _)| n.as_str())
+                .collect::<Vec<_>>()
+                .join(" -> ");
             return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
                 filename,
                 line_no,
                 &format!("`#include {name}` nested too deeply (chain: {chain} -> {name})"),
             )));
         }
-        self.include_stack.push(name.to_string());
+        self.include_stack.push((name.to_string(), own));
         let result = self.process_named(&content, &resolved_path, out);
         self.include_stack.pop();
         result
@@ -208,7 +213,7 @@ impl Preprocessor {
     /// header root if one carries it, else the in-binary registry.
     /// The key is always `name`, so a header reached both directly and
     /// through another bundled header is one file to `#pragma once`.
-    fn own_header(&self, name: &str) -> Option<(String, String)> {
+    fn own_header(&self, name: &str) -> Option<(String, String, bool)> {
         #[cfg(feature = "std")]
         for root in &self.own_header_roots {
             let candidate = if root.ends_with('/') || root.ends_with('\\') {
@@ -217,10 +222,10 @@ impl Preprocessor {
                 alloc::format!("{root}/{name}")
             };
             if let Ok(body) = std::fs::read_to_string(&candidate) {
-                return Some((body, name.to_string()));
+                return Some((body, name.to_string(), true));
             }
         }
-        embedded_header(name).map(|b| (b.to_string(), name.to_string()))
+        embedded_header(name).map(|b| (b.to_string(), name.to_string(), true))
     }
 
     /// Look `name` up and return its body plus the path it resolved
@@ -233,7 +238,7 @@ impl Preprocessor {
         &self,
         name: &str,
         source_dir: Option<&str>,
-    ) -> Option<(String, String)> {
+    ) -> Option<(String, String, bool)> {
         #[cfg(feature = "std")]
         {
             let join = |dir: &str| -> String {
@@ -251,7 +256,7 @@ impl Preprocessor {
             if let Some(dir) = source_dir {
                 let candidate = join(dir);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some((body, candidate));
+                    return Some((body, candidate, false));
                 }
                 // `-iquote` directories apply to `#include "..."` only
                 // (C99 6.10.2p2 leaves the extra places implementation-
@@ -260,7 +265,7 @@ impl Preprocessor {
                 for path in &self.quote_search_paths {
                     let candidate = join(path);
                     if let Ok(body) = std::fs::read_to_string(&candidate) {
-                        return Some((body, candidate));
+                        return Some((body, candidate, false));
                     }
                 }
             }
@@ -282,12 +287,12 @@ impl Preprocessor {
             // same name -- an OS source tree supplies its own
             // `linux/...` uapi headers, which `<sys/mman.h>` reaches for
             // -- would otherwise be spliced into the middle of a
-            // standard header. A header the user includes directly keeps
-            // `-I`-shadows-bundled.
-            if self
-                .include_stack
-                .last()
-                .is_some_and(|f| embedded_header(f).is_some())
+            // standard header. The test is the including file's recorded
+            // provenance, not a registry lookup of its spelling: a
+            // foreign header that happens to share a bundled name (an OS
+            // tree's own `linux/cdrom.h`) is not part of the closed set,
+            // and its includes keep `-I`-shadows-bundled.
+            if self.include_stack.last().is_some_and(|&(_, own)| own)
                 && let Some(found) = self.own_header(name)
             {
                 return Some(found);
@@ -295,7 +300,7 @@ impl Preprocessor {
             for path in &self.search_paths {
                 let candidate = join(path);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some((body, candidate));
+                    return Some((body, candidate, false));
                 }
             }
         }
@@ -321,7 +326,7 @@ impl Preprocessor {
             for path in &self.system_fallback_paths {
                 let candidate = join(path);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some((body, candidate));
+                    return Some((body, candidate, false));
                 }
             }
         }
@@ -332,7 +337,7 @@ impl Preprocessor {
             return crate::c5::headers::embedded_headers()
                 .iter()
                 .find(|(n, _)| n.eq_ignore_ascii_case(&lower))
-                .map(|(n, body)| (body.to_string(), n.to_string()));
+                .map(|(n, body)| (body.to_string(), n.to_string(), true));
         }
         None
     }
@@ -346,7 +351,7 @@ impl Preprocessor {
         &self,
         name: &str,
         current_file: &str,
-    ) -> Option<(String, String)> {
+    ) -> Option<(String, String, bool)> {
         #[cfg(feature = "std")]
         {
             // Skip the search-path entries up to and including the one whose
@@ -388,7 +393,7 @@ impl Preprocessor {
                 }
                 let candidate = join(path);
                 if let Ok(body) = std::fs::read_to_string(&candidate) {
-                    return Some((body, candidate));
+                    return Some((body, candidate, false));
                 }
             }
         }

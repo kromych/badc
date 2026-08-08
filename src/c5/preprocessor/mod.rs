@@ -205,10 +205,15 @@ pub(crate) struct Preprocessor {
     /// dropped instead of being read and scanned again (C99 6.10.2; the
     /// same optimization gcc and clang apply).
     include_guards: HashMap<String, String>,
-    /// Names of headers currently being expanded, used to break
-    /// cycles. Pushed on `#include`, popped when we finish processing
-    /// the header.
-    include_stack: Vec<String>,
+    /// Headers currently being expanded: the include spelling plus
+    /// whether the body came from the compiler's own header set (the
+    /// embedded registry or an own-header root) rather than a search
+    /// path. Pushed on `#include`, popped when the header finishes.
+    /// The flag drives the closed-set resolution rule in
+    /// `find_include`: only a file actually served from the own set
+    /// resolves its includes there first, so a foreign header whose
+    /// spelling collides with a bundled name keeps `-I` order.
+    include_stack: Vec<(String, bool)>,
     /// Filesystem search paths for `#include`. Probed in order
     /// before falling back to the bundled in-binary headers, so
     /// an on-disk copy of a bundled header overrides it without

@@ -10302,6 +10302,212 @@ int main(void) { return 0; }
 }
 
 #[test]
+fn empty_and_flexible_arrays_decay_in_static_initializers() {
+    // The array side of the address-constant rule: a zero-length array
+    // (`u8 none[] = {}` -- crypto/rsassa-pkcs1.c, virtio feature
+    // tables) and a flexible array member (`fontdata.data` --
+    // lib/fonts) still decay to addresses, C99 6.3.2.1p3 / GNU
+    // zero-length arrays; only bare non-array scalars are values.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"typedef unsigned char u8;
+static const u8 none[] = {};
+static const u8 md5[] = {1, 2};
+static const struct pfx { const u8 *data; unsigned long n; } pfxs[] = {
+    { none, sizeof(none) }, { md5, sizeof(md5) }, { 0 },
+};
+struct font_data { unsigned int extra[4]; const unsigned char data[]; };
+static const struct font_data fontdata = { {0, 0, 0, 0}, {0x7e, 0x81} };
+static const unsigned char *font_ptr = fontdata.data;
+const void *keep[] = { pfxs, &font_ptr };
+int main(void) { return 0; }
+"#;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let copts = crate::c5::compiler::CompileOptions {
+            gnu: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(String::from(src), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let data_relas: usize = sections
+            .iter()
+            .filter(|(n, _, _, _)| n.starts_with(".rela.data") || n.starts_with(".rela.rodata"))
+            .map(|s| s.3.len() / 24)
+            .sum();
+        // none, md5, fontdata.data, keep[0], keep[1].
+        assert!(
+            data_relas >= 5,
+            "{target:?}: expected the decayed addresses to relocate, got {data_relas}"
+        );
+    }
+}
+
+#[test]
+fn sectioned_callee_stays_out_of_line_across_sections() {
+    // Placement is a contract consumers read: the kernel whitelists
+    // .init.text references from .ref.text, so splicing a __ref helper
+    // into a .text caller moves the reference out of the whitelisted
+    // section (modpost then warns on efi_earlycon_write). gcc keeps a
+    // sectioned callee out of line unless the caller is placed the
+    // same; a callee without a section inlines anywhere.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"extern void sink(int);
+static __attribute__((section(".ref.text"))) void ref_helper(int x) { sink(x + 1); }
+static int plain_helper(int x) { return x + 3; }
+void text_caller(int x) { ref_helper(x); sink(plain_helper(x)); }
+__attribute__((section(".ref.text"))) void ref_caller(int x) { ref_helper(x); }
+int main(void) { return 0; }
+"#;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let copts = crate::c5::compiler::CompileOptions {
+            gnu: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(String::from(src), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            optimize: true,
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        assert!(
+            elf_symbol(&bytes, "ref_helper").is_some(),
+            "{target:?}: the sectioned helper must stay out of line"
+        );
+        assert!(
+            elf_symbol(&bytes, "plain_helper").is_none(),
+            "{target:?}: the unsectioned helper must inline away"
+        );
+        let sections = elf_sections(&bytes);
+        let count_calls = |sec: &str| {
+            sections
+                .iter()
+                .find(|(n, _, _, _)| n == sec)
+                .map_or(0, |s| {
+                    s.3.chunks_exact(24)
+                        .filter(|r| {
+                            let ty = u32::from_le_bytes(r[8..12].try_into().unwrap());
+                            // CALL26 / PLT32+PC32 call forms.
+                            matches!(ty, 283 | 2 | 4)
+                        })
+                        .count()
+                })
+        };
+        // text_caller keeps exactly the ref_helper call (sink calls are
+        // PLT-form too, so compare the two callers instead of a fixed
+        // count): ref_caller's body must contain no call to ref_helper
+        // -- the same-section splice absorbed it, leaving only sink.
+        assert!(
+            count_calls(".rela.text") >= 1,
+            "{target:?}: the cross-section call must stay"
+        );
+        let ref_caller = elf_symbol(&bytes, "ref_caller").expect("ref_caller");
+        let helper = elf_symbol(&bytes, "ref_helper").expect("ref_helper");
+        assert_eq!(
+            ref_caller.0, helper.0,
+            "{target:?}: both placed in .ref.text"
+        );
+    }
+}
+
+#[test]
+fn const_scalar_chain_initializer_folds_to_values() {
+    // A static initializer reading a const-qualified scalar takes its
+    // value (GNU practice; gcc folds the chain), not its address: the
+    // etnaviv module's buffer-size chain got an 8-byte ABS64-relocated
+    // slot over a 4-byte u32, overlapping the next object. The address
+    // form still requires `&` or an array's decay.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"typedef unsigned u32;
+static const u32 image_data_size = 64 * 6;
+static const u32 output_offset = (image_data_size + 63) & ~63u;
+static const u32 shader_offset = ((output_offset + image_data_size) + 63) & ~63u;
+static const u32 shader_size = 16 * 4;
+static const u32 buffer_size = shader_offset + shader_size;
+static const u32 *addr_still_relocates = &buffer_size;
+u32 read_all(void) { return buffer_size + shader_offset + *addr_still_relocates; }
+int main(void) { return 0; }
+"#;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let ro = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rodata")
+            .unwrap_or_else(|| panic!("{target:?}: .rodata missing"));
+        let words: Vec<u32> = ro
+            .3
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
+        for want in [0x300u32, 0x340] {
+            assert!(
+                words.contains(&want),
+                "{target:?}: {want:#x} not in .rodata words {words:x?}"
+            );
+        }
+        // Exactly the pointer object relocates; the value chain must not.
+        let relas = sections
+            .iter()
+            .filter(|(n, _, _, _)| n == ".rela.rodata" || n == ".rela.data")
+            .map(|s| s.3.len() / 24)
+            .sum::<usize>();
+        assert_eq!(relas, 1, "{target:?}: only &buffer_size may relocate");
+    }
+}
+
+#[test]
+fn inline_asm_string_directives_follow_gas() {
+    // `.ascii`/`.asciz`/`.string` take a comma-separated operand list;
+    // adjacent literals concatenate as in C; escapes cover the C set
+    // plus octal and `\x`. The kernel's EXPORT_SYMBOL emits its
+    // namespace as `.ascii ns "\0"` where `ns` is a (possibly empty)
+    // literal -- first-to-last-quote parsing turned the empty form into
+    // the 3 bytes `" "` and poisoned every export's namespace.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"asm(".section \"strs\",\"a\"\n"
+    "\t.asciz \"GPL\"\n"
+    "\t.ascii \"\" \"\\0\"\n"
+    "\t.asciz \"\"\n"
+    "\t.ascii \"KVM\" \"\\0\"\n"
+    "\t.asciz \"a\", \"b\"\n"
+    "\t.ascii \"\\101\\x42\"\n"
+    "\t.string \"s\"\n"
+    ".previous\n");
+int main(void) { return 0; }
+"#;
+    // gas emits: GPL\0, \0, \0, KVM\0, a\0b\0, AB, s\0.
+    const WANT: &[u8] = b"GPL\0\0\0KVM\0a\0b\0ABs\0";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == "strs")
+            .unwrap_or_else(|| panic!("{target:?}: strs section missing"));
+        assert_eq!(sec.3, WANT, "{target:?}: string directive bytes");
+    }
+}
+
+#[test]
 fn inline_asm_section_label_is_relocation_target() {
     // A data reference to a label defined in the same named section
     // resolves to that definition, not to an undefined import. The

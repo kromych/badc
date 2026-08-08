@@ -344,16 +344,13 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	testq	%rsi, %rsi
-               	setg	%dl
+               	sete	%dl
                	movzbq	%dl, %rdx
-               	testq	%rsi, %rsi
-               	sete	%r9b
-               	movzbq	%r9b, %r9
                	cmpq	%r12, %r13
-               	setb	%r14b
-               	movzbq	%r14b, %r14
-               	andq	%r14, %r9
-               	orq	%r9, %rdx
+               	setb	%r9b
+               	movzbq	%r9b, %r9
+               	andq	%r9, %rdx
+               	orq	$0x0, %rdx
                	testq	%rdx, %rdx
                	setne	%r9b
                	movzbq	%r9b, %r9

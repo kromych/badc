@@ -2195,10 +2195,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=323
     v1987 Imm(0)                                           -> x6
     v1988 BinopI { op=and, lhs=v1986, rhs_imm=268435455 }  -> x2
     v1989 Imm(1)                                           -> x6
-    v1990 BinopI { op=add, lhs=v1988, rhs_imm=1 }          -> x6
-    v1991 Binop { op=ult, lhs=v1990, rhs=v1988 }           -> x2
-    v1992 Imm(0)                                           -> x7
-    v1993 BinopI { op=add, lhs=v1991, rhs_imm=0 }          -> x2
+    v1990 BinopI { op=add, lhs=v1988, rhs_imm=1 }          -> x2
+    v1991 Imm(0)                                           -> x6
+    v1992 Imm(0)                                           -> x6
+    v1993 Imm(0)                                           -> x6
     v1994 BinopI { op=and, lhs=v1990, rhs_imm=268435455 }  -> x2
     v1995 BinopI { op=shl, lhs=v1994, rhs_imm=36 }         -> x2
     v1996 Load { addr=v1982, disp=0, kind=I64 }            -> x6
@@ -2285,8 +2285,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=323
     v2071 BinopI { op=shl, lhs=v2070, rhs_imm=36 }         -> x0
     v2072 BinopI { op=shr, lhs=v2071, rhs_imm=36 }         -> x2
     v2073 BinopI { op=shr, lhs=v2071, rhs_imm=63 }         -> x0
-    v2074 BinopI { op=lt, lhs=v2072, rhs_imm=0 }           -> x0
-    v2075 BinopI { op=eq, lhs=v2074, rhs_imm=0 }           -> x0
+    v2074 Imm(1)                                           -> x0
+    v2075 Imm(0)                                           -> x0
     v2076 Imm(0)                                           -> x2
     terminator Jmp(b88)   (exit_acc=v2075)
   block 88  start_pc=0

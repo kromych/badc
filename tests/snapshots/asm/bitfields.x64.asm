@@ -127,15 +127,6 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movl	%edx, %ecx
-               	xorq	$0x12345678, %rcx       # imm = 0x12345678
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0xb, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	leaq	-0x10(%rbp), %rcx
                	movl	%eax, %eax
                	andq	$-0x1d, %rax

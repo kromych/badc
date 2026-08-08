@@ -71,6 +71,7 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "addr_fold_pruned_arm_dce.c",
     "const_struct_array_inline_accessor.c",
     "local_template_byte_probe.c",
+    "range_guard_field_reload.c",
 ];
 
 /// Fixtures whose body carries inline asm specific to one ISA. The
@@ -712,6 +713,53 @@ fn opt_level_flags_map_to_the_single_level() {
     assert_eq!(o2, o, "-O2 should match -O");
     assert_eq!(o3, o, "-O3 should match -O");
     assert_eq!(os, o, "-Os should match -O");
+}
+
+// `-mcmodel=` values follow the target the way gcc's do: aarch64 has
+// tiny/small, x86-64 has small/kernel. `tiny` narrows the layout
+// contract the small form already satisfies, so it lowers as small and
+// the objects are identical (the arm64 vdso builds its units with it).
+#[test]
+fn code_model_values_follow_the_target() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-cmodel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let src = dir.join("u.c");
+    std::fs::write(
+        &src,
+        "extern int ev;\nstatic int gv;\nint f(void) { return ev + gv; }\n",
+    )
+    .expect("write source");
+
+    let compile = |target: &str, model: &str| -> Result<Vec<u8>, String> {
+        let obj = dir.join(format!("u-{target}-{model}.o"));
+        let out = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .arg("-c")
+            .arg(format!("-mcmodel={model}"))
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj)
+            .output()
+            .expect("run badc");
+        if out.status.success() {
+            Ok(std::fs::read(&obj).expect("read object"))
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).into_owned())
+        }
+    };
+
+    let tiny = compile("linux-aarch64", "tiny").expect("aarch64 rejects -mcmodel=tiny");
+    let small = compile("linux-aarch64", "small").expect("aarch64 rejects -mcmodel=small");
+    assert_eq!(tiny, small, "tiny must lower as the small model");
+    let err = compile("linux-x64", "tiny").expect_err("x86-64 accepts -mcmodel=tiny");
+    assert!(err.contains("-mcmodel=tiny"), "unexpected diagnostic: {err}");
+    let err = compile("linux-aarch64", "kernel").expect_err("aarch64 accepts -mcmodel=kernel");
+    assert!(err.contains("-mcmodel=kernel"), "unexpected diagnostic: {err}");
+    let err = compile("linux-x64", "medium").expect_err("x86-64 accepts -mcmodel=medium");
+    assert!(err.contains("unsupported code model"), "unexpected diagnostic: {err}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // `-O` predefines `NDEBUG=1` and `__OPTIMIZE__=1` (release semantics).

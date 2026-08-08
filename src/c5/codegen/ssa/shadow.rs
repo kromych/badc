@@ -23,6 +23,19 @@ fn weak_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> 
         .collect()
 }
 
+/// Explicit `__attribute__((section))` placement per defined function.
+fn function_sections(
+    program: &Program,
+) -> alloc::collections::BTreeMap<&str, &alloc::string::String> {
+    use crate::c5::token::Token;
+    program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && s.defined_here)
+        .filter_map(|s| Some((s.name.as_str(), s.section_name.as_ref()?)))
+        .collect()
+}
+
 /// Names of function definitions with internal linkage (C99 6.2.2).
 fn internal_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> {
     use crate::c5::symbol::Linkage;
@@ -55,6 +68,7 @@ pub(crate) fn walk_program(
     let mut walker_pcs: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     let weak_names = weak_function_names(program);
     let internal_names = internal_function_names(program);
+    let sections = function_sections(program);
     let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
     let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
@@ -82,6 +96,7 @@ pub(crate) fn walk_program(
         func.is_naked = f.is_naked;
         func.is_weak = weak_names.contains(f.name.as_str());
         func.is_internal = internal_names.contains(f.name.as_str());
+        func.section = sections.get(f.name.as_str()).map(|s| (*s).clone());
         // Seed declared multi-cell extents alongside the synthetic ones the
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);

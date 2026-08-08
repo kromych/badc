@@ -216,13 +216,12 @@ Disassembly of section .text:
                	mov	x6, #0x1                // =1
                	cbnz	x2, <addr>
                	cmp	x3, #0x0
-               	cset	x2, gt
-               	cmp	x3, #0x0
-               	cset	x6, eq
+               	cset	x2, eq
                	cmp	x9, x8
-               	cset	x10, lo
-               	and	x6, x6, x10
-               	orr	x2, x2, x6
+               	cset	x6, lo
+               	and	x2, x2, x6
+               	mov	x17, #0x0               // =0
+               	orr	x2, x2, x17
                	cmp	x2, #0x0
                	cset	x6, ne
                	mov	x2, #0x1                // =1

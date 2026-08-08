@@ -178,7 +178,8 @@ static const char *const modules[] = { @MODULES@ };
    fails with ENOENT; the list carries no dependency order. */
 static void load_modules(void)
 {
-    static char done[512];
+    static char done[sizeof modules / sizeof modules[0]];
+    static int last_err[sizeof modules / sizeof modules[0]];
     unsigned n, i, pass, loaded = 0, progress;
 
     for (n = 0; modules[n]; n++)
@@ -193,6 +194,10 @@ static void load_modules(void)
 
             if (done[i])
                 continue;
+            /* Named before the load, so an init that never returns leaves
+               the module it stopped in as the last line on the console. */
+            printf("BADC-MODULE %%s loading pass=%%u\n", modules[i], pass);
+            fflush(stdout);
             fd = open(modules[i], O_RDONLY);
             if (fd < 0) {
                 printf("BADC-MODULE %%s open errno=%%d\n", modules[i], errno);
@@ -207,15 +212,21 @@ static void load_modules(void)
                 done[i] = 1;
                 loaded++;
                 progress = 1;
-            } else if (pass == 3) {
-                printf("BADC-MODULE %%s errno=%%d %%s\n", modules[i], errno,
-                       strerror(errno));
+            } else {
+                last_err[i] = errno;
             }
             fflush(stdout);
         }
         if (!progress)
             break;
     }
+    /* One line per module that never loaded, with the errno of its last
+       attempt; printed after the passes so an early no-progress exit
+       cannot swallow it. */
+    for (i = 0; i < n; i++)
+        if (!done[i] && last_err[i])
+            printf("BADC-MODULE %%s errno=%%d %%s\n", modules[i], last_err[i],
+                   strerror(last_err[i]));
     printf("BADC-MODULE-DONE loaded=%%u of=%%u\n", loaded, n);
     fflush(stdout);
 

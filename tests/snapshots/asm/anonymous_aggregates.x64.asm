@@ -35,23 +35,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %eax
-               	movl	$0x90abcdef, %r11d      # imm = 0x90ABCDEF
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	-0x8(%rbp), %rax
-               	movslq	0x4(%rax), %rax
-               	cmpq	$0x12345678, %rax       # imm = 0x12345678
-               	je	<addr>
-               	movl	$0x5, %eax
-               	addq	$0x60, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	-0x8(%rbp), %rax
                	movl	$0xcafebabe, %ecx       # imm = 0xCAFEBABE
                	movl	%ecx, (%rax)
                	leaq	-0x8(%rbp), %rax

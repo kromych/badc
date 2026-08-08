@@ -1430,14 +1430,15 @@ impl Compiler {
             // arithmetic expression.
             if let Some((v, reloc)) = self.try_const_cond_init_value()? {
                 // A pure-integer parenthesized conditional may be followed by
-                // arithmetic (`(cond ? a : b) * N`, as OpenSSL's cipher tables
-                // use); continue the const-expr chain so the trailing
-                // operators are absorbed rather than left for the brace list
-                // to misread as extra elements. `parse_const_expr_add_from`
-                // returns the seed unchanged when no operator follows. An
-                // address-valued arm is returned as-is.
+                // any binary operator (`(cond ? a : b) * N`, `(cond ? a : b)
+                // | N << 8`) or another `?:`; continue the full const-expr
+                // chain so the trailing operators are absorbed rather than
+                // left for the brace list to misread as extra elements.
+                // `parse_const_expr_cond_from` returns the seed unchanged
+                // when no operator follows. An address-valued arm is
+                // returned as-is.
                 if matches!(reloc, InitElemReloc::None) {
-                    let folded = self.parse_const_expr_add_from(ConstVal::Int {
+                    let folded = self.parse_const_expr_cond_from(ConstVal::Int {
                         val: v,
                         ty: Ty::Int as i64,
                     })?;

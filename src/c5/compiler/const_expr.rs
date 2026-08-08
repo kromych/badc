@@ -761,7 +761,20 @@ impl Compiler {
     /// expression and the `:` arm a conditional-expression, so nested
     /// `?:` (`a ? b ? c : d : e`, `a ? b : c ? d : e`) parses correctly.
     pub(super) fn parse_const_expr_cond_val(&mut self) -> Result<ConstVal, C5Error> {
-        let cond = self.parse_const_expr_or_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_cond_from(seed)
+    }
+
+    /// Continue the whole constant-expression operator chain from an
+    /// already parsed unary-level operand. Each level's `_from` variant
+    /// first lets the tighter levels absorb the seed, so a caller that
+    /// consumed a primary itself (the static-initializer folder after a
+    /// parenthesized conditional) can absorb any trailing operators.
+    pub(super) fn parse_const_expr_cond_from(
+        &mut self,
+        seed: ConstVal,
+    ) -> Result<ConstVal, C5Error> {
+        let cond = self.parse_const_expr_or_from(seed)?;
         if self.lex.tk == Token::Cond {
             self.next()?;
             let taken = cond.is_truthy();
@@ -802,7 +815,12 @@ impl Compiler {
     }
 
     pub(super) fn parse_const_expr_or_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_and_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_or_from(seed)
+    }
+
+    fn parse_const_expr_or_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_and_from(seed)?;
         while self.lex.tk == Token::Lor {
             self.next()?;
             // The right operand's tokens are always consumed, but a
@@ -820,7 +838,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_and_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_bitor_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_and_from(seed)
+    }
+
+    fn parse_const_expr_and_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_bitor_from(seed)?;
         while self.lex.tk == Token::Lan {
             self.next()?;
             let right =
@@ -836,7 +859,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_bitor_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_xor_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_bitor_from(seed)
+    }
+
+    fn parse_const_expr_bitor_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_xor_from(seed)?;
         while self.lex.tk == Token::OrOp {
             self.next()?;
             let right = self.parse_const_expr_xor_val()?;
@@ -846,7 +874,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_xor_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_bitand_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_xor_from(seed)
+    }
+
+    fn parse_const_expr_xor_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_bitand_from(seed)?;
         while self.lex.tk == Token::XorOp {
             self.next()?;
             let right = self.parse_const_expr_bitand_val()?;
@@ -856,7 +889,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_bitand_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_eq_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_bitand_from(seed)
+    }
+
+    fn parse_const_expr_bitand_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_eq_from(seed)?;
         while self.lex.tk == Token::AndOp {
             self.next()?;
             let right = self.parse_const_expr_eq_val()?;
@@ -866,7 +904,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_eq_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_rel_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_eq_from(seed)
+    }
+
+    fn parse_const_expr_eq_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_rel_from(seed)?;
         loop {
             let op = if self.lex.tk == Token::EqOp {
                 ConstBinOp::Eq
@@ -888,7 +931,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_rel_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_shift_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_rel_from(seed)
+    }
+
+    fn parse_const_expr_rel_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_shift_from(seed)?;
         loop {
             let op = if self.lex.tk == Token::LtOp {
                 ConstBinOp::Lt
@@ -921,7 +969,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_shift_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_add_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_shift_from(seed)
+    }
+
+    fn parse_const_expr_shift_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_add_from(seed)?;
         loop {
             let op = if self.lex.tk == Token::ShlOp {
                 ConstBinOp::Shl

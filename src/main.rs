@@ -333,6 +333,23 @@ fn run() {
     let mut compile_only = false;
     let mut lib_names: Vec<String> = Vec::new();
     let mut library_paths: Vec<String> = Vec::new();
+    // Linker-script link (`-T` / `--script`) and the GNU ld options
+    // that shape it. A script switches the link to the per-input-
+    // section engine in `lds_link`; without one the default family
+    // layout stays byte-identical.
+    let mut script_path: Option<PathBuf> = None;
+    let mut orphan_handling = badc::OrphanHandling::Place;
+    let mut build_id_sha1 = false;
+    let mut max_page_size: Option<u64> = None;
+    let mut pack_relative_relocs = false;
+    let mut apply_dynamic_relocs = true;
+    let mut ld_strip_debug = false;
+    let mut discard_locals = false;
+    let mut discard_none = false;
+    // `--whole-archive` spans, as half-open ranges over the positional
+    // input indexes (`args` grows one entry per positional).
+    let mut wa_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut wa_open: Option<usize> = None;
     // `--jobs N` / `-jN` sets the compile-parallelism factor N: the
     // driver compiles independent `.c` sources in up to 2*N worker
     // threads (capped at the source count). `None` leaves N at the host
@@ -751,6 +768,138 @@ fn run() {
                     }
                 });
             }
+            // GNU ld surface for script-driven links. `-T FILE` /
+            // `--script=FILE` select the script; the rest mirror the
+            // options the Linux kernel build passes to `ld`.
+            "-T" | "--script" => match iter.next() {
+                Some(p) => script_path = Some(PathBuf::from(p)),
+                None => {
+                    eprint_diagnostic("badc: error: -T/--script requires a file argument");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("--script=") => {
+                script_path = Some(PathBuf::from(&s["--script=".len()..]));
+            }
+            s if s.starts_with("-T") && s.len() > 2 => {
+                script_path = Some(PathBuf::from(&s[2..]));
+            }
+            s if s.starts_with("--orphan-handling=") => {
+                orphan_handling = match &s["--orphan-handling=".len()..] {
+                    "place" => badc::OrphanHandling::Place,
+                    "warn" => badc::OrphanHandling::Warn,
+                    "error" => badc::OrphanHandling::Error,
+                    "discard" => badc::OrphanHandling::Discard,
+                    other => {
+                        eprint_diagnostic(format!(
+                            "badc: error: --orphan-handling=`{other}`: expected \
+                             place, warn, error, or discard"
+                        ));
+                        std::process::exit(1);
+                    }
+                };
+            }
+            "--build-id" => build_id_sha1 = true,
+            s if s.starts_with("--build-id=") => match &s["--build-id=".len()..] {
+                "sha1" => build_id_sha1 = true,
+                "none" => build_id_sha1 = false,
+                other => {
+                    eprint_diagnostic(format!(
+                        "badc: error: --build-id=`{other}` is not supported (sha1, none)"
+                    ));
+                    std::process::exit(1);
+                }
+            },
+            // `-z keyword`: page-size and packing keywords take
+            // effect; the hardening keywords the kernel passes
+            // describe states this linker already emits.
+            "-z" => match iter.next() {
+                Some(kw) => match kw.as_str() {
+                    s if s.starts_with("max-page-size=") => {
+                        let body = &s["max-page-size=".len()..];
+                        let parsed = if let Some(hex) = body.strip_prefix("0x") {
+                            u64::from_str_radix(hex, 16).ok()
+                        } else {
+                            body.parse::<u64>().ok()
+                        };
+                        match parsed {
+                            Some(n) if n.is_power_of_two() => max_page_size = Some(n),
+                            _ => {
+                                eprint_diagnostic(
+                                    "badc: error: -z max-page-size requires a power of two",
+                                );
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    "pack-relative-relocs" => pack_relative_relocs = true,
+                    "nopack-relative-relocs" => pack_relative_relocs = false,
+                    "noexecstack" | "execstack" | "norelro" | "relro" | "notext" | "text"
+                    | "now" | "lazy" | "defs" | "nodefault" | "muldefs" => {}
+                    other => {
+                        eprint_diagnostic(format!("badc: error: unknown -z keyword `{other}`"));
+                        std::process::exit(1);
+                    }
+                },
+                None => {
+                    eprint_diagnostic("badc: error: -z requires a keyword");
+                    std::process::exit(1);
+                }
+            },
+            "--strip-debug" | "-S" => ld_strip_debug = true,
+            "-X" | "--discard-locals" => discard_locals = true,
+            "--discard-none" => discard_none = true,
+            "--no-apply-dynamic-relocs" => apply_dynamic_relocs = false,
+            // Accepted with no effect on output: diagnostics-shaping
+            // and emulation flags from ld command lines.
+            "--fatal-warnings"
+            | "--no-warn-rwx-segments"
+            | "--no-undefined"
+            | "-EL"
+            | "--pic-veneer"
+            | "-Bsymbolic"
+            | "--no-ld-generated-unwind-info" => {}
+            "--fix-cortex-a53-843419" => {
+                // Erratum veneer generation is not implemented; the
+                // sequences the workaround rewrites must be absent.
+                // TODO: scan for adrp-at-0xff8/0xffc patterns and
+                // materialise veneers.
+                eprintln!(
+                    "badc: note: --fix-cortex-a53-843419 accepted; erratum veneers are not \
+                     generated"
+                );
+            }
+            "-m" => match iter.next() {
+                Some(emu) => {
+                    let spec = match emu.as_str() {
+                        "elf_x86_64" => Some("linux-x64"),
+                        "aarch64linux" | "aarch64elf" => Some("linux-arm64"),
+                        _ => None,
+                    };
+                    match spec {
+                        Some(t) if target_spec.is_none() => target_spec = Some(t.to_string()),
+                        Some(_) => {}
+                        None => {
+                            eprint_diagnostic(format!("badc: error: unknown emulation `{emu}`"));
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                None => {
+                    eprint_diagnostic("badc: error: -m requires an emulation name");
+                    std::process::exit(1);
+                }
+            },
+            "-shared" => claim(&mut mode, Mode::SharedLibrary),
+            "--whole-archive" => wa_open = Some(args.len()),
+            "--no-whole-archive" => {
+                if let Some(start) = wa_open.take() {
+                    wa_ranges.push((start, args.len()));
+                }
+            }
+            // Group markers: the script-link archive loop already
+            // rescans every archive to a fixed point.
+            "--start-group" | "--end-group" => {}
             // An unrecognised dash-prefixed token is an unknown option, not
             // a source file. Without this guard it falls through to `args`
             // and is classified by extension, becoming a phantom input path
@@ -952,9 +1101,14 @@ fn run() {
     //                  mode used.
     // Unrecognised entries past the first non-input become the
     // program's argv for VM / JIT modes.
+    if let Some(start) = wa_open.take() {
+        wa_ranges.push((start, args.len()));
+    }
     let mut sources: Vec<String> = Vec::new();
     let mut objects: Vec<String> = Vec::new();
     let mut archives: Vec<String> = Vec::new();
+    // Parallel to `archives`: inside a `--whole-archive` span.
+    let mut archives_whole: Vec<bool> = Vec::new();
     let mut prog_args_start: usize = args.len();
     // Program argv is consumed only by --jit / --interp; every other
     // mode links or preprocesses its inputs and has no argv tail.
@@ -971,7 +1125,10 @@ fn run() {
         match ext {
             "c" | "" => sources.push(a.clone()),
             "o" => objects.push(a.clone()),
-            "a" => archives.push(a.clone()),
+            "a" => {
+                archives.push(a.clone());
+                archives_whole.push(wa_ranges.iter().any(|&(s, e)| s <= i && i < e));
+            }
             _ => {
                 // In --jit / --interp the first unrecognised entry marks
                 // the boundary; everything after it is the program's argv
@@ -991,6 +1148,47 @@ fn run() {
                 std::process::exit(1);
             }
         }
+    }
+
+    // A linker script switches to the script-driven link engine:
+    // object/archive inputs only, laid out exactly as the script
+    // directs. The default (scriptless) path below is untouched.
+    if let Some(spath) = &script_path {
+        if !matches!(mode, Mode::NativeExecutable | Mode::SharedLibrary) {
+            eprint_diagnostic(format!(
+                "badc: error: -T/--script requires a native link (current mode is {})",
+                mode.flag_name()
+            ));
+            std::process::exit(1);
+        }
+        if !sources.is_empty() {
+            eprint_diagnostic(
+                "badc: error: -T/--script links take .o/.a inputs; compile sources with -c first",
+            );
+            std::process::exit(1);
+        }
+        let opts = ScriptLinkCli {
+            script_path: spath.clone(),
+            objects,
+            archives,
+            archives_whole,
+            output_path,
+            map_path,
+            print_map,
+            entry_override: cli_entry,
+            shared: mode == Mode::SharedLibrary,
+            orphan_handling,
+            build_id_sha1,
+            max_page_size,
+            pack_relative_relocs,
+            apply_dynamic_relocs,
+            strip_debug: ld_strip_debug,
+            discard_locals,
+            discard_none,
+            quiet,
+        };
+        run_script_link(opts);
+        return;
     }
 
     // Resolve `-l<name>` against the `-L<dir>` paths, then the standard
@@ -2809,6 +3007,186 @@ fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
 /// binary emit, native-binary emit -- so the chatter is uniform.
 /// Routes the info line through `eprint_diagnostic` so the
 /// severity word picks up the green TTY color.
+/// Inputs and options for a `-T/--script` link, gathered by the CLI.
+struct ScriptLinkCli {
+    script_path: std::path::PathBuf,
+    objects: Vec<String>,
+    archives: Vec<String>,
+    archives_whole: Vec<bool>,
+    output_path: Option<std::path::PathBuf>,
+    map_path: Option<std::path::PathBuf>,
+    print_map: bool,
+    entry_override: Option<String>,
+    shared: bool,
+    orphan_handling: badc::OrphanHandling,
+    build_id_sha1: bool,
+    max_page_size: Option<u64>,
+    pack_relative_relocs: bool,
+    apply_dynamic_relocs: bool,
+    strip_debug: bool,
+    discard_locals: bool,
+    discard_none: bool,
+    quiet: bool,
+}
+
+/// Script-driven link: parse the script, read every object (pulling
+/// archive members on demand, or wholly under `--whole-archive`), and
+/// hand the set to the `lds_link` engine.
+fn run_script_link(cli: ScriptLinkCli) {
+    let fail = |msg: String| -> ! {
+        eprint_diagnostic(format!("badc: {msg}"));
+        std::process::exit(1);
+    };
+    let script_text = match std::fs::read_to_string(&cli.script_path) {
+        Ok(t) => t,
+        Err(e) => fail(format!(
+            "error: cannot read script {}: {e}",
+            cli.script_path.display()
+        )),
+    };
+    let script = match badc::parse_linker_script(&script_text) {
+        Ok(s) => s,
+        Err(e) => fail(format!("{e}")),
+    };
+    let mut inputs: Vec<badc::LdsObject> = Vec::new();
+    for path in &cli.objects {
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(e) => fail(format!("error: cannot read {path}: {e}")),
+        };
+        match badc::parse_lds_object(path, bytes) {
+            Ok(o) => inputs.push(o),
+            Err(e) => fail(format!("{e}")),
+        }
+    }
+    // Archive members: `--whole-archive` includes every member; the
+    // rest are pulled while they define a still-undefined symbol,
+    // rescanning to a fixed point (group semantics).
+    let mut lazy_members: Vec<badc::LdsObject> = Vec::new();
+    for (ai, path) in cli.archives.iter().enumerate() {
+        let whole = cli.archives_whole.get(ai).copied().unwrap_or(false);
+        let blob = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(e) => fail(format!("error: cannot read {path}: {e}")),
+        };
+        let members = match badc::read_archive_at(&blob, Some(std::path::Path::new(path))) {
+            Ok(m) => m,
+            Err(e) => fail(format!("error: {path}: {e}")),
+        };
+        for m in members {
+            let label = format!("{path}({})", m.name);
+            match badc::parse_lds_object(&label, m.bytes) {
+                Ok(o) => {
+                    if whole {
+                        inputs.push(o);
+                    } else {
+                        lazy_members.push(o);
+                    }
+                }
+                Err(e) => fail(format!("{e}")),
+            }
+        }
+    }
+    if !lazy_members.is_empty() {
+        let defined_names = |o: &badc::LdsObject| -> Vec<String> {
+            o.symbols
+                .iter()
+                .filter(|s| (s.info >> 4) != 0 && s.shndx != 0 && !s.name.is_empty())
+                .map(|s| s.name.clone())
+                .collect()
+        };
+        let mut defined: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut undefined: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let account = |o: &badc::LdsObject,
+                       defined: &mut std::collections::HashSet<String>,
+                       undefined: &mut std::collections::HashSet<String>| {
+            for s in &o.symbols {
+                if s.name.is_empty() || (s.info >> 4) == 0 {
+                    continue;
+                }
+                if s.shndx == 0 {
+                    if !defined.contains(&s.name) {
+                        undefined.insert(s.name.clone());
+                    }
+                } else {
+                    undefined.remove(&s.name);
+                    defined.insert(s.name.clone());
+                }
+            }
+        };
+        for o in &inputs {
+            account(o, &mut defined, &mut undefined);
+        }
+        let mut slots: Vec<Option<badc::LdsObject>> = lazy_members.drain(..).map(Some).collect();
+        loop {
+            let mut progress = false;
+            for slot in slots.iter_mut() {
+                let wanted = slot
+                    .as_ref()
+                    .is_some_and(|o| defined_names(o).iter().any(|n| undefined.contains(n)));
+                if wanted {
+                    let o = slot.take().expect("wanted slot is occupied");
+                    account(&o, &mut defined, &mut undefined);
+                    inputs.push(o);
+                    progress = true;
+                }
+            }
+            if !progress {
+                break;
+            }
+        }
+    }
+    if inputs.is_empty() {
+        fail("error: no input objects".to_string());
+    }
+    let machine = inputs[0].machine;
+    let opts = badc::LdsOptions {
+        emit: if cli.shared {
+            badc::LdsEmit::Dyn
+        } else {
+            badc::LdsEmit::Exec
+        },
+        entry_override: cli.entry_override,
+        // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64.
+        max_page_size: cli
+            .max_page_size
+            .unwrap_or(if machine == 183 { 0x10000 } else { 0x200000 }),
+        orphan_handling: cli.orphan_handling,
+        build_id_sha1: cli.build_id_sha1,
+        strip_debug: cli.strip_debug,
+        discard_locals: cli.discard_locals,
+        discard_none: cli.discard_none,
+        pack_relative_relocs: cli.pack_relative_relocs,
+        apply_dynamic_relocs: cli.apply_dynamic_relocs,
+        emit_warnings: !cli.quiet,
+    };
+    let res = match badc::link_with_script(&script, inputs, &opts) {
+        Ok(r) => r,
+        Err(e) => fail(format!("{e}")),
+    };
+    for w in &res.warnings {
+        eprintln!("badc: {w}");
+    }
+    let out = cli
+        .output_path
+        .unwrap_or_else(|| std::path::PathBuf::from("a.out"));
+    if let Err(e) = std::fs::write(&out, &res.image) {
+        fail(format!("error: failed to write {}: {e}", out.display()));
+    }
+    set_executable(&out);
+    if !cli.quiet {
+        eprint_diagnostic(format!("info: wrote file {}", out.display()));
+    }
+    if let Some(p) = &cli.map_path {
+        if let Err(e) = std::fs::write(p, &res.map) {
+            fail(format!("error: cannot write map file {}: {e}", p.display()));
+        }
+    }
+    if cli.print_map {
+        print!("{}", res.map);
+    }
+}
+
 fn write_output(out: &std::path::Path, bytes: &[u8], target: Target, quiet: bool) {
     if let Err(e) = std::fs::write(out, bytes) {
         eprint_diagnostic(format!(

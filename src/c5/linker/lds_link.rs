@@ -1229,9 +1229,9 @@ impl<'a> LdsLinker<'a> {
         for (gid, members) in &groups {
             let key = &group_key[*gid].0;
             let maps = if key.strings {
-                self.build_string_pool(members)
+                self.build_string_pool(members, key.align)
             } else {
-                self.build_fixed_pool(members, key.entsize)
+                self.build_fixed_pool(members, key.entsize, key.align)
             };
             let (pool_bytes, member_maps) = maps;
             let rep = *members
@@ -1252,11 +1252,12 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Fixed-entsize merge: dedupe identical entries, first occurrence
-    /// wins the offset.
+    /// wins the offset. Entries keep the group's alignment in the pool.
     fn build_fixed_pool(
         &self,
         members: &[usize],
         entsize: u64,
+        align: u64,
     ) -> (Vec<u8>, HashMap<usize, (Vec<u64>, Vec<u64>)>) {
         let mut pool: Vec<u8> = Vec::new();
         let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
@@ -1273,7 +1274,8 @@ impl<'a> LdsLinker<'a> {
                 let end = (pos + entsize as usize).min(data.len());
                 let entry = &data[pos..end];
                 let off = *interned.entry(entry.to_owned()).or_insert_with(|| {
-                    let at = pool.len() as u64;
+                    let at = align_up(pool.len() as u64, align);
+                    pool.resize(at as usize, 0);
                     pool.extend_from_slice(entry);
                     at
                 });
@@ -1296,6 +1298,7 @@ impl<'a> LdsLinker<'a> {
     fn build_string_pool(
         &self,
         members: &[usize],
+        align: u64,
     ) -> (Vec<u8>, HashMap<usize, (Vec<u64>, Vec<u64>)>) {
         let mut pool: Vec<u8> = Vec::new();
         let mut interned: HashMap<Vec<u8>, u64> = HashMap::new();
@@ -1316,7 +1319,8 @@ impl<'a> LdsLinker<'a> {
                     .unwrap_or(data.len());
                 let entry = &data[pos..end];
                 let off = *interned.entry(entry.to_owned()).or_insert_with(|| {
-                    let at = pool.len() as u64;
+                    let at = align_up(pool.len() as u64, align);
+                    pool.resize(at as usize, 0);
                     pool.extend_from_slice(entry);
                     at
                 });
@@ -2183,8 +2187,19 @@ impl<'a> LdsLinker<'a> {
                 let p = self.placements[i];
                 match self.fates[i] {
                     SecFate::Placed { out } => {
+                        // In a merge pool a section symbol's addend picks
+                        // the entry, so the combined offset is remapped; a
+                        // named symbol anchors at its own entry and the
+                        // addend applies to the remapped address (matches
+                        // bfd -- an addend past the entry, e.g. one past a
+                        // string's NUL, must stay relative to that entry).
                         let off = if self.merge_of.contains_key(&i) {
-                            self.merge_remap(i, sym.value.wrapping_add(addend as u64))
+                            if sym.kind() == STT_SECTION {
+                                self.merge_remap(i, sym.value.wrapping_add(addend as u64))
+                            } else {
+                                self.merge_remap(i, sym.value)
+                                    .wrapping_add(addend as u64)
+                            }
                         } else {
                             sym.value.wrapping_add(addend as u64)
                         };
@@ -4357,6 +4372,59 @@ SECTIONS {
         assert_eq!(find_sym(&syms, "b_str"), ro.2 + 6);
     }
 
+    /// A named symbol into a merged string section anchors its relocs:
+    /// the addend applies to the remapped address, so an addend past
+    /// the string's NUL (gcc anchors one-past-end bounds this way)
+    /// stays with that string instead of resolving to a deduplicated
+    /// padding entry. A section symbol's addend selects the entry
+    /// through the remap. Pool entries keep the section's alignment.
+    #[test]
+    fn merge_string_addend_anchors_to_symbol_entry() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text*) } .rodata : { *(.rodata*) } .data : { *(.data*) } }",
+        )
+        .expect("parses");
+        // gcc's .rodata.str1.8 shape: 8-aligned strings, NUL padding.
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0u8; 4])
+            .sec(
+                ".rodata.str1.8",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE | SHF_STRINGS,
+                8,
+                b"io  \0\0\0\0mem \0\0\0\0",
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 24])
+            .entsize(1, 1)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+            .sym("mem_str", STB_GLOBAL, STT_OBJECT, 1, 8, 5)
+            // Symtab: null(0), sections(1..=3), _start(4), mem_str(5).
+            // Slots: mem_str+1, mem_str+5 (one past the NUL), and the
+            // string's offset through the section symbol.
+            .reloc(2, 0, 5, rt::R_AARCH64_ABS64, 1)
+            .reloc(2, 8, 5, rt::R_AARCH64_ABS64, 5)
+            .reloc(2, 16, 2, rt::R_AARCH64_ABS64, 8)
+            .build(EM_AARCH64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let secs = readelf_sections(&res.image);
+        let ro = secs.iter().find(|s| s.0 == ".rodata").expect("rodata");
+        let data = secs.iter().find(|s| s.0 == ".data").expect("data");
+        let ro_off = section_file_off(&res.image, ro.2);
+        let bytes = &res.image[ro_off..ro_off + ro.3 as usize];
+        let mem = bytes
+            .windows(5)
+            .position(|w| w == b"mem \0")
+            .expect("pooled string") as u64;
+        assert_eq!((ro.2 + mem) % 8, 0, "pool keeps the entry alignment");
+        let d_off = section_file_off(&res.image, data.2);
+        let slot =
+            |k: usize| u64::from_le_bytes(res.image[d_off + k..d_off + k + 8].try_into().unwrap());
+        assert_eq!(slot(0), ro.2 + mem + 1);
+        assert_eq!(slot(8), ro.2 + mem + 5);
+        assert_eq!(slot(16), ro.2 + mem);
+    }
+
     const DYN_SCRIPT: &str = r#"
 ENTRY(_start)
 SECTIONS {
@@ -4430,4 +4498,5 @@ SECTIONS {
         assert_eq!(r_type, rt::R_AARCH64_RELATIVE);
         let _ = syms;
     }
+
 }

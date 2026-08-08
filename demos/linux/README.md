@@ -173,30 +173,39 @@ pointer, which is the form the percpu headers read through.
 
 ## Hybrid build (link + boot)
 
-`buildcc.py` is a kbuild CC shim that turns the sweep's compile-only claim
-into a linked, bootable kernel before coverage reaches 100%: badc compiles
-every unit it can, gcc fills the known gaps, and the kernel's own link and
-boot become the correctness test for the badc objects.
+`buildcc.py` is a kbuild CC shim that builds a linked, bootable kernel
+whose every C object is badc's, and the kernel's own link and boot become
+the correctness test for those objects.
 
 Named as `CC=`, the shim classifies each invocation. A kernel C compile
-(`-c`, `-D__KERNEL__`, a `.c` source, not `-m16`/`-m32`) runs the real gcc
-first with the original argv -- kbuild's object and `.d` bookkeeping stay
-authoritative -- then, unless the source is on the fallback list, badc
-recompiles the unit with the sweep's flag rewrite and replaces the object.
+(`-c`, `-D__KERNEL__`, a `.c` source, not `-m16`/`-m32`) goes to badc and
+only to badc: no other compiler runs on it, so no other compiler's object
+can reach the image. The rewritten flag set forwards kbuild's
+`-Wp,-MMD,<path>`, so badc writes the `.d` file `fixdep` turns into the
+`.cmd` file and incremental rebuilds trigger on the right headers. A badc
+failure is the shim's failure -- it removes any partial object, puts
+badc's diagnostic on stderr and exits nonzero, so `make` stops at the
+defect instead of carrying on with something else's object.
 `--version` is answered with badc's identification (`$BADC --version`): its
 first line becomes `CONFIG_CC_VERSION_TEXT`, the compiler text in the boot
 banner and `/proc/version`, and Kconfig re-records that text whenever it
 disagrees with what the build's `$(CC)` reports, so only the shim's own
 answer can survive the build. Everything else (probes, `-E`, `-S`, `.S`
-units, links, 16/32-bit units) goes to gcc untouched, so the configuration
-and object population match the reference corpus -- in particular
-`scripts/cc-version.sh` classifies the reference compiler (`-E`), keeping
-`CONFIG_GCC_VERSION` at the reference toolchain's value: identification
-follows the compiler that built the objects, classification stays with the
-toolchain whose bug-history gates the corpus was captured under (badc's
-claimed `__GNUC__`, 4.2.1, sits below the kernel's gcc floor). A badc failure leaves gcc's object standing and is
-recorded; since the fallback list is exactly the sweep's fail set, every
-recorded failure is a compiler bug candidate.
+units, links, 16/32-bit units, the host tools under `scripts/` and
+`tools/`) goes to gcc untouched -- gas still assembles `.S`, ld still
+links -- so the configuration and object population match the reference
+corpus. In particular `scripts/cc-version.sh` classifies the reference
+compiler (`-E`), keeping `CONFIG_GCC_VERSION` at the reference
+toolchain's value: identification follows the compiler that built the
+objects, classification stays with the toolchain whose bug-history gates
+the corpus was captured under (badc's claimed `__GNUC__`, 4.2.1, sits
+below the kernel's gcc floor).
+
+The one way a kernel C unit reaches another compiler is `$BADC_FALLBACK`,
+which names units explicitly. It exists to bisect a suspected miscompile:
+each listed unit is recorded as `fallback` in the manifest, so a build
+that used it cannot be mistaken for a pure one, and `verify.py` fails when
+the count is nonzero.
 
 ```sh
 cp <reference>/.config <tree>/ && make -C <tree> olddefconfig CC=$PWD/demos/linux/buildcc.py
@@ -204,12 +213,15 @@ BADC=<badc> BADC_FALLBACK=fails.txt BADC_MANIFEST=manifest.txt \
     make -C <tree> -j12 CC=$PWD/demos/linux/buildcc.py vmlinux bzImage
 ```
 
-`fails.txt` holds one kernel-relative source or object path per line (the
-`ok: false` entries of a sweep JSON report). Object entries discriminate a
-compile context: a source also built into an isolated-link environment
-(the EFI stub's `lib-%.o`) is listed by the object it becomes there,
-leaving its other compiles to badc. The manifest gets one line per kernel
-unit: `badc`, `fallback`, or `fail` plus the source and first diagnostic.
+`fails.txt` holds one kernel-relative source or object path per line.
+Object entries discriminate a compile context: a source also built into an
+isolated-link environment (the EFI stub's `lib-%.o`) is listed by the
+object it becomes there, leaving its other compiles to badc. Leave the
+variable unset for a pure build; both defconfigs compile with an empty
+list. The manifest gets one line per kernel unit: `badc`, `fallback`, or
+`fail` plus the source and first diagnostic. A `fail` line is also a build
+failure -- the shim exits nonzero -- so the manifest records what stopped
+the build rather than what it hid.
 Unlike the sweep, the shim forwards `-mno-sse` and
 `-mgeneral-regs-only`: a linked kernel object must keep off the
 floating-point / SIMD register file, which the kernel runs with trapped
@@ -235,7 +247,7 @@ boot a pass/fail check under `qemu-system-x86_64 -nographic`.
 
 ## Regression gate
 
-`verify.py` runs the hybrid build above with no fallback list and boots the
+`verify.py` runs the build above with no fallback list and boots the
 result, as a pass/fail check rather than a measurement:
 
 ```sh

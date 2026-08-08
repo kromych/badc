@@ -1736,33 +1736,27 @@ pub(crate) fn expand_asm_gas_macros(
         .into_iter()
         .map(|s| alloc::string::String::from(s.trim()))
         .collect();
-    let mut macros: alloc::collections::BTreeMap<alloc::string::String, GasMacro> =
-        alloc::collections::BTreeMap::new();
-    let mut equ: alloc::collections::BTreeMap<alloc::string::String, i64> =
-        alloc::collections::BTreeMap::new();
-    let mut aliases: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> =
-        alloc::collections::BTreeMap::new();
+    let mut st = GasExpandState::default();
     let mut out = alloc::string::String::with_capacity(text.len());
-    let mut altmacro = false;
-    expand_gas_statements(
-        &stmts,
-        &mut macros,
-        &mut equ,
-        &mut aliases,
-        &mut altmacro,
-        &mut out,
-        inst_width,
-        0,
-    )?;
+    expand_gas_statements(&stmts, &mut st, &mut out, inst_width, 0)?;
     Ok(Some(out))
+}
+
+/// State a macro expansion carries and mutates: the macro table, `.equ`
+/// values, `.req` register aliases, and whether `.altmacro` is in effect.
+/// Nested expansions share one instance, so a definition or a mode change
+/// inside a macro body is visible to what it invokes.
+#[derive(Default)]
+struct GasExpandState {
+    macros: alloc::collections::BTreeMap<alloc::string::String, GasMacro>,
+    equ: alloc::collections::BTreeMap<alloc::string::String, i64>,
+    aliases: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
+    altmacro: bool,
 }
 
 fn expand_gas_statements(
     stmts: &[alloc::string::String],
-    macros: &mut alloc::collections::BTreeMap<alloc::string::String, GasMacro>,
-    equ: &mut alloc::collections::BTreeMap<alloc::string::String, i64>,
-    aliases: &mut alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
-    altmacro: &mut bool,
+    st: &mut GasExpandState,
     out: &mut alloc::string::String,
     inst_width: usize,
     depth: usize,
@@ -1808,7 +1802,7 @@ fn expand_gas_statements(
         // branch emits, so nesting stays balanced across dead branches.
         match tok {
             ".if" | ".ifeq" | ".ifne" | ".ifgt" | ".iflt" | ".ifge" | ".ifle" => {
-                let taken = emitting(&cond) && gas_if_taken(tok, rest, equ)?;
+                let taken = emitting(&cond) && gas_if_taken(tok, rest, &st.equ)?;
                 cond.push((taken, taken));
                 continue;
             }
@@ -1827,7 +1821,7 @@ fn expand_gas_statements(
             // Defined test against the assignment table the expansion has
             // built (`.ifdef .Lframe_regcount`).
             ".ifdef" | ".ifndef" | ".ifnotdef" => {
-                let defined = equ.contains_key(rest.trim());
+                let defined = st.equ.contains_key(rest.trim());
                 let taken = emitting(&cond) && (defined == (tok == ".ifdef"));
                 cond.push((taken, taken));
                 continue;
@@ -1837,7 +1831,7 @@ fn expand_gas_statements(
                 let f = cond
                     .last_mut()
                     .ok_or("inline asm: `.elseif` without `.if`")?;
-                let taken = outer && !f.1 && gas_if_taken(".if", rest, equ)?;
+                let taken = outer && !f.1 && gas_if_taken(".if", rest, &st.equ)?;
                 f.0 = taken;
                 f.1 |= taken;
                 continue;
@@ -1873,7 +1867,7 @@ fn expand_gas_statements(
             ".macro" => {
                 let (name, params) = parse_gas_macro_header(rest)?;
                 let (body, next) = collect_gas_body(stmts, i, ".macro", ".endm")?;
-                macros.insert(name, GasMacro { params, body });
+                st.macros.insert(name, GasMacro { params, body });
                 i = next;
             }
             ".endm" => {
@@ -1883,7 +1877,7 @@ fn expand_gas_statements(
             }
             ".purgem" => {
                 let name = rest.trim();
-                if macros.remove(name).is_none() {
+                if st.macros.remove(name).is_none() {
                     return Err(alloc::format!(
                         "inline asm: `.purgem` of undefined macro `{name}`"
                     ));
@@ -1892,7 +1886,7 @@ fn expand_gas_statements(
             // Alternate macro syntax. Only the `%expr` argument evaluation is
             // interpreted; the mode carries into nested expansions, which is
             // where an invocation written inside a macro body reads it.
-            ".altmacro" | ".noaltmacro" => *altmacro = tok == ".altmacro",
+            ".altmacro" | ".noaltmacro" => st.altmacro = tok == ".altmacro",
             ".irp" => {
                 let (var, values) = parse_gas_irp_header(rest)?;
                 let (body, next) = collect_gas_repeat_body(stmts, i)?;
@@ -1904,35 +1898,17 @@ fn expand_gas_statements(
                         .iter()
                         .map(|l| subst_gas_params(l, &map, None))
                         .collect();
-                    expand_gas_statements(
-                        &expanded,
-                        macros,
-                        equ,
-                        aliases,
-                        altmacro,
-                        out,
-                        inst_width,
-                        depth + 1,
-                    )?;
+                    expand_gas_statements(&expanded, st, out, inst_width, depth + 1)?;
                 }
             }
             ".rept" => {
-                let table = &*equ;
+                let table = &st.equ;
                 let (body, next) = collect_gas_repeat_body(stmts, i)?;
                 i = next;
                 match eval_asm_expr_with_labels(rest, &|t| table.get(t).copied()) {
                     Some(n) => {
                         for _ in 0..n.max(0) {
-                            expand_gas_statements(
-                                &body,
-                                macros,
-                                equ,
-                                aliases,
-                                altmacro,
-                                out,
-                                inst_width,
-                                depth + 1,
-                            )?;
+                            expand_gas_statements(&body, st, out, inst_width, depth + 1)?;
                         }
                     }
                     // A count over labels (`(662b-661b) / 4`) defers to the
@@ -1942,16 +1918,7 @@ fn expand_gas_statements(
                         out.push_str(".rept ");
                         out.push_str(rest);
                         out.push('\n');
-                        expand_gas_statements(
-                            &body,
-                            macros,
-                            equ,
-                            aliases,
-                            altmacro,
-                            out,
-                            inst_width,
-                            depth + 1,
-                        )?;
+                        expand_gas_statements(&body, st, out, inst_width, depth + 1)?;
                         out.push_str(".endr\n");
                     }
                 }
@@ -1969,10 +1936,10 @@ fn expand_gas_statements(
                     out.push('\n');
                     continue;
                 };
-                let table = &*equ;
+                let table = &st.equ;
                 match eval_asm_expr_with_labels(expr.trim(), &|t| table.get(t).copied()) {
                     Some(v) => {
-                        equ.insert(alloc::string::String::from(sym.trim()), v);
+                        st.equ.insert(alloc::string::String::from(sym.trim()), v);
                     }
                     // A value the expander cannot fold names a symbol or reads
                     // the location counter; neither is known before layout, so
@@ -1985,7 +1952,7 @@ fn expand_gas_statements(
             }
             ".inst" | ".inst.n" | ".inst.w" => {
                 for arg in split_top_commas(rest) {
-                    let table = &*equ;
+                    let table = &st.equ;
                     let v = eval_asm_expr_with_labels(arg, &|t| table.get(t).copied()).ok_or_else(
                         || alloc::format!("inline asm: `.inst` operand `{arg}` is not constant"),
                     )?;
@@ -2001,7 +1968,7 @@ fn expand_gas_statements(
                 }
             }
             ".unreq" => {
-                aliases.remove(rest.trim());
+                st.aliases.remove(rest.trim());
             }
             _ => {
                 // `name = expr`: the GNU as assignment spelling of `.set`.
@@ -2018,10 +1985,10 @@ fn expand_gas_statements(
                 };
                 if let Some((aname, aexpr)) = assign {
                     let aexpr = aexpr.trim();
-                    let table = &*equ;
+                    let table = &st.equ;
                     match eval_asm_expr_with_labels(aexpr, &|t| table.get(t).copied()) {
                         Some(v) => {
-                            equ.insert(alloc::string::String::from(aname), v);
+                            st.equ.insert(alloc::string::String::from(aname), v);
                         }
                         None => {
                             out.push_str(&alloc::format!(".set {aname}, {aexpr}\n"));
@@ -2035,34 +2002,25 @@ fn expand_gas_statements(
                     let reg = r.trim();
                     (r.starts_with(char::is_whitespace) && !reg.is_empty()).then_some(reg)
                 }) {
-                    let resolved = aliases.get(reg).cloned();
-                    aliases.insert(
+                    let resolved = st.aliases.get(reg).cloned();
+                    st.aliases.insert(
                         alloc::string::String::from(tok),
                         resolved.unwrap_or_else(|| alloc::string::String::from(reg)),
                     );
-                } else if macros.contains_key(tok) {
+                } else if st.macros.contains_key(tok) {
                     // Bind arguments to parameters, then expand and re-process
-                    // the body (which may define, invoke, or purge macros).
+                    // the body (which may define, invoke, or purge st.macros).
                     // Each invocation takes a fresh `\@` instance number.
-                    let def = &macros[tok];
+                    let def = &st.macros[tok];
                     let params = def.params.clone();
                     let body = def.body.clone();
-                    let map = bind_gas_macro_args(&params, rest, *altmacro);
+                    let map = bind_gas_macro_args(&params, rest, st.altmacro);
                     let inst = next_asm_instance();
                     let expanded: alloc::vec::Vec<alloc::string::String> = body
                         .iter()
                         .map(|l| subst_gas_params(l, &map, Some(inst)))
                         .collect();
-                    expand_gas_statements(
-                        &expanded,
-                        macros,
-                        equ,
-                        aliases,
-                        altmacro,
-                        out,
-                        inst_width,
-                        depth + 1,
-                    )?;
+                    expand_gas_statements(&expanded, st, out, inst_width, depth + 1)?;
                 } else {
                     // A pass-through line. Resolve any `.equ` symbol and
                     // register alias so a `.short`/`.long` value (the
@@ -2070,19 +2028,19 @@ fn expand_gas_statements(
                     // aliased operand names its register when the section
                     // pass reads it. An alias with an arrangement suffix
                     // (`cbciv.16b`) substitutes the register part.
-                    if equ.is_empty() && aliases.is_empty() {
+                    if st.equ.is_empty() && st.aliases.is_empty() {
                         out.push_str(s);
                     } else {
                         out.push_str(&subst_asm_idents_text(s, &|t| {
-                            if let Some(a) = aliases.get(t) {
+                            if let Some(a) = st.aliases.get(t) {
                                 return Some(a.clone());
                             }
                             if let Some((head, tail)) = t.split_once('.')
-                                && let Some(a) = aliases.get(head)
+                                && let Some(a) = st.aliases.get(head)
                             {
                                 return Some(alloc::format!("{a}.{tail}"));
                             }
-                            equ.get(t).map(|v| alloc::format!("{v}"))
+                            st.equ.get(t).map(|v| alloc::format!("{v}"))
                         }));
                     }
                     out.push('\n');

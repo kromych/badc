@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 
 use super::archive;
 use super::relocatable::{
-    EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable, parse_et_rel,
-    parse_module_script,
+    DiscardLocals, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
+    parse_et_rel, parse_module_script,
 };
 
 /// How positional inputs and archive state were ordered on the
@@ -49,7 +49,7 @@ struct LdArgs {
     fatal_warnings: bool,
     emit_relocs: bool,
     no_undefined: bool,
-    discard_locals: bool,
+    discard_locals: DiscardLocals,
     strip_debug: bool,
     orphan_handling: Option<String>,
     /// `-z noexecstack` / `-z execstack`.
@@ -89,7 +89,7 @@ pub fn run_ld(args: &[String]) -> i32 {
         fatal_warnings: false,
         emit_relocs: false,
         no_undefined: false,
-        discard_locals: false,
+        discard_locals: DiscardLocals::None,
         strip_debug: false,
         orphan_handling: None,
         gnu_stack: None,
@@ -173,9 +173,9 @@ pub fn run_ld(args: &[String]) -> i32 {
             }
             "--emit-relocs" | "-q" => a.emit_relocs = true,
             "--no-undefined" => a.no_undefined = true,
-            "-X" | "--discard-locals" => a.discard_locals = true,
-            "-x" | "--discard-all" => a.discard_locals = true,
-            "--discard-none" => a.discard_locals = false,
+            "-X" | "--discard-locals" => a.discard_locals = DiscardLocals::Temporaries,
+            "-x" | "--discard-all" => a.discard_locals = DiscardLocals::All,
+            "--discard-none" => a.discard_locals = DiscardLocals::None,
             "--strip-debug" | "-S" => a.strip_debug = true,
             "-EL" => {} // little-endian, the only byte order supported
             "-EB" => return ld_err("big-endian output is not supported"),

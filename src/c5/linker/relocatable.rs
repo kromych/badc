@@ -739,11 +739,24 @@ fn parse_gather(toks: &[String], p: &mut usize) -> Result<SecStmt, C5Error> {
 
 // ---- Merge ----------------------------------------------------------
 
+/// Which local symbols survive the merge. A relocation against a
+/// discarded local retargets the containing section's symbol with the
+/// local's value folded into the addend, as GNU ld converts them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DiscardLocals {
+    /// Keep every local (`--discard-none`, the default).
+    #[default]
+    None,
+    /// `-X` / `--discard-locals`: drop `.L*` temporaries.
+    Temporaries,
+    /// `-x` / `--discard-all`: drop every named local.
+    All,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct RelinkOptions {
     pub script: Option<LdScript>,
-    /// `-X` / `--discard-locals`: drop unreferenced `.L*` temporaries.
-    pub discard_locals: bool,
+    pub discard_locals: DiscardLocals,
     pub strip_debug: bool,
     /// `--build-id=sha1`: append a `.note.gnu.build-id` section.
     pub build_id_sha1: bool,
@@ -1216,21 +1229,6 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
         }
     }
 
-    // Which locals are referenced by relocations (for -X).
-    let mut referenced: HashSet<(usize, u32)> = HashSet::new();
-    if opts.discard_locals {
-        for (oi, o) in objs.iter().enumerate() {
-            for (si, s) in o.sections.iter().enumerate() {
-                if dropped.contains(&(oi, si)) && !twin.contains_key(&(oi, si)) {
-                    continue;
-                }
-                for r in &s.relocs {
-                    referenced.insert((oi, r.sym));
-                }
-            }
-        }
-    }
-
     // Global resolution. States keyed by name in first-appearance
     // order; definitions in comdat-dropped sections defer to the kept
     // copy and never conflict.
@@ -1452,10 +1450,12 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                     ((outsec + 1) as u16, sym.value + off)
                 }
             };
-            if opts.discard_locals
-                && sym.name.starts_with(".L")
-                && !referenced.contains(&(oi, yi as u32))
-            {
+            let discard = match opts.discard_locals {
+                DiscardLocals::None => false,
+                DiscardLocals::Temporaries => sym.name.starts_with(".L"),
+                DiscardLocals::All => sym.kind != STT_FILE,
+            };
+            if discard {
                 continue;
             }
             local_map.insert((oi, yi as u32), syms.len() as u32);
@@ -1572,13 +1572,24 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             return Ok((secsym_of_outsec[outsec], r.addend + off as i64));
         }
         if sym.binding == STB_LOCAL {
-            let idx = local_map.get(&(oi, r.sym)).ok_or_else(|| {
-                err(&format!(
-                    "{}: relocation against discarded local `{}'",
-                    o.source, sym.name
-                ))
-            })?;
-            return Ok((*idx, r.addend));
+            if let Some(idx) = local_map.get(&(oi, r.sym)) {
+                return Ok((*idx, r.addend));
+            }
+            // Discarded local: convert to the containing section's
+            // symbol with the local's value folded into the addend.
+            if let EtSymRef::Section(si) = sym.sec {
+                let (tobj, tsec) = twin.get(&(oi, si)).copied().unwrap_or((oi, si));
+                if let Some(&(outsec, off)) = placed.get(&(tobj, tsec)) {
+                    return Ok((
+                        secsym_of_outsec[outsec],
+                        r.addend + off as i64 + sym.value as i64,
+                    ));
+                }
+            }
+            return Err(err(&format!(
+                "{}: relocation against discarded local `{}'",
+                o.source, sym.name
+            )));
         }
         let idx = global_index.get(sym.name.as_str()).ok_or_else(|| {
             err(&format!(

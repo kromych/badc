@@ -149,6 +149,38 @@ fn locals_kept_per_object() {
 }
 
 #[test]
+fn discard_all_converts_local_relocs_to_section_relative() {
+    use crate::c5::linker::relocatable::DiscardLocals;
+    let a = compile_obj(
+        "static int hidden = 9;\n\
+         int reach(void) { return hidden; }\n",
+        "a.o",
+    );
+    let merged = merge(
+        &[a],
+        &RelinkOptions {
+            discard_locals: DiscardLocals::All,
+            ..Default::default()
+        },
+    );
+    assert!(
+        !merged.symbols.iter().any(|s| s.name == "hidden"),
+        "-x drops named locals"
+    );
+    // Every surviving relocation must reference a live symbol; the
+    // one against `hidden` now goes through its section's symbol.
+    for s in &merged.sections {
+        for r in &s.relocs {
+            let sym = &merged.symbols[r.sym as usize];
+            assert!(
+                sym.kind == 3 || !sym.name.is_empty(),
+                "reloc target is a section symbol or a named symbol"
+            );
+        }
+    }
+}
+
+#[test]
 fn module_script_discard_and_gather() {
     let script_text = "\
         SECTIONS {\n\

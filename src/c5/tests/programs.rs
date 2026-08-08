@@ -1269,6 +1269,40 @@ fn attr_arg_keeps_declared_type() {
 }
 
 #[test]
+fn case_label_const_object() {
+    // GCC (GNU mode, at -O) folds a const-qualified scalar arithmetic
+    // object with a constant initializer in case labels, static_assert,
+    // designator indices, and static initializers -- and never in type
+    // dimensions, so `int a[n]` stays a VLA.
+    assert_eq!(run_fixture("case_label_const_object.c"), 0);
+}
+
+#[test]
+fn init_subdesignator_multi_dim() {
+    // C99 6.7.8p7: chained array designators walk one rank per `[i]`,
+    // mixed with `.member` steps, for static, constant-local, and
+    // runtime-valued targets alike.
+    assert_eq!(run_fixture("init_subdesignator_multi_dim.c"), 0);
+}
+
+#[test]
+fn fn_ptr_typedef_param_no_leak() {
+    // An unnamed fn-pointer-typedef parameter must not leak its
+    // prototype into the next struct definition's first field record
+    // (which broke typeof-based container_of static asserts).
+    assert_eq!(run_fixture("fn_ptr_typedef_param_no_leak.c"), 0);
+}
+
+#[test]
+fn init_paren_cond_operator_chain() {
+    // A parenthesized constant conditional in an initializer element
+    // continues through any trailing binary operator or another `?:`
+    // (`(c ? a : b) | x << 8`) instead of leaving tokens to the brace
+    // list.
+    assert_eq!(run_fixture("init_paren_cond_operator_chain.c"), 0);
+}
+
+#[test]
 fn aggregate_init_struct_member_copy() {
     // C99 6.7.8p13: a struct member of an automatic aggregate initialized
     // by a non-constant struct expression (subscript, deref, by-value

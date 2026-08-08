@@ -5209,7 +5209,9 @@ impl Compiler {
             let n = if self.lex.tk == ']' {
                 -1
             } else {
-                let n = self.parse_constant_int()?;
+                // A type dimension: masked so `sizeof(int[h])` with a
+                // const local `h` stays non-constant, as in gcc.
+                let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
                 if n < 0 {
                     return Err(
                         self.compile_err("array dimension in a type name must not be negative")

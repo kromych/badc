@@ -53,6 +53,7 @@ pub(super) struct BlockShadow {
     is_zero_len_array: bool,
     asm_register: Option<crate::c5::symbol::AsmRegister>,
     is_global_register: bool,
+    const_object_value: Option<crate::c5::symbol::ConstObjectValue>,
 }
 
 impl Compiler {
@@ -81,6 +82,7 @@ impl Compiler {
             is_zero_len_array: s.is_zero_len_array,
             asm_register: s.asm_register,
             is_global_register: s.is_global_register,
+            const_object_value: s.const_object_value,
         }
     }
 
@@ -105,6 +107,7 @@ impl Compiler {
         s.is_zero_len_array = b.is_zero_len_array;
         s.asm_register = b.asm_register;
         s.is_global_register = b.is_global_register;
+        s.const_object_value = b.const_object_value;
         s.block_extern_active = false;
     }
 
@@ -2944,12 +2947,14 @@ impl Compiler {
             // negated literal, parenthesised literal, enum / `#define`d
             // constant. The C99 grammar allows the full conditional-
             // expression chain (`a ? b : c`), so we go in at the top.
-            let lo = self.parse_constant_int()?;
+            // Block-scope `const` scalar objects fold to their recorded
+            // initializer values here, as GCC (GNU mode, at -O) accepts.
+            let lo = self.parse_constant_int_folding_const_objects()?;
             // GNU case range `case lo ... hi:` (C extension): the label
             // covers every value in [lo, hi]. `hi == lo` for a single label.
             let hi = if self.lex.tk == Token::Ellipsis {
                 self.next()?;
-                self.parse_constant_int()?
+                self.parse_constant_int_folding_const_objects()?
             } else {
                 lo
             };

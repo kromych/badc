@@ -120,7 +120,10 @@ impl Compiler {
             let mut array_count: i64 = 1;
             while self.lex.tk == Token::Brak {
                 self.next()?;
-                let n = self.parse_constant_int()?;
+                // A type dimension: the const-object fold stays masked so
+                // `sizeof(int[h])` with a const local `h` stays
+                // non-constant, as in gcc.
+                let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
                 // n == 0 is a GCC zero-length array: `sizeof(T[0])` is 0.
                 if n < 0 {
                     return Err(self.compile_err("array dimension in sizeof must be positive"));
@@ -571,7 +574,8 @@ impl Compiler {
         }
         while self.lex.tk == Token::Brak {
             self.next()?;
-            let _ = self.parse_constant_int()?;
+            // A type dimension (see above).
+            let _ = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
             if self.lex.tk != ']' {
                 return Err(self.compile_err("close bracket expected in `_Alignof` array type"));
             }

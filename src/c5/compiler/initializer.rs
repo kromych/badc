@@ -566,7 +566,7 @@ impl Compiler {
                 let mut depth: usize = 0;
                 loop {
                     self.next()?; // consume `[`
-                    let n = self.parse_constant_int()?;
+                    let n = self.parse_constant_int_folding_const_objects()?;
                     if n < 0 {
                         return Err(self.compile_err(format!(
                             "array designator index must be non-negative (got {n})"
@@ -582,7 +582,7 @@ impl Compiler {
                     let mut hi = n;
                     if self.lex.tk == Token::Ellipsis {
                         self.next()?;
-                        hi = self.parse_constant_int()?;
+                        hi = self.parse_constant_int_folding_const_objects()?;
                         if hi < n {
                             return Err(self.compile_err(format!(
                                 "array range designator high {hi} below low {n}"
@@ -897,7 +897,7 @@ impl Compiler {
         loop {
             if self.lex.tk == Token::Brak {
                 self.next()?;
-                let n = self.parse_constant_int()?;
+                let n = self.parse_constant_int_folding_const_objects()?;
                 if self.lex.tk != ']' {
                     self.restore_lex(snap);
                     self.truncate_data(data_snap);
@@ -944,7 +944,7 @@ impl Compiler {
                 let op_snap = self.lex.snapshot();
                 let op_data = self.data.len();
                 self.next()?;
-                let n = match self.parse_constant_int() {
+                let n = match self.parse_constant_int_folding_const_objects() {
                     Ok(n) => n,
                     Err(_) => {
                         self.restore_lex(op_snap);
@@ -1083,6 +1083,17 @@ impl Compiler {
     }
 
     pub(super) fn parse_constant_init_value(&mut self) -> Result<(i128, InitElemReloc), C5Error> {
+        // A constant initializer's value position folds block-scope
+        // `const` scalar objects (`static int x = h;` inside a function),
+        // as GCC accepts; type dimensions nested in the value (a compound
+        // literal's `[N]`) re-mask the fold (see `const_object_fold`).
+        self.const_object_fold += 1;
+        let r = self.parse_constant_init_value_inner();
+        self.const_object_fold -= 1;
+        r
+    }
+
+    fn parse_constant_init_value_inner(&mut self) -> Result<(i128, InitElemReloc), C5Error> {
         // C11 6.5.1.1 generic selection as an aggregate initializer
         // element: select the association, then evaluate the winning
         // expression as a constant (which may itself be an address).
@@ -1433,14 +1444,15 @@ impl Compiler {
             // arithmetic expression.
             if let Some((v, reloc)) = self.try_const_cond_init_value()? {
                 // A pure-integer parenthesized conditional may be followed by
-                // arithmetic (`(cond ? a : b) * N`, as OpenSSL's cipher tables
-                // use); continue the const-expr chain so the trailing
-                // operators are absorbed rather than left for the brace list
-                // to misread as extra elements. `parse_const_expr_add_from`
-                // returns the seed unchanged when no operator follows. An
-                // address-valued arm is returned as-is.
+                // any binary operator (`(cond ? a : b) * N`, `(cond ? a : b)
+                // | N << 8`) or another `?:`; continue the full const-expr
+                // chain so the trailing operators are absorbed rather than
+                // left for the brace list to misread as extra elements.
+                // `parse_const_expr_cond_from` returns the seed unchanged
+                // when no operator follows. An address-valued arm is
+                // returned as-is.
                 if matches!(reloc, InitElemReloc::None) {
-                    let folded = self.parse_const_expr_add_from(ConstVal::Int {
+                    let folded = self.parse_const_expr_cond_from(ConstVal::Int {
                         val: v,
                         ty: Ty::Int as i64,
                     })?;
@@ -1708,7 +1720,7 @@ impl Compiler {
                 let mut depth: usize = 0;
                 while self.lex.tk == Token::Brak {
                     self.next()?;
-                    let n = self.parse_constant_int()?;
+                    let n = self.parse_constant_int_folding_const_objects()?;
                     if self.lex.tk != ']' {
                         return Err(self.compile_err(format!(
                             "close bracket expected in `{}[...]` initializer",
@@ -1797,7 +1809,10 @@ impl Compiler {
         let declared_size: i64 = if self.lex.tk == ']' {
             -1
         } else {
-            self.parse_constant_int()?
+            // A type dimension: the const-object fold stays masked so
+            // `(int[h]){...}` with a const local `h` is rejected as a
+            // variably sized literal, as gcc rejects it.
+            self.with_const_object_fold_masked(|c| c.parse_constant_int())?
         };
         if self.lex.tk != ']' {
             return Err(self.compile_err("`]` expected in array compound-literal type"));
@@ -1938,9 +1953,9 @@ impl Compiler {
     /// first `.field` has already been consumed) and resolve it down
     /// to the final member: its absolute byte offset and its
     /// `StructField` record (so the caller sees array / bitfield
-    /// shape, not just the element type). Accepts further `.member`
-    /// steps; `[index]` sub-array designators surface as a parse
-    /// error until they are wired up. The current type must be a
+    /// shape, not just the element type). Accepts `.member` steps and
+    /// `[index]` sub-array designators, one rank per index, in any
+    /// mix (`.a[i][j]`, `.a[i].b`). The current type must be a
     /// value-typed struct or union for any `.` step.
     pub(super) fn resolve_nested_designator_chain(
         &mut self,
@@ -1983,36 +1998,46 @@ impl Compiler {
                 cur_ty = sub.ty;
                 last = Some(sub);
             } else {
-                // C99 6.7.8p7 `.member[i]`: index the current array member.
-                // Its element type is `cur_ty`; its dimension is on the
-                // field record (`array_size`, with the element type stored
-                // separately, so the stride is `sizeof(element)`).
+                // C99 6.7.8p7 `.member[i]`: index the current array member,
+                // one rank per designator. The element type is `cur_ty`; the
+                // field record carries the dimensions (`array_size` is the
+                // total element count, `array_dims` the per-rank list for a
+                // multi-dimensional member), so each step scales by the
+                // product of the remaining inner dimensions.
                 let arr = match &last {
                     Some(f) if f.array_size > 0 => f.clone(),
                     _ => return Err(self.compile_err("`[N]` designator on a non-array field")),
                 };
-                if arr.inner_array_size != 0 {
-                    return Err(self.compile_err(
-                        "multi-dimensional `[N]` sub-designator is not yet supported",
-                    ));
-                }
+                let dims: Vec<i64> = if arr.array_dims.len() >= 2 {
+                    arr.array_dims.clone()
+                } else {
+                    alloc::vec![arr.array_size]
+                };
+                let inner: i64 = dims[1..].iter().product::<i64>().max(1);
                 self.next()?;
-                let m = self.parse_constant_int()?;
-                if m < 0 || m >= arr.array_size {
+                let m = self.parse_constant_int_folding_const_objects()?;
+                if m < 0 || m >= dims[0] {
                     return Err(self.compile_err(format!(
                         "array designator index {m} out of bounds [0, {})",
-                        arr.array_size
+                        dims[0]
                     )));
                 }
                 if self.lex.tk != ']' {
                     return Err(self.compile_err("`]` expected after sub-designator index"));
                 }
                 self.next()?;
-                cur_offset += m * self.size_of_type(cur_ty) as i64;
-                // The indexed element is one `cur_ty`; strip the array so the
-                // leaf initializes a single element.
+                cur_offset += m * inner * self.size_of_type(cur_ty) as i64;
+                // Drop the indexed rank: the remaining dims describe the
+                // selected row, and a scalar leaf clears the array shape so
+                // the value fill writes a single element.
                 let mut elem = arr;
-                elem.array_size = 0;
+                elem.array_size = if dims.len() >= 2 { inner } else { 0 };
+                elem.inner_array_size = if dims.len() >= 3 { dims[2] } else { 0 };
+                elem.array_dims = if dims.len() >= 3 {
+                    dims[1..].to_vec()
+                } else {
+                    Vec::new()
+                };
                 last = Some(elem);
             }
             took_step = true;
@@ -2462,11 +2487,11 @@ impl Compiler {
             return Ok(None);
         }
         self.next()?; // `[`
-        let lo = self.parse_constant_int()?;
+        let lo = self.parse_constant_int_folding_const_objects()?;
         let mut hi = lo;
         if self.lex.tk == Token::Ellipsis {
             self.next()?;
-            hi = self.parse_constant_int()?;
+            hi = self.parse_constant_int_folding_const_objects()?;
         }
         if lo < 0 || hi < lo || hi >= count {
             return Err(self.compile_err(format!(
@@ -2512,7 +2537,7 @@ impl Compiler {
                 return Err(self.compile_err("`[` designator on a non-array element"));
             }
             self.next()?; // `[`
-            let n = self.parse_constant_int()?;
+            let n = self.parse_constant_int_folding_const_objects()?;
             if n < 0 || n >= dims_below[0] {
                 return Err(self.compile_err(format!(
                     "array designator index {n} out of bounds [0, {})",
@@ -2849,7 +2874,7 @@ impl Compiler {
             let mut range_hi = idx;
             if self.lex.tk == Token::Brak {
                 self.next()?; // consume `[`
-                let n = self.parse_constant_int()?;
+                let n = self.parse_constant_int_folding_const_objects()?;
                 if n < 0 {
                     return Err(self.compile_err(format!(
                         "array designator index must be non-negative (got {n})"
@@ -2858,7 +2883,7 @@ impl Compiler {
                 let mut hi = n;
                 if self.lex.tk == Token::Ellipsis {
                     self.next()?;
-                    hi = self.parse_constant_int()?;
+                    hi = self.parse_constant_int_folding_const_objects()?;
                     if hi < n {
                         return Err(self.compile_err(format!(
                             "array range designator high {hi} below low {n}"

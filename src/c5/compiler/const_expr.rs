@@ -416,6 +416,32 @@ impl Compiler {
         Ok(self.require_integer_const(v)?.as_int())
     }
 
+    /// As [`Self::parse_constant_int`], with references to block-scope
+    /// `const` scalar objects folding to their recorded initializer
+    /// values. Entry point for the value contexts GCC folds them in:
+    /// case labels (including GNU ranges), `static_assert`, and
+    /// initializer designator indices.
+    pub(super) fn parse_constant_int_folding_const_objects(&mut self) -> Result<i64, C5Error> {
+        self.const_object_fold += 1;
+        let r = self.parse_constant_int();
+        self.const_object_fold -= 1;
+        r
+    }
+
+    /// Run `rule` with the const-object fold masked: a type dimension
+    /// (array declarator, compound-literal or type-name `[N]`) never
+    /// folds a block-scope `const` object even inside a folding value
+    /// context, so `int a[h]` stays variably sized (gcc parity).
+    pub(super) fn with_const_object_fold_masked<T>(
+        &mut self,
+        rule: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let saved = core::mem::take(&mut self.const_object_fold);
+        let r = rule(self);
+        self.const_object_fold = saved;
+        r
+    }
+
     /// As [`Self::parse_constant_int`], keeping all 128 bits. Used by the
     /// initializer paths, whose destination may be the 16-byte integer.
     pub(super) fn parse_constant_i128(&mut self) -> Result<i128, C5Error> {
@@ -699,7 +725,12 @@ impl Compiler {
             ));
         }
         self.next()?;
-        let value = self.parse_const_expr_cond_val()?.as_int();
+        // GCC (GNU mode, at -O) folds block-scope `const` scalar objects
+        // in the controlling expression.
+        self.const_object_fold += 1;
+        let value = self.parse_const_expr_cond_val();
+        self.const_object_fold -= 1;
+        let value = value?.as_int();
         // The message argument is optional in C23 but required in
         // C11. Accept both shapes: a trailing `, "msg"` is the
         // canonical form; a bare `(expr)` falls back to a generic
@@ -761,7 +792,20 @@ impl Compiler {
     /// expression and the `:` arm a conditional-expression, so nested
     /// `?:` (`a ? b ? c : d : e`, `a ? b : c ? d : e`) parses correctly.
     pub(super) fn parse_const_expr_cond_val(&mut self) -> Result<ConstVal, C5Error> {
-        let cond = self.parse_const_expr_or_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_cond_from(seed)
+    }
+
+    /// Continue the whole constant-expression operator chain from an
+    /// already parsed unary-level operand. Each level's `_from` variant
+    /// first lets the tighter levels absorb the seed, so a caller that
+    /// consumed a primary itself (the static-initializer folder after a
+    /// parenthesized conditional) can absorb any trailing operators.
+    pub(super) fn parse_const_expr_cond_from(
+        &mut self,
+        seed: ConstVal,
+    ) -> Result<ConstVal, C5Error> {
+        let cond = self.parse_const_expr_or_from(seed)?;
         if self.lex.tk == Token::Cond {
             self.next()?;
             let taken = cond.is_truthy();
@@ -802,7 +846,12 @@ impl Compiler {
     }
 
     pub(super) fn parse_const_expr_or_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_and_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_or_from(seed)
+    }
+
+    fn parse_const_expr_or_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_and_from(seed)?;
         while self.lex.tk == Token::Lor {
             self.next()?;
             // The right operand's tokens are always consumed, but a
@@ -820,7 +869,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_and_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_bitor_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_and_from(seed)
+    }
+
+    fn parse_const_expr_and_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_bitor_from(seed)?;
         while self.lex.tk == Token::Lan {
             self.next()?;
             let right =
@@ -836,7 +890,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_bitor_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_xor_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_bitor_from(seed)
+    }
+
+    fn parse_const_expr_bitor_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_xor_from(seed)?;
         while self.lex.tk == Token::OrOp {
             self.next()?;
             let right = self.parse_const_expr_xor_val()?;
@@ -846,7 +905,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_xor_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_bitand_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_xor_from(seed)
+    }
+
+    fn parse_const_expr_xor_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_bitand_from(seed)?;
         while self.lex.tk == Token::XorOp {
             self.next()?;
             let right = self.parse_const_expr_bitand_val()?;
@@ -856,7 +920,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_bitand_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_eq_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_bitand_from(seed)
+    }
+
+    fn parse_const_expr_bitand_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_eq_from(seed)?;
         while self.lex.tk == Token::AndOp {
             self.next()?;
             let right = self.parse_const_expr_eq_val()?;
@@ -866,7 +935,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_eq_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_rel_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_eq_from(seed)
+    }
+
+    fn parse_const_expr_eq_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_rel_from(seed)?;
         loop {
             let op = if self.lex.tk == Token::EqOp {
                 ConstBinOp::Eq
@@ -888,7 +962,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_rel_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_shift_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_rel_from(seed)
+    }
+
+    fn parse_const_expr_rel_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_shift_from(seed)?;
         loop {
             let op = if self.lex.tk == Token::LtOp {
                 ConstBinOp::Lt
@@ -921,7 +1000,12 @@ impl Compiler {
     }
 
     fn parse_const_expr_shift_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut left = self.parse_const_expr_add_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_shift_from(seed)
+    }
+
+    fn parse_const_expr_shift_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
+        let mut left = self.parse_const_expr_add_from(seed)?;
         loop {
             let op = if self.lex.tk == Token::ShlOp {
                 ConstBinOp::Shl
@@ -1979,6 +2063,31 @@ impl Compiler {
             let ty = self.symbols[self.lex.curr_id_idx].type_;
             self.next()?;
             return Ok(ConstVal::Int { val: v as i128, ty });
+        }
+        // A block-scope `const` scalar arithmetic object with a recorded
+        // constant initializer folds to that value in the contexts GCC
+        // folds it (case labels, `static_assert`; see `const_object_fold`).
+        if self.const_object_fold > 0 && self.lex.tk == Token::Id {
+            let idx = self.lex.curr_id_idx;
+            let sym = &self.symbols[idx];
+            if sym.class == Token::Loc as i64
+                && let Some(v) = sym.const_object_value
+            {
+                let ty = sym.type_;
+                // A folded reference reads the object's value: keep the
+                // unused-binding report quiet even though no load emits.
+                self.symbols[idx].was_referenced = true;
+                self.symbols[idx].was_read = true;
+                self.next()?;
+                return Ok(match v {
+                    crate::c5::symbol::ConstObjectValue::Int(i) => {
+                        ConstVal::Int { val: i as i128, ty }
+                    }
+                    crate::c5::symbol::ConstObjectValue::FloatBits(b) => {
+                        ConstVal::Float(f64::from_bits(b))
+                    }
+                });
+            }
         }
         // C99 6.6 leaves it implementation-defined, but GCC and common
         // practice fold a `const`-qualified integer object with static

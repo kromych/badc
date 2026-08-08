@@ -210,7 +210,9 @@ impl Compiler {
                 dims.push(-1);
                 self.next()?;
             } else {
-                dims.push(self.parse_constant_int()?);
+                // A type-name dimension: the const-object fold stays
+                // masked (see `with_const_object_fold_masked`).
+                dims.push(self.with_const_object_fold_masked(|c| c.parse_constant_int())?);
                 self.accept(']')?;
             }
         }
@@ -625,7 +627,9 @@ impl Compiler {
                 // decide how to interpret it.
                 self.next()?;
                 array_size = -1;
-            } else if let Some(n) = self.try_parse_constant_dim()? {
+            } else if let Some(n) =
+                self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+            {
                 // `int xs[N]` -- N folded to an integer constant. The
                 // constant-expression evaluator accepts integer literals
                 // (with optional unary minus) and identifiers bound to
@@ -703,7 +707,8 @@ impl Compiler {
                     self.next()?;
                     continue;
                 }
-                let Some(m) = self.try_parse_constant_dim()? else {
+                let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+                else {
                     // A non-constant inner dimension makes the whole
                     // object a variably-modified type (C99 6.7.6.2); c5's
                     // stride model is compile-time only, so reject it

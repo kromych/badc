@@ -318,6 +318,28 @@ fn one_dependency_file_cannot_describe_several_units() {
 }
 
 #[test]
+fn dep_output_is_refused_where_it_would_write_nothing() {
+    let dir = fixture("no-tu-output");
+    // `--ar` bundles objects rather than describing a compile, so
+    // `-MMD` there must say so instead of being dropped.
+    let out = Command::new(badc())
+        .args(["--ar", "-MMD", "-o", "out.a", "main.c"])
+        .current_dir(&dir)
+        .output()
+        .expect("spawn badc");
+    assert!(!out.status.success(), "-MMD with --ar must be refused");
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("--ar"),
+        "the diagnostic must name the mode"
+    );
+    // `-M` still works there: it describes the source, not the output.
+    assert_eq!(
+        run(&dir, &["--ar", "-M" /* stdout */, "-MM", "main.c"]),
+        "main.o: main.c a.h sub/deep.h b.h\n"
+    );
+}
+
+#[test]
 fn an_unsupported_wp_payload_is_rejected_rather_than_dropped() {
     let dir = fixture("wp-unknown");
     let out = Command::new(badc())

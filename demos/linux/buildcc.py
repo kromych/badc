@@ -45,10 +45,12 @@ import os
 import subprocess
 import sys
 
-# Flag policy identical to sweep.py: keep the preprocessor surface and the
-# code model (-mcmodel=), fold -isystem/-idirafter into -I, honor the
-# recorded optimization level, drop the rest (warnings, -g/-std, the gcc
-# hardening spellings badc has no equivalent for).
+# Flag policy as in sweep.py: keep the preprocessor surface and the code
+# model (-mcmodel=), fold -isystem/-idirafter into -I, honor the recorded
+# optimization level, drop the rest (warnings, -g/-std, the gcc hardening
+# spellings badc has no equivalent for). It differs in the dependency
+# flags below: the sweep compiles into a scratch directory and wants no
+# .d files, while this shim is the kernel's CC and must produce them.
 KEEP_ARG = {"-I", "-include", "-iquote", "-MF", "-MT", "-MQ"}
 FOLD_TO_I = {"-isystem", "-idirafter"}
 DROP_ARG = {"-o", "--param", "-Xassembler", "-Xlinker"}

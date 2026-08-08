@@ -1562,6 +1562,22 @@ fn run() {
         ));
         std::process::exit(1);
     }
+    // `-MD` / `-MMD` describe a compiled translation unit, which only
+    // `-c` and the executable / shared-library link produce. Refuse the
+    // other modes rather than accept the flag and write nothing.
+    if let Some(d) = &deps
+        && d.kind == DepKind::WithOutput
+        && !compile_only
+        && !matches!(mode, Mode::NativeExecutable | Mode::SharedLibrary)
+    {
+        eprint_diagnostic(format!(
+            "badc: error: {} produces no translation-unit output to describe, \
+             so -MD / -MMD would write nothing (use -M / -MM for a rule \
+             without compiling)",
+            mode.flag_name()
+        ));
+        std::process::exit(1);
+    }
     // Stdin is consumed exactly once. The `--dump-pp`, JIT / interp,
     // and native-link paths can each call `read_stdin_source()`;
     // cache the bytes in an Option so a second call sees the same

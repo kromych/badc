@@ -194,23 +194,14 @@ impl Compiler {
         // (`.globl name`, applied to a C symbol) or a trampoline body (labels +
         // instructions in the default `.text` section). The first routes through
         // `.globl` collection; the second is assembled as a `.text` section.
+        // The probe runs the function-scope extractor, which rejects forms
+        // only the file-scope one accepts (`.text` switches, `.subsection`),
+        // so its error falls through to the file-scope parse.
         let mut blocks = match engine::extract_asm_sections(text, aarch64) {
-            Err(m) => return Err(self.compile_err(m)),
-            Ok(Some((code, blocks))) => {
-                if self.take_file_scope_asm_globl(&code) {
-                    blocks
-                } else {
-                    engine::extract_file_scope_asm_sections(text, aarch64)
-                        .map_err(|m| self.compile_err(m))?
-                }
-            }
-            Ok(None) => {
-                if self.take_file_scope_asm_globl(text) {
-                    return Ok(());
-                }
-                engine::extract_file_scope_asm_sections(text, aarch64)
-                    .map_err(|m| self.compile_err(m))?
-            }
+            Ok(Some((code, blocks))) if self.take_file_scope_asm_globl(&code) => blocks,
+            Ok(None) if self.take_file_scope_asm_globl(text) => return Ok(()),
+            _ => engine::extract_file_scope_asm_sections(text, aarch64)
+                .map_err(|m| self.compile_err(m))?,
         };
         for b in &blocks {
             for item in &b.items {
@@ -2732,7 +2723,7 @@ impl Compiler {
         if !crate::c5::codegen::ssa::emit_common::asm_stream_is_globl_only(text) {
             return false;
         }
-        for piece in text.split([';', '\n']) {
+        for piece in crate::c5::codegen::ssa::emit_common::split_asm_statements(text) {
             let piece = piece.trim();
             if let Some(p) = piece.find(char::is_whitespace) {
                 self.pending_asm_globl.push(piece[p..].trim().into());

@@ -329,6 +329,7 @@ fn fold_asm_sections(
             let at = base + r.offset as usize;
             let target_off = match &r.target {
                 AsmSectionTarget::Text(off) => *off,
+                AsmSectionTarget::OwnSection(off) => base + *off as usize,
                 AsmSectionTarget::Symbol(name) => match label_at
                     .get(name.as_str())
                     .and_then(|p| match p {
@@ -354,16 +355,28 @@ fn fold_asm_sections(
                 }
             };
             // The folded code and its targets share the text stream, so a
-            // PC-relative field folds to a constant: S + A - P.
-            if !(r.pcrel && r.width == 4) {
+            // PC-relative field folds to a constant: S + A - P. The shared
+            // patcher covers the rel32 data field and the AArch64
+            // PC-relative instruction kinds; a kind it declines (an
+            // absolute field, a page / lo12 form) needs a load-time
+            // relocation this image cannot carry.
+            let disp = target_off as i64 + r.addend - at as i64;
+            let patched = crate::c5::codegen::ssa::emit_common::patch_asm_insn_field(
+                &mut build.text,
+                at,
+                r.kind,
+                r.pcrel,
+                r.width,
+                disp,
+            )
+            .map_err(|m| err(alloc::format!("inline-asm section `{}`: {m}", s.name)))?;
+            if !patched {
                 return Err(err(alloc::format!(
-                    "inline-asm section `{}`: only 4-byte PC-relative relocations are \
-                     supported in a single-file image; compile with `-c` and link",
+                    "inline-asm section `{}`: this relocation is not supported in a \
+                     single-file image; compile with `-c` and link",
                     s.name
                 )));
             }
-            let val = target_off as i64 + r.addend - at as i64;
-            build.text[at..at + 4].copy_from_slice(&(val as i32).to_le_bytes());
         }
     }
     // Main-stream references to a label placed in one of those sections.

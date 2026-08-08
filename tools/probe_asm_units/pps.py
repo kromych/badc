@@ -42,6 +42,9 @@ for src, obj, cmd, cmdf in sorted(units):
         fail += 1
         results[src] = {"status": "parse-error"}
         continue
+    # Drop a chained post-step (`; ./tools/objtool/objtool ... obj.o`).
+    if ";" in argv:
+        argv = argv[: argv.index(";")]
     if argv and (argv[0].endswith(".py") or "buildcc" in argv[0]):
         argv[0] = os.environ.get("REALCC", "gcc")
     new = []

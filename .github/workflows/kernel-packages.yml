@@ -35,11 +35,6 @@ name: kernel-packages
 # the paravirtualised spinlocks behind CONFIG_KVM_GUEST) stay unexercised,
 # and instruction timing differs. Everything this gate asserts is guest
 # behaviour whose instructions TCG executes.
-#
-# TODO: the x86_64 lane is red on a compiler defect this harness found -- the
-# badc-built kernel trips WARN_ON_ONCE(!on_thread_stack()) at irqentry exit
-# and runs tainted, where the same tree built with gcc does not warn. Build,
-# package and publish pass; it is the boot probes that fail.
 
 on:
   # No architecture input: both lanes run in parallel, so selecting one saves
@@ -77,15 +72,11 @@ jobs:
           # module-autoload dimension is real only on the aarch64 lane.
           #
           # `cpu` is the guest CPU model, stated per lane rather than left to
-          # the emulator's default. TODO: x86_64 turns LA57 off because the
-          # badc-built kernel oopses in pgd_alloc under 5-level paging where
-          # the same tree built with gcc boots. That oops ends the run in a
-          # boot timeout with no probe data; with the property off the lane
-          # boots, runs its probes and reports the irqentry defect named in
-          # the header. Drop the property once the oops is fixed, so the lane
-          # covers 5-level paging.
+          # the emulator's default. `max` exposes LA57 on x86_64, so the lane
+          # boots under 5-level paging -- which ci.yml's kernel lane does not,
+          # since its guest takes the emulator's default model.
           - { os: ubuntu-24.04,     arch: x86_64,  pkg: deb, floor: 2900,
-              cpu: 'max,la57=off' }
+              cpu: 'max' }
           - { os: ubuntu-24.04-arm, arch: aarch64, pkg: rpm, floor: 10000,
               cpu: 'max' }
     runs-on: ${{ matrix.os }}

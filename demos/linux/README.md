@@ -490,14 +490,15 @@ are gate evidence for one pinned kernel configuration, not a distribution
 channel, and publishing them as release assets would imply support for
 installing them on real machines.
 
-TODO: the x86_64 lane is red on what it found. Booting the installed kernel
-through the image's boot loader reaches paths qemu's `-kernel` loader does
-not -- the boot loader enters the 32-bit entry point, so the decompressor
-runs its 4-to-5 level paging switch -- and the badc-built kernel oopses in
-`pgd_alloc` under 5-level paging and trips
-`WARN_ON_ONCE(!on_thread_stack())` at irqentry exit under any CPU model. The
-same tree built with gcc does neither. Build, package and publish pass; it is
-the boot probes that fail.
+The x86_64 lane runs its guest as `-cpu max`, which exposes LA57, so the
+kernel boots under 5-level paging; `verify.py` takes the emulator's default
+CPU model, which does not. That is one of the two dimensions this lane adds,
+and each caught one of the defects it found on its first run: an oops in
+`pgd_alloc` reachable only under 5-level paging, and
+`WARN_ON_ONCE(!on_thread_stack())` at irqentry exit, which a marker boot
+cannot see because it asserts on markers alone and reads neither dmesg nor
+the taint word. The loader is not the difference -- `-kernel` runs the
+decompressor's 4-to-5 level switch too.
 
 Core dumps are captured throughout. Before validation the vm phase sets
 `kernel.core_pattern`, a core size limit (limits.d) and systemd's

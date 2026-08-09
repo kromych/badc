@@ -423,7 +423,7 @@ impl Compiler {
                 self.accept_declarator_separator()?;
                 continue;
             }
-            let asm_reg = self.parse_register_asm_binding(is_static, is_extern)?;
+            let asm_reg = self.parse_register_asm_binding(loc_idx, is_static, is_extern)?;
             // Trailing cleanup wins for this declarator; else the leading one.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
             if maybe_unused && loc_idx != usize::MAX {
@@ -720,11 +720,17 @@ impl Compiler {
         } else {
             ((self.slots_of_type(ty) * 8).max(8) + fam_tail + 7) / 8 * 8
         };
-        let name = alloc::format!(
-            "{}.{}",
-            self.symbols[loc_idx].name,
-            self.next_block_static_id
-        );
+        // A GNU asm-label names the object outright, so it replaces the
+        // disambiguating `name.N` rather than being suffixed: the label is
+        // the assembler name the declaration asked for.
+        let name = match &self.symbols[loc_idx].asm_name {
+            Some(label) => label.clone(),
+            None => alloc::format!(
+                "{}.{}",
+                self.symbols[loc_idx].name,
+                self.next_block_static_id
+            ),
+        };
         self.next_block_static_id += 1;
         let hash = crate::c5::lexer::hash_name(name.as_bytes());
         let record_idx = self.symbols.len();

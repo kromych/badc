@@ -2188,7 +2188,7 @@ pub(crate) fn lower(
             .symbols
             .iter()
             .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
-            .map(|s| (s.val as usize, s.name.as_str()))
+            .map(|s| (s.val as usize, s.link_name()))
             .collect()
     };
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
@@ -2202,7 +2202,7 @@ pub(crate) fn lower(
         let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
             .extern_imm_data_refs
             .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
             .collect();
         // Same, for cross-TU function references: a `%c` function operand a
         // replacement `call` / `jmp` in a section relocates against. Each
@@ -2221,7 +2221,7 @@ pub(crate) fn lower(
         let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
             .extern_tls_refs
             .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
             .collect();
         let ok = {
             let mut cx = super::ssa::emit_common::EmitCtx {

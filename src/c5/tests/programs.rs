@@ -2030,6 +2030,14 @@ fn attribute_weak_alias() {
 }
 
 #[test]
+fn asm_label_rename() {
+    // A GNU asm-label renames the emitted symbol without changing what the
+    // identifier denotes, so the program's behaviour is the same as it
+    // would be without the labels.
+    assert_eq!(run_fixture("asm_label_rename.c"), 0);
+}
+
+#[test]
 fn alias_extern_redeclaration() {
     // A no-initializer redeclaration of an alias-defined object is a
     // pure redeclaration; it must not re-allocate storage over the

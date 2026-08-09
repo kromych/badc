@@ -839,7 +839,9 @@ fn build_debug_info(
         // `printf` and similar always have a matching Token::Fun
         // symbol in the defining TU).
         let is_variadic = program.symbols.iter().any(|s| {
-            s.class == super::super::token::Token::Fun as i64 && s.name == name && s.is_variadic
+            s.class == super::super::token::Token::Fun as i64
+                && s.link_name() == name
+                && s.is_variadic
         });
         // Group this function's parameters and locals out of the
         // flat program.variables list. `function_bc_pc` keys by

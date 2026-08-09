@@ -98,6 +98,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("attribute_hot_cold.c", 0),
     ("attribute_weak_alias.c", 0),
     ("alias_extern_redeclaration.c", 0),
+    ("asm_label_rename.c", 0),
     ("attribute_section_placement.c", 0),
     // TODO: `speculative_init_parse_data_rewind.c` is held off the host
     // native list -- its nested-compound-literal table is mis-relocated on
@@ -1038,6 +1039,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("register_var_typeof_stmt_expr.c", 0),
     ("attribute_weak_alias.c", 0),
     ("alias_extern_redeclaration.c", 0),
+    ("asm_label_rename.c", 0),
     ("weak_definition_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
     ("attribute_section_placement.c", 0),
@@ -1736,6 +1738,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("register_var_typeof_stmt_expr.c", 0),
     ("attribute_weak_alias.c", 0),
     ("alias_extern_redeclaration.c", 0),
+    ("asm_label_rename.c", 0),
     ("weak_definition_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
     ("attribute_alias_target_later.c", 0),

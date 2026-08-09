@@ -2189,7 +2189,7 @@ impl Compiler {
         let (entry_pc, entry_name) = match resolved_idx {
             Some(idx) => (
                 self.symbols[idx].val as usize,
-                Some(self.symbols[idx].name.clone()),
+                Some(self.symbols[idx].link_name().into()),
             ),
             None if !self.pending_exports.is_empty() || has_user_dllmain || self.no_entry_point => {
                 (0, None)
@@ -2251,11 +2251,11 @@ impl Compiler {
                 {
                     continue;
                 }
-                if exports.iter().any(|e| e.name == sym.name) {
+                if exports.iter().any(|e| e.name == sym.link_name()) {
                     continue;
                 }
                 exports.push(crate::c5::program::ExportedFunction {
-                    name: sym.name.clone(),
+                    name: sym.link_name().into(),
                     ent_pc: sym.val as usize,
                 });
             }
@@ -2438,7 +2438,7 @@ impl Compiler {
                 {
                     continue;
                 }
-                imports.push((next_pc, sym.name.clone()));
+                imports.push((next_pc, sym.link_name().into()));
                 sym.val = next_pc as i64;
                 next_pc += 1;
             }
@@ -2478,7 +2478,7 @@ impl Compiler {
                     s.class == Token::Glo as i64
                         && s.defined_here
                         && !s.is_thread_local
-                        && s.name == r.symbol_name
+                        && s.link_name() == r.symbol_name
                 });
                 let Some(sym_idx) = defined else {
                     still_extern.push(r);

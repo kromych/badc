@@ -18,7 +18,7 @@ fn weak_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> 
         .symbols
         .iter()
         .filter(|s| s.is_weak && s.class == Token::Fun as i64 && !s.name.is_empty())
-        .map(|s| s.name.as_str())
+        .map(|s| s.link_name())
         .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
         .collect()
 }
@@ -32,7 +32,22 @@ fn function_sections(
         .symbols
         .iter()
         .filter(|s| s.class == Token::Fun as i64 && s.defined_here)
-        .filter_map(|s| Some((s.name.as_str(), s.section_name.as_ref()?)))
+        .filter_map(|s| Some((s.link_name(), s.section_name.as_ref()?)))
+        .collect()
+}
+
+/// Assembler name per function identifier the unit renames with a GNU
+/// asm label. Only renamed entries appear; every other function emits
+/// under its identifier.
+fn renamed_functions(
+    program: &Program,
+) -> alloc::collections::BTreeMap<&str, &alloc::string::String> {
+    use crate::c5::token::Token;
+    program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
+        .filter_map(|s| Some((s.name.as_str(), s.asm_name.as_ref()?)))
         .collect()
 }
 
@@ -49,7 +64,7 @@ fn internal_function_names(program: &Program) -> alloc::collections::BTreeSet<&s
                 && s.defined_here
                 && !s.name.is_empty()
         })
-        .map(|s| s.name.as_str())
+        .map(|s| s.link_name())
         .collect()
 }
 
@@ -69,6 +84,7 @@ pub(crate) fn walk_program(
     let weak_names = weak_function_names(program);
     let internal_names = internal_function_names(program);
     let sections = function_sections(program);
+    let renamed = renamed_functions(program);
     let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
     let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
@@ -90,13 +106,19 @@ pub(crate) fn walk_program(
                 e,
             )))
         })?;
-        func.name = f.name.clone();
+        // `FunctionSsa::name` is the assembler name from here down: it feeds
+        // `Build::func_names`, every writer's symbol table, and the bare-name
+        // lookup an inline-asm `call`/`bl` resolves against. The identifier
+        // stays available through `Program::symbols` for DWARF.
+        func.name = renamed
+            .get(f.name.as_str())
+            .map_or_else(|| f.name.clone(), |n| (*n).clone());
         func.is_inline = f.is_inline;
         func.is_always_inline = f.is_always_inline;
         func.is_naked = f.is_naked;
-        func.is_weak = weak_names.contains(f.name.as_str());
-        func.is_internal = internal_names.contains(f.name.as_str());
-        func.section = sections.get(f.name.as_str()).map(|s| (*s).clone());
+        func.is_weak = weak_names.contains(func.name.as_str());
+        func.is_internal = internal_names.contains(func.name.as_str());
+        func.section = sections.get(func.name.as_str()).map(|s| (*s).clone());
         // Seed declared multi-cell extents alongside the synthetic ones the
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);
@@ -277,7 +299,7 @@ fn order_by_section(mut funcs: Vec<FunctionSsa>, program: &Program) -> Vec<Funct
         .symbols
         .iter()
         .filter(|s| s.class == Token::Fun as i64 && s.defined_here && s.section_name.is_some())
-        .map(|s| (s.name.as_str(), s.section_name.as_deref().unwrap_or("")))
+        .map(|s| (s.link_name(), s.section_name.as_deref().unwrap_or("")))
         .collect();
     if section_of.is_empty() {
         return funcs;
@@ -382,7 +404,7 @@ pub(crate) fn compute_live_sets(
             && !sym.name.is_empty()
             && (0..data_len).contains(&sym.val)
         {
-            named.insert(sym.name.as_str(), Node::Data(interval_of(sym.val)));
+            named.insert(sym.link_name(), Node::Data(interval_of(sym.val)));
         }
     }
     for f in funcs {

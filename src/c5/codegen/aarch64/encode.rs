@@ -2044,14 +2044,14 @@ pub(crate) fn lower(
         let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
             .extern_imm_data_refs
             .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
             .collect();
         // Same pre-resolution for `tls_addr_extern` value-ids so the
         // Mach-O TLV descriptor is keyed by the cross-unit symbol name.
         let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
             .extern_tls_refs
             .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
             .collect();
         let ok = {
             let mut cx = super::ssa::emit_common::EmitCtx {

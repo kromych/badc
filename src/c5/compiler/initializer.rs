@@ -188,7 +188,7 @@ impl Compiler {
                         && t.linkage == crate::c5::symbol::Linkage::External
                         && !t.has_initializer;
                     if is_extern_data {
-                        let name = t.name.clone();
+                        let name: alloc::string::String = t.link_name().into();
                         let addend = value - self.symbols[sym_idx].val;
                         self.symbols[sym_idx].was_referenced = true;
                         self.extern_data_relocs

@@ -95,6 +95,24 @@ pub(crate) struct Symbol {
     /// Shadow slot for `is_global_register` (see `h_class`).
     pub h_is_global_register: bool,
 
+    /// GNU asm-label rename (`T name asm("label")`): the assembler
+    /// symbol name emitted for this entity. `name` stays the C
+    /// identifier -- it remains the lookup key, the redeclaration
+    /// match and the spelling diagnostics use -- while every emitted
+    /// symbol and relocation uses [`Symbol::link_name`].
+    ///
+    /// The label is the assembler name, taken as written: gcc and clang
+    /// emit it with no target user-label prefix. badc carries names
+    /// undecorated through the compiler and the linker, so ELF and PE
+    /// emit exactly the label. The Mach-O writer adds its leading
+    /// underscore where it decorates today -- the `--shared` dynamic
+    /// export table -- so a renamed symbol is exported there as
+    /// `_<label>`; nothing else on that path decorates.
+    pub asm_name: Option<String>,
+    /// Shadow slot for `asm_name` (see `h_class`). An inner binding
+    /// that reuses the name starts with no rename of its own.
+    pub h_asm_name: Option<String>,
+
     /// `__attribute__((weak))`: the symbol binds STB_WEAK in the
     /// object's symbol table, for a definition (a strong definition
     /// elsewhere overrides it) and for a declaration (an unresolved
@@ -600,6 +618,15 @@ pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
     }
 }
 
+impl Symbol {
+    /// Assembler symbol name: the GNU asm label when the declaration
+    /// set one, otherwise the C identifier. Every emitted symbol,
+    /// relocation and export uses this; `name` is the identifier.
+    pub fn link_name(&self) -> &str {
+        self.asm_name.as_deref().unwrap_or(&self.name)
+    }
+}
+
 impl crate::c5::layout::DataOffsets for Symbol {
     /// `val` is a `Program::data` byte offset only for a file-scope object
     /// this unit defines: a function symbol's `val` is an `ent_pc`, a
@@ -630,6 +657,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_asm_register: _,
             is_global_register: _,
             h_is_global_register: _,
+            asm_name: _,   // an assembler symbol name, not an offset
+            h_asm_name: _, // scope-restore shadow
             is_weak: _,
             is_used,
             is_hidden: _,

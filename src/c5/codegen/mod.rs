@@ -2665,11 +2665,11 @@ pub(crate) fn reloc_callee_ctx(
     };
     let section_of: alloc::collections::BTreeMap<&str, &str> = defined_funcs()
         .filter(|s| s.section_name.is_some())
-        .map(|s| (s.name.as_str(), s.section_name.as_deref().unwrap_or("")))
+        .map(|s| (s.link_name(), s.section_name.as_deref().unwrap_or("")))
         .collect();
     let weak_names: alloc::collections::BTreeSet<&str> = defined_funcs()
         .filter(|s| s.is_weak)
-        .map(|s| s.name.as_str())
+        .map(|s| s.link_name())
         .collect();
     if section_of.is_empty() && weak_names.is_empty() {
         return empty;

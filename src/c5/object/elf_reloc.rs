@@ -1007,7 +1007,7 @@ pub(super) fn write_relocatable(
             .symbols
             .iter()
             .filter(|s| s.class == Token::Fun as i64 && s.defined_here && s.section_name.is_some())
-            .map(|s| (s.name.as_str(), s.section_name.as_deref().unwrap_or("")))
+            .map(|s| (s.link_name(), s.section_name.as_deref().unwrap_or("")))
             .collect();
         // The emitted code ends at the last recorded native offset;
         // the version marker sits past it and stays in `.text`.
@@ -1459,7 +1459,7 @@ pub(super) fn write_relocatable(
                     && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64)
                     && !s.name.is_empty()
             })
-            .map(|s| s.name.as_str())
+            .map(|s| s.link_name())
             .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
             .collect()
     };
@@ -1483,7 +1483,7 @@ pub(super) fn write_relocatable(
                     && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64)
                     && !s.name.is_empty()
             })
-            .map(|s| s.name.as_str())
+            .map(|s| s.link_name())
             .collect()
     };
     let vis_for = |name: &str| -> u8 {
@@ -1643,16 +1643,16 @@ pub(super) fn write_relocatable(
             let size = crate::c5::layout::data_object_byte_size(sym);
             match sym.linkage {
                 Linkage::External if sym.is_thread_local => {
-                    defined_tls_globals.push((sym.name.as_str(), sym.val, size));
+                    defined_tls_globals.push((sym.link_name(), sym.val, size));
                 }
                 Linkage::External => {
-                    defined_data_globals.push((sym.name.as_str(), sym.val, size));
+                    defined_data_globals.push((sym.link_name(), sym.val, size));
                 }
                 // An alias names another object's storage and a
                 // thread-local static's value is a TLS-block offset, which
                 // `DataPlan::map` would read as a `.data` offset.
                 Linkage::Internal if !sym.is_thread_local && !sym.is_alias => {
-                    defined_data_locals.push((sym.name.as_str(), sym.val, size));
+                    defined_data_locals.push((sym.link_name(), sym.val, size));
                 }
                 _ => {}
             }
@@ -1709,7 +1709,7 @@ pub(super) fn write_relocatable(
                     && !s.name.is_empty()
                     && matches!(s.linkage, Linkage::External | Linkage::Internal)
             })
-            .map(|s| (s.name.as_str(), s.val))
+            .map(|s| (s.link_name(), s.val))
             .collect()
     };
     // Inline-asm section reloc names with neither a definition in this

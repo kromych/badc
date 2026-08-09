@@ -1292,14 +1292,27 @@ fn asm_goto_accepts_forward_and_backward_labels() {
 }
 
 #[test]
-fn declarator_asm_label_rename_rejected_at_file_scope() {
-    // A GNU asm-label restating the identifier is a no-op and accepted; a
-    // differing assembler name would rename the emitted symbol, which is not
-    // yet wired. TODO: honor a differing assembler name.
+fn declarator_asm_label_renames_the_emitted_symbol() {
+    // A GNU asm-label sets the assembler symbol name; the identifier keeps
+    // its own identity, so it stays the lookup key and the only spelling the
+    // source may use.
     super::compile_str_bare("int g asm(\"g\"); int main(void) { return g; }");
+    let p = super::compile_str_bare("int g asm(\"real_g\"); int main(void) { return g; }");
+    let g = p
+        .symbols
+        .iter()
+        .find(|s| s.name == "g")
+        .expect("identifier stays the symbol-table key");
+    assert_eq!(g.link_name(), "real_g");
+    // One identifier, one assembler name: restating it is fine, changing it
+    // is not.
+    super::compile_str_bare(
+        "int f(void) asm(\"r\"); int f(void) asm(\"r\"); int f(void) { return 0; } \
+         int main(void) { return f(); }",
+    );
     expect_compile_error(
-        "int g asm(\"r9\"); int main(void) { return g; }",
-        "differing from `g` is not yet supported",
+        "int f(void) asm(\"a\"); int f(void) asm(\"b\"); int main(void) { return 0; }",
+        "conflicting assembler name `b` for `f`, already declared as `a`",
     );
 }
 
@@ -1308,10 +1321,9 @@ fn register_asm_binding_constraints() {
     // `register T name asm("reg")` requires the `register` storage
     // class, a bindable register for the target, automatic storage,
     // and (for the stack / frame pointer) read-only use.
-    expect_compile_error(
-        "int main(void) { long x asm(\"rax\"); return 0; }",
-        "requires the `register` storage class",
-    );
+    // Without `register` the suffix is an asm-label, which an automatic
+    // object has no symbol to carry; gcc ignores it with a warning.
+    super::compile_str_bare("int main(void) { long x asm(\"rax\"); return 0; }");
     expect_compile_error(
         "int main(void) { register long x asm(\"nosuch\"); return (int)x; }",
         "is not a bindable register",
@@ -1483,11 +1495,15 @@ fn file_scope_register_asm_binding() {
         &format!("int x; register long x asm(\"{sp}\"); int main(void) {{ return 0; }}"),
         "conflicts with a prior declaration",
     );
-    // Without `register` the declarator asm suffix is a GNU asm-label: a
-    // no-op rename is accepted, a differing one is not yet supported.
-    expect_compile_error(
-        "long x asm(\"renamed\"); int main(void) { return 0; }",
-        "differing from `x` is not yet supported",
+    // Without `register` the declarator asm suffix is a GNU asm-label, which
+    // renames the emitted symbol rather than binding a register.
+    let p = super::compile_str_bare("long x asm(\"renamed\"); int main(void) { return 0; }");
+    assert_eq!(
+        p.symbols
+            .iter()
+            .find(|s| s.name == "x")
+            .map(crate::c5::symbol::Symbol::link_name),
+        Some("renamed")
     );
 }
 

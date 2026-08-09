@@ -27,9 +27,10 @@ must agree with `--linker`, so the image itself states what produced it.
         --initramfs <image> --expect-units 1912
 
 `--linker badc` (the default) makes every link badc's, through ldshim.py: the
-kallsyms passes, the final vmlinux, and the relocatable merges. The steps badc
-does not implement are recorded in the link manifest and named in the run's
-output, so a run cannot claim more than it did. `--linker reference` leaves
+kallsyms passes, the final vmlinux, the relocatable merges, the vDSOs and the
+16/32-bit boot links. A link that fell back or that badc could not make is
+recorded in the link manifest and fails the run, so a run cannot claim more
+than it did. `--linker reference` leaves
 every link to `--real-ld` and is the contrast run. Every run names the linker
 it used on its first line and in its verdict, so no result is ambiguous about
 which of the two produced the image it booted.

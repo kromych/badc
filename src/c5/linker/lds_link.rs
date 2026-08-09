@@ -113,7 +113,7 @@ const EM_AARCH64: u16 = 183;
 
 /// ELF class an emulation's machine is linked at. Only i386 among the
 /// machines badc targets is ELF32.
-pub fn class_for_machine(machine: u16) -> ElfClass {
+fn class_for_machine(machine: u16) -> ElfClass {
     match machine {
         EM_386 => ElfClass::Elf32,
         _ => ElfClass::Elf64,

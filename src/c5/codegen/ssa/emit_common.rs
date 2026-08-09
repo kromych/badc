@@ -2296,11 +2296,14 @@ fn bind_gas_macro_args(
             map.insert(p.name.clone(), text);
             break;
         }
+        // An argument supplied empty takes the parameter's default, as GNU as
+        // binds it; a parameter with no default takes the empty string either
+        // way.
         match positional.next() {
-            Some((_, a)) => {
+            Some((_, a)) if !a.is_empty() => {
                 map.insert(p.name.clone(), value(a));
             }
-            None => {
+            _ => {
                 map.insert(p.name.clone(), p.default.clone());
             }
         }
@@ -2383,7 +2386,7 @@ fn parse_gas_macro_header(
     // Parameters split like invocation arguments: a parenthesised
     // `=default` may contain spaces.
     let toks = split_macro_args(rest);
-    let mut it = toks.into_iter();
+    let mut it = toks.into_iter().filter(|t| !t.is_empty());
     let name = it.next().ok_or("inline asm: `.macro` without a name")?;
     let params = it
         .map(|p| {
@@ -2531,7 +2534,8 @@ fn subst_asm_operands(
 /// separate; whitespace separates unless it borders an expression operator
 /// (`ldr_l x1, sym + 24` keeps `sym + 24` whole, `m 3 4` splits) or the
 /// argument began with `(` (`nops (662b-661b) / 4`). Quoted runs and
-/// bracketed groups are opaque.
+/// bracketed groups are opaque. A comma with no argument before it supplies
+/// an empty one (`m 1,,3` binds three), so only whitespace runs collapse.
 fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
     let b = s.as_bytes();
     let is_op = |c: u8| {
@@ -2546,6 +2550,10 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
     let mut start = 0usize;
     let mut paren_led = false;
     let mut in_arg = false;
+    // Whether whitespace closed the previous argument, so a comma reaching
+    // this one is its separator rather than an empty argument.
+    let mut ws_terminated = false;
+    let mut last_comma = false;
     for (i, &c) in b.iter().enumerate() {
         if !in_arg && !c.is_ascii_whitespace() {
             in_arg = true;
@@ -2575,15 +2583,23 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
         };
         if split {
             let p = s[start..i].trim();
-            if !p.is_empty() {
+            let comma = c == b',';
+            // A comma terminates an argument even when it is empty, except
+            // where whitespace already terminated the one before it
+            // (`m 1 , 2` is two arguments, `m 1,,2` is three).
+            if !p.is_empty() || (comma && !ws_terminated) {
                 parts.push(p);
+                ws_terminated = !comma;
+            } else if comma {
+                ws_terminated = false;
             }
+            last_comma = comma;
             start = i + 1;
             in_arg = false;
         }
     }
     let p = s[start..].trim();
-    if !p.is_empty() {
+    if !p.is_empty() || last_comma {
         parts.push(p);
     }
     parts
@@ -8456,6 +8472,49 @@ mod asm_section_tests {
         let out = expand_asm_gas_macros(text, 4, &subst).unwrap().unwrap();
         // sys_reg(3,0,0,0,0) is 0x180000, mrs base 0xd5200000, Rt=1: 0xd5380001.
         assert_eq!(out.trim(), ".byte 0x01, 0x00, 0x38, 0xd5", "{out}");
+    }
+
+    /// A comma with no argument before it supplies an empty one, so the
+    /// arguments after it keep their positions; a parameter supplied empty
+    /// still takes its `=default`. Both are what GNU as binds -- the kernel's
+    /// SIMD macro layers pass empty arguments through several levels
+    /// (`__pmull_p8_tail \rq, ..., 8b,, sh1, ...`).
+    #[test]
+    fn gas_macro_empty_arguments_bind_like_gnu_as() {
+        let expand = |invocation: &str, params: &str| {
+            let text = alloc::format!(
+                ".macro m {params}\n.ascii \"[\\a][\\b][\\c]\"\n.endm\n{invocation}\n"
+            );
+            expand_asm_gas_macros(&text, 4, &|_| None)
+                .unwrap()
+                .unwrap()
+                .trim()
+                .to_string()
+        };
+        for (invocation, want) in [
+            ("m 1,,3", "[1][][3]"),
+            ("m 1, , 3", "[1][][3]"),
+            ("m 1 2 3", "[1][2][3]"),
+            ("m 1,2,", "[1][2][]"),
+            ("m ,2,3", "[][2][3]"),
+        ] {
+            assert_eq!(
+                expand(invocation, "a, b, c"),
+                alloc::format!(".ascii \"{want}\""),
+                "{invocation}"
+            );
+        }
+        for (invocation, want) in [
+            ("m 1,,3", "[1][5][3]"),
+            ("m 1", "[1][5][]"),
+            ("m 1,,", "[1][5][]"),
+        ] {
+            assert_eq!(
+                expand(invocation, "a, b=5, c"),
+                alloc::format!(".ascii \"{want}\""),
+                "{invocation}"
+            );
+        }
     }
 
     #[test]

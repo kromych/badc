@@ -394,7 +394,7 @@ pub(crate) enum AsmOpnd {
     /// imm32 field and records an absolute relocation against the label's
     /// text offset. `num` / `forward` follow [`AsmOpnd::Label`].
     ImmLabel { num: u32, forward: bool },
-    /// `$symbol` / `$symbol ± const`: the address of a named symbol as an
+    /// `$symbol` / `$symbol +/- const`: the address of a named symbol as an
     /// absolute immediate (`pushq $arch_rethook_trampoline`, `movw $_end+3,
     /// %cx`). The name rides in the instruction's `sym_target` and the
     /// constant in `addend`; the emitter zeroes the immediate field and
@@ -2331,7 +2331,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                     }
                     None => op,
                 };
-                // `$symbol` / `$symbol ± const`: a symbol address the
+                // `$symbol` / `$symbol +/- const`: a symbol address the
                 // instruction takes as an absolute immediate, distinct from a
                 // `$int` / `$Nf` label. The constant folds into the addend.
                 if let Some(expr) = tok.strip_prefix('$')

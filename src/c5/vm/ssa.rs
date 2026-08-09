@@ -3503,7 +3503,9 @@ mod tests {
         // libc keep running.
         use crate::Compiler;
         let program = Compiler::new(
-            "#include <string.h>\nint main(void) { return strlen(\"hi\"); }".to_string(),
+            "#include <string.h>\nstatic const char *s = \"hi\";\n\
+             int main(void) { return strlen(s); }"
+                .to_string(),
         )
         .compile()
         .expect("compile fixture");

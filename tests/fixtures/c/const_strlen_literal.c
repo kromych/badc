@@ -7,9 +7,10 @@
 //
 // a test for an embedded NUL rather than a tautology.
 //
-// The fold applies to that exact shape only: a call on a runtime string
-// stays an ordinary call, and stays usable as a variable-length array
-// bound.
+// gcc folds the same shape in an ordinary expression at every
+// optimization level, so it holds there too. The fold applies to that
+// exact shape only: a call on a runtime string stays an ordinary call,
+// and stays usable as a variable-length array bound.
 
 #include <stdio.h>
 #include <string.h>
@@ -60,8 +61,8 @@ int main(void) {
     if (sizeof(sized) != 5) return 1;
     if (sizeof(struct tagged) != 12) return 2;
 
-    // Runtime calls are unaffected: on a variable, on a literal, and
-    // through a function pointer.
+    // A call on a variable or through a function pointer is unaffected;
+    // the literal argument folds here as it does above.
     const char *s = "dynamic";
     char buf[64];
     strcpy(buf, s);

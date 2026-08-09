@@ -4753,9 +4753,8 @@ fn escape_analysis_reads_identifier_runs_not_whole_templates() {
     }
 }
 
-/// The `__builtin_*` library thunks are in scope from the start, so a
-/// unit that uses one and has the library name declared compiles in one
-/// front-end pass with nothing recovered.
+/// A unit that uses a library builtin and has the library name declared
+/// compiles in one front-end pass with nothing recovered.
 #[test]
 fn builtin_thunks_need_no_auto_include_retry() {
     use crate::{CompileOptions, Compiler, Target};
@@ -4778,10 +4777,8 @@ fn builtin_thunks_need_no_auto_include_retry() {
     );
 }
 
-/// The absolute-value builtins fold in a constant expression whether or
-/// not the unit pulled in other builtin thunks: a thunk macro defined up
-/// front would replace the spelling before the constant evaluator saw
-/// it, which is why they are not in the always-included header.
+/// The absolute-value builtins fold in a constant expression alongside
+/// the other library builtins.
 #[test]
 fn absolute_value_builtins_fold_alongside_the_thunks() {
     use crate::{CompileOptions, Compiler, Target};
@@ -4865,9 +4862,8 @@ fn auto_include_retry_emits_what_the_force_include_would() {
     let retried = Compiler::with_options(src.to_string(), target, CompileOptions::default())
         .compile()
         .expect("auto-include retry recovers the undeclared builtin");
-    // `__builtin_memcmp` needs no retry -- its thunk is in scope from
-    // the start -- so what the retry recovers is the library name the
-    // thunk forwards to.
+    // `__builtin_memcmp` is supplied by the compiler, so what the retry
+    // recovers is the library name the builtin binds to.
     assert!(
         retried.auto_includes.iter().any(|n| n == "memcmp"),
         "expected the retry to record the recovered name, got {:?}",

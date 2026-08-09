@@ -1492,7 +1492,7 @@ impl Preprocessor {
     }
 }
 
-mod builtins;
+pub(super) mod builtins;
 mod cond;
 mod directive;
 mod expand;

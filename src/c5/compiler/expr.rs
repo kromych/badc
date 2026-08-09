@@ -412,6 +412,15 @@ impl Compiler {
         Ok(())
     }
 
+    /// The symbol-table index of `name`, creating an unbound entry when
+    /// the translation unit has not mentioned it. Reaching a name this
+    /// way bypasses the preprocessor, so no macro of that name applies.
+    pub(super) fn resolve_symbol_named(&mut self, name: &str) -> usize {
+        let bytes = name.as_bytes();
+        let hash = super::super::lexer::hash_name(bytes);
+        super::super::lexer::resolve_symbol(&mut self.symbols, &mut self.symbol_index, bytes, hash)
+    }
+
     /// Build the call a declined memory-transfer expansion falls back
     /// to: the library function of the same name, with the arguments
     /// already parsed. An undeclared library name reports the same
@@ -941,11 +950,32 @@ impl Compiler {
             self.emit_imm(v);
             self.ty = Ty::Int as i64;
             self.ast_emit_int_lit(v, self.ty);
+        } else if let Some(v) = self.try_fold_strlen_builtin()? {
+            // Likewise the length of a literal, which gcc folds at every
+            // optimization level. Folding it here and not only in the
+            // constant-expression parser is what lets a `sizeof` on an
+            // expression built from it see an integer constant.
+            let (val, ty) = (v.as_int(), self.size_t_ty());
+            self.emit_imm(val);
+            self.ty = ty;
+            self.ast_emit_int_lit(val, ty);
         } else if self.lex.tk == Token::Id {
-            let id_idx = self.lex.curr_id_idx;
+            let mut id_idx = self.lex.curr_id_idx;
             self.next()?;
             if self.lex.tk == '(' {
                 self.next()?;
+                // A `__builtin_*` name equivalent to a library function
+                // binds to that function here rather than through a
+                // header macro, so the unit's own macro of the library
+                // name cannot capture the builtin spelling.
+                if self.symbols[id_idx].class == 0 {
+                    let alias = super::super::preprocessor::builtins::library_alias(
+                        &self.symbols[id_idx].name,
+                    );
+                    if let Some(fn_name) = alias {
+                        id_idx = self.resolve_symbol_named(fn_name);
+                    }
+                }
                 // C89 6.3.2.2 implicit declaration, restricted to the
                 // names the driver listed: the link set defines them,
                 // so the call binds `extern int name();` and resolves

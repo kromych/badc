@@ -66,10 +66,6 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "_builtins.h",
         include_str!("../../libc/include/_builtins.h"),
     ),
-    (
-        "_builtins_abs.h",
-        include_str!("../../libc/include/_builtins_abs.h"),
-    ),
     ("arm_neon.h", include_str!("../../libc/include/arm_neon.h")),
     ("stdalign.h", include_str!("../../libc/include/stdalign.h")),
     ("stddef.h", include_str!("../../libc/include/stddef.h")),

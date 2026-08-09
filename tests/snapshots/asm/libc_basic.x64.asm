@@ -15,26 +15,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x90, %rsp
                	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x5, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	<rip>, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	<rip>, %rdi
                	movl	$0x6c, %esi
                	xorl	%eax, %eax
                	callq	<addr>

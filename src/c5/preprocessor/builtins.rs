@@ -2,8 +2,8 @@
 //!
 //! One table records how each name is supplied; the intrinsic registry
 //! seeded at preprocessor construction, the `#pragma intrinsic` name
-//! lookup and `__has_builtin` are all derived from it, so the three
-//! cannot drift apart.
+//! lookup, `__has_builtin` and the parser's library-alias binding are
+//! all derived from it, so they cannot drift apart.
 
 use crate::c5::codegen::Target;
 use crate::c5::op::Intrinsic;
@@ -20,6 +20,13 @@ pub(super) enum Supply {
     /// Supplied without the registry -- recognized by the parser at the
     /// call site, or predefined as a macro. Also usable with no header.
     Direct,
+    /// Equivalent to the library function named here. The parser binds
+    /// the call site to that function through the symbol table, so a
+    /// translation unit that defines a macro of the library name does
+    /// not capture the builtin spelling -- the guarantee gcc and clang
+    /// give, and the reason a fortified header can call the builtin to
+    /// reach the unfortified function.
+    Alias(&'static str),
     /// A library function that a bundled header binds with
     /// `#pragma intrinsic`; it is not a builtin until that header is
     /// included.
@@ -50,6 +57,17 @@ const fn direct(name: &'static str) -> Builtin {
         name,
         supply: Supply::Direct,
     }
+}
+
+/// `__builtin_<fn>` standing for the library function `<fn>`; the two
+/// spellings are derived from one another so they cannot disagree.
+macro_rules! alias {
+    ($fn_name:literal) => {
+        Builtin {
+            name: concat!("__builtin_", $fn_name),
+            supply: Supply::Alias($fn_name),
+        }
+    };
 }
 
 const fn library(name: &'static str, kind: Intrinsic) -> Builtin {
@@ -113,10 +131,36 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__builtin_mul_overflow"),
     // Memory transfers with an integer-constant-expression byte count,
     // expanded inline at the call site. A count the expansion declines
-    // falls back to the library function through <_builtins_mem.h>.
+    // is emitted as a call to the library function of the same name.
     direct("__builtin_memcpy"),
     direct("__builtin_memmove"),
     direct("__builtin_memset"),
+    // Builtins equivalent to a library function. `abs` / `labs` / `llabs`
+    // and the string comparisons fold with constant arguments; every one
+    // of them is otherwise a call to the named function.
+    alias!("abs"),
+    alias!("labs"),
+    alias!("llabs"),
+    alias!("memcmp"),
+    alias!("memchr"),
+    alias!("strcpy"),
+    alias!("strncpy"),
+    alias!("strcat"),
+    alias!("strncat"),
+    alias!("strcmp"),
+    alias!("strncmp"),
+    alias!("strlen"),
+    alias!("strchr"),
+    alias!("strrchr"),
+    alias!("strstr"),
+    alias!("strpbrk"),
+    alias!("strspn"),
+    alias!("strcspn"),
+    alias!("abort"),
+    alias!("malloc"),
+    alias!("calloc"),
+    alias!("realloc"),
+    alias!("free"),
     // Hints with no code-generation effect: predefined as macros, either
     // by the preprocessor or by the auto-included <_builtins.h>.
     direct("__builtin_expect"),
@@ -167,7 +211,7 @@ fn registry_id(supply: Supply, target: Target) -> Option<i64> {
         } else {
             llp64 as i64
         }),
-        Supply::Direct => None,
+        Supply::Direct | Supply::Alias(_) => None,
     }
 }
 
@@ -178,8 +222,19 @@ pub(super) fn preseeded(target: Target) -> impl Iterator<Item = (&'static str, i
         Supply::Registry(_) | Supply::RegistryByLong { .. } => {
             registry_id(b.supply, target).map(|id| (b.name, id))
         }
-        Supply::Direct | Supply::Library(_) => None,
+        Supply::Direct | Supply::Alias(_) | Supply::Library(_) => None,
     })
+}
+
+/// The library function a `__builtin_*` name stands for, or `None` when
+/// the name is not one of the aliases. The parser binds a call site to
+/// that function directly, which is what keeps the builtin out of reach
+/// of a translation unit's macro of the library name.
+pub(crate) fn library_alias(name: &str) -> Option<&'static str> {
+    match lookup(name)?.supply {
+        Supply::Alias(fn_name) => Some(fn_name),
+        _ => None,
+    }
 }
 
 /// `#pragma intrinsic(name)`: the registry discriminant to record, or

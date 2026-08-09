@@ -2121,6 +2121,35 @@ fn builtin_table_answers_all_three_roles() {
             "`{name}` has no registry id"
         );
     }
+    // Builtins equivalent to a library function: no registry id, and
+    // `__has_builtin` reports 1 as it does in gcc and clang. The
+    // library name they bind to is derived from the builtin spelling.
+    for (name, fn_name) in [
+        ("__builtin_strlen", "strlen"),
+        ("__builtin_memcmp", "memcmp"),
+        ("__builtin_abs", "abs"),
+        ("__builtin_malloc", "malloc"),
+    ] {
+        assert!(
+            builtins::has_builtin(name),
+            "__has_builtin({name}) must be 1"
+        );
+        assert_eq!(
+            builtins::library_alias(name),
+            Some(fn_name),
+            "`{name}` must bind to `{fn_name}`"
+        );
+        assert!(
+            builtins::intrinsic_id(name, Target::MacOSAarch64).is_none(),
+            "`{name}` has no registry id"
+        );
+        assert!(
+            !pp.intrinsics.contains_key(name),
+            "`{name}` must not be seeded into the registry"
+        );
+    }
+    assert_eq!(builtins::library_alias("__builtin_clz"), None);
+    assert_eq!(builtins::library_alias("strlen"), None);
     // Library names a header binds: not seeded and not reported by
     // `__has_builtin`, but `#pragma intrinsic` registers them.
     for name in [

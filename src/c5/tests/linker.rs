@@ -5411,7 +5411,7 @@ fn macho_data_import_gets_no_bogus_local_text_symbol() {
     let program = Compiler::with_options(
         "#include <unistd.h>\n\
          #include <string.h>\n\
-         int main(void) { return environ != 0 ? (int)strlen(\"x\") : 0; }\n"
+         int main(void) { return environ != 0 ? (int)strlen(environ[0]) : 0; }\n"
             .to_string(),
         Target::MacOSAarch64,
         CompileOptions::default(),

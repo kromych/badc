@@ -212,10 +212,15 @@ kernel harness under `demos/linux/` does exactly that.
   `__builtin_ctz(0)` return the operand width instead of being undefined.
   `__builtin_unreachable` lowers to a trap, so reaching one aborts.
   `__builtin_has_attribute` is accepted and always folds to 0.
-  The remaining string and math `__builtin_` spellings are macro thunks in
-  the bundled `_builtins.h`, which every translation unit includes; a few
+  The remaining string, allocation and absolute-value `__builtin_`
+  spellings are equivalent to the library function of the same name, which
+  the parser binds them to through the symbol table -- a unit that defines
+  a macro of the library name (as the fortified string headers do) still
+  gets the builtin from the `__builtin_` spelling. A few
   (`__builtin_strlen`, `strcmp`, `strncmp`, `memcmp`, `abs` and its wider
-  forms) additionally constant-fold on literal operands.
+  forms) additionally constant-fold on literal operands. The hints with no
+  code-generation effect and the infinity / NaN constants stay macros in
+  the bundled `_builtins.h`, which every translation unit includes.
 - The `__sync_*` and `__atomic_*` families are recognized by prefix and
   lowered at the call site, so a spelling outside the C11 set above still
   compiles.

@@ -1,25 +1,16 @@
 // GCC `__builtin_*` macro thunks.
 //
-// Defining `__GNUC__` makes code reach for the GCC builtins. Two
-// families are handled here as macros rather than in the compiler:
+// Defining `__GNUC__` makes code reach for the GCC builtins. The ones
+// handled here as macros rather than in the compiler are those whose
+// value is an expression built from the operands: the hints with no
+// code-generation effect, and the infinity / NaN constants.
 //
-//   * The standard-library functions GCC also exposes under a
-//     `__builtin_` prefix. Each is equivalent to the library function,
-//     so the thunk forwards to it; the library name then resolves
-//     through its own header (auto-included on demand).
-//   * Hints with no code-generation effect: the value of
-//     `__builtin_expect` is its first operand and `__builtin_prefetch`
-//     is discarded.
-//
-// The genuine code-generation builtins (`__builtin_clz`, the byte-swap
-// and overflow family, `__builtin_alloca`, `__builtin_va_*`, the
-// floating-point and trap builtins) are handled by the compiler, not
-// here. Every translation unit gets this header, so nothing in it may
-// shadow a name the compiler evaluates itself: the absolute-value
-// thunks would, and live in <_builtins_abs.h>, auto-included when one
-// of them is used outside a constant expression. The memory-transfer
-// builtins would too: the compiler expands them for a constant byte
-// count and calls the library function of the same name otherwise.
+// Every other builtin is supplied by the compiler, which is what keeps
+// it out of reach of a translation unit's macros. In particular the
+// builtins equivalent to a library function -- `__builtin_strlen` and
+// the rest -- bind to that function through the symbol table, so a unit
+// that defines a macro of the library name (as the fortified string
+// headers do) still gets the builtin from the `__builtin_` spelling.
 
 #pragma once
 
@@ -48,24 +39,3 @@
 // usual arithmetic conversions and widen, e.g., a chosen `bool`);
 // `constant_p` folds to 1 when its unevaluated operand is a constant
 // expression, else 0.
-
-#define __builtin_memcmp memcmp
-#define __builtin_memchr memchr
-#define __builtin_strcpy strcpy
-#define __builtin_strncpy strncpy
-#define __builtin_strcat strcat
-#define __builtin_strncat strncat
-#define __builtin_strcmp strcmp
-#define __builtin_strncmp strncmp
-#define __builtin_strlen strlen
-#define __builtin_strchr strchr
-#define __builtin_strrchr strrchr
-#define __builtin_strstr strstr
-#define __builtin_strpbrk strpbrk
-#define __builtin_strspn strspn
-#define __builtin_strcspn strcspn
-#define __builtin_abort abort
-#define __builtin_malloc malloc
-#define __builtin_calloc calloc
-#define __builtin_realloc realloc
-#define __builtin_free free

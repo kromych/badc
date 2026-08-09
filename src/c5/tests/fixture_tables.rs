@@ -888,6 +888,10 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // Constant-count `__builtin_memcpy` / `memmove` / `memset` expand
     // inline; a count past the cap falls back to the library.
     ("builtin_mem_transfer_inline.c", 0),
+    // Every builtin equivalent to a library function keeps its meaning
+    // when the unit defines a macro of that function's name, which is
+    // the shape the fortified string headers compile to.
+    ("builtin_library_alias_macro_shadow.c", 0),
     // An empty structure member contributes no storage but keeps its
     // alignment, so an `aligned(N)` empty type spaces what follows.
     ("empty_struct_member_align.c", 0),

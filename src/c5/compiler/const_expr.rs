@@ -1420,7 +1420,7 @@ impl Compiler {
     /// stream untouched and declines, so a call on a runtime string stays
     /// whatever it already was in this context -- a VLA bound, or the
     /// error the context raises for a non-constant operand.
-    fn try_fold_strlen_builtin(&mut self) -> Result<Option<ConstVal>, C5Error> {
+    pub(super) fn try_fold_strlen_builtin(&mut self) -> Result<Option<ConstVal>, C5Error> {
         if self.lex.tk != Token::Id
             || !matches!(
                 self.symbols[self.lex.curr_id_idx].name.as_str(),
@@ -1429,7 +1429,14 @@ impl Compiler {
         {
             return Ok(None);
         }
+        // A local, a global object, or an enum constant of this name is
+        // not the library function.
+        let class = self.symbols[self.lex.curr_id_idx].class;
+        if class != 0 && class != Token::Fun as i64 && class != Token::Sys as i64 {
+            return Ok(None);
+        }
         let snap = self.lex.snapshot();
+        let data_len = self.data.len();
         self.next()?;
         if self.lex.tk != '(' {
             self.restore_lex(snap);
@@ -1441,9 +1448,11 @@ impl Compiler {
             return Ok(None);
         }
         // The lexer stages the literal (adjacent ones already glued) into
-        // the data segment and leaves its offset in `lex.ival`.
+        // the data segment and leaves its offset in `lex.ival`. It was
+        // staged only to be counted here, so the storage is reclaimed.
         let addr = self.take_concat_string_literal()?;
         if self.lex.tk != ')' {
+            self.truncate_data(data_len);
             self.restore_lex(snap);
             return Ok(None);
         }
@@ -1454,6 +1463,7 @@ impl Compiler {
             n += 1;
             p += 1;
         }
+        self.truncate_data(data_len);
         Ok(Some(ConstVal::Int {
             val: n,
             ty: self.size_t_ty(),

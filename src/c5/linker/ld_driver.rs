@@ -115,18 +115,29 @@ pub fn is_ld_invocation(argv0: &str, first_arg: Option<&str>) -> bool {
 /// does: whitespace separates arguments, single and double quotes group
 /// them, and a backslash escapes the next character.
 fn split_response(text: &str) -> Vec<String> {
+    split_response_on(text, cfg!(windows))
+}
+
+/// `split_response` with the host rule stated, so both behaviours are
+/// testable from either host. With `path_sep_backslash`, a backslash is
+/// a path separator -- `C:\dir\file.o` is what the native toolchains
+/// write into a response file -- and escapes only a double quote, as
+/// `CommandLineToArgvW` reads it. Otherwise it escapes unconditionally.
+fn split_response_on(text: &str, path_sep_backslash: bool) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut cur = String::new();
     let (mut started, mut squote, mut dquote, mut escape) = (false, false, false, false);
-    for c in text.chars() {
+    let mut it = text.chars().peekable();
+    while let Some(c) = it.next() {
         if !started && !squote && !dquote && !escape && c.is_whitespace() {
             continue;
         }
         started = true;
+        let escapes_next = c == '\\' && (!path_sep_backslash || it.peek() == Some(&'"'));
         if escape {
             cur.push(c);
             escape = false;
-        } else if c == '\\' {
+        } else if escapes_next {
             escape = true;
         } else if squote {
             squote = c != '\'';
@@ -947,18 +958,40 @@ mod tests {
 
     #[test]
     fn response_file_splitting_follows_buildargv() {
-        assert_eq!(split_response("a.o\nb.o\n"), vec!["a.o", "b.o"]);
-        assert_eq!(split_response("  a.o \t b.o  "), vec!["a.o", "b.o"]);
+        // buildargv's own rule, named rather than taken from the host:
+        // the escape case below reads differently where a backslash is a
+        // path separator, and that is covered by the test after this one.
+        let split = |t: &str| split_response_on(t, false);
+        assert_eq!(split("a.o\nb.o\n"), vec!["a.o", "b.o"]);
+        assert_eq!(split("  a.o \t b.o  "), vec!["a.o", "b.o"]);
         assert_eq!(
-            split_response("'one two' \"three four\""),
+            split("'one two' \"three four\""),
             vec!["one two", "three four"]
         );
-        assert_eq!(split_response(r"a\ b c"), vec!["a b", "c"]);
+        assert_eq!(split(r"a\ b c"), vec!["a b", "c"]);
         // A quote closes the group without ending the argument.
-        assert_eq!(split_response("-o'out name'.o"), vec!["-oout name.o"]);
+        assert_eq!(split("-o'out name'.o"), vec!["-oout name.o"]);
         // An empty quoted argument is still an argument.
-        assert_eq!(split_response("'' x"), vec!["", "x"]);
-        assert_eq!(split_response("   \n\t "), Vec::<String>::new());
+        assert_eq!(split("'' x"), vec!["", "x"]);
+        assert_eq!(split("   \n\t "), Vec::<String>::new());
+    }
+
+    #[test]
+    fn response_file_path_keeps_its_separators() {
+        // A Windows response file carries `C:\dir\file.o` unquoted, and
+        // the separators must survive; a POSIX host keeps buildargv's
+        // unconditional escape. Both rules are checked from either host.
+        let win = |t: &str| split_response_on(t, true);
+        let posix = |t: &str| split_response_on(t, false);
+
+        assert_eq!(win(r"C:\dir\file.o"), alloc::vec!["C:\\dir\\file.o"]);
+        assert_eq!(win(r#""C:\dir\file.o""#), alloc::vec!["C:\\dir\\file.o"]);
+        // A backslash still escapes a quote, so a quoted argument can
+        // contain one.
+        assert_eq!(win(r#""a\"b""#), alloc::vec!["a\"b"]);
+        // The POSIX rule is unchanged: the separator escapes its successor.
+        assert_eq!(posix(r"a\b"), alloc::vec!["ab"]);
+        assert_eq!(posix(r"a\ b"), alloc::vec!["a b"]);
     }
 
     #[test]

@@ -1529,8 +1529,6 @@ impl<'a> TypeCatalog<'a> {
             .iter()
             .copied()
             .filter(|&p| !crate::c5::compiler::types::is_void_ty(p))
-            .collect::<Vec<i64>>()
-            .into_iter()
             .map(|p| self.of_tag(p))
             .collect();
         let fn_ty = self.intern(TypeNode::Subroutine {

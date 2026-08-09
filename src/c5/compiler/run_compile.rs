@@ -2100,15 +2100,18 @@ impl Compiler {
                                 self.accept_declarator_separator()?;
                                 continue;
                             }
-                            // C99 6.9.2: a file-scope `T x[];` with no
+                            // C99 6.9.2p2: a file-scope `T x[];` with no
                             // `extern` and no initializer is a tentative
-                            // definition. An array type left incomplete at
-                            // the end of the unit is completed to one
-                            // element, so reserve a single zero-filled
-                            // element here.
-                            self.symbols[id_idx].array_size = 1;
+                            // definition, and an array type left incomplete
+                            // at the end of the unit is completed to one
+                            // element. A GNU `T x[0]` is complete already and
+                            // holds no elements, so it keeps the zero count.
+                            let zero_len = self.pending.declarator_zero_len_array;
+                            let count = if zero_len { 0 } else { 1 };
+                            self.symbols[id_idx].array_size = count;
+                            self.symbols[id_idx].is_zero_len_array = zero_len;
                             if let Some(first) = self.symbols[id_idx].array_dims.first_mut() {
-                                *first = 1;
+                                *first = count;
                             }
                             let elem = self.size_of_type(ty) as i64;
                             let aligned = (((elem + 7) / 8) * 8).max(8);

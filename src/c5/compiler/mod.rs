@@ -601,6 +601,14 @@ pub(in crate::c5::compiler) struct Pending {
     /// leading `[expr]` was non-constant and `vla_allowed`. `None` for
     /// a constant-dimension array. Consumed by the local-decl site.
     pub vla_dim_expr: Option<crate::c5::ast::ExprId>,
+    /// True when the declarator's leading dimension was spelled `[0]`.
+    /// Both `T x[0]` and `T x[]` reach the object allocators as
+    /// `array_size == -1`, but they declare different objects: `[0]` is
+    /// a complete GNU zero-length array (`sizeof` 0, no elements), while
+    /// empty brackets leave the type incomplete until an initializer or
+    /// C99 6.9.2p2 completion supplies a count. Written by the array
+    /// declarator, read by the object allocators.
+    pub declarator_zero_len_array: bool,
     /// Set by `sizeof_operand_bytes` to the VLA's runtime-byte-count
     /// slot when the operand is a variable-length array (C99
     /// 6.5.3.4p2); the `sizeof` site then emits a runtime load instead
@@ -1037,6 +1045,7 @@ impl Default for Pending {
             declarator_outer_const: false,
             vla_allowed: false,
             vla_dim_expr: None,
+            declarator_zero_len_array: false,
             sizeof_vla_size_slot: None,
             const_expr_nonconst: false,
             typedef_fn_proto: None,

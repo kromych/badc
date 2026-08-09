@@ -607,6 +607,7 @@ impl Compiler {
 
         let mut array_size: i64 = 0;
         if self.lex.tk == Token::Brak {
+            self.pending.declarator_zero_len_array = false;
             self.next()?;
             // C99 6.7.5.3p7 + 6.7.5.2p1: `[`'s contents may be
             // prefixed by `static` and / or any type qualifier
@@ -645,12 +646,14 @@ impl Compiler {
                     return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;
-                // `T x[0]` -- a GCC zero-length array. It behaves like a
-                // C99 6.7.2.1 flexible array member (`T x[]`): zero size,
-                // valid as a struct/union's trailing member with storage
-                // allocated past the fixed part. Route it through the same
-                // `array_size = -1` sentinel.
+                // `T x[0]` -- a GCC zero-length array. As a struct or union
+                // member it behaves like a C99 6.7.2.1 flexible array member
+                // (`T x[]`), so it rides the same `array_size = -1` sentinel.
+                // As a declared object the two differ -- `[0]` is a complete
+                // type of size zero -- which `declarator_zero_len_array`
+                // carries to the object allocators.
                 array_size = if n == 0 { -1 } else { n };
+                self.pending.declarator_zero_len_array = n == 0;
             } else {
                 // Non-constant dimension (C99 6.7.6.2). In a parameter it
                 // is adjusted to a pointer, so the size is parsed and

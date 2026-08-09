@@ -1614,16 +1614,20 @@ impl Compiler {
         }
         if declared_array_size == -1 {
             if self.lex.tk != Token::Assign {
-                // GCC zero-length array `T x[0]`: the declarator folds `[0]`
-                // to the -1 sentinel (it otherwise behaves like a flexible
-                // array member). As a local with no initializer this is a
-                // valid empty array, used by compile-time-assert idioms such
-                // as `char offset_must_be_zero[-offsetof(type, f)]` --
-                // a first member gives `[0]` (accepted here), a non-first
-                // member a negative dimension the declarator already rejects.
-                // Reserve a minimal slot; the array holds no elements and is
-                // normally unused.
-                self.symbols[loc_idx].array_size = 1;
+                // GCC zero-length array `T x[0]`: a complete type holding no
+                // elements, so `sizeof` is 0. Used by compile-time-assert
+                // idioms such as `char ok[-offsetof(type, f)]` and by
+                // conditionally-empty buffers whose guards read
+                // `sizeof(buf) != 0`. Recorded with the same zero-count
+                // encoding `T x[] = {}` uses; a slot is still reserved so
+                // the object has an address of its own.
+                //
+                // Empty brackets without an initializer leave the type
+                // incomplete. c5 completes it to one element rather than
+                // diagnosing it.
+                let zero_len = self.pending.declarator_zero_len_array;
+                self.symbols[loc_idx].array_size = if zero_len { 0 } else { 1 };
+                self.symbols[loc_idx].is_zero_len_array = zero_len;
                 self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, 1));
                 return Ok(());
             }

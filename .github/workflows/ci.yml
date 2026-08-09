@@ -1617,6 +1617,12 @@ jobs:
     # vendor-deps mirror: the tarball is large, would have to be rotated on
     # every pin bump, and cdn.kernel.org is not one of the hosts that made CI
     # flaky.
+    #
+    # This is the kernel gate on the push path. The distribution dimension --
+    # deb/rpm packaging, install into a stock cloud image, boot into the
+    # installed kernel through its boot loader -- is the `kernel-packages`
+    # workflow, which runs nightly and on demand because it needs a VM and
+    # GitHub-hosted runners have no KVM.
     name: kernel (${{ matrix.label }} defconfig, badc-built qemu)
     strategy:
       fail-fast: false

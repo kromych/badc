@@ -363,21 +363,88 @@ measurement has a baseline from the same userspace.
 
 ```sh
 python3 demos/linux/packages.py --arch x86_64 \
-    --tarball <linux-<version>.tar.xz> --config <corpus .config> \
+    --tarball <linux-<version>.tar.xz> \
     --report packages-x86_64.json
 ```
 
 Phases -- `tree` (extract + configure), `build` (hybrid make), `package`,
-`vm` -- are idempotent and `--phases` selects a subset; `--image` reuses a
-downloaded cloud image, and a fresh qcow2 overlay keeps the base image
-pristine per run. On an rpm host the Debian packaging tools (dpkg, dpkg-dev,
-debhelper) are provisioned under `--deb-tools` from the host's own mirror via
-`dnf download` + rpm2cpio extraction; nothing is installed system-wide, and
-`dpkg-buildpackage` runs with `-d` plus a scratch admindir because the build
-host's package database is not what the produced package depends on.
-`rpmbuild` runs with `--without debuginfo` and `INSTALL_MOD_STRIP=1`: the
-gate packages the kernel, not its debug info. Run it on the box whose
-architecture matches; it is not wired into CI.
+`vm` -- are idempotent and `--phases` selects a subset. Without `--config` the
+tree's own `defconfig` is the corpus, which is what CI builds: 2953 units on
+x86_64 and 10489 on aarch64 at the 7.1.6 pin, kernel plus modules. A fresh
+qcow2 overlay keeps the base image pristine per run. On an rpm host the Debian
+packaging tools (dpkg, dpkg-dev, debhelper) are provisioned under
+`--deb-tools` from the host's own mirror via `dnf download` + rpm2cpio
+extraction; nothing is installed system-wide, and `dpkg-buildpackage` runs
+with `-d` plus a scratch admindir because the build host's package database is
+not what the produced package depends on. `rpmbuild` runs with
+`--without debuginfo` and `INSTALL_MOD_STRIP=1`: the gate packages the kernel,
+not its debug info. The provisioned prefix is stamped with a digest of the rpm
+file names `dnf` resolves the tool set to, so a prefix built against a package
+set the mirror has moved past is rebuilt rather than reused.
+
+### Cloud images
+
+Each architecture's image is a `vendor-deps-v1` release asset pinned by
+sha256, fetched through the same helper as every other vendored archive and
+rejected on mismatch -- in all paths, including a `--image` pointing at a local
+file (`--image-sha256` states the digest of a deliberately different one).
+Without a pin, a red gate is not attributable to a badc change.
+
+The bytes are the distributions' own, mirrored rather than fetched from them,
+because an upstream URL is not a durable pin: Debian keeps only the last few
+dated cloud snapshots, so a URL pinned to one stops resolving within weeks,
+and `trixie/latest/` is not a pin at all. The asset table in `packages.py`
+records each image's upstream URL and the digest the distribution publishes
+for it (sha512 for Debian, sha256 for Fedora), so the mirrored bytes stay
+checkable against the source. There is no `actions/cache` layer in front of
+this: a release asset downloads from the same CDN as the rest of CI's inputs,
+and the cache's eviction window is not shorter than this lane's cadence.
+
+### Concurrency and the accelerator
+
+Two runs on one host do not collide: the ssh forward takes a free port per run
+and the workdir is held under an exclusive lock, so a second run against the
+same workdir fails immediately and names the holder. `--accel` selects the
+qemu accelerator -- `kvm` fails when `/dev/kvm` is unusable rather than
+substituting an emulator an order of magnitude slower, `tcg` states that
+choice, and the default reports whichever it took. `--vm-cpu` overrides the
+model (`host` under kvm, `max` under tcg).
+
+### In CI
+
+`.github/workflows/kernel-packages.yml` runs the whole harness -- build,
+package, publish, install, boot -- on a nightly schedule, on
+`workflow_dispatch`, and on a pull request carrying the `kernel-packages`
+label. It is deliberately off the push path, and the reason is the
+accelerator: GitHub-hosted runners expose no `/dev/kvm`, so the VM runs under
+TCG. Measured on the boxes against the same packages and images with the VM's
+host cores capped at 4, the vm phase costs 40 s under KVM and 3 min under TCG
+on x86_64, and 2.5 min under KVM and 40 min under TCG on aarch64 -- of which
+28 min is `rpm -ivh` regenerating the initramfs with dracut -- on top of a
+5 min and 11 min build and package. The per-push gate stays `verify.py` in
+ci.yml's `kernel` job: the same "badc compiles every unit, zero fallbacks"
+contract, booted with a marker initramfs. Self-hosted KVM runners would buy
+back the time, but this is a public repository, and a self-hosted runner would
+execute pull-request code from any fork on the machine that runs it.
+
+Each lane publishes two artifacts: the packages (deb or rpm, plus headers,
+`SHA256SUMS`, the run's report and the per-unit manifest), named
+`linux-badc-<arch>-<kernel release>-badc<version>-<commit>` and kept 30 days,
+uploaded before the VM step so a failed boot still leaves an installable
+package on the run page; and the validation record (report JSON, the qemu
+serial console log, any core dumps). Tagged releases carry no packages: these
+are gate evidence for one pinned kernel configuration, not a distribution
+channel, and publishing them as release assets would imply support for
+installing them on real machines.
+
+TODO: the x86_64 lane is red on what it found. Booting the installed kernel
+through the image's boot loader reaches paths qemu's `-kernel` loader does
+not -- the boot loader enters the 32-bit entry point, so the decompressor
+runs its 4-to-5 level paging switch -- and the badc-built kernel oopses in
+`pgd_alloc` under 5-level paging and trips
+`WARN_ON_ONCE(!on_thread_stack())` at irqentry exit under any CPU model. The
+same tree built with gcc does neither. Build, package and publish pass; it is
+the boot probes that fail.
 
 Core dumps are captured throughout. Before validation the vm phase sets
 `kernel.core_pattern`, a core size limit (limits.d) and systemd's

@@ -326,6 +326,15 @@ stopped on, and the gate quotes that line in the failure. A kernel whose
 procfs reads never return prints the boot marker and hangs, which the boot
 marker alone cannot distinguish from a pass.
 
+The checks end at the vDSO, the one image in the build a loader has to search
+rather than just map. `/init` resolves it the way a loader does --
+`AT_SYSINFO_EHDR`, `PT_DYNAMIC`, `DT_SONAME`, the `.gnu.hash` Bloom filter and
+chain, then `DT_VERSYM`/`DT_VERDEF` for the version the symbol is exported
+under -- and calls the function those tables hand back, requiring
+`CLOCK_MONOTONIC` to be non-zero and non-decreasing (`BADC-VDSO-OK`). Every
+table the linker builds is on the path to that call, so a vDSO that links and
+cannot be searched fails here rather than passing unnoticed.
+
 Before building, the gate re-runs `make olddefconfig` with the shim as CC, so
 the tree's `CONFIG_CC_VERSION_TEXT` records badc's identification; the diff
 is logged, and only that symbol moves (the capability probes still go to the

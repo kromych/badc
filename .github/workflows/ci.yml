@@ -52,11 +52,15 @@ jobs:
       - name: cargo clippy (full)
         run: cargo clippy --all-targets --features full -- -D warnings
       # The kernel gate's KASLR harness writes a device tree and reads the
-      # displacement back out of a boot log; both are pure functions with a
-      # self-check, so they are verified here rather than in the kernel lane,
-      # which runs on a fraction of the pushes and takes an hour to say so.
-      - name: kernel gate KASLR harness self-test
-        run: python3 demos/linux/kaslr.py
+      # displacement back out of a boot log, and its banner reading decides
+      # whether the booted image names badc as compiler and linker; all are
+      # pure functions with a self-check, so they are verified here rather
+      # than in the kernel lane, which runs on a fraction of the pushes and
+      # takes an hour to say so.
+      - name: kernel gate harness self-tests
+        run: |
+          python3 demos/linux/kaslr.py
+          python3 demos/linux/verify.py --self-test
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
       # arrows tend to sneak in via copy-paste and rendered editor
       # autocorrect; keep them out at the gate. A fixture that exercises

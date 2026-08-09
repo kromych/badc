@@ -326,13 +326,26 @@ reference compiler). Each boot's `Linux version` banner -- the same text
 `/proc/version` serves -- must then contain `badc`, which pins the claim in
 the booted kernel, not just the configuration.
 
-`--linker badc` additionally makes every link badc's, through `ldshim.py`
-above; `--linker reference` (the default) leaves them all to `--real-ld` and
-is the contrast run. Under `--linker badc` the gate names each link the shim
-left to the real linker, and fails on a link badc could not make, a link that
-used `BADC_LD_FALLBACK`, or a run where badc made no link at all. The run's
-report records which linker it used, so a result cannot be read as the other
-one's.
+`--linker badc` (the default) makes every link badc's, through `ldshim.py`
+above; `--linker reference` leaves them all to `--real-ld` and is the contrast
+run. Under `--linker badc` the gate names each link the shim left to the real
+linker, and fails on a link badc could not make, a link that used
+`BADC_LD_FALLBACK`, or a run where badc made no link at all. badc links the
+kernel on both architectures, so the default is the run that asserts it; the
+contrast is then a stated choice rather than the one a caller gets by
+omission.
+
+Which linker ran is not left to be inferred: the run names it before it builds
+and again in its verdict, and the report records it, so neither a console log
+nor a report can be read as the other lane's. A `--no-build` run linked
+nothing and names no linker at all.
+
+The booted image carries the same statement, so it is checked there too. The
+banner's compiler identification is followed by the one the build probed from
+`$(LD)` -- `GNU ld (badc <version>) 2.30` under `--linker badc`, the real
+linker's version string under `--linker reference` -- and each boot must
+agree with the run's choice. A stale image from the other lane therefore
+fails rather than passing as this one's.
 
 It fails on any unit badc cannot compile, any unit that fell back to the
 reference compiler, any undefined reference at link, any boot that does not

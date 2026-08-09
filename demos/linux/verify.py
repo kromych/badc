@@ -20,16 +20,19 @@ configuration with the build shim as CC, so CONFIG_CC_VERSION_TEXT -- the
 compiler text in the boot banner and /proc/version -- carries badc's
 identification instead of the reference compiler's, while every capability
 symbol keeps the reference answer. Each boot's `Linux version` banner must
-then name badc.
+then name badc as the compiler, and the linker identification that follows it
+must agree with `--linker`, so the image itself states what produced it.
 
     python3 demos/linux/verify.py --kernel-dir <writable tree> \
         --initramfs <image> --expect-units 1912
 
-`--linker badc` additionally makes every link badc's, through ldshim.py: the
+`--linker badc` (the default) makes every link badc's, through ldshim.py: the
 kallsyms passes, the final vmlinux, and the relocatable merges. The steps badc
 does not implement are recorded in the link manifest and named in the run's
-output, so a run cannot claim more than it did. `--linker reference` (the
-default) leaves every link to `--real-ld` and is the contrast run.
+output, so a run cannot claim more than it did. `--linker reference` leaves
+every link to `--real-ld` and is the contrast run. Every run names the linker
+it used on its first line and in its verdict, so no result is ambiguous about
+which of the two produced the image it booted.
 
 The tree must already be configured (setup.py) and must be writable: the build
 runs in it. It is rebuilt from clean by default, because make skips units whose
@@ -39,6 +42,8 @@ Each boot runs at a KASLR displacement the gate picked rather than one the
 machine drew, so a displacement-dependent defect is reproducible; see kaslr.py
 for what each architecture allows. `--kaslr-seed` replays one exactly, and
 `--no-build` boots the image already in the tree.
+
+`--self-test` checks the banner reading and takes no tree.
 """
 
 from __future__ import annotations
@@ -275,11 +280,60 @@ def last_step(text: str) -> str:
 def banner_line(text: str) -> str:
     """The kernel's `Linux version ...` banner from a console log, from the
     marker onward (console lines carry timestamps). The banner embeds
-    CONFIG_CC_VERSION_TEXT, and /proc/version serves the same text."""
+    CONFIG_CC_VERSION_TEXT followed by the identification the build probed
+    from the linker, and /proc/version serves the same text."""
     for ln in text.splitlines():
         if "Linux version " in ln:
             return ln[ln.index("Linux version "):]
     return ""
+
+
+def banner_failure(banner: str, cc_text: str, badc_ld: bool | None) -> str:
+    """What the banner contradicts about the build that produced it, or "".
+
+    Both identifications come out of the booted image rather than out of the
+    run's own bookkeeping, so an image left by another run cannot pass as this
+    one's. `badc_ld` is None when the run linked nothing and can claim neither.
+    """
+    if "badc" in cc_text and "badc" not in banner:
+        return "does not identify badc as the compiler"
+    if badc_ld is None or not cc_text:
+        return ""
+    if ("badc" in banner.split(cc_text, 1)[-1]) != badc_ld:
+        return ("does not name badc as the linker" if badc_ld
+                else "names badc as the linker")
+    return ""
+
+
+def _self_test() -> int:
+    """Check the banner reading against both lanes' real console text.
+
+    These are pure functions and the gate reaches them an hour into a run, so
+    they are checked where a push can afford to say so.
+    """
+    cc = "badc 0.3.0 (gcc-compatible, GNU C 4.2.1)"
+
+    def line(ld: str) -> str:
+        return f"Linux version 7.1.6 (u@h) ({cc}, {ld}) #1 SMP PREEMPT"
+
+    badc = line("GNU ld (badc 0.3.0) 2.30")
+    ref = line("GNU ld version 2.46.1-1.fc44")
+    assert banner_line(f"boot noise\n[    0.000000] {badc}\nmore") == badc
+    assert banner_line("no banner in this log") == ""
+
+    assert banner_failure(badc, cc, True) == ""
+    assert banner_failure(ref, cc, False) == ""
+    assert banner_failure(ref, cc, True), "a reference-linked image is not badc's"
+    assert banner_failure(badc, cc, False), "a badc-linked image is not the contrast"
+    # A run that linked nothing claims neither linker, and an image built by
+    # the reference compiler fails on the compiler before the linker is read.
+    assert banner_failure(badc, cc, None) == ""
+    assert banner_failure(ref, cc, None) == ""
+    assert banner_failure("Linux version 7.1.6 (u@h) (gcc 13.2, GNU ld 2.46) #1",
+                          cc, True) == "does not identify badc as the compiler"
+    assert banner_failure("", cc, True), "a log with no banner cannot pass"
+    print("linux verify: self-test ok", flush=True)
+    return 0
 
 
 def kaslr_configured(tree: Path) -> bool:
@@ -303,10 +357,10 @@ def main() -> int:
                     default=os.environ.get("BADC", REPO_ROOT / "target/release/badc"))
     ap.add_argument("--real-cc", default=os.environ.get("BADC_REAL_CC", "gcc"))
     ap.add_argument("--linker", choices=("reference", "badc"),
-                    default=os.environ.get("BADC_LINKER", "reference"),
-                    help="who links: `badc` runs every link through "
-                         "ldshim.py, `reference` leaves them all to --real-ld "
-                         "(the contrast run). See README.md")
+                    default=os.environ.get("BADC_LINKER", "badc"),
+                    help="who links: `badc` (the default) runs every link "
+                         "through ldshim.py, `reference` leaves them all to "
+                         "--real-ld (the contrast run). See README.md")
     ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL", "ld"),
                     help="linker for the steps badc does not implement, and "
                          "for every step under --linker reference")
@@ -378,6 +432,9 @@ def main() -> int:
     links = {"badc": [], "ld": [], "fallback": [], "fail": []}
     rc, secs, undef = 0, 0.0, 0
     if args.build:
+        # Named before anything is built: a console log has to say which
+        # linker produced the image the boots below ran.
+        log(f"linker: {'badc (ldshim.py)' if args.linker == 'badc' else args.real_ld}")
         manifest = args.workdir / f"manifest-{args.arch}.txt"
         ld_manifest = args.workdir / f"ld-manifest-{args.arch}.txt"
         rc, secs, build_log = build(args, arch, tree, manifest, ld_manifest)
@@ -447,16 +504,19 @@ def main() -> int:
         # A tree whose configuration names badc as the compiler must boot a
         # kernel whose banner -- and therefore /proc/version -- says so; the
         # banner embeds CONFIG_CC_VERSION_TEXT at build time, so a mismatch
-        # means the image was not built from this configuration.
-        require_badc = "badc" in cc_version_text(tree)
+        # means the image was not built from this configuration. The linker
+        # identification the build probed follows it, and holds the image to
+        # the linker this run asked for.
+        cc_text = cc_version_text(tree)
+        badc_ld = (args.linker == "badc") if args.build else None
         for i, seed in enumerate(plan, start=1):
             out = Path(args.workdir) / f"boot-{args.arch}-{i}.log"
             text = boot(args, arch, image, out, args.rdinit, trees.get(seed))
             booted, lines = args.marker in text, text.count("\n")
             checked = not args.check_marker or args.check_marker in text
             banner = banner_line(text)
-            identified = not require_badc or "badc" in banner
-            ok = booted and checked and identified
+            mismatch = banner_failure(banner, cc_text, badc_ld)
+            ok = booted and checked and not mismatch
             tag = f"0x{seed:016x}" if seed is not None else "unpinned"
             # An unpinned boot draws its own displacement, which the probe's
             # does not stand for, so it is left unattributed.
@@ -470,8 +530,8 @@ def main() -> int:
             boots.append({"ok": ok, "booted": booted, "checked": checked,
                           "lines": lines, "log": str(out), "banner": banner,
                           "seed": tag, "offset": disp})
-            if booted and checked and not identified:
-                failures.append(f"boot {i} banner does not identify badc: "
+            if booted and checked and mismatch:
+                failures.append(f"boot {i} banner {mismatch}: "
                                 f"{banner!r} (see {out})")
             elif not ok:
                 replay = (f"; replay with --kaslr-seed 0x{seed:016x}"
@@ -486,7 +546,8 @@ def main() -> int:
         args.report.write_text(json.dumps({
             "arch": args.arch, "make_rc": rc, "seconds": round(secs, 1),
             "qemu": shutil.which(args.qemu) if args.boot else None,
-            "linker": args.linker,
+            # A --no-build run linked nothing, so it names no linker.
+            "linker": args.linker if args.build else None,
             "units": {k: len(v) for k, v in units.items()},
             "links": {k: len(v) for k, v in links.items()},
             "links_left_to_ld": links["ld"],
@@ -511,12 +572,16 @@ def main() -> int:
               f"passed the kernel checks{where}" if boots else "; not booted")
     built = (f"{len(units['badc'])} units, 0 fallbacks, 0 undefined refs"
              if args.build else "not built")
-    linked = (f", {len(links['badc'])} links by badc and "
-              f"{len(links['ld'])} left to {args.real_ld}"
-              if args.build and args.linker == "badc" else "")
+    if not args.build:
+        linked = ""
+    elif args.linker == "badc":
+        linked = (f", {len(links['badc'])} links by badc and "
+                  f"{len(links['ld'])} left to {args.real_ld}")
+    else:
+        linked = f", every link by {args.real_ld}"
     log(f"PASS: {built}{linked}{booted}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(_self_test() if sys.argv[1:] == ["--self-test"] else main())

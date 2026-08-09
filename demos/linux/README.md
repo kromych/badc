@@ -475,8 +475,9 @@ installation is the one route that runs the 16-bit `setup.elf` from a disk
 rather than from qemu's `-kernel`, so it is where a badc-linked boot image is
 exercised end to end.
 
-Phases -- `tree` (extract + configure), `build` (hybrid make), `package`,
-`vm` -- are idempotent and `--phases` selects a subset. Without `--config` the
+Phases -- `config` (take a configuration out of the stock image), `tree`
+(extract + configure), `build` (hybrid make), `package`, `vm` -- are idempotent
+and `--phases` selects a subset. Without `--config` the
 tree's own `defconfig` is the corpus, which is what CI builds: 2953 units on
 x86_64 and 10489 on aarch64 at the 7.1.6 pin, kernel plus modules. A fresh
 qcow2 overlay keeps the base image pristine per run. On an rpm host the Debian
@@ -489,6 +490,79 @@ not what the produced package depends on. `rpmbuild` runs with
 not its debug info. The provisioned prefix is stamped with a digest of the rpm
 file names `dnf` resolves the tool set to, so a prefix built against a package
 set the mirror has moved past is rebuilt rather than reused.
+
+### The distribution's own configuration (`--config from-vm`)
+
+`defconfig` is the tree's answer to what a kernel should contain; a
+distribution's is its own, and the two differ in size and in shape. `--config
+from-vm` boots the pinned cloud image before anything is built, reads
+`/boot/config-$(uname -r)` -- the configuration the distribution's kernel
+package ships -- and uses it as the corpus. The source cannot drift from the
+kernel the image actually runs, and it is the same image the gate installs
+into, so the configuration and the system under test agree by construction.
+The extraction lands in `<workdir>/config-vm-<arch>.config` with a
+`config-vm-<arch>.json` recording the release it came from, its sha256 and its
+option count; a later run reuses it instead of booting again.
+
+Measured at the current pins:
+
+| | source kernel | `=y` | `=m` |
+|---|---|---|---|
+| Debian 13 cloud amd64 | 6.12.100+deb13-cloud-amd64 | 1804 | 1137 |
+| Fedora 44 aarch64 | 6.19.10-300.fc44.aarch64 | 3484 | 5522 |
+
+The distribution's kernel is not the pinned one, so the configuration is
+carried forward with `make olddefconfig` and every option that moved is
+recorded in `<workdir>/config-deviations-<arch>.txt` (538 on x86_64, 312 on
+aarch64 at these pins). The deviations are part of the measurement, not noise:
+they name what the version gap and the build host together made of the
+distribution's answers. Two sources of deviation are worth separating when
+reading the file -- symbols the version difference added or removed, and
+symbols the build host cannot satisfy (`DEBUG_INFO_BTF` needs `pahole`,
+`CONFIG_RUST` needs `bindgen`; without them Kconfig turns the option off and
+the deviation records it).
+
+Options whose value names a file in the originating packaging tree are cleared
+before `olddefconfig`, because none of those paths exist here and the artifacts
+they name are ones this build produces itself: `CONFIG_INITRAMFS_SOURCE`,
+`CONFIG_SYSTEM_TRUSTED_KEYS`, `CONFIG_SYSTEM_REVOCATION_KEYS` and
+`CONFIG_MODULE_SIG_KEY`. Each clearing appears in the deviations.
+
+### Surveying a kernel and configuration from a URL
+
+The same script is the local survey tool: `--tarball-url` fetches a kernel
+tarball and `--tarball-sha256` verifies it. The digest is required rather than
+optional -- a survey has to be reproducible, and a truncated or substituted
+download must not be able to present itself as a compiler defect. `--config`
+takes any `.config`, for any kernel version, and carries it forward exactly as
+above. `--pkg` selects the packaging formats, so one run can produce both the
+`.deb` and the `.rpm`; the default is the format the architecture's image
+installs.
+
+```sh
+python3 demos/linux/packages.py --arch x86_64 \
+    --tarball-url https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.6.tar.xz \
+    --tarball-sha256 <sha256> \
+    --config /boot/config-$(uname -r) --pkg deb,rpm \
+    --phases tree,build,package --keep-going \
+    --workdir survey-out --report survey-x86_64.json
+```
+
+`--keep-going` is what makes it a survey rather than a gate. The buildcc.py
+contract stops the build at the first C unit badc rejects, which names one
+defect; `-k` carries make past it, so the manifest ranks every unit that failed
+instead. The failing exit status is still reported and the manifest counts are
+what the run is judged on. It is not for the gate: a build that continued past
+a failure has no complete image to install.
+
+`--fallback` and `--ld-fallback` name the `BADC_FALLBACK` /
+`BADC_LD_FALLBACK` lists for bisecting a suspected miscompile. The gate drops
+an inherited list because its contract is zero fallbacks; stating one
+explicitly puts it in the manifest, where a build that used it cannot be
+mistaken for a pure one.
+
+The report and the manifest are the same shape the gate produces, so a survey
+result and a CI result are comparable rather than two formats.
 
 ### Cloud images
 

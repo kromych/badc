@@ -15,12 +15,21 @@ the install, so every measurement has a reference.
         --tarball <linux-7.1.6.tar.xz> --config <corpus .config> \
         --report packages-x86_64.json
 
-Phases (--phases selects a subset; each is idempotent): tree, build, package,
-vm. The build runs in <workdir>/linux-<version>; packages land in <workdir>
-(deb) or the tree's rpmbuild/RPMS (rpm). On a host without the Debian
+Phases (--phases selects a subset; each is idempotent): config, tree, build,
+package, vm. The build runs in <workdir>/linux-<version>; packages land in
+<workdir> (deb) or the tree's rpmbuild/RPMS (rpm). On a host without the Debian
 packaging tools (an rpm distribution), --deb-tools names a prefix that is
 provisioned from the host's own package mirror via `dnf download` + rpm2cpio
 extraction; nothing is installed system-wide.
+
+The same script is the local survey tool. `--config from-vm` takes the
+distribution's own /boot/config-$(uname -r) out of the stock image instead of
+building defconfig; `--tarball-url` with a required `--tarball-sha256` fetches
+the kernel rather than taking a local path; `--pkg deb,rpm` produces both
+formats; and `--keep-going` runs the build under `make -k`, so the manifest
+ranks every unit badc rejects instead of stopping at the first. A configuration
+from another kernel version is carried forward with `make olddefconfig` and
+what moved is recorded in <workdir>/config-deviations-<arch>.txt.
 
 Concurrent runs on one host are supported: the ssh forward takes a free port
 per run and the workdir is held under an exclusive lock, so a second run
@@ -43,6 +52,8 @@ import subprocess
 import sys
 import tarfile
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 LINUX_DIR = Path(__file__).resolve().parent
@@ -173,9 +184,108 @@ def run(cmd, cwd=None, env=None, timeout=None, capture=True, check=False):
     return r
 
 
+# --- config -----------------------------------------------------------------
+
+# Options whose value names a file in the originating packaging tree. A
+# configuration lifted out of a distribution kernel carries the paths that
+# distribution's build used; none of them exist here, and the artifacts they
+# name (an embedded initramfs, signing and trust keyrings) are ones this build
+# produces itself or does not need. Cleared before olddefconfig, so every
+# clearing appears in the recorded deviations.
+FOREIGN_FILE_OPTIONS = (
+    "CONFIG_INITRAMFS_SOURCE",
+    "CONFIG_SYSTEM_TRUSTED_KEYS",
+    "CONFIG_SYSTEM_REVOCATION_KEYS",
+    "CONFIG_MODULE_SIG_KEY",
+)
+
+CONFIG_FROM_VM = "from-vm"
+
+
+def fetch_tarball(url: str, want_sha: str, cache: Path) -> Path:
+    """Download a kernel tarball and verify the caller's sha256.
+
+    The digest is required rather than optional: a survey has to be
+    reproducible, and a truncated or substituted download must not be able to
+    present itself as a compiler defect.
+    """
+    cache.mkdir(parents=True, exist_ok=True)
+    dst = cache / Path(urllib.parse.urlparse(url).path).name
+    if dst.is_file() and sha256_of(dst) == want_sha:
+        log(f"cached: {dst.name}")
+        return dst
+    log(f"fetching {url}")
+    tmp = dst.with_suffix(dst.suffix + ".part")
+    with urllib.request.urlopen(url) as r, open(tmp, "wb") as f:
+        shutil.copyfileobj(r, f, 1 << 20)
+    got = sha256_of(tmp)
+    if got != want_sha:
+        tmp.unlink()
+        die(f"sha256 mismatch for {dst.name}: got {got}, want {want_sha}")
+    tmp.rename(dst)
+    return dst
+
+
+def clear_foreign_files(text: str) -> str:
+    for opt in FOREIGN_FILE_OPTIONS:
+        text = re.sub(rf'(?m)^{opt}=.*$', f'{opt}=""', text)
+    return text
+
+
+def phase_config(args, arch) -> Path:
+    """Take the distribution's own kernel configuration out of its image.
+
+    A distribution ships the configuration its kernel was built with as
+    /boot/config-$(uname -r). Reading it from the booted stock image is the
+    one source that cannot drift from the kernel the distribution actually
+    runs, and it is the same pinned image the gate validates against, so the
+    configuration and the system under test agree by construction.
+    """
+    dest = args.workdir / f"config-vm-{args.arch}.config"
+    meta_path = args.workdir / f"config-vm-{args.arch}.json"
+    if dest.is_file() and meta_path.is_file():
+        meta = json.loads(meta_path.read_text())
+        log(f"config already extracted from {meta['source_release']}: {dest}")
+        return dest
+    image = ensure_image(args, arch)
+    accel = resolve_accel(args, arch)
+    seed = make_seed(args)
+    # A throwaway overlay: extraction must not disturb the disk the gate
+    # installs into, and nothing here is carried forward.
+    disk = args.workdir / f"disk-config-{args.arch}.qcow2"
+    disk.unlink(missing_ok=True)
+    run(["qemu-img", "create", "-q", "-f", "qcow2", "-b", str(image.resolve()),
+         "-F", "qcow2", str(disk), args.vm_disk], check=True)
+    vm = VM(args, arch, disk, seed, accel)
+    vm.console = args.workdir / f"console-config-{args.arch}.log"
+    vm.pidfile = args.workdir / f"vm-config-{args.arch}.pid"
+    vm.start()
+    try:
+        vm.wait_ssh(args.vm_timeout)
+        release = vm.ssh("uname -r", check=True).stdout.strip()
+        os_id = vm.ssh('. /etc/os-release && echo "$ID $VERSION_ID"',
+                       check=True).stdout.strip()
+        remote = f"/boot/config-{release}"
+        if not vm.pull(remote, dest):
+            die(f"{remote} is not readable in the {arch['distro']} image; "
+                f"the distribution kernel package ships it")
+        meta = {"source_release": release, "source_os": os_id,
+                "source_path": remote, "image": image.name,
+                "sha256": sha256_of(dest), "bytes": dest.stat().st_size,
+                "set_options": sum(1 for ln in dest.read_text().splitlines()
+                                   if re.match(r"CONFIG_\w+=", ln))}
+        meta_path.write_text(json.dumps(meta, indent=2) + "\n")
+        log(f"config from {os_id} kernel {release}: {meta['set_options']} "
+            f"options set ({dest})")
+    finally:
+        vm.stop()
+        disk.unlink(missing_ok=True)
+    return dest
+
+
 # --- tree -------------------------------------------------------------------
 
-def phase_tree(args, arch) -> Path:
+def phase_tree(args, arch, config: Path | None) -> Path:
     m = re.fullmatch(r"linux-(.+?)\.tar\.\w+", args.tarball.name)
     if not m:
         die(f"cannot derive the kernel version from {args.tarball.name!r}")
@@ -189,21 +299,27 @@ def phase_tree(args, arch) -> Path:
                 if base not in p.parents and p != base:
                     die(f"unsafe path in tarball: {m.name!r}")
             tf.extractall(base)
-    if args.config:
-        text = Path(args.config).read_text()
+    if config:
+        text = config.read_text()
     else:
         log("make defconfig")
         run(["make", "defconfig"], cwd=tree, env=shim_env(args, arch),
             check=True)
         text = (tree / ".config").read_text()
-    # The build produces boot artifacts itself; a config carried over from
-    # another tree must not pull that tree's embedded initramfs in.
-    text = re.sub(r'(?m)^CONFIG_INITRAMFS_SOURCE=.*$',
-                  'CONFIG_INITRAMFS_SOURCE=""', text)
+    text = clear_foreign_files(text)
     (tree / ".config").write_text(text)
+    (tree / ".config.orig").write_text(text)
     log("make olddefconfig")
     run(["make", *toolchain_args(args), "olddefconfig"], cwd=tree,
         env=shim_env(args, arch), check=True)
+    # A configuration from another kernel version is carried forward by
+    # olddefconfig answering the symbols the version difference added or
+    # removed. What it changed is the deviation list.
+    dev = run(["./scripts/diffconfig", ".config.orig", ".config"], cwd=tree)
+    out = args.workdir / f"config-deviations-{args.arch}.txt"
+    out.write_text(dev.stdout)
+    n = len([ln for ln in dev.stdout.splitlines() if ln.strip()])
+    log(f"config ready ({n} olddefconfig deviations recorded in {out})")
     return tree
 
 
@@ -220,9 +336,19 @@ def shim_env(args, arch) -> dict:
         BADC_LD_REAL=args.real_ld,
         BADC_LD_MANIFEST=str(args.ld_manifest),
     )
+    # The gate's contract is zero fallbacks, so an inherited list is dropped;
+    # --fallback states one explicitly and it lands in the manifest, where a
+    # build that used it cannot be mistaken for a pure one.
     env.pop("BADC_FALLBACK", None)
     env.pop("BADC_LD_FALLBACK", None)
-    if args.arch == "x86_64" and args.deb_tools:
+    if args.fallback:
+        env["BADC_FALLBACK"] = str(args.fallback)
+    if args.ld_fallback:
+        env["BADC_LD_FALLBACK"] = str(args.ld_fallback)
+    # Keyed off the packaging format being built, not the architecture: a
+    # survey can ask for a deb on either arch, and --deb-tools is only set
+    # when a deb is wanted and the host lacks the tools.
+    if args.deb_tools:
         deb_tool_env(args.deb_tools, env)
     return env
 
@@ -237,8 +363,11 @@ def toolchain_args(args) -> list[str]:
     return out
 
 
-def kbuild(args, arch, tree, targets, extra=(), log_name="build") -> Path:
-    cmd = ["make", f"-j{args.jobs}", *toolchain_args(args), *extra, *targets]
+def kbuild(args, arch, tree, targets, extra=(), log_name="build",
+           tolerate_rc=False) -> Path:
+    keep = ["-k"] if args.keep_going else []
+    cmd = ["make", f"-j{args.jobs}", *keep, *toolchain_args(args), *extra,
+           *targets]
     build_log = args.workdir / f"{log_name}-{args.arch}.log"
     log(f"{' '.join(cmd)} (in {tree}, log {build_log})")
     with build_log.open("wb") as fh:
@@ -246,14 +375,21 @@ def kbuild(args, arch, tree, targets, extra=(), log_name="build") -> Path:
                             stdin=subprocess.DEVNULL, stdout=fh,
                             stderr=subprocess.STDOUT).returncode
     if rc != 0:
-        die(f"make {' '.join(targets)} exited {rc} (see {build_log})")
+        if not tolerate_rc:
+            die(f"make {' '.join(targets)} exited {rc} (see {build_log})")
+        log(f"make {' '.join(targets)} exited {rc} (see {build_log})")
     return build_log
 
 
 def phase_build(args, arch, tree) -> None:
     args.manifest.unlink(missing_ok=True)
     args.ld_manifest.unlink(missing_ok=True)
-    kbuild(args, arch, tree, [arch["make_target"], "modules"])
+    # Under --keep-going the build is a survey: make carries on past a unit
+    # badc rejects so the manifest ranks every failure instead of naming the
+    # first. The failing status is still reported, and the manifest counts
+    # are what the run is judged on.
+    kbuild(args, arch, tree, [arch["make_target"], "modules"],
+           tolerate_rc=args.keep_going)
 
 
 def read_manifest(path: Path) -> dict[str, list[str]]:
@@ -327,31 +463,32 @@ def deb_tool_env(prefix: Path, env: dict) -> None:
     env["DPKG_ADMINDIR"] = str(admindir)
 
 
-def phase_package(args, arch, tree) -> list[Path]:
+def build_deb(args, arch, tree) -> list[Path]:
     # Products of a previous run in this workdir would satisfy the install
     # globs; a fresh package phase replaces them.
     for stale in args.workdir.glob("linux-image-*.deb"):
         stale.unlink()
+    if args.deb_tools:
+        ensure_deb_tools(args.deb_tools)
+    admindir = (args.deb_tools / "var/lib/dpkg") if args.deb_tools else None
+    # -d: build-dependency data lives in a dpkg database this host does
+    # not have; the tools themselves are the real prerequisite.
+    flags = "-d"
+    if admindir:
+        flags += f" --buildinfo-option=--admindir={admindir}"
+    kbuild(args, arch, tree, ["bindeb-pkg"],
+           extra=[f"DPKG_FLAGS={flags}"], log_name="package")
+    debs = sorted(args.workdir.glob(f"linux-image-{args.release}_*.deb"))
+    debs = [d for d in debs if "-dbg" not in d.name]
+    if not debs:
+        die(f"bindeb-pkg produced no linux-image deb in {args.workdir}")
+    return debs
+
+
+def build_rpm(args, arch, tree) -> list[Path]:
     shutil.rmtree(tree / "rpmbuild/RPMS", ignore_errors=True)
-    if arch["pkg"] == "deb":
-        if args.deb_tools:
-            ensure_deb_tools(args.deb_tools)
-        admindir = (args.deb_tools / "var/lib/dpkg") if args.deb_tools else None
-        # -d: build-dependency data lives in a dpkg database this host does
-        # not have; the tools themselves are the real prerequisite.
-        flags = "-d"
-        if admindir:
-            flags += f" --buildinfo-option=--admindir={admindir}"
-        kbuild(args, arch, tree, ["bindeb-pkg"],
-               extra=[f"DPKG_FLAGS={flags}"], log_name="package")
-        debs = sorted(args.workdir.glob(
-            f"linux-image-{args.release}_*.deb"))
-        debs = [d for d in debs if "-dbg" not in d.name]
-        if not debs:
-            die(f"bindeb-pkg produced no linux-image deb in {args.workdir}")
-        return debs
-    # rpm: modules are stripped at install; the gate packages the kernel,
-    # not its debug info.
+    # Modules are stripped at install; the gate packages the kernel, not its
+    # debug info.
     kbuild(args, arch, tree, ["binrpm-pkg"],
            extra=["INSTALL_MOD_STRIP=1", "RPMOPTS=--without debuginfo"],
            log_name="package")
@@ -362,6 +499,20 @@ def phase_package(args, arch, tree) -> list[Path]:
     if not rpms:
         die(f"binrpm-pkg produced no kernel rpm under {tree}/rpmbuild/RPMS")
     return rpms
+
+
+# The packaging format is a property of the target distribution, not of the
+# architecture: the kernel's bindeb-pkg and binrpm-pkg targets both work on
+# either arch given their tools. The per-arch default is the format the image
+# the gate boots installs; a survey can ask for both.
+PACKAGERS = {"deb": build_deb, "rpm": build_rpm}
+
+
+def phase_package(args, arch, tree) -> list[Path]:
+    out: list[Path] = []
+    for fmt in args.pkg_formats:
+        out += PACKAGERS[fmt](args, arch, tree)
+    return out
 
 
 def assert_module_producer(tree: Path, failures: list[str]) -> dict:
@@ -818,6 +969,14 @@ def phase_vm(args, arch, packages: list[Path], failures: list[str]) -> dict:
             f"modules={len(base['modules'])}")
         result["cores_stock"] = sweep_cores(args, vm, "stock", failures)
 
+        # Only the image's own format is installable in it; a survey may have
+        # built the other one alongside.
+        suffix = "." + arch["pkg"]
+        packages = [p for p in packages if p.suffix == suffix]
+        if not packages:
+            failures.append(f"no {suffix} package to install in the "
+                            f"{arch['distro']} image")
+            return result
         log(f"installing {', '.join(p.name for p in packages)}")
         vm.scp(packages, "")
         names = " ".join(shlex.quote(p.name) for p in packages)
@@ -973,15 +1132,39 @@ def main() -> int:
     ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL", "ld"))
     ap.add_argument("--tarball", type=Path,
                     help="pinned kernel source tarball (see setup.py)")
-    ap.add_argument("--config", type=Path,
-                    help="kernel .config to build (default: make defconfig)")
+    ap.add_argument("--tarball-url",
+                    help="fetch the kernel tarball from this URL instead; "
+                         "requires --tarball-sha256")
+    ap.add_argument("--tarball-sha256",
+                    help="expected sha256 of --tarball-url")
+    ap.add_argument("--tarball-cache", type=Path,
+                    default=LINUX_DIR / ".cache" / "tarballs",
+                    help="where a fetched tarball is kept between runs")
+    ap.add_argument("--config",
+                    help=f"kernel .config to build: a path, or "
+                         f"{CONFIG_FROM_VM!r} to take the distribution's own "
+                         f"/boot/config-$(uname -r) out of the stock image "
+                         f"(default: make defconfig)")
+    ap.add_argument("--pkg", default="",
+                    help="packaging formats, comma-separated from "
+                         "deb,rpm (default: the image's own)")
+    ap.add_argument("--keep-going", action="store_true",
+                    help="survey mode: make -k, so the manifest ranks every "
+                         "unit badc rejects instead of stopping at the first")
+    ap.add_argument("--fallback", type=Path,
+                    help="file of kernel-relative sources to leave to the "
+                         "real compiler (BADC_FALLBACK), for bisecting")
+    ap.add_argument("--ld-fallback", type=Path,
+                    help="file of link outputs to leave to the real linker "
+                         "(BADC_LD_FALLBACK), for bisecting")
     ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--unit-timeout", type=int, default=600,
                     help="seconds per badc unit")
     ap.add_argument("--expect-units", type=int, default=0,
                     help="minimum badc-compiled units (default: per-arch)")
-    ap.add_argument("--phases", default="tree,build,package,vm",
-                    help="comma-separated subset of tree,build,package,vm")
+    ap.add_argument("--phases", default="config,tree,build,package,vm",
+                    help="comma-separated subset of config,tree,build,"
+                         "package,vm")
     ap.add_argument("--deb-tools", type=Path,
                     help="prefix for the Debian packaging tools on an rpm "
                          "host; provisioned there when missing")
@@ -1018,7 +1201,7 @@ def main() -> int:
 
     arch = ARCHES[args.arch]
     phases = set(args.phases.split(","))
-    if unknown := phases - {"tree", "build", "package", "vm"}:
+    if unknown := phases - {"config", "tree", "build", "package", "vm"}:
         die(f"unknown phases: {sorted(unknown)}")
     args.workdir = args.workdir.resolve()
     args.workdir.mkdir(parents=True, exist_ok=True)
@@ -1043,18 +1226,49 @@ def main() -> int:
                                                                os.X_OK):
         die(f"badc not executable: {args.badc} "
             f"(cargo build --release --features full)")
+    args.pkg_formats = args.pkg.split(",") if args.pkg else [arch["pkg"]]
+    if bad := set(args.pkg_formats) - set(PACKAGERS):
+        die(f"unknown packaging formats: {sorted(bad)}")
     if args.deb_tools:
         args.deb_tools = args.deb_tools.resolve()
-    elif arch["pkg"] == "deb" and not shutil.which("dpkg-buildpackage"):
+    elif "deb" in args.pkg_formats and not shutil.which("dpkg-buildpackage"):
         args.deb_tools = args.workdir / "deb-tools"
 
     failures: list[str] = []
     report: dict = {"arch": args.arch, "linker": args.linker, "packages": []}
 
+    config = None
+    if args.config == CONFIG_FROM_VM:
+        if "config" not in phases:
+            die(f"--config {CONFIG_FROM_VM} needs the config phase")
+        config = phase_config(args, arch)
+        report["config_source"] = json.loads(
+            (args.workdir / f"config-vm-{args.arch}.json").read_text())
+    elif args.config:
+        config = Path(args.config)
+        if not config.is_file():
+            die(f"no config at {config}")
+
+    if not phases - {"config"}:
+        if args.report:
+            report["failures"] = failures
+            args.report.write_text(json.dumps(report, indent=2) + "\n")
+        return 0
+
     if "tree" in phases:
+        if args.tarball_url:
+            if not args.tarball_sha256:
+                die("--tarball-url requires --tarball-sha256")
+            args.tarball = fetch_tarball(args.tarball_url,
+                                         args.tarball_sha256,
+                                         args.tarball_cache)
         if not args.tarball or not args.tarball.is_file():
-            die("--tarball is required for the tree phase")
-        tree = phase_tree(args, arch)
+            die("--tarball or --tarball-url is required for the tree phase")
+        tree = phase_tree(args, arch, config)
+        report["config_deviations"] = len([
+            ln for ln in (args.workdir /
+                          f"config-deviations-{args.arch}.txt")
+            .read_text().splitlines() if ln.strip()])
     else:
         trees = sorted(args.workdir.glob("linux-*/Makefile"))
         if not trees:

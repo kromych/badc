@@ -111,9 +111,84 @@ pub fn is_ld_invocation(argv0: &str, first_arg: Option<&str>) -> bool {
     base == "ld" || base == "ld.badc" || base.ends_with("-ld")
 }
 
+/// Split a response file's contents the way libiberty's `buildargv`
+/// does: whitespace separates arguments, single and double quotes group
+/// them, and a backslash escapes the next character.
+fn split_response(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let (mut started, mut squote, mut dquote, mut escape) = (false, false, false, false);
+    for c in text.chars() {
+        if !started && !squote && !dquote && !escape && c.is_whitespace() {
+            continue;
+        }
+        started = true;
+        if escape {
+            cur.push(c);
+            escape = false;
+        } else if c == '\\' {
+            escape = true;
+        } else if squote {
+            squote = c != '\'';
+            if squote {
+                cur.push(c);
+            }
+        } else if dquote {
+            dquote = c != '"';
+            if dquote {
+                cur.push(c);
+            }
+        } else if c == '\'' {
+            squote = true;
+        } else if c == '"' {
+            dquote = true;
+        } else if c.is_whitespace() {
+            out.push(core::mem::take(&mut cur));
+            started = false;
+        } else {
+            cur.push(c);
+        }
+    }
+    if started {
+        out.push(cur);
+    }
+    out
+}
+
+/// Replace each `@file` with the arguments the file holds, recursively.
+/// GNU ld leaves a `@file` it cannot read literal, so an input whose
+/// name starts with `@` still reaches the link. `seen` breaks a cycle
+/// between files that name each other.
+fn expand_response_files(args: &[String]) -> Vec<String> {
+    fn walk(args: &[String], out: &mut Vec<String>, seen: &mut Vec<PathBuf>) {
+        for a in args {
+            let Some(name) = a.strip_prefix('@') else {
+                out.push(a.clone());
+                continue;
+            };
+            let path = PathBuf::from(name);
+            let text = (!seen.contains(&path))
+                .then(|| std::fs::read_to_string(&path).ok())
+                .flatten();
+            match text {
+                Some(text) => {
+                    seen.push(path);
+                    walk(&split_response(&text), out, seen);
+                    seen.pop();
+                }
+                None => out.push(a.clone()),
+            }
+        }
+    }
+    let mut out = Vec::with_capacity(args.len());
+    walk(args, &mut out, &mut Vec::new());
+    out
+}
+
 /// Run the ld driver over `args` (program name and any `--ld` marker
 /// already stripped). Returns the process exit code.
 pub fn run_ld(args: &[String]) -> i32 {
+    let args = &expand_response_files(args);
     let mut a = LdArgs {
         relocatable: false,
         output: PathBuf::from("a.out"),
@@ -862,5 +937,64 @@ fn report_orphans(
             Some(1)
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec;
+
+    #[test]
+    fn response_file_splitting_follows_buildargv() {
+        assert_eq!(split_response("a.o\nb.o\n"), vec!["a.o", "b.o"]);
+        assert_eq!(split_response("  a.o \t b.o  "), vec!["a.o", "b.o"]);
+        assert_eq!(
+            split_response("'one two' \"three four\""),
+            vec!["one two", "three four"]
+        );
+        assert_eq!(split_response(r"a\ b c"), vec!["a b", "c"]);
+        // A quote closes the group without ending the argument.
+        assert_eq!(split_response("-o'out name'.o"), vec!["-oout name.o"]);
+        // An empty quoted argument is still an argument.
+        assert_eq!(split_response("'' x"), vec!["", "x"]);
+        assert_eq!(split_response("   \n\t "), Vec::<String>::new());
+    }
+
+    #[test]
+    fn response_files_expand_in_place_and_nest() {
+        let dir = std::env::temp_dir().join(alloc::format!("badc-rsp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let inner = dir.join("inner.rsp");
+        let outer = dir.join("outer.rsp");
+        std::fs::write(&inner, "c.o d.o\n").expect("write");
+        std::fs::write(&outer, alloc::format!("a.o\n@{}\nb.o\n", inner.display())).expect("write");
+        let args = vec![
+            "-r".to_string(),
+            alloc::format!("@{}", outer.display()),
+            "-o".to_string(),
+            "out.o".to_string(),
+        ];
+        assert_eq!(
+            expand_response_files(&args),
+            vec!["-r", "a.o", "c.o", "d.o", "b.o", "-o", "out.o"]
+        );
+        // GNU ld leaves an unreadable `@file` literal, so an input
+        // whose name starts with `@` still reaches the link.
+        let missing = alloc::format!("@{}", dir.join("absent.rsp").display());
+        assert_eq!(
+            expand_response_files(std::slice::from_ref(&missing)),
+            vec![missing.clone()]
+        );
+        // A file naming itself expands once and then stays literal.
+        let loop_file = dir.join("loop.rsp");
+        std::fs::write(&loop_file, alloc::format!("x.o @{}", loop_file.display())).expect("write");
+        let self_ref = alloc::format!("@{}", loop_file.display());
+        assert_eq!(
+            expand_response_files(std::slice::from_ref(&self_ref)),
+            vec!["x.o".to_string(), self_ref]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

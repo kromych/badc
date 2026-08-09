@@ -6621,7 +6621,7 @@ fn encode_one_x86_section_insn(
     if prefix.is_some()
         && (matches!(
             insn.operands.first(),
-            Some(AsmOpnd::GotoLabel(_) | AsmOpnd::ImmSym)
+            Some(AsmOpnd::GotoLabel(_) | AsmOpnd::ImmSym { .. })
         ) || (insn.sym_target.is_some() && insn.operands.is_empty()))
     {
         return Err(alloc::format!(
@@ -6765,33 +6765,6 @@ fn encode_one_x86_section_insn(
             });
         }
     }
-    // `pushq $symbol`: the symbol's address as an absolute immediate. `68`
-    // pushes a sign-extended imm32; the field takes an `R_X86_64_32S` reloc
-    // against the symbol (addend 0), like the compiler-emitted form.
-    if matches!(insn.operands.first(), Some(AsmOpnd::ImmSym)) {
-        if mnem != "push" {
-            return Err(alloc::format!(
-                "inline asm: replacement `{text}` symbol immediate requires `push`"
-            ));
-        }
-        let name = insn.sym_target.clone().ok_or_else(|| {
-            alloc::format!("inline asm: replacement `{text}` symbol immediate has no symbol")
-        })?;
-        let reloc = AsmSectionReloc {
-            offset: 1,
-            width: 4,
-            kind: AsmRelocKind::Data,
-            pcrel: false,
-            branch: false,
-            signed: true,
-            target: AsmSectionTarget::Symbol(name),
-            addend: 0,
-        };
-        return Ok(AsmSectionItem::CodeBytes {
-            bytes: alloc::vec![0x68, 0, 0, 0, 0],
-            relocs: alloc::vec![reloc],
-        });
-    }
     // Resolve each operand to a concrete register, immediate, or memory
     // reference. A template operand assigned a register uses it; an `i`-class
     // operand uses its constant. A base register is a `%%reg` or an operand's
@@ -6834,12 +6807,34 @@ fn encode_one_x86_section_insn(
     // `sym(,%index,scale)`). The disp32 field is located by re-encoding. At
     // most one such operand per instruction.
     let mut sym_disp: Option<(AsmSectionTarget, i64, usize, bool)> = None;
+    // A `$symbol` immediate: its reloc target, the symbol addend, and the
+    // operand's index in `concrete`. The field is located by re-encoding, as
+    // for a symbolic displacement. At most one per instruction.
+    let mut sym_imm: Option<(AsmSectionTarget, i64, usize)> = None;
     // A `__seg_gs` / `__seg_fs` memory operand's segment override; a template
     // `%%gs:` rides `insn.seg` instead, and the two never conflict.
     let mut operand_seg: Option<u8> = None;
     for o in &insn.operands {
         match *o {
             AsmOpnd::Imm(v) => concrete.push(Concrete::Imm(v)),
+            AsmOpnd::ImmSym { addend } => {
+                let name = insn.sym_target.clone().ok_or_else(|| {
+                    alloc::format!(
+                        "inline asm: replacement `{text}` symbol immediate has no symbol"
+                    )
+                })?;
+                if sym_imm.is_some() {
+                    return Err(alloc::format!(
+                        "inline asm: replacement `{text}` has more than one symbol immediate"
+                    ));
+                }
+                sym_imm = Some((
+                    AsmSectionTarget::Symbol(name),
+                    addend as i64,
+                    concrete.len(),
+                ));
+                concrete.push(Concrete::Imm(IMM_PROBE[0].1));
+            }
             AsmOpnd::Reg { reg, size } => concrete.push(Concrete::Reg { reg, size }),
             AsmOpnd::Ref { idx, size } => {
                 // A memory-constraint (`m`) operand holds its address in the
@@ -6953,13 +6948,34 @@ fn encode_one_x86_section_insn(
                     }
                 }
             }
-            // `seg:disp` with no base register, written as a literal or as a
-            // bare `%cN` / `%PN` operand: the absolute disp32 form, or a
-            // RIP-relative relocation when the operand names an address.
-            AsmOpnd::AbsMem { disp } => concrete.push(Concrete::AbsMem {
-                disp,
-                size: mem_size(insn),
-            }),
+            // An absolute address with no base register, written as a literal,
+            // as a symbol name, or as a bare `%cN` / `%PN` operand: the
+            // absolute disp form, its field relocated when a symbol names it.
+            AsmOpnd::AbsMem { disp, sym } => {
+                let size = mem_size(insn);
+                if !sym {
+                    concrete.push(Concrete::AbsMem { disp, size });
+                    continue;
+                }
+                let name = insn.sym_target.clone().ok_or_else(|| {
+                    alloc::format!("inline asm: replacement `{text}` memory symbol is missing")
+                })?;
+                if sym_disp.is_some() {
+                    return Err(alloc::format!(
+                        "inline asm: replacement `{text}` has more than one memory operand"
+                    ));
+                }
+                sym_disp = Some((
+                    AsmSectionTarget::Symbol(name),
+                    disp as i64,
+                    concrete.len(),
+                    false,
+                ));
+                concrete.push(Concrete::AbsMem {
+                    disp: abs_probe(section_addr_size(insn, mode)).0,
+                    size,
+                });
+            }
             AsmOpnd::AbsMemRef { idx, .. } => {
                 let size = mem_size(insn);
                 match (refs.imm_of)(idx) {
@@ -7097,6 +7113,61 @@ fn encode_one_x86_section_insn(
                 ));
                 concrete.push(Concrete::RipRel { disp: 0, size });
             }
+            // `Nf(%%rip)`: the address of a section label, a `lea` source. The
+            // materializer values the label, so the reference is a PC-relative
+            // relocation against it like any other symbolic displacement.
+            AsmOpnd::LabelAddr { num, forward } => {
+                if sym_disp.is_some() {
+                    return Err(alloc::format!(
+                        "inline asm: replacement `{text}` has more than one memory operand"
+                    ));
+                }
+                sym_disp = Some((
+                    AsmSectionTarget::Symbol(local_label_name(num, forward)),
+                    0,
+                    concrete.len(),
+                    true,
+                ));
+                concrete.push(Concrete::RipRel {
+                    disp: 0,
+                    size: mem_size(insn),
+                });
+            }
+            // `$Nf`: the label's address as an absolute immediate.
+            AsmOpnd::ImmLabel { num, forward } => {
+                if sym_imm.is_some() {
+                    return Err(alloc::format!(
+                        "inline asm: replacement `{text}` has more than one symbol immediate"
+                    ));
+                }
+                sym_imm = Some((
+                    AsmSectionTarget::Symbol(local_label_name(num, forward)),
+                    0,
+                    concrete.len(),
+                ));
+                concrete.push(Concrete::Imm(IMM_PROBE[0].1));
+            }
+            // A bare `Nf` outside a branch is AT&T's absolute memory address
+            // (the boot stubs patch their own operands through one). The
+            // displacement is the address size wide and takes an absolute
+            // relocation against the label.
+            AsmOpnd::Label { num, forward } => {
+                if sym_disp.is_some() {
+                    return Err(alloc::format!(
+                        "inline asm: replacement `{text}` has more than one memory operand"
+                    ));
+                }
+                sym_disp = Some((
+                    AsmSectionTarget::Symbol(local_label_name(num, forward)),
+                    0,
+                    concrete.len(),
+                    false,
+                ));
+                concrete.push(Concrete::AbsMem {
+                    disp: abs_probe(section_addr_size(insn, mode)).0,
+                    size: mem_size(insn),
+                });
+            }
             _ => {
                 return Err(alloc::format!(
                     "inline asm: replacement instruction `{text}` operand is not a \
@@ -7106,10 +7177,31 @@ fn encode_one_x86_section_insn(
         }
     }
     // Encode the instruction body; a segment override rides in front of it.
-    let mut body = alloc::vec::Vec::new();
     let addr = section_addr_size(insn, mode);
-    super::asm::encode_in(&mut body, mode, addr, insn.mnemonic, insn.suffix, &concrete)
-        .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+    let encode = |ops: &[Concrete]| {
+        let mut out = alloc::vec::Vec::new();
+        super::asm::encode_in(&mut out, mode, addr, insn.mnemonic, insn.suffix, ops).map(|()| out)
+    };
+    // A `$symbol` immediate: settle the field's width and signedness before
+    // the body is encoded, since both follow from the form the probe value
+    // selects. The widest probe that encodes wins, matching GNU as, which
+    // relocates a symbol immediate in the operand size's own field rather
+    // than in a shortened one.
+    let imm_field = match sym_imm {
+        Some((_, _, idx)) => Some(locate_sym_imm_field(&concrete, idx, &encode).ok_or_else(
+            || {
+                alloc::format!(
+                    "inline asm: replacement `{text}` symbol immediate has no encodable field"
+                )
+            },
+        )?),
+        None => None,
+    };
+    if let (Some((_, _, idx)), Some(f)) = (&sym_imm, &imm_field) {
+        concrete[*idx] = Concrete::Imm(f.probe);
+    }
+    let mut body =
+        encode(&concrete).map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
     // GNU as orders the prefixes segment, address size, operand size, then
     // repeat / lock; the encoded body carries the size prefixes at its front,
     // so the repeat / lock byte goes after them.
@@ -7159,6 +7251,12 @@ fn encode_one_x86_section_insn(
                 disp: RIPREL_PROBE_DISP2,
                 size,
             },
+            // An absolute address's field is the address size wide, so its
+            // probe pair is chosen to differ in every byte of that width.
+            Concrete::AbsMem { size, .. } => Concrete::AbsMem {
+                disp: abs_probe(addr).1,
+                size,
+            },
             other => other,
         };
         let mut probe_bytes = alloc::vec::Vec::new();
@@ -7171,33 +7269,139 @@ fn encode_one_x86_section_insn(
             &probe,
         )
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
-        let field = riprel_disp32_field(&body, &probe_bytes).ok_or_else(|| {
-            alloc::format!("inline asm: replacement `{text}` disp32 field is not a 4-byte run")
-        })?;
-        body[field..field + 4].fill(0);
-        // A PC-relative field's addend is the symbol offset less the 4-byte
-        // end skew and any bytes trailing the field (the immediate of
-        // `testb $imm, sym(%rip)`), matching gcc. An absolute `R_X86_64_32S`
-        // field is patched with the symbol value plus the offset directly.
-        let trailing = body.len() - (field + 4);
+        let (field, width) = differing_run(&body, &probe_bytes)
+            .filter(|&(_, n)| matches!(n, 2 | 4))
+            .ok_or_else(|| {
+                alloc::format!(
+                    "inline asm: replacement `{text}` displacement field is not a 2- or 4-byte run"
+                )
+            })?;
+        body[field..field + width].fill(0);
+        // A PC-relative field's addend is the symbol offset less the field's
+        // own end skew and any bytes trailing it (the immediate of `testb
+        // $imm, sym(%rip)`), matching gcc. An absolute field is patched with
+        // the symbol value plus the offset directly.
+        let trailing = body.len() - (field + width);
         let addend = if pcrel {
-            off - 4 - trailing as i64
+            off - width as i64 - trailing as i64
         } else {
             off
         };
         relocs.push(AsmSectionReloc {
             offset: seg_len + field as u32,
-            width: 4,
+            width: width as u8,
             kind: AsmRelocKind::Data,
             pcrel,
             branch: false,
-            signed: !pcrel,
+            // An absolute disp32 is sign-extended into a 64-bit address, so it
+            // takes `R_X86_64_32S`; under a 32- or 16-bit address size the
+            // field is the whole address and takes the zero-extended flavour.
+            signed: !pcrel && width == 4 && addr == 8,
             target,
             addend,
         });
     }
+    if let (Some((target, off, _)), Some(f)) = (sym_imm, imm_field) {
+        body[f.start..f.start + f.width as usize].fill(0);
+        relocs.push(AsmSectionReloc {
+            offset: seg_len + f.start as u32,
+            width: f.width,
+            kind: AsmRelocKind::Data,
+            pcrel: false,
+            branch: false,
+            signed: f.signed,
+            target,
+            addend: off,
+        });
+    }
     bytes.extend_from_slice(&body[sizes..]);
     Ok(AsmSectionItem::CodeBytes { bytes, relocs })
+}
+
+/// Where a `$symbol` immediate lands in an instruction's encoding.
+struct SymImmField {
+    /// Probe value that selects this field; the body encodes with it and the
+    /// field bytes are zeroed afterwards.
+    probe: i64,
+    start: usize,
+    width: u8,
+    /// The form's immediate slot is the sign-extended class, so the field
+    /// takes `R_X86_64_32S` rather than `R_X86_64_32`.
+    signed: bool,
+}
+
+/// Probe pairs for locating a symbol immediate's field, widest first. Both
+/// members of a pair differ in every byte of the field and stay inside the
+/// signed range of their width, so a form that accepts one accepts the other.
+/// The 8-byte pair comes last: an instruction that also has a 4-byte form
+/// (`movq $sym, %rax`) takes it, as GNU as does, and only an imm64-only form
+/// (`movabsq`) falls through.
+const IMM_PROBE: [(u8, i64, i64); 4] = [
+    (4, 0x5B3D_71A7, 0x24C2_8E58),
+    (2, 0x5B3D, 0x24C2),
+    (1, 0x5B, 0x24),
+    (8, 0x5B3D_71A7_2C4E_1936, 0x24C2_8E58_53B1_E6C9),
+];
+
+/// A value only an unsigned imm32 slot accepts: a signed imm32 slot rejects
+/// it, which is how the sign-extended class is told apart.
+const IMM_UNSIGNED_PROBE: i64 = 0x8000_0000;
+
+/// Encode a concrete operand list, or report why it does not encode.
+type EncodeFn<'a> =
+    dyn Fn(&[super::asm::Concrete]) -> Result<alloc::vec::Vec<u8>, alloc::string::String> + 'a;
+
+/// Settle a symbol immediate's field by re-encoding. Each probe pair encodes
+/// the instruction twice; the bytes that differ are the field, which x86
+/// places last, so a run reaching the end of the encoding is the whole field
+/// and a shorter one means the probe did not fill it.
+fn locate_sym_imm_field(
+    concrete: &[super::asm::Concrete],
+    idx: usize,
+    encode: &EncodeFn<'_>,
+) -> Option<SymImmField> {
+    use super::asm::Concrete;
+    let with = |v: i64| {
+        let mut ops = concrete.to_vec();
+        ops[idx] = Concrete::Imm(v);
+        encode(&ops).ok()
+    };
+    for (width, p1, p2) in IMM_PROBE {
+        let (a, b) = (with(p1)?, with(p2)?);
+        let Some((start, len)) = differing_run(&a, &b) else {
+            continue;
+        };
+        if len != width as usize || start + len != a.len() {
+            continue;
+        }
+        // The signed imm32 class rejects a value above `i32::MAX`, so an
+        // encoding that changes length or fails there is the sign-extended
+        // form. Narrower fields carry no such distinction.
+        let signed = width == 4 && with(IMM_UNSIGNED_PROBE).is_none_or(|u| u.len() != a.len());
+        return Some(SymImmField {
+            probe: p1,
+            start,
+            width,
+            signed,
+        });
+    }
+    None
+}
+
+/// A local label's name as the section materializer resolves it: the number
+/// plus its search direction.
+fn local_label_name(num: u32, forward: bool) -> alloc::string::String {
+    alloc::format!("{num}{}", if forward { 'f' } else { 'b' })
+}
+
+/// The probe pair for locating an absolute-address displacement, whose field
+/// is the address size wide: both members differ in every byte of that field.
+fn abs_probe(addr: u8) -> (i32, i32) {
+    if addr == 2 {
+        (0x5B3D, 0x24C2)
+    } else {
+        (RIPREL_PROBE_DISP, RIPREL_PROBE_DISP2)
+    }
 }
 
 /// A distinctive displacement for locating a RIP-relative disp32 field by
@@ -7213,18 +7417,23 @@ const RIPREL_PROBE_DISP2: i32 = 0xA4C2_8E58u32 as i32;
 /// four contiguous bytes differ -- an encoder-invariant check that the disp32
 /// is the sole variable field.
 fn riprel_disp32_field(a: &[u8], b: &[u8]) -> Option<usize> {
+    differing_run(a, b).filter(|&(_, n)| n == 4).map(|(s, _)| s)
+}
+
+/// The single contiguous run of bytes two equal-length encodings differ in,
+/// as (offset, length). `None` when they differ nowhere or in more than one
+/// run -- the encoder-invariant check that the probed field is the only
+/// variable one.
+fn differing_run(a: &[u8], b: &[u8]) -> Option<(usize, usize)> {
     if a.len() != b.len() {
         return None;
     }
-    let first = a.iter().zip(b).position(|(x, y)| x != y)?;
     let differ = |i: usize| a.get(i).zip(b.get(i)).is_some_and(|(x, y)| x != y);
-    if !(first + 4 <= a.len() && (first..first + 4).all(differ)) {
-        return None;
-    }
-    if (0..a.len()).any(|i| differ(i) && !(first..first + 4).contains(&i)) {
-        return None;
-    }
-    Some(first)
+    let first = (0..a.len()).find(|&i| differ(i))?;
+    let end = (first..a.len()).find(|&i| !differ(i)).unwrap_or(a.len());
+    (end..a.len())
+        .all(|i| !differ(i))
+        .then_some((first, end - first))
 }
 
 /// Lower an `Inst::InlineAsm` (GCC extended asm with operands). Assigns
@@ -8042,8 +8251,16 @@ fn emit_inline_asm(
                     }
                 }
                 // An absolute `seg:disp` reference; the segment prefix rides
-                // the instruction. Access width as for `disp(%reg)`.
-                AsmOpnd::AbsMem { disp } => {
+                // the instruction. Access width as for `disp(%reg)`. A symbol
+                // address needs a relocation the function-body stream does not
+                // carry, so only the literal form assembles here.
+                AsmOpnd::AbsMem { sym: true, .. } => {
+                    return fail(
+                        "inline asm: an absolute symbol address is only supported in \
+                         file-scope asm",
+                    );
+                }
+                AsmOpnd::AbsMem { disp, sym: false } => {
                     let size = asm_mem_size(None, insn, &asm.operands, &op_reg);
                     Concrete::AbsMem {
                         disp,
@@ -8150,7 +8367,7 @@ fn emit_inline_asm(
                 // A `$symbol` absolute-address immediate needs a symbol
                 // relocation the function-body stream does not carry; it is
                 // assembled only in file-scope section code.
-                AsmOpnd::ImmSym => {
+                AsmOpnd::ImmSym { .. } => {
                     return fail(
                         "inline asm: `$symbol` address immediate is only supported in file-scope asm",
                     );
@@ -10316,19 +10533,47 @@ mod code_mode_tests {
 
     /// Bytes a file-scope asm stream assembles to, in section order.
     fn assemble(text: &str) -> Vec<u8> {
-        let mut blocks = extract_file_scope_asm_sections(text, false).expect("parses");
+        assemble_relocs(text).0
+    }
+
+    /// One relocation as `(offset, width, signed, symbol, addend)`.
+    type Reloc = (u32, u8, bool, alloc::string::String, i64);
+
+    /// Bytes plus the stream's relocations. Offsets are within the item,
+    /// which is the whole stream in these tests.
+    fn assemble_relocs(text: &str) -> (Vec<u8>, Vec<Reloc>) {
+        use super::super::ssa::emit_common::{
+            AsmComments, AsmSectionTarget, prepare_file_asm_text,
+        };
+        // The file-scope path prepares the template (comment stripping, GNU as
+        // macro and equate expansion) before the section parse reads it.
+        let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
+        let mut blocks = extract_file_scope_asm_sections(&text, false).expect("parses");
         super::encode_x86_file_asm_section_code(&mut blocks).expect("assembles");
-        let mut out = Vec::new();
+        let (mut out, mut rs) = (Vec::new(), Vec::new());
         for b in blocks.iter_mut() {
             for_each_section_item_mut(core::slice::from_mut(b), &mut |item| {
-                if let AsmSectionItem::CodeBytes { bytes, .. } = item {
+                if let AsmSectionItem::CodeBytes { bytes, relocs } = item {
+                    for r in relocs.iter() {
+                        let name = match &r.target {
+                            AsmSectionTarget::Symbol(n) => n.clone(),
+                            t => alloc::format!("{t:?}"),
+                        };
+                        rs.push((
+                            r.offset + out.len() as u32,
+                            r.width,
+                            r.signed,
+                            name,
+                            r.addend,
+                        ));
+                    }
                     out.extend_from_slice(bytes);
                 }
                 Ok(())
             })
             .expect("walks");
         }
-        out
+        (out, rs)
     }
 
     /// `.code16` / `.code32` / `.code64` select the encoding mode of the
@@ -10389,5 +10634,418 @@ mod code_mode_tests {
         assert_eq!(assemble(".code16\njz f\n"), [0x0f, 0x84, 0, 0]);
         assert_eq!(assemble(".code32\ncall f\n"), [0xe8, 0, 0, 0, 0]);
         assert_eq!(assemble("call f\n"), [0xe8, 0, 0, 0, 0]);
+    }
+
+    /// A `$symbol` immediate relocates in whatever field the instruction's
+    /// operand size gives it, not only `push`'s imm32. The field is
+    /// sign-extended (`R_X86_64_32S`, `signed`) exactly when the form's
+    /// immediate slot is the signed imm32 class. Bytes and relocations
+    /// measured with GNU as 2.46.1 for the same source.
+    #[test]
+    fn symbol_immediate_field_matches_gnu_as() {
+        for (src, bytes, reloc) in [
+            // 48 c7 c0 <32S sym>
+            (
+                "movq $s, %rax\n",
+                &[0x48, 0xc7, 0xc0, 0, 0, 0, 0][..],
+                (3u32, 4u8, true, 0i64),
+            ),
+            // b8 <32 sym>: a 32-bit operand takes the zero-extended field.
+            ("movl $s, %eax\n", &[0xb8, 0, 0, 0, 0][..], (1, 4, false, 0)),
+            (
+                "subq $s, %rsp\n",
+                &[0x48, 0x81, 0xec, 0, 0, 0, 0][..],
+                (3, 4, true, 0),
+            ),
+            (
+                "addq $s+8, %rax\n",
+                &[0x48, 0x05, 0, 0, 0, 0][..],
+                (2, 4, true, 8),
+            ),
+            ("cmpl $s, %eax\n", &[0x3d, 0, 0, 0, 0][..], (1, 4, false, 0)),
+            ("pushq $s\n", &[0x68, 0, 0, 0, 0][..], (1, 4, true, 0)),
+            ("movb $s, %al\n", &[0xb0, 0][..], (1, 1, false, 0)),
+            ("movw $s, %dx\n", &[0x66, 0xba, 0, 0][..], (2, 2, false, 0)),
+            (
+                "movabsq $s, %rcx\n",
+                &[0x48, 0xb9, 0, 0, 0, 0, 0, 0, 0, 0][..],
+                (2, 8, false, 0),
+            ),
+        ] {
+            let (got, relocs) = assemble_relocs(src);
+            assert_eq!(got, bytes, "{src}");
+            let (off, width, signed, addend) = reloc;
+            assert_eq!(
+                relocs,
+                [(off, width, signed, alloc::string::String::from("s"), addend)],
+                "{src}"
+            );
+        }
+    }
+
+    /// A `.code16` stub's symbol immediate takes the 16-bit field, and the
+    /// constant term folds into the relocation addend.
+    #[test]
+    fn symbol_immediate_in_code16_matches_gnu_as() {
+        let (bytes, relocs) = assemble_relocs(".code16\nmovw $_end+3, %cx\n");
+        assert_eq!(bytes, [0xb9, 0, 0]);
+        assert_eq!(
+            relocs,
+            [(1, 2, false, alloc::string::String::from("_end"), 3)]
+        );
+    }
+
+    /// A `.set` / `=` assignment to a register is the GNU as register equate:
+    /// every later use of the name assembles as that register. `$name` splits
+    /// at the AT&T immediate sigil, so a constant equate resolves there too.
+    #[test]
+    fn register_and_constant_equates_resolve_in_operands() {
+        assert_eq!(
+            assemble(".set IN_KEY, %rdx\nmovdqu (IN_KEY), %xmm0\n"),
+            [0xf3, 0x0f, 0x6f, 0x02]
+        );
+        assert_eq!(
+            assemble("CRC = %edi\nmovd CRC, %xmm0\n"),
+            [0x66, 0x0f, 0x6e, 0xc7]
+        );
+        // An equate whose value is another equate takes its register.
+        assert_eq!(
+            assemble("A = %rdx\nB = A\nmov (%r9), B\n"),
+            [0x49, 0x8b, 0x11]
+        );
+        // `_A`/`_B`/`K` fold to 32; `$K` is the sigil plus the name.
+        assert_eq!(
+            assemble("_A = 8\n_B = _A + 8\nK = _B + 16\nsubq $K, %rsp\n"),
+            [0x48, 0x83, 0xec, 0x20]
+        );
+    }
+
+    /// The SSSE3 / SSE4.1 / AES / SHA / carry-less families sit on the 0F38 and
+    /// 0F3A maps, whose escape byte and operand direction the two-operand and
+    /// immediate SSE shapes now carry. The extract forms write their r/m
+    /// operand, so their vector operand is the ModRM.reg one. Bytes measured
+    /// with GNU as 2.46.1 for the same source.
+    #[test]
+    fn sse_map38_and_map3a_forms_match_gnu_as() {
+        for (src, want) in [
+            ("pshufb %xmm7, %xmm2\n", &[0x66, 0x0f, 0x38, 0x00, 0xd7][..]),
+            (
+                "pshufb 16(%rdi), %xmm10\n",
+                &[0x66, 0x44, 0x0f, 0x38, 0x00, 0x57, 0x10][..],
+            ),
+            ("punpcklqdq %xmm2, %xmm1\n", &[0x66, 0x0f, 0x6c, 0xca][..]),
+            ("punpckhqdq %xmm2, %xmm1\n", &[0x66, 0x0f, 0x6d, 0xca][..]),
+            (
+                "pclmulqdq $0x00, %xmm1, %xmm0\n",
+                &[0x66, 0x0f, 0x3a, 0x44, 0xc1, 0x00][..],
+            ),
+            (
+                "pclmulqdq $0x11, %xmm9, %xmm10\n",
+                &[0x66, 0x45, 0x0f, 0x3a, 0x44, 0xd1, 0x11][..],
+            ),
+            (
+                "palignr $8, %xmm1, %xmm2\n",
+                &[0x66, 0x0f, 0x3a, 0x0f, 0xd1, 0x08][..],
+            ),
+            (
+                "pinsrd $3, 16(%rdi), %xmm1\n",
+                &[0x66, 0x0f, 0x3a, 0x22, 0x4f, 0x10, 0x03][..],
+            ),
+            (
+                "pinsrq $1, %rax, %xmm5\n",
+                &[0x66, 0x48, 0x0f, 0x3a, 0x22, 0xe8, 0x01][..],
+            ),
+            // The extract's destination is the r/m: `%eax` sits there, `%xmm1`
+            // in ModRM.reg.
+            (
+                "pextrd $3, %xmm1, %eax\n",
+                &[0x66, 0x0f, 0x3a, 0x16, 0xc8, 0x03][..],
+            ),
+            (
+                "pextrd $2, %xmm9, 8(%rsi)\n",
+                &[0x66, 0x44, 0x0f, 0x3a, 0x16, 0x4e, 0x08, 0x02][..],
+            ),
+            (
+                "pmovzxdq %xmm1, %xmm2\n",
+                &[0x66, 0x0f, 0x38, 0x35, 0xd1][..],
+            ),
+            ("aesenc %xmm1, %xmm0\n", &[0x66, 0x0f, 0x38, 0xdc, 0xc1][..]),
+            (
+                "aesenclast %xmm9, %xmm10\n",
+                &[0x66, 0x45, 0x0f, 0x38, 0xdd, 0xd1][..],
+            ),
+            // The SHA extensions take no mandatory prefix.
+            ("sha1nexte %xmm1, %xmm0\n", &[0x0f, 0x38, 0xc8, 0xc1][..]),
+            ("sha256rnds2 %xmm1, %xmm0\n", &[0x0f, 0x38, 0xcb, 0xc1][..]),
+            (
+                "sha1rnds4 $3, %xmm1, %xmm0\n",
+                &[0x0f, 0x3a, 0xcc, 0xc1, 0x03][..],
+            ),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// The AVX counterparts: the 0F38 three-operand set, the packed shifts
+    /// (destination in VEX.vvvv), the 0F3A lane ops, the lane extracts (whose
+    /// `L` follows the wide ModRM.reg source), and the operandless upper-lane
+    /// clears. Bytes measured with GNU as 2.46.1 for the same source.
+    #[test]
+    fn vex_map38_shift_and_lane_forms_match_gnu_as() {
+        for (src, want) in [
+            (
+                "vpshufb %xmm13, %xmm4, %xmm4\n",
+                &[0xc4, 0xc2, 0x59, 0x00, 0xe5][..],
+            ),
+            (
+                "vpshufb %ymm13, %ymm0, %ymm0\n",
+                &[0xc4, 0xc2, 0x7d, 0x00, 0xc5][..],
+            ),
+            (
+                "vpslld $2, %xmm1, %xmm2\n",
+                &[0xc5, 0xe9, 0x72, 0xf1, 0x02][..],
+            ),
+            (
+                "vpsrld $30, %ymm1, %ymm2\n",
+                &[0xc5, 0xed, 0x72, 0xd1, 0x1e][..],
+            ),
+            (
+                "vpslldq $8, %xmm0, %xmm1\n",
+                &[0xc5, 0xf1, 0x73, 0xf8, 0x08][..],
+            ),
+            (
+                "vpsrldq $4, %xmm11, %xmm12\n",
+                &[0xc4, 0xc1, 0x19, 0x73, 0xdb, 0x04][..],
+            ),
+            (
+                "vpclmulqdq $0x01, %xmm0, %xmm1, %xmm14\n",
+                &[0xc4, 0x63, 0x71, 0x44, 0xf0, 0x01][..],
+            ),
+            (
+                "vperm2i128 $0x20, %ymm2, %ymm1, %ymm0\n",
+                &[0xc4, 0xe3, 0x75, 0x46, 0xc2, 0x20][..],
+            ),
+            (
+                "vinserti128 $1, %xmm2, %ymm1, %ymm0\n",
+                &[0xc4, 0xe3, 0x75, 0x38, 0xc2, 0x01][..],
+            ),
+            (
+                "vextracti128 $1, %ymm0, %xmm1\n",
+                &[0xc4, 0xe3, 0x7d, 0x39, 0xc1, 0x01][..],
+            ),
+            (
+                "vextracti128 $1, %ymm10, 16(%rdi)\n",
+                &[0xc4, 0x63, 0x7d, 0x39, 0x57, 0x10, 0x01][..],
+            ),
+            ("vzeroupper\n", &[0xc5, 0xf8, 0x77][..]),
+            ("vzeroall\n", &[0xc5, 0xfc, 0x77][..]),
+            (
+                "vaesenc %xmm1, %xmm2, %xmm3\n",
+                &[0xc4, 0xe2, 0x69, 0xdc, 0xd9][..],
+            ),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// A label outside a branch is an operand like any other: `Nf(%%rip)` is
+    /// the label's address, `$Nf` its address as an immediate, and a bare `Nf`
+    /// the absolute address the boot stubs patch through. The whole stream's
+    /// bytes and relocations, measured with GNU as 2.46.1.
+    #[test]
+    fn label_operands_match_gnu_as() {
+        let (bytes, relocs) = assemble_relocs(concat!(
+            ".code16\n",
+            "cmpb %al, 3f\n",
+            "movb %al, 3f\n",
+            "addw %bx, 3f\n",
+            "3:\n",
+            "int $0x10\n",
+            ".code32\n",
+            "addl %ebx, 2f\n",
+            "2:\n",
+            ".code64\n",
+            "leaq 1f(%rip), %rbp\n",
+            "movl 1f(%rip), %eax\n",
+            "pushq $1f\n",
+            "1:\n",
+        ));
+        #[rustfmt::skip]
+        let want: &[u8] = &[
+            0x38, 0x06, 0, 0,                   // cmpb %al, 3f
+            0xa2, 0, 0,                         // movb %al, 3f (the moffs form)
+            0x01, 0x1e, 0, 0,                   // addw %bx, 3f
+            0xcd, 0x10,                         // 3: int $0x10
+            0x01, 0x1d, 0, 0, 0, 0,             // addl %ebx, 2f
+            0x48, 0x8d, 0x2d, 0, 0, 0, 0,       // leaq 1f(%rip), %rbp
+            0x8b, 0x05, 0, 0, 0, 0,             // movl 1f(%rip), %eax
+            0x68, 0, 0, 0, 0,                   // pushq $1f
+        ];
+        assert_eq!(bytes, want);
+        let at = |name: &str| alloc::string::String::from(name);
+        assert_eq!(
+            relocs,
+            [
+                // The `.code16` address fields are 16 bits wide.
+                (2, 2, false, at("3f"), 0),
+                (5, 2, false, at("3f"), 0),
+                (9, 2, false, at("3f"), 0),
+                // A 32-bit address size takes the zero-extended flavour.
+                (15, 4, false, at("2f"), 0),
+                // RIP-relative references carry the end skew in the addend.
+                (22, 4, false, at("1f"), -4),
+                (28, 4, false, at("1f"), -4),
+                (33, 4, true, at("1f"), 0),
+            ]
+        );
+    }
+
+    /// AT&T spells an absolute memory reference without the `$` an immediate
+    /// carries, so a bare symbol is an address. Its disp32 is sign-extended
+    /// into a 64-bit address (`R_X86_64_32S`) and is the whole address under a
+    /// narrower address size. Bytes measured with GNU as 2.46.1.
+    #[test]
+    fn absolute_symbol_memory_operands_match_gnu_as() {
+        for (src, bytes, reloc) in [
+            (
+                "lock btsl $0, tr_lock\n",
+                &[0xf0, 0x0f, 0xba, 0x2c, 0x25, 0, 0, 0, 0, 0][..],
+                (5u32, 4u8, true, "tr_lock", 0i64),
+            ),
+            (
+                "movl sym, %eax\n",
+                &[0x8b, 0x04, 0x25, 0, 0, 0, 0][..],
+                (3, 4, true, "sym", 0),
+            ),
+            // The immediate trails the displacement field.
+            (
+                "testb $0x80, loadflags\n",
+                &[0xf6, 0x04, 0x25, 0, 0, 0, 0, 0x80][..],
+                (3, 4, true, "loadflags", 0),
+            ),
+            (
+                ".code16\nlgdtl %cs:wakeup_gdt\n",
+                &[0x2e, 0x66, 0x0f, 0x01, 0x16, 0, 0][..],
+                (5, 2, false, "wakeup_gdt", 0),
+            ),
+            (
+                ".code16\nmovw sym, %dx\n",
+                &[0x8b, 0x16, 0, 0][..],
+                (2, 2, false, "sym", 0),
+            ),
+        ] {
+            let (got, relocs) = assemble_relocs(src);
+            assert_eq!(got, bytes, "{src}");
+            let (off, width, signed, name, addend) = reloc;
+            assert_eq!(
+                relocs,
+                [(
+                    off,
+                    width,
+                    signed,
+                    alloc::string::String::from(name),
+                    addend
+                )],
+                "{src}"
+            );
+        }
+    }
+
+    /// A scaled index addresses memory in the hand-written SSE / VEX shapes as
+    /// it does in the catalogue: the SIB byte with REX.X / VEX.X carrying the
+    /// index's high bit. Bytes measured with GNU as 2.46.1.
+    #[test]
+    fn scaled_index_memory_operands_match_gnu_as() {
+        for (src, want) in [
+            (
+                "crc32q (%rsi,%rcx), %r8\n",
+                &[0xf2, 0x4c, 0x0f, 0x38, 0xf1, 0x04, 0x0e][..],
+            ),
+            (
+                "movd (%rsi,%rax,4), %xmm4\n",
+                &[0x66, 0x0f, 0x6e, 0x24, 0x86][..],
+            ),
+            (
+                "movdqu -16(%rsi,%rdx), %xmm2\n",
+                &[0xf3, 0x0f, 0x6f, 0x54, 0x16, 0xf0][..],
+            ),
+            (
+                "movdqu %xmm7, 16(%rsp,%rbx,8)\n",
+                &[0xf3, 0x0f, 0x7f, 0x7c, 0xdc, 0x10][..],
+            ),
+            // A high index sets VEX.X, which forces the 3-byte form.
+            (
+                "vpaddd (%rsi,%r13,4), %ymm4, %ymm9\n",
+                &[0xc4, 0x21, 0x5d, 0xfe, 0x0c, 0xae][..],
+            ),
+            (
+                "pshufb (%r8,%r9,2), %xmm3\n",
+                &[0x66, 0x43, 0x0f, 0x38, 0x00, 0x1c, 0x48][..],
+            ),
+            // No base register: SIB.base = 101 with a disp32.
+            (
+                "movd (,%rax,4), %xmm4\n",
+                &[0x66, 0x0f, 0x6e, 0x24, 0x85, 0, 0, 0, 0][..],
+            ),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// The BMI / BMI2 set encodes with VEX but names no vector register:
+    /// VEX.W follows the operand width and VEX.L is zero. The shift-like ops
+    /// hold their count in VEX.vvvv, so their AT&T sources are the other way
+    /// round from `andn` and friends. Bytes measured with GNU as 2.46.1.
+    #[test]
+    fn vex_general_register_forms_match_gnu_as() {
+        for (src, want) in [
+            (
+                "rorx $2, %esi, %esi\n",
+                &[0xc4, 0xe3, 0x7b, 0xf0, 0xf6, 0x02][..],
+            ),
+            (
+                "rorx $25, %edx, %r13d\n",
+                &[0xc4, 0x63, 0x7b, 0xf0, 0xea, 0x19][..],
+            ),
+            // A quadword operand sets VEX.W.
+            (
+                "rorx $7, %rax, %rbx\n",
+                &[0xc4, 0xe3, 0xfb, 0xf0, 0xd8, 0x07][..],
+            ),
+            (
+                "rorx $3, 8(%rdi), %ecx\n",
+                &[0xc4, 0xe3, 0x7b, 0xf0, 0x4f, 0x08, 0x03][..],
+            ),
+            (
+                "andn %eax, %ebx, %ecx\n",
+                &[0xc4, 0xe2, 0x60, 0xf2, 0xc8][..],
+            ),
+            (
+                "andn %rax, %rbx, %rcx\n",
+                &[0xc4, 0xe2, 0xe0, 0xf2, 0xc8][..],
+            ),
+            (
+                "bzhi %eax, %ebx, %ecx\n",
+                &[0xc4, 0xe2, 0x78, 0xf5, 0xcb][..],
+            ),
+            (
+                "sarx %ecx, %eax, %edx\n",
+                &[0xc4, 0xe2, 0x72, 0xf7, 0xd0][..],
+            ),
+            (
+                "shlx %ecx, %eax, %edx\n",
+                &[0xc4, 0xe2, 0x71, 0xf7, 0xd0][..],
+            ),
+            (
+                "shrx %rcx, %rax, %rdx\n",
+                &[0xc4, 0xe2, 0xf3, 0xf7, 0xd0][..],
+            ),
+            (
+                "sarx %ecx, (%rdi,%rsi,4), %edx\n",
+                &[0xc4, 0xe2, 0x72, 0xf7, 0x14, 0xb7][..],
+            ),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
     }
 }

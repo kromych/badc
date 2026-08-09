@@ -2121,7 +2121,7 @@ fn run_inline_asm(
                     | AsmOpnd::RipRelRef { .. }
                     | AsmOpnd::LabelAddr { .. }
                     | AsmOpnd::ImmLabel { .. }
-                    | AsmOpnd::ImmSym
+                    | AsmOpnd::ImmSym { .. }
             )
         })
     }) {
@@ -2206,7 +2206,7 @@ fn run_inline_asm(
             AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::ImmLabel { .. }
-            | AsmOpnd::ImmSym
+            | AsmOpnd::ImmSym { .. }
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }
@@ -2230,7 +2230,7 @@ fn run_inline_asm(
             | AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::ImmLabel { .. }
-            | AsmOpnd::ImmSym
+            | AsmOpnd::ImmSym { .. }
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }
@@ -2261,13 +2261,16 @@ fn run_inline_asm(
             }
             Mnemonic::Sse2Rr { .. }
             | Mnemonic::SseMov { .. }
-            | Mnemonic::SseShufImm { .. }
+            | Mnemonic::SseRmImm { .. }
             | Mnemonic::SseShiftImm { .. }
             | Mnemonic::Vex { .. }
             | Mnemonic::VexMov { .. }
             | Mnemonic::Vex2 { .. }
             | Mnemonic::VexImm3 { .. }
-            | Mnemonic::VexImm2 { .. } => {
+            | Mnemonic::VexImm2 { .. }
+            | Mnemonic::VexShiftImm { .. }
+            | Mnemonic::VexNullary { .. }
+            | Mnemonic::VexGpr { .. } => {
                 // The interpreter has no XMM register file; SSE inline asm is a
                 // native / JIT construct, refused here rather than mis-modelled.
                 return Err(C5Error::Runtime(alloc::string::String::from(

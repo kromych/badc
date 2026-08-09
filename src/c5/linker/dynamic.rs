@@ -32,6 +32,12 @@ pub const DT_STRSZ: u64 = 10;
 pub const DT_SYMENT: u64 = 11;
 pub const DT_SONAME: u64 = 14;
 pub const DT_SYMBOLIC: u64 = 16;
+pub const DT_INIT_ARRAY: u64 = 25;
+pub const DT_FINI_ARRAY: u64 = 26;
+pub const DT_INIT_ARRAYSZ: u64 = 27;
+pub const DT_FINI_ARRAYSZ: u64 = 28;
+pub const DT_PREINIT_ARRAY: u64 = 32;
+pub const DT_PREINIT_ARRAYSZ: u64 = 33;
 pub const DT_TEXTREL: u64 = 22;
 pub const DT_FLAGS: u64 = 30;
 pub const DT_RELRSZ: u64 = 35;
@@ -423,6 +429,11 @@ pub struct DynAddrs {
     pub soname: Option<u32>,
     pub symbolic: bool,
     pub textrel: bool,
+    /// `(address, size)` of `.preinit_array`, `.init_array` and
+    /// `.fini_array`, so a loader runs what they hold.
+    pub preinit_array: Option<(u64, u64)>,
+    pub init_array: Option<(u64, u64)>,
+    pub fini_array: Option<(u64, u64)>,
 }
 
 /// `.dynamic` contents in bfd's tag order. `DT_NULL` terminates.
@@ -450,6 +461,16 @@ pub fn build_dynamic(a: &DynAddrs) -> Vec<u8> {
     }
     tags.push((DT_STRSZ, a.strsz));
     tags.push((DT_SYMENT, SYM_SIZE as u64));
+    for (arr, tag, sz) in [
+        (a.preinit_array, DT_PREINIT_ARRAY, DT_PREINIT_ARRAYSZ),
+        (a.init_array, DT_INIT_ARRAY, DT_INIT_ARRAYSZ),
+        (a.fini_array, DT_FINI_ARRAY, DT_FINI_ARRAYSZ),
+    ] {
+        if let Some((addr, size)) = arr.filter(|&(_, s)| s > 0) {
+            tags.push((tag, addr));
+            tags.push((sz, size));
+        }
+    }
     if let Some((addr, size)) = a.rela {
         tags.push((DT_RELA, addr));
         tags.push((DT_RELASZ, size));

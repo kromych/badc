@@ -37,7 +37,11 @@ fn uleb(b: &[u8], i: &mut usize) -> Option<u64> {
     loop {
         let byte = *b.get(*i)?;
         *i += 1;
-        v |= ((byte & 0x7f) as u64) << shift;
+        if shift < 64 {
+            v |= ((byte & 0x7f) as u64) << shift;
+        } else if byte & 0x7f != 0 {
+            return None; // more than 64 bits of value
+        }
         if byte & 0x80 == 0 {
             return Some(v);
         }
@@ -204,22 +208,28 @@ pub fn count_fdes(data: &[u8]) -> usize {
 pub const HEADER_SIZE: u64 = 12;
 pub const ENTRY_SIZE: u64 = 8;
 
+/// The table's entries are signed 32-bit displacements, so a target
+/// further than 2 GiB from the header cannot be named.
+fn delta32(from: u64, to: u64) -> Result<i32, String> {
+    i32::try_from(to.wrapping_sub(from) as i64)
+        .map_err(|_| format!("`.eh_frame_hdr`: {to:#x} is out of range of {from:#x}"))
+}
+
 /// `.eh_frame_hdr` contents: the header, then the FDE table encoded
 /// relative to the section's own address.
-pub fn build(hdr_addr: u64, eh_frame_addr: u64, entries: &[FdeEntry]) -> Vec<u8> {
+pub fn build(hdr_addr: u64, eh_frame_addr: u64, entries: &[FdeEntry]) -> Result<Vec<u8>, String> {
     let mut out = Vec::with_capacity(HEADER_SIZE as usize + entries.len() * ENTRY_SIZE as usize);
     out.push(1); // version
     out.push(DW_EH_PE_PCREL | DW_EH_PE_SDATA4); // eh_frame_ptr
     out.push(DW_EH_PE_UDATA4); // fde_count
     out.push(DW_EH_PE_DATAREL | DW_EH_PE_SDATA4); // table
-    let rel = eh_frame_addr.wrapping_sub(hdr_addr + 4) as i64 as i32;
-    out.extend_from_slice(&rel.to_le_bytes());
+    out.extend_from_slice(&delta32(hdr_addr + 4, eh_frame_addr)?.to_le_bytes());
     out.extend_from_slice(&(entries.len() as u32).to_le_bytes());
     for e in entries {
-        out.extend_from_slice(&(e.pc.wrapping_sub(hdr_addr) as i64 as i32).to_le_bytes());
-        out.extend_from_slice(&(e.fde.wrapping_sub(hdr_addr) as i64 as i32).to_le_bytes());
+        out.extend_from_slice(&delta32(hdr_addr, e.pc)?.to_le_bytes());
+        out.extend_from_slice(&delta32(hdr_addr, e.fde)?.to_le_bytes());
     }
-    out
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -289,7 +299,7 @@ mod tests {
             pc: 0x7e0,
             fde: 0x698,
         }];
-        let b = build(0x63c, 0x680, &e);
+        let b = build(0x63c, 0x680, &e).expect("in range");
         assert_eq!(b[0..4], [1, 0x1b, 0x03, 0x3b]);
         // eh_frame_ptr is pc-relative to its own field at hdr+4.
         assert_eq!(i32::from_le_bytes(b[4..8].try_into().unwrap()), 0x40);

@@ -96,6 +96,7 @@ const STV_HIDDEN: u8 = 2;
 const PT_LOAD: u32 = 1;
 const PT_DYNAMIC: u32 = 2;
 const PT_NOTE: u32 = 4;
+const PT_GNU_EH_FRAME: u32 = 0x6474e550;
 const PT_GNU_STACK: u32 = 0x6474e551;
 const PF_X: u32 = 1;
 const PF_W: u32 = 2;
@@ -1660,7 +1661,14 @@ impl<'a> LdsLinker<'a> {
             };
             return Err(err(&format!("{}{}", list.join("\n"), extra)));
         }
-        self.finish()
+        let res = self.finish()?;
+        // Writing the image can fail on its own: an `.eh_frame` the FDE
+        // scan cannot read, or a synthesized table that outgrew the
+        // section sized for it.
+        if !self.errors.is_empty() {
+            return Err(err(&self.errors.join("\n")));
+        }
+        Ok(res)
     }
 
     fn fingerprint(&self) -> Vec<u64> {
@@ -1684,14 +1692,15 @@ impl<'a> LdsLinker<'a> {
 
     fn layout_pass(&mut self, final_pass: bool) -> Result<(), C5Error> {
         self.final_pass = final_pass;
-        self.script_prev = core::mem::take(&mut self.script_now);
-        // Dynamic machinery is sized from the previous pass's placement
-        // (the `placed` flags and offsets still hold here); do it before
-        // resetting for this pass. Skipped on the first pass, where no
-        // placement exists yet -- the relocation sections start empty
-        // and gain their size once a pass has run.
+        // Dynamic machinery is sized from the previous pass's state:
+        // its placement (the `placed` flags and offsets still hold) and
+        // its script symbols, which the dynamic tables carry. Both are
+        // reset below, so this runs first. Skipped in effect on the
+        // first pass, where no placement exists yet -- the tables start
+        // empty and gain their size once a pass has run.
         self.size_dynamic_sections();
         self.size_eh_frame_hdr();
+        self.script_prev = core::mem::take(&mut self.script_now);
         for p in &mut self.placements {
             p.placed = false;
         }
@@ -2614,12 +2623,16 @@ impl<'a> LdsLinker<'a> {
         if !self.opts.eh_frame_hdr {
             return;
         }
+        // Count over every input the `.eh_frame` output gathers, not
+        // just those named `.eh_frame`: the writer scans that whole
+        // output, and a script pulling `.eh_frame.*` into it would
+        // otherwise size the table short of what it then writes.
         let mut fdes = 0usize;
         for i in 0..self.insecs.len() {
             let SecFate::Placed { out } = self.fates[i] else {
                 continue;
             };
-            if self.outs[out].name != OUT_EH_FRAME || self.insec(i).name != OUT_EH_FRAME {
+            if self.outs[out].name != OUT_EH_FRAME {
                 continue;
             }
             fdes += eh_frame::count_fdes(self.chunk_input_bytes(i));
@@ -2840,8 +2853,39 @@ impl<'a> LdsLinker<'a> {
                 _ => None,
             },
             symbolic: self.opts.symbolic,
-            textrel: false,
+            textrel: self.has_readonly_dynamic_reloc(),
+            preinit_array: self.out_extent(".preinit_array"),
+            init_array: self.out_extent(".init_array"),
+            fini_array: self.out_extent(".fini_array"),
         }
+    }
+
+    /// `(address, size)` of a kept output section.
+    fn out_extent(&self, name: &str) -> Option<(u64, u64)> {
+        self.outs
+            .iter()
+            .find(|o| o.name == name && o.alloc && !o.removed)
+            .map(|o| (o.addr, o.size))
+    }
+
+    /// True when a dynamic relocation applies to a section the loader
+    /// maps read-only. `DT_TEXTREL` is what tells it to make the
+    /// segment writable first; without the tag the write faults.
+    fn has_readonly_dynamic_reloc(&self) -> bool {
+        let sites = self
+            .dyn_relas
+            .iter()
+            .map(|d| d.offset)
+            .chain(self.relr_addrs.iter().copied());
+        let ro: Vec<(u64, u64)> = self
+            .outs
+            .iter()
+            .filter(|o| o.alloc && !o.removed && o.flags & SHF_WRITE == 0)
+            .map(|o| (o.addr, o.addr + o.size))
+            .collect();
+        sites
+            .into_iter()
+            .any(|a| ro.iter().any(|&(lo, hi)| a >= lo && a < hi))
     }
 
     /// bfd sizes dynamic reloc sections at check_relocs time: every
@@ -3847,8 +3891,10 @@ impl<'a> LdsLinker<'a> {
                     let Some(body) = contents.get(&eh_out) else {
                         continue;
                     };
-                    match eh_frame::scan(body, eh_addr) {
-                        Ok(entries) => bytes = eh_frame::build(hdr_addr, eh_addr, &entries),
+                    match eh_frame::scan(body, eh_addr)
+                        .and_then(|e| eh_frame::build(hdr_addr, eh_addr, &e))
+                    {
+                        Ok(b) => bytes = b,
                         Err(e) => {
                             self.errors.push(e);
                             continue;
@@ -3870,6 +3916,18 @@ impl<'a> LdsLinker<'a> {
                     };
                 }
                 _ => continue,
+            }
+            // Content longer than the section sized for it means the
+            // sizing pass and the writer disagreed. Truncating leaves a
+            // table a consumer indexes past the end of, so it is a link
+            // failure rather than a silent short write.
+            if bytes.len() > self.objects[synth].sections[sec_idx].size as usize {
+                self.errors.push(format!(
+                    "internal: `{name}' holds {} bytes in a section sized {}",
+                    bytes.len(),
+                    self.objects[synth].sections[sec_idx].size
+                ));
+                continue;
             }
             if let Some(buf) = contents.get_mut(&out) {
                 let n = bytes.len().min(buf.len().saturating_sub(off));
@@ -4018,20 +4076,26 @@ impl<'a> LdsLinker<'a> {
                 ));
             }
             // PT_DYNAMIC over `.dynamic`, so a loader finds the tables
-            // without walking section headers.
-            if let Some(oi) = emit_order
-                .iter()
-                .find(|&&oi| self.outs[oi].alloc && self.outs[oi].name == SYNTH_DYNAMIC)
-            {
-                segs.push((
-                    Elf64Phdr {
-                        p_type: PT_DYNAMIC,
-                        p_flags: PF_R | PF_W,
-                        p_align: 8,
-                        ..Default::default()
-                    },
-                    alloc::vec![*oi],
-                ));
+            // without walking section headers; PT_GNU_EH_FRAME over
+            // `.eh_frame_hdr`, which is how an unwinder finds it.
+            for (name, ptype, flags) in [
+                (SYNTH_DYNAMIC, PT_DYNAMIC, PF_R | PF_W),
+                (SYNTH_EH_FRAME_HDR, PT_GNU_EH_FRAME, PF_R),
+            ] {
+                if let Some(&oi) = emit_order
+                    .iter()
+                    .find(|&&oi| self.outs[oi].alloc && self.outs[oi].name == name)
+                {
+                    segs.push((
+                        Elf64Phdr {
+                            p_type: ptype,
+                            p_flags: flags,
+                            p_align: 8,
+                            ..Default::default()
+                        },
+                        alloc::vec![oi],
+                    ));
+                }
             }
             segs.push((
                 Elf64Phdr {
@@ -6084,9 +6148,22 @@ VERSION { LINUX_2.6 { global: __vdso_time; time; local: *; }; }
         };
         // The default script places the dynamic tables and RELR.
         assert!(sec(".relr.dyn").3 >= 8, ".relr.dyn carries the fixup");
+        let dynsym = image_dynsyms(&res.image);
         assert!(
-            image_dynsyms(&res.image).iter().any(|d| d.0 == "p"),
+            dynsym.iter().any(|d| d.0 == "p"),
             "the defined global reaches .dynsym"
+        );
+        // A symbol the script defines is exported too, and it is sized
+        // for: the tables are built from the same set the sizing pass
+        // measured, or the writer refuses the link.
+        assert!(
+            dynsym.iter().any(|d| d.0 == "_end"),
+            "a script-defined symbol reaches .dynsym"
+        );
+        assert_eq!(
+            sec(".dynsym").3 as usize,
+            dynsym.len() * 24,
+            ".dynsym is sized for exactly what it holds"
         );
         // Read-only tables below the writable group, each on its own
         // segment, as ld's default lays them out.

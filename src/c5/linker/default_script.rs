@@ -1,30 +1,22 @@
-//! Built-in default linker script, used when a final link names none.
-//!
-//! GNU ld carries one internal script per emulation and output kind and
-//! falls back on it; this is the same arrangement. The script names the
-//! sections whose order a loader or a consumer depends on -- the
-//! dynamic tables ahead of the text, the writable group on its own page
-//! -- and leaves everything else to the engine's orphan placement,
-//! which puts an unnamed section with the last section of its
-//! allocation class, as bfd's does.
+//! Built-in default linker script, used when a final link names none,
+//! as GNU ld falls back on its internal one. It names the sections
+//! whose order a consumer depends on and leaves the rest to orphan
+//! placement.
 
 #![cfg(feature = "std")]
 
 use alloc::string::String;
 
-/// bfd's default text base, the same on both emulations: an executable
-/// starts clear of the first page so a null dereference faults; a
-/// shared object is position independent and starts at zero.
+/// bfd's default text base on both emulations. An executable starts
+/// clear of the first page so a null dereference faults.
 const TEXT_BASE: &str = "0x400000";
 
 /// The default script as an `ld` script source. `shared` selects the
-/// ET_DYN variant.
+/// ET_DYN variant, which is position independent and starts at zero.
+/// No `ENTRY`: an entry the caller never named is not a diagnostic,
+/// and an unnamed one resolves per output kind in the engine.
 pub fn default_script(shared: bool) -> String {
     let base = if shared { "0" } else { TEXT_BASE };
-    // The read-only group runs from the headers; the writable group
-    // starts on a fresh page so it can carry different permissions.
-    // No `ENTRY`: an entry the caller never named is not a diagnostic,
-    // and an unnamed one resolves per output kind in the engine.
     alloc::format!(
         r#"SECTIONS
 {{

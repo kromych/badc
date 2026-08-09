@@ -270,7 +270,11 @@ static void load_modules(void)
 #define VDSO_SYM     "__kernel_clock_gettime"
 #define VDSO_VERSION "LINUX_2.6.39"
 #else
-#define VDSO_SYM     NULL
+/* An architecture the gate does not cover: the exported name and the
+   version differ per architecture, and guessing them would fail a boot
+   for the wrong reason. An empty name skips the check. */
+#define VDSO_SYM     ""
+#define VDSO_VERSION ""
 #endif
 
 #define VDSO_SONAME "linux-vdso.so.1"
@@ -352,10 +356,10 @@ static int check_vdso(void)
     int (*fn)(clockid_t, struct timespec *);
     int n, i;
 
-    printf("%%s resolving %%s in the vDSO\n", CHECK_STEP, VDSO_SYM ? VDSO_SYM : "(none)");
-    fflush(stdout);
-    if (!VDSO_SYM)
+    if (!VDSO_SYM[0])
         return 1;   /* architecture the gate does not cover */
+    printf("%%s resolving %%s in the vDSO\n", CHECK_STEP, VDSO_SYM);
+    fflush(stdout);
     if (!base) {
         fail("vdso", "no AT_SYSINFO_EHDR");
         return 0;

@@ -1904,7 +1904,7 @@ fn run() {
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
                 .with_optimize(optimize_flag)
-                .with_defines(defines.clone())
+                .with_defines(tu_defines(src_path, &defines))
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
                 .with_quote_include_paths(quote_include_paths.clone())

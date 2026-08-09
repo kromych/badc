@@ -144,6 +144,12 @@ pub struct StructDef {
     /// the last dereference decays to the element pointer (C99 6.3.2.1p3)
     /// instead of producing the depth-0 value.
     pub is_array: bool,
+    /// `true` when the source declared no tag and `name` is the synthetic
+    /// one the registry needs as a key. C99 6.7.2.3 gives such a type no
+    /// name, so DWARF describes it with no `DW_AT_name`; the synthetic
+    /// spelling carries a parse-order serial and matches nothing across
+    /// translation units.
+    pub is_anonymous: bool,
 }
 
 /// One unnamed bit-field of an aggregate (`int :N;`). `before` is the

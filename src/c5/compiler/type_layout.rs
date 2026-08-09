@@ -115,7 +115,7 @@ impl Compiler {
     /// before the struct's body has been seen -- common idioms
     /// like `typedef struct Foo Foo;` and `struct Foo *p;` rely
     /// on this.
-    pub(super) fn find_or_forward_declare_struct(&mut self, name: &str) -> usize {
+    pub(super) fn find_or_forward_declare_struct(&mut self, name: &str, is_union: bool) -> usize {
         if let Some(id) = self.find_struct_id(name) {
             return id;
         }
@@ -126,10 +126,11 @@ impl Compiler {
             explicit_align: 0,
             fields: Vec::new(),
             anon_bitfields: Vec::new(),
-            is_union: false,
+            is_union,
             is_complete: false,
             is_vector: false,
             is_array: false,
+            is_anonymous: false,
         });
         let id = self.structs.len() - 1;
         if let Some(scope) = self.tag_scopes.last_mut() {
@@ -220,6 +221,7 @@ impl Compiler {
             is_union: false,
             is_vector: false,
             is_array: false,
+            is_anonymous: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -306,6 +308,7 @@ impl Compiler {
             is_union: false,
             is_vector: false,
             is_array: false,
+            is_anonymous: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -393,6 +396,7 @@ impl Compiler {
             is_union: false,
             is_vector: true,
             is_array: false,
+            is_anonymous: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -461,6 +465,7 @@ impl Compiler {
             is_union: false,
             is_vector: false,
             is_array: true,
+            is_anonymous: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }

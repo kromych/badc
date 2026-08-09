@@ -201,6 +201,7 @@ impl Compiler {
         // An attribute may sit between the keyword and the tag
         // (`struct __attribute__((packed)) name`).
         let packed = self.skip_attribute_specifiers()?;
+        let mut anonymous = false;
         let name = if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
@@ -209,12 +210,14 @@ impl Compiler {
             // Anonymous: `typedef struct { ... } Foo;`. Synth a tag
             // so the inner body can register and so a typedef-side
             // declarator that follows still sees a struct type.
+            anonymous = true;
             format!("__anon_{kind}_{}", self.structs.len())
         } else {
             return Err(self.compile_err(format!("{kind} name or `{{` expected")));
         };
         let id = if self.lex.tk == '{' {
             let id = self.parse_aggregate_body(&name, is_union, packed)?;
+            self.structs[id].is_anonymous = anonymous;
             // `struct name { ... } __attribute__((...))`: the attributes
             // follow the body and apply to the aggregate just laid out.
             self.apply_post_body_attributes(id)?;
@@ -223,7 +226,7 @@ impl Compiler {
             // A trailing attribute on a tag use without a body
             // (`struct name __attribute__((...))`); consume it.
             self.skip_attribute_specifiers()?;
-            self.find_or_forward_declare_struct(&name)
+            self.find_or_forward_declare_struct(&name, is_union)
         };
         Ok(struct_ty_for(id))
     }

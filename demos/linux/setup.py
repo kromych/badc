@@ -129,6 +129,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="download/extract directory")
     ap.add_argument("--build", action="store_true",
                     help="also run the gcc reference build (produces the .cmd corpus)")
+    ap.add_argument("--fetch-only", action="store_true",
+                    help="download and verify the tarball, then stop; for "
+                         "consumers that extract and configure themselves")
     ap.add_argument("-j", "--jobs", type=int, default=0,
                     help="make parallelism for --build (default: nproc)")
     args = ap.parse_args(argv)
@@ -148,6 +151,9 @@ def main(argv: list[str] | None = None) -> int:
     cache.mkdir(parents=True, exist_ok=True)
     tar_path = cache / f"linux-{version}.tar.xz"
     fetch(tarball_url(version), tar_path, sha)
+    if args.fetch_only:
+        log(f"tarball ready at {tar_path}")
+        return 0
 
     tree = cache / f"linux-{version}"
     if not (tree / "Makefile").is_file():

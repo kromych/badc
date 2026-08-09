@@ -192,9 +192,10 @@ banner and `/proc/version`, and Kconfig re-records that text whenever it
 disagrees with what the build's `$(CC)` reports, so only the shim's own
 answer can survive the build. Everything else (probes, `-E`, `-S`, `.S`
 units, links, 16/32-bit units, the host tools under `scripts/` and
-`tools/`) goes to gcc untouched -- gas still assembles `.S`, ld still
-links -- so the configuration and object population match the reference
-corpus. In particular `scripts/cc-version.sh` classifies the reference
+`tools/`) goes to gcc untouched -- gas still assembles `.S` -- so the
+configuration and object population match the reference corpus. Linking
+is `ldshim.py`'s, below, and is badc's throughout.
+In particular `scripts/cc-version.sh` classifies the reference
 compiler (`-E`), keeping `CONFIG_GCC_VERSION` at the reference
 toolchain's value: identification follows the compiler that built the
 objects, classification stays with the toolchain whose bug-history gates
@@ -240,17 +241,25 @@ Environment: `BADC` (required), `BADC_REAL_CC` (default `gcc`),
 ### Linking with badc (`ldshim.py`)
 
 `ldshim.py` is the same idea for `LD=`. Named as the kernel's linker, it
-routes each invocation from facts of the command line, not from a list of
-paths, and records every decision in `$BADC_LD_MANIFEST`:
+records every decision in `$BADC_LD_MANIFEST`. Nothing reaches GNU ld
+except what `$BADC_LD_FALLBACK` names:
 
-* An emulation badc has no backend for (`-m elf_i386`) goes to the real
-  linker. badc emits ELF64 x86-64 and aarch64 only, so `arch/x86/boot/setup.elf`,
-  `arch/x86/realmode/rm/realmode.elf` and the 32-bit vDSO are not links a
-  linker fix could take -- they need the i386 target as a whole.
-* Everything else is badc's and only badc's: the `-r` merges (`vmlinux.o`,
+* Every link is badc's and only badc's: the `-r` merges (`vmlinux.o`,
   `arch/arm64/kvm/hyp/nvhe/*`), every `vmlinux` kallsyms pass, the x86 boot
-  decompressor, both 64-bit vDSOs, and kbuild's scriptless probes. A badc
-  failure is the shim's failure, as with the CC shim.
+  decompressor, all three vDSOs, the `-m elf_i386` boot links
+  (`arch/x86/boot/setup.elf`, `arch/x86/realmode/rm/realmode.elf`, `vdso32`),
+  and kbuild's scriptless probes. A badc failure is the shim's failure, as
+  with the CC shim.
+
+  The i386 links are ELF32 `EM_386`: their inputs carry `SHT_REL` relocations,
+  which keep the addend in the field being relocated rather than in the
+  relocation record. The reader materializes each implicit addend from the
+  input bytes at the field's own width (1, 2 or 4), so one relocation engine
+  covers both formats, and the writer emits the ELF32 records -- `Elf32_Ehdr`/
+  `Phdr`/`Shdr`, 16-byte `Elf32_Sym`, 8-byte `.dynamic` entries, 32-bit
+  `.gnu.hash` Bloom words. `--emit-relocs` writes the target's own format, so
+  `realmode.elf` gets `.rel.<section>` tables, which is what
+  `arch/x86/tools/relocs --realmode` reads.
 
   The vDSOs are shared objects, so badc builds the dynamic-linking metadata a
   loader searches: `.dynsym`/`.dynstr` from the symbols the script's `VERSION`

@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
-"""Kbuild LD shim: badc links what it implements, GNU ld keeps the rest.
+"""Kbuild LD shim: badc performs every link in the build.
 
 Named as the kernel's LD. Routing is decided from facts of the
 invocation, not from a list of paths:
 
-- ``-m elf_i386`` (or any emulation badc has no backend for): the real
-  linker. badc targets x86-64 and aarch64 only, so the 16/32-bit boot
-  links (``arch/x86/boot/setup.elf``, ``arch/x86/realmode/rm``,
-  ``vdso32``) cannot be badc's. Recorded as `ld` with the emulation.
-- Everything else is badc's, and only badc's: ``-r`` merges, every
-  ``vmlinux`` pass, the vDSO shared objects -- badc emits
-  ``.dynsym``/``.dynstr``/``.hash``/``.gnu.hash``/``.dynamic`` and the
-  symbol-version tables -- and scriptless links such as kbuild's RELR
-  probe, which run under badc's built-in default script. A badc failure
-  is the shim's failure: its exit status and diagnostic go to make,
-  which stops at the defect. Recorded as `badc` or `fail`.
+- Every link is badc's: ``-r`` merges, every ``vmlinux`` pass, the vDSO
+  shared objects -- badc emits ``.dynsym``/``.dynstr``/``.hash``/
+  ``.gnu.hash``/``.dynamic`` and the symbol-version tables -- the
+  ``-m elf_i386`` boot links (``arch/x86/boot/setup.elf``,
+  ``arch/x86/realmode/rm/realmode.elf``, ``vdso32``), and scriptless
+  links such as kbuild's RELR probe, which run under badc's built-in
+  default script. A badc failure is the shim's failure: its exit status
+  and diagnostic go to make, which stops at the defect. Recorded as
+  `badc` or `fail`.
 - Version and capability probes (``-v``/``--version`` with no output
   file): badc answers, so what the configuration records about the
   linker is what badc actually implements. ``$(call ld-option,...)``
@@ -26,11 +24,12 @@ A unit named in ``$BADC_LD_FALLBACK`` (output paths, one per line) goes
 to the real linker and is recorded as `fallback`. That list is the
 bisect tool for a suspected bad link: naming an output is explicit and
 shows up in the manifest, so a build that used it cannot be mistaken
-for a pure one.
+for a pure one. It is the only route to the real linker; an emulation
+badc has no backend for is a badc error, not a silent handover.
 
 Environment: BADC (badc binary, required), BADC_LD_REAL (default ld),
 BADC_LD_FALLBACK (file of output paths to leave to the real linker),
-BADC_LD_MANIFEST (append `badc|ld|fallback|fail<TAB>output[<TAB>detail]`
+BADC_LD_MANIFEST (append `badc|fallback|fail<TAB>output[<TAB>detail]`
 per link), BADC_LD_TIMEOUT (seconds per badc link, default 900).
 """
 
@@ -39,27 +38,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-
-# Emulations badc has a backend for. Everything else is the real
-# linker's: badc emits ELF64 little-endian x86-64 / aarch64 only.
-BADC_EMULATIONS = {"elf_x86_64", "aarch64linux", "aarch64elf"}
-
-
-def emulation(argv: list[str]) -> str | None:
-    """The last `-m EMU` on the line, joined or separate, as ld resolves
-    it (a later -m overrides an earlier one)."""
-    emu = None
-    i = 0
-    while i < len(argv):
-        a = argv[i]
-        if a == "-m" and i + 1 < len(argv):
-            emu, i = argv[i + 1], i + 2
-            continue
-        if a.startswith("-m") and len(a) > 2:
-            emu = a[2:]
-        i += 1
-    return emu
-
 
 def output_of(argv: list[str]) -> str | None:
     for i, a in enumerate(argv):
@@ -102,19 +80,14 @@ def main(argv: list[str]) -> int:
     real = os.environ.get("BADC_LD_REAL", "ld")
     badc = os.environ.get("BADC")
     out = output_of(argv)
-    emu = emulation(argv)
 
     if out is None:
         # A probe, not a link. badc answers so the recorded linker
-        # capabilities are badc's; an emulation it has no backend for
-        # is still the real linker's answer.
-        if badc and (emu is None or emu in BADC_EMULATIONS):
+        # capabilities are badc's.
+        if badc:
             os.execvp(badc, [badc, "--ld", *argv])
         os.execvp(real, [real, *argv])
 
-    if emu is not None and emu not in BADC_EMULATIONS:
-        manifest("ld", out, f"emulation {emu}")
-        os.execvp(real, [real, *argv])
     if fallback_listed(out):
         manifest("fallback", out, "listed")
         os.execvp(real, [real, *argv])

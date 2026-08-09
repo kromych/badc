@@ -70,24 +70,27 @@ measures the surface separately, feeding each preprocessed `.S` through badc's
 file-scope `asm` path; badc's own assembler currently takes 46 of 68 x86_64
 units and 62 of 77 aarch64 units that way. That is a probe, not a build path.
 
-**Some links.** Under `LD=badc` the shim routes by facts of the command line,
-and one class goes to the real linker:
+Every link is badc's and only badc's: the `-r` merges, every `vmlinux` kallsyms
+pass, the x86 boot decompressor, all three vDSOs, the `-m elf_i386` boot links
+(`arch/x86/boot/setup.elf`, `arch/x86/realmode/rm/realmode.elf`, `vdso32`) and
+the scriptless probes. `LD=badc` leaves nothing to GNU ld.
 
-* i386 links (`-m elf_i386`) -- the x86 boot setup, the realmode blob and the
-  32-bit vDSO. badc emits ELF64 x86-64 and aarch64 only, so these need the
-  i386 target, not a linker fix.
-
-Everything else is badc's and only badc's: the `-r` merges, every `vmlinux`
-kallsyms pass, the x86 boot decompressor, both 64-bit vDSOs, and the
-scriptless probes.
+The i386 links read ELF32 `EM_386` relocatables whose relocations are `SHT_REL`
+-- the addend lives in the field being relocated rather than in the relocation
+record -- and write an ELF32 image. The reader materializes each implicit
+addend from the input bytes at the field's own width, so the same relocation
+engine covers both formats; the writer emits `Elf32_Ehdr`/`Phdr`/`Shdr`,
+16-byte `Elf32_Sym`, 8-byte `.dynamic` entries and 32-bit `.gnu.hash` Bloom
+words. `--emit-relocs` writes back in the target's own format, so
+`realmode.elf` carries `.rel.<section>` for `arch/x86/tools/relocs` to read.
 
 The vDSOs are shared objects, so badc emits the dynamic-linking metadata a
 loader searches -- `.dynsym`/`.dynstr`, `.hash` and `.gnu.hash` per
 `--hash-style`, `.gnu.version`/`.gnu.version_d` for the version the symbols are
 exported under, and a `.dynamic` with `DT_SONAME`, the table addresses and the
-RELA/RELR tags -- plus `PT_DYNAMIC`. A link with no `-T` runs under a built-in
-default script per output kind, as GNU ld falls back on its internal one, which
-is what `scripts/tools-support-relr.sh` probes with.
+REL/RELA/RELR tags -- plus `PT_DYNAMIC`. A link with no `-T` runs under a
+built-in default script per output kind, as GNU ld falls back on its internal
+one, which is what `scripts/tools-support-relr.sh` probes with.
 
 **Configuration classification.** `scripts/cc-version.sh` still classifies the
 reference compiler, so `CONFIG_GCC_VERSION` keeps the reference toolchain's

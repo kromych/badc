@@ -453,6 +453,9 @@ def main() -> int:
                 f"fallback={len(links['fallback'])} fail={len(links['fail'])}")
             for line in links["ld"]:
                 log(f"link left to {args.real_ld}: {line}")
+            if links["ld"]:
+                failures.append(f"links left to {args.real_ld}: "
+                                f"{len(links['ld'])}")
             if links["fail"]:
                 named = ", ".join(l.split("\t")[0] for l in links["fail"][:5])
                 failures.append(f"links badc could not make: "

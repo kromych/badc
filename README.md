@@ -27,8 +27,9 @@ Fedora 44 images, and reaches systemd multi-user with modules autoloading,
 `/proc/version` names `badc`.
 
 `gas` helps with assembling although `badc` is getting very close to replacing it
-in the kernel build. `ld` is used to link the 32-bit i386 object files; both
-vDSOs are `badc`-linked, dynamic metadata and symbol versions included. See for
+in the kernel build. `ld` links nothing: `badc` makes every link, the 32-bit
+i386 ones (boot setup, realmode blob, 32-bit vDSO) included, and all three vDSOs
+are `badc`-linked, dynamic metadata and symbol versions included. See for
 more [here](./doc/linux-kernel.md).
 
 ### Target five platforms from any host

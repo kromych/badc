@@ -26,8 +26,9 @@ The kernel packages as a `.deb` and an `.rpm`, installs into stock Debian 13 and
 Fedora 44 images, and reaches systemd multi-user with modules autoloading,
 `/proc/version` names `badc`.
 
-`gas` helps with assembling although `badc` is getting very close to replacing it
-in the kernel build. `ld` links nothing: `badc` makes every link, the 32-bit
+`badc -c foo.S -o foo.o` assembles too, and the kernel build uses it: of the
+`defconfig` assembly units `badc` takes 42 of 68 on x86_64 and 69 of 77 on
+aarch64, `gas` the rest. `ld` links nothing: `badc` makes every link, the 32-bit
 i386 ones (boot setup, realmode blob, 32-bit vDSO) included, and all three vDSOs
 are `badc`-linked, dynamic metadata and symbol versions included. See for
 more [here](./doc/linux-kernel.md).

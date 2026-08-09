@@ -231,11 +231,12 @@ differs from the declared name. A label equal to the name is accepted.
   J.5.10) on both architectures: the basic form, the extended form
   `asm(template : outputs : inputs : clobbers)` with register, memory and
   immediate constraints, `asm goto`, `__attribute__((naked))` function
-  bodies, and file-scope `asm(...)`. The assembler behind it accepts a
-  substantial GAS subset -- enough that the demos boot interrupt handlers
-  and context-switch coroutines through it, and that badc compiles the
-  Linux kernel's inline asm. It is not a complete GAS implementation:
-  `tools/probe_asm_units/` measures the surface against real `.S` units.
+  bodies, and file-scope `asm(...)`. The same assembler stands behind
+  `badc -c foo.S -o foo.o`. It accepts a substantial GAS subset -- enough
+  that the demos boot interrupt handlers and context-switch coroutines
+  through it, and that badc assembles most of the Linux kernel's `.S`
+  units ([kernel work](linux-kernel.md) carries the counts). It is not a
+  complete GAS implementation.
 - `__attribute__((...))` / `__declspec(...)` / C23 `[[...]]` decorators.
   The honored ones: `packed` (struct / union packing; an anonymous union
   inside a packed struct keeps its members overlapping), `aligned(N)` /

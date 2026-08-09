@@ -21,9 +21,9 @@ higher-level debugger path is blocked.
 
 Feeds each preprocessed `.S` unit through badc's file-scope `asm` path, records
 the first diagnostic per unit, and tallies and ranks them. It measures the
-assembler surface; it is not a proposed driver design. badc has no standalone
-assembler driver, and `.S` units in the [kernel work](linux-kernel.md) go to
-gas.
+assembler surface in isolation, with no code model to honor and no dependency
+output; the [kernel work](linux-kernel.md) carries the build's own figures,
+which supersede it.
 
 ## `scripts/`
 

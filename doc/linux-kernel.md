@@ -22,11 +22,11 @@ x86_64 `defconfig` builds virtio, ext4 and most of the rest `=y` and aarch64
 builds them `=m`, which is why the aarch64 count more than doubles while the
 x86_64 count moves by 32.
 
-A unit badc cannot compile fails the build rather than being handed to gcc:
+A C unit badc cannot compile fails the build rather than being handed to gcc:
 `buildcc.py`, the `CC=` shim, removes the partial object and exits nonzero. The
 one route to another compiler is `$BADC_FALLBACK`, which names units explicitly
 and marks the build impure in the manifest; the gate fails when that count is
-nonzero.
+nonzero. An assembly unit is the one exception, and is covered below.
 
 **Boot.** Both kernels boot under qemu, checked by more than reaching
 userspace. The initramfs `/init` prints a marker, then mounts procfs and sysfs
@@ -64,11 +64,38 @@ same userspace.
 
 ## What is not badc's
 
-**Assembly.** Every `.S` unit goes to gas: badc has no standalone assembler
-driver, so `.S` units are out of scope for the build. `tools/probe_asm_units/`
-measures the surface separately, feeding each preprocessed `.S` through badc's
-file-scope `asm` path; badc's own assembler currently takes 46 of 68 x86_64
-units and 62 of 77 aarch64 units that way. That is a probe, not a build path.
+**Assembly.** Partly badc's. `badc -c foo.S -o foo.o` assembles a unit
+directly, and kbuild routes `.S` through `$(CC)`, so `buildcc.py` decides each
+assembly unit the same way it decides a C one. badc takes what its assembler
+implements and gas takes the rest; unlike the C path a fallback here is
+expected, so it is measured rather than fatal. At the 7.1.6 `defconfig` pin:
+
+| | assembly units | badc | gas |
+|---|---|---|---|
+| x86_64 | 68 | 42 | 26 |
+| aarch64 | 77 | 69 | 8 |
+
+What keeps a unit with gas, ranked by incidence:
+
+| units | class |
+|---|---|
+| 14 (x86_64) | `-m16` / `-m32`. badc's object writers emit ELFCLASS64 only, so a non-64-bit code model is refused by name rather than assembled as 64-bit code. |
+| 6 (x86_64), 3 (aarch64) | Operand forms: symbol arithmetic inside an immediate or a memory operand, `:abs_g2_s:` over a label, an operand over a label difference. |
+| 4 (x86_64), 3 (aarch64) | Instruction encodings the tables do not carry: AVX `vmovd`, `lsl r64, r64`, `verw m16`, the NEON `str q` / `orr v.2s, #imm` post-index and immediate forms, `sha1c`. |
+| 2 (x86_64), 2 (aarch64) | Directives: `.hidden`, `.reloc`, `.endr` reached without its `.rept`. |
+
+These figures supersede `tools/probe_asm_units/`'s 46 of 68 and 62 of 77. The
+probe feeds each preprocessed unit through the file-scope `asm` path in
+isolation, with no code model to honor, so it counted 16- and 32-bit units the
+build must not take. The numbers above are what the build achieves.
+
+Against GNU as 2.46.1's object for the same source, byte for byte over every
+allocatable section plus the symbol table and the relocations: 18 of the 42
+x86_64 units and, setting aside the DWARF badc emits none of for an assembled
+unit and the AArch64 `$x` / `$d` mapping symbols, 62 of 69 aarch64 units are
+identical. The x86_64 gap is one class -- a conditional branch to a named
+label in the same section always takes the `rel32` form, where GNU as relaxes
+it to `rel8`. The bytes execute the same; the sections are longer.
 
 Every link is badc's and only badc's: the `-r` merges, every `vmlinux` kallsyms
 pass, the x86 boot decompressor, all three vDSOs, the `-m elf_i386` boot links

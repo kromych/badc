@@ -397,7 +397,7 @@ impl Preprocessor {
     /// Comparing these string-literal predefines with `#if X == "..."`
     /// is a c5 extension over C99 6.10.1p4, which restricts a `#if`
     /// controlling expression to an integer constant expression; see
-    /// std-conformance.md.
+    /// doc/std-conformance.md.
     /// * CPU-architecture macros, all defined to `1` when active so
     ///   `#if __aarch64__` works the same way it does in gcc/clang:
     ///   * AArch64 targets get `__aarch64__` and `__arm64__` (the

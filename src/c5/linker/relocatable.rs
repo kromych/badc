@@ -44,6 +44,7 @@ const SHT_REL: u32 = 9;
 const SHT_GROUP: u32 = 17;
 const SHT_SYMTAB_SHNDX: u32 = 18;
 
+const SHF_ALLOC: u64 = 0x2;
 const SHF_MERGE: u64 = 0x10;
 const SHF_INFO_LINK: u64 = 0x40;
 const SHF_LINK_ORDER: u64 = 0x80;
@@ -931,7 +932,7 @@ fn merge_property_notes(notes: &[Vec<u8>], n_inputs: usize, align: u64) -> Optio
     Some(EtSection {
         name: ".note.gnu.property".to_string(),
         sh_type: SHT_NOTE,
-        flags: 0x2, // SHF_ALLOC
+        flags: SHF_ALLOC,
         addralign: align,
         entsize: 0,
         bytes: body,
@@ -1140,7 +1141,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
         // the final file bytes at write time.
         let mut out = OutSec::new(".note.gnu.build-id", exec_fill);
         out.sh_type = SHT_NOTE;
-        out.flags = 0x2; // SHF_ALLOC
+        out.flags = SHF_ALLOC;
         out.addralign = 4;
         out.bytes.extend_from_slice(&4u32.to_le_bytes());
         out.bytes.extend_from_slice(&20u32.to_le_bytes());
@@ -1477,8 +1478,12 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
         global_index.insert(name.as_str(), idx);
     }
 
-    // Per-object symbol-index mapping for relocation rewrite.
-    let map_sym = |oi: usize, r: &EtReloc| -> Result<(u32, i64), C5Error> {
+    // Per-object symbol-index mapping for relocation rewrite. A
+    // non-allocated section -- `.debug_*` above all -- may reference a
+    // symbol the script discarded; GNU ld resolves such a slot to null
+    // rather than failing the link, because the section describes the
+    // image instead of taking part in it.
+    let map_sym = |oi: usize, r: &EtReloc, allocated: bool| -> Result<(u32, i64), C5Error> {
         let o = &objs[oi];
         let sym = o.symbols.get(r.sym as usize).ok_or_else(|| {
             err(&format!(
@@ -1497,12 +1502,15 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 )));
             };
             let (tobj, tsec) = twin.get(&(oi, si)).copied().unwrap_or((oi, si));
-            let &(outsec, off) = placed.get(&(tobj, tsec)).ok_or_else(|| {
-                err(&format!(
+            let Some(&(outsec, off)) = placed.get(&(tobj, tsec)) else {
+                if !allocated {
+                    return Ok((0, 0));
+                }
+                return Err(err(&format!(
                     "{}: relocation against discarded section `{}'",
                     o.source, o.sections[si].name
-                ))
-            })?;
+                )));
+            };
             return Ok((secsym_of_outsec[outsec], r.addend + off as i64));
         }
         if sym.binding == STB_LOCAL {
@@ -1520,17 +1528,23 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                     ));
                 }
             }
+            if !allocated {
+                return Ok((0, 0));
+            }
             return Err(err(&format!(
                 "{}: relocation against discarded local `{}'",
                 o.source, sym.name
             )));
         }
-        let idx = global_index.get(sym.name.as_str()).ok_or_else(|| {
-            err(&format!(
+        let Some(idx) = global_index.get(sym.name.as_str()) else {
+            if !allocated {
+                return Ok((0, 0));
+            }
+            return Err(err(&format!(
                 "{}: relocation against unmapped global `{}'",
                 o.source, sym.name
-            ))
-        })?;
+            )));
+        };
         Ok((*idx, r.addend))
     };
 
@@ -1539,7 +1553,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
     for (idx, out) in outsecs.iter().enumerate() {
         for c in &out.contribs {
             for r in &objs[c.obj].sections[c.sec].relocs {
-                let (sym, addend) = map_sym(c.obj, r)?;
+                let (sym, addend) = map_sym(c.obj, r, out.flags & SHF_ALLOC != 0)?;
                 out_relocs[idx].push((c.offset + r.offset, sym, r.rtype, addend));
             }
         }

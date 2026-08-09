@@ -27,6 +27,23 @@ fn compile_obj(src: &str, name: &str) -> EtRel {
     parse_et_rel(&bytes, name).expect("parse")
 }
 
+fn compile_obj_with_debug_info(src: &str, name: &str) -> EtRel {
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(src.to_string(), Target::LinuxX64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        debug_info: true,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    parse_et_rel(&bytes, name).expect("parse")
+}
+
 fn merge(objs: &[EtRel], opts: &RelinkOptions) -> EtRel {
     let bytes = link_relocatable(objs, opts).expect("merge");
     parse_et_rel(&bytes, "merged").expect("round-trip parse")
@@ -303,6 +320,54 @@ fn module_script_discard_and_gather() {
             .unwrap_or_else(|| panic!("{name} defined"));
         assert!(matches!(s.sec, EtSymRef::Section(_)), "{name} in a section");
         assert!(s.binding != 0, "{name} global");
+    }
+}
+
+/// A `.debug_info` reference to an object the script discarded
+/// resolves to null instead of failing the link: the section describes
+/// the image rather than taking part in it, which is how GNU ld treats
+/// the same reference. The kernel's `__ADDRESSABLE` objects live in
+/// `.discard.addressable` and every module link hits this.
+#[test]
+fn debug_reference_to_a_discarded_object_resolves_to_null() {
+    let script = parse_module_script("SECTIONS {\n /DISCARD/ : { *(.discard) *(.discard.*) }\n}\n")
+        .expect("parse script");
+    let a = compile_obj_with_debug_info(
+        "int target = 5;\n\
+         static void *addressable __attribute__((used, section(\".discard.addressable\")))\n\
+             = (void *)&target;\n\
+         int probe(void) { return target; }\n",
+        "a.o",
+    );
+    assert!(
+        a.sections.iter().any(|s| s.name == ".discard.addressable"),
+        "the object carries the section the script discards"
+    );
+    let merged = merge(
+        &[a],
+        &RelinkOptions {
+            script: Some(script),
+            ..Default::default()
+        },
+    );
+    assert!(
+        !merged
+            .sections
+            .iter()
+            .any(|s| s.name == ".discard.addressable"),
+        "the section is discarded"
+    );
+    let info = merged
+        .sections
+        .iter()
+        .find(|s| s.name == ".debug_info")
+        .expect("merged .debug_info");
+    // Every surviving reference names a real symbol; the discarded one
+    // became the null entry with a zero addend.
+    for r in &info.relocs {
+        if r.sym == 0 {
+            assert_eq!(r.addend, 0, "a null reference carries no addend");
+        }
     }
 }
 

@@ -55,7 +55,7 @@ import shlex
 import subprocess
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
 
 import sweep
@@ -783,29 +783,35 @@ def replay_units(tree: Path, arch: str, badc: Path, scratch: Path,
                 cmd[i + 1] = str(ro)
         cmd += ["-gdwarf-4"]
         cmd = [a for a in cmd if not a.startswith("-Wp,-MMD,")]
-        try:
-            r = subprocess.run(cmd, cwd=tree, capture_output=True, text=True,
-                               timeout=timeout)
-            rec["ref_rc"] = r.returncode
-            if r.returncode == 0 and ro.is_file():
-                rec["ref_obj"] = str(ro)
-        except (subprocess.TimeoutExpired, OSError):
-            rec["ref_rc"] = "timeout"
         bo = scratch / f"{stem}.badc.o"
         bcmd = [str(badc), "--gnu", "-q", "-c", f"--target={target}",
                 *sweep.rewrite(argv), "-g", src, "-o", str(bo)]
-        try:
-            r = subprocess.run(bcmd, cwd=tree, capture_output=True, text=True,
-                               timeout=timeout)
-            rec["badc_rc"] = r.returncode
-            if r.returncode == 0 and bo.is_file():
-                rec["badc_obj"] = str(bo)
-        except (subprocess.TimeoutExpired, OSError):
-            rec["badc_rc"] = "timeout"
+        # An object already in the scratch directory is reused: a re-run
+        # then costs only the extraction, and an interrupted run resumes.
+        for key, obj, run in (("ref", ro, cmd), ("badc", bo, bcmd)):
+            if obj.is_file() and obj.stat().st_size:
+                rec[f"{key}_obj"], rec[f"{key}_rc"] = str(obj), "cached"
+                continue
+            try:
+                r = subprocess.run(run, cwd=tree, capture_output=True,
+                                   text=True, timeout=timeout)
+                rec[f"{key}_rc"] = r.returncode
+                if r.returncode == 0 and obj.is_file():
+                    rec[f"{key}_obj"] = str(obj)
+            except (subprocess.TimeoutExpired, OSError):
+                rec[f"{key}_rc"] = "timeout"
         return rec
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
         return list(pool.map(one, enumerate(units)))
+
+
+def extract_pair(args: tuple[str, str, str]) -> tuple[dict, dict]:
+    """(reference, badc) extraction for one unit pair, as a process-pool
+    payload: parsing the dumper's output is interpreter-bound, so unit pairs
+    are spread over processes rather than threads."""
+    ref, badc, dwarfdump = args
+    return extract(Path(ref), dwarfdump), extract(Path(badc), dwarfdump)
 
 
 def merge(into: dict, other: dict) -> dict:
@@ -1127,11 +1133,13 @@ def main(argv: list[str] | None = None) -> int:
             f"{ok_badc}; both {len(both)}")
         report["replay"] = {"units": len(recs), "ref_built": ok_ref,
                             "badc_built": ok_badc, "both": len(both)}
-        for i, r in enumerate(both):
-            ref_acc = merge(ref_acc, extract(Path(r["ref_obj"]), dwarfdump))
-            badc_acc = merge(badc_acc, extract(Path(r["badc_obj"]), dwarfdump))
-            if i % 200 == 0:
-                log(f"extracted {i}/{len(both)} unit pairs")
+        payload = [(r["ref_obj"], r["badc_obj"], dwarfdump) for r in both]
+        with ProcessPoolExecutor(max_workers=args.jobs) as pool:
+            for i, (rx, bx) in enumerate(
+                    pool.map(extract_pair, payload, chunksize=8)):
+                ref_acc, badc_acc = merge(ref_acc, rx), merge(badc_acc, bx)
+                if i % 500 == 0:
+                    log(f"extracted {i}/{len(both)} unit pairs")
         if both:
             sample_elf = Path(both[0]["badc_obj"])
     elif args.ref_tree:

@@ -15,23 +15,29 @@
 //! the per-unit `.text` / `.debug_line` / `.debug_abbrev` bases are
 //! known. This matches gcc / clang `-c -g` output for c5's subset.
 //!
-//! Each CU lays out its children in this order: type catalog
-//! (base_type + pointer_type DIEs) then subprograms. Subprograms
-//! carry `DW_AT_frame_base` and emit formal_parameter / variable
-//! children with `DW_AT_location` (DW_OP_fbreg + offset) and
-//! `DW_AT_type` cross-DIE references (`DW_FORM_ref4`) to the type
-//! catalog earlier in the same CU. The `long` base type follows
-//! the C99 data model per target: 4 bytes on Windows (LLP64),
-//! 8 bytes on Linux / macOS (LP64). Struct / union types are
-//! emitted as `DW_TAG_structure_type` / `DW_TAG_union_type` DIEs
-//! with `DW_TAG_member` children; member `DW_AT_type` refs the
-//! scalar catalog above plus any earlier aggregate the topo
-//! sort placed before this one. Bitfield members carry
-//! `DW_AT_data_bit_offset` + `DW_AT_bit_size`. Pointer-to-
-//! aggregate members rely on the pointer_type wrapper's forward
-//! ref4 to the target struct. `.debug_frame` regenerates from
-//! `synth_build`'s symbol set on the merged image rather than
-//! being carried per-`.o`.
+//! Each CU lays out its children in this order: type DIEs, enum
+//! DIEs, objects with static storage duration, then subprograms.
+//!
+//! Type emission runs in two passes. [`TypeCatalog`] interns every
+//! type the unit's locals, file-scope objects and aggregate members
+//! reach, keyed structurally so `int *` shares one DIE across the
+//! unit. Each interned node is then written into its own buffer with
+//! its `DW_FORM_ref4` slots recorded, and the slots are patched once
+//! the concatenated layout gives every DIE its CU-relative offset.
+//! Because a reference is resolved after layout rather than at write
+//! time, a member can name a type whose DIE lands later in the unit,
+//! and no emission order can drop one.
+//!
+//! A type the catalog cannot describe becomes
+//! `DW_TAG_unspecified_type` rather than the nearest type that can be
+//! spelled: a member keeps its name and offset, and the description
+//! reports the type as unknown instead of naming a different one.
+//!
+//! The `long` base type follows the C99 data model per target: 4
+//! bytes on Windows (LLP64), 8 bytes on Linux / macOS (LP64).
+//! Bitfield members carry `DW_AT_data_bit_offset` + `DW_AT_bit_size`.
+//! `.debug_frame` regenerates from `synth_build`'s symbol set on the
+//! merged image rather than being carried per-`.o`.
 
 #![allow(dead_code)]
 
@@ -43,6 +49,7 @@ use alloc::vec::Vec;
 use super::super::program::Program;
 use super::super::token::Ty;
 use super::Build;
+use crate::c5::compiler::{StructDef, StructField};
 use crate::c5::layout::write_struct;
 
 /// Section that an emitted reloc lives in. Used to route the
@@ -62,6 +69,10 @@ pub(crate) enum DwarfRelocTarget {
     Text,
     DebugLine,
     DebugAbbrev,
+    /// A defined object with static storage duration, by its index in
+    /// [`DwarfRelocatable::reloc_symbols`]. The object writer resolves
+    /// the name to its own symbol-table entry.
+    Symbol(u32),
 }
 
 /// Width of the reloc's value field. Maps to R_*_64 / R_*_32 in
@@ -97,6 +108,9 @@ pub(crate) struct DwarfRelocatable {
     pub debug_line: Vec<u8>,
     pub info_relocs: Vec<DwarfReloc>,
     pub line_relocs: Vec<DwarfReloc>,
+    /// Link names named by [`DwarfRelocTarget::Symbol`] relocs, in the
+    /// order the emitter first referenced them.
+    pub reloc_symbols: Vec<String>,
 }
 
 const DW_TAG_COMPILE_UNIT: u8 = 0x11;
@@ -113,6 +127,8 @@ const DW_TAG_ARRAY_TYPE: u8 = 0x01;
 const DW_TAG_SUBRANGE_TYPE: u8 = 0x21;
 const DW_TAG_ENUMERATION_TYPE: u8 = 0x04;
 const DW_TAG_ENUMERATOR: u8 = 0x28;
+const DW_TAG_SUBROUTINE_TYPE: u8 = 0x15;
+const DW_TAG_UNSPECIFIED_TYPE: u8 = 0x3b;
 
 const DW_AT_NAME: u8 = 0x03;
 const DW_AT_STMT_LIST: u8 = 0x10;
@@ -137,6 +153,7 @@ const DW_AT_CALLING_CONVENTION: u8 = 0x36;
 const DW_CC_NORMAL: u8 = 0x01;
 const DW_AT_UPPER_BOUND: u8 = 0x2f;
 const DW_AT_CONST_VALUE: u8 = 0x1c;
+const DW_AT_DECLARATION: u8 = 0x3c;
 
 const DW_FORM_ADDR: u8 = 0x01;
 const DW_FORM_DATA8: u8 = 0x07;
@@ -160,6 +177,7 @@ const DW_ATE_FLOAT: u8 = 0x04;
 const DW_OP_REG29: u8 = 0x6d; // aarch64 frame pointer x29
 const DW_OP_REG6: u8 = 0x56; // x86_64 frame pointer rbp
 const DW_OP_FBREG: u8 = 0x91; // fbreg N (SLEB128 N)
+const DW_OP_ADDR: u8 = 0x03; // addr <target address size>
 
 const DW_CHILDREN_NO: u8 = 0x00;
 const DW_CHILDREN_YES: u8 = 0x01;
@@ -194,6 +212,18 @@ const ABBREV_ARRAY_TYPE: u64 = 13;
 const ABBREV_SUBRANGE_TYPE: u64 = 14;
 const ABBREV_ENUMERATION_TYPE: u64 = 15;
 const ABBREV_ENUMERATOR: u64 = 16;
+const ABBREV_STRUCTURE_TYPE_ANON: u64 = 17;
+const ABBREV_UNION_TYPE_ANON: u64 = 18;
+const ABBREV_STRUCTURE_TYPE_DECL: u64 = 19;
+const ABBREV_UNION_TYPE_DECL: u64 = 20;
+const ABBREV_SUBROUTINE_TYPE: u64 = 21;
+const ABBREV_SUBROUTINE_TYPE_VOID: u64 = 22;
+const ABBREV_FORMAL_PARAMETER_TYPE: u64 = 23;
+const ABBREV_SUBRANGE_TYPE_OPEN: u64 = 24;
+const ABBREV_POINTER_TYPE_VOID: u64 = 25;
+const ABBREV_UNSPECIFIED_TYPE: u64 = 26;
+const ABBREV_STATIC_VARIABLE: u64 = 27;
+const ABBREV_STATIC_VARIABLE_INTERNAL: u64 = 28;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -259,13 +289,15 @@ pub(crate) fn emit(
 ) -> DwarfRelocatable {
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_relocs) = build_debug_line(program, build);
-    let (debug_info, info_relocs) = build_debug_info(source_path, program, build, machine, target);
+    let (debug_info, info_relocs, reloc_symbols) =
+        build_debug_info(source_path, program, build, machine, target);
     DwarfRelocatable {
         debug_info,
         debug_abbrev,
         debug_line,
         info_relocs,
         line_relocs,
+        reloc_symbols,
     }
 }
 
@@ -478,6 +510,126 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_CONST_VALUE, DW_FORM_SDATA),
         ],
     },
+    // structure / union with no source tag (C99 6.7.2.3). DWARF 4
+    // 5.5.1 gives such a type no DW_AT_name; c5's registry key is a
+    // synthesized spelling that carries a parse-order serial and so
+    // names the same type differently in two units.
+    AbbrevDecl {
+        code: ABBREV_STRUCTURE_TYPE_ANON,
+        tag: DW_TAG_STRUCTURE_TYPE,
+        has_children: true,
+        attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_UDATA)],
+    },
+    AbbrevDecl {
+        code: ABBREV_UNION_TYPE_ANON,
+        tag: DW_TAG_UNION_TYPE,
+        has_children: true,
+        attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_UDATA)],
+    },
+    // structure / union the unit only forward-declares (C99 6.7.2.3
+    // incomplete type). DWARF 4 5.5.1: DW_AT_declaration and no
+    // DW_AT_byte_size, so a consumer reads the size as unknown rather
+    // than as zero.
+    AbbrevDecl {
+        code: ABBREV_STRUCTURE_TYPE_DECL,
+        tag: DW_TAG_STRUCTURE_TYPE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_DECLARATION, DW_FORM_FLAG_PRESENT),
+        ],
+    },
+    AbbrevDecl {
+        code: ABBREV_UNION_TYPE_DECL,
+        tag: DW_TAG_UNION_TYPE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_DECLARATION, DW_FORM_FLAG_PRESENT),
+        ],
+    },
+    // subroutine_type -- the pointee of a function pointer (DWARF 4
+    // 5.7). DW_AT_type is the return type; the void-returning form
+    // omits it. DW_AT_prototyped is always set (c5 rejects K&R
+    // identifier lists). Children are the parameter types.
+    AbbrevDecl {
+        code: ABBREV_SUBROUTINE_TYPE,
+        tag: DW_TAG_SUBROUTINE_TYPE,
+        has_children: true,
+        attrs: &[
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_TYPE, DW_FORM_REF4),
+        ],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBROUTINE_TYPE_VOID,
+        tag: DW_TAG_SUBROUTINE_TYPE,
+        has_children: true,
+        attrs: &[(DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT)],
+    },
+    // formal_parameter of a subroutine_type: a type with no name and
+    // no location, since a function type has no storage.
+    AbbrevDecl {
+        code: ABBREV_FORMAL_PARAMETER_TYPE,
+        tag: DW_TAG_FORMAL_PARAMETER,
+        has_children: false,
+        attrs: &[(DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    // subrange with no bound -- the unspecified extent of a flexible
+    // array member (C99 6.7.2.1p16) and of the GNU zero-length form.
+    AbbrevDecl {
+        code: ABBREV_SUBRANGE_TYPE_OPEN,
+        tag: DW_TAG_SUBRANGE_TYPE,
+        has_children: false,
+        attrs: &[],
+    },
+    // `void *` -- DWARF 4 5.2 spells an untyped pointer as a
+    // pointer_type with no DW_AT_type.
+    AbbrevDecl {
+        code: ABBREV_POINTER_TYPE_VOID,
+        tag: DW_TAG_POINTER_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_DATA1)],
+    },
+    // unspecified_type (DWARF 4 5.2) -- the target of a member whose
+    // type this emitter cannot describe. The member keeps its name and
+    // offset and the description says the type is unknown instead of
+    // naming a different one.
+    AbbrevDecl {
+        code: ABBREV_UNSPECIFIED_TYPE,
+        tag: DW_TAG_UNSPECIFIED_TYPE,
+        has_children: false,
+        attrs: &[],
+    },
+    // Object with static storage duration (C99 6.2.4p3), at compile-unit
+    // scope. DW_AT_location is an exprloc holding DW_OP_addr over the
+    // object's link-time address. DW_AT_external marks external linkage;
+    // the internal-linkage form drops it.
+    AbbrevDecl {
+        code: ABBREV_STATIC_VARIABLE,
+        tag: DW_TAG_VARIABLE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
+            (DW_AT_LOCATION, DW_FORM_EXPRLOC),
+            (DW_AT_DECL_FILE, DW_FORM_UDATA),
+            (DW_AT_DECL_LINE, DW_FORM_UDATA),
+        ],
+    },
+    AbbrevDecl {
+        code: ABBREV_STATIC_VARIABLE_INTERNAL,
+        tag: DW_TAG_VARIABLE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_LOCATION, DW_FORM_EXPRLOC),
+            (DW_AT_DECL_FILE, DW_FORM_UDATA),
+            (DW_AT_DECL_LINE, DW_FORM_UDATA),
+        ],
+    },
 ];
 
 fn build_debug_abbrev() -> Vec<u8> {
@@ -515,7 +667,7 @@ fn build_debug_info(
     build: &Build,
     machine: super::Machine,
     target: super::Target,
-) -> (Vec<u8>, Vec<DwarfReloc>) {
+) -> (Vec<u8>, Vec<DwarfReloc>, Vec<String>) {
     let mut body: Vec<u8> = Vec::new();
     let mut relocs: Vec<DwarfReloc> = Vec::new();
 
@@ -564,228 +716,46 @@ fn build_debug_info(
         super::Machine::X86_64 => DW_OP_REG6,
     };
 
-    // Collect every distinct (base_leaf, pointer_depth) tuple
-    // referenced by this unit's variables. Emit base_type DIEs
-    // followed by pointer_type wrappers; pointer levels chain
-    // via DW_AT_type ref4 to the next-shallower wrapper (or to
-    // the leaf type at depth 1). Map keys back to the
-    // DW_FORM_ref4 offset (CU-relative byte offset = body offset
-    // + DEBUG_INFO_UNIT_HEADER_SIZE).
-    let mut type_offsets: BTreeMap<TypeKey, u32> = BTreeMap::new();
-    let mut array_offsets: BTreeMap<(TypeKey, u32), u32> = BTreeMap::new();
-    {
-        // Gather distinct leaf bases and aggregates referenced
-        // by this unit's variables and struct fields, along
-        // with the maximum pointer depth each one needs.
-        // Aggregate fields that reference other aggregates pull
-        // those in too via the field-walk below.
-        let mut max_depth_per_scalar: BTreeMap<i64, u8> = BTreeMap::new();
-        let mut max_depth_per_aggregate: BTreeMap<usize, u8> = BTreeMap::new();
-        for v in &program.variables {
-            match decompose_pointer_chain(v.type_tag) {
-                Some(TypeKey::Scalar { leaf, depth }) => {
-                    let e = max_depth_per_scalar.entry(leaf).or_insert(0);
-                    if depth > *e {
-                        *e = depth;
-                    }
-                }
-                Some(TypeKey::Aggregate { id, depth }) => {
-                    let e = max_depth_per_aggregate.entry(id).or_insert(0);
-                    if depth > *e {
-                        *e = depth;
-                    }
-                }
-                None => continue,
-            }
+    // Type DIEs. Every type this unit references is interned into a
+    // catalog first; the DIEs are then written into per-DIE buffers,
+    // laid out, and their `DW_AT_type` slots patched with the
+    // resulting CU-relative offsets. Separating layout from writing
+    // is what lets a member name a type whose DIE lands later in the
+    // unit, so no member is dropped for want of an emission order.
+    let mut catalog = TypeCatalog::new(&program.structs, target);
+    let var_types: Vec<TypeId> = program
+        .variables
+        .iter()
+        .map(|v| catalog.of_variable(v))
+        .collect();
+    let statics = static_storage_objects(program);
+    let static_types: Vec<TypeId> = statics
+        .iter()
+        .map(|&i| catalog.of_symbol(&program.symbols[i]))
+        .collect();
+    catalog.drain();
+    let mut dies: Vec<DieBuf> = Vec::new();
+    let mut next = 0usize;
+    while next < catalog.len() {
+        let node = catalog.node(next).clone();
+        dies.push(build_type_die(&mut catalog, &node));
+        next += 1;
+    }
+    let type_offsets: Vec<u32> = {
+        let mut offs = Vec::with_capacity(dies.len());
+        let mut cur = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
+        for d in &dies {
+            offs.push(cur);
+            cur += d.bytes.len() as u32;
         }
-        // Pull in field types: aggregates whose fields reference
-        // scalar / pointer-to-scalar leafs need those DIEs in
-        // the catalog. Aggregate-typed fields (depth 0) drag
-        // their target struct id into `max_depth_per_aggregate`
-        // and contribute a dependency edge for the topo sort
-        // below; pointer-to-aggregate fields (depth >= 1)
-        // forward-reference safely and only need the pointer
-        // wrapper.
-        let mut worklist: Vec<usize> = max_depth_per_aggregate.keys().copied().collect();
-        while let Some(id) = worklist.pop() {
-            let Some(sd) = program.structs.get(id) else {
-                continue;
-            };
-            for f in &sd.fields {
-                match decompose_pointer_chain(f.ty) {
-                    Some(TypeKey::Scalar { leaf, depth }) => {
-                        let e = max_depth_per_scalar.entry(leaf).or_insert(0);
-                        if depth > *e {
-                            *e = depth;
-                        }
-                    }
-                    Some(TypeKey::Aggregate {
-                        id: dep_id,
-                        depth: dep_depth,
-                    }) => {
-                        let added = !max_depth_per_aggregate.contains_key(&dep_id);
-                        let e = max_depth_per_aggregate.entry(dep_id).or_insert(0);
-                        if dep_depth > *e {
-                            *e = dep_depth;
-                        }
-                        if added {
-                            worklist.push(dep_id);
-                        }
-                    }
-                    None => {}
-                }
-            }
+        offs
+    };
+    for die in &mut dies {
+        let DieBuf { bytes, refs } = die;
+        for &(at, id) in refs.iter() {
+            bytes[at..at + 4].copy_from_slice(&type_offsets[id].to_le_bytes());
         }
-        // Emit base_type DIEs first so the pointer wrappers and
-        // aggregate members can reference them at smaller
-        // offsets.
-        for (&leaf, &max_depth) in &max_depth_per_scalar {
-            let Some(base) = base_type_for_leaf(leaf, machine, target) else {
-                continue;
-            };
-            let off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
-            type_offsets.insert(TypeKey::Scalar { leaf, depth: 0 }, off);
-            write_uleb128(&mut body, ABBREV_BASE_TYPE);
-            push_string(&mut body, base.name);
-            body.push(base.byte_size);
-            body.push(base.encoding);
-            // Pointer wrappers: one DIE per depth from 1 to
-            // max_depth. Each wrapper references the
-            // next-shallower entry (depth N references depth
-            // N-1).
-            let mut prev_off = off;
-            for depth in 1..=max_depth {
-                let ptr_off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
-                type_offsets.insert(TypeKey::Scalar { leaf, depth }, ptr_off);
-                write_uleb128(&mut body, ABBREV_POINTER_TYPE);
-                body.push(8);
-                body.extend_from_slice(&prev_off.to_le_bytes());
-                prev_off = ptr_off;
-            }
-        }
-        // DW_TAG_array_type DIEs collected from both variable
-        // arrays (`int xs[N]` locals) and struct-field arrays
-        // (`int xs[N]` as a struct member). Element type must be
-        // scalar / pointer-to-scalar -- arrays of aggregates fall
-        // back to the decay-to-element shape because the aggregate
-        // DIE we'd reference hasn't been emitted yet at this
-        // point. C99 6.7.5.3p7 already decays parameter arrays to
-        // pointers, so only non-parameter locals contribute from
-        // the variable side.
-        {
-            let mut pending: BTreeMap<(TypeKey, u32), ()> = BTreeMap::new();
-            for v in &program.variables {
-                if v.array_size == 0 || v.is_parameter {
-                    continue;
-                }
-                let Some(key) = decompose_pointer_chain(v.type_tag) else {
-                    continue;
-                };
-                if matches!(key, TypeKey::Scalar { .. }) && type_offsets.contains_key(&key) {
-                    pending.insert((key, v.array_size), ());
-                }
-            }
-            for sd in &program.structs {
-                for f in &sd.fields {
-                    if f.array_size <= 0 {
-                        continue;
-                    }
-                    let Some(key) = decompose_pointer_chain(f.ty) else {
-                        continue;
-                    };
-                    if matches!(key, TypeKey::Scalar { .. }) && type_offsets.contains_key(&key) {
-                        pending.insert((key, f.array_size as u32), ());
-                    }
-                }
-            }
-            for (key, count) in pending.keys() {
-                let elem_off = *type_offsets.get(key).expect("element type present");
-                let arr_off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
-                array_offsets.insert((*key, *count), arr_off);
-                write_uleb128(&mut body, ABBREV_ARRAY_TYPE);
-                body.extend_from_slice(&elem_off.to_le_bytes());
-                // Subrange child: upper_bound = count - 1.
-                write_uleb128(&mut body, ABBREV_SUBRANGE_TYPE);
-                write_uleb128(&mut body, (*count as u64).saturating_sub(1));
-                // Children-list terminator for the array_type DIE.
-                body.push(0);
-            }
-        }
-        // Aggregate (struct / union) DIEs. Each carries
-        // DW_TAG_member children referring back into the scalar
-        // catalog above plus any earlier aggregate DIE the
-        // topological sort places ahead of this one.
-        let aggregate_order = topo_sort_aggregates(program, &max_depth_per_aggregate);
-        for &id in &aggregate_order {
-            let Some(sd) = program.structs.get(id) else {
-                continue;
-            };
-            let max_depth = max_depth_per_aggregate.get(&id).copied().unwrap_or(0);
-            let off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
-            type_offsets.insert(TypeKey::Aggregate { id, depth: 0 }, off);
-            let abbrev = if sd.is_union {
-                ABBREV_UNION_TYPE
-            } else {
-                ABBREV_STRUCTURE_TYPE
-            };
-            write_uleb128(&mut body, abbrev);
-            push_string(&mut body, &sd.name);
-            write_uleb128(&mut body, sd.size as u64);
-            for f in &sd.fields {
-                let Some(field_key) = decompose_pointer_chain(f.ty) else {
-                    continue;
-                };
-                let Some(&elem_off) = type_offsets.get(&field_key) else {
-                    continue;
-                };
-                // True field array: ref the array_type DIE emitted
-                // above if one was collected for this (element,
-                // count) pair. Falls back to the element-type DIE
-                // for arrays-of-aggregate (the array DIE block
-                // skips those because the aggregate isn't emitted
-                // yet).
-                let field_type_off = if f.array_size > 0 && f.bit_width == 0 {
-                    array_offsets
-                        .get(&(field_key, f.array_size as u32))
-                        .copied()
-                        .unwrap_or(elem_off)
-                } else {
-                    elem_off
-                };
-                if f.bit_width > 0 {
-                    // DWARF 4 5.6.6 bitfield: DW_AT_data_bit_offset
-                    // is the absolute bit offset from the start of
-                    // the aggregate. c5's StructField stores
-                    // `offset` as the byte offset of the storage
-                    // unit and `bit_offset` as the bit offset
-                    // within that unit, so the absolute bit
-                    // offset is `offset * 8 + bit_offset`.
-                    let data_bit_offset = (f.offset as u64) * 8 + f.bit_offset as u64;
-                    write_uleb128(&mut body, ABBREV_BITFIELD_MEMBER);
-                    push_string(&mut body, &f.name);
-                    body.extend_from_slice(&field_type_off.to_le_bytes());
-                    write_uleb128(&mut body, data_bit_offset);
-                    write_uleb128(&mut body, f.bit_width as u64);
-                } else {
-                    write_uleb128(&mut body, ABBREV_MEMBER);
-                    push_string(&mut body, &f.name);
-                    body.extend_from_slice(&field_type_off.to_le_bytes());
-                    write_uleb128(&mut body, f.offset as u64);
-                }
-            }
-            // End-of-children marker for the structure DIE.
-            body.push(0);
-            // Pointer wrappers for `Foo *`, `Foo **`, etc.
-            let mut prev_off = off;
-            for depth in 1..=max_depth {
-                let ptr_off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
-                type_offsets.insert(TypeKey::Aggregate { id, depth }, ptr_off);
-                write_uleb128(&mut body, ABBREV_POINTER_TYPE);
-                body.push(8);
-                body.extend_from_slice(&prev_off.to_le_bytes());
-                prev_off = ptr_off;
-            }
-        }
+        body.extend_from_slice(bytes);
     }
 
     // DW_TAG_enumeration_type DIEs for every tagged enum the
@@ -807,6 +777,44 @@ fn build_debug_info(
         }
         // End-of-children marker for the enumeration_type DIE.
         body.push(0);
+    }
+
+    // DW_TAG_variable DIEs for objects with static storage duration
+    // (C99 6.2.4p3), at compile-unit scope. `DW_OP_addr` needs the
+    // object's link-time address, which the relocation supplies.
+    let mut reloc_symbols: Vec<String> = Vec::new();
+    for (&idx, &type_id) in statics.iter().zip(static_types.iter()) {
+        let sym = &program.symbols[idx];
+        let external = sym.linkage == crate::c5::symbol::Linkage::External;
+        write_uleb128(
+            &mut body,
+            if external {
+                ABBREV_STATIC_VARIABLE
+            } else {
+                ABBREV_STATIC_VARIABLE_INTERNAL
+            },
+        );
+        push_string(&mut body, &sym.name);
+        body.extend_from_slice(&type_offsets[type_id].to_le_bytes());
+        // DW_AT_location: exprloc holding DW_OP_addr + an 8-byte
+        // address slot the reloc below fills in.
+        write_uleb128(&mut body, 9);
+        body.push(DW_OP_ADDR);
+        let addr_off = body.len() as u64;
+        body.extend_from_slice(&[0u8; 8]);
+        let sym_idx = reloc_symbols.len() as u32;
+        reloc_symbols.push(sym.link_name().to_string());
+        relocs.push(DwarfReloc {
+            section: DwarfSectionKind::Info,
+            offset: DEBUG_INFO_UNIT_HEADER_SIZE + addr_off,
+            width: DwarfRelocWidth::W8,
+            target: DwarfRelocTarget::Symbol(sym_idx),
+            addend: 0,
+        });
+        // `source_files` is 0-indexed with the primary unit at 0; the
+        // DWARF file table is 1-indexed with it at slot 1.
+        write_uleb128(&mut body, sym.decl_file as u64 + 1);
+        write_uleb128(&mut body, sym.decl_line as u64);
     }
 
     // Subprogram child DIEs. One per defined function in the
@@ -847,10 +855,11 @@ fn build_debug_info(
         // flat program.variables list. `function_bc_pc` keys by
         // the function's ent_pc, matching what the amalg path's
         // DWARF emitter uses.
-        let vars: Vec<&super::super::program::VariableInfo> = program
+        let vars: Vec<(&super::super::program::VariableInfo, TypeId)> = program
             .variables
             .iter()
-            .filter(|v| v.function_bc_pc == ent_pc as u64)
+            .zip(var_types.iter().copied())
+            .filter(|(v, _)| v.function_bc_pc == ent_pc as u64)
             .collect();
         // A variadic function always needs the WITH_CHILDREN
         // abbrev so the trailing DW_TAG_unspecified_parameters DIE
@@ -881,25 +890,8 @@ fn build_debug_info(
             // DW_OP_reg<fp> byte. ULEB128 length(1) + opcode.
             write_uleb128(&mut body, 1);
             body.push(frame_base_op);
-            for v in &vars {
-                let Some(key) = decompose_pointer_chain(v.type_tag) else {
-                    continue;
-                };
-                // True local arrays reference the array_type DIE;
-                // every other variable (parameters, scalars,
-                // pointers, struct values) references the element /
-                // scalar / pointer DIE directly.
-                let type_off = if v.array_size > 0 && !v.is_parameter {
-                    array_offsets
-                        .get(&(key, v.array_size))
-                        .copied()
-                        .or_else(|| type_offsets.get(&key).copied())
-                } else {
-                    type_offsets.get(&key).copied()
-                };
-                let Some(type_off) = type_off else {
-                    continue;
-                };
+            for &(v, type_id) in &vars {
+                let type_off = type_offsets[type_id];
                 // Slot coalescing may have moved this local onto a new
                 // exclusive frame offset; use it so the location is not
                 // stale. A local moved onto shared storage is in
@@ -990,7 +982,35 @@ fn build_debug_info(
     });
     out.extend_from_slice(&body);
 
-    (out, relocs)
+    (out, relocs, reloc_symbols)
+}
+
+/// Indices in `program.symbols` of the objects with static storage
+/// duration this unit defines, in declaration order. Mirrors the
+/// relocatable writer's own selection so every DIE emitted here has a
+/// symbol-table entry to relocate against: thread-local objects have
+/// no `DW_OP_addr` address, an alias names another object's storage,
+/// and one link name reaches the writer only once.
+fn static_storage_objects(program: &Program) -> Vec<usize> {
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    let mut seen: alloc::collections::BTreeSet<&str> = alloc::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for (i, sym) in program.symbols.iter().enumerate() {
+        if sym.class != Token::Glo as i64
+            || !sym.defined_here
+            || sym.name.is_empty()
+            || sym.is_thread_local
+            || sym.is_alias
+            || !matches!(sym.linkage, Linkage::External | Linkage::Internal)
+        {
+            continue;
+        }
+        if seen.insert(sym.link_name()) {
+            out.push(i);
+        }
+    }
+    out
 }
 
 // ---- .debug_line ----
@@ -1244,71 +1264,417 @@ fn write_uleb128(out: &mut Vec<u8>, mut value: u64) {
     }
 }
 
-/// Topologically order the aggregate ids in
-/// `max_depth_per_aggregate` so each struct's directly-embedded
-/// aggregate fields (depth 0) reach their dependency's DIE
-/// offset before the outer struct's member emit needs it.
-/// Pointer-to-aggregate fields (depth >= 1) don't contribute
-/// edges -- a pointer_type wrapper's `DW_AT_type` ref4 works as
-/// a forward reference, which the cycle case
-/// (`struct A { struct B *b; }; struct B { struct A *a; }`)
-/// relies on. If a cycle ever shows up at depth 0 (a struct
-/// directly containing itself, which C99 6.7.2.1 forbids), the
-/// remaining ids appear in their original insertion order so
-/// the emit still completes.
-fn topo_sort_aggregates(program: &Program, used: &BTreeMap<usize, u8>) -> alloc::vec::Vec<usize> {
-    let mut deps: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    let mut indeg: BTreeMap<usize, usize> = used.keys().map(|&id| (id, 0)).collect();
-    for &id in used.keys() {
-        let Some(sd) = program.structs.get(id) else {
-            continue;
+/// Index of a type DIE within the per-unit catalog.
+type TypeId = usize;
+
+/// One type DIE in a form independent of emission order: every
+/// `DW_AT_type` reference is a [`TypeId`] the layout pass turns into a
+/// CU-relative offset, so a member can name a type whose DIE is
+/// written later in the unit.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum TypeNode {
+    /// C99 scalar, keyed by the leaf tag with its unsigned marker.
+    Base(i64),
+    /// `DW_TAG_pointer_type`. `None` is `void *`, which DWARF 4 5.2
+    /// spells as a pointer with no `DW_AT_type`.
+    Pointer(Option<TypeId>),
+    /// Struct / union whose definition this unit has.
+    Aggregate(usize),
+    /// Struct / union the unit only forward-declares (C99 6.7.2.3).
+    Declaration(usize),
+    /// `DW_TAG_array_type`, one `DW_TAG_subrange_type` child per
+    /// dimension, outermost first. A negative bound is unspecified.
+    Array { elem: TypeId, dims: Vec<i64> },
+    /// `DW_TAG_subroutine_type` -- the pointee of a function pointer.
+    /// `ret` is `None` for a void-returning function.
+    Subroutine {
+        ret: Option<TypeId>,
+        params: Vec<TypeId>,
+        variadic: bool,
+    },
+    /// `DW_TAG_unspecified_type` (DWARF 4 5.2): a type this emitter
+    /// cannot describe. A member keeps its name and offset and the
+    /// description reports the type as unknown rather than naming a
+    /// different one.
+    Unspecified,
+}
+
+/// One DIE (with its children) as bytes, plus the byte offsets of its
+/// `DW_FORM_ref4` slots and the type each names. The layout pass
+/// resolves the slots once every DIE's size is known.
+struct DieBuf {
+    bytes: Vec<u8>,
+    refs: Vec<(usize, TypeId)>,
+}
+
+impl DieBuf {
+    fn new() -> Self {
+        DieBuf {
+            bytes: Vec::new(),
+            refs: Vec::new(),
+        }
+    }
+
+    /// Reserve a `DW_FORM_ref4` slot naming `id`.
+    fn push_ref(&mut self, id: TypeId) {
+        self.refs.push((self.bytes.len(), id));
+        self.bytes.extend_from_slice(&[0u8; 4]);
+    }
+}
+
+/// Interned type DIEs for one compilation unit. Interning is
+/// structural, so `int *` on ten members shares one DIE.
+struct TypeCatalog<'a> {
+    structs: &'a [StructDef],
+    target: super::Target,
+    nodes: Vec<TypeNode>,
+    index: BTreeMap<TypeNode, TypeId>,
+    /// Aggregates interned but whose members have not been walked.
+    pending: Vec<usize>,
+}
+
+impl<'a> TypeCatalog<'a> {
+    fn new(structs: &'a [StructDef], target: super::Target) -> Self {
+        TypeCatalog {
+            structs,
+            target,
+            nodes: Vec::new(),
+            index: BTreeMap::new(),
+            pending: Vec::new(),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.nodes.len()
+    }
+
+    fn node(&self, id: TypeId) -> &TypeNode {
+        &self.nodes[id]
+    }
+
+    fn intern(&mut self, node: TypeNode) -> TypeId {
+        if let Some(&id) = self.index.get(&node) {
+            return id;
+        }
+        let id = self.nodes.len();
+        self.nodes.push(node.clone());
+        self.index.insert(node, id);
+        id
+    }
+
+    fn unspecified(&mut self) -> TypeId {
+        self.intern(TypeNode::Unspecified)
+    }
+
+    fn pointer_chain(&mut self, base: TypeId, depth: u8) -> TypeId {
+        let mut cur = base;
+        for _ in 0..depth {
+            cur = self.intern(TypeNode::Pointer(Some(cur)));
+        }
+        cur
+    }
+
+    /// Walk the members of every aggregate interned so far, which
+    /// interns the types they reach. Runs to fixpoint; a cycle
+    /// terminates because an aggregate is queued only when its DIE is
+    /// first interned.
+    fn drain(&mut self) {
+        while let Some(id) = self.pending.pop() {
+            let structs = self.structs;
+            let Some(sd) = structs.get(id) else { continue };
+            for f in &sd.fields {
+                self.of_field(f);
+            }
+        }
+    }
+
+    fn of_key(&mut self, key: TypeKey) -> TypeId {
+        match key {
+            TypeKey::Scalar { leaf, depth } => {
+                if crate::c5::compiler::types::is_void_ty(leaf) {
+                    // `void` itself has no DIE; the shallowest pointer
+                    // over it is the untyped `void *`.
+                    if depth == 0 {
+                        return self.unspecified();
+                    }
+                    let mut cur = self.intern(TypeNode::Pointer(None));
+                    for _ in 1..depth {
+                        cur = self.intern(TypeNode::Pointer(Some(cur)));
+                    }
+                    return cur;
+                }
+                let base = match base_type_for_leaf(leaf, self.target) {
+                    Some(_) => self.intern(TypeNode::Base(leaf)),
+                    None => self.unspecified(),
+                };
+                self.pointer_chain(base, depth)
+            }
+            TypeKey::Aggregate { id, depth } => {
+                let base = self.of_aggregate(id);
+                self.pointer_chain(base, depth)
+            }
+        }
+    }
+
+    fn of_tag(&mut self, tag: i64) -> TypeId {
+        match decompose_pointer_chain(tag) {
+            Some(key) => self.of_key(key),
+            None => self.unspecified(),
+        }
+    }
+
+    fn of_aggregate(&mut self, id: usize) -> TypeId {
+        let structs = self.structs;
+        let Some(sd) = structs.get(id) else {
+            return self.unspecified();
         };
-        for f in &sd.fields {
-            if let Some(TypeKey::Aggregate {
-                id: dep_id,
-                depth: 0,
-            }) = decompose_pointer_chain(f.ty)
-            {
-                if dep_id == id {
-                    continue;
-                }
-                if indeg.contains_key(&dep_id) {
-                    deps.entry(dep_id).or_default().push(id);
-                    *indeg.entry(id).or_insert(0) += 1;
+        // The pointer-to-array carrier is an array type, not an
+        // aggregate: it exists only to give `T (*)[N]` a type id and
+        // holds one array field of the element type.
+        if sd.is_array && sd.fields.len() == 1 {
+            let f = &sd.fields[0];
+            let elem = self.of_tag(f.ty);
+            let dims = array_dims(f.array_size, &f.array_dims);
+            return self.intern(TypeNode::Array { elem, dims });
+        }
+        if !sd.is_complete {
+            return self.intern(TypeNode::Declaration(id));
+        }
+        let node = TypeNode::Aggregate(id);
+        let fresh = !self.index.contains_key(&node);
+        let tid = self.intern(node);
+        if fresh {
+            self.pending.push(id);
+        }
+        tid
+    }
+
+    /// The type of an aggregate member: a function pointer resolves
+    /// through its own `DW_TAG_subroutine_type`, an array member
+    /// through a `DW_TAG_array_type` over the element type.
+    fn of_field(&mut self, f: &StructField) -> TypeId {
+        let base = if f.fn_ptr_indirection >= 1 {
+            self.of_function_pointer(f.ty, f.fn_ptr_indirection, &f.params, f.is_variadic)
+        } else {
+            self.of_tag(f.ty)
+        };
+        let dims = array_dims(f.array_size, &f.array_dims);
+        if dims.is_empty() {
+            base
+        } else {
+            self.intern(TypeNode::Array { elem: base, dims })
+        }
+    }
+
+    /// The type of an object with static storage duration.
+    fn of_symbol(&mut self, sym: &crate::c5::symbol::Symbol) -> TypeId {
+        let base = if sym.fn_ptr_indirection >= 1 {
+            self.of_function_pointer(
+                sym.type_,
+                sym.fn_ptr_indirection,
+                &sym.params,
+                sym.is_variadic,
+            )
+        } else {
+            self.of_tag(sym.type_)
+        };
+        let dims = array_dims(sym.array_size, &sym.array_dims);
+        if dims.is_empty() {
+            base
+        } else {
+            self.intern(TypeNode::Array { elem: base, dims })
+        }
+    }
+
+    /// The type of a local or parameter. C99 6.7.5.3p7 decays a
+    /// parameter array to a pointer, so only a true local contributes
+    /// an array type.
+    fn of_variable(&mut self, v: &super::super::program::VariableInfo) -> TypeId {
+        let base = self.of_tag(v.type_tag);
+        if v.array_size > 0 && !v.is_parameter {
+            self.intern(TypeNode::Array {
+                elem: base,
+                dims: alloc::vec![v.array_size as i64],
+            })
+        } else {
+            base
+        }
+    }
+
+    /// A function pointer. `indirection` counts the `*` levels the
+    /// declarator put over the function type, and `tag` carries the
+    /// return type under exactly that many pointer levels, so peeling
+    /// them names the return type.
+    fn of_function_pointer(
+        &mut self,
+        tag: i64,
+        indirection: i64,
+        param_tags: &[i64],
+        variadic: bool,
+    ) -> TypeId {
+        let depth = indirection.clamp(0, 32) as u8;
+        let Some(key) = decompose_pointer_chain(tag) else {
+            return self.unspecified();
+        };
+        let ret = match key.peel(depth) {
+            None => Some(self.unspecified()),
+            // DWARF 4 5.7: a void-returning subroutine type has no
+            // DW_AT_type.
+            Some(k) if k.is_void_value() => None,
+            Some(k) => Some(self.of_key(k)),
+        };
+        // A `(void)` prototype is an empty parameter list, not one
+        // parameter of type void (C99 6.7.5.3p10).
+        let params: Vec<TypeId> = param_tags
+            .iter()
+            .copied()
+            .filter(|&p| !crate::c5::compiler::types::is_void_ty(p))
+            .collect::<Vec<i64>>()
+            .into_iter()
+            .map(|p| self.of_tag(p))
+            .collect();
+        let fn_ty = self.intern(TypeNode::Subroutine {
+            ret,
+            params,
+            variadic,
+        });
+        self.pointer_chain(fn_ty, depth)
+    }
+}
+
+/// The dimension list of an array declarator, outermost first, empty
+/// when the declarator is not an array. A negative entry is an
+/// unspecified bound: c5 records the C99 6.7.2.1p16 flexible array
+/// member, the GNU zero-length form and a variable-length array all as
+/// a negative count.
+fn array_dims(count: i64, dims: &[i64]) -> Vec<i64> {
+    if count == 0 {
+        return Vec::new();
+    }
+    if count < 0 {
+        return alloc::vec![-1];
+    }
+    // `dims` also carries shapes whose entries are not a plain
+    // dimension list (the redundant-paren form prepends a sentinel), so
+    // it is used only when it accounts for the recorded element count.
+    if !dims.is_empty() && dims.iter().all(|&d| d > 0) && dims.iter().product::<i64>() == count {
+        return dims.to_vec();
+    }
+    alloc::vec![count]
+}
+
+/// Write one type DIE, with its children, into a fresh buffer.
+fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
+    let mut die = DieBuf::new();
+    match node {
+        TypeNode::Base(leaf) => {
+            // Every interned Base was checked to have a description.
+            let Some(base) = base_type_for_leaf(*leaf, catalog.target) else {
+                write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_TYPE);
+                return die;
+            };
+            write_uleb128(&mut die.bytes, ABBREV_BASE_TYPE);
+            push_string(&mut die.bytes, base.name);
+            die.bytes.push(base.byte_size);
+            die.bytes.push(base.encoding);
+        }
+        TypeNode::Pointer(None) => {
+            write_uleb128(&mut die.bytes, ABBREV_POINTER_TYPE_VOID);
+            die.bytes.push(8);
+        }
+        TypeNode::Pointer(Some(inner)) => {
+            write_uleb128(&mut die.bytes, ABBREV_POINTER_TYPE);
+            die.bytes.push(8);
+            die.push_ref(*inner);
+        }
+        TypeNode::Declaration(id) => {
+            let structs = catalog.structs;
+            let is_union = structs.get(*id).is_some_and(|s| s.is_union);
+            let abbrev = if is_union {
+                ABBREV_UNION_TYPE_DECL
+            } else {
+                ABBREV_STRUCTURE_TYPE_DECL
+            };
+            write_uleb128(&mut die.bytes, abbrev);
+            push_string(&mut die.bytes, structs.get(*id).map_or("", |s| &s.name));
+        }
+        TypeNode::Aggregate(id) => {
+            let structs = catalog.structs;
+            let Some(sd) = structs.get(*id) else {
+                write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_TYPE);
+                return die;
+            };
+            let abbrev = match (sd.is_union, sd.is_anonymous) {
+                (false, false) => ABBREV_STRUCTURE_TYPE,
+                (true, false) => ABBREV_UNION_TYPE,
+                (false, true) => ABBREV_STRUCTURE_TYPE_ANON,
+                (true, true) => ABBREV_UNION_TYPE_ANON,
+            };
+            write_uleb128(&mut die.bytes, abbrev);
+            if !sd.is_anonymous {
+                push_string(&mut die.bytes, &sd.name);
+            }
+            write_uleb128(&mut die.bytes, sd.size as u64);
+            for f in &sd.fields {
+                let field_type = catalog.of_field(f);
+                if f.bit_width > 0 {
+                    // DWARF 4 5.6.6: DW_AT_data_bit_offset is the
+                    // absolute bit offset from the start of the
+                    // aggregate. c5 stores `offset` as the byte offset
+                    // of the storage unit and `bit_offset` as the bit
+                    // offset within it.
+                    let data_bit_offset = (f.offset as u64) * 8 + f.bit_offset as u64;
+                    write_uleb128(&mut die.bytes, ABBREV_BITFIELD_MEMBER);
+                    push_string(&mut die.bytes, &f.name);
+                    die.push_ref(field_type);
+                    write_uleb128(&mut die.bytes, data_bit_offset);
+                    write_uleb128(&mut die.bytes, f.bit_width as u64);
+                } else {
+                    write_uleb128(&mut die.bytes, ABBREV_MEMBER);
+                    push_string(&mut die.bytes, &f.name);
+                    die.push_ref(field_type);
+                    write_uleb128(&mut die.bytes, f.offset as u64);
                 }
             }
+            die.bytes.push(0);
         }
-    }
-    let mut ready: Vec<usize> = indeg
-        .iter()
-        .filter(|&(_, &d)| d == 0)
-        .map(|(&id, _)| id)
-        .collect();
-    let mut out: Vec<usize> = Vec::with_capacity(used.len());
-    while let Some(id) = ready.pop() {
-        out.push(id);
-        if let Some(consumers) = deps.get(&id) {
-            for &c in consumers {
-                let e = indeg.entry(c).or_insert(0);
-                if *e > 0 {
-                    *e -= 1;
-                }
-                if *e == 0 {
-                    ready.push(c);
+        TypeNode::Array { elem, dims } => {
+            write_uleb128(&mut die.bytes, ABBREV_ARRAY_TYPE);
+            die.push_ref(*elem);
+            for &d in dims {
+                if d > 0 {
+                    write_uleb128(&mut die.bytes, ABBREV_SUBRANGE_TYPE);
+                    write_uleb128(&mut die.bytes, (d as u64) - 1);
+                } else {
+                    write_uleb128(&mut die.bytes, ABBREV_SUBRANGE_TYPE_OPEN);
                 }
             }
+            die.bytes.push(0);
         }
-    }
-    // Any id with a remaining indeg > 0 sits on a cycle; emit
-    // it last in insertion order so the output still covers
-    // every used aggregate (the DIE's aggregate-field DW_AT_type
-    // ref4 falls through to None and the member is skipped).
-    for &id in used.keys() {
-        if !out.contains(&id) {
-            out.push(id);
+        TypeNode::Subroutine {
+            ret,
+            params,
+            variadic,
+        } => {
+            match ret {
+                Some(r) => {
+                    write_uleb128(&mut die.bytes, ABBREV_SUBROUTINE_TYPE);
+                    die.push_ref(*r);
+                }
+                None => write_uleb128(&mut die.bytes, ABBREV_SUBROUTINE_TYPE_VOID),
+            }
+            for p in params {
+                write_uleb128(&mut die.bytes, ABBREV_FORMAL_PARAMETER_TYPE);
+                die.push_ref(*p);
+            }
+            if *variadic {
+                write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_PARAMETERS);
+            }
+            die.bytes.push(0);
         }
+        TypeNode::Unspecified => write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_TYPE),
     }
-    out
+    die
 }
 
 /// c5's frame-slot index to native byte offset from the frame
@@ -1338,6 +1704,28 @@ enum TypeKey {
     Aggregate { id: usize, depth: u8 },
 }
 
+impl TypeKey {
+    /// The same type with `n` pointer levels removed, or `None` when
+    /// it does not have that many.
+    fn peel(self, n: u8) -> Option<TypeKey> {
+        match self {
+            TypeKey::Scalar { leaf, depth } => depth
+                .checked_sub(n)
+                .map(|depth| TypeKey::Scalar { leaf, depth }),
+            TypeKey::Aggregate { id, depth } => depth
+                .checked_sub(n)
+                .map(|depth| TypeKey::Aggregate { id, depth }),
+        }
+    }
+
+    /// True for the scalar `void` value type, which DWARF describes by
+    /// the absence of a `DW_AT_type` rather than by a DIE.
+    fn is_void_value(self) -> bool {
+        matches!(self, TypeKey::Scalar { leaf, depth: 0 }
+            if crate::c5::compiler::types::is_void_ty(leaf))
+    }
+}
+
 /// Split a c5 type tag into its catalog key. Mirror of the
 /// amalg-path `classify` band layout: each non-integer scalar
 /// type occupies a 100-wide band; pointer depth is encoded as
@@ -1347,7 +1735,7 @@ enum TypeKey {
 /// STRUCT_BASE + N*STRUCT_STRIDE)` range with one band per
 /// struct id.
 fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
-    const UNSIGNED_BIT: i64 = 1 << 30;
+    use crate::c5::compiler::types::{UNSIGNED_BIT, VOID_BIT};
     const TY_PTR: i64 = Ty::Ptr as i64;
     const BAND_SIZE: i64 = 100;
     const STRUCT_BASE: i64 = 1000;
@@ -1398,7 +1786,10 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
     } else {
         return None;
     };
-    let leaf = if unsigned { leaf | UNSIGNED_BIT } else { leaf };
+    // The unsigned and void markers ride the leaf so `unsigned char`
+    // and `char` get distinct DIEs and `void *` stays distinguishable
+    // from `unsigned char *`.
+    let leaf = if unsigned { leaf | UNSIGNED_BIT } else { leaf } | (type_tag & VOID_BIT);
     Some(TypeKey::Scalar { leaf, depth })
 }
 
@@ -1406,12 +1797,11 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
 /// attributes. Returns `None` for struct types and any tag
 /// outside the C99 scalar grid; the caller skips emitting a
 /// type DIE for those (debugger falls back to raw bytes).
-fn base_type_for_leaf(
-    leaf: i64,
-    _machine: super::Machine,
-    target: super::Target,
-) -> Option<BaseTypeDesc> {
-    const UNSIGNED_BIT: i64 = 1 << 30;
+fn base_type_for_leaf(leaf: i64, target: super::Target) -> Option<BaseTypeDesc> {
+    use crate::c5::compiler::types::{UNSIGNED_BIT, is_void_ty};
+    if is_void_ty(leaf) {
+        return None;
+    }
     let unsigned = (leaf & UNSIGNED_BIT) != 0;
     let bare = crate::c5::compiler::types::strip_unsigned(leaf);
     let desc = if bare == Ty::Bool as i64 {
@@ -1459,6 +1849,20 @@ fn base_type_for_leaf(
         BaseTypeDesc {
             name: if unsigned { "unsigned long" } else { "long" },
             byte_size,
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
+        }
+    } else if bare == Ty::LongLong as i64 {
+        BaseTypeDesc {
+            name: if unsigned {
+                "unsigned long long"
+            } else {
+                "long long"
+            },
+            byte_size: 8,
             encoding: if unsigned {
                 DW_ATE_UNSIGNED
             } else {
@@ -1530,7 +1934,10 @@ mod abbrev_golden {
              00000534000308021849133a0f3b0f000006240003080b0b3e0b0000070f000b0b49\
              13000008130103080b0f000009170103080b0f00000a0d0003084913380f00000b0d\
              00030849136b0f0d0f00000c180000000d0101491300000e21002f0f00000f040103\
-             080b0b000010280003081c0d000000"
+             080b0b000010280003081c0d00001113010b0f00001217010b0f000013130003083c\
+             19000014170003083c19000015150127194913000016150127190000170500491300\
+             001821000000190f000b0b00001a3b0000001b3400030849133f1902183a0f3b0f00\
+             001c34000308491302183a0f3b0f000000"
         );
     }
 }

@@ -702,19 +702,34 @@ CONFIG_IDENT = re.compile(
     r"RUSTC_VERSION\w*|BINDGEN_VERSION\w*|AS_VERSION|LD_VERSION|"
     r"PAHOLE_VERSION)=")
 
+# A symbol with a value, as opposed to a blank line, a section comment, or
+# the `# CONFIG_X is not set` form Kconfig writes for a visible unset one.
+CONFIG_SET = re.compile(r"^CONFIG_\w+=")
+
 
 def config_digest(tree: Path) -> tuple[str, str, list[str]]:
     """(exact digest, digest with toolchain identification removed, the
-    identification lines that were removed)."""
+    identification lines that were removed).
+
+    The second digest covers the symbols that are set, not the file's
+    text. A symbol left unset is written as an `is not set` comment only
+    while Kconfig considers it visible, and visibility can turn on the
+    linker's version -- so the badc-linked and reference-linked trees
+    write a different number of those comments for symbols that are
+    unset on both sides. Comparing the set symbols keeps the guarantee
+    the check exists for: equal digests mean equal configurations."""
     cfg = tree / ".config"
     if not cfg.is_file():
         die(f"{tree} has no .config; the trees must be configured")
     raw = cfg.read_bytes()
     ident, kept = [], []
     for line in raw.decode(errors="replace").splitlines():
-        (ident if CONFIG_IDENT.match(line) else kept).append(line)
+        if CONFIG_IDENT.match(line):
+            ident.append(line)
+        elif CONFIG_SET.match(line):
+            kept.append(line)
     return (hashlib.sha256(raw).hexdigest(),
-            hashlib.sha256("\n".join(kept).encode()).hexdigest(),
+            hashlib.sha256("\n".join(sorted(kept)).encode()).hexdigest(),
             ident)
 
 

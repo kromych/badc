@@ -484,6 +484,8 @@ impl Compiler {
                     self.pending.typedef_base_array_size = typedef_array;
                     self.pending.typedef_base_array_dims =
                         self.symbols[self.lex.curr_id_idx].array_dims.clone();
+                    self.pending.typedef_base_zero_len =
+                        self.symbols[self.lex.curr_id_idx].is_zero_len_array;
                 }
                 // Carry the typedef's explicit type alignment (GNU
                 // `aligned(N)`) so a declaration through it -- including a
@@ -545,6 +547,9 @@ impl Compiler {
             if self.pending.attr_vector_size > 0 {
                 let n = core::mem::take(&mut self.pending.attr_vector_size);
                 bt = self.make_vector_type(bt, n);
+            }
+            if let Some(m) = self.pending.attr_mode.take() {
+                bt = self.apply_mode_to_type(bt, m)?;
             }
 
             // C99 6.7.1: declaration specifiers may appear in any order, so a
@@ -656,6 +661,9 @@ impl Compiler {
                     let n = core::mem::take(&mut self.pending.attr_vector_size);
                     ty = self.make_vector_type(ty, n);
                 }
+                if let Some(m) = self.pending.attr_mode.take() {
+                    ty = self.apply_mode_to_type(ty, m)?;
+                }
                 // Capture per this declarator before any nested parse can
                 // overwrite it (a later parameter of function type would
                 // re-set it). A bare function-type declarator is a function
@@ -696,16 +704,24 @@ impl Compiler {
                 // A fixed dimension (`> 0`) sizes the object; a deferred array
                 // typedef (`typedef T X[]`, carried as `-1`) makes the object
                 // a deferred array whose size the initializer fixes.
+                let mut zero_len_array = self.pending.declarator_zero_len_array;
                 if typedef_dim != 0
                     && array_size == 0
                     && self.pending.declarator_leading_ptr_count == 0
                 {
                     array_size = typedef_dim;
+                    zero_len_array = self.pending.typedef_base_zero_len;
                     self.apply_typedef_array_dims(id_idx);
                 }
                 self.ty = ty;
                 let prior_array_size = self.symbols[id_idx].array_size;
                 self.symbols[id_idx].array_size = array_size;
+                // A zero-length array (`T x[0]`, or an alias of one) is a
+                // complete type of size 0; the `-1` count it shares with
+                // the deferred `T x[]` form cannot tell them apart.
+                if array_size < 0 {
+                    self.symbols[id_idx].is_zero_len_array = zero_len_array;
+                }
                 // A `const`-qualified plain integer scalar folds its value
                 // in later constant expressions (read back from `.data`).
                 self.symbols[id_idx].is_const_qualified = self.pending.base_is_const

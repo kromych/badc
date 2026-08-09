@@ -1114,6 +1114,11 @@ impl Compiler {
                                 self.symbols[self.lex.curr_id_idx].name.as_str(),
                                 "vector_size" | "__vector_size__"
                             );
+                        let is_mode = self.lex.tk == Token::Id
+                            && matches!(
+                                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                                "mode" | "__mode__"
+                            );
                         let is_cleanup = self.lex.tk == Token::Id
                             && matches!(
                                 self.symbols[self.lex.curr_id_idx].name.as_str(),
@@ -1169,6 +1174,15 @@ impl Compiler {
                                 return Err(
                                     self.compile_err("`)` expected after `vector_size` operand")
                                 );
+                            }
+                            self.next()?;
+                        } else if is_mode && self.lex.tk == '(' {
+                            // GCC `mode(M)`: the declared type becomes the
+                            // integer or floating type of machine mode `M`.
+                            self.next()?; // `(`
+                            self.pending.attr_mode = Some(self.parse_machine_mode()?);
+                            if self.lex.tk != ')' {
+                                return Err(self.compile_err("`)` expected after `mode` operand"));
                             }
                             self.next()?;
                         } else if is_section && self.lex.tk == '(' {
@@ -1359,6 +1373,37 @@ impl Compiler {
             bytes.pop();
         }
         Ok(alloc::string::String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    /// Parse the operand of `__attribute__((mode(M)))` and return the
+    /// mode's `(byte width, is floating)`. The operand is an identifier;
+    /// GCC accepts the mode names with and without the `__M__` spelling.
+    /// An unrecognised name is an error, as in GCC -- a silently dropped
+    /// mode would change the layout of every aggregate holding the type.
+    fn parse_machine_mode(&mut self) -> Result<(u8, bool), C5Error> {
+        if self.lex.tk != Token::Id {
+            return Err(self.compile_err("`mode` operand must be a machine mode name"));
+        }
+        let raw = self.symbols[self.lex.curr_id_idx].name.clone();
+        let name = raw.trim_matches('_');
+        // Integer modes are named by byte width; the aliases follow the
+        // target's data model (LP64 / LLP64 both make `word` and
+        // `pointer` 8 bytes on the supported targets).
+        let spec = match name {
+            "QI" | "byte" => Some((1u8, false)),
+            "HI" => Some((2, false)),
+            "SI" => Some((4, false)),
+            "DI" | "word" | "pointer" | "unwind_word" => Some((8, false)),
+            "TI" => Some((16, false)),
+            "SF" => Some((4, true)),
+            "DF" => Some((8, true)),
+            _ => None,
+        };
+        let Some(spec) = spec else {
+            return Err(self.compile_err(format!("unknown machine mode `{raw}`")));
+        };
+        self.next()?;
+        Ok(spec)
     }
 
     /// Parse the optional `(N)` priority argument of a
@@ -1630,6 +1675,8 @@ impl Compiler {
                 self.pending.typedef_base_array_size = typedef_array;
                 self.pending.typedef_base_array_dims =
                     self.symbols[self.lex.curr_id_idx].array_dims.clone();
+                self.pending.typedef_base_zero_len =
+                    self.symbols[self.lex.curr_id_idx].is_zero_len_array;
             }
             // Carry the typedef's explicit type alignment (GNU
             // `aligned(N)` on the alias) so a struct field / object /
@@ -1677,6 +1724,9 @@ impl Compiler {
         if self.pending.attr_vector_size > 0 {
             let n = core::mem::take(&mut self.pending.attr_vector_size);
             bt = self.make_vector_type(bt, n);
+        }
+        if let Some(m) = self.pending.attr_mode.take() {
+            bt = self.apply_mode_to_type(bt, m)?;
         }
 
         Ok(apply_qual_bits(bt, qual_bits))

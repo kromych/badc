@@ -125,6 +125,7 @@ impl Compiler {
             align: 1,
             explicit_align: 0,
             fields: Vec::new(),
+            anon_bitfields: Vec::new(),
             is_union: false,
             is_complete: false,
             is_vector: false,
@@ -135,6 +136,33 @@ impl Compiler {
             scope.push((name.to_string(), id));
         }
         id
+    }
+
+    /// Rewrite `ty` into the type named by a `__attribute__((mode(M)))`
+    /// spec of `(bytes, is_float)`, keeping the operand's signedness.
+    /// Only scalar operands have a machine mode; anything else is the
+    /// error GCC reports as "applied to inappropriate type".
+    pub(super) fn apply_mode_to_type(&mut self, ty: i64, m: (u8, bool)) -> Result<i64, C5Error> {
+        let (bytes, is_float) = m;
+        let floating = super::types::is_floating_scalar(ty);
+        if is_pointer_ty(ty) || (is_struct_ty(ty) && !self.is_int128_ty(ty)) || is_float != floating
+        {
+            return Err(self.compile_err("`mode` applied to an inappropriate type"));
+        }
+        if is_float {
+            return Ok(match bytes {
+                4 => Ty::Float as i64,
+                _ => Ty::Double as i64,
+            });
+        }
+        let unsigned = ty & UNSIGNED_BIT;
+        Ok(match bytes {
+            1 => Ty::Char as i64 | unsigned,
+            2 => Ty::Short as i64 | unsigned,
+            4 => Ty::Int as i64 | unsigned,
+            8 => Ty::LongLong as i64 | unsigned,
+            _ => self.builtin_int128_tag() | unsigned,
+        })
     }
 
     /// True when the current identifier is a spelling of the GCC 128-bit
@@ -187,6 +215,7 @@ impl Compiler {
             align: 16,
             explicit_align: 0,
             fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
+            anon_bitfields: Vec::new(),
             is_complete: true,
             is_union: false,
             is_vector: false,
@@ -272,6 +301,7 @@ impl Compiler {
             align: 8,
             explicit_align: 0,
             fields: fields.iter().map(field).collect(),
+            anon_bitfields: Vec::new(),
             is_complete: true,
             is_union: false,
             is_vector: false,
@@ -358,6 +388,7 @@ impl Compiler {
             align: (n_bytes as usize).min(8),
             explicit_align: 0,
             fields: alloc::vec![field],
+            anon_bitfields: Vec::new(),
             is_complete: true,
             is_union: false,
             is_vector: true,
@@ -425,6 +456,7 @@ impl Compiler {
             align: self.align_of_type(elem_ty),
             explicit_align: 0,
             fields: alloc::vec![field],
+            anon_bitfields: Vec::new(),
             is_complete: true,
             is_union: false,
             is_vector: false,

@@ -113,6 +113,12 @@ pub struct StructDef {
     /// request when deciding on the realigned frame region.
     pub explicit_align: u32,
     pub fields: Vec<StructField>,
+    /// Unnamed bit-fields, in declaration order. C99 6.7.2.1p11 makes
+    /// them members that reserve storage, but they have no name, so
+    /// they are not addressable and do not appear in `fields`. The
+    /// post-body `packed` re-lay replays them from here to reproduce
+    /// the placement the natural pass computed.
+    pub anon_bitfields: Vec<AnonBitfield>,
     /// `true` for `union` definitions. The only effect on layout
     /// is that every field sits at offset 0 and the aggregate
     /// size is `max(field size)` instead of the sum. Member
@@ -138,6 +144,18 @@ pub struct StructDef {
     /// the last dereference decays to the element pointer (C99 6.3.2.1p3)
     /// instead of producing the depth-0 value.
     pub is_array: bool,
+}
+
+/// One unnamed bit-field of an aggregate (`int :N;`). `before` is the
+/// index in `StructDef::fields` of the first named member declared
+/// after it, `unit` the declared type's size in bytes, and `width` the
+/// requested bit count -- 0 for the C99 6.7.2.1p11 form that only ends
+/// the current storage unit.
+#[derive(Debug, Clone, Copy)]
+pub struct AnonBitfield {
+    pub before: u32,
+    pub width: u32,
+    pub unit: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -591,6 +609,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// meaningful while that count is non-zero, so the count's
     /// clear-discipline covers this field too.
     pub typedef_base_array_dims: alloc::vec::Vec<i64>,
+    /// Set alongside `typedef_base_array_size == -1` when the alias is a
+    /// zero-length array (`typedef T A[0]`) rather than an incomplete
+    /// one (`typedef T A[]`). Both carry the same `-1` count and both
+    /// occupy no storage; only the zero-length form is a complete type,
+    /// so `sizeof` through it is 0 instead of a diagnostic.
+    pub typedef_base_zero_len: bool,
     /// Count of leading `*` levels the most recent declarator added.
     /// A use of an array typedef folds the typedef's dimension onto the
     /// object (`typedef T A[N]; A x;` -> `x` is `T[N]`) unless the
@@ -879,6 +903,11 @@ pub(in crate::c5::compiler) struct Pending {
     /// type of the declaration is rebuilt into a GCC vector type of `N /
     /// sizeof(element)` lanes (modeled as an N-byte aggregate).
     pub attr_vector_size: i64,
+    /// `__attribute__((mode(M)))`: the machine mode the declaration's type
+    /// is rewritten to, as `(bytes, is_float)`. `None` when absent. GCC
+    /// applies it to the base type of an enum and to the declared type of
+    /// an object, member, or typedef alias.
+    pub attr_mode: Option<(u8, bool)>,
     /// A consumed `__declspec(thread)`. Read by the declaration parse to mark
     /// the declared object thread-local (the storage class `_Thread_local`
     /// reaches the same flag through the keyword path).
@@ -947,6 +976,7 @@ pub(super) struct DeclSpecifiers {
     attr_align: i64,
     type_align: i64,
     attr_vector_size: i64,
+    attr_mode: Option<(u8, bool)>,
 }
 
 impl Pending {
@@ -964,6 +994,7 @@ impl Pending {
             attr_align: core::mem::take(&mut self.attr_align),
             type_align: core::mem::take(&mut self.type_align),
             attr_vector_size: core::mem::take(&mut self.attr_vector_size),
+            attr_mode: self.attr_mode.take(),
         }
     }
 
@@ -978,6 +1009,7 @@ impl Pending {
         self.attr_align = s.attr_align;
         self.type_align = s.type_align;
         self.attr_vector_size = s.attr_vector_size;
+        self.attr_mode = s.attr_mode;
     }
 
     /// Detach the declared-type carriers seeded by a base-type or
@@ -997,6 +1029,7 @@ impl Pending {
             fn_ptr_param_types: self.fn_ptr_param_types.take(),
             typedef_base_array_size: core::mem::take(&mut self.typedef_base_array_size),
             typedef_base_array_dims: core::mem::take(&mut self.typedef_base_array_dims),
+            typedef_base_zero_len: core::mem::take(&mut self.typedef_base_zero_len),
             typeof_operand_was_array: core::mem::take(&mut self.typeof_operand_was_array),
             type_align: core::mem::take(&mut self.type_align),
         }
@@ -1012,6 +1045,7 @@ impl Pending {
         self.fn_ptr_param_types = s.fn_ptr_param_types;
         self.typedef_base_array_size = s.typedef_base_array_size;
         self.typedef_base_array_dims = s.typedef_base_array_dims;
+        self.typedef_base_zero_len = s.typedef_base_zero_len;
         self.typeof_operand_was_array = s.typeof_operand_was_array;
         self.type_align = s.type_align;
     }
@@ -1029,6 +1063,7 @@ pub(super) struct DeclTypeCarriers {
     typedef_fn_proto: Option<(usize, bool)>,
     fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
     typedef_base_array_size: i64,
+    typedef_base_zero_len: bool,
     typedef_base_array_dims: alloc::vec::Vec<i64>,
     typeof_operand_was_array: bool,
     type_align: i64,
@@ -1051,6 +1086,7 @@ impl Default for Pending {
             init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
+            typedef_base_zero_len: false,
             typedef_base_array_dims: alloc::vec::Vec::new(),
             declarator_leading_ptr_count: 0,
             declarator_outer_const: false,
@@ -1092,6 +1128,7 @@ impl Default for Pending {
             type_align: 0,
             attr_packed: false,
             attr_vector_size: 0,
+            attr_mode: None,
             attr_thread_local: false,
             attr_dllexport: false,
             attr_constructor: false,

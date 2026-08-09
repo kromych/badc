@@ -93,7 +93,21 @@ impl Compiler {
             // (`enum E { ... } __attribute__((packed))`), the position GCC
             // and Clang accept most often.
             packed = self.skip_attribute_specifiers()? || packed;
-            let underlying = if packed {
+            let underlying = if let Some(m) = self.pending.attr_mode.take() {
+                // `mode(M)` fixes the enum's width outright; the
+                // enumerators must fit, as GCC requires.
+                let ty = self.apply_mode_to_type(enum_compatible_ty(min, max), m)?;
+                let bits = self.size_of_type(ty) as u32 * 8;
+                let fits = if min < 0 {
+                    bits >= 64 || (min >= -(1i64 << (bits - 1)) && max < (1i64 << (bits - 1)))
+                } else {
+                    bits >= 64 || max < (1i64 << bits)
+                };
+                if !fits {
+                    return Err(self.compile_err("specified mode too small for enumerated values"));
+                }
+                ty
+            } else if packed {
                 Self::packed_enum_underlying_ty(min, max)
             } else {
                 enum_compatible_ty(min, max)

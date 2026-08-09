@@ -128,6 +128,15 @@ impl Target {
         matches!(self, Target::LinuxX64 | Target::WindowsX64)
     }
 
+    /// Whether an unnamed bit-field's declared type raises the
+    /// alignment of the aggregate containing it. C99 6.7.2.1 leaves
+    /// this to the implementation; AArch64 (AAPCS64) inherits the
+    /// alignment, x86_64 does not. A named bit-field always does on
+    /// both.
+    pub fn align_anon_bitfield(self) -> bool {
+        self.is_aarch64()
+    }
+
     /// Whether plain `char` is signed. C99 6.2.5p15 leaves the
     /// signedness of unqualified `char` implementation-defined; to
     /// interoperate with the host toolchain and match the platform

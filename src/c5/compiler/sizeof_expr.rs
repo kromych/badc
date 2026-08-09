@@ -135,8 +135,12 @@ impl Compiler {
                 array_count *= n;
             }
             let elem_size = self.size_of_type(self.ty) as i64;
+            let zero_len = core::mem::take(&mut self.pending.typedef_base_zero_len);
             let base = if typedef_dim > 0 && !decayed_to_ptr {
                 typedef_dim * elem_size
+            } else if typedef_dim < 0 && zero_len && !decayed_to_ptr {
+                // `typedef T A[0]`: a complete type of size 0.
+                0
             } else {
                 elem_size
             };

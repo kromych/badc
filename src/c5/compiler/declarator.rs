@@ -769,6 +769,11 @@ impl Compiler {
                     if array_size > 0 {
                         array_size *= typedef_dim;
                     }
+                } else if typedef_dim < 0 && self.pending.typedef_base_zero_len {
+                    // An array of a zero-length-array alias has zero
+                    // elements whatever the declarator's own bounds are.
+                    array_size = -1;
+                    self.pending.declarator_zero_len_array = true;
                 }
             }
             // Deferred-outer multi-dim arrays (`T arr[][N]`,

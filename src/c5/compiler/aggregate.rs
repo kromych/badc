@@ -23,7 +23,7 @@ use super::types::{
     UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_value_ty, round_up, struct_id_of,
     struct_ty_for,
 };
-use super::{Compiler, StructDef, StructField};
+use super::{AnonBitfield, Compiler, StructDef, StructField};
 
 impl Compiler {
     /// Parse a `struct Name { ... }` / `union Name { ... }` body.
@@ -110,6 +110,7 @@ impl Compiler {
                     align: 1,
                     explicit_align: 0,
                     fields: Vec::new(),
+                    anon_bitfields: Vec::new(),
                     is_union,
                     is_complete: false,
                     is_vector: false,
@@ -320,10 +321,12 @@ impl Compiler {
                 // the count so the field-binding code below can
                 // make `jmp_buf b;` lay out `long b[64];`.
                 let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
-                if typedef_array > 0 {
+                if typedef_array != 0 {
                     self.pending.typedef_base_array_size = typedef_array;
                     self.pending.typedef_base_array_dims =
                         self.symbols[self.lex.curr_id_idx].array_dims.clone();
+                    self.pending.typedef_base_zero_len =
+                        self.symbols[self.lex.curr_id_idx].is_zero_len_array;
                 }
                 // Carry the typedef's explicit type alignment so a field
                 // declared with it lays out on the requested boundary
@@ -526,6 +529,15 @@ impl Compiler {
 
                 if let Some(width) = anon_bitfield_width {
                     let unit = self.size_of_type(field_base).max(1);
+                    // Recorded so the post-body `packed` re-lay reproduces
+                    // the same placement: the member has no name, so
+                    // `fields` cannot carry it.
+                    let before = self.structs[struct_id].fields.len() as u32;
+                    self.structs[struct_id].anon_bitfields.push(AnonBitfield {
+                        before,
+                        width,
+                        unit: unit.min(u8::MAX as usize) as u8,
+                    });
                     if width == 0 {
                         // C99 6.7.2.1p11: a width-zero bitfield aligns
                         // the next field to the start of the next
@@ -538,7 +550,11 @@ impl Compiler {
                             offset = offset.max(bf_bit_cursor / 8);
                         }
                         bf_active = false;
-                    } else if !is_union {
+                    } else if is_union {
+                        // A union member occupies its own storage from
+                        // offset 0; the bits round up to whole bytes.
+                        offset = offset.max((width as usize).div_ceil(8));
+                    } else {
                         place_bitfield(
                             &mut offset,
                             &mut bf_active,
@@ -546,10 +562,21 @@ impl Compiler {
                             unit,
                             width,
                         );
-                        let a = unit.min(16);
-                        if a > struct_align {
-                            struct_align = a;
-                        }
+                    }
+                    // Whether an unnamed bit-field's declared type raises
+                    // the aggregate's alignment is target-defined. Where
+                    // it does, a non-zero width is still clamped by
+                    // `packed` / `#pragma pack`, while the width-zero form
+                    // keeps its boundary regardless.
+                    if self.target.align_anon_bitfield() {
+                        let cap = if width == 0 {
+                            16
+                        } else if packed {
+                            1
+                        } else {
+                            self.lex.current_pack()
+                        };
+                        struct_align = struct_align.max(unit.min(16).min(cap));
                     }
                     if self.lex.tk == ',' {
                         self.next()?;
@@ -582,6 +609,9 @@ impl Compiler {
                 // from raising the aggregate's alignment), independent of
                 // a struct-level `packed`.
                 self.skip_attribute_specifiers()?;
+                if let Some(m) = self.pending.attr_mode.take() {
+                    field_ty = self.apply_mode_to_type(field_ty, m)?;
+                }
                 let field_packed = core::mem::take(&mut self.pending.attr_packed);
                 let m_align = self.take_member_align()?;
                 // Alignment for this declarator only (a comma-list peer
@@ -608,7 +638,12 @@ impl Compiler {
                     typedef_dim,
                     type_align_override as i64,
                 )?;
-                if typedef_dim > 0
+                // `!= 0` rather than `> 0`: the `-1` count covers both the
+                // zero-length (`typedef T A[0]`) and deferred
+                // (`typedef T A[]`) aliases, and a member of either
+                // occupies no storage while still placing at the element
+                // type's alignment.
+                if typedef_dim != 0
                     && field_array_size == 0
                     && self.pending.declarator_leading_ptr_count == 0
                 {
@@ -882,9 +917,25 @@ impl Compiler {
         // rejected at its declaration -- the frame uses 8-byte slots and
         // does not realign. Struct layout, static locals and globals honor
         // the full range.
+        // The boundary a width-zero unnamed bit-field imposes is not
+        // subject to `packed` / `#pragma pack` on the targets that align
+        // to unnamed bit-fields at all.
+        let anon_zero_align = if self.target.align_anon_bitfield() {
+            self.structs[struct_id]
+                .anon_bitfields
+                .iter()
+                .filter(|a| a.width == 0)
+                .map(|a| a.unit as usize)
+                .max()
+                .unwrap_or(1)
+        } else {
+            1
+        };
         let struct_align = struct_align
             .min(super::MAX_STATIC_ALIGN)
-            .min(self.lex.current_pack());
+            .min(self.lex.current_pack())
+            .max(anon_zero_align)
+            .min(super::MAX_STATIC_ALIGN);
         // Pad the struct's tail up to its alignment so consecutive
         // elements of an array preserve every field's natural
         // alignment. A struct with no named member -- empty, or holding
@@ -939,10 +990,32 @@ impl Compiler {
         }
         let n = self.structs[struct_id].fields.len();
         let mut bit_cursor = 0usize;
-        let mut max_explicit_align = 1usize;
+        // An unnamed bit-field of width zero keeps its declared type's
+        // boundary on the targets that align to unnamed bit-fields at
+        // all, and `packed` does not clamp it.
+        let mut max_explicit_align = if self.target.align_anon_bitfield() {
+            self.structs[struct_id]
+                .anon_bitfields
+                .iter()
+                .filter(|a| a.width == 0)
+                .map(|a| (a.unit as usize).min(16))
+                .max()
+                .unwrap_or(1)
+        } else {
+            1
+        };
         let mut bitfields: Vec<(usize, usize)> = Vec::new();
+        let anon = self.structs[struct_id].anon_bitfields.clone();
+        let mut anon_pos = 0usize;
         let mut i = 0usize;
         while i < n {
+            // Replay the unnamed bit-fields declared before this member
+            // so the packed layout reserves the same bits the natural
+            // one did (C99 6.7.2.1p11).
+            while anon_pos < anon.len() && anon[anon_pos].before as usize <= i {
+                bit_cursor = repack_anon_bitfield(bit_cursor, &anon[anon_pos]);
+                anon_pos += 1;
+            }
             // Fields promoted from one anonymous union (C11 6.7.2.1p13)
             // keep the relative offsets the natural layout already gave
             // them (union arms overlap; a nested anonymous struct's members
@@ -1015,7 +1088,12 @@ impl Compiler {
             bit_cursor = (offset + storage) * 8;
             i += 1;
         }
-        let size = bit_cursor.div_ceil(8).max(1);
+        // Unnamed bit-fields trailing the last named member.
+        while anon_pos < anon.len() {
+            bit_cursor = repack_anon_bitfield(bit_cursor, &anon[anon_pos]);
+            anon_pos += 1;
+        }
+        let size = bit_cursor.div_ceil(8);
         // Each bitfield's addressable unit is the smallest 1/2/4/8-byte
         // window covering its bits, slid back when it would extend past
         // the struct's tail (a packed struct has no tail padding to
@@ -1068,13 +1146,18 @@ impl Compiler {
             };
             size = size.max(offset + storage);
         }
+        // An unnamed bit-field is a union member too: it occupies its
+        // own storage from offset 0.
+        for a in &self.structs[struct_id].anon_bitfields {
+            size = size.max((a.width as usize).div_ceil(8));
+        }
         self.structs[struct_id].align = max_explicit_align;
         self.structs[struct_id].explicit_align = if max_explicit_align > 1 {
             max_explicit_align as u32
         } else {
             0
         };
-        self.structs[struct_id].size = round_up(size.max(1), max_explicit_align);
+        self.structs[struct_id].size = round_up(size, max_explicit_align);
     }
 
     /// Byte storage a non-bitfield member occupies in a packed layout:
@@ -1101,6 +1184,18 @@ impl Compiler {
 /// advances `offset` to the highest byte the run reaches, and returns
 /// the field's `(byte offset of its addressable unit, bit offset within
 /// that unit)`.
+/// Advance a packed layout's bit cursor over one unnamed bit-field: a
+/// non-zero width reserves exactly that many bits (packing leaves no
+/// storage-unit padding), a zero width rounds up to the next boundary of
+/// the declared type.
+fn repack_anon_bitfield(bit_cursor: usize, a: &AnonBitfield) -> usize {
+    if a.width == 0 {
+        round_up(bit_cursor, (a.unit as usize).max(1) * 8)
+    } else {
+        bit_cursor + a.width as usize
+    }
+}
+
 fn place_bitfield(
     offset: &mut usize,
     active: &mut bool,

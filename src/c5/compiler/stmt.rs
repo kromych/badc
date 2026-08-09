@@ -420,6 +420,9 @@ impl Compiler {
                 let n = core::mem::take(&mut self.pending.attr_vector_size);
                 ty = self.make_vector_type(ty, n);
             }
+            if let Some(m) = self.pending.attr_mode.take() {
+                ty = self.apply_mode_to_type(ty, m)?;
+            }
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let bare_fn_type = core::mem::take(&mut self.pending.bare_function_type_declarator);
             // C99 function-type typedef: `typedef RET NAME(args);`

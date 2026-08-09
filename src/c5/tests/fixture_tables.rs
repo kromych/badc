@@ -68,6 +68,9 @@
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("anon_bitfield_reserves_bits.c", 0),
+    ("attribute_mode.c", 0),
+    ("flex_array_only_member.c", 0),
     ("post_inline_dead_data_repack.c", 0),
     ("post_inline_import_survives_repack.c", 0),
     ("overaligned_data_placement.c", 0),
@@ -631,6 +634,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // static initializer (a real-world descriptor-table shape).
     ("compound_literal_pointer_field.c", 0),
     // GCC zero-length array `T x[0]` as a local (compile-time-assert idiom).
+    ("zero_length_array_typedef.c", 0),
     ("zero_length_local_array.c", 0),
     // GCC 128-bit integer as a 16-byte type: sizeof, struct/array layout
     // (asm/sigcontext.h shape), by-value copy.
@@ -1023,6 +1027,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
 /// stay in sync because both backends should faithfully execute the
 /// same fixtures; if they drift, one of them has a bug.
 pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
+    ("anon_bitfield_reserves_bits.c", 0),
+    ("attribute_mode.c", 0),
+    ("flex_array_only_member.c", 0),
     ("post_inline_dead_data_repack.c", 0),
     ("post_inline_import_survives_repack.c", 0),
     ("overaligned_data_placement.c", 0),
@@ -1363,6 +1370,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("flex_array_member_static_init.c", 0),
+    ("zero_length_array_typedef.c", 0),
     ("zero_length_local_array.c", 0),
     ("attribute_cleanup.c", 0),
     ("array_compound_literal_static_init.c", 0),
@@ -1686,6 +1694,9 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
+    ("anon_bitfield_reserves_bits.c", 0),
+    ("attribute_mode.c", 0),
+    ("flex_array_only_member.c", 0),
     ("post_inline_dead_data_repack.c", 0),
     ("post_inline_import_survives_repack.c", 0),
     ("overaligned_data_placement.c", 0),
@@ -2077,6 +2088,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("flex_array_member_static_init.c", 0),
+    ("zero_length_array_typedef.c", 0),
     ("zero_length_local_array.c", 0),
     ("attribute_cleanup.c", 0),
     ("array_compound_literal_static_init.c", 0),
@@ -2326,6 +2338,9 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// Subset of the cross-arch fixture corpus that doesn't lean on
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
+    ("anon_bitfield_reserves_bits.c", 0),
+    ("attribute_mode.c", 0),
+    ("flex_array_only_member.c", 0),
     ("vla_basic_sum.c", 0),
     ("vla_runtime_sizeof.c", 0),
     ("vla_size_from_arg.c", 0),
@@ -2580,6 +2595,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("flex_array_member_static_init.c", 0),
+    ("zero_length_array_typedef.c", 0),
     ("zero_length_local_array.c", 0),
     ("attribute_cleanup.c", 0),
     ("array_compound_literal_static_init.c", 0),
@@ -2797,6 +2813,9 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
+    ("anon_bitfield_reserves_bits.c", 0),
+    ("attribute_mode.c", 0),
+    ("flex_array_only_member.c", 0),
     ("vla_basic_sum.c", 0),
     ("vla_runtime_sizeof.c", 0),
     ("vla_size_from_arg.c", 0),
@@ -3054,6 +3073,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("flex_array_member_static_init.c", 0),
+    ("zero_length_array_typedef.c", 0),
     ("zero_length_local_array.c", 0),
     ("attribute_cleanup.c", 0),
     ("array_compound_literal_static_init.c", 0),
@@ -3219,6 +3239,9 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     // parameter list not in scope) must bind an address to the spliced
     // body's parameter cell. Native-only: the SSA interpreter's own call
     // path does not model the value form.
+    ("anon_bitfield_reserves_bits.c", 0),
+    ("attribute_mode.c", 0),
+    ("flex_array_only_member.c", 0),
     ("struct_arg_value_form_inline.c", 0),
     ("post_inline_dead_data_repack.c", 0),
     ("post_inline_import_survives_repack.c", 0),
@@ -3591,6 +3614,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("static_function_pointer_identity.c", 0),
     ("flexible_array_member.c", 0),
+    ("zero_length_array_typedef.c", 0),
     ("zero_length_local_array.c", 0),
     ("wmem_functions.c", 0),
     ("posix_module_headers.c", 0),

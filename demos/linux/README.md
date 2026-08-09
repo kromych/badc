@@ -536,25 +536,39 @@ defect:
 
 | | `badc` | `fail` | `badc-asm` | `gas` | image | wall |
 |---|---|---|---|---|---|---|
-| x86_64, Debian 13 | 138 | 5015 | 58 | 46 | none | 3m43s (12 jobs) |
-| aarch64, Fedora 44 | 179 | 17546 | 87 | 8 | none | 10m42s (8 jobs) |
+| x86_64, Debian 13 | 5100 | 54 | 64 | 40 | none | 8m19s (12 jobs) |
+| aarch64, Fedora 44 | 17682 | 45 | 89 | 7 | none | 18m28s (8 jobs) |
 
-Ranked by normalized signature, one gap is 5014 of the 5015 x86_64 failures
-and 17544 of the 17546 aarch64 ones: the GNU asm-label symbol rename in
-`include/linux/fortify-string.h` (issue #714). `linux/string.h` includes that
-header, so nearly every unit sees it, and the units that compiled are the ones
-that do not. The header is compiled only under `CONFIG_FORTIFY_SOURCE`, which
-has no `default y` and which no arch defconfig sets, while both distributions
-enable it -- that single option is what separates the defconfig corpus from a
-distribution one.
+Two constructs the distribution configuration reaches and the defconfig one
+does not accounted for nearly the whole corpus until recently: the GNU
+asm-label symbol rename and the fortified `strlen` macro, both in
+`include/linux/fortify-string.h`, which `linux/string.h` includes and which is
+compiled only under `CONFIG_FORTIFY_SOURCE`. That option has no `default y`
+and no arch defconfig sets it, while both distributions enable it -- that
+single difference is what separates the defconfig corpus from a distribution
+one.
 
-The remainder is four defects, one unit each: #718 (x86_64, `%c` on a cast
-address constant), #717 and #716 (aarch64, an initializer designator overcount
-and a compound assignment on a vector lvalue), and #715 (aarch64, a `.bss`
-allocation that the vDSO's linker script discards). #715 stops the arm64 build
-at `vdso_prepare`, which is a hard prerequisite, so measuring past it needs
-`--fallback` on the two `arch/arm64/kernel/vdso` C units; that is what the two
-`fallback` units in the aarch64 row are.
+Ranked by normalized signature, what is left is:
+
+| units | signature | arch |
+|---|---|---|
+| 36 | `.global` in an inline-asm template (#722) | x86_64 |
+| 31 | `.size sym, .-sym` across asm statements (#724) | aarch64 |
+| 5 | inline asm: non-constant section data value | x86_64 |
+| 4 | inline asm: unsupported instruction `encls` | x86_64 |
+| 3 | `unknown function printk` | aarch64 |
+| 2 | `expected , or ; after declarator` | aarch64 |
+| 18 | 16 further signatures, one unit each | both |
+
+The `arch` column records where a configuration reaches the construct, not a
+target restriction: both inline-asm classes are rejected on either
+architecture, and each distribution's configuration selects a different set of
+subsystems that emit them.
+
+#715 (aarch64, a `.bss` allocation the vDSO's linker script discards) stops
+the arm64 build at `vdso_prepare`, which is a hard prerequisite, so measuring
+past it needs `--fallback` on `arch/arm64/kernel/vdso/vgetrandom.c`; that is
+the one `fallback` unit in the aarch64 row.
 
 No `vmlinux` is produced on either architecture, so the package and vm phases
 are unreachable and nothing is said here about installing or booting a

@@ -13,76 +13,86 @@ and SSA interpreter.
 
 ## What it can do
 
-**Compile the Linux kernel.** Every C translation unit of a Linux 7.1.6
-`defconfig` kernel on x86_64 and aarch64 is badc's, with zero fallbacks to
-another compiler -- 2921 and 4434 units for the kernel image, 2953 and 10489
+### Compile the Linux kernel
+
+Every C translation unit of a Linux 7.1.6
+`defconfig` kernel on x86_64 and aarch64 is built by `badc` in the CI, this is 2921 and
+4434 units for the kernel image, 2953 and 10489
 with the modules. Both kernels boot, checked by boot markers plus in-kernel
 procfs/sysfs self-checks. All
 `defconfig` modules build and load, with per-module verdicts identical to a
-gcc-built kernel. `LD=badc` links the kernel through kbuild's own
-`link-vmlinux.sh` on both architectures, and those kernels boot too; kallsyms
-converges in two passes, and the x86 KASLR relocation table built from badc's
-`--emit-relocs` output is byte-identical to GNU ld's. The kernel packages as a
-`.deb` and an `.rpm`, installs into stock Debian 13 and Fedora 44 images, and
-reaches systemd multi-user with modules autoloading; `/proc/version` names
-badc.
+gcc-built kernel. `badc` links the kernel, too, and those kernels boot too as well.
+The kernel packages as a `.deb` and an `.rpm`, installs into stock Debian 13 and
+Fedora 44 images, and reaches systemd multi-user with modules autoloading,
+`/proc/version` names `badc`.
 
-Still gas's: every `.S` unit. Still GNU ld's within kbuild: the i386 links, the
-vDSOs' dynamic metadata, one scriptless probe.
-[Scope statement](./doc/linux-kernel.md).
+`gas` helps with assembling although `badc` is getting very close to replacing it
+in the kernel build. `ld` is used to link the 32-bit i386 oibject files and the
+vDSOs' dynamic metadata. See for more [here](./doc/linux-kernel.md).
 
-**Target five platforms from any host**, emitting Mach-O, ELF, or PE32+
-directly:
+### Target five platforms from any host
+
+`badc` emits Mach-O, ELF, or PE32+ directly:
 
 * macOS (`ARM64`),
 * Linux (`ARM64`, `x86_64`),
 * Windows ({`ARM64`, `x86_64`} x {`console`, `GUI`, `NT`, `driver`}).
 
-EFI images too, and `--freestanding` drops the startup runtime.
+EFI images are supported as well. `--freestanding` drops the startup runtime.
 
-**Ship as one binary.** Headers and runtime are embedded; `--install` writes
-them to a path to override. No `ld` / `lld` / `link.exe` dependency -- badc's
-linker also stands in for `LD=` in an existing build. No assembler dependency
-for C sources.
+### Ship as one binary
 
-**Optimize.** `-O` runs SSA passes over a graph-coloring register allocator and
+Headers and runtime are embedded; `--install` writes
+them to a path to override. There is no `ld` / `lld` / `link.exe` dependency as badc's
+linker also can stand in for `LD=` in an existing build. Assembly is supported
+in standalone files and inline.
+
+### Optimize
+
+`-O` runs SSA passes over a graph-coloring register allocator and
 produces code faster than `clang -O0`, especially on ARM64. CI compares against
 tcc and clang/MSVC on every push.
 
-**Emit debug info.** `-g` writes DWARF for lldb / gdb / rr and the profilers.
+### Emit debug info
 
-**Run C without writing a binary.** `--jit` lowers in-process and calls `main`
+`-g` writes DWARF for lldb / gdb / rr and the profilers. You can set breakpoints,
+watchpoints, dump the structure layout, all the usual debugging repertoire.
+
+### Run C without writing a binary
+
+`--jit` lowers in-process and calls `main`
 directly; `--interp` runs the SSA IR under a VM that keeps code, stack and data
 apart and can track every allocation. A `.c` file with a shebang is directly
 executable.
 
-**Be a library.** `cargo add badc` builds or runs C from your project, on `std`
-or on `alloc` alone.
+## Be a library
+
+`cargo add badc` builds or runs C from your project, on `std` or on `alloc` alone.
 
 ## Demos
 
 [`demos/`](./demos/) wires each project below as a smoke test;
 [`demos/README.md`](./demos/README.md) says what each exercises.
 
-* **Language runtimes** -- [`Python`](./demos/python/) 3.14 on all five
+* _Language interpreters_: [`Python`](./demos/python/) 3.14 on all five
   targets, [`Lua`](./demos/lua/), [`quickjs`](./demos/quickjs/),
   [`TCL`](./demos/tcl/).
-* **Systems software** -- [`sqlite3`](./demos/sqlite3/),
+* _Systems software_: [`sqlite3`](./demos/sqlite3/),
   [`curl`](./demos/curl/), [`qemu`](./demos/qemu/): over a thousand units per
   target, self-linked, and both `qemu-system-aarch64` and `qemu-system-x86_64`
   boot Linux through UEFI firmware to a shell under TCG.
-* **Toolchains** -- [`chibicc`](./demos/chibicc/),
+* _Toolchains_: [`chibicc`](./demos/chibicc/),
   [`tinycc`](./demos/tinycc/), and the [`nasm`](./demos/nasm/) /
   [`yasm`](./demos/yasm/) assemblers, each run against its own test suite.
-* **Firmware and kernels** -- [`edk2`](./demos/edk2/): badc compiles the full
+* _Firmware and kernels_: [`edk2`](./demos/edk2/): badc compiles the full
   UEFI firmware from edk2 source into a bootable OVMF / AAVMF image, and the CI
   boots run under it. [`kernel`](./demos/kernel/) is a freestanding preemptive
   multitasking kernel on both architectures, timer interrupts and context
   switches included.
-* **Cryptography and compression** -- [`TweetNaCl`](./demos/tweetnacl/),
+* _Cryptography and compression_: [`TweetNaCl`](./demos/tweetnacl/),
   [`Monocypher`](./demos/monocypher/), [`BearSSL`](./demos/bearssl/),
   [`miniz`](./demos/miniz/), [`bzip2`](./demos/bzip2/).
-* **Graphics, math, and the rest** -- [`stb`](./demos/stb/),
+* _Graphics, math, and the rest_: [`stb`](./demos/stb/),
   [`raylib`](./demos/raylib/) with a Lode Runner game,
   [`kissfft`](./demos/kissfft/), the GUI demos, the Windows driver and NT
   native binaries, and the cooperative-concurrency libraries
@@ -94,7 +104,7 @@ or on `alloc` alone.
 
 It started as a Rust port of Robert Swierczek's C compiler in four functions,
 [c4](https://github.com/rswier/c4), and diverged enough to call the dialect
-**c5** -- hence the `c5` module and the `C5Error` type. `c4.c` ships as a test
+**c5**. Hence the `c5` module and the `C5Error` type. `c4.c` ships as a test
 fixture and self-hosts:
 
 ```sh
@@ -102,10 +112,20 @@ badc -O -o c4 tests/fixtures/c/c4.c   # compile c4 to a native binary
 ./c4 hello.c                          # which then runs hello.c
 ```
 
+And you can really crank the fun up with something like
+
+```sh
+badc -O --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c
+```
+
+to run it quadro-nested :)
+
 It has since grown from a stack IR through a 3-operand IR to SSA with an
 optimizing backend, without taking on the pass count of a titan toolchain.
 
 > `badc` used to be bad when the project started out, and the name stuck.
+> There is some compiler-building jargon in this document here and there. You can safely skip it, and jump to the usage section right away.
+> For _the true compiler heads_ there is the `--dump-ssa` option which prints each function's SSA IR plus the register allocator's per-value placement to stderr before lowering.
 
 ## Documentation
 

@@ -27,8 +27,10 @@ Fedora 44 images, and reaches systemd multi-user with modules autoloading,
 `/proc/version` names `badc`.
 
 `badc -c foo.S -o foo.o` assembles too, and the kernel build uses it: of the
-`defconfig` assembly units `badc` takes 42 of 68 on x86_64 and 69 of 77 on
-aarch64, `gas` the rest. `ld` links nothing: `badc` makes every link, the 32-bit
+`defconfig` assembly units `badc` takes 54 of 71 on x86_64 -- the real-mode
+boot units among them, written out as ELFCLASS32 / EM_386 objects under `-m16`
+/ `-m32` -- and 69 of 77 on aarch64, `gas` the rest. `ld` links nothing:
+`badc` makes every link, the 32-bit
 i386 ones (boot setup, realmode blob, 32-bit vDSO) included, and all three vDSOs
 are `badc`-linked, dynamic metadata and symbol versions included. See for
 more [here](./doc/linux-kernel.md).

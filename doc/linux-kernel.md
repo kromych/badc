@@ -72,30 +72,45 @@ expected, so it is measured rather than fatal. At the 7.1.6 `defconfig` pin:
 
 | | assembly units | badc | gas |
 |---|---|---|---|
-| x86_64 | 68 | 42 | 26 |
+| x86_64 | 71 | 54 | 17 |
 | aarch64 | 77 | 69 | 8 |
+
+The x86_64 row moved from 45 of 71 once `-m16` / `-m32` units stopped
+being refused: the writer emits ELFCLASS32 / EM_386 objects, so the nine
+of those fourteen units the assembler can encode are badc's.
 
 What keeps a unit with gas, ranked by incidence:
 
 | units | class |
 |---|---|
-| 14 (x86_64) | `-m16` / `-m32`. badc's object writers emit ELFCLASS64 only, so a non-64-bit code model is refused by name rather than assembled as 64-bit code. |
-| 6 (x86_64), 3 (aarch64) | Operand forms: symbol arithmetic inside an immediate or a memory operand, `:abs_g2_s:` over a label, an operand over a label difference. |
-| 4 (x86_64), 3 (aarch64) | Instruction encodings the tables do not carry: AVX `vmovd`, `lsl r64, r64`, `verw m16`, the NEON `str q` / `orr v.2s, #imm` post-index and immediate forms, `sha1c`. |
+| 4 (x86_64) | `ljmp $seg, $off`. The far jump with an immediate segment and offset has no encoding, and a symbol in the offset finds no relocatable field. Every one is real-mode mode-switch code. |
+| 4 (x86_64), 3 (aarch64) | Operand forms: symbol arithmetic inside an immediate or a memory operand, `:abs_g2_s:` over a label, an operand over a label difference. |
+| 4 (x86_64), 3 (aarch64) | Instruction encodings the tables do not carry: AVX `vmovd`, `lsl r64, r64`, `verw m16`, `ud2a`, the NEON `str q` / `orr v.2s, #imm` post-index and immediate forms, `sha1c`. |
 | 2 (x86_64), 2 (aarch64) | Directives: `.hidden`, `.reloc`, `.endr` reached without its `.rept`. |
+| 2 (x86_64) | Pseudo-instruction macros (`ANNOTATE`) and a macro-body comment the preprocessor leaves in its output as `/ *`. |
 
 These figures supersede `tools/probe_asm_units/`'s 46 of 68 and 62 of 77. The
 probe feeds each preprocessed unit through the file-scope `asm` path in
-isolation, with no code model to honor, so it counted 16- and 32-bit units the
-build must not take. The numbers above are what the build achieves.
+isolation, with no code model to honor. The numbers above are what the build
+achieves.
+
+An assembly unit built `-m16` or `-m32` gets an ELFCLASS32 / EM_386 object:
+`Elf32_Ehdr` / `Shdr` / `Sym` widths, `SHT_REL` tables named `.rel<section>`
+whose addends ride in the field each relocation patches, and the `R_386_*`
+numbering. The class also picks the assembler's starting code mode, the way
+`as --32` does for either spelling; `.code16` / `.code32` move it from there.
+badc generates no i386 machine code, so a C source under either is refused by
+name and only the assembler reaches the 32-bit container.
 
 Against GNU as 2.46.1's object for the same source, byte for byte over every
-allocatable section plus the symbol table and the relocations: 18 of the 42
-x86_64 units and, setting aside the DWARF badc emits none of for an assembled
-unit and the AArch64 `$x` / `$d` mapping symbols, 62 of 69 aarch64 units are
-identical. The x86_64 gap is one class -- a conditional branch to a named
-label in the same section always takes the `rel32` form, where GNU as relaxes
-it to `rel8`. The bytes execute the same; the sections are longer.
+allocatable section plus the symbol table and the relocations: 18 of the
+x86_64 units that were already badc's and, setting aside the DWARF badc emits
+none of for an assembled unit and the AArch64 `$x` / `$d` mapping symbols, 62
+of 69 aarch64 units are identical. Of the nine the 32-bit container adds,
+three are identical and the rest differ only in that DWARF and in one class --
+a branch to a named label in the same section always takes the wide
+displacement, where GNU as relaxes it to `rel8`. The bytes execute the same;
+the sections are longer.
 
 Every link is badc's and only badc's: the `-r` merges, every `vmlinux` kallsyms
 pass, the x86 boot decompressor, all three vDSOs, the `-m elf_i386` boot links

@@ -10,6 +10,13 @@ Named as the kernel's CC. Per invocation:
   end up in the image. A badc failure is the shim's failure: its exit
   status and diagnostic go straight to make, which stops at the defect.
   Recorded in the manifest as `badc` or `fail`.
+- Kernel assembly (-c, -D__KERNEL__, a .S / .s source): badc assembles
+  it, and gas assembles it when badc cannot. kbuild routes .S through
+  $(CC), not $(AS), so this shim is where an assembly unit is decided.
+  Recorded in the manifest as `badc-asm` or `gas`, with badc's own
+  diagnostic as the detail of a `gas` line. Unlike the C path a
+  fallback here is expected, so it is measured rather than fatal: the
+  count of each is what the manifest is for.
 - A unit named in ``$BADC_FALLBACK`` is compiled by the real compiler and
   recorded as `fallback`. That list is the bisect tool for a suspected
   miscompile: naming a unit is explicit and shows up in the manifest, so
@@ -23,11 +30,10 @@ Named as the kernel's CC. Per invocation:
   cannot survive the build. Classification stays with the reference
   compiler: ``scripts/cc-version.sh`` asks via ``-E``, and badc's claimed
   ``__GNUC__`` (4.2.1) is below the kernel's gcc floor.
-- Anything else (cc-option probes, -E, -S, .S units, links,
-  -m16/-m32 units, the host tools under scripts/ and tools/): the real
-  compiler, untouched. gas still assembles .S and ld still links.
-  Configuration answers stay the reference compiler's, so the built
-  object population matches the corpus the sweep measured.
+- Anything else (cc-option probes, -E, -S, links, the host tools under
+  scripts/ and tools/): the real compiler, untouched. Configuration
+  answers stay the reference compiler's, so the built object population
+  matches the corpus the sweep measured.
 
 There is no gcc pre-pass and no substitution. Every kernel C object in
 the tree was produced by badc unless its source is on the fallback list.
@@ -35,8 +41,9 @@ the tree was produced by badc unless its source is on the fallback list.
 Environment: BADC (badc binary, required once a kernel unit appears),
 BADC_REAL_CC (default gcc), BADC_TARGET (default linux-x64),
 BADC_FALLBACK (file of kernel-relative source paths to leave to the real
-compiler), BADC_MANIFEST (append `badc|fallback|fail<TAB>source[<TAB>detail]`
-per kernel unit), BADC_TIMEOUT (seconds per badc run, default 300).
+compiler), BADC_MANIFEST (append
+`badc|fallback|fail|badc-asm|gas<TAB>source[<TAB>detail]` per kernel unit),
+BADC_TIMEOUT (seconds per badc run, default 300).
 """
 
 from __future__ import annotations
@@ -138,6 +145,13 @@ def rewrite(argv: list[str]) -> list[str]:
             # access at the alignment its operand types guarantee.
             out.append(a)
             i += 1
+        elif a in ("-m16", "-m32", "-m64"):
+            # Code mode. Only an assembly unit reaches this with a
+            # non-64-bit spelling (the C path leaves those to the real
+            # compiler); forwarding it makes badc name the gap in the
+            # manifest rather than the shim guess at it.
+            out.append(a)
+            i += 1
         elif a in ("-mno-sse", "-mgeneral-regs-only"):
             # Keep generated code off the floating-point / SIMD register
             # file, which a linked kernel object must do: the kernel runs
@@ -207,8 +221,11 @@ def fallback_listed(src: str, obj: str) -> bool:
                for e in entries for p in (src, obj))
 
 
+SOURCE_SUFFIXES = (".c", ".S", ".s")
+
+
 def source_of(argv: list[str]) -> str | None:
-    """The compiled source: a positional `.c` argument.
+    """The compiled source: a positional `.c` / `.S` / `.s` argument.
 
     An option's separate argument is not positional, so the value of
     `-include`, `-I` and the rest is skipped. The kernel's vDSO units are
@@ -223,10 +240,16 @@ def source_of(argv: list[str]) -> str | None:
         if a in takes_arg:
             i += 2
             continue
-        if not a.startswith("-") and a.endswith(".c"):
+        if not a.startswith("-") and a.endswith(SOURCE_SUFFIXES):
             return a
         i += 1
     return None
+
+
+def first_diagnostic(err: str, rc: int) -> str:
+    lines = [ln for ln in err.splitlines() if ln.strip()]
+    return next((ln for ln in lines if "error" in ln or "panicked" in ln),
+                lines[-1] if lines else f"exit {rc}")
 
 
 def main(argv: list[str]) -> int:
@@ -235,21 +258,25 @@ def main(argv: list[str]) -> int:
     if argv == ["--version"] and badc:
         os.execvp(badc, [badc, "--version"])
     src = source_of(argv)
-    kernel_c = (src is not None and "-c" in argv and "-D__KERNEL__" in argv
-                and "-m16" not in argv and "-m32" not in argv)
-    if not kernel_c:
+    kernel_unit = src is not None and "-c" in argv and "-D__KERNEL__" in argv
+    is_asm = kernel_unit and src.endswith((".S", ".s"))
+    # A 16- / 32-bit C unit stays with the real compiler; the assembly
+    # equivalent is attempted so badc's own refusal reaches the manifest.
+    if kernel_unit and not is_asm and ("-m16" in argv or "-m32" in argv):
+        kernel_unit = False
+    if not kernel_unit:
         os.execvp(real, [real, *argv])
     try:
         obj = argv[argv.index("-o") + 1]
     except (ValueError, IndexError):
-        # kbuild always names the object; a kernel C compile without -o is
+        # kbuild always names the object; a kernel compile without -o is
         # some other caller's shape, so leave it to the real compiler
         # rather than guessing an output path.
         os.execvp(real, [real, *argv])
     if fallback_listed(src, obj):
         # Opt-in only, and recorded before the exec: a build that used the
         # list says so in the manifest.
-        manifest("fallback", src, "listed")
+        manifest("gas" if is_asm else "fallback", src, "listed")
         os.execvp(real, [real, *argv])
 
     if not badc:
@@ -266,20 +293,23 @@ def main(argv: list[str]) -> int:
     except subprocess.TimeoutExpired:
         rc, err = 900, f"timeout after {timeout:.0f}s"
     if rc == 0:
-        manifest("badc", src)
+        manifest("badc-asm" if is_asm else "badc", src)
         return 0
 
-    # No second compiler runs. Drop any partial object so a later make
-    # cannot mistake it for a built one, put badc's diagnostic on stderr,
-    # and fail so the build stops at the defect.
+    # Drop any partial object so neither make nor the fallback mistakes it
+    # for a built one.
     try:
         os.unlink(obj)
     except OSError:
         pass
-    lines = [ln for ln in err.splitlines() if ln.strip()]
-    first = next((ln for ln in lines
-                  if "error" in ln or "panicked" in ln),
-                 lines[-1] if lines else f"exit {rc}")
+    first = first_diagnostic(err, rc)
+    if is_asm:
+        # gas assembles what badc's assembler does not yet take. The
+        # manifest records which unit and why; the build carries on.
+        manifest("gas", src, first)
+        os.execvp(real, [real, *argv])
+    # No second compiler runs for C. Put badc's diagnostic on stderr and
+    # fail so the build stops at the defect.
     manifest("fail", src, first)
     sys.stderr.write(err if err.endswith("\n") else err + "\n")
     return rc or 1

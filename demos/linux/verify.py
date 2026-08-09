@@ -50,6 +50,7 @@ for what each architecture allows. `--kaslr-seed` replays one exactly, and
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import os
 import platform
@@ -112,7 +113,9 @@ def die(m: str) -> "None":
     sys.exit(1)
 
 
-def read_manifest(path: Path, verdicts: tuple[str, ...] = ("badc", "fallback", "fail")
+def read_manifest(path: Path,
+                  verdicts: tuple[str, ...] = ("badc", "fallback", "fail",
+                                               "badc-asm", "gas")
                   ) -> dict[str, list[str]]:
     """Group a shim's per-invocation lines by verdict."""
     out: dict[str, list[str]] = {v: [] for v in verdicts}
@@ -429,7 +432,7 @@ def main() -> int:
         args.initramfs = Path(args.initramfs).resolve()
 
     failures = []
-    units = {"badc": [], "fallback": [], "fail": []}
+    units = {"badc": [], "fallback": [], "fail": [], "badc-asm": [], "gas": []}
     links = {"badc": [], "ld": [], "fallback": [], "fail": []}
     rc, secs, undef = 0, 0.0, 0
     if args.build:
@@ -448,6 +451,15 @@ def main() -> int:
         log(f"make rc={rc} in {secs:.0f}s: badc={len(units['badc'])} "
             f"fallback={len(units['fallback'])} fail={len(units['fail'])} "
             f"undefined-refs={undef}")
+        # Assembly is measured, not gated: gas assembling what badc's
+        # assembler does not yet take is the expected state, so no `gas`
+        # line joins `failures`. The counts and the reasons are the point.
+        log(f"asm units: badc={len(units['badc-asm'])} "
+            f"gas={len(units['gas'])}")
+        for reason, n in collections.Counter(
+                u.partition("\t")[2] or "(no diagnostic)"
+                for u in units["gas"]).most_common():
+            log(f"  gas: {n} x {reason}")
         if args.linker == "badc":
             log(f"links: badc={len(links['badc'])} "
                 f"{args.real_ld}={len(links['ld'])} "
@@ -553,6 +565,10 @@ def main() -> int:
             # A --no-build run linked nothing, so it names no linker.
             "linker": args.linker if args.build else None,
             "units": {k: len(v) for k, v in units.items()},
+            # What kept each assembly unit with gas, ranked by incidence.
+            "asm_gas_reasons": collections.Counter(
+                u.partition("\t")[2] or "(no diagnostic)"
+                for u in units["gas"]).most_common(),
             "links": {k: len(v) for k, v in links.items()},
             "links_left_to_ld": links["ld"],
             "undefined_refs": undef, "boots": boots,

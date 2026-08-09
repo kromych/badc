@@ -1116,6 +1116,23 @@ pub(crate) enum AsmRelocKind {
     A64LdrLit19,
 }
 
+impl AsmRelocKind {
+    /// Whether the field's value is measured from the field's own address. A
+    /// data field carries that on the relocation's `pcrel` flag; an
+    /// instruction field carries it in the kind, the page and low-12 forms
+    /// being the ones that resolve against a link-time address instead.
+    fn self_relative(self) -> bool {
+        matches!(
+            self,
+            AsmRelocKind::A64Branch26 { .. }
+                | AsmRelocKind::A64Condbr19
+                | AsmRelocKind::A64Tstbr14
+                | AsmRelocKind::A64Adr21
+                | AsmRelocKind::A64LdrLit19
+        )
+    }
+}
+
 /// A relocation of a materialized section against the object.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmSectionReloc {
@@ -1149,6 +1166,12 @@ pub(crate) enum AsmSectionTarget {
     Text(usize),
     /// A named symbol.
     Symbol(alloc::string::String),
+    /// An expression over symbols and labels written in an instruction
+    /// operand (`$(sym - base)`, `(sym - 1b)(%ecx)`). Evaluated where the
+    /// section materializes and the layout is known: a result with no
+    /// symbolic term left is folded into the field, one with a symbol
+    /// becomes a relocation against it. It never reaches the object writer.
+    Expr(alloc::string::String),
     /// A byte offset into the emitted data image (an `i`-class operand
     /// naming a link-time address, `.long %c0 - .`). Resolved against the
     /// `.data` / `.bss` section symbol like a `DataFixup`.
@@ -1363,6 +1386,26 @@ pub(crate) fn resolve_asm_value(
     }
 }
 
+/// Split an operand expression into one symbol and a constant addend. This
+/// is what a field outside a materialized section can carry: the in-function
+/// relocation channels name a symbol and an offset, with no layout to fold a
+/// label difference against. `None` for any richer expression.
+pub(crate) fn asm_expr_sym_addend(expr: &str) -> Option<(alloc::string::String, i64)> {
+    let ctx = AsmExprCtx {
+        resolve: &|_| None,
+        const_of: &|_| None,
+        lax_div: false,
+    };
+    match resolve_asm_value(eval_asm_value(expr, &ctx).ok()?, None).ok()? {
+        AsmResolved::Reloc {
+            target: AsmSectionTarget::Symbol(name),
+            addend,
+            pcrel: false,
+        } => Some((name, addend)),
+        _ => None,
+    }
+}
+
 /// Patch a PC-relative instruction field whose target resolved within the
 /// section, so no relocation is emitted (as GNU as resolves same-section
 /// fixups). `disp` is target plus addend minus the field's own offset.
@@ -1439,6 +1482,35 @@ pub(crate) fn patch_asm_insn_field(
             Ok(false)
         }
     }
+}
+
+/// Store the constant an operand expression folded to into its field, the
+/// relocation the field would otherwise have taken standing for its width
+/// and flavor. A `Data` field takes the value little-endian at its own
+/// width; an instruction-field kind takes the same encoding a PC-relative
+/// patch writes, the field being the same one. A kind whose value is a
+/// link-time address has no constant form and is rejected rather than
+/// encoded wrong.
+pub(crate) fn store_asm_insn_const(
+    buf: &mut [u8],
+    at: usize,
+    r: &AsmSectionReloc,
+    v: i64,
+) -> Result<(), alloc::string::String> {
+    if r.kind == AsmRelocKind::Data {
+        if !value_fits_width(v, r.width) {
+            return Err(alloc::format!(
+                "value {v} does not fit a {}-byte field",
+                r.width
+            ));
+        }
+        let w = r.width as usize;
+        buf[at..at + w].copy_from_slice(&v.to_le_bytes()[..w]);
+        return Ok(());
+    }
+    patch_asm_insn_field(buf, at, r.kind, true, r.width, v)?
+        .then_some(())
+        .ok_or_else(|| alloc::string::String::from("expression has no constant form in this field"))
 }
 
 /// A materialized named section: bytes plus relocations, accumulated
@@ -3869,14 +3941,23 @@ fn eval_fill_count(
 }
 
 /// Fill-count evaluation with label leaves resolved through `resolve`
-/// (section-relative offsets, so same-section differences fold).
+/// (section-relative offsets, so same-section differences fold) and the
+/// location counter `.` at section offset `here` (`.fill sym - ., 1, 0xcc`
+/// pads to a label).
 fn eval_fill_count_with(
     expr: &str,
+    here: i64,
     const_of: &dyn Fn(u8) -> Option<i64>,
     resolve: &dyn Fn(&str) -> Option<i64>,
 ) -> Option<i64> {
+    let leaf = |t: &str| {
+        if t == "." {
+            return Some(AsmExprLeaf::Abs(here));
+        }
+        resolve(t).map(AsmExprLeaf::Abs)
+    };
     let ctx = AsmExprCtx {
-        resolve: &|t| resolve(t).map(AsmExprLeaf::Abs),
+        resolve: &leaf,
         const_of,
         lax_div: false,
     };
@@ -5028,7 +5109,7 @@ fn measure_round_inner(
                             .or_else(|| prev.and_then(|p| p.offset(t)))
                             .or_else(|| prev.and_then(|p| p.symbol(t)))
                     };
-                    let n = match eval_fill_count_with(count, const_of, &resolve) {
+                    let n = match eval_fill_count_with(count, at, const_of, &resolve) {
                         Some(n) => n,
                         None => {
                             *unresolved_fill = true;
@@ -5120,7 +5201,7 @@ fn measure_round_inner(
                             .or_else(|| prev.and_then(|p| p.offset(t)))
                             .or_else(|| prev.and_then(|p| p.symbol(t)))
                     };
-                    let n = match eval_fill_count_with(count, const_of, &resolve) {
+                    let n = match eval_fill_count_with(count, at, const_of, &resolve) {
                         Some(n) => n,
                         None => {
                             *unresolved_fill = true;
@@ -5338,7 +5419,7 @@ pub(crate) fn materialize_asm_sections(
                     sec.bytes.resize(target as usize, 0);
                 }
                 AsmSectionItem::Rept { count, items } => {
-                    let n = eval_fill_count_with(count, const_of, &|t| {
+                    let n = eval_fill_count_with(count, sec.bytes.len() as i64, const_of, &|t| {
                         if t.bytes().all(|c| c.is_ascii_digit()) {
                             return None;
                         }
@@ -5383,7 +5464,7 @@ pub(crate) fn materialize_asm_sections(
                 AsmSectionItem::Fill { count, unit, value } => {
                     // The count may reference section labels; the measured
                     // offsets are final here.
-                    let n = eval_fill_count_with(count, const_of, &|t| {
+                    let n = eval_fill_count_with(count, sec.bytes.len() as i64, const_of, &|t| {
                         if t.bytes().all(|c| c.is_ascii_digit()) {
                             return None;
                         }
@@ -5903,6 +5984,72 @@ pub(crate) fn materialize_asm_sections(
                     let mut buf = bytes.clone();
                     for r in relocs {
                         let mut r = r.clone();
+                        // An operand expression resolves against the layout
+                        // here: what folds lands in the field, what keeps a
+                        // symbol relocates against it.
+                        if let AsmSectionTarget::Expr(text) = &r.target {
+                            let place = base as i64 + r.offset as i64;
+                            // `.` in an operand is the instruction's own
+                            // address, which is where this item starts.
+                            let resolve = |t: &str| {
+                                section_expr_leaf(
+                                    t,
+                                    &key,
+                                    base as i64,
+                                    &measured,
+                                    sink_labels,
+                                    &num_unique,
+                                    label_off,
+                                )
+                            };
+                            let ctx = AsmExprCtx {
+                                resolve: &resolve,
+                                const_of,
+                                lax_div: false,
+                            };
+                            let space = AsmSpace::Section(key.clone());
+                            let named = |e: alloc::string::String| {
+                                alloc::format!("inline asm: `{text}`: {e}")
+                            };
+                            // The field's value is the expression plus the
+                            // encoding's own addend, less the field's location
+                            // where the encoding measures from it.
+                            let mut v = eval_asm_value(text, &ctx)
+                                .and_then(|v| v.combine(AsmExprValue::abs(r.addend), false))
+                                .map_err(named)?;
+                            if r.pcrel || r.kind.self_relative() {
+                                v = v
+                                    .combine(
+                                        AsmExprValue::from_term(AsmExprTerm {
+                                            space: Some((space.clone(), place)),
+                                            target: AsmSectionTarget::OwnSection(place as u32),
+                                        }),
+                                        true,
+                                    )
+                                    .map_err(named)?;
+                            }
+                            match resolve_asm_value(v, Some((&space, place))).map_err(named)? {
+                                AsmResolved::Abs(c) => {
+                                    store_asm_insn_const(&mut buf, r.offset as usize, &r, c)
+                                        .map_err(named)?;
+                                    continue;
+                                }
+                                AsmResolved::Reloc {
+                                    target,
+                                    addend,
+                                    pcrel,
+                                } => {
+                                    r.target = target;
+                                    r.addend = addend;
+                                    // A data field's PC-relativity rides the
+                                    // relocation; an instruction field's is
+                                    // its kind's and stays as encoded.
+                                    if r.kind == AsmRelocKind::Data {
+                                        r.pcrel = pcrel;
+                                    }
+                                }
+                            }
+                        }
                         let leaf = match &r.target {
                             AsmSectionTarget::Symbol(n) => section_expr_leaf(
                                 n,

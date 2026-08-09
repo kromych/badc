@@ -2744,6 +2744,14 @@ pub(super) fn write_relocatable(
                             "elf_reloc: unresolved deferred-replacement section relocation",
                         )));
                     }
+                    AsmSectionTarget::Expr(_) => {
+                        // Resolved against the layout when the section
+                        // materializes; an unresolved one means the operand
+                        // expression never reached that pass.
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            "elf_reloc: unresolved operand-expression section relocation",
+                        )));
+                    }
                     AsmSectionTarget::Symbol(name) => {
                         if let Some((sym, base)) = asm_label_ref(name.as_str()) {
                             (sym, base + r.addend)

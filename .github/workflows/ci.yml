@@ -1590,14 +1590,23 @@ jobs:
   kernel:
     needs: [qemu]
     # Full-kernel gate. badc compiles every C translation unit of a Linux
-    # `defconfig` -- no fallback to the reference compiler -- the kernel's own
-    # link produces the bootable image, and that image boots under the
-    # emulator the qemu lane linked with badc's own linker. badc-built end to
-    # end: the compiler (this repo, built here), the kernel image, and the
-    # emulator it runs on. Not badc-built: the reference compiler still
-    # assembles the .S units, builds kbuild's host tools, and links vmlinux,
-    # and the boot uses the emulator's -kernel loader rather than badc-built
-    # firmware -- booting through OVMF/AAVMF is the qemu lane's dimension.
+    # `defconfig` -- no fallback to the reference compiler -- and is also the
+    # tree's `LD`, so the kernel's own link-vmlinux.sh drives badc for the
+    # kallsyms passes, the `-r` merges and the final vmlinux, and that image
+    # boots under the emulator the qemu lane linked with badc's own linker.
+    # badc-built end to end: the compiler (this repo, built here), the kernel
+    # image and the link that produced it, and the emulator it runs on. Not
+    # badc-built: the reference compiler still assembles the .S units and
+    # builds kbuild's host tools, and GNU ld still takes the links ldshim.py
+    # routes to it -- x86's 16/32-bit boot and vDSO links, which need the i386
+    # target; the vDSO images, which need a dynamic section; and kbuild's
+    # scriptless linker probe. `verify.py` names those one by one and fails on
+    # a link leaving badc for any other reason. The boot uses the emulator's
+    # -kernel loader rather than badc-built firmware; booting through
+    # OVMF/AAVMF is the qemu lane's dimension.
+    #
+    # `--linker badc` is spelled out rather than left to `verify.py`'s
+    # default, so what this lane proves does not move with the harness.
     #
     # x86_64 additionally needs the machine's ROM set: a self-linked emulator
     # has no data directory, so `-L` points at the `pc-bios-x86` asset -- the
@@ -1608,12 +1617,21 @@ jobs:
     # -M virt loads no ROM.
     #
     # `verify.py` is the gate: it fails on any unit badc cannot compile, any
-    # unit that fell back, any undefined reference at link, a badc unit count
-    # below the floor, and any boot that does not print the marker. The tree is
-    # rebuilt from clean, so nothing passes vacuously. Each boot runs at a
-    # KASLR displacement the gate picked -- pinned per boot on aarch64, drawn
-    # by the machine on x86_64, which takes no seed -- and it also fails if a
-    # randomizing configuration produced no displaced boot.
+    # unit that fell back, any link badc could not make, any link that left
+    # badc for a reason the shim does not route on, any undefined reference at
+    # link, a badc unit count below the floor, and any boot that does not print
+    # the marker or whose banner does not name badc as both compiler and
+    # linker. The tree is rebuilt from clean, so nothing passes vacuously. Each
+    # boot runs at a KASLR displacement the gate picked -- pinned per boot on
+    # aarch64, drawn by the machine on x86_64, which takes no seed -- and it
+    # also fails if a randomizing configuration produced no displaced boot.
+    #
+    # A red lane is attributable from that output alone, because compiling and
+    # linking are separate failure classes and each names what it stopped on.
+    # The exception is a build that succeeded and a boot that did not, which is
+    # a miscompile or a bad link and does not say which; a single
+    # `--linker reference` run separates those two, and the same contrast runs
+    # nightly (see below).
     #
     # The kernel source is the release `demos/linux/setup.py` pins, fetched
     # from cdn.kernel.org and rejected unless its sha256 matches -- the same
@@ -1622,12 +1640,28 @@ jobs:
     # every pin bump, and cdn.kernel.org is not one of the hosts that made CI
     # flaky.
     #
-    # This is the kernel gate on the push path. The distribution dimension --
-    # deb/rpm packaging, install into a stock cloud image, boot into the
-    # installed kernel through its boot loader -- is the `kernel-packages`
-    # workflow, which runs nightly and on demand because it needs a VM and
-    # GitHub-hosted runners have no KVM.
-    name: kernel (${{ matrix.label }} defconfig, badc-built qemu)
+    # This is the kernel gate on the push path, and it is the badc-linked one.
+    # The reference-linked contrast is not a second `--linker` dimension here,
+    # because the two runs differ only in the links and share the compile,
+    # which is the whole cost. One clean run end to end -- build, displacement
+    # probe, four boots -- measured on the boxes at defconfig:
+    #
+    #                       --linker badc      --linker reference
+    #   aarch64,  8 cores   250 s (build 225)  249 s (build 224)
+    #   x86_64,  12 cores   319 s (build 220)  320 s (build 220)
+    #
+    # The two are within run-to-run noise of each other, x86_64's badc-linked
+    # run coming out the faster of the pair, so a second dimension would buy
+    # the link steps at the price of a second full compile per architecture on
+    # every push. `kernel-packages.yml` carries the contrast instead: same
+    # pinned release, same `make defconfig`, kbuild's default LD, nightly on
+    # both architectures, and booted into a stock distribution userspace
+    # rather than a marker initramfs. The distribution dimension -- deb/rpm
+    # packaging, install into a stock cloud image, boot into the installed
+    # kernel through its boot loader -- is that same workflow, which runs
+    # nightly and on demand because it needs a VM and GitHub-hosted runners
+    # have no KVM.
+    name: kernel (${{ matrix.label }} defconfig, badc-linked, badc-built qemu)
     strategy:
       fail-fast: false
       matrix:
@@ -1647,6 +1681,8 @@ jobs:
     # displacement probe per distinct displacement: 25 s on aarch64 (eight
     # emulator starts), 50 s on x86_64 (five, one probe covering them all).
     # The sweep release since bumped to 4434 / 2921 units, within these caps.
+    # Linking with badc costs a second or so of the build on either
+    # architecture (table above), so the caps carry over unchanged.
     # The caps are hang backstops just above that, not slack; tighten them once
     # green runs have shown the real spread.
     timeout-minutes: 50
@@ -1723,6 +1759,7 @@ jobs:
           chmod +x "$emu"
           python demos/linux/verify.py \
             --kernel-dir "$KERNEL_TREE" --arch ${{ matrix.arch }} \
+            --linker badc \
             --qemu "$emu" \
             --qemu-args "$ROMS -nic none" \
             --initramfs "$RUNNER_TEMP/initramfs.cpio.gz" \
@@ -1730,6 +1767,8 @@ jobs:
             --workdir "$RUNNER_TEMP/verify" \
             --report "$RUNNER_TEMP/verify/verify-${{ matrix.arch }}.json"
       - name: publish the gate result and boot logs
+        # Both manifests go up: the per-unit one is the compiling claim's
+        # evidence, the per-link one the linking claim's.
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -1739,4 +1778,5 @@ jobs:
             ${{ runner.temp }}/verify/boot-*.log
             ${{ runner.temp }}/verify/probe-*.log
             ${{ runner.temp }}/verify/manifest-*.txt
+            ${{ runner.temp }}/verify/ld-manifest-*.txt
           if-no-files-found: ignore

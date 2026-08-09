@@ -27,8 +27,18 @@ name: kernel-packages
 #
 # ci.yml's `kernel` job keeps the per-push gate -- same "badc compiles every
 # unit, zero fallbacks" contract, booted with a marker initramfs under the
-# badc-built emulator. This workflow adds the distribution dimension on a
-# nightly schedule, on demand, and on a labelled pull request.
+# badc-built emulator, and with badc as the tree's LD as well. This workflow
+# adds the distribution dimension on a nightly schedule, on demand, and on a
+# labelled pull request.
+#
+# It is also the linker contrast, which is why the push path does not carry
+# one. This lane builds the same pinned release at the same `make defconfig`
+# but leaves LD to kbuild's default, so "GNU ld consumes badc's kernel
+# objects and the result boots" is gated here -- and boots further here, into
+# a stock distribution userspace rather than a marker initramfs. The two
+# lanes together separate a compiler defect from a linker one: a kernel that
+# boots reference-linked and not badc-linked is the linker's, and one that
+# boots neither way is the compiler's.
 #
 # What a TCG run does not cover, relative to KVM: the guest sees an emulated
 # CPU rather than the host's, so the kernel's KVM-guest paths (kvm-clock and

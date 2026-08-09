@@ -493,6 +493,26 @@ contract, booted with a marker initramfs. Self-hosted KVM runners would buy
 back the time, but this is a public repository, and a self-hosted runner would
 execute pull-request code from any fork on the machine that runs it.
 
+The push-path lane runs `--linker badc`, so what it gates is the whole claim:
+badc compiles every unit and links the kernel, and that image boots. It does
+not also run the contrast, because the two runs differ only in the links and
+share the compile, which is the whole cost -- one clean run end to end
+(build, displacement probe, four boots) measured on the boxes at defconfig:
+
+| box | `--linker badc` | `--linker reference` |
+|---|---|---|
+| aarch64, 8 cores | 250 s (build 225 s) | 249 s (build 224 s) |
+| x86_64, 12 cores | 319 s (build 220 s) | 320 s (build 220 s) |
+
+The two are within run-to-run noise of each other, x86_64's badc-linked run
+coming out the faster of the pair. A second matrix dimension would therefore
+buy the link steps at the price of a second full compile per architecture on
+every push. `kernel-packages.yml` carries the contrast instead: it builds the
+same pinned release at the same `make defconfig` with kbuild's default `LD`,
+nightly and on both architectures, which is where GNU ld consuming badc's
+kernel objects is gated. A kernel that boots one way and not the other
+separates a compiler defect from a linker one.
+
 Each lane publishes two artifacts: the packages (deb or rpm, plus headers,
 `SHA256SUMS`, the run's report and the per-unit manifest), named
 `linux-badc-<arch>-<kernel release>-badc<version>-<commit>` and kept 30 days,

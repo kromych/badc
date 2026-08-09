@@ -13,11 +13,11 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x40, %rsp
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	%xmm14, -0x38(%rbp,%riz)
+               	movsd	-0x38(%rbp,%riz), %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -29,10 +29,10 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1d, %eax
-               	addq	$0x10, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq

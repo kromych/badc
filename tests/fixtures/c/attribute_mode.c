@@ -38,6 +38,8 @@ typedef int qi_t __attribute__((mode(QI)));
 typedef int hi_t __attribute__((mode(HI)));
 typedef int si_t __attribute__((mode(SI)));
 typedef int di_t __attribute__((mode(DI)));
+// The mode the kernel's soft-float and libgcc shims name.
+typedef int ti_t __attribute__((mode(TI)));
 typedef float sf_t __attribute__((mode(SF)));
 typedef float df_t __attribute__((mode(DF)));
 static int obj_qi __attribute__((mode(QI)));
@@ -88,6 +90,7 @@ int main(void) {
     if (sizeof(hi_t) != 2) return 21;
     if (sizeof(si_t) != 4) return 22;
     if (sizeof(di_t) != 8) return 23;
+    if (sizeof(ti_t) != 16) return 32;
     if (sizeof(sf_t) != 4) return 24;
     if (sizeof(df_t) != 8) return 25;
     if (sizeof(obj_qi) != 1) return 26;
@@ -97,9 +100,13 @@ int main(void) {
         di_t d = 0x1122334455667788L;
         qi_t q = -3;
         df_t f = 0.5;
+        ti_t t = 1;
         if (d != 0x1122334455667788L) return 27;
         if (q != -3) return 28;
         if (f != 0.5) return 29;
+        // A 128-bit mode holds a value no 64-bit type can.
+        t <<= 100;
+        if ((int) (t >> 100) != 1) return 33;
     }
 
     if (sizeof(struct member_mode) != 2) return 30;

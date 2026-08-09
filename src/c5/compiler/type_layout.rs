@@ -17,9 +17,9 @@ use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_MASK, is_pointer_ty, is_struct_ty, is_struct_value_ty,
-    is_type_start_token, pointee_size_no_struct, strip_unsigned, struct_id_of, struct_ptr_depth,
-    struct_ty_for, usual_arith_common_ty,
+    UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_type_start_token, pointee_size_no_struct, strip_unsigned, struct_id_of,
+    struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
 use super::{StructDef, StructField};
 
@@ -144,7 +144,7 @@ impl Compiler {
     /// error GCC reports as "applied to inappropriate type".
     pub(super) fn apply_mode_to_type(&mut self, ty: i64, m: (u8, bool)) -> Result<i64, C5Error> {
         let (bytes, is_float) = m;
-        let floating = super::types::is_floating_scalar(ty);
+        let floating = is_floating_scalar(ty);
         if is_pointer_ty(ty) || (is_struct_ty(ty) && !self.is_int128_ty(ty)) || is_float != floating
         {
             return Err(self.compile_err("`mode` applied to an inappropriate type"));

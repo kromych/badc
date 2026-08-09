@@ -14,12 +14,12 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
+               	sub	sp, sp, #0x40
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x0
-               	sub	x17, x29, #0x8
+               	sub	x17, x29, #0x38
                	str	d16, [x17]
-               	sub	x16, x29, #0x8
+               	sub	x16, x29, #0x38
                	ldr	d0, [x16]
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
@@ -27,10 +27,10 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x1d               // =29
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

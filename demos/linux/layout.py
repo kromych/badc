@@ -581,17 +581,35 @@ GDB_OFFSET_RE = re.compile(
     r"^/\*\s*(?:(\d+)|(\d+):\s*(\d+))\s*\|\s*(\d+)\s*\*/\s+(.*)$")
 
 
-def gdb_layout(path: Path, name: str, kind: str, gdb: str) -> str | None:
-    """gdb's own rendering of one aggregate, or None when gdb cannot show
-    it. Used to confirm the parse against a debugger rather than to extract
-    at scale: `ptype /o` costs about 2 ms per type."""
-    r = subprocess.run(
-        [gdb, "-batch", "-nx", "-ex", "set pagination off",
-         "-ex", f"ptype /o {kind} {name}", str(path)],
-        capture_output=True, text=True, timeout=300)
-    if "No struct type named" in r.stdout + r.stderr:
-        return None
-    return r.stdout
+GDB_MARK = "@@layout@@"
+
+
+def gdb_layouts(path: Path, names: list[tuple[str, str]],
+                gdb: str) -> dict[str, str]:
+    """gdb's own rendering of each (kind, name), keyed by name.
+
+    One gdb process for the whole set: loading a kernel vmlinux costs far
+    more than the `ptype /o` calls themselves, so a process per type would
+    pay that cost once per name.
+    """
+    exs = ["-ex", "set pagination off"]
+    for kind, nm in names:
+        exs += ["-ex", f"echo {GDB_MARK}{nm}\\n", "-ex", f"ptype /o {kind} {nm}"]
+    r = subprocess.run([gdb, "-batch", "-nx", *exs, str(path)],
+                       capture_output=True, text=True, timeout=3600)
+    out: dict[str, str] = {}
+    cur: str | None = None
+    buf: list[str] = []
+    for line in r.stdout.splitlines():
+        if line.startswith(GDB_MARK):
+            if cur is not None:
+                out[cur] = "\n".join(buf)
+            cur, buf = line[len(GDB_MARK):].strip(), []
+            continue
+        buf.append(line)
+    if cur is not None:
+        out[cur] = "\n".join(buf)
+    return out
 
 
 def cross_check(path: Path, extracted: dict, names: list[str],
@@ -599,13 +617,14 @@ def cross_check(path: Path, extracted: dict, names: list[str],
     """For each name, compare the byte offsets the parse produced with the
     offsets gdb prints for its top-level members."""
     out = {"checked": 0, "agree": 0, "unavailable": 0, "mismatch": []}
-    for nm in names:
-        ent = extracted["aggregates"].get(nm)
-        if not ent:
-            continue
+    want = [(extracted["aggregates"][n]["kind"], n) for n in names
+            if n in extracted["aggregates"]]
+    rendered = gdb_layouts(path, want, gdb)
+    for _kind, nm in want:
+        ent = extracted["aggregates"][nm]
         lay, _ = dominant(ent)
-        text = gdb_layout(path, nm, ent["kind"], gdb)
-        if text is None:
+        text = rendered.get(nm)
+        if not text or "No struct type named" in text or "type = " not in text:
             out["unavailable"] += 1
             continue
         out["checked"] += 1
@@ -840,6 +859,10 @@ def summarize(res: dict, top: int) -> str:
             head = f"  {d['kind']} {d['name']}  (in {d['incidence']} units)"
             if d["size"]:
                 head += f"  size {d['size']['ref']} -> {d['size']['badc']}"
+            if d["ambiguous"]:
+                # The build defines this tag name more than once; the two
+                # sides may not have picked the same definition.
+                head += "  [ambiguous name]"
             lines.append(head)
             for m in d["members"][:8]:
                 lines.append(fmt_member_diff(m))
@@ -1131,7 +1154,9 @@ def main(argv: list[str] | None = None) -> int:
                 f"{rx['units']} units, badc {len(bx['aggregates'])} names / "
                 f"{bx['units']} units ({time.time() - t0:.1f}s)")
             ref_acc, badc_acc = merge(ref_acc, rx), merge(badc_acc, bx)
-            sample_elf = b
+            # vmlinux is first and carries the most types: cross-check there
+            # rather than in whichever artifact happened to come last.
+            sample_elf = sample_elf or b
     else:
         report["mode"] = "elf"
         report["preconditions"] = {"note": "two ELF files compared directly; "

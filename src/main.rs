@@ -1680,14 +1680,22 @@ fn run() {
     // only the assembler, whose encoder already follows `.code16` /
     // `.code32`. A C source under either is refused by name rather
     // than compiled as x86-64 into an EM_386 container.
-    if let Some(flag) = &code_model_flag
-        && let Some(src) = sources.iter().find(|s| !SourceKind::of(s).is_asm())
-    {
-        eprint_diagnostic(format!(
-            "badc: error: `{flag}` applies to assembly units only; `{src}` is a C source \
-             and badc emits no 32-bit code"
-        ));
-        std::process::exit(1);
+    if let Some(flag) = &code_model_flag {
+        if let Some(src) = sources.iter().find(|s| !SourceKind::of(s).is_asm()) {
+            eprint_diagnostic(format!(
+                "badc: error: `{flag}` applies to assembly units only; `{src}` is a C source \
+                 and badc emits no 32-bit code"
+            ));
+            std::process::exit(1);
+        }
+        // The class reaches the `-c` object only: badc writes no 32-bit
+        // image, and its own linker reads ELFCLASS64 objects.
+        if !compile_only && mode != Mode::BuildArchive {
+            eprint_diagnostic(format!(
+                "badc: error: `{flag}` applies to `-c` output; badc links no 32-bit image"
+            ));
+            std::process::exit(1);
+        }
     }
     let object_elf_class = match code_model_flag {
         Some(_) => badc::ElfClass::Elf32,

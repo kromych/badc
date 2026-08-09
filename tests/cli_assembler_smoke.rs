@@ -506,10 +506,11 @@ fn non_64_bit_abis_are_refused_by_name() {
     );
 }
 
-/// badc generates no i386 machine code, so `-m16` / `-m32` reach the
-/// assembler only; a C source under either is refused by name.
+/// badc generates no i386 machine code and writes no 32-bit image, so
+/// `-m16` / `-m32` reach a `-c` assembly unit only; anything else is
+/// refused by name rather than failing inside the linker.
 #[test]
-fn a_c_source_under_m32_is_refused_by_name() {
+fn m32_outside_a_c_assembly_unit_is_refused_by_name() {
     let d = dir("m32-c");
     write(&d, "u.c", "int f(void) { return 1; }\n");
     let (ok, text) = run(
@@ -520,6 +521,23 @@ fn a_c_source_under_m32_is_refused_by_name() {
     assert!(
         text.contains("-m32") && text.contains("u.c"),
         "the diagnostic must name the flag and the source: {text}"
+    );
+    write(&d, "leaf.s", LEAF);
+    let (ok, text) = run(
+        &d,
+        &[
+            "-q",
+            &format!("--target={TARGET}"),
+            "-m32",
+            "leaf.s",
+            "-o",
+            "prog",
+        ],
+    );
+    assert!(!ok, "a link under -m32 must be refused");
+    assert!(
+        text.contains("-m32") && text.contains("-c"),
+        "the diagnostic must name the flag and where it applies: {text}"
     );
 }
 

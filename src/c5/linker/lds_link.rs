@@ -31,6 +31,8 @@ type PoolMemberMaps = HashMap<usize, (Vec<u64>, Vec<u64>)>;
 
 use crate::c5::error::C5Error;
 
+use super::dynamic::{self, DynSym, DynTables, HashStyle, VerDef};
+use super::eh_frame;
 use super::lds::{
     AssignOp, Assignment, BinOp, Command, DataWidth, Expr, InputSpec, LinkerScript, OutputSection,
     OutputSectionType, SectionContent, SectionsItem, SortKind, UnOp, glob_match,
@@ -92,6 +94,7 @@ const STV_DEFAULT: u8 = 0;
 const STV_HIDDEN: u8 = 2;
 
 const PT_LOAD: u32 = 1;
+const PT_DYNAMIC: u32 = 2;
 const PT_NOTE: u32 = 4;
 const PT_GNU_STACK: u32 = 0x6474e551;
 const PF_X: u32 = 1;
@@ -433,6 +436,20 @@ pub struct LdsOptions {
     /// output as `.rela.<outsec>` entries against the output symtab.
     pub emit_relocs: bool,
     pub emit_warnings: bool,
+    /// `-soname`: recorded as `DT_SONAME`.
+    pub soname: Option<String>,
+    /// Output file base name. Names the base version definition where
+    /// no soname was given, as bfd's does.
+    pub output_name: String,
+    /// `--hash-style`.
+    pub hash_style: HashStyle,
+    /// `-Bsymbolic`: `DT_SYMBOLIC` and `DF_SYMBOLIC`.
+    pub symbolic: bool,
+    /// `-n` / `--nmagic`: a `PT_LOAD` aligns to the strongest
+    /// alignment among its sections rather than to a page.
+    pub nmagic: bool,
+    /// `--eh-frame-hdr`: build the unwinder's FDE search table.
+    pub eh_frame_hdr: bool,
 }
 
 impl Default for LdsOptions {
@@ -450,6 +467,12 @@ impl Default for LdsOptions {
             apply_dynamic_relocs: true,
             emit_relocs: false,
             emit_warnings: true,
+            soname: None,
+            output_name: String::new(),
+            hash_style: HashStyle::default(),
+            symbolic: false,
+            nmagic: false,
+            eh_frame_hdr: false,
         }
     }
 }
@@ -496,6 +519,8 @@ struct OutSec {
     pieces: Vec<Piece>,
     phdrs: Vec<String>,
     fill: Option<Expr>,
+    /// Created by orphan placement rather than named by the script.
+    orphan: bool,
     // Computed per pass:
     addr: u64,
     lma: u64,
@@ -644,6 +669,11 @@ pub struct LdsLinker<'a> {
     /// an undefined symbol still needs a slot).
     got_slots: Vec<String>,
     got_map: HashMap<String, usize>,
+    /// Dynamic tables, rebuilt each pass from the current placement.
+    dyn_tables: Option<DynTables>,
+    /// Version definitions from the script's `VERSION` command, base
+    /// node first. Empty when the script defines none.
+    verdefs: Vec<VerDef>,
     /// `--emit-relocs` records, gathered on the final pass.
     emitted: Vec<EmittedReloc>,
     /// Where `build_symtab` put each symbol, for resolving `emitted`.
@@ -690,6 +720,15 @@ const SYNTH_GOT: &str = ".got";
 const SYNTH_GOTPLT: &str = ".got.plt";
 const SYNTH_BUILD_ID: &str = ".note.gnu.build-id";
 const SYNTH_COMMON: &str = "COMMON";
+const SYNTH_DYNSYM: &str = ".dynsym";
+const SYNTH_DYNSTR: &str = ".dynstr";
+const SYNTH_HASH: &str = ".hash";
+const SYNTH_GNU_HASH: &str = ".gnu.hash";
+const SYNTH_VERSYM: &str = ".gnu.version";
+const SYNTH_VERDEF: &str = ".gnu.version_d";
+const SYNTH_DYNAMIC: &str = ".dynamic";
+const SYNTH_EH_FRAME_HDR: &str = ".eh_frame_hdr";
+const OUT_EH_FRAME: &str = ".eh_frame";
 
 #[derive(Debug)]
 pub struct LdsResult {
@@ -725,19 +764,24 @@ impl<'a> LdsLinker<'a> {
                 )));
             }
         }
-        if opts.strip_debug {
-            for o in &mut objects {
-                if !o.sections.iter().any(|s| is_debug_section(&s.name)) {
-                    continue;
-                }
-                o.sections.retain(|s| !is_debug_section(&s.name));
-                o.shndx_map = o
-                    .sections
-                    .iter()
-                    .enumerate()
-                    .map(|(i, s)| (s.orig_shndx, i))
-                    .collect();
+        // `.note.GNU-stack` conveys stack executability and nothing
+        // else; bfd consumes it and never places it. Keeping it would
+        // put a PROGBITS input in whatever `*(.note*)` rule claims it,
+        // which then stops being a note section.
+        let drop_input = |s: &RawSection| {
+            s.name == ".note.GNU-stack" || (opts.strip_debug && is_debug_section(&s.name))
+        };
+        for o in &mut objects {
+            if !o.sections.iter().any(drop_input) {
+                continue;
             }
+            o.sections.retain(|s| !drop_input(s));
+            o.shndx_map = o
+                .sections
+                .iter()
+                .enumerate()
+                .map(|(i, s)| (s.orig_shndx, i))
+                .collect();
         }
         // Pseudo-object for linker-synthesized sections.
         let synth_obj = objects.len();
@@ -786,6 +830,8 @@ impl<'a> LdsLinker<'a> {
             relr_addrs: Vec::new(),
             got_slots: Vec::new(),
             got_map: HashMap::new(),
+            dyn_tables: None,
+            verdefs: Vec::new(),
             emitted: Vec::new(),
             sym_index: SymIndex::default(),
         };
@@ -898,6 +944,11 @@ impl<'a> LdsLinker<'a> {
     }
 
     fn synthesize_sections(&mut self) {
+        if self.opts.eh_frame_hdr {
+            let idx = self.push_synth_section(SYNTH_EH_FRAME_HDR, SHT_PROGBITS, SHF_ALLOC);
+            let synth = self.synth_obj;
+            self.objects[synth].sections[idx].addralign = 4;
+        }
         if self.opts.build_id_sha1 {
             let idx = self.push_synth_section(SYNTH_BUILD_ID, SHT_NOTE, SHF_ALLOC);
             let synth = self.synth_obj;
@@ -927,7 +978,70 @@ impl<'a> LdsLinker<'a> {
             // .got.plt: three reserved slots, no PLT entries.
             self.objects[synth].sections[gotplt].entsize = 8;
             self.objects[synth].sections[gotplt].size = 24;
+            self.synthesize_dynamic_sections();
         }
+    }
+
+    /// The dynamic-linking tables. bfd builds these for every ET_DYN
+    /// image; a script that does not want them discards them, which is
+    /// what the kernel's own scripts do.
+    fn synthesize_dynamic_sections(&mut self) {
+        self.verdefs = self.script_verdefs();
+        let mut secs: Vec<(&str, u32, u64, u64)> = Vec::new();
+        if self.opts.hash_style.sysv() {
+            secs.push((SYNTH_HASH, dynamic::SHT_HASH, SHF_ALLOC, 4));
+        }
+        if self.opts.hash_style.gnu() {
+            secs.push((SYNTH_GNU_HASH, dynamic::SHT_GNU_HASH, SHF_ALLOC, 0));
+        }
+        secs.push((SYNTH_DYNSYM, dynamic::SHT_DYNSYM, SHF_ALLOC, 24));
+        secs.push((SYNTH_DYNSTR, SHT_STRTAB, SHF_ALLOC, 0));
+        if !self.verdefs.is_empty() {
+            secs.push((SYNTH_VERSYM, dynamic::SHT_GNU_VERSYM, SHF_ALLOC, 2));
+            secs.push((SYNTH_VERDEF, dynamic::SHT_GNU_VERDEF, SHF_ALLOC, 0));
+        }
+        secs.push((
+            SYNTH_DYNAMIC,
+            dynamic::SHT_DYNAMIC,
+            SHF_ALLOC | SHF_WRITE,
+            16,
+        ));
+        for (name, shtype, flags, entsize) in secs {
+            let idx = self.push_synth_section(name, shtype, flags);
+            let synth = self.synth_obj;
+            let sec = &mut self.objects[synth].sections[idx];
+            sec.entsize = entsize;
+            sec.addralign = match name {
+                SYNTH_DYNSTR => 1,
+                SYNTH_VERSYM => 2,
+                _ => 8,
+            };
+        }
+    }
+
+    /// Version definitions in index order. Index 1 names the object
+    /// itself (the soname where one was given), so a user version's
+    /// index starts at 2, as `.gnu.version` entries reference them.
+    fn script_verdefs(&self) -> Vec<VerDef> {
+        let nodes = self.script.versions().unwrap_or(&[]);
+        let named: Vec<&super::lds::VersionNode> =
+            nodes.iter().filter(|n| !n.name.is_empty()).collect();
+        if named.is_empty() {
+            return Vec::new();
+        }
+        let mut out = alloc::vec![VerDef {
+            name: self
+                .opts
+                .soname
+                .clone()
+                .unwrap_or_else(|| self.opts.output_name.clone()),
+            base: true,
+        }];
+        out.extend(named.iter().map(|n| VerDef {
+            name: n.name.clone(),
+            base: false,
+        }));
+        out
     }
 
     fn flatten_inputs(&mut self) {
@@ -971,6 +1085,7 @@ impl<'a> LdsLinker<'a> {
                         pieces: Vec::new(),
                         phdrs: o.phdrs.clone(),
                         fill: o.fill.clone(),
+                        orphan: false,
                         addr: 0,
                         lma: 0,
                         size: 0,
@@ -1219,6 +1334,7 @@ impl<'a> LdsLinker<'a> {
             pieces: alloc::vec![Piece::Inputs(alloc::vec![i])],
             phdrs: Vec::new(),
             fill: None,
+            orphan: true,
             addr: 0,
             lma: 0,
             size: 0,
@@ -1575,6 +1691,7 @@ impl<'a> LdsLinker<'a> {
         // placement exists yet -- the relocation sections start empty
         // and gain their size once a pass has run.
         self.size_dynamic_sections();
+        self.size_eh_frame_hdr();
         for p in &mut self.placements {
             p.placed = false;
         }
@@ -1692,7 +1809,11 @@ impl<'a> LdsLinker<'a> {
         let explicit_zero = matches!(address, Some(Expr::Number(0)));
         let non_alloc_inputs = in_flags & SHF_ALLOC == 0;
         let info_type = stype == Some(OutputSectionType::Info);
-        let alloc = !info_type && !(explicit_zero && non_alloc_inputs);
+        // An orphan takes its input's allocation: bfd creates the
+        // output section from the input's flags, so a non-allocated
+        // input never joins the load image.
+        let orphan_non_alloc = self.outs[oi].orphan && non_alloc_inputs && any_input;
+        let alloc = !info_type && !(explicit_zero && non_alloc_inputs) && !orphan_non_alloc;
 
         let addr = if let Some(ae) = &address {
             let v = self.eval(ae).v;
@@ -1891,7 +2012,18 @@ impl<'a> LdsLinker<'a> {
                     let id = self.insecs[i];
                     if id.obj == self.synth_obj {
                         let t = self.objects[id.obj].sections[id.sec].shtype;
-                        if t == SHT_RELA || t == SHT_RELR {
+                        if matches!(
+                            t,
+                            SHT_RELA
+                                | SHT_RELR
+                                | SHT_STRTAB
+                                | dynamic::SHT_HASH
+                                | dynamic::SHT_DYNAMIC
+                                | dynamic::SHT_DYNSYM
+                                | dynamic::SHT_GNU_HASH
+                                | dynamic::SHT_GNU_VERDEF
+                                | dynamic::SHT_GNU_VERSYM
+                        ) {
                             return Some(t);
                         }
                     }
@@ -1919,6 +2051,9 @@ impl<'a> LdsLinker<'a> {
             if self.globals.contains_key(&a.symbol) || !self.referenced.contains(&a.symbol) {
                 return;
             }
+            // An active PROVIDE's expression references what it names,
+            // so a chain of them resolves on the following pass.
+            collect_symbols(&a.value, &mut self.referenced);
         }
         if a.symbol.trim_start_matches('_') == "end" {
             self.found_end = true;
@@ -2119,6 +2254,9 @@ impl<'a> LdsLinker<'a> {
             Expr::Number(n) => Val::abs(*n),
             Expr::Symbol(name) => match self.lookup(name) {
                 Some(v) => v,
+                // `CONSTANT(...)` lowers to these names.
+                None if name == "MAXPAGESIZE" => Val::abs(self.opts.max_page_size),
+                None if name == "COMMONPAGESIZE" => Val::abs(self.common_page_size()),
                 None => {
                     if self.final_pass {
                         self.undefined.insert(name.clone());
@@ -2279,6 +2417,17 @@ impl<'a> LdsLinker<'a> {
         self.outs.iter().position(|o| o.name == name)
     }
 
+    /// bfd's `CONSTANT(COMMONPAGESIZE)`: 4 KiB on x86-64, 64 KiB on
+    /// aarch64, and never above the configured maximum.
+    fn common_page_size(&self) -> u64 {
+        let common = if self.machine == EM_AARCH64 {
+            0x10000
+        } else {
+            0x1000
+        };
+        common.min(self.opts.max_page_size)
+    }
+
     fn phdr_count_estimate(&self) -> usize {
         self.script.phdrs().map(|p| p.len()).unwrap_or(4)
     }
@@ -2430,23 +2579,268 @@ impl<'a> LdsLinker<'a> {
                 n
             }
         };
+        self.build_dyn_tables(&|_| 1);
+        let dyn_sizes = self.dyn_table_sizes();
+        // bfd reserves `_GLOBAL_OFFSET_TABLE_[0]` once the link either
+        // needs a GOT slot or creates a `.dynamic` for the header to
+        // point at; a link with neither leaves `.got` empty, which
+        // scripts assert on.
+        let got_header = !self.got_slots.is_empty() || self.kept_synth(SYNTH_DYNAMIC).is_some();
         let synth = self.synth_obj;
         for sec in &mut self.objects[synth].sections {
+            if let Some(&size) = dyn_sizes.get(sec.name.as_str()) {
+                sec.size = size;
+                continue;
+            }
             match sec.name.as_str() {
                 SYNTH_RELA => sec.size = (nones + self.dyn_relas.len() as u64) * 24,
                 SYNTH_RELR => sec.size = relr_words.len() as u64 * 8,
-                // The reserved header entry (`_GLOBAL_OFFSET_TABLE_[0]`)
-                // exists only once something needs the GOT; bfd leaves
-                // an unused `.got` empty, which scripts assert on.
                 SYNTH_GOT => {
-                    sec.size = if self.got_slots.is_empty() {
-                        0
-                    } else {
+                    sec.size = if got_header {
                         8 + self.got_slots.len() as u64 * 8
+                    } else {
+                        0
                     }
                 }
                 _ => {}
             }
+        }
+    }
+
+    /// `.eh_frame_hdr` holds one table entry per FDE that reached the
+    /// output. The count comes from the input bytes, so it is settled
+    /// before any address is.
+    fn size_eh_frame_hdr(&mut self) {
+        if !self.opts.eh_frame_hdr {
+            return;
+        }
+        let mut fdes = 0usize;
+        for i in 0..self.insecs.len() {
+            let SecFate::Placed { out } = self.fates[i] else {
+                continue;
+            };
+            if self.outs[out].name != OUT_EH_FRAME || self.insec(i).name != OUT_EH_FRAME {
+                continue;
+            }
+            fdes += eh_frame::count_fdes(self.chunk_input_bytes(i));
+        }
+        let size = if fdes == 0 {
+            0
+        } else {
+            eh_frame::HEADER_SIZE + fdes as u64 * eh_frame::ENTRY_SIZE
+        };
+        let synth = self.synth_obj;
+        if let Some(sec) = self.objects[synth]
+            .sections
+            .iter_mut()
+            .find(|s| s.name == SYNTH_EH_FRAME_HDR)
+        {
+            sec.size = size;
+        }
+    }
+
+    /// Final address of a kept synthetic section.
+    fn synth_addr(&self, name: &str) -> Option<u64> {
+        let out = self.kept_synth(name)?;
+        let sec = self.objects[self.synth_obj]
+            .sections
+            .iter()
+            .position(|s| s.name == name)?;
+        let i = self.insec_index(self.synth_obj, sec);
+        Some(self.outs[out].addr + self.placements[i].off)
+    }
+
+    fn dyn_section_addr(&self) -> Option<u64> {
+        self.synth_addr(SYNTH_DYNAMIC)
+    }
+
+    /// Index of the synthetic section `name`, when the script kept it.
+    /// A script that routes it to `/DISCARD/` gets no table built.
+    fn kept_synth(&self, name: &str) -> Option<usize> {
+        let synth = self.synth_obj;
+        let sec = self.objects[synth]
+            .sections
+            .iter()
+            .position(|s| s.name == name)?;
+        let i = self.insec_index(synth, sec);
+        match self.fates[i] {
+            SecFate::Placed { out } if self.outs[out].name != "/DISCARD/" => Some(out),
+            _ => None,
+        }
+    }
+
+    /// The version index the script assigns `name`, or `None` when the
+    /// script makes it local. Exact patterns are consulted before
+    /// wildcards, as bfd matches them.
+    fn version_of(&self, name: &str) -> Option<u16> {
+        let nodes = self.script.versions().unwrap_or(&[]);
+        if nodes.is_empty() {
+            return Some(dynamic::VER_NDX_GLOBAL);
+        }
+        let mut ndx: u16 = 1;
+        let mut wildcard: Option<Option<u16>> = None;
+        for n in nodes {
+            if !n.name.is_empty() {
+                ndx += 1;
+            }
+            let here = (!n.name.is_empty()).then_some(ndx);
+            for (pats, keep) in [(&n.globals, true), (&n.locals, false)] {
+                for p in pats {
+                    if p == name {
+                        return keep.then_some(here.unwrap_or(dynamic::VER_NDX_GLOBAL));
+                    }
+                    if !super::lds::is_literal_pattern(p)
+                        && wildcard.is_none()
+                        && glob_match(p, name)
+                    {
+                        wildcard = Some(keep.then_some(here.unwrap_or(dynamic::VER_NDX_GLOBAL)));
+                    }
+                }
+            }
+        }
+        wildcard.unwrap_or(Some(dynamic::VER_NDX_GLOBAL))
+    }
+
+    /// Defined symbols a loader may resolve against, as bfd selects
+    /// them: global or weak, not hidden, and kept by the version
+    /// script. Each version definition also contributes a symbol
+    /// naming itself.
+    fn collect_dyn_exports(&self, out_shndx: &dyn Fn(usize) -> u16) -> Vec<DynSym> {
+        let mut out: Vec<DynSym> = Vec::new();
+        let mut names: Vec<&String> = self.globals.keys().collect();
+        names.sort();
+        for name in names {
+            if self.script_now.contains_key(name) {
+                continue;
+            }
+            let (obj_i, sym_i) = self.globals[name];
+            if self.objects[obj_i].symbols[sym_i].other & 0x3 != STV_DEFAULT {
+                continue;
+            }
+            let Some(v) = self.version_of(name) else {
+                continue;
+            };
+            if let Some(fs) = self.finalize_sym(obj_i, sym_i, out_shndx) {
+                out.push(DynSym {
+                    name: fs.name,
+                    info: fs.info,
+                    other: fs.other,
+                    shndx: fs.shndx,
+                    value: fs.value,
+                    size: fs.size,
+                    version: v,
+                });
+            }
+        }
+        let mut script_syms: Vec<(&String, &ScriptSym)> = self.script_now.iter().collect();
+        script_syms.sort_by(|a, b| a.0.cmp(b.0));
+        for (name, s) in script_syms {
+            if s.hidden {
+                continue;
+            }
+            let Some(v) = self.version_of(name) else {
+                continue;
+            };
+            let shndx = match (s.val.att, s.final_out) {
+                (Att::Out(oi), _) => out_shndx(oi),
+                (_, Some(oi)) => out_shndx(oi),
+                (_, None) => SHN_ABS,
+            };
+            out.push(DynSym {
+                name: name.clone(),
+                info: (STB_GLOBAL << 4) | STT_NOTYPE,
+                other: STV_DEFAULT,
+                shndx,
+                value: s.val.v,
+                size: 0,
+                version: v,
+            });
+        }
+        // The base node names the image, not a symbol.
+        for (k, v) in self.verdefs.iter().enumerate().skip(1) {
+            out.push(DynSym {
+                name: v.name.clone(),
+                info: (STB_GLOBAL << 4) | STT_OBJECT,
+                other: STV_DEFAULT,
+                shndx: SHN_ABS,
+                value: 0,
+                size: 0,
+                version: (k + 1) as u16,
+            });
+        }
+        out
+    }
+
+    fn build_dyn_tables(&mut self, out_shndx: &dyn Fn(usize) -> u16) {
+        self.dyn_tables = None;
+        if self.opts.emit != LdsEmit::Dyn || self.kept_synth(SYNTH_DYNSYM).is_none() {
+            return;
+        }
+        let exports = self.collect_dyn_exports(out_shndx);
+        let verdefs = if self.kept_synth(SYNTH_VERDEF).is_some() {
+            self.verdefs.clone()
+        } else {
+            Vec::new()
+        };
+        self.dyn_tables = Some(dynamic::build_tables(
+            &exports,
+            self.opts.soname.as_deref(),
+            &verdefs,
+            self.opts.hash_style,
+        ));
+    }
+
+    /// Sizes of the dynamic tables for this pass, by section name.
+    /// `.dynamic` is sized from the tag list the writer will emit.
+    fn dyn_table_sizes(&self) -> HashMap<&'static str, u64> {
+        let mut m: HashMap<&'static str, u64> = HashMap::new();
+        let Some(t) = &self.dyn_tables else {
+            return m;
+        };
+        m.insert(SYNTH_DYNSYM, t.dynsym.len() as u64);
+        m.insert(SYNTH_DYNSTR, t.dynstr().len() as u64);
+        m.insert(SYNTH_HASH, t.hash.len() as u64);
+        m.insert(SYNTH_GNU_HASH, t.gnu_hash.len() as u64);
+        m.insert(SYNTH_VERSYM, t.versym.len() as u64);
+        m.insert(SYNTH_VERDEF, t.verdef.len() as u64);
+        m.insert(
+            SYNTH_DYNAMIC,
+            dynamic::build_dynamic(&self.dyn_addrs()).len() as u64,
+        );
+        m
+    }
+
+    /// Addresses and sizes the `.dynamic` tags name. Values come from
+    /// the previous pass's layout and settle with it.
+    fn dyn_addrs(&self) -> dynamic::DynAddrs {
+        let addr = |name: &str| self.synth_addr(name);
+        // A relocation table the link did not fill gets no tags, as
+        // bfd leaves them off an empty section.
+        let sized = |name: &str| -> Option<(u64, u64)> {
+            let sec = self.objects[self.synth_obj]
+                .sections
+                .iter()
+                .position(|s| s.name == name)?;
+            let size = self.objects[self.synth_obj].sections[sec].size;
+            (size > 0).then(|| addr(name).map(|a| (a, size))).flatten()
+        };
+        let t = self.dyn_tables.as_ref();
+        dynamic::DynAddrs {
+            hash: addr(SYNTH_HASH),
+            gnu_hash: addr(SYNTH_GNU_HASH),
+            strtab: addr(SYNTH_DYNSTR),
+            strsz: t.map(|t| t.dynstr().len() as u64).unwrap_or(0),
+            symtab: addr(SYNTH_DYNSYM),
+            rela: sized(SYNTH_RELA),
+            relr: sized(SYNTH_RELR),
+            verdef: addr(SYNTH_VERDEF).map(|a| (a, t.map(|t| t.verdef_count).unwrap_or(0))),
+            versym: addr(SYNTH_VERSYM),
+            soname: match (t, self.opts.soname.as_deref()) {
+                (Some(t), Some(s)) => Some(t.str_offset(s)),
+                _ => None,
+            },
+            symbolic: self.opts.symbolic,
+            textrel: false,
         }
     }
 
@@ -2613,6 +3007,28 @@ impl<'a> LdsLinker<'a> {
     }
 }
 
+/// Every symbol name an expression reads.
+fn collect_symbols(e: &Expr, out: &mut HashSet<String>) {
+    match e {
+        Expr::Symbol(n) => {
+            out.insert(n.clone());
+        }
+        Expr::Unary(_, a) | Expr::AlignDot(a) | Expr::Absolute(a) | Expr::Assert(a, _) => {
+            collect_symbols(a, out)
+        }
+        Expr::Binary(_, a, b) | Expr::Align2(a, b) | Expr::Min(a, b) | Expr::Max(a, b) => {
+            collect_symbols(a, out);
+            collect_symbols(b, out);
+        }
+        Expr::Ternary(a, b, c) => {
+            collect_symbols(a, out);
+            collect_symbols(b, out);
+            collect_symbols(c, out);
+        }
+        _ => {}
+    }
+}
+
 fn is_debug_section(name: &str) -> bool {
     name.starts_with(".debug")
         || name.starts_with(".zdebug")
@@ -2763,7 +3179,7 @@ impl<'a> LdsLinker<'a> {
         // Apply relocations into the content buffers.
         let relr_set: HashSet<u64> = self.relr_addrs.iter().copied().collect();
         self.apply_relocations(&mut contents, &relr_set)?;
-        self.fill_synth_contents(&mut contents, &relr_set);
+        self.fill_synth_contents(&mut contents, &relr_set, &out_shndx);
 
         // Entry point.
         let entry_name: Option<String> = self
@@ -3350,7 +3766,14 @@ impl<'a> LdsLinker<'a> {
         &mut self,
         contents: &mut HashMap<usize, Vec<u8>>,
         relr_set: &HashSet<u64>,
+        out_shndx: &dyn Fn(usize) -> u16,
     ) {
+        // Rebuild with the final section indices; the tables the sizing
+        // pass produced carry placeholder ones.
+        self.build_dyn_tables(out_shndx);
+        let addrs = self.dyn_addrs();
+        let dyn_section_addr = self.dyn_section_addr();
+        let dynamic_bytes = dynamic::build_dynamic(&addrs);
         let synth = self.synth_obj;
         for sec_idx in 0..self.objects[synth].sections.len() {
             let name = self.objects[synth].sections[sec_idx].name.clone();
@@ -3379,9 +3802,11 @@ impl<'a> LdsLinker<'a> {
                         bytes.extend_from_slice(&wdd.to_le_bytes());
                     }
                 }
-                SYNTH_GOT if self.got_slots.is_empty() => {}
+                SYNTH_GOT if self.objects[synth].sections[sec_idx].size == 0 => {}
                 SYNTH_GOT => {
-                    bytes.extend_from_slice(&0u64.to_le_bytes());
+                    // The header slot holds the `.dynamic` address, as
+                    // bfd writes `_GLOBAL_OFFSET_TABLE_[0]`.
+                    bytes.extend_from_slice(&dyn_section_addr.unwrap_or(0).to_le_bytes());
                     let base = self.got_addr_prevpass().unwrap_or(0);
                     for (k, gname) in self.got_slots.clone().iter().enumerate() {
                         let v = self.resolve_name(gname).unwrap_or(0);
@@ -3399,6 +3824,46 @@ impl<'a> LdsLinker<'a> {
                     bytes.extend_from_slice(&3u32.to_le_bytes()); // NT_GNU_BUILD_ID
                     bytes.extend_from_slice(b"GNU\0");
                     bytes.extend_from_slice(&[0u8; 20]);
+                }
+                SYNTH_DYNAMIC => bytes = dynamic_bytes.clone(),
+                SYNTH_EH_FRAME_HDR => {
+                    let Some(hdr_addr) = self.synth_addr(SYNTH_EH_FRAME_HDR) else {
+                        continue;
+                    };
+                    let Some((eh_out, eh_addr)) = self
+                        .outs
+                        .iter()
+                        .position(|o| o.name == OUT_EH_FRAME && !o.removed)
+                        .map(|k| (k, self.outs[k].addr))
+                    else {
+                        continue;
+                    };
+                    // The linked `.eh_frame` is relocated by now, so
+                    // its FDE pointers name final addresses.
+                    let Some(body) = contents.get(&eh_out) else {
+                        continue;
+                    };
+                    match eh_frame::scan(body, eh_addr) {
+                        Ok(entries) => bytes = eh_frame::build(hdr_addr, eh_addr, &entries),
+                        Err(e) => {
+                            self.errors.push(e);
+                            continue;
+                        }
+                    }
+                }
+                SYNTH_DYNSYM | SYNTH_DYNSTR | SYNTH_HASH | SYNTH_GNU_HASH | SYNTH_VERSYM
+                | SYNTH_VERDEF => {
+                    let Some(t) = &self.dyn_tables else {
+                        continue;
+                    };
+                    bytes = match name.as_str() {
+                        SYNTH_DYNSYM => t.dynsym.clone(),
+                        SYNTH_DYNSTR => t.dynstr().to_vec(),
+                        SYNTH_HASH => t.hash.clone(),
+                        SYNTH_GNU_HASH => t.gnu_hash.clone(),
+                        SYNTH_VERSYM => t.versym.clone(),
+                        _ => t.verdef.clone(),
+                    };
                 }
                 _ => continue,
             }
@@ -3441,9 +3906,17 @@ impl<'a> LdsLinker<'a> {
                 .enumerate()
                 .map(|(i, d)| (d.name.as_str(), i))
                 .collect();
+            // `:phdr` carries to following sections that name none.
+            // The carry runs over the script's section list, not the
+            // kept one, so an empty section still passes its
+            // assignment on -- an empty `.hash` ahead of `.gnu.hash`
+            // is how the vDSO scripts rely on it.
+            let kept: HashSet<usize> = emit_order.iter().copied().collect();
             let mut inherit: Vec<usize> = Vec::new();
-            for &oi in emit_order {
-                if !self.outs[oi].alloc {
+            for st in &self.stmts {
+                let Stmt::Open(oi) = st else { continue };
+                let oi = *oi;
+                if !self.outs[oi].alloc && kept.contains(&oi) {
                     continue;
                 }
                 let named = &self.outs[oi].phdrs;
@@ -3462,10 +3935,14 @@ impl<'a> LdsLinker<'a> {
                     }
                     inherit = set;
                 }
+                if !kept.contains(&oi) || !self.outs[oi].alloc {
+                    continue;
+                }
                 for &k in &inherit {
                     segs[k].1.push(oi);
                 }
             }
+            self.set_phdr_alignments(&mut segs);
             Ok(segs)
         } else {
             // No PHDRS command: bfd's default segment assignment. A new
@@ -3536,6 +4013,22 @@ impl<'a> LdsLinker<'a> {
                     note_members,
                 ));
             }
+            // PT_DYNAMIC over `.dynamic`, so a loader finds the tables
+            // without walking section headers.
+            if let Some(oi) = emit_order
+                .iter()
+                .find(|&&oi| self.outs[oi].alloc && self.outs[oi].name == SYNTH_DYNAMIC)
+            {
+                segs.push((
+                    Elf64Phdr {
+                        p_type: PT_DYNAMIC,
+                        p_flags: PF_R | PF_W,
+                        p_align: 8,
+                        ..Default::default()
+                    },
+                    alloc::vec![*oi],
+                ));
+            }
             segs.push((
                 Elf64Phdr {
                     p_type: PT_GNU_STACK,
@@ -3545,7 +4038,28 @@ impl<'a> LdsLinker<'a> {
                 },
                 Vec::new(),
             ));
+            self.set_phdr_alignments(&mut segs);
             Ok(segs)
+        }
+    }
+
+    /// Segment alignment once membership is known: a `PT_LOAD` pages
+    /// unless `-n` asked otherwise, and every other segment takes the
+    /// strongest alignment among its sections, as bfd's does.
+    fn set_phdr_alignments(&self, segs: &mut [(Elf64Phdr, Vec<usize>)]) {
+        for (ph, members) in segs.iter_mut() {
+            let member_align = members
+                .iter()
+                .map(|&oi| self.outs[oi].align)
+                .max()
+                .unwrap_or(0);
+            if ph.p_type == PT_LOAD {
+                if self.opts.nmagic {
+                    ph.p_align = member_align.max(1);
+                }
+            } else if member_align != 0 {
+                ph.p_align = member_align;
+            }
         }
     }
 
@@ -3901,8 +4415,13 @@ impl<'a> LdsLinker<'a> {
             }
         }
 
-        // Program header extents.
-        for (ph, members) in phdrs.iter_mut() {
+        // Program header extents. A segment the script declared
+        // `FILEHDR`/`PHDRS` reaches back over those headers, so the
+        // image a loader maps starts at the ELF header -- which is
+        // what lets a consumer derive the load bias from the first
+        // PT_LOAD.
+        let defs = self.script.phdrs().unwrap_or(&[]).to_owned();
+        for (k, (ph, members)) in phdrs.iter_mut().enumerate() {
             if members.is_empty() {
                 continue;
             }
@@ -3910,6 +4429,19 @@ impl<'a> LdsLinker<'a> {
             ph.p_vaddr = self.outs[first].addr;
             ph.p_paddr = self.outs[first].lma;
             ph.p_offset = file_off[&first];
+            if let Some(d) = defs.get(k) {
+                let cover = match (d.filehdr, d.phdrs) {
+                    (true, _) => Some(0),
+                    (false, true) => Some(64),
+                    _ => None,
+                };
+                if let Some(want) = cover.filter(|&w| w < ph.p_offset) {
+                    let back = ph.p_offset - want;
+                    ph.p_offset = want;
+                    ph.p_vaddr = ph.p_vaddr.saturating_sub(back);
+                    ph.p_paddr = ph.p_paddr.saturating_sub(back);
+                }
+            }
             let mut file_end = ph.p_offset;
             let mut mem_end = ph.p_vaddr;
             for &oi in members.iter() {
@@ -4082,8 +4614,38 @@ impl<'a> LdsLinker<'a> {
             image[at + 48..at + 56].copy_from_slice(&sh.sh_addralign.to_le_bytes());
             image[at + 56..at + 64].copy_from_slice(&sh.sh_entsize.to_le_bytes());
         };
+        // `sh_link`/`sh_info` for the dynamic tables: each names the
+        // table a consumer must read alongside it.
+        let out_index = |name: &str| -> u32 {
+            emit_order
+                .iter()
+                .position(|&oi| self.outs[oi].name == name)
+                .map(|k| k as u32 + 1)
+                .unwrap_or(0)
+        };
+        let (dynsym_ndx, dynstr_ndx) = (out_index(SYNTH_DYNSYM), out_index(SYNTH_DYNSTR));
         for (k, &oi) in emit_order.iter().enumerate() {
             let o = &self.outs[oi];
+            let (sh_link, sh_info) = match o.name.as_str() {
+                SYNTH_DYNSYM => (
+                    dynstr_ndx,
+                    self.dyn_tables
+                        .as_ref()
+                        .map(|t| t.first_global)
+                        .unwrap_or(0),
+                ),
+                SYNTH_HASH | SYNTH_GNU_HASH | SYNTH_VERSYM => (dynsym_ndx, 0),
+                SYNTH_VERDEF => (
+                    dynstr_ndx,
+                    self.dyn_tables
+                        .as_ref()
+                        .map(|t| t.verdef_count as u32)
+                        .unwrap_or(0),
+                ),
+                SYNTH_DYNAMIC => (dynstr_ndx, 0),
+                SYNTH_RELA => (dynsym_ndx, 0),
+                _ => (0, 0),
+            };
             wr_shdr(
                 k + 1,
                 Elf64Shdr {
@@ -4093,8 +4655,8 @@ impl<'a> LdsLinker<'a> {
                     sh_addr: o.addr,
                     sh_offset: file_off[&oi],
                     sh_size: o.size,
-                    sh_link: 0,
-                    sh_info: 0,
+                    sh_link,
+                    sh_info,
                     sh_addralign: o.align,
                     sh_entsize: o.entsize,
                 },
@@ -4644,6 +5206,96 @@ mod tests {
             }
         }
         Vec::new()
+    }
+
+    /// `.dynsym` as `(name, value, shndx)`, in table order.
+    fn image_dynsyms(image: &[u8]) -> Vec<(String, u64, u16)> {
+        let shoff = u64::from_le_bytes(image[40..48].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(image[60..62].try_into().unwrap()) as usize;
+        let sh = |i: usize| -> Elf64Shdr { read_struct(image, shoff + i * 64).unwrap() };
+        for i in 1..shnum {
+            let h = sh(i);
+            if h.sh_type != dynamic::SHT_DYNSYM {
+                continue;
+            }
+            let strh = sh(h.sh_link as usize);
+            let strtab = &image[strh.sh_offset as usize..(strh.sh_offset + strh.sh_size) as usize];
+            return (0..(h.sh_size / 24) as usize)
+                .map(|k| {
+                    let s: Elf64Sym = read_struct(image, h.sh_offset as usize + k * 24).unwrap();
+                    (strz(strtab, s.st_name as usize), s.st_value, s.st_shndx)
+                })
+                .collect();
+        }
+        Vec::new()
+    }
+
+    fn section_index(image: &[u8], name: &str) -> u32 {
+        readelf_sections(image)
+            .iter()
+            .position(|s| s.0 == name)
+            .map(|k| k as u32 + 1)
+            .unwrap_or_else(|| panic!("{name} in output"))
+    }
+
+    fn section_link(image: &[u8], name: &str) -> u32 {
+        let shoff = u64::from_le_bytes(image[40..48].try_into().unwrap()) as usize;
+        let i = section_index(image, name) as usize;
+        let h: Elf64Shdr = read_struct(image, shoff + i * 64).unwrap();
+        h.sh_link
+    }
+
+    fn image_phdrs(image: &[u8]) -> Vec<Elf64Phdr> {
+        let phoff = u64::from_le_bytes(image[32..40].try_into().unwrap()) as usize;
+        let phnum = u16::from_le_bytes(image[56..58].try_into().unwrap()) as usize;
+        (0..phnum)
+            .map(|i| read_struct(image, phoff + i * 56).unwrap())
+            .collect()
+    }
+
+    /// Walk a SysV `.hash` chain the way a loader does.
+    fn sysv_lookup(hash: &[u8], syms: &[(String, u64, u16)], name: &str) -> Option<usize> {
+        let w = |i: usize| u32::from_le_bytes(hash[i * 4..i * 4 + 4].try_into().unwrap()) as usize;
+        let (nbucket, nchain) = (w(0), w(1));
+        assert_eq!(nchain, syms.len(), ".hash nchain covers .dynsym");
+        let mut i = w(2 + dynamic::elf_hash(name) as usize % nbucket);
+        while i != 0 {
+            if syms[i].0 == name {
+                return Some(i);
+            }
+            i = w(2 + nbucket + i);
+        }
+        None
+    }
+
+    /// Walk a `.gnu.hash` bucket the way a loader does, Bloom filter
+    /// included: a name the filter rejects is not in the table.
+    fn gnu_lookup(gnu: &[u8], syms: &[(String, u64, u16)], name: &str) -> Option<usize> {
+        let w = |i: usize| u32::from_le_bytes(gnu[i * 4..i * 4 + 4].try_into().unwrap()) as usize;
+        let (nbuckets, symndx, maskwords, shift2) = (w(0), w(1), w(2), w(3));
+        let h = dynamic::gnu_hash(name);
+        let bloom = |k: usize| -> u64 {
+            u64::from_le_bytes(gnu[16 + k * 8..16 + k * 8 + 8].try_into().unwrap())
+        };
+        let word = bloom((h as usize / 64) % maskwords);
+        if word & (1u64 << (h % 64)) == 0 || word & (1u64 << ((h >> shift2) % 64)) == 0 {
+            return None;
+        }
+        let buckets = 4 + maskwords * 2;
+        let mut i = w(buckets + h as usize % nbuckets);
+        if i == 0 {
+            return None;
+        }
+        loop {
+            let c = w(buckets + nbuckets + i - symndx);
+            if c & !1 == (h & !1) as usize && syms[i].0 == name {
+                return Some(i);
+            }
+            if c & 1 != 0 {
+                return None;
+            }
+            i += 1;
+        }
     }
 
     fn find_sym(syms: &[(String, u64, u16)], name: &str) -> u64 {
@@ -5201,6 +5853,316 @@ SECTIONS {
         let slot = u64::from_le_bytes(res.image[d_off..d_off + 8].try_into().unwrap());
         assert_eq!(slot, ro_addr, "slot holds the link-time value in place");
     }
+    /// A shared object's linker script names the dynamic tables, so
+    /// they must come out with the shape a loader searches: a
+    /// `.dynsym` holding only what `VERSION` exports, hash tables that
+    /// find those names, version tables indexing them, and a
+    /// `.dynamic` naming every one of them plus the soname.
+    #[test]
+    fn shared_link_emits_searchable_dynamic_metadata() {
+        // The shape of a vDSO link: one exported name, one weak alias
+        // whose string is a suffix of it, and everything else local.
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = SIZEOF_HEADERS;
+  .hash : { *(.hash) }
+  .gnu.hash : { *(.gnu.hash) }
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .gnu.version : { *(.gnu.version) }
+  .gnu.version_d : { *(.gnu.version_d) }
+  .dynamic : { *(.dynamic) } :text :dynamic
+  .text : { *(.text*) } :text
+  /DISCARD/ : { *(.note*) *(.comment) *(.rela*) *(.got*) }
+}
+PHDRS { text PT_LOAD FLAGS(5) FILEHDR PHDRS; dynamic PT_DYNAMIC FLAGS(4); }
+VERSION { LINUX_2.6 { global: __vdso_time; time; local: *; }; }
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 32],
+            )
+            .sym("__vdso_time", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+            .sym("time", STB_WEAK, STT_FUNC, 0, 0, 16)
+            .sym("internal_helper", STB_GLOBAL, STT_FUNC, 0, 16, 16)
+            .build(EM_X86_64);
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            soname: Some("linux-vdso.so.1".to_string()),
+            hash_style: HashStyle::Both,
+            symbolic: true,
+            max_page_size: 0x1000,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("shared link succeeds");
+        let secs = readelf_sections(&res.image);
+        let sec = |n: &str| {
+            secs.iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{n} in output"))
+        };
+        assert_eq!(sec(".dynsym").1, dynamic::SHT_DYNSYM);
+        assert_eq!(sec(".hash").1, dynamic::SHT_HASH);
+        assert_eq!(sec(".gnu.hash").1, dynamic::SHT_GNU_HASH);
+        assert_eq!(sec(".gnu.version").1, dynamic::SHT_GNU_VERSYM);
+        assert_eq!(sec(".gnu.version_d").1, dynamic::SHT_GNU_VERDEF);
+        assert_eq!(sec(".dynamic").1, dynamic::SHT_DYNAMIC);
+
+        // `.dynsym`: the null entry, the two exported names, and the
+        // symbol naming the version. `internal_helper` is local.
+        let dynsym = image_dynsyms(&res.image);
+        let names: BTreeSet<&str> = dynsym.iter().map(|d| d.0.as_str()).collect();
+        assert!(names.contains("__vdso_time"), "exported name is present");
+        assert!(names.contains("time"), "exported alias is present");
+        assert!(names.contains("LINUX_2.6"), "version names itself");
+        assert!(
+            !names.contains("internal_helper"),
+            "`local: *` keeps an unlisted symbol out of .dynsym"
+        );
+        assert_eq!(dynsym[0].0, "", "index 0 is the null entry");
+
+        // The exported alias shares the longer name's bytes, as bfd's
+        // `.dynstr` does.
+        let dynstr_off = section_file_off(&res.image, sec(".dynstr").2);
+        let dynstr = &res.image[dynstr_off..dynstr_off + sec(".dynstr").3 as usize];
+        assert_eq!(
+            dynstr.iter().filter(|&&b| b == 0).count(),
+            4,
+            ".dynstr holds only __vdso_time, the soname, the version, and the leading NUL"
+        );
+
+        // Both hash tables find every exported name.
+        let hash_off = section_file_off(&res.image, sec(".hash").2);
+        let hash = &res.image[hash_off..hash_off + sec(".hash").3 as usize];
+        let gnu_off = section_file_off(&res.image, sec(".gnu.hash").2);
+        let gnu = &res.image[gnu_off..gnu_off + sec(".gnu.hash").3 as usize];
+        for (i, (name, _, _)) in dynsym.iter().enumerate().skip(1) {
+            assert_eq!(
+                sysv_lookup(hash, &dynsym, name),
+                Some(i),
+                "`{name}' via .hash"
+            );
+            assert_eq!(
+                gnu_lookup(gnu, &dynsym, name),
+                Some(i),
+                "`{name}' via .gnu.hash"
+            );
+        }
+
+        // One versym per dynsym entry; every exported symbol carries
+        // the user version (index 2, the base node being index 1).
+        assert_eq!(sec(".gnu.version").3, dynsym.len() as u64 * 2);
+        let vs_off = section_file_off(&res.image, sec(".gnu.version").2);
+        for (i, d) in dynsym.iter().enumerate().skip(1) {
+            let v = u16::from_le_bytes(
+                res.image[vs_off + i * 2..vs_off + i * 2 + 2]
+                    .try_into()
+                    .unwrap(),
+            );
+            assert_eq!(v, 2, "`{}' carries LINUX_2.6", d.0);
+        }
+        // Two version definitions: the base (the soname) and LINUX_2.6.
+        assert_eq!(sec(".gnu.version_d").3, 2 * (20 + 8));
+
+        // `.dynamic` names each table at the address it landed on.
+        let dyn_off = section_file_off(&res.image, sec(".dynamic").2);
+        let tags: HashMap<u64, u64> = res.image[dyn_off..dyn_off + sec(".dynamic").3 as usize]
+            .chunks_exact(16)
+            .map(|c| {
+                (
+                    u64::from_le_bytes(c[0..8].try_into().unwrap()),
+                    u64::from_le_bytes(c[8..16].try_into().unwrap()),
+                )
+            })
+            .collect();
+        assert_eq!(tags.get(&dynamic::DT_HASH), Some(&sec(".hash").2));
+        assert_eq!(tags.get(&dynamic::DT_GNU_HASH), Some(&sec(".gnu.hash").2));
+        assert_eq!(tags.get(&dynamic::DT_SYMTAB), Some(&sec(".dynsym").2));
+        assert_eq!(tags.get(&dynamic::DT_STRTAB), Some(&sec(".dynstr").2));
+        assert_eq!(tags.get(&dynamic::DT_STRSZ), Some(&sec(".dynstr").3));
+        assert_eq!(tags.get(&dynamic::DT_SYMENT), Some(&24));
+        assert_eq!(tags.get(&dynamic::DT_VERSYM), Some(&sec(".gnu.version").2));
+        assert_eq!(
+            tags.get(&dynamic::DT_VERDEF),
+            Some(&sec(".gnu.version_d").2)
+        );
+        assert_eq!(tags.get(&dynamic::DT_VERDEFNUM), Some(&2));
+        assert_eq!(tags.get(&dynamic::DT_SYMBOLIC), Some(&0));
+        assert_eq!(tags.get(&dynamic::DT_FLAGS), Some(&dynamic::DF_SYMBOLIC));
+        assert!(tags.contains_key(&dynamic::DT_NULL));
+        // DT_SONAME names the soname's offset in .dynstr.
+        let soname_off = *tags.get(&dynamic::DT_SONAME).expect("DT_SONAME") as usize;
+        assert_eq!(
+            strz(dynstr, soname_off),
+            "linux-vdso.so.1",
+            "DT_SONAME points at the soname"
+        );
+
+        // PT_DYNAMIC covers `.dynamic` exactly.
+        let phdrs = image_phdrs(&res.image);
+        let pd = phdrs
+            .iter()
+            .find(|p| p.p_type == PT_DYNAMIC)
+            .expect("PT_DYNAMIC");
+        assert_eq!(pd.p_vaddr, sec(".dynamic").2);
+        assert_eq!(pd.p_filesz, sec(".dynamic").3);
+
+        // `.dynsym` links to `.dynstr`, the hash tables to `.dynsym`.
+        let link_of = |n: &str| section_link(&res.image, n);
+        assert_eq!(link_of(".dynsym"), section_index(&res.image, ".dynstr"));
+        assert_eq!(link_of(".hash"), section_index(&res.image, ".dynsym"));
+        assert_eq!(link_of(".gnu.hash"), section_index(&res.image, ".dynsym"));
+        assert_eq!(
+            link_of(".gnu.version"),
+            section_index(&res.image, ".dynsym")
+        );
+        assert_eq!(
+            link_of(".gnu.version_d"),
+            section_index(&res.image, ".dynstr")
+        );
+        assert_eq!(link_of(".dynamic"), section_index(&res.image, ".dynstr"));
+    }
+
+    /// A final link with no `-T` runs the built-in default script.
+    /// This is the shape of kbuild's RELR probe: `void *p = &p;`
+    /// linked `-shared -Bsymbolic -z pack-relative-relocs`.
+    #[test]
+    fn scriptless_shared_link_uses_the_default_script() {
+        let script = parse_linker_script(&super::super::default_script::default_script(true))
+            .expect("the built-in default script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym("p", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            // Symtab: null(0), sections(1,2), p(3).
+            .reloc(1, 0, 3, rt::R_X86_64_64, 0)
+            .build(EM_X86_64);
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            symbolic: true,
+            pack_relative_relocs: true,
+            max_page_size: 0x200000,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("t.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("scriptless shared link succeeds");
+        assert_eq!(
+            u16::from_le_bytes(res.image[16..18].try_into().unwrap()),
+            ET_DYN
+        );
+        let secs = readelf_sections(&res.image);
+        let sec = |n: &str| {
+            secs.iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{n} in output"))
+        };
+        // The default script places the dynamic tables and RELR.
+        assert!(sec(".relr.dyn").3 >= 8, ".relr.dyn carries the fixup");
+        assert!(
+            image_dynsyms(&res.image).iter().any(|d| d.0 == "p"),
+            "the defined global reaches .dynsym"
+        );
+        // Read-only tables below the writable group, each on its own
+        // segment, as ld's default lays them out.
+        assert!(sec(".gnu.hash").2 < sec(".text").2);
+        assert!(sec(".text").2 < sec(".dynamic").2);
+        assert!(sec(".dynamic").2 < sec(".data").2);
+        let dyn_off = section_file_off(&res.image, sec(".dynamic").2);
+        let tags: HashMap<u64, u64> = res.image[dyn_off..dyn_off + sec(".dynamic").3 as usize]
+            .chunks_exact(16)
+            .map(|c| {
+                (
+                    u64::from_le_bytes(c[0..8].try_into().unwrap()),
+                    u64::from_le_bytes(c[8..16].try_into().unwrap()),
+                )
+            })
+            .collect();
+        assert_eq!(tags.get(&dynamic::DT_RELR), Some(&sec(".relr.dyn").2));
+        assert_eq!(tags.get(&dynamic::DT_RELRSZ), Some(&sec(".relr.dyn").3));
+        assert_eq!(tags.get(&dynamic::DT_RELRENT), Some(&8));
+        assert_eq!(tags.get(&dynamic::DT_GNU_HASH), Some(&sec(".gnu.hash").2));
+        // The writable group gets its own PT_LOAD and a PT_DYNAMIC.
+        let phdrs = image_phdrs(&res.image);
+        let loads: Vec<&Elf64Phdr> = phdrs.iter().filter(|p| p.p_type == PT_LOAD).collect();
+        assert_eq!(loads.len(), 2, "read-only and writable segments");
+        assert_eq!(loads[0].p_flags & PF_W, 0);
+        assert_ne!(loads[1].p_flags & PF_W, 0);
+        assert!(phdrs.iter().any(|p| p.p_type == PT_DYNAMIC));
+    }
+
+    /// A script that discards the dynamic tables gets no dynamic
+    /// sections, which is how the kernel's own `-shared` links stay
+    /// unchanged.
+    #[test]
+    fn shared_link_honours_discarding_the_dynamic_tables() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0;
+  /DISCARD/ : { *(.dynsym) *(.dynstr) *(.hash) *(.gnu.hash) *(.dynamic) *(.gnu.version*) }
+  .text : { *(.text*) }
+  .rela.dyn : { *(.rela*) }
+}
+"#,
+        )
+        .expect("parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 8],
+            )
+            .sym("exported", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .build(EM_X86_64);
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            max_page_size: 0x1000,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("links");
+        for n in [".dynsym", ".dynstr", ".gnu.hash", ".hash", ".dynamic"] {
+            assert!(
+                !readelf_sections(&res.image).iter().any(|s| s.0 == n),
+                "{n} must stay discarded"
+            );
+        }
+        assert!(
+            !image_phdrs(&res.image)
+                .iter()
+                .any(|p| p.p_type == PT_DYNAMIC),
+            "no PT_DYNAMIC without a .dynamic"
+        );
+    }
+
     /// bfd merge layout for an aligned string class: entries keep the
     /// alignment implied by their input offsets, deduplicate on
     /// identity, tail-merge only when the length difference is a

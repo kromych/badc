@@ -33,6 +33,12 @@
 
 mod archive;
 #[cfg(feature = "std")]
+pub(crate) mod default_script;
+#[cfg(feature = "std")]
+pub(crate) mod dynamic;
+#[cfg(feature = "std")]
+pub(crate) mod eh_frame;
+#[cfg(feature = "std")]
 mod image;
 pub(crate) mod ld_driver;
 #[cfg(feature = "std")]

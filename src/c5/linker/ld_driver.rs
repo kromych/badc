@@ -4,9 +4,9 @@
 //!
 //! Two link kinds share one option surface and one input resolver:
 //! `-r` merges to ET_REL ([`super::relocatable`]), and a final link
-//! runs the script-driven layout engine ([`super::lds_link`]). A
-//! final link requires an explicit `-T`/`--script`; there is no
-//! built-in default script.
+//! runs the script-driven layout engine ([`super::lds_link`]) under
+//! the script named by `-T`/`--script` or, absent one, the built-in
+//! default ([`super::default_script`]).
 
 #![cfg(feature = "std")]
 
@@ -17,6 +17,8 @@ use hashbrown::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::archive;
+use super::default_script::default_script;
+use super::dynamic::HashStyle;
 use super::lds::parse_linker_script;
 use super::lds_link::{LdsEmit, LdsObject, LdsOptions, OrphanHandling, parse_lds_object};
 use super::relocatable::{
@@ -75,6 +77,16 @@ struct LdArgs {
     apply_dynamic_relocs: bool,
     /// `-u SYM`: symbols forced undefined before the archive scan.
     undefined: Vec<String>,
+    /// `-soname NAME`: recorded as `DT_SONAME`.
+    soname: Option<String>,
+    /// `--hash-style`.
+    hash_style: HashStyle,
+    /// `-Bsymbolic`.
+    symbolic: bool,
+    /// `-n` / `--nmagic`: no page alignment between segments.
+    nmagic: bool,
+    /// `--eh-frame-hdr`.
+    eh_frame_hdr: bool,
 }
 
 fn ld_err(msg: impl core::fmt::Display) -> i32 {
@@ -127,6 +139,11 @@ pub fn run_ld(args: &[String]) -> i32 {
         pack_relative_relocs: false,
         apply_dynamic_relocs: true,
         undefined: Vec::new(),
+        soname: None,
+        hash_style: HashStyle::default(),
+        symbolic: false,
+        nmagic: false,
+        eh_frame_hdr: false,
     };
     let mut it = args.iter().map(String::as_str);
     let next_of = |it: &mut dyn Iterator<Item = &str>, flag: &str| -> Result<String, i32> {
@@ -205,33 +222,49 @@ pub fn run_ld(args: &[String]) -> i32 {
             // Accepted with no effect on the emitted image: badc emits
             // no interpreter, no ld-generated unwind tables, and
             // resolves every branch in range without veneers.
-            "--no-dynamic-linker"
-            | "-Bsymbolic"
-            | "-Bsymbolic-functions"
-            | "--pic-veneer"
-            | "--no-ld-generated-unwind-info" => {}
-            // The script-driven engine emits no
-            // `.dynsym`/`.dynstr`/`.hash`/`.dynamic`, so an image whose
-            // symbols a dynamic loader must find cannot be built here.
-            // Ignoring these would yield an image that links and is
-            // unusable. TODO: emit dynamic-linking metadata.
-            "-soname" | "-h" | "--dynamic-linker" => {
+            "--no-dynamic-linker" | "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
+            "--eh-frame-hdr" => a.eh_frame_hdr = true,
+            "--no-eh-frame-hdr" => a.eh_frame_hdr = false,
+            // `-n`: a segment aligns to its sections, not to a page.
+            "-n" | "--nmagic" => a.nmagic = true,
+            "-Bsymbolic" | "-Bsymbolic-functions" => a.symbolic = true,
+            "-soname" | "-h" => match next_of(&mut it, arg) {
+                Ok(n) => a.soname = Some(n),
+                Err(c) => return c,
+            },
+            s if s.starts_with("-soname=") || s.starts_with("--soname=") => {
+                a.soname = Some(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
+            }
+            "--hash-style" => match next_of(&mut it, arg) {
+                Ok(v) => match HashStyle::parse(&v) {
+                    Some(h) => a.hash_style = h,
+                    None => return ld_err(format!("unknown hash style `{v}`")),
+                },
+                Err(c) => return c,
+            },
+            s if s.starts_with("--hash-style=") => {
+                let v = &s["--hash-style=".len()..];
+                match HashStyle::parse(v) {
+                    Some(h) => a.hash_style = h,
+                    None => return ld_err(format!("unknown hash style `{v}`")),
+                }
+            }
+            // An interpreter implies PT_INTERP and the `DT_NEEDED`
+            // machinery for resolving imports at run time, which the
+            // script-driven link does not build. Ignoring it would
+            // yield an image that links and cannot start.
+            "--dynamic-linker" => {
                 let _ = next_of(&mut it, arg);
                 return ld_err(format!(
-                    "`{arg}` needs dynamic-linking metadata (.dynsym/.dynamic), \
+                    "`{arg}` needs an interpreter and import resolution, \
                      which the script-driven link does not emit"
                 ));
             }
-            s if s.starts_with("-soname=")
-                || s.starts_with("--soname=")
-                || s.starts_with("--dynamic-linker=")
-                || s.starts_with("--hash-style=") =>
-            {
-                let flag = s.split_once('=').map(|(f, _)| f).unwrap_or(s);
-                return ld_err(format!(
-                    "`{flag}` needs dynamic-linking metadata (.dynsym/.dynamic), \
-                     which the script-driven link does not emit"
-                ));
+            s if s.starts_with("--dynamic-linker=") => {
+                return ld_err(
+                    "`--dynamic-linker` needs an interpreter and import resolution, \
+                     which the script-driven link does not emit",
+                );
             }
             "--fix-cortex-a53-843419" => {
                 // TODO: scan for the affected adrp page offsets and
@@ -672,18 +705,15 @@ fn parse_page_size(body: &str) -> Option<u64> {
 }
 
 /// Final (non-`-r`) link: lay the inputs out under the script and
-/// write the image. GNU ld falls back on a built-in default script
-/// when none is given; badc has none, so the script is required.
+/// write the image. With no `-T`/`--script` the built-in default
+/// script runs, as GNU ld's does.
 fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
-    let Some(spath) = &a.script else {
-        return ld_err(
-            "a final link needs an explicit linker script (-T/--script); \
-             badc has no built-in default script",
-        );
-    };
-    let text = match std::fs::read_to_string(spath) {
-        Ok(t) => t,
-        Err(e) => return ld_err(format!("cannot read script `{}`: {e}", spath.display())),
+    let text = match &a.script {
+        Some(spath) => match std::fs::read_to_string(spath) {
+            Ok(t) => t,
+            Err(e) => return ld_err(format!("cannot read script `{}`: {e}", spath.display())),
+        },
+        None => default_script(a.shared),
     };
     let script = match parse_linker_script(&text) {
         Ok(s) => s,
@@ -722,6 +752,17 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         apply_dynamic_relocs: a.apply_dynamic_relocs,
         emit_relocs: a.emit_relocs,
         emit_warnings: true,
+        soname: a.soname.clone(),
+        output_name: a
+            .output
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string(),
+        hash_style: a.hash_style,
+        symbolic: a.symbolic,
+        nmagic: a.nmagic,
+        eh_frame_hdr: a.eh_frame_hdr,
     };
     let res = match super::lds_link::link_with_script(&script, objs, &opts) {
         Ok(r) => r,

@@ -212,6 +212,16 @@ pub struct PhdrDef {
     pub flags: Option<Expr>,
 }
 
+/// One node of a `VERSION` block: a version name and the symbol
+/// patterns it exports (`global:`) or hides (`local:`). An unnamed node
+/// is the anonymous version, which assigns no version to its symbols.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct VersionNode {
+    pub name: String,
+    pub globals: Vec<String>,
+    pub locals: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     OutputFormat(Vec<String>),
@@ -221,6 +231,7 @@ pub enum Command {
     Assert(Expr, String),
     Phdrs(Vec<PhdrDef>),
     Sections(Vec<SectionsItem>),
+    Version(Vec<VersionNode>),
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -256,6 +267,12 @@ impl LinkerScript {
     pub fn entry(&self) -> Option<&str> {
         self.commands.iter().find_map(|c| match c {
             Command::Entry(s) => Some(s.as_str()),
+            _ => None,
+        })
+    }
+    pub fn versions(&self) -> Option<&[VersionNode]> {
+        self.commands.iter().find_map(|c| match c {
+            Command::Version(v) => Some(v.as_slice()),
             _ => None,
         })
     }
@@ -576,7 +593,11 @@ impl<'a> Parser<'a> {
                     "PROVIDE" | "PROVIDE_HIDDEN" | "HIDDEN" => {
                         commands.push(Command::Assign(self.parse_assignment()?));
                     }
-                    "MEMORY" | "VERSION" | "INSERT" | "REGION_ALIAS" | "INCLUDE" => {
+                    "VERSION" => {
+                        self.lex.pos = end;
+                        commands.push(Command::Version(self.parse_version()?));
+                    }
+                    "MEMORY" | "INSERT" | "REGION_ALIAS" | "INCLUDE" => {
                         return Err(err(&format!(
                             "line {}: `{w}` is not supported",
                             self.lex.line
@@ -798,6 +819,76 @@ impl<'a> Parser<'a> {
             defs.push(def);
         }
         Ok(defs)
+    }
+
+    /// `VERSION { [name] { [global:|local:] pattern; ... } [parent] ; ... }`.
+    /// A node with no `global:`/`local:` label lists globals.
+    fn parse_version(&mut self) -> Result<Vec<VersionNode>, C5Error> {
+        self.lex.expect_punct("{", LexState::Pattern)?;
+        let mut nodes = Vec::new();
+        loop {
+            if self.lex.eat_punct("}", LexState::Pattern)? {
+                break;
+            }
+            let mut node = VersionNode::default();
+            if !self.lex.eat_punct("{", LexState::Pattern)? {
+                match self.lex.next(LexState::Pattern)? {
+                    Tok::Word(w) => node.name = w,
+                    other => {
+                        return Err(err(&format!(
+                            "line {}: expected version name, found {other:?}",
+                            self.lex.line
+                        )));
+                    }
+                }
+                self.lex.expect_punct("{", LexState::Pattern)?;
+            }
+            let mut local = false;
+            loop {
+                if self.lex.eat_punct("}", LexState::Pattern)? {
+                    break;
+                }
+                if self.lex.eat_punct(";", LexState::Pattern)? {
+                    continue;
+                }
+                let pat = match self.lex.next(LexState::Pattern)? {
+                    Tok::Word(w) => w,
+                    Tok::Str(s) => s,
+                    other => {
+                        return Err(err(&format!(
+                            "line {}: expected symbol pattern, found {other:?}",
+                            self.lex.line
+                        )));
+                    }
+                };
+                if self.lex.eat_punct(":", LexState::Pattern)? {
+                    match pat.as_str() {
+                        "global" => local = false,
+                        "local" => local = true,
+                        _ => {
+                            return Err(err(&format!(
+                                "line {}: `{pat}:` is not a version label",
+                                self.lex.line
+                            )));
+                        }
+                    }
+                    continue;
+                }
+                if local {
+                    node.locals.push(pat);
+                } else {
+                    node.globals.push(pat);
+                }
+                self.lex.expect_punct(";", LexState::Pattern)?;
+            }
+            // An optional parent version name follows the body.
+            if let (Tok::Word(_), end) = self.lex.peek(LexState::Pattern)? {
+                self.lex.pos = end;
+            }
+            self.lex.expect_punct(";", LexState::Pattern)?;
+            nodes.push(node);
+        }
+        Ok(nodes)
     }
 
     fn parse_sections(&mut self) -> Result<Vec<SectionsItem>, C5Error> {

@@ -3611,6 +3611,7 @@ fn run_script_link(cli: ScriptLinkCli) {
         apply_dynamic_relocs: cli.apply_dynamic_relocs,
         emit_relocs: cli.emit_relocs,
         emit_warnings: !cli.quiet,
+        ..Default::default()
     };
     let res = match badc::link_with_script(&script, inputs, &opts) {
         Ok(r) => r,

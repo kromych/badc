@@ -302,6 +302,7 @@ impl Compiler {
         // (a function / function pointer, which cannot be an array), so clear
         // it before the enclosing declarator binds.
         self.pending.typedef_base_array_size = 0;
+        self.pending.typedef_base_zero_len = false;
         Ok(ParsedParams {
             indices: args,
             types,

@@ -132,7 +132,9 @@ impl Compiler {
         // the outer declarator binding of `ge`. Restored just
         // before this function returns.
         let saved_typedef_base_array_size = self.pending.typedef_base_array_size;
+        let saved_typedef_base_zero_len = self.pending.typedef_base_zero_len;
         self.pending.typedef_base_array_size = 0;
+        self.pending.typedef_base_zero_len = false;
         let saved_typedef_base_array_dims =
             core::mem::take(&mut self.pending.typedef_base_array_dims);
 
@@ -179,6 +181,7 @@ impl Compiler {
             // group and turn an unrelated scalar field into a
             // bogus array.
             self.pending.typedef_base_array_size = 0;
+            self.pending.typedef_base_zero_len = false;
             self.pending.type_align = 0;
             // Field type prefix: int, char, float, double, or struct Name.
             // Leading qualifiers / int modifiers / function specifiers
@@ -906,6 +909,7 @@ impl Compiler {
         }
         self.next()?; // consume `}`
         self.pending.typedef_base_array_size = saved_typedef_base_array_size;
+        self.pending.typedef_base_zero_len = saved_typedef_base_zero_len;
         self.pending.typedef_base_array_dims = saved_typedef_base_array_dims;
 
         // Struct alignment tops out at `MAX_STATIC_ALIGN` -- the widest the

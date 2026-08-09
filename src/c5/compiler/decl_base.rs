@@ -342,6 +342,7 @@ impl Compiler {
             // names a pointer; the dimension belongs to the pointee.
             if had_ptr {
                 self.pending.typedef_base_array_size = 0;
+                self.pending.typedef_base_zero_len = false;
                 self.pending.typedef_base_array_dims.clear();
             }
             // Abstract array declarator in the type name: `typeof(T [N])`,
@@ -1534,6 +1535,7 @@ impl Compiler {
         // consumer, so clear here to keep the channel scoped to
         // this one base-type parse.
         self.pending.typedef_base_array_size = 0;
+        self.pending.typedef_base_zero_len = false;
         // Same for the type-alignment carrier: a typedef whose alias
         // carries an `aligned(N)` type attribute seeds it below, scoped
         // to this one base-type parse.

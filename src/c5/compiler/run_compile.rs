@@ -309,6 +309,7 @@ impl Compiler {
             // leak its array count into this iteration's
             // declarator binding.
             self.pending.typedef_base_array_size = 0;
+            self.pending.typedef_base_zero_len = false;
             // Reset the const carrier so a prior declaration's `const`
             // base does not leak onto this iteration's declarators.
             self.pending.base_is_const = false;

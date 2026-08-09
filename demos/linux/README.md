@@ -458,6 +458,13 @@ python3 demos/linux/packages.py --arch x86_64 \
     --report packages-x86_64.json
 ```
 
+`--linker badc` makes the build's links badc's too, through `ldshim.py`, and
+the run then fails on any link the shim could not make; the default keeps the
+reference `ld` so the packaging gate measures the compiler alone. Boot-loader
+installation is the one route that runs the 16-bit `setup.elf` from a disk
+rather than from qemu's `-kernel`, so it is where a badc-linked boot image is
+exercised end to end.
+
 Phases -- `tree` (extract + configure), `build` (hybrid make), `package`,
 `vm` -- are idempotent and `--phases` selects a subset. Without `--config` the
 tree's own `defconfig` is the corpus, which is what CI builds: 2953 units on

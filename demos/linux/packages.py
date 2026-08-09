@@ -202,7 +202,7 @@ def phase_tree(args, arch) -> Path:
                   'CONFIG_INITRAMFS_SOURCE=""', text)
     (tree / ".config").write_text(text)
     log("make olddefconfig")
-    run(["make", f"CC={LINUX_DIR / 'buildcc.py'}", "olddefconfig"], cwd=tree,
+    run(["make", *toolchain_args(args), "olddefconfig"], cwd=tree,
         env=shim_env(args, arch), check=True)
     return tree
 
@@ -217,16 +217,28 @@ def shim_env(args, arch) -> dict:
         BADC_TARGET=arch["target"],
         BADC_MANIFEST=str(args.manifest),
         BADC_TIMEOUT=str(args.unit_timeout),
+        BADC_LD_REAL=args.real_ld,
+        BADC_LD_MANIFEST=str(args.ld_manifest),
     )
     env.pop("BADC_FALLBACK", None)
+    env.pop("BADC_LD_FALLBACK", None)
     if args.arch == "x86_64" and args.deb_tools:
         deb_tool_env(args.deb_tools, env)
     return env
 
 
+def toolchain_args(args) -> list[str]:
+    """`CC=`/`LD=` for a make line. kbuild takes these from the command
+    line only: the top Makefile assigns them, so an environment value
+    would lose."""
+    out = [f"CC={LINUX_DIR / 'buildcc.py'}"]
+    if args.linker == "badc":
+        out.append(f"LD={LINUX_DIR / 'ldshim.py'}")
+    return out
+
+
 def kbuild(args, arch, tree, targets, extra=(), log_name="build") -> Path:
-    shim = LINUX_DIR / "buildcc.py"
-    cmd = ["make", f"-j{args.jobs}", f"CC={shim}", *extra, *targets]
+    cmd = ["make", f"-j{args.jobs}", *toolchain_args(args), *extra, *targets]
     build_log = args.workdir / f"{log_name}-{args.arch}.log"
     log(f"{' '.join(cmd)} (in {tree}, log {build_log})")
     with build_log.open("wb") as fh:
@@ -240,6 +252,7 @@ def kbuild(args, arch, tree, targets, extra=(), log_name="build") -> Path:
 
 def phase_build(args, arch, tree) -> None:
     args.manifest.unlink(missing_ok=True)
+    args.ld_manifest.unlink(missing_ok=True)
     kbuild(args, arch, tree, [arch["make_target"], "modules"])
 
 
@@ -395,6 +408,24 @@ def assert_manifest(args, failures: list[str]) -> dict:
         failures.append(f"units compiled: {len(units['badc'])}, expected at "
                         f"least {args.expect_units}")
     return {k: len(v) for k, v in units.items()}
+
+
+def assert_link_manifest(args, failures: list[str]) -> dict:
+    """Under `--linker badc` every link is badc's, so anything else in
+    the manifest is a failure the package must not hide."""
+    links = read_manifest(args.ld_manifest)
+    log(f"links: badc={len(links['badc'])} "
+        f"fallback={len(links['fallback'])} fail={len(links['fail'])}")
+    if links["fail"]:
+        named = ", ".join(l.split("\t")[0] for l in links["fail"][:5])
+        failures.append(
+            f"links badc could not make: {len(links['fail'])} ({named})")
+    if links["fallback"]:
+        failures.append(f"links that fell back to {args.real_ld}: "
+                        f"{len(links['fallback'])}")
+    if not links["badc"]:
+        failures.append("no link was made by badc")
+    return {k: len(v) for k, v in links.items()}
 
 
 # --- vm ---------------------------------------------------------------------
@@ -935,6 +966,11 @@ def main() -> int:
                     default=os.environ.get("BADC",
                                            REPO_ROOT / "target/release/badc"))
     ap.add_argument("--real-cc", default=os.environ.get("BADC_REAL_CC", "gcc"))
+    ap.add_argument("--linker", choices=("reference", "badc"),
+                    default="reference",
+                    help="linker for the kernel build: the reference `ld`, "
+                         "or badc through ldshim.py")
+    ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL", "ld"))
     ap.add_argument("--tarball", type=Path,
                     help="pinned kernel source tarball (see setup.py)")
     ap.add_argument("--config", type=Path,
@@ -1000,6 +1036,7 @@ def main() -> int:
         args.ssh_port = free_port()
     args.badc = Path(args.badc).resolve()
     args.manifest = args.workdir / f"manifest-{args.arch}.txt"
+    args.ld_manifest = args.workdir / f"ld-manifest-{args.arch}.txt"
     if not args.expect_units:
         args.expect_units = arch["expect_units"]
     if {"tree", "build", "package"} & phases and not os.access(args.badc,
@@ -1012,7 +1049,7 @@ def main() -> int:
         args.deb_tools = args.workdir / "deb-tools"
 
     failures: list[str] = []
-    report: dict = {"arch": args.arch, "packages": []}
+    report: dict = {"arch": args.arch, "linker": args.linker, "packages": []}
 
     if "tree" in phases:
         if not args.tarball or not args.tarball.is_file():
@@ -1040,6 +1077,8 @@ def main() -> int:
                                "sha256": sha256_of(p)} for p in packages]
     if {"build", "package"} & phases:
         report["units"] = assert_manifest(args, failures)
+        if args.linker == "badc":
+            report["links"] = assert_link_manifest(args, failures)
         report["module_producer"] = assert_module_producer(tree, failures)
 
     if "vm" in phases and not failures:

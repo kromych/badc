@@ -190,11 +190,20 @@ defect instead of carrying on with something else's object.
 first line becomes `CONFIG_CC_VERSION_TEXT`, the compiler text in the boot
 banner and `/proc/version`, and Kconfig re-records that text whenever it
 disagrees with what the build's `$(CC)` reports, so only the shim's own
-answer can survive the build. Everything else (probes, `-E`, `-S`, `.S`
-units, links, 16/32-bit units, the host tools under `scripts/` and
-`tools/`) goes to gcc untouched -- gas still assembles `.S` -- so the
-configuration and object population match the reference corpus. Linking
-is `ldshim.py`'s, below, and is badc's throughout.
+answer can survive the build.
+
+A kernel assembly unit (`-c`, `-D__KERNEL__`, a `.S` / `.s` source) goes
+to badc too: kbuild compiles `.S` through `$(CC)`, not `$(AS)`, so this
+shim is where an assembly unit is decided. Unlike a C unit, a failure is
+not the build's: badc's diagnostic goes to the manifest as a `gas` line
+and gas assembles the unit. gas taking what badc's assembler does not yet
+implement is the expected state, so the counts are the measurement rather
+than a gate. A unit badc assembles is recorded `badc-asm`.
+
+Everything else (probes, `-E`, `-S`, links, the host tools under
+`scripts/` and `tools/`) goes to gcc untouched, so the configuration and
+object population match the reference corpus. Linking is `ldshim.py`'s,
+below, and is badc's throughout.
 In particular `scripts/cc-version.sh` classifies the reference
 compiler (`-E`), keeping `CONFIG_GCC_VERSION` at the reference
 toolchain's value: identification follows the compiler that built the
@@ -219,10 +228,11 @@ Object entries discriminate a compile context: a source also built into an
 isolated-link environment (the EFI stub's `lib-%.o`) is listed by the
 object it becomes there, leaving its other compiles to badc. Leave the
 variable unset for a pure build; both defconfigs compile with an empty
-list. The manifest gets one line per kernel unit: `badc`, `fallback`, or
-`fail` plus the source and first diagnostic. A `fail` line is also a build
-failure -- the shim exits nonzero -- so the manifest records what stopped
-the build rather than what it hid.
+list. The manifest gets one line per kernel unit: `badc`, `fallback` or
+`fail` for a C unit, `badc-asm` or `gas` for an assembly one, plus the
+source and first diagnostic. A `fail` line is also a build failure -- the
+shim exits nonzero -- so the manifest records what stopped the build
+rather than what it hid.
 Unlike the sweep, the shim forwards `-mno-sse` and
 `-mgeneral-regs-only`: a linked kernel object must keep off the
 floating-point / SIMD register file, which the kernel runs with trapped

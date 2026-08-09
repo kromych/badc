@@ -9346,12 +9346,12 @@ pub(crate) fn encode_a64_file_asm_section_code(
                         "inline asm: `{text}` in a file-scope section needs a relocation"
                     ));
                 }
-                if let Some((word, kind, name, addend)) = encode_a64_sym_insn(insn, &conv)
+                if let Some((word, kind, expr)) = encode_a64_sym_insn(insn, &conv)
                     .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?
                 {
-                    // An empty name marks a `.`-relative form resolved in
-                    // place: the word is final, no relocation.
-                    if !name.is_empty() {
+                    // An empty expression marks a `.`-relative form resolved
+                    // in place: the word is final, no relocation.
+                    if !expr.is_empty() {
                         relocs.push(super::ssa::emit_common::AsmSectionReloc {
                             offset: bytes.len() as u32,
                             width: 4,
@@ -9359,8 +9359,8 @@ pub(crate) fn encode_a64_file_asm_section_code(
                             pcrel: false,
                             branch: false,
                             signed: false,
-                            target: super::ssa::emit_common::AsmSectionTarget::Symbol(name),
-                            addend,
+                            target: super::ssa::emit_common::AsmSectionTarget::Expr(expr),
+                            addend: 0,
                         });
                     }
                     bytes.extend_from_slice(&word.to_le_bytes());
@@ -9395,7 +9395,6 @@ fn encode_a64_sym_insn(
         u32,
         super::ssa::emit_common::AsmRelocKind,
         alloc::string::String,
-        i64,
     )>,
     alloc::string::String,
 > {
@@ -9415,11 +9414,11 @@ fn encode_a64_sym_insn(
         } else {
             super::encode::enc_b(0)
         };
-        return Ok(Some((word, K::A64Branch26 { link }, name.clone(), 0)));
+        return Ok(Some((word, K::A64Branch26 { link }, name.clone())));
     }
     // A load/store whose immediate is `:lo12:sym`: encode with a zero
     // offset; the access size names the LDST reloc width.
-    if let Some(AsmOpndA64::MemSymLo12 { base, name, addend }) = insn.operands.last() {
+    if let Some(AsmOpndA64::MemSymLo12 { base, expr }) = insn.operands.last() {
         let size = a64_access_size(&insn.mnemonic, insn.operands.first())?;
         let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
         for o in &insn.operands[..insn.operands.len() - 1] {
@@ -9431,17 +9430,17 @@ fn encode_a64_sym_insn(
             pre: false,
         });
         let word = super::table::encode(&insn.mnemonic, &ops)?;
-        return Ok(Some((word, K::A64LdstLo12(size), name.clone(), *addend)));
+        return Ok(Some((word, K::A64LdstLo12(size), expr.clone())));
     }
     // A numeric-label reference (`b 1b`) resolves at materialize time, where
     // this call's label offsets are known; carry it as a symbol reference.
     // `.`-relative branches encode directly.
     let named;
-    let (name, lo12, addend) = match insn.operands.last() {
-        Some(AsmOpndA64::Sym { name, lo12, addend }) => (name, *lo12, *addend),
+    let (name, lo12) = match insn.operands.last() {
+        Some(AsmOpndA64::Sym { expr, lo12 }) => (expr, *lo12),
         Some(&AsmOpndA64::Label { num, forward }) => {
             named = alloc::format!("{num}{}", if forward { 'f' } else { 'b' });
-            (&named, false, 0)
+            (&named, false)
         }
         Some(&AsmOpndA64::Here(off)) => {
             let kind = build_label_branch(insn, conv)?;
@@ -9449,7 +9448,7 @@ fn encode_a64_sym_insn(
                 LabelBranch::Adr { rd } => super::encode::enc_adr(super::Reg(rd), off),
                 _ => label_branch_word(&kind, off as i64)?,
             };
-            return Ok(Some((word, K::Data, alloc::string::String::new(), 0)));
+            return Ok(Some((word, K::Data, alloc::string::String::new())));
         }
         _ => return Ok(None),
     };
@@ -9469,7 +9468,7 @@ fn encode_a64_sym_insn(
             }
         };
         let word = super::encode::enc_add_imm(super::Reg(rd), super::Reg(rn), 0);
-        return Ok(Some((word, K::A64AddLo12, name.clone(), addend)));
+        return Ok(Some((word, K::A64AddLo12, name.clone())));
     }
     match insn.mnemonic.as_str() {
         "adrp" => {
@@ -9487,7 +9486,6 @@ fn encode_a64_sym_insn(
                 super::encode::enc_adrp(super::Reg(rd), 0),
                 K::A64AdrpPage21,
                 name.clone(),
-                addend,
             )))
         }
         // `ldr Rt, sym` / `ldrsw Xt, sym`: a PC-relative literal load.
@@ -9498,7 +9496,7 @@ fn encode_a64_sym_insn(
                         "inline asm: `ldr` literal needs a register destination",
                     )
                 })?;
-            Ok(Some((word, K::A64LdrLit19, name.clone(), addend)))
+            Ok(Some((word, K::A64LdrLit19, name.clone())))
         }
         _ => {
             // The branch shapes share the label-branch classifier.
@@ -9512,7 +9510,7 @@ fn encode_a64_sym_insn(
                 LabelBranch::Tb { .. } => (label_branch_word(&kind, 0)?, K::A64Tstbr14),
                 LabelBranch::Adr { rd } => (super::encode::enc_adr(super::Reg(rd), 0), K::A64Adr21),
             };
-            Ok(Some((word, k, name.clone(), addend)))
+            Ok(Some((word, k, name.clone())))
         }
     }
 }
@@ -9620,17 +9618,17 @@ fn a64_pool_value(
     if let Some(v) = super::ssa::emit_common::eval_const_expr_wide(expr) {
         return Ok(AsmPoolValue::Const(v));
     }
+    // The pool is assigned before layout, so a value here reduces to one
+    // symbol and a constant; a label difference has nothing to fold against.
     let (name, addend) = super::asm::split_sym_addend(expr)
+        .and_then(super::ssa::emit_common::asm_expr_sym_addend)
         .ok_or_else(|| alloc::format!("inline asm: bad literal-pool value `{expr}`"))?;
     if size == 16 {
         return Err(alloc::format!(
             "inline asm: literal-pool symbol `{name}` needs a 4- or 8-byte load"
         ));
     }
-    Ok(AsmPoolValue::Sym {
-        name: alloc::string::String::from(name),
-        addend,
-    })
+    Ok(AsmPoolValue::Sym { name, addend })
 }
 
 /// The LDR (literal) word for a destination register view, with the number
@@ -10222,6 +10220,64 @@ mod tests {
             err.contains("`.error` vector preamble length mismatch"),
             "{err}"
         );
+    }
+
+    /// A branch, `adr`, `adrp` or `:lo12:` operand is an expression over
+    /// symbols, not only a symbol with a constant addend: a label difference
+    /// in the addend folds against the layout and the symbol keeps the
+    /// relocation. The KVM hypervisor entry branches to a vector slot that
+    /// way. Words and relocations measured with GNU as 2.46.1 for the same
+    /// source.
+    #[test]
+    fn file_scope_a64_operand_symbol_expressions_match_gnu_as() {
+        let text = ".text\n1:\nnop\nnop\n2:\nb __kvm_hyp_vector + (2b - 1b + (2 * 4))\n\
+                    adr x0, sym + (2b - 1b)\nadrp x1, sym + (2b - 1b)\n\
+                    add x1, x1, :lo12:(sym + (2b - 1b))\ncbz x2, sym + (2b - 1b)\n";
+        let sec = a64_file_asm_section(text, ".text");
+        let want: Vec<u8> = [
+            0xd503201fu32, // nop
+            0xd503201f,    // nop
+            0x14000000,    // b __kvm_hyp_vector + 16
+            0x10000000,    // adr x0, sym + 8
+            0x90000001,    // adrp x1, sym + 8
+            0x91000021,    // add x1, x1, :lo12:sym + 8
+            0xb4000002,    // cbz x2, sym + 8
+        ]
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
+        assert_eq!(sec.bytes, want);
+        let relocs: Vec<_> = sec
+            .relocs
+            .iter()
+            .map(|r| (r.offset, alloc::format!("{:?}", r.target), r.addend))
+            .collect();
+        let at = |n: &str| alloc::format!("Symbol(\"{n}\")");
+        assert_eq!(
+            relocs,
+            [
+                (8, at("__kvm_hyp_vector"), 16),
+                (12, at("sym"), 8),
+                (16, at("sym"), 8),
+                (20, at("sym"), 8),
+                (24, at("sym"), 8),
+            ]
+        );
+    }
+
+    /// A `.rept` count and a `.fill` count are expressions over the layout,
+    /// the location counter included. Bytes measured with GNU as 2.46.1.
+    #[test]
+    fn file_scope_a64_counts_over_the_layout_match_gnu_as() {
+        let text = ".text\na:\nnop\nnop\nb:\n.rept (b - a) / 4\nnop\n.endr\n\
+                    .fill b + 20 - ., 1, 0xcc\n";
+        let sec = a64_file_asm_section(text, ".text");
+        let mut want: Vec<u8> = alloc::vec![];
+        for _ in 0..4 {
+            want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+        }
+        want.extend_from_slice(&[0xcc; 12]);
+        assert_eq!(sec.bytes, want);
     }
 
     /// A deferred condition the layout still cannot value is reported rather

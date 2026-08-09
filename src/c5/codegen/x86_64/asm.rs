@@ -286,7 +286,7 @@ pub(crate) enum Mnemonic {
     /// `.skip count, fill`: emit `count` bytes of `fill`. `count` is a
     /// constant expression over template and section labels, resolved at emit
     /// time (an ALTERNATIVE pads its old site to the replacement length). The
-    /// expression text is carried in [`AsmInsn::sym_target`] and the fill byte
+    /// expression text is carried in [`AsmInsn::sym_exprs`] and the fill byte
     /// in [`AsmInsn::bytes`].
     Skip,
     /// `.align n` / `.p2align e` / `.balign n` inside the code stream: pad to
@@ -343,11 +343,11 @@ pub(crate) enum AsmOpnd {
         disp: i32,
     },
     /// An absolute address with no base register: a bare displacement, written
-    /// as a literal (`%%gs:0x28`, `movl %eax, 0x1234`) or as a symbol name
-    /// (`btsl $0, tr_lock`). `sym` marks a link-time symbol displacement (its
-    /// name in the instruction's `sym_target`, `disp` the addend); otherwise
-    /// `disp` is the whole address.
-    AbsMem { disp: i32, sym: bool },
+    /// as a literal (`%%gs:0x28`, `movl %eax, 0x1234`) or as a symbol
+    /// expression (`btsl $0, tr_lock`). `sym` names the instruction's
+    /// displacement expression by index; otherwise `disp` is the whole
+    /// address.
+    AbsMem { disp: i32, sym: Option<u8> },
     /// `%cN` / `%PN` as a bare instruction operand (`%%gs:%c1`, `movq %c1, %0`):
     /// a memory reference whose displacement is the substituted operand -- AT&T
     /// marks an immediate with `$`. The emitter resolves a compile-time constant
@@ -355,31 +355,29 @@ pub(crate) enum AsmOpnd {
     /// relocation.
     AbsMemRef { idx: u8, symbolic: bool },
     /// `disp(,%%index,scale)`: a scaled-index memory reference with no base
-    /// register (SIB base=101, mod=00, disp32). `sym` marks a link-time symbol
-    /// displacement (its name in the instruction's `sym_target`, `disp` the
-    /// addend, taken as an absolute reference); otherwise `disp` is a literal.
+    /// register (SIB base=101, mod=00, disp32). `sym` names the instruction's
+    /// displacement expression by index, taken as an absolute reference;
+    /// otherwise `disp` is a literal.
     IndexMem {
         index: AsmMemBase,
         scale: u8,
         disp: i32,
-        sym: bool,
+        sym: Option<u8>,
     },
     /// `sym(%%base)` / `disp+sym(%%base, %%index, scale)`: a based memory
-    /// reference whose displacement is a link-time symbol address plus a
-    /// constant (the symbol name in the instruction's `sym_target`, `disp`
-    /// the addend). Taken as an absolute reference through a disp32
-    /// relocation.
+    /// reference whose displacement is the instruction's expression named by
+    /// `expr`. Taken as an absolute reference through a disp32 relocation.
     SymMem {
         base: AsmMemBase,
         index: Option<AsmMemBase>,
         scale: u8,
-        disp: i32,
+        expr: u8,
     },
-    /// `sym(%%rip)` / `(sym + disp)(%%rip)`: a RIP-relative reference whose
-    /// displacement is a link-time symbol address plus a constant (the symbol
-    /// name in the instruction's `sym_target`, `disp` the addend). The disp32
-    /// field takes a PC-relative relocation against the symbol.
-    SymRipRel { disp: i32 },
+    /// `sym(%%rip)` / `(sym - 1b)(%%rip)`: a RIP-relative reference whose
+    /// displacement is the instruction's expression named by `expr`. The
+    /// disp32 field takes a PC-relative relocation against what the
+    /// expression leaves symbolic.
+    SymRipRel { expr: u8 },
     /// `%cN(%%rip)` / `%PN(%%rip)`: a RIP-relative memory reference whose
     /// displacement is an `i`-class operand substituted as a bare constant
     /// (`%c`) or a symbol / constant address (`%P`). The emitter resolves a
@@ -407,12 +405,12 @@ pub(crate) enum AsmOpnd {
     /// imm32 field and records an absolute relocation against the label's
     /// text offset. `num` / `forward` follow [`AsmOpnd::Label`].
     ImmLabel { num: u32, forward: bool },
-    /// `$symbol` / `$symbol +/- const`: the address of a named symbol as an
-    /// absolute immediate (`pushq $arch_rethook_trampoline`, `movw $_end+3,
-    /// %cx`). The name rides in the instruction's `sym_target` and the
-    /// constant in `addend`; the emitter zeroes the immediate field and
-    /// records an absolute relocation of the field's width against the symbol.
-    ImmSym { addend: i32 },
+    /// `$expr`: a symbol expression as an absolute immediate (`pushq
+    /// $arch_rethook_trampoline`, `movw $_end+3, %cx`, `addq $(a - b)`).
+    /// `expr` names the instruction's expression by index; the emitter zeroes
+    /// the immediate field and either folds the expression into it or records
+    /// an absolute relocation of the field's width.
+    ImmSym { expr: u8 },
     /// `%lK`: an `asm goto` label reference by label-list index (the
     /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
     /// this form). The emitter branches to the label's target block.
@@ -445,10 +443,13 @@ pub(crate) struct AsmInsn {
     pub operands: Vec<AsmOpnd>,
     /// Literal bytes for a [`Mnemonic::RawBytes`] piece; empty otherwise.
     pub bytes: Vec<u8>,
-    /// For a direct `call` / `jmp` to a bare identifier (`call schedule`),
-    /// the target symbol name; the emitter resolves it to a rel32 through a
-    /// relocation. `None` for every other instruction.
-    pub sym_target: Option<alloc::string::String>,
+    /// Symbol expressions the instruction's relocatable fields take, named by
+    /// index from the operands that carry one. A direct `call` / `jmp` /
+    /// `jcc` to a bare identifier (`call schedule`) has no operands and puts
+    /// its target here alone, as does a `.skip` count. An x86 instruction
+    /// relocates its displacement and its immediate independently, so it may
+    /// carry two (`movq $.Lresume, saved_rip(%rip)`).
+    pub sym_exprs: Vec<alloc::string::String>,
     /// A local-label definition `N:` at this point; the emitter records the
     /// code offset it stands at. Such a piece carries no mnemonic operands.
     pub label_def: Option<u32>,
@@ -1736,15 +1737,25 @@ fn split_seg_prefix(tok: &str) -> Option<(u8, &str)> {
     None
 }
 
+/// Strip the register sigil from a memory-operand register token: the
+/// extended-asm `%%` or the basic-asm `%`, with the whitespace GNU as allows
+/// between the sigil and the name (the kernel's `_ASM_RIP(x)` expands to
+/// `x (% rip)`) removed.
+fn strip_reg_sigil(tok: &str) -> Option<&str> {
+    let t = tok.trim();
+    Some(
+        t.strip_prefix("%%")
+            .or_else(|| t.strip_prefix('%'))?
+            .trim_start(),
+    )
+}
+
 /// Parse a base / index register of a memory operand: `%%reg` (a word, long or
 /// quad GP name -- the width selects the address size) or an operand reference
 /// `%N` (an optional `q` size letter is the 64-bit name the address requires
 /// anyway).
 fn parse_mem_base(tok: &str) -> Option<AsmMemBase> {
-    let body = tok
-        .trim()
-        .strip_prefix("%%")
-        .or_else(|| tok.trim().strip_prefix('%'))?;
+    let body = strip_reg_sigil(tok)?;
     let digits = body.strip_prefix('q').unwrap_or(body);
     if !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit()) {
         return Some(AsmMemBase::Ref(digits.parse().ok()?));
@@ -1812,7 +1823,7 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
                 index,
                 scale,
                 disp,
-                sym: false,
+                sym: None,
             });
         }
         return Some(AsmOpnd::Mem {
@@ -1822,9 +1833,7 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
             disp,
         });
     }
-    let reg_body = inner
-        .strip_prefix("%%")
-        .or_else(|| inner.strip_prefix('%'))?;
+    let reg_body = strip_reg_sigil(inner)?;
     // `(%dx)`: the variable I/O port of in/out/ins/outs. dx is the only
     // register the port parentheses name; it denotes the same port as the bare
     // `%dx` spelling, so it resolves to that register operand.
@@ -1909,51 +1918,50 @@ fn parse_int(s: &str) -> Option<i64> {
     crate::c5::codegen::ssa::emit_common::eval_const_expr(s.trim())
 }
 
-/// Split a memory-operand displacement expression whose terms are one symbol
-/// name plus integer constants (`sym`, `16+sym`, `sym-4`, `(sym + 16)`) into
-/// the symbol and the folded integer addend. `None` when there is no symbol
-/// term, more than one, a leading `-` on the symbol, or a non-integer term. A
-/// whole-expression integer, a template label, and a register name are not
-/// symbol displacements.
-fn parse_sym_disp<'a>(prefix: &'a str, labels: &[&str]) -> Option<(&'a str, i64)> {
-    if prefix.is_empty() || parse_int(prefix).is_some() {
+/// The symbolic displacement expression of an operand, or `None` when the
+/// text holds no symbol: an integer constant, a register name, a template
+/// label reference (which has its own operand forms), or an operand
+/// reference. Anything else the assembler's expression grammar accepts and
+/// that names at least one symbol is returned as written; the section engine
+/// evaluates it once the layout is known, folding a same-section difference
+/// and relocating what is left.
+fn sym_disp_expr<'a>(prefix: &'a str, labels: &[&str]) -> Option<&'a str> {
+    let prefix = prefix.trim();
+    // `%` in a displacement is a register or an operand reference, never a
+    // link-time symbol.
+    if prefix.is_empty()
+        || prefix.contains('%')
+        || parse_int(prefix).is_some()
+        || parse_label_ref(prefix, labels).is_some()
+    {
         return None;
     }
-    let mut terms = Vec::new();
-    if !super::super::ssa::emit_common::flatten_addsub_terms(prefix, false, &mut terms) {
-        return None;
-    }
-    let mut sym: Option<&str> = None;
-    let mut addend: i64 = 0;
-    for (neg, term) in terms {
-        if let Some(v) = parse_int(term) {
-            addend += if neg { -v } else { v };
-        } else if !neg
-            && sym.is_none()
-            && parse_label_ref(term, labels).is_none()
-            && reg_by_name(term).is_none()
-            && super::super::ssa::emit_common::is_asm_symbol_template(term)
-        {
-            sym = Some(term);
-        } else {
-            return None;
-        }
-    }
-    sym.map(|s| (s, addend))
+    let named = core::cell::Cell::new(false);
+    let resolve = |t: &str| {
+        named.set(named.get() || super::super::ssa::emit_common::is_asm_symbol_template(t));
+        Some(super::super::ssa::emit_common::AsmExprLeaf::Abs(0))
+    };
+    let ctx = super::super::ssa::emit_common::AsmExprCtx {
+        resolve: &resolve,
+        const_of: &|_| None,
+        lax_div: true,
+    };
+    super::super::ssa::emit_common::eval_asm_value(prefix, &ctx).ok()?;
+    named.get().then_some(prefix)
 }
 
 /// Parse a memory reference whose displacement carries a link-time symbol:
 /// the RIP-relative `sym(%rip)`, the no-base `sym(,%index,scale)`, and the
-/// based `disp+sym(%base[, %index, scale])` forms. Returns the symbol and the
-/// operand (its addend in `disp`); `None` for any other shape.
-fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str]) -> Option<(&'a str, AsmOpnd)> {
+/// based `disp+sym(%base[, %index, scale])` forms. Returns the displacement
+/// expression and the operand, which names it by the index `expr` the caller
+/// gives it; `None` for any other shape.
+fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str], expr: u8) -> Option<(&'a str, AsmOpnd)> {
     let open = matching_open_paren(tok)?;
     let prefix = tok[..open].trim();
     let inner = tok[open + 1..tok.len() - 1].trim();
-    let (sym, addend) = parse_sym_disp(prefix, labels)?;
-    let disp = i32::try_from(addend).ok()?;
-    if inner.strip_prefix("%%").or_else(|| inner.strip_prefix('%')) == Some("rip") {
-        return Some((sym, AsmOpnd::SymRipRel { disp }));
+    let sym = sym_disp_expr(prefix, labels)?;
+    if strip_reg_sigil(inner) == Some("rip") {
+        return Some((sym, AsmOpnd::SymRipRel { expr }));
     }
     let parts = split_asm_operands(inner);
     if parts.len() > 3 {
@@ -1980,14 +1988,14 @@ fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str]) -> Option<(&'a str, AsmOpnd)
         (None, Some((index, scale))) => AsmOpnd::IndexMem {
             index,
             scale,
-            disp,
-            sym: true,
+            disp: 0,
+            sym: Some(expr),
         },
         (Some(base), index_scale) => AsmOpnd::SymMem {
             base,
             index: index_scale.map(|(i, _)| i),
             scale: index_scale.map(|(_, s)| s).unwrap_or(1),
-            disp,
+            expr,
         },
         (None, None) => return None,
     };
@@ -2143,7 +2151,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 seg: None,
                 operands: Vec::new(),
                 bytes: Vec::new(),
-                sym_target: None,
+                sym_exprs: Vec::new(),
                 label_def: Some(num),
             });
             piece = rest.trim();
@@ -2179,7 +2187,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 seg: None,
                 operands,
                 bytes: Vec::new(),
-                sym_target: None,
+                sym_exprs: Vec::new(),
                 label_def: None,
             });
             continue;
@@ -2193,7 +2201,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 seg: None,
                 operands: Vec::new(),
                 bytes: bytes?,
-                sym_target: None,
+                sym_exprs: Vec::new(),
                 label_def: None,
             });
             continue;
@@ -2215,7 +2223,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 seg: None,
                 operands: Vec::new(),
                 bytes: (value as u64).to_le_bytes()[..unit as usize].to_vec(),
-                sym_target: Some(String::from(count_expr)),
+                sym_exprs: alloc::vec![String::from(count_expr)],
                 label_def: None,
             });
             continue;
@@ -2236,7 +2244,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 seg: None,
                 operands: Vec::new(),
                 bytes: Vec::new(),
-                sym_target: None,
+                sym_exprs: Vec::new(),
                 label_def: None,
             });
             continue;
@@ -2260,7 +2268,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 seg: None,
                 operands: Vec::new(),
                 bytes: Vec::new(),
-                sym_target: None,
+                sym_exprs: Vec::new(),
                 label_def: None,
             });
             (mnem_tok, rest) = match rest.find(char::is_whitespace) {
@@ -2293,16 +2301,15 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 seg: None,
                 operands: Vec::new(),
                 bytes: Vec::new(),
-                sym_target: Some(alloc::string::String::from(rest)),
+                sym_exprs: alloc::vec![alloc::string::String::from(rest)],
                 label_def: None,
             });
             continue;
         }
         let mut operands = Vec::new();
         let mut seg: Option<u8> = None;
-        // The address of a named symbol as an absolute immediate (`pushq
-        // $symbol`): the name rides here, the operand is an `ImmSym` marker.
-        let mut sym_target: Option<String> = None;
+        // Displacement and immediate expressions the operands name by index.
+        let mut sym_exprs: Vec<String> = Vec::new();
         if !rest.is_empty() {
             for op in split_asm_operands(rest) {
                 // A `%%fs:` / `%%gs:` segment override rides the instruction
@@ -2318,43 +2325,35 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                         if let Some(v) = parse_int(rem) {
                             let disp = i32::try_from(v)
                                 .map_err(|_| format!("inline asm: bad displacement `{op}`"))?;
-                            operands.push(AsmOpnd::AbsMem { disp, sym: false });
+                            operands.push(AsmOpnd::AbsMem { disp, sym: None });
                             continue;
                         }
                         rem
                     }
                     None => op,
                 };
-                // `$symbol` / `$symbol +/- const`: a symbol address the
-                // instruction takes as an absolute immediate, distinct from a
-                // `$int` / `$Nf` label. The constant folds into the addend.
+                // AT&T's indirect-branch marker `*` selects no encoding of
+                // its own -- the operand kind does -- so it is stripped
+                // before the operand forms are matched.
+                let tok = tok.strip_prefix('*').unwrap_or(tok);
+                let next = u8::try_from(sym_exprs.len())
+                    .map_err(|_| String::from("inline asm: too many symbol operands"))?;
+                // `$expr`: a symbol expression the instruction takes as an
+                // absolute immediate, distinct from a `$int` / `$Nf` label.
                 if let Some(expr) = tok.strip_prefix('$')
                     && parse_int(expr).is_none()
                     && reg_by_name(expr).is_none()
-                    && let Some((sym, addend)) = parse_sym_disp(strip_outer_parens(expr), &names)
-                    && let Ok(addend) = i32::try_from(addend)
+                    && let Some(sym) = sym_disp_expr(strip_outer_parens(expr), &names)
                 {
-                    if sym_target.is_some() {
-                        return Err(String::from(
-                            "inline asm: more than one symbol immediate per instruction",
-                        ));
-                    }
-                    sym_target = Some(String::from(sym));
-                    operands.push(AsmOpnd::ImmSym { addend });
+                    sym_exprs.push(String::from(sym));
+                    operands.push(AsmOpnd::ImmSym { expr: next });
                     continue;
                 }
                 // `sym(,%index,scale)` / `disp+sym(%base)`: a memory reference
-                // whose displacement is a link-time symbol address plus a
-                // constant. The name rides in `sym_target` (one such operand
-                // per instruction); the operand marks where its disp32 field
-                // goes.
-                if let Some((sym, opnd)) = parse_sym_mem(tok, &names) {
-                    if sym_target.is_some() {
-                        return Err(String::from(
-                            "inline asm: more than one symbol reference per instruction",
-                        ));
-                    }
-                    sym_target = Some(String::from(sym));
+                // whose displacement is a symbol expression; the operand marks
+                // where its disp32 field goes.
+                if let Some((sym, opnd)) = parse_sym_mem(tok, &names, next) {
+                    sym_exprs.push(String::from(sym));
                     operands.push(opnd);
                     continue;
                 }
@@ -2366,19 +2365,15 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                     if let Some(v) = parse_int(tok)
                         && let Ok(disp) = i32::try_from(v)
                     {
-                        operands.push(AsmOpnd::AbsMem { disp, sym: false });
+                        operands.push(AsmOpnd::AbsMem { disp, sym: None });
                         continue;
                     }
-                    if let Some((sym, addend)) = parse_sym_disp(tok, &names)
-                        && let Ok(disp) = i32::try_from(addend)
-                    {
-                        if sym_target.is_some() {
-                            return Err(String::from(
-                                "inline asm: more than one symbol reference per instruction",
-                            ));
-                        }
-                        sym_target = Some(String::from(sym));
-                        operands.push(AsmOpnd::AbsMem { disp, sym: true });
+                    if let Some(sym) = sym_disp_expr(tok, &names) {
+                        sym_exprs.push(String::from(sym));
+                        operands.push(AsmOpnd::AbsMem {
+                            disp: 0,
+                            sym: Some(next),
+                        });
                         continue;
                     }
                 }
@@ -2398,7 +2393,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             seg,
             operands,
             bytes: Vec::new(),
-            sym_target,
+            sym_exprs,
             label_def: None,
         });
     }
@@ -4484,7 +4479,7 @@ mod tests {
         assert_eq!(insns[0].mnemonic, Mnemonic::Nop);
         // A jump to a named label parses as a label operand, not a symbol.
         let insns = parse_template(b"jmp done%=\n\tnop\n\tdone%=:").unwrap();
-        assert!(insns[0].sym_target.is_none());
+        assert!(insns[0].sym_exprs.is_empty());
         assert!(matches!(insns[0].operands[0], AsmOpnd::Label { .. }));
         // Numeric-label addresses take a direction suffix.
         let insns = parse_template(b"1:\n\tlea 1b(%%rip), %%rax").unwrap();
@@ -4581,11 +4576,11 @@ mod tests {
                 index: AsmMemBase::Ref(1),
                 scale: 8,
                 disp: 8,
-                sym: false
+                sym: None
             }
         );
         let insns = parse_template(b"movq tab(,%%rcx,4), %%rbx").unwrap();
-        assert_eq!(insns[0].sym_target.as_deref(), Some("tab"));
+        assert_eq!(insns[0].sym_exprs, ["tab"]);
         assert_eq!(
             insns[0].operands[0],
             AsmOpnd::IndexMem {
@@ -4595,7 +4590,7 @@ mod tests {
                 },
                 scale: 4,
                 disp: 0,
-                sym: true
+                sym: Some(0)
             }
         );
         // movq (,%r9,4), %rax -- REX.X extends the index register.
@@ -4624,15 +4619,16 @@ mod tests {
         // in the operand; a segment override rides the instruction.
         let insns = parse_template(b"sarq $5, %%gs:(percpu_obj + 16)(%%rip)").unwrap();
         assert_eq!(insns[0].seg, Some(0x65));
-        assert_eq!(insns[0].sym_target.as_deref(), Some("percpu_obj"));
+        assert_eq!(insns[0].sym_exprs, ["(percpu_obj + 16)"]);
         assert_eq!(insns[0].operands[0], AsmOpnd::Imm(5));
-        assert_eq!(insns[0].operands[1], AsmOpnd::SymRipRel { disp: 16 });
+        assert_eq!(insns[0].operands[1], AsmOpnd::SymRipRel { expr: 0 });
         // The single-`%` basic-asm spelling and the unparenthesized form.
         let insns = parse_template(b"movq obj+8(%rip), %rax").unwrap();
-        assert_eq!(insns[0].sym_target.as_deref(), Some("obj"));
-        assert_eq!(insns[0].operands[0], AsmOpnd::SymRipRel { disp: 8 });
+        assert_eq!(insns[0].sym_exprs, ["obj+8"]);
+        assert_eq!(insns[0].operands[0], AsmOpnd::SymRipRel { expr: 0 });
         let insns = parse_template(b"leaq (obj - 8)(%%rip), %%rdx").unwrap();
-        assert_eq!(insns[0].operands[0], AsmOpnd::SymRipRel { disp: -8 });
+        assert_eq!(insns[0].sym_exprs, ["(obj - 8)"]);
+        assert_eq!(insns[0].operands[0], AsmOpnd::SymRipRel { expr: 0 });
         // A template-local label keeps the label-address form; a literal
         // displacement keeps the relocation-free form.
         let insns = parse_template(b"lbl:\n\tleaq lbl(%%rip), %%rax").unwrap();
@@ -5951,12 +5947,12 @@ mod string_and_prefix_tests {
         assert!(matches!(insns[0].mnemonic, Mnemonic::Skip));
         assert_eq!(insns[0].bytes, [0x90]);
         assert_eq!(
-            insns[0].sym_target.as_deref(),
-            Some("-(((775f-774f)-(772b-771b)) > 0) * ((775f-774f)-(772b-771b))")
+            insns[0].sym_exprs,
+            ["-(((775f-774f)-(772b-771b)) > 0) * ((775f-774f)-(772b-771b))"]
         );
         let plain = parse_template(b".skip 8").unwrap();
         assert!(matches!(plain[0].mnemonic, Mnemonic::Skip));
         assert_eq!(plain[0].bytes, [0]);
-        assert_eq!(plain[0].sym_target.as_deref(), Some("8"));
+        assert_eq!(plain[0].sym_exprs, ["8"]);
     }
 }

@@ -225,7 +225,7 @@ pub(crate) enum Mnemonic {
     },
     /// A single-memory-operand instruction encoded as one opcode byte and a
     /// ModR/M whose reg field is the opcode extension: `fnstsw` / `fnstcw`
-    /// (x87 status / control word) and the far indirect call `lcall`.
+    /// (x87 status / control word).
     /// `osz` emits the 0x66 operand-size prefix; REX.W comes from `rex_w`
     /// and REX.B from the base register.
     MemExt {
@@ -233,6 +233,19 @@ pub(crate) enum Mnemonic {
         ext: u8,
         osz: bool,
         rex_w: bool,
+    },
+    /// A far branch, `lcall` / `ljmp`. Two forms share the mnemonic: the
+    /// indirect `*m16:N` through a ModR/M (FF /3, /5) and the direct
+    /// `$seg, $off` immediate pair (9A, EA), which is `ptr16:16` or
+    /// `ptr16:32` and has no 64-bit-mode encoding. `opw` is the offset width
+    /// the AT&T suffix names, `None` for the mode default; the 0x66 prefix
+    /// follows from it and a 64-bit offset takes REX.W.
+    FarBranch {
+        /// ModR/M.reg extension of the indirect form: 3 `lcall`, 5 `ljmp`.
+        ext: u8,
+        /// Opcode of the direct form: 0x9A `lcall`, 0xEA `ljmp`.
+        far: u8,
+        opw: Option<u8>,
     },
     /// A single-memory-operand instruction on the 0F map, the ModR/M reg field
     /// carrying the opcode extension: `cmpxchg16b` (REX.W 0F C7 /1), `ldmxcsr`
@@ -936,44 +949,25 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
             ext: 3,
             rex_w: false,
         },
-        // Far indirect call (FF /3); the AT&T suffix sets the operand size.
-        "lcallw" => Mnemonic::MemExt {
-            opcode: 0xFF,
-            ext: 3,
-            osz: true,
-            rex_w: false,
-        },
-        "lcall" | "lcalll" => Mnemonic::MemExt {
-            opcode: 0xFF,
-            ext: 3,
-            osz: false,
-            rex_w: false,
-        },
-        "lcallq" => Mnemonic::MemExt {
-            opcode: 0xFF,
-            ext: 3,
-            osz: false,
-            rex_w: true,
-        },
-        // Far indirect jump (FF /5); the AT&T suffix sets the operand size.
-        "ljmpw" => Mnemonic::MemExt {
-            opcode: 0xFF,
-            ext: 5,
-            osz: true,
-            rex_w: false,
-        },
-        "ljmp" | "ljmpl" => Mnemonic::MemExt {
-            opcode: 0xFF,
-            ext: 5,
-            osz: false,
-            rex_w: false,
-        },
-        "ljmpq" => Mnemonic::MemExt {
-            opcode: 0xFF,
-            ext: 5,
-            osz: false,
-            rex_w: true,
-        },
+        // Far branch: FF /3 indirect and 9A direct for `lcall`, FF /5 and EA
+        // for `ljmp`. The AT&T suffix sets the offset width, absent it the
+        // mode default.
+        "lcall" | "lcallw" | "lcalll" | "lcallq" | "ljmp" | "ljmpw" | "ljmpl" | "ljmpq" => {
+            let (ext, far, sfx) = match name.strip_prefix("lcall") {
+                Some(s) => (3, 0x9A, s),
+                None => (5, 0xEA, &name["ljmp".len()..]),
+            };
+            Mnemonic::FarBranch {
+                ext,
+                far,
+                opw: match sfx {
+                    "w" => Some(2),
+                    "l" => Some(4),
+                    "q" => Some(8),
+                    _ => None,
+                },
+            }
+        }
         "xadd" => Mnemonic::Xadd,
         "cmpxchg" => Mnemonic::Cmpxchg,
         // 128-bit compare-and-exchange against rDX:rAX (REX.W 0F C7 /1).
@@ -2834,6 +2828,17 @@ fn retry_as_suffixed(
     to_table_generic(table_mnemonic(base)?, Some(size), ops)
 }
 
+/// Bytes an encoding places after its immediate field. x86 puts the immediate
+/// last, save for the direct far branch, whose 16-bit selector trails the
+/// offset. The emitter needs it to settle a symbol immediate's field width by
+/// re-encoding.
+pub(crate) fn imm_field_tail(mnemonic: Mnemonic) -> usize {
+    match mnemonic {
+        Mnemonic::FarBranch { .. } => 2,
+        _ => 0,
+    }
+}
+
 /// Encode one resolved instruction into `code`. Operands are in AT&T
 /// order. Returns an error for an unsupported mnemonic / operand form.
 pub(crate) fn encode(
@@ -3124,6 +3129,53 @@ fn encode_bespoke(
                 code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
             }
             code.push(opcode);
+            mr.emit(code, ext);
+            Ok(())
+        }
+        Mnemonic::FarBranch { ext, far, opw } => {
+            let w = opw.unwrap_or(mode.opsize());
+            // `$seg, $off`: AT&T writes the selector first, the encoding puts
+            // the offset first. The direct form is invalid in 64-bit mode.
+            if let [Concrete::Imm(seg), Concrete::Imm(off)] = *ops {
+                if mode == super::table::Mode::Bits64 {
+                    return Err(String::from(
+                        "inline asm: the direct far branch has no 64-bit-mode encoding",
+                    ));
+                }
+                if w != 2 && w != 4 {
+                    return Err(String::from(
+                        "inline asm: a direct far branch takes a 16- or 32-bit offset",
+                    ));
+                }
+                // The offset must fit the field either signed or unsigned; the
+                // selector is truncated, as GNU as does.
+                let bits = u32::from(w) * 8;
+                if off >> bits != 0 && off >> bits != -1 {
+                    return Err(format!(
+                        "inline asm: far branch offset `{off}` does not fit {bits} bits"
+                    ));
+                }
+                if w != mode.opsize() {
+                    code.push(0x66);
+                }
+                code.push(far);
+                code.extend_from_slice(&(off as u64).to_le_bytes()[..w as usize]);
+                code.extend_from_slice(&(seg as u16).to_le_bytes());
+                return Ok(());
+            }
+            let Some(mr) = ops.first().and_then(MemRm::of) else {
+                return Err(String::from(
+                    "inline asm: a far branch takes a memory operand or `$seg, $off`",
+                ));
+            };
+            if (w == 2 || w == 4) && w != mode.opsize() {
+                code.push(0x66);
+            }
+            let rex_w = w == 8;
+            if rex_w || mr.rex_x() || mr.rex_b() {
+                code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
+            }
+            code.push(0xFF);
             mr.emit(code, ext);
             Ok(())
         }

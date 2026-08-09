@@ -443,6 +443,57 @@ fn m32_starts_the_encoder_in_32_bit_mode() {
     );
 }
 
+/// The direct far branch of real-mode mode-switch code, in the shapes
+/// the kernel's `arch/x86/realmode` units write it. Bytes, `R_386_*`
+/// numbering and the implicit addend are GNU as 2.46.1's for the same
+/// source.
+#[test]
+fn direct_far_branches_assemble_to_an_i386_object() {
+    const SRC: &str = concat!(
+        "\t.code16\n\t.text\n",
+        "\tljmpw $0xf000, $0xfff0\n",
+        "\tljmpw $8, $2f\n",
+        "2:\tljmpl $(1*8), $pa_startup_32\n",
+        "\t.code32\n",
+        "\tljmpl $(1*8), $pa_startup_32\n",
+    );
+    let d = dir("far-branch");
+    write(&d, "f.s", SRC);
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "-m16", "f.s", "-o", "f.o"],
+    );
+    let b = std::fs::read(d.join("f.o")).expect("object");
+    let secs = elf32_sections(&b);
+    let text = secs
+        .iter()
+        .find(|s| s.0 == ".text" && s.3 != 0)
+        .expect(".text");
+    assert_eq!(
+        &b[text.2..text.2 + text.3],
+        [
+            0xea, 0xf0, 0xff, 0x00, 0xf0, // ljmpw $0xf000, $0xfff0
+            0xea, 0x0a, 0x00, 0x08, 0x00, // ljmpw $8, $2f
+            0x66, 0xea, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, // .code16 ljmpl $8, $sym
+            0xea, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, // .code32 ljmpl $8, $sym
+        ]
+    );
+    let rel = secs.iter().find(|s| s.0 == ".rel.text").expect(".rel.text");
+    // R_386_16 over the same-section label's offset, R_386_32 over each
+    // external one. SHT_REL has no addend field, so the label's own
+    // offset rides in the field it patches.
+    let rels: Vec<(u32, u32)> = (0..rel.3 / 8)
+        .map(|i| {
+            let o = rel.2 + i * 8;
+            (
+                u32::from_le_bytes(b[o..o + 4].try_into().unwrap()),
+                u32::from_le_bytes(b[o + 4..o + 8].try_into().unwrap()) & 0xff,
+            )
+        })
+        .collect();
+    assert_eq!(rels, [(6, 20), (12, 1), (19, 1)], "R_386_16, R_386_32 x2");
+}
+
 /// A `.code16` branch to a label in the same section resolves at
 /// assembly time at the 2-byte field's width, leaving no relocation.
 #[test]

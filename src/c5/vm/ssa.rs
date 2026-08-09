@@ -2353,6 +2353,7 @@ fn run_inline_asm(
             | Mnemonic::StringOp { .. }
             | Mnemonic::MemExt { .. }
             | Mnemonic::MemExt0F { .. }
+            | Mnemonic::FarBranch { .. }
             | Mnemonic::InvMem { .. } => {
                 return Err(C5Error::Runtime(alloc::string::String::from(
                     "inline asm: string / x87 / far-branch / system instruction is not supported under the VM",

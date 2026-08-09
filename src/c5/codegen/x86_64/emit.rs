@@ -7192,14 +7192,15 @@ fn encode_one_x86_section_insn(
     // selects. The widest probe that encodes wins, matching GNU as, which
     // relocates a symbol immediate in the operand size's own field rather
     // than in a shortened one.
+    let tail = super::asm::imm_field_tail(insn.mnemonic);
     let imm_field = match sym_imm {
-        Some((_, _, idx)) => Some(locate_sym_imm_field(&concrete, idx, &encode).ok_or_else(
-            || {
+        Some((_, _, idx)) => Some(
+            locate_sym_imm_field(&concrete, idx, tail, &encode).ok_or_else(|| {
                 alloc::format!(
                     "inline asm: replacement `{text}` symbol immediate has no encodable field"
                 )
-            },
-        )?),
+            })?,
+        ),
         None => None,
     };
     if let (Some((_, _, idx)), Some(f)) = (&sym_imm, &imm_field) {
@@ -7358,11 +7359,13 @@ type EncodeFn<'a> =
 
 /// Settle a symbol immediate's field by re-encoding. Each probe pair encodes
 /// the instruction twice; the bytes that differ are the field, which x86
-/// places last, so a run reaching the end of the encoding is the whole field
-/// and a shorter one means the probe did not fill it.
+/// places last (`tail` bytes from the end for the form that trails it), so a
+/// run reaching that point is the whole field and a shorter one means the
+/// probe did not fill it.
 fn locate_sym_imm_field(
     concrete: &[super::asm::Concrete],
     idx: usize,
+    tail: usize,
     encode: &EncodeFn<'_>,
 ) -> Option<SymImmField> {
     use super::asm::Concrete;
@@ -7372,11 +7375,16 @@ fn locate_sym_imm_field(
         encode(&ops).ok()
     };
     for (width, p1, p2) in IMM_PROBE {
-        let (a, b) = (with(p1)?, with(p2)?);
+        // A probe the form rejects (a 16-bit field asked for a 32-bit value)
+        // rules that width out, not the search.
+        let (Some(a), Some(b)) = (with(p1), with(p2)) else {
+            continue;
+        };
         let Some((start, len)) = differing_run(&a, &b) else {
             continue;
         };
-        if len != width as usize || start + len != a.len() {
+        let end = start + len;
+        if len != width as usize || (end != a.len() && end + tail != a.len()) {
             continue;
         }
         // The signed imm32 class rejects a value above `i32::MAX`, so an
@@ -10731,6 +10739,163 @@ mod code_mode_tests {
         assert_eq!(assemble(".code16\njz f\n"), [0x0f, 0x84, 0, 0]);
         assert_eq!(assemble(".code32\ncall f\n"), [0xe8, 0, 0, 0, 0]);
         assert_eq!(assemble("call f\n"), [0xe8, 0, 0, 0, 0]);
+    }
+
+    /// The direct far branch `ljmp` / `lcall $seg, $off` is `ptr16:16` or
+    /// `ptr16:32` (EA / 9A) with the offset first and the selector after it.
+    /// The offset width is the mode default unless the AT&T suffix names the
+    /// other one, which the 0x66 prefix then selects. Bytes measured with GNU
+    /// as 2.46.1 for the same source.
+    #[test]
+    fn direct_far_branch_matches_gnu_as() {
+        for (src, bytes) in [
+            (
+                ".code16\nljmp $0x1234, $0x5678\n",
+                &[0xea, 0x78, 0x56, 0x34, 0x12][..],
+            ),
+            (
+                ".code16\nljmpw $0x1234, $0x5678\n",
+                &[0xea, 0x78, 0x56, 0x34, 0x12][..],
+            ),
+            (
+                ".code16\nljmpl $0x1234, $0x12345678\n",
+                &[0x66, 0xea, 0x78, 0x56, 0x34, 0x12, 0x34, 0x12][..],
+            ),
+            (
+                ".code16\nlcall $0x1234, $0x5678\n",
+                &[0x9a, 0x78, 0x56, 0x34, 0x12][..],
+            ),
+            (
+                ".code16\nlcalll $0x1234, $0x12345678\n",
+                &[0x66, 0x9a, 0x78, 0x56, 0x34, 0x12, 0x34, 0x12][..],
+            ),
+            (
+                ".code32\nljmp $0x1234, $0x12345678\n",
+                &[0xea, 0x78, 0x56, 0x34, 0x12, 0x34, 0x12][..],
+            ),
+            (
+                ".code32\nljmpw $0x1234, $0x5678\n",
+                &[0x66, 0xea, 0x78, 0x56, 0x34, 0x12][..],
+            ),
+            (
+                ".code32\nljmpl $0x1234, $0x12345678\n",
+                &[0xea, 0x78, 0x56, 0x34, 0x12, 0x34, 0x12][..],
+            ),
+            (
+                ".code32\nlcall $0x1234, $0x12345678\n",
+                &[0x9a, 0x78, 0x56, 0x34, 0x12, 0x34, 0x12][..],
+            ),
+            (
+                ".code32\nlcallw $0x1234, $0x5678\n",
+                &[0x66, 0x9a, 0x78, 0x56, 0x34, 0x12][..],
+            ),
+            // The offset fits the field signed or unsigned; the selector is
+            // truncated to 16 bits.
+            (
+                ".code16\nljmpw $0xf000, $-1\n",
+                &[0xea, 0xff, 0xff, 0x00, 0xf0][..],
+            ),
+            (
+                ".code16\nljmpw $0x12345, $0x1234\n",
+                &[0xea, 0x34, 0x12, 0x45, 0x23][..],
+            ),
+        ] {
+            assert_eq!(assemble(src), bytes, "{src}");
+        }
+        // 64-bit mode has no direct far branch, as GNU as reports.
+        for src in [
+            "ljmp $1, $2\n",
+            "ljmpl $1, $2\n",
+            "lcall $1, $2\n",
+            ".code64\nljmpw $1, $2\n",
+        ] {
+            assert!(assemble_err(src).contains("64-bit-mode"), "{src}");
+        }
+        // An offset wider than the field it would take has no encoding.
+        assert!(
+            assemble_err(".code16\nljmpw $0x1234, $0x12345\n").contains("does not fit"),
+            "16-bit offset range"
+        );
+    }
+
+    /// The indirect far branch's operand-size prefix follows the mode the
+    /// same way: the AT&T suffix names the offset width, and 0x66 appears
+    /// only where it differs from the mode default. Bytes measured with GNU
+    /// as 2.46.1 for the same source. The operands stay at the mode's default
+    /// address size; the bespoke encoder does not yet model the other one.
+    /// TODO 16-bit addressing and the 0x67 prefix in the bespoke encoder.
+    #[test]
+    fn indirect_far_branch_operand_size_matches_gnu_as() {
+        for (src, bytes) in [
+            (".code32\nljmp *(%eax)\n", &[0xff, 0x28][..]),
+            (".code32\nljmpw *(%eax)\n", &[0x66, 0xff, 0x28][..]),
+            (".code32\nljmpl *(%eax)\n", &[0xff, 0x28][..]),
+            (".code32\nlcall *(%eax)\n", &[0xff, 0x18][..]),
+            (".code32\nlcallw *(%eax)\n", &[0x66, 0xff, 0x18][..]),
+            ("ljmp *(%rax)\n", &[0xff, 0x28][..]),
+            ("ljmpw *(%rax)\n", &[0x66, 0xff, 0x28][..]),
+            ("ljmpl *(%rax)\n", &[0xff, 0x28][..]),
+            ("lcall *(%rax)\n", &[0xff, 0x18][..]),
+        ] {
+            assert_eq!(assemble(src), bytes, "{src}");
+        }
+    }
+
+    /// A symbol in a direct far branch's offset relocates in that field,
+    /// which the trailing selector keeps off the end of the encoding; a
+    /// symbol in the selector relocates in its own 16-bit field. Bytes and
+    /// relocations measured with GNU as 2.46.1 for the same source.
+    #[test]
+    fn far_branch_symbol_immediate_matches_gnu_as() {
+        for (src, bytes, reloc) in [
+            // ea <16 sym> 08 00
+            (
+                ".code16\nljmpw $8, $s\n",
+                &[0xea, 0, 0, 0x08, 0][..],
+                (1u32, 2u8, 0i64),
+            ),
+            // 66 ea <32 sym> 08 00
+            (
+                ".code16\nljmpl $8, $s\n",
+                &[0x66, 0xea, 0, 0, 0, 0, 0x08, 0][..],
+                (2, 4, 0),
+            ),
+            (
+                ".code32\nljmpl $8, $s\n",
+                &[0xea, 0, 0, 0, 0, 0x08, 0][..],
+                (1, 4, 0),
+            ),
+            (
+                ".code32\nljmpw $8, $s\n",
+                &[0x66, 0xea, 0, 0, 0x08, 0][..],
+                (2, 2, 0),
+            ),
+            (
+                ".code32\nlcalll $8, $s\n",
+                &[0x9a, 0, 0, 0, 0, 0x08, 0][..],
+                (1, 4, 0),
+            ),
+            (
+                ".code32\nljmpl $8, $s+4\n",
+                &[0xea, 0, 0, 0, 0, 0x08, 0][..],
+                (1, 4, 4),
+            ),
+            // A symbol selector takes the trailing 16-bit field instead.
+            (
+                ".code32\nljmpl $s, $0x1000\n",
+                &[0xea, 0x00, 0x10, 0, 0, 0, 0][..],
+                (5, 2, 0),
+            ),
+        ] {
+            let (got, relocs) = assemble_relocs(src);
+            assert_eq!(got, bytes, "{src}");
+            let (off, width, addend) = reloc;
+            assert_eq!(
+                relocs,
+                [(off, width, false, alloc::string::String::from("s"), addend)],
+                "{src}"
+            );
+        }
     }
 
     /// A `$symbol` immediate relocates in whatever field the instruction's

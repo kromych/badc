@@ -6621,7 +6621,7 @@ fn encode_one_x86_section_insn(
     if prefix.is_some()
         && (matches!(
             insn.operands.first(),
-            Some(AsmOpnd::GotoLabel(_) | AsmOpnd::ImmSym)
+            Some(AsmOpnd::GotoLabel(_) | AsmOpnd::ImmSym { .. })
         ) || (insn.sym_target.is_some() && insn.operands.is_empty()))
     {
         return Err(alloc::format!(
@@ -6765,33 +6765,6 @@ fn encode_one_x86_section_insn(
             });
         }
     }
-    // `pushq $symbol`: the symbol's address as an absolute immediate. `68`
-    // pushes a sign-extended imm32; the field takes an `R_X86_64_32S` reloc
-    // against the symbol (addend 0), like the compiler-emitted form.
-    if matches!(insn.operands.first(), Some(AsmOpnd::ImmSym)) {
-        if mnem != "push" {
-            return Err(alloc::format!(
-                "inline asm: replacement `{text}` symbol immediate requires `push`"
-            ));
-        }
-        let name = insn.sym_target.clone().ok_or_else(|| {
-            alloc::format!("inline asm: replacement `{text}` symbol immediate has no symbol")
-        })?;
-        let reloc = AsmSectionReloc {
-            offset: 1,
-            width: 4,
-            kind: AsmRelocKind::Data,
-            pcrel: false,
-            branch: false,
-            signed: true,
-            target: AsmSectionTarget::Symbol(name),
-            addend: 0,
-        };
-        return Ok(AsmSectionItem::CodeBytes {
-            bytes: alloc::vec![0x68, 0, 0, 0, 0],
-            relocs: alloc::vec![reloc],
-        });
-    }
     // Resolve each operand to a concrete register, immediate, or memory
     // reference. A template operand assigned a register uses it; an `i`-class
     // operand uses its constant. A base register is a `%%reg` or an operand's
@@ -6834,12 +6807,34 @@ fn encode_one_x86_section_insn(
     // `sym(,%index,scale)`). The disp32 field is located by re-encoding. At
     // most one such operand per instruction.
     let mut sym_disp: Option<(AsmSectionTarget, i64, usize, bool)> = None;
+    // A `$symbol` immediate: its reloc target, the symbol addend, and the
+    // operand's index in `concrete`. The field is located by re-encoding, as
+    // for a symbolic displacement. At most one per instruction.
+    let mut sym_imm: Option<(AsmSectionTarget, i64, usize)> = None;
     // A `__seg_gs` / `__seg_fs` memory operand's segment override; a template
     // `%%gs:` rides `insn.seg` instead, and the two never conflict.
     let mut operand_seg: Option<u8> = None;
     for o in &insn.operands {
         match *o {
             AsmOpnd::Imm(v) => concrete.push(Concrete::Imm(v)),
+            AsmOpnd::ImmSym { addend } => {
+                let name = insn.sym_target.clone().ok_or_else(|| {
+                    alloc::format!(
+                        "inline asm: replacement `{text}` symbol immediate has no symbol"
+                    )
+                })?;
+                if sym_imm.is_some() {
+                    return Err(alloc::format!(
+                        "inline asm: replacement `{text}` has more than one symbol immediate"
+                    ));
+                }
+                sym_imm = Some((
+                    AsmSectionTarget::Symbol(name),
+                    addend as i64,
+                    concrete.len(),
+                ));
+                concrete.push(Concrete::Imm(IMM_PROBE[0].1));
+            }
             AsmOpnd::Reg { reg, size } => concrete.push(Concrete::Reg { reg, size }),
             AsmOpnd::Ref { idx, size } => {
                 // A memory-constraint (`m`) operand holds its address in the
@@ -7106,10 +7101,31 @@ fn encode_one_x86_section_insn(
         }
     }
     // Encode the instruction body; a segment override rides in front of it.
-    let mut body = alloc::vec::Vec::new();
     let addr = section_addr_size(insn, mode);
-    super::asm::encode_in(&mut body, mode, addr, insn.mnemonic, insn.suffix, &concrete)
-        .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+    let encode = |ops: &[Concrete]| {
+        let mut out = alloc::vec::Vec::new();
+        super::asm::encode_in(&mut out, mode, addr, insn.mnemonic, insn.suffix, ops).map(|()| out)
+    };
+    // A `$symbol` immediate: settle the field's width and signedness before
+    // the body is encoded, since both follow from the form the probe value
+    // selects. The widest probe that encodes wins, matching GNU as, which
+    // relocates a symbol immediate in the operand size's own field rather
+    // than in a shortened one.
+    let imm_field = match sym_imm {
+        Some((_, _, idx)) => Some(locate_sym_imm_field(&concrete, idx, &encode).ok_or_else(
+            || {
+                alloc::format!(
+                    "inline asm: replacement `{text}` symbol immediate has no encodable field"
+                )
+            },
+        )?),
+        None => None,
+    };
+    if let (Some((_, _, idx)), Some(f)) = (&sym_imm, &imm_field) {
+        concrete[*idx] = Concrete::Imm(f.probe);
+    }
+    let mut body =
+        encode(&concrete).map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
     // GNU as orders the prefixes segment, address size, operand size, then
     // repeat / lock; the encoded body carries the size prefixes at its front,
     // so the repeat / lock byte goes after them.
@@ -7196,8 +7212,91 @@ fn encode_one_x86_section_insn(
             addend,
         });
     }
+    if let (Some((target, off, _)), Some(f)) = (sym_imm, imm_field) {
+        body[f.start..f.start + f.width as usize].fill(0);
+        relocs.push(AsmSectionReloc {
+            offset: seg_len + f.start as u32,
+            width: f.width,
+            kind: AsmRelocKind::Data,
+            pcrel: false,
+            branch: false,
+            signed: f.signed,
+            target,
+            addend: off,
+        });
+    }
     bytes.extend_from_slice(&body[sizes..]);
     Ok(AsmSectionItem::CodeBytes { bytes, relocs })
+}
+
+/// Where a `$symbol` immediate lands in an instruction's encoding.
+struct SymImmField {
+    /// Probe value that selects this field; the body encodes with it and the
+    /// field bytes are zeroed afterwards.
+    probe: i64,
+    start: usize,
+    width: u8,
+    /// The form's immediate slot is the sign-extended class, so the field
+    /// takes `R_X86_64_32S` rather than `R_X86_64_32`.
+    signed: bool,
+}
+
+/// Probe pairs for locating a symbol immediate's field, widest first. Both
+/// members of a pair differ in every byte of the field and stay inside the
+/// signed range of their width, so a form that accepts one accepts the other.
+/// The 8-byte pair comes last: an instruction that also has a 4-byte form
+/// (`movq $sym, %rax`) takes it, as GNU as does, and only an imm64-only form
+/// (`movabsq`) falls through.
+const IMM_PROBE: [(u8, i64, i64); 4] = [
+    (4, 0x5B3D_71A7, 0x24C2_8E58),
+    (2, 0x5B3D, 0x24C2),
+    (1, 0x5B, 0x24),
+    (8, 0x5B3D_71A7_2C4E_1936, 0x24C2_8E58_53B1_E6C9),
+];
+
+/// A value only an unsigned imm32 slot accepts: a signed imm32 slot rejects
+/// it, which is how the sign-extended class is told apart.
+const IMM_UNSIGNED_PROBE: i64 = 0x8000_0000;
+
+/// Encode a concrete operand list, or report why it does not encode.
+type EncodeFn<'a> =
+    dyn Fn(&[super::asm::Concrete]) -> Result<alloc::vec::Vec<u8>, alloc::string::String> + 'a;
+
+/// Settle a symbol immediate's field by re-encoding. Each probe pair encodes
+/// the instruction twice; the bytes that differ are the field, which x86
+/// places last, so a run reaching the end of the encoding is the whole field
+/// and a shorter one means the probe did not fill it.
+fn locate_sym_imm_field(
+    concrete: &[super::asm::Concrete],
+    idx: usize,
+    encode: &EncodeFn<'_>,
+) -> Option<SymImmField> {
+    use super::asm::Concrete;
+    let with = |v: i64| {
+        let mut ops = concrete.to_vec();
+        ops[idx] = Concrete::Imm(v);
+        encode(&ops).ok()
+    };
+    for (width, p1, p2) in IMM_PROBE {
+        let (a, b) = (with(p1)?, with(p2)?);
+        let Some((start, len)) = differing_run(&a, &b) else {
+            continue;
+        };
+        if len != width as usize || start + len != a.len() {
+            continue;
+        }
+        // The signed imm32 class rejects a value above `i32::MAX`, so an
+        // encoding that changes length or fails there is the sign-extended
+        // form. Narrower fields carry no such distinction.
+        let signed = width == 4 && with(IMM_UNSIGNED_PROBE).is_none_or(|u| u.len() != a.len());
+        return Some(SymImmField {
+            probe: p1,
+            start,
+            width,
+            signed,
+        });
+    }
+    None
 }
 
 /// A distinctive displacement for locating a RIP-relative disp32 field by
@@ -7213,18 +7312,23 @@ const RIPREL_PROBE_DISP2: i32 = 0xA4C2_8E58u32 as i32;
 /// four contiguous bytes differ -- an encoder-invariant check that the disp32
 /// is the sole variable field.
 fn riprel_disp32_field(a: &[u8], b: &[u8]) -> Option<usize> {
+    differing_run(a, b).filter(|&(_, n)| n == 4).map(|(s, _)| s)
+}
+
+/// The single contiguous run of bytes two equal-length encodings differ in,
+/// as (offset, length). `None` when they differ nowhere or in more than one
+/// run -- the encoder-invariant check that the probed field is the only
+/// variable one.
+fn differing_run(a: &[u8], b: &[u8]) -> Option<(usize, usize)> {
     if a.len() != b.len() {
         return None;
     }
-    let first = a.iter().zip(b).position(|(x, y)| x != y)?;
     let differ = |i: usize| a.get(i).zip(b.get(i)).is_some_and(|(x, y)| x != y);
-    if !(first + 4 <= a.len() && (first..first + 4).all(differ)) {
-        return None;
-    }
-    if (0..a.len()).any(|i| differ(i) && !(first..first + 4).contains(&i)) {
-        return None;
-    }
-    Some(first)
+    let first = (0..a.len()).find(|&i| differ(i))?;
+    let end = (first..a.len()).find(|&i| !differ(i)).unwrap_or(a.len());
+    (end..a.len())
+        .all(|i| !differ(i))
+        .then_some((first, end - first))
 }
 
 /// Lower an `Inst::InlineAsm` (GCC extended asm with operands). Assigns
@@ -8150,7 +8254,7 @@ fn emit_inline_asm(
                 // A `$symbol` absolute-address immediate needs a symbol
                 // relocation the function-body stream does not carry; it is
                 // assembled only in file-scope section code.
-                AsmOpnd::ImmSym => {
+                AsmOpnd::ImmSym { .. } => {
                     return fail(
                         "inline asm: `$symbol` address immediate is only supported in file-scope asm",
                     );
@@ -10316,19 +10420,47 @@ mod code_mode_tests {
 
     /// Bytes a file-scope asm stream assembles to, in section order.
     fn assemble(text: &str) -> Vec<u8> {
-        let mut blocks = extract_file_scope_asm_sections(text, false).expect("parses");
+        assemble_relocs(text).0
+    }
+
+    /// One relocation as `(offset, width, signed, symbol, addend)`.
+    type Reloc = (u32, u8, bool, alloc::string::String, i64);
+
+    /// Bytes plus the stream's relocations. Offsets are within the item,
+    /// which is the whole stream in these tests.
+    fn assemble_relocs(text: &str) -> (Vec<u8>, Vec<Reloc>) {
+        use super::super::ssa::emit_common::{
+            AsmComments, AsmSectionTarget, prepare_file_asm_text,
+        };
+        // The file-scope path prepares the template (comment stripping, GNU as
+        // macro and equate expansion) before the section parse reads it.
+        let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
+        let mut blocks = extract_file_scope_asm_sections(&text, false).expect("parses");
         super::encode_x86_file_asm_section_code(&mut blocks).expect("assembles");
-        let mut out = Vec::new();
+        let (mut out, mut rs) = (Vec::new(), Vec::new());
         for b in blocks.iter_mut() {
             for_each_section_item_mut(core::slice::from_mut(b), &mut |item| {
-                if let AsmSectionItem::CodeBytes { bytes, .. } = item {
+                if let AsmSectionItem::CodeBytes { bytes, relocs } = item {
+                    for r in relocs.iter() {
+                        let name = match &r.target {
+                            AsmSectionTarget::Symbol(n) => n.clone(),
+                            t => alloc::format!("{t:?}"),
+                        };
+                        rs.push((
+                            r.offset + out.len() as u32,
+                            r.width,
+                            r.signed,
+                            name,
+                            r.addend,
+                        ));
+                    }
                     out.extend_from_slice(bytes);
                 }
                 Ok(())
             })
             .expect("walks");
         }
-        out
+        (out, rs)
     }
 
     /// `.code16` / `.code32` / `.code64` select the encoding mode of the
@@ -10389,5 +10521,89 @@ mod code_mode_tests {
         assert_eq!(assemble(".code16\njz f\n"), [0x0f, 0x84, 0, 0]);
         assert_eq!(assemble(".code32\ncall f\n"), [0xe8, 0, 0, 0, 0]);
         assert_eq!(assemble("call f\n"), [0xe8, 0, 0, 0, 0]);
+    }
+
+    /// A `$symbol` immediate relocates in whatever field the instruction's
+    /// operand size gives it, not only `push`'s imm32. The field is
+    /// sign-extended (`R_X86_64_32S`, `signed`) exactly when the form's
+    /// immediate slot is the signed imm32 class. Bytes and relocations
+    /// measured with GNU as 2.46.1 for the same source.
+    #[test]
+    fn symbol_immediate_field_matches_gnu_as() {
+        for (src, bytes, reloc) in [
+            // 48 c7 c0 <32S sym>
+            (
+                "movq $s, %rax\n",
+                &[0x48, 0xc7, 0xc0, 0, 0, 0, 0][..],
+                (3u32, 4u8, true, 0i64),
+            ),
+            // b8 <32 sym>: a 32-bit operand takes the zero-extended field.
+            ("movl $s, %eax\n", &[0xb8, 0, 0, 0, 0][..], (1, 4, false, 0)),
+            (
+                "subq $s, %rsp\n",
+                &[0x48, 0x81, 0xec, 0, 0, 0, 0][..],
+                (3, 4, true, 0),
+            ),
+            (
+                "addq $s+8, %rax\n",
+                &[0x48, 0x05, 0, 0, 0, 0][..],
+                (2, 4, true, 8),
+            ),
+            ("cmpl $s, %eax\n", &[0x3d, 0, 0, 0, 0][..], (1, 4, false, 0)),
+            ("pushq $s\n", &[0x68, 0, 0, 0, 0][..], (1, 4, true, 0)),
+            ("movb $s, %al\n", &[0xb0, 0][..], (1, 1, false, 0)),
+            ("movw $s, %dx\n", &[0x66, 0xba, 0, 0][..], (2, 2, false, 0)),
+            (
+                "movabsq $s, %rcx\n",
+                &[0x48, 0xb9, 0, 0, 0, 0, 0, 0, 0, 0][..],
+                (2, 8, false, 0),
+            ),
+        ] {
+            let (got, relocs) = assemble_relocs(src);
+            assert_eq!(got, bytes, "{src}");
+            let (off, width, signed, addend) = reloc;
+            assert_eq!(
+                relocs,
+                [(off, width, signed, alloc::string::String::from("s"), addend)],
+                "{src}"
+            );
+        }
+    }
+
+    /// A `.code16` stub's symbol immediate takes the 16-bit field, and the
+    /// constant term folds into the relocation addend.
+    #[test]
+    fn symbol_immediate_in_code16_matches_gnu_as() {
+        let (bytes, relocs) = assemble_relocs(".code16\nmovw $_end+3, %cx\n");
+        assert_eq!(bytes, [0xb9, 0, 0]);
+        assert_eq!(
+            relocs,
+            [(1, 2, false, alloc::string::String::from("_end"), 3)]
+        );
+    }
+
+    /// A `.set` / `=` assignment to a register is the GNU as register equate:
+    /// every later use of the name assembles as that register. `$name` splits
+    /// at the AT&T immediate sigil, so a constant equate resolves there too.
+    #[test]
+    fn register_and_constant_equates_resolve_in_operands() {
+        assert_eq!(
+            assemble(".set IN_KEY, %rdx\nmovdqu (IN_KEY), %xmm0\n"),
+            [0xf3, 0x0f, 0x6f, 0x02]
+        );
+        assert_eq!(
+            assemble("CRC = %edi\nmovd CRC, %xmm0\n"),
+            [0x66, 0x0f, 0x6e, 0xc7]
+        );
+        // An equate whose value is another equate takes its register.
+        assert_eq!(
+            assemble("A = %rdx\nB = A\nmov (%r9), B\n"),
+            [0x49, 0x8b, 0x11]
+        );
+        // `_A`/`_B`/`K` fold to 32; `$K` is the sigil plus the name.
+        assert_eq!(
+            assemble("_A = 8\n_B = _A + 8\nK = _B + 16\nsubq $K, %rsp\n"),
+            [0x48, 0x83, 0xec, 0x20]
+        );
     }
 }

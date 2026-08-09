@@ -353,11 +353,12 @@ pub(crate) enum AsmOpnd {
     /// imm32 field and records an absolute relocation against the label's
     /// text offset. `num` / `forward` follow [`AsmOpnd::Label`].
     ImmLabel { num: u32, forward: bool },
-    /// `$symbol`: the address of a named symbol as an absolute immediate
-    /// (`pushq $arch_rethook_trampoline`). The name rides in the instruction's
-    /// `sym_target`; the emitter zeroes the imm32 field and records an
-    /// `R_X86_64_32S` relocation against the symbol.
-    ImmSym,
+    /// `$symbol` / `$symbol ± const`: the address of a named symbol as an
+    /// absolute immediate (`pushq $arch_rethook_trampoline`, `movw $_end+3,
+    /// %cx`). The name rides in the instruction's `sym_target` and the
+    /// constant in `addend`; the emitter zeroes the immediate field and
+    /// records an absolute relocation of the field's width against the symbol.
+    ImmSym { addend: i32 },
     /// `%lK`: an `asm goto` label reference by label-list index (the
     /// frontend canonicalizes `%l[name]` and operand-relative `%lN` to
     /// this form). The emitter branches to the label's target block.
@@ -2164,13 +2165,14 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                     }
                     None => op,
                 };
-                // `$symbol`: a symbol address the instruction takes as an
-                // absolute immediate, distinct from a `$int` / `$Nf` label.
-                if let Some(sym) = tok.strip_prefix('$')
-                    && parse_int(sym).is_none()
-                    && parse_label_ref(sym, &names).is_none()
-                    && super::super::ssa::emit_common::is_asm_symbol_template(sym)
-                    && reg_by_name(sym).is_none()
+                // `$symbol` / `$symbol ± const`: a symbol address the
+                // instruction takes as an absolute immediate, distinct from a
+                // `$int` / `$Nf` label. The constant folds into the addend.
+                if let Some(expr) = tok.strip_prefix('$')
+                    && parse_int(expr).is_none()
+                    && reg_by_name(expr).is_none()
+                    && let Some((sym, addend)) = parse_sym_disp(strip_outer_parens(expr), &names)
+                    && let Ok(addend) = i32::try_from(addend)
                 {
                     if sym_target.is_some() {
                         return Err(String::from(
@@ -2178,7 +2180,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                         ));
                     }
                     sym_target = Some(String::from(sym));
-                    operands.push(AsmOpnd::ImmSym);
+                    operands.push(AsmOpnd::ImmSym { addend });
                     continue;
                 }
                 // `sym(,%index,scale)` / `disp+sym(%base)`: a memory reference

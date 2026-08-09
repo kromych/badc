@@ -2121,7 +2121,7 @@ fn run_inline_asm(
                     | AsmOpnd::RipRelRef { .. }
                     | AsmOpnd::LabelAddr { .. }
                     | AsmOpnd::ImmLabel { .. }
-                    | AsmOpnd::ImmSym
+                    | AsmOpnd::ImmSym { .. }
             )
         })
     }) {
@@ -2206,7 +2206,7 @@ fn run_inline_asm(
             AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::ImmLabel { .. }
-            | AsmOpnd::ImmSym
+            | AsmOpnd::ImmSym { .. }
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }
@@ -2230,7 +2230,7 @@ fn run_inline_asm(
             | AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
             | AsmOpnd::ImmLabel { .. }
-            | AsmOpnd::ImmSym
+            | AsmOpnd::ImmSym { .. }
             | AsmOpnd::GotoLabel(_)
             | AsmOpnd::Mem { .. }
             | AsmOpnd::AbsMem { .. }

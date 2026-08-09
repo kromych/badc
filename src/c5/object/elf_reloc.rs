@@ -58,8 +58,9 @@ use super::elf_reloc_types::{
     R_AARCH64_LDST8_ABS_LO12_NC, R_AARCH64_LDST16_ABS_LO12_NC, R_AARCH64_LDST32_ABS_LO12_NC,
     R_AARCH64_LDST64_ABS_LO12_NC, R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32,
     R_AARCH64_PREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
-    R_AARCH64_TSTBR14, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_PC16,
-    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
+    R_AARCH64_TSTBR14, R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64,
+    R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
+    R_X86_64_TPOFF32,
 };
 
 // ELF64 constants (Elf.h subset).
@@ -2732,8 +2733,11 @@ pub(super) fn write_relocatable(
                         (Machine::X86_64, false, 4) if r.signed => R_X86_64_32S,
                         // A 16-bit field is the `.code16` boot stubs' address
                         // and near-branch width; the reloc must match it or the
-                        // link writes over the following instruction.
+                        // link writes over the following instruction. An 8-bit
+                        // field is a byte-width symbol immediate (`movb $sym,
+                        // %al`).
                         (Machine::X86_64, false, 2) => R_X86_64_16,
+                        (Machine::X86_64, false, 1) => R_X86_64_8,
                         (Machine::X86_64, false, _) => R_X86_64_32,
                         (Machine::X86_64, true, 8) => R_X86_64_PC64,
                         (Machine::X86_64, true, 2) => R_X86_64_PC16,

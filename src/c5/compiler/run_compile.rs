@@ -164,7 +164,6 @@ impl Compiler {
     /// instructions outside a named section are rejected.
     /// TODO: top-level instruction emission.
     fn parse_file_scope_asm(&mut self) -> Result<(), C5Error> {
-        use crate::c5::codegen::ssa::emit_common as engine;
         let (template, tstart, _is_volatile, is_goto) = self.parse_asm_head()?;
         self.truncate_data(tstart);
         if is_goto {
@@ -177,6 +176,22 @@ impl Compiler {
         self.consume(b';', "`;` expected after file-scope `asm`")?;
         let text = core::str::from_utf8(&template)
             .map_err(|_| self.compile_err("file-scope asm template is not valid UTF-8"))?;
+        self.ingest_file_scope_asm(text, true)
+            .map_err(|m| self.compile_err(m))
+    }
+
+    /// Run one GNU-as source unit through the section-directive engine and
+    /// record it for the object writers. `globl_shortcut` routes a stream of
+    /// nothing but `.globl` at C symbols, which only a translation unit has.
+    ///
+    /// Shared by the file-scope `asm("...")` parse and the assembler driver so
+    /// both accept the same constructs and reject the rest identically.
+    pub(super) fn ingest_file_scope_asm(
+        &mut self,
+        text: &str,
+        globl_shortcut: bool,
+    ) -> Result<(), String> {
+        use crate::c5::codegen::ssa::emit_common as engine;
         // Comment stripping, GNU as macro expansion, and the per-definition
         // rename of redefined numeric labels, once; the stored text is the
         // prepared form so the codegen materialization sees the same
@@ -187,8 +202,7 @@ impl Compiler {
         } else {
             engine::AsmComments::X86
         };
-        let prepared =
-            engine::prepare_file_asm_text(text, comments).map_err(|m| self.compile_err(m))?;
+        let prepared = engine::prepare_file_asm_text(text, comments)?;
         let text = prepared.as_str();
         // The stream outside pushed sections is either linkage directives only
         // (`.globl name`, applied to a C symbol) or a trampoline body (labels +
@@ -198,10 +212,11 @@ impl Compiler {
         // only the file-scope one accepts (`.text` switches, `.subsection`),
         // so its error falls through to the file-scope parse.
         let mut blocks = match engine::extract_asm_sections(text, aarch64) {
-            Ok(Some((code, blocks))) if self.take_file_scope_asm_globl(&code) => blocks,
-            Ok(None) if self.take_file_scope_asm_globl(text) => return Ok(()),
-            _ => engine::extract_file_scope_asm_sections(text, aarch64)
-                .map_err(|m| self.compile_err(m))?,
+            Ok(Some((code, blocks))) if globl_shortcut && self.take_file_scope_asm_globl(&code) => {
+                blocks
+            }
+            Ok(None) if globl_shortcut && self.take_file_scope_asm_globl(text) => return Ok(()),
+            _ => engine::extract_file_scope_asm_sections(text, aarch64)?,
         };
         for b in &blocks {
             for item in &b.items {
@@ -211,9 +226,10 @@ impl Compiler {
                             .iter()
                             .any(|v| matches!(v, engine::AsmSectionValue::OperandConst(_))) =>
                     {
-                        return Err(self.compile_err(
-                            "operand reference in file-scope asm (no operands at file scope)",
-                        ));
+                        return Err(
+                            "operand reference in file-scope asm (no operands at file scope)"
+                                .into(),
+                        );
                     }
                     // Unit-level symbol directives: `.weak name` binds the
                     // symbol weak wherever it is defined; `.set name, target`
@@ -240,15 +256,8 @@ impl Compiler {
         // sink now so directive and encoding errors are diagnosed at the source
         // line; the codegen re-materializes into the object's sections under
         // the emit target's conventions.
-        crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target)
-            .map_err(|m| self.compile_err(m))?;
+        crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target)?;
         let mut scratch = engine::AsmSectionSink::default();
-        let aarch64 = matches!(
-            self.target,
-            crate::Target::MacOSAarch64
-                | crate::Target::LinuxAarch64
-                | crate::Target::WindowsAarch64
-        );
         engine::materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -257,8 +266,7 @@ impl Compiler {
             &|_| None,
             aarch64,
             &mut scratch,
-        )
-        .map_err(|m| self.compile_err(m))?;
+        )?;
         self.file_asm.push(prepared);
         Ok(())
     }

@@ -11,10 +11,13 @@ usage: badc [options] <input...> [program-args...]
        cat foo.c | badc [options]              (same -- stdin auto-detected
                                                 when not a terminal)
 
-Inputs are positional and may mix `.c` sources, c5 `.o` objects,
-and `.a` archives. A single `.c` input compiles and emits a
-binary directly; two or more inputs (or any `-l` / `-L` / `-c`
-flag) run through the cross-TU linker.
+Inputs are positional and may mix `.c` sources, `.s` / `.S`
+assembly sources, c5 `.o` objects, and `.a` archives. A single
+`.c` input compiles and emits a binary directly; two or more
+inputs (or any `-l` / `-L` / `-c` flag) run through the cross-TU
+linker. `.S` (and `.sx`) run through the preprocessor with
+`__ASSEMBLER__` predefined before being assembled; `.s` is
+assembled verbatim, as in gcc's suffix table.
 
 Output mode -- pick at most one (defaults to a native binary):
   --interp                 Run under the SSA interpreter.
@@ -136,6 +139,13 @@ Compile knobs:
   -MQ target               As -MT, but quote the name for make.
   -MP                      Add an empty rule for each prerequisite
                            so a deleted header does not stop make.
+  -Wa,<opt>[,<opt>]        Hand an option to the assembler. badc's
+  -Xassembler <opt>        assembler is built in, so each option is
+                           checked against what it implements rather
+                           than passed on; an option it does not
+                           implement is refused by name.
+  -m64                     Accepted (the only code model badc emits).
+                           `-m16` / `-m32` are refused by name.
   -Wp,-MD,file             The preprocessor spellings of -MD / -MMD,
   -Wp,-MMD,file            which take the output path as an operand.
                            kbuild passes dependency generation this
@@ -250,6 +260,33 @@ impl Mode {
     }
 }
 
+/// The language a positional input's suffix selects, following gcc's
+/// suffix table. `.S` and `.sx` are assembler with the preprocessor run
+/// first; `.s` is assembler taken verbatim.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SourceKind {
+    C,
+    Asm { preprocess: bool },
+}
+
+impl SourceKind {
+    fn of(path: &str) -> Self {
+        match std::path::Path::new(path)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+        {
+            "s" => SourceKind::Asm { preprocess: false },
+            "S" | "sx" => SourceKind::Asm { preprocess: true },
+            _ => SourceKind::C,
+        }
+    }
+
+    fn is_asm(self) -> bool {
+        matches!(self, SourceKind::Asm { .. })
+    }
+}
+
 /// What the `-M` flag family asked the driver to produce.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DepKind {
@@ -319,6 +356,43 @@ impl DepOptions {
         };
         vec![badc::dep_escape(&format!("{stem}.o"))]
     }
+}
+
+/// Check one `-Wa,` / `-Xassembler` option against what badc's assembler
+/// implements. The accepted set is what its behavior already matches:
+///
+/// * `--fatal-warnings` -- every construct badc's assembler declines is
+///   already an error, so warnings never downgrade a failure.
+/// * `-mrelax-relocations=` -- selects the relaxable x86-64 GOT relocation
+///   forms, which an assembled unit never produces.
+/// * `--noexecstack` / `--no-warn-rwx-segments` -- `.text` is the only
+///   executable section an assembled unit gets, and no `PT_GNU_STACK`
+///   program header rides a relocatable object.
+///
+/// Anything else is refused: passing it on is not an option, and accepting
+/// it would claim behavior badc does not have.
+fn accept_assembler_option(opt: &str) -> Result<(), String> {
+    let name = opt.split_once('=').map_or(opt, |(n, _)| n);
+    match name {
+        "--fatal-warnings" | "-mrelax-relocations" | "--noexecstack" | "--no-warn-rwx-segments" => {
+            Ok(())
+        }
+        _ => Err(format!("badc: error: unsupported assembler option `{opt}`")),
+    }
+}
+
+/// The `-D` list one translation unit preprocesses under. gcc predefines
+/// `__ASSEMBLER__` for a `.S`, and kernel headers gate their C-only content
+/// on it. It goes ahead of the command-line list so `-U__ASSEMBLER__` and an
+/// explicit `-D__ASSEMBLER__=<v>` both still win.
+fn tu_defines(src_path: &str, defines: &[(String, String)]) -> Vec<(String, String)> {
+    if !SourceKind::of(src_path).is_asm() {
+        return defines.to_vec();
+    }
+    let mut out = Vec::with_capacity(defines.len() + 1);
+    out.push(("__ASSEMBLER__".to_string(), "1".to_string()));
+    out.extend_from_slice(defines);
+    out
 }
 
 /// The file-name component of a source path, or the whole path when it
@@ -764,6 +838,41 @@ fn run() {
                         }
                     }
                 }
+            }
+            // `-Wa,<opt>[,<opt>...]` and `-Xassembler <opt>`: gcc's two
+            // spellings for handing an option to the assembler. badc's
+            // assembler is built in, so each option is checked against what
+            // it implements rather than passed on.
+            s if s.starts_with("-Wa,") => {
+                for opt in s["-Wa,".len()..].split(',') {
+                    if let Err(e) = accept_assembler_option(opt) {
+                        eprint_diagnostic(e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            "-Xassembler" => match iter.next() {
+                Some(opt) => {
+                    if let Err(e) = accept_assembler_option(&opt) {
+                        eprint_diagnostic(e);
+                        std::process::exit(1);
+                    }
+                }
+                None => {
+                    eprint_diagnostic("badc: error: -Xassembler requires an option");
+                    std::process::exit(1);
+                }
+            },
+            // gcc's x86 code-mode selectors. badc's object writers emit
+            // ELFCLASS64 only, so the 16- and 32-bit modes are refused by
+            // name rather than assembled as 64-bit code.
+            "-m64" => {}
+            s @ ("-m16" | "-m32" | "-m31" | "-mx32") => {
+                eprint_diagnostic(format!(
+                    "badc: error: `{s}` selects a non-64-bit code model, which badc \
+                     does not emit"
+                ));
+                std::process::exit(1);
             }
             // gcc-shape `-Wdead-store` -- enable the per-store
             // dead-store diagnostic. `-Wno-dead-store` is the
@@ -1391,7 +1500,7 @@ fn run() {
             .and_then(|s| s.to_str())
             .unwrap_or("");
         match ext {
-            "c" | "" => sources.push(a.clone()),
+            "c" | "" | "s" | "S" | "sx" => sources.push(a.clone()),
             "o" => {
                 objects.push(a.clone());
                 link_inputs.push(LinkInputCli::Object(a.clone()));
@@ -1419,7 +1528,8 @@ fn run() {
                 }
                 eprint_diagnostic(format!(
                     "badc: error: unrecognized input file extension: `{a}` \
-                     (expected a `.c` source, `.o` object, or `.a` archive)"
+                     (expected a `.c` / `.s` / `.S` source, `.o` object, or \
+                     `.a` archive)"
                 ));
                 std::process::exit(1);
             }
@@ -1541,6 +1651,20 @@ fn run() {
         std::process::exit(1);
     }
 
+    // The VM has no assembler: it walks SSA and never sees an assembled
+    // section, so an asm unit would run as an empty program. Refuse it
+    // rather than run nothing.
+    if matches!(mode, Mode::Jit | Mode::Interp)
+        && let Some(src) = sources.iter().find(|s| SourceKind::of(s).is_asm())
+    {
+        eprint_diagnostic(format!(
+            "badc: error: {} does not run assembly (`{src}`); assemble it with \
+             -c and link the object",
+            mode.flag_name()
+        ));
+        std::process::exit(1);
+    }
+
     let deps = dep_kind.map(|kind| DepOptions {
         kind,
         system: dep_system,
@@ -1619,7 +1743,7 @@ fn run() {
             let copts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
-                .with_defines(defines.clone())
+                .with_defines(tu_defines(src, &defines))
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
                 .with_quote_include_paths(quote_include_paths.clone())
@@ -2492,7 +2616,7 @@ fn run() {
             if source_count != 1 {
                 eprintln!(
                     "badc: `-o <path>` together with `-c` requires exactly one \
-                     `.c` input ({} given)",
+                     source input ({} given)",
                     source_count
                 );
                 std::process::exit(1);
@@ -3076,23 +3200,17 @@ fn read_tu_source(src_path: &str, cfg: &CompileCfg, log: &mut TuLog) -> Result<S
 /// native-link path, capturing every diagnostic in the returned log.
 /// `implicit_externs` is empty on the first pass; the auto-include
 /// retry passes the names to rebind (and stays quiet about "compiling").
-fn compile_native_tu(
+/// The front-end options one translation unit compiles (or preprocesses)
+/// under. `implicit_externs` applies to the C front end only.
+fn tu_compile_options(
     src_path: &str,
     implicit_externs: &[String],
     cfg: &CompileCfg,
-) -> (TuLog, Result<NativeTu, ()>) {
-    let mut log = TuLog::default();
-    if cfg.multi_tu && !cfg.quiet && implicit_externs.is_empty() {
-        log.diag(cfg.stderr_is_tty, format!("info: compiling {src_path}"));
-    }
-    let src_bytes = match read_tu_source(src_path, cfg, &mut log) {
-        Ok(b) => b,
-        Err(()) => return (log, Err(())),
-    };
-    let copts = badc::CompileOptions::default()
+) -> badc::CompileOptions {
+    badc::CompileOptions::default()
         .with_gnu(cfg.gnu)
         .with_gnu89_inline(cfg.gnu89_inline)
-        .with_defines(cfg.defines.to_vec())
+        .with_defines(tu_defines(src_path, cfg.defines))
         .with_undefines(cfg.undefines.to_vec())
         .with_include_paths(cfg.include_paths.to_vec())
         .with_quote_include_paths(cfg.quote_include_paths.to_vec())
@@ -3105,7 +3223,90 @@ fn compile_native_tu(
         .with_optimize(cfg.optimize_flag)
         .with_export_all_functions(cfg.export_all)
         .with_implicit_extern_fns(implicit_externs.to_vec())
-        .with_no_entry_point(true);
+        .with_no_entry_point(true)
+}
+
+/// GNU line markers (`# <line> "<file>" [flags]`) blanked in place. gas reads
+/// them as line directives rather than as content, and on AArch64 `#` is not
+/// a comment introducer, so they cannot be left for the comment stripper.
+/// Blanking rather than deleting keeps every statement's line number.
+fn blank_line_markers(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for (i, line) in text.split('\n').enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        let t = line.trim_start();
+        let is_marker = t.strip_prefix('#').is_some_and(|r| {
+            let r = r.trim_start();
+            r.starts_with(|c: char| c.is_ascii_digit())
+                || r.strip_prefix("line")
+                    .is_some_and(|r| r.starts_with(char::is_whitespace))
+        });
+        if !is_marker {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// Assemble one `.s` / `.S` source to a `Program` the object writers consume,
+/// writing its dependency rule on the way. `.S` runs through the preprocessor
+/// first, as gcc's driver does; `.s` is taken verbatim.
+fn assemble_tu(src_path: &str, cfg: &CompileCfg, log: &mut TuLog) -> Result<badc::Program, ()> {
+    let src_bytes = read_tu_source(src_path, cfg, log)?;
+    let copts = tu_compile_options(src_path, &[], cfg);
+    let text = if SourceKind::of(src_path) == (SourceKind::Asm { preprocess: true }) {
+        let (text, records) =
+            match badc::Compiler::preprocess_tracked(src_bytes, cfg.target, copts.clone()) {
+                Ok(r) => r,
+                Err(e) => {
+                    log.diag(cfg.stderr_is_tty, e);
+                    return Err(());
+                }
+            };
+        if let Some(d) = cfg.deps
+            && emit_deps(
+                src_path,
+                &records,
+                d,
+                cfg.dep_output,
+                log,
+                cfg.stderr_is_tty,
+            )
+            .is_err()
+        {
+            return Err(());
+        }
+        blank_line_markers(&text)
+    } else {
+        // A `.s` unit opens no header, so its rule names only the source.
+        if let Some(d) = cfg.deps
+            && emit_deps(src_path, &[], d, cfg.dep_output, log, cfg.stderr_is_tty).is_err()
+        {
+            return Err(());
+        }
+        src_bytes
+    };
+    badc::Compiler::assemble(&text, cfg.target, copts).map_err(|e| {
+        log.diag(cfg.stderr_is_tty, e);
+    })
+}
+
+/// Produce one translation unit's `Program` and write its dependency rule:
+/// a `.c` source through the C front end, a `.s` / `.S` source through the
+/// assembler.
+fn translate_tu(
+    src_path: &str,
+    implicit_externs: &[String],
+    cfg: &CompileCfg,
+    log: &mut TuLog,
+) -> Result<badc::Program, ()> {
+    if SourceKind::of(src_path).is_asm() {
+        return assemble_tu(src_path, cfg, log);
+    }
+    let src_bytes = read_tu_source(src_path, cfg, log)?;
+    let copts = tu_compile_options(src_path, implicit_externs, cfg);
     let compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
     if cfg.show_includes {
         for line in compiler.include_trace() {
@@ -3119,23 +3320,39 @@ fn compile_native_tu(
             compiler.include_records(),
             d,
             cfg.dep_output,
-            &mut log,
+            log,
             cfg.stderr_is_tty,
         )
         .is_err()
     {
-        return (log, Err(()));
+        return Err(());
     }
     let program = match compiler.compile() {
         Ok(p) => p,
         Err(e) => {
             log.diag(cfg.stderr_is_tty, e);
-            return (log, Err(()));
+            return Err(());
         }
     };
     for w in &program.warnings {
         log.diag(cfg.stderr_is_tty, w);
     }
+    Ok(program)
+}
+
+fn compile_native_tu(
+    src_path: &str,
+    implicit_externs: &[String],
+    cfg: &CompileCfg,
+) -> (TuLog, Result<NativeTu, ()>) {
+    let mut log = TuLog::default();
+    if cfg.multi_tu && !cfg.quiet && implicit_externs.is_empty() {
+        log.diag(cfg.stderr_is_tty, format!("info: compiling {src_path}"));
+    }
+    let program = match translate_tu(src_path, implicit_externs, cfg, &mut log) {
+        Ok(p) => p,
+        Err(()) => return (log, Err(())),
+    };
     // Prefer the literal `#pragma entrypoint(<name>)` over the
     // in-TU-resolved `entry_name`: in a multi-TU freestanding link the
     // named entry is often defined in a different TU, so `entry_name` is
@@ -3169,68 +3386,17 @@ fn compile_native_tu(
     }
 }
 
-/// Compile one `.c` source to relocatable object bytes for the `-c` /
+/// Translate one source to relocatable object bytes for the `-c` /
 /// `--ar` paths, capturing every diagnostic in the returned log.
 fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Result<Vec<u8>, ()>) {
     let mut log = TuLog::default();
     if cfg.multi_tu && !cfg.quiet {
         log.diag(cfg.stderr_is_tty, format!("info: compiling {src_path}"));
     }
-    let src_bytes = match std::fs::read_to_string(src_path) {
-        Ok(b) => b,
-        Err(e) => {
-            log.diag(
-                cfg.stderr_is_tty,
-                format!("badc: error: cannot read `{src_path}`: {e}"),
-            );
-            return (log, Err(()));
-        }
-    };
-    let copts = badc::CompileOptions::default()
-        .with_gnu(cfg.gnu)
-        .with_gnu89_inline(cfg.gnu89_inline)
-        .with_defines(cfg.defines.to_vec())
-        .with_undefines(cfg.undefines.to_vec())
-        .with_include_paths(cfg.include_paths.to_vec())
-        .with_quote_include_paths(cfg.quote_include_paths.to_vec())
-        .with_system_include_paths(cfg.system_include_paths.to_vec())
-        .with_own_header_roots(cfg.own_header_roots.to_vec())
-        .with_force_includes(cfg.force_includes.to_vec())
-        .with_source_label(src_path.to_string())
-        .with_track_includes(cfg.show_includes || cfg.deps.is_some())
-        .with_warn_dead_store(cfg.warn_dead_store)
-        .with_optimize(cfg.optimize_flag)
-        .with_no_entry_point(true);
-    let compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
-    if cfg.show_includes {
-        for line in compiler.include_trace() {
-            log.raw(line);
-        }
-    }
-    if let Some(d) = cfg.deps
-        && compiler.preprocess_error().is_none()
-        && emit_deps(
-            src_path,
-            compiler.include_records(),
-            d,
-            cfg.dep_output,
-            &mut log,
-            cfg.stderr_is_tty,
-        )
-        .is_err()
-    {
-        return (log, Err(()));
-    }
-    let program = match compiler.compile() {
+    let program = match translate_tu(src_path, &[], cfg, &mut log) {
         Ok(p) => p,
-        Err(e) => {
-            log.diag(cfg.stderr_is_tty, e);
-            return (log, Err(()));
-        }
+        Err(()) => return (log, Err(())),
     };
-    for w in &program.warnings {
-        log.diag(cfg.stderr_is_tty, w);
-    }
     warn_dropped_link_pragmas(&program, src_path, &mut log, cfg.stderr_is_tty);
     match badc::emit_native_with_options(&program, cfg.target, cfg.reloc_opts) {
         Ok(bytes) => (log, Ok(bytes)),

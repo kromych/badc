@@ -1815,8 +1815,40 @@ impl Compiler {
         target: Target,
         opts: CompileOptions,
     ) -> Result<String, C5Error> {
+        Self::preprocess_tracked(source, target, opts).map(|(text, _)| text)
+    }
+
+    /// As [`Self::preprocess`], also returning the include records the run
+    /// opened. The assembler driver needs both from one pass: the expanded
+    /// text to assemble and the records to render `-M` dependencies from.
+    pub fn preprocess_tracked(
+        source: String,
+        target: Target,
+        opts: CompileOptions,
+    ) -> Result<(String, Vec<IncludeRecord>), C5Error> {
         let mut pp = Self::configure_preprocessor(target, &opts);
-        pp.process(&source)
+        let text = pp.process(&source)?;
+        Ok((text, pp.include_records))
+    }
+
+    /// Assemble one GNU-as source unit for `target`, yielding the program the
+    /// object writers consume. The unit routes through the same
+    /// section-directive engine as a file-scope `asm("...")`, so the two
+    /// accept the same constructs and diagnose the rest identically.
+    pub fn assemble(text: &str, target: Target, opts: CompileOptions) -> Result<Program, C5Error> {
+        let label = opts.source_label.clone();
+        // No C source and no retry state: the auto-include retry rebuilds
+        // from the source string, which would drop the ingested unit.
+        let mut this = Self::build("", target, opts);
+        this.ingest_file_scope_asm(text, false)
+            .map_err(|m| C5Error::Compile(alloc::format!("{label}: error: {m}")))?;
+        let mut program = this.compile_one_pass()?;
+        // The reserved `.data` prefix keeps a c5 global's address away from
+        // the null pointer. An assembled unit has no C source and so no c5
+        // global; every byte it defines lives in an asm section, leaving the
+        // prefix as eight bytes of `.data` GNU as does not emit.
+        program.data.clear();
+        Ok(program)
     }
 
     /// Construct a `Preprocessor` from `opts`. Shared by the `-E`

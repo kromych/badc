@@ -1007,14 +1007,27 @@ impl Compiler {
                     .map(|k| self.structs[struct_id].fields[k].offset)
                     .min()
                     .unwrap_or(0);
-                let group_span = (i..j)
-                    .map(|k| {
-                        self.structs[struct_id].fields[k].offset
-                            + self.packed_member_storage(struct_id, k)
-                            - old_base
-                    })
-                    .max()
-                    .unwrap_or(0);
+                // The group's extent is the anonymous union's own size:
+                // `packed` on this struct removes the padding between its
+                // members, not the padding inside a member's type. The
+                // group id is the inner aggregate's index plus one; fall
+                // back to the promoted members' span if it does not
+                // resolve to a laid-out aggregate.
+                let inner_size = self
+                    .structs
+                    .get(ug as usize - 1)
+                    .filter(|s| s.is_complete)
+                    .map(|s| s.size);
+                let group_span = inner_size.unwrap_or_else(|| {
+                    (i..j)
+                        .map(|k| {
+                            self.structs[struct_id].fields[k].offset
+                                + self.packed_member_storage(struct_id, k)
+                                - old_base
+                        })
+                        .max()
+                        .unwrap_or(0)
+                });
                 let new_base = bit_cursor.div_ceil(8);
                 for k in i..j {
                     let off = self.structs[struct_id].fields[k].offset;

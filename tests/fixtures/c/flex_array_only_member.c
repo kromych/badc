@@ -59,7 +59,39 @@ union flex_union_packed {
     DECLARE_FLEX_ARRAY(int, tail);
 } __attribute__((packed));
 
+// `packed` removes the padding between a struct's own members, not the
+// padding inside a member's type: the anonymous union below keeps the
+// 4-byte alignment its widest arm gives it and stays 12 bytes wide, so
+// the enclosing struct is 13. The shape is the ChromeOS EC host-command
+// parameter block, whose arms mix packed and unpacked structs.
+struct arm_packed {
+    unsigned char sensor_num;
+    unsigned short flags;
+    short temp;
+    short offset[3];
+} __attribute__((packed));
+struct arm_aligned {
+    unsigned char sensor_num;
+    unsigned char roundup;
+    unsigned short reserved;
+    int data;
+};
+struct ec_params {
+    unsigned char cmd;
+    union {
+        struct arm_packed sensor_offset;
+        struct arm_aligned ec_rate;
+    };
+} __attribute__((packed));
+
 int main(void) {
+    if (sizeof(struct arm_packed) != 11) return 16;
+    if (sizeof(struct arm_aligned) != 8) return 17;
+    if (_Alignof(struct arm_aligned) != 4) return 18;
+    if (sizeof(struct ec_params) != 13) return 19;
+    if (offsetof(struct ec_params, sensor_offset) != 1) return 20;
+    if (offsetof(struct ec_params, ec_rate) != 1) return 21;
+
     if (sizeof(struct stripe_extent) != 0) return 1;
     if (_Alignof(struct stripe_extent) != 1) return 2;
     if (sizeof(struct stripe_extent_unpacked) != 0) return 3;

@@ -19,6 +19,15 @@ two things:
   non-zero offset. Each file is named on the console before it is opened, so a
   boot that stops reports which file it stopped on.
 
+  The checks end at the vDSO, which is the one image in the build a loader
+  has to search rather than just map. It is resolved the way a loader
+  resolves it -- ``AT_SYSINFO_EHDR``, ``PT_DYNAMIC``, ``DT_SONAME``,
+  ``DT_GNU_HASH``, then ``DT_VERSYM``/``DT_VERDEF`` for the version the
+  symbol is exported under -- and the function those tables hand back is
+  called and required to keep time. A linker that got the dynamic metadata
+  wrong fails here rather than producing an image that links and cannot be
+  searched. Reported under ``BADC-VDSO-OK``.
+
 The two markers are separate on purpose: a boot that prints the first and not
 the second reached userspace and failed the checks, which is a different defect
 from one that never got there.
@@ -50,14 +59,18 @@ CHECK_FAIL = "BADC-SELFTEST-FAIL"
 CHECK_STEP = "BADC-SELFTEST-STEP"
 
 INIT_C = r"""
+#include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <link.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/auxv.h>
 #include <sys/mount.h>
 #include <sys/reboot.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <time.h>
 #include <unistd.h>
 
 #define BOOT_MARKER  "%(boot)s"
@@ -245,6 +258,165 @@ static void load_modules(void)
     }
 }
 
+/* The vDSO the kernel mapped, resolved the way a loader resolves it:
+   through PT_DYNAMIC, the hash table, and the version tables. A linker
+   that got any of those wrong fails here rather than silently handing
+   back a symbol nobody can find. */
+
+#if defined(__x86_64__)
+#define VDSO_SYM     "__vdso_clock_gettime"
+#define VDSO_VERSION "LINUX_2.6"
+#elif defined(__aarch64__)
+#define VDSO_SYM     "__kernel_clock_gettime"
+#define VDSO_VERSION "LINUX_2.6.39"
+#else
+#define VDSO_SYM     NULL
+#endif
+
+#define VDSO_SONAME "linux-vdso.so.1"
+
+static unsigned long gnu_hash_of(const char *s)
+{
+    unsigned long h = 5381;
+
+    while (*s)
+        h = h * 33 + (unsigned char)*s++;
+    return h & 0xffffffffUL;
+}
+
+/* Look `name' up in the vDSO's .gnu.hash exactly as a loader does:
+   Bloom filter, bucket, then the chain. Returns the .dynsym index. */
+static int vdso_gnu_lookup(const unsigned int *h, const ElfW(Sym) *sym,
+                           const char *str, const char *name)
+{
+    unsigned int nbuckets = h[0], symndx = h[1], maskwords = h[2], shift2 = h[3];
+    const ElfW(Addr) *bloom = (const ElfW(Addr) *)&h[4];
+    const unsigned int *buckets = (const unsigned int *)&bloom[maskwords];
+    const unsigned int *chain = &buckets[nbuckets];
+    unsigned long hash = gnu_hash_of(name);
+    ElfW(Addr) word = bloom[(hash / (8 * sizeof(ElfW(Addr)))) %% maskwords];
+    unsigned int bits = 8 * sizeof(ElfW(Addr));
+    unsigned int i;
+
+    if (!(word >> (hash %% bits) & 1) || !(word >> ((hash >> shift2) %% bits) & 1))
+        return -1;
+    i = buckets[hash %% nbuckets];
+    if (i < symndx)
+        return -1;
+    for (;;) {
+        unsigned int c = chain[i - symndx];
+
+        if ((c | 1) == (hash | 1) && !strcmp(str + sym[i].st_name, name))
+            return (int)i;
+        if (c & 1)
+            return -1;
+        i++;
+    }
+}
+
+/* The version name `.gnu.version'/`.gnu.version_d' give symbol `n'. */
+static const char *vdso_version_of(const unsigned short *versym,
+                                   const ElfW(Verdef) *verdef,
+                                   const char *str, int n)
+{
+    unsigned short want = versym ? (versym[n] & 0x7fff) : 0;
+    const ElfW(Verdef) *v = verdef;
+
+    if (!versym || !verdef)
+        return NULL;
+    for (;;) {
+        if ((v->vd_ndx & 0x7fff) == want) {
+            const ElfW(Verdaux) *aux =
+                (const ElfW(Verdaux) *)((const char *)v + v->vd_aux);
+            return str + aux->vda_name;
+        }
+        if (!v->vd_next)
+            return NULL;
+        v = (const ElfW(Verdef) *)((const char *)v + v->vd_next);
+    }
+}
+
+static int check_vdso(void)
+{
+    unsigned long base = getauxval(AT_SYSINFO_EHDR);
+    const ElfW(Ehdr) *eh = (const ElfW(Ehdr) *)base;
+    const ElfW(Phdr) *ph;
+    const ElfW(Dyn) *dyn = NULL;
+    const char *str = NULL, *soname = NULL, *ver;
+    const ElfW(Sym) *sym = NULL;
+    const ElfW(Verdef) *verdef = NULL;
+    const unsigned short *versym = NULL;
+    const unsigned int *gnu = NULL;
+    unsigned long soname_off = 0;
+    struct timespec a, b;
+    int (*fn)(clockid_t, struct timespec *);
+    int n, i;
+
+    printf("%%s resolving %%s in the vDSO\n", CHECK_STEP, VDSO_SYM ? VDSO_SYM : "(none)");
+    fflush(stdout);
+    if (!VDSO_SYM)
+        return 1;   /* architecture the gate does not cover */
+    if (!base) {
+        fail("vdso", "no AT_SYSINFO_EHDR");
+        return 0;
+    }
+    ph = (const ElfW(Phdr) *)(base + eh->e_phoff);
+    for (i = 0; i < eh->e_phnum; i++)
+        if (ph[i].p_type == PT_DYNAMIC)
+            dyn = (const ElfW(Dyn) *)(base + ph[i].p_vaddr);
+    if (!dyn) {
+        fail("vdso", "no PT_DYNAMIC");
+        return 0;
+    }
+    for (; dyn->d_tag != DT_NULL; dyn++) {
+        switch (dyn->d_tag) {
+        case DT_STRTAB:   str = (const char *)(base + dyn->d_un.d_ptr); break;
+        case DT_SYMTAB:   sym = (const ElfW(Sym) *)(base + dyn->d_un.d_ptr); break;
+        case DT_GNU_HASH: gnu = (const unsigned int *)(base + dyn->d_un.d_ptr); break;
+        case DT_VERSYM:   versym = (const unsigned short *)(base + dyn->d_un.d_ptr); break;
+        case DT_VERDEF:   verdef = (const ElfW(Verdef) *)(base + dyn->d_un.d_ptr); break;
+        case DT_SONAME:   soname_off = dyn->d_un.d_val; break;
+        }
+    }
+    if (!str || !sym || !gnu) {
+        fail("vdso", "PT_DYNAMIC names no string, symbol or hash table");
+        return 0;
+    }
+    soname = str + soname_off;
+    if (strcmp(soname, VDSO_SONAME)) {
+        fail("vdso", "DT_SONAME is not " VDSO_SONAME);
+        return 0;
+    }
+    n = vdso_gnu_lookup(gnu, sym, str, VDSO_SYM);
+    if (n < 0) {
+        fail("vdso", VDSO_SYM " is not in .gnu.hash");
+        return 0;
+    }
+    ver = vdso_version_of(versym, verdef, str, n);
+    if (!ver || strcmp(ver, VDSO_VERSION)) {
+        fail("vdso", VDSO_SYM " does not carry " VDSO_VERSION);
+        return 0;
+    }
+    /* Call what the tables handed back and require it to keep time. */
+    fn = (int (*)(clockid_t, struct timespec *))(base + sym[n].st_value);
+    if (fn(CLOCK_MONOTONIC, &a) || fn(CLOCK_MONOTONIC, &b)) {
+        fail("vdso", VDSO_SYM " returned an error");
+        return 0;
+    }
+    if (b.tv_sec < a.tv_sec || (b.tv_sec == a.tv_sec && b.tv_nsec < a.tv_nsec)) {
+        fail("vdso", "CLOCK_MONOTONIC went backwards");
+        return 0;
+    }
+    if (!a.tv_sec && !a.tv_nsec) {
+        fail("vdso", "CLOCK_MONOTONIC is zero");
+        return 0;
+    }
+    printf("BADC-VDSO-OK %%s@%%s soname=%%s t=%%ld.%%09ld\n",
+           VDSO_SYM, ver, soname, (long)a.tv_sec, (long)a.tv_nsec);
+    fflush(stdout);
+    return 1;
+}
+
 int main(void)
 {
     unsigned i;
@@ -268,6 +440,9 @@ int main(void)
     if (ok)
         for (i = 0; i < sizeof PROBES / sizeof PROBES[0]; i++)
             ok &= check(&PROBES[i]);
+
+    if (ok)
+        ok &= check_vdso();
 
     if (ok)
         for (i = 1; i <= 5; i++)

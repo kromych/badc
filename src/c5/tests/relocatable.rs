@@ -137,6 +137,9 @@ fn asm_label_renames_every_emitted_symbol() {
          int weak_fn(void) { return 3; }\n\
          int hid_fn(void) __asm__(\"real_hid\") __attribute__((visibility(\"hidden\")));\n\
          int hid_fn(void) { return 4; }\n\
+         int sect_fn(void) __asm__(\"real_sect\") __attribute__((section(\".text.r\")));\n\
+         int sect_fn(void) { return 6; }\n\
+         int blk(void) { static int q __asm__(\"real_blk_q\") = 7; return q; }\n\
          int obj __asm__(\"real_obj\") = 5;\n\
          extern int ext_fn(void) __asm__(\"real_ext\");\n\
          extern int ext_obj __asm__(\"real_ext_obj\");\n\
@@ -159,12 +162,15 @@ fn asm_label_renames_every_emitted_symbol() {
         "real_ext",
         "real_ext_obj",
         "real_p",
+        "real_sect",
+        "real_blk_q",
     ] {
         sym(name);
     }
     // The identifier names nothing in the object.
     for ident in [
-        "fn", "stat_fn", "weak_fn", "hid_fn", "obj", "ext_fn", "ext_obj", "p",
+        "fn", "stat_fn", "weak_fn", "hid_fn", "obj", "ext_fn", "ext_obj", "p", "sect_fn", "q",
+        "q.0",
     ] {
         assert!(
             !a.symbols.iter().any(|s| s.name == ident),
@@ -177,6 +183,14 @@ fn asm_label_renames_every_emitted_symbol() {
     assert_eq!(sym("real_weak").binding, STB_WEAK);
     assert_eq!(sym("real_hid").other & 0x3, STV_HIDDEN);
     assert!(matches!(sym("real_ext").sec, EtSymRef::Undef));
+    // `section` places the renamed definition, and a block-scope static's
+    // record takes the label outright instead of the `name.N` form.
+    let sect = match sym("real_sect").sec {
+        EtSymRef::Section(i) => a.sections[i].name.as_str(),
+        _ => panic!("`real_sect` is not section-relative"),
+    };
+    assert_eq!(sect, ".text.r");
+    assert_eq!(sym("real_blk_q").binding, STB_LOCAL);
     assert!(matches!(sym("real_ext_obj").sec, EtSymRef::Undef));
     // Every relocation resolves through the renamed symbol.
     let named: alloc::vec::Vec<&str> = a

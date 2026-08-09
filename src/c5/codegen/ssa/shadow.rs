@@ -18,7 +18,7 @@ fn weak_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> 
         .symbols
         .iter()
         .filter(|s| s.is_weak && s.class == Token::Fun as i64 && !s.name.is_empty())
-        .map(|s| s.name.as_str())
+        .map(|s| s.link_name())
         .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
         .collect()
 }
@@ -32,7 +32,7 @@ fn function_sections(
         .symbols
         .iter()
         .filter(|s| s.class == Token::Fun as i64 && s.defined_here)
-        .filter_map(|s| Some((s.name.as_str(), s.section_name.as_ref()?)))
+        .filter_map(|s| Some((s.link_name(), s.section_name.as_ref()?)))
         .collect()
 }
 
@@ -64,7 +64,7 @@ fn internal_function_names(program: &Program) -> alloc::collections::BTreeSet<&s
                 && s.defined_here
                 && !s.name.is_empty()
         })
-        .map(|s| s.name.as_str())
+        .map(|s| s.link_name())
         .collect()
 }
 
@@ -116,9 +116,9 @@ pub(crate) fn walk_program(
         func.is_inline = f.is_inline;
         func.is_always_inline = f.is_always_inline;
         func.is_naked = f.is_naked;
-        func.is_weak = weak_names.contains(f.name.as_str());
-        func.is_internal = internal_names.contains(f.name.as_str());
-        func.section = sections.get(f.name.as_str()).map(|s| (*s).clone());
+        func.is_weak = weak_names.contains(func.name.as_str());
+        func.is_internal = internal_names.contains(func.name.as_str());
+        func.section = sections.get(func.name.as_str()).map(|s| (*s).clone());
         // Seed declared multi-cell extents alongside the synthetic ones the
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);
@@ -299,7 +299,7 @@ fn order_by_section(mut funcs: Vec<FunctionSsa>, program: &Program) -> Vec<Funct
         .symbols
         .iter()
         .filter(|s| s.class == Token::Fun as i64 && s.defined_here && s.section_name.is_some())
-        .map(|s| (s.name.as_str(), s.section_name.as_deref().unwrap_or("")))
+        .map(|s| (s.link_name(), s.section_name.as_deref().unwrap_or("")))
         .collect();
     if section_of.is_empty() {
         return funcs;
@@ -404,7 +404,7 @@ pub(crate) fn compute_live_sets(
             && !sym.name.is_empty()
             && (0..data_len).contains(&sym.val)
         {
-            named.insert(sym.name.as_str(), Node::Data(interval_of(sym.val)));
+            named.insert(sym.link_name(), Node::Data(interval_of(sym.val)));
         }
     }
     for f in funcs {

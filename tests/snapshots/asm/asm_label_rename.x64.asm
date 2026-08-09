@@ -31,6 +31,12 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
+               	callq	<addr>
+               	cmpq	$0x58, %rax
+               	je	<addr>
+               	movl	$0xc, %eax
+               	popq	%rbp
+               	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x2c, %rax
@@ -95,3 +101,9 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+		...
+               	addb	%al, (%rax)
+
+<badc_real_sect>:
+               	movl	$0x58, %eax
+               	retq

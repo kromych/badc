@@ -17,6 +17,10 @@ int renamed_hidden(void) __asm__("badc_real_hidden")
     __attribute__((visibility("hidden")));
 int renamed_hidden(void) { return 55; }
 
+int renamed_sect(void) __asm__("badc_real_sect")
+    __attribute__((section(".text.badc_rename")));
+int renamed_sect(void) { return 88; }
+
 int renamed_obj __asm__("badc_real_obj") = 44;
 int renamed_arr[3] __asm__("badc_real_arr") = { 1, 2, 3 };
 int renamed_bss __asm__("badc_real_bss");
@@ -56,6 +60,8 @@ int main(void)
         return 3;
     if (renamed_hidden() != 55)
         return 4;
+    if (renamed_sect() != 88)
+        return 12;
     if (renamed_obj != 44)
         return 5;
     if (renamed_arr[0] != 1 || renamed_arr[1] != 2 || renamed_arr[2] != 3)

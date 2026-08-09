@@ -69,6 +69,12 @@ DROP_ARG = {"-o", "--param", "-Xassembler", "-Xlinker"}
 DEP_FLAG = {"-M", "-MM", "-MD", "-MMD", "-MP"}
 DEP_WP_PREFIX = ("-Wp,-MMD,", "-Wp,-MD,")
 
+# Debug-info request. CONFIG_DEBUG_INFO_DWARF{4,5} spell it -gdwarf-N;
+# -g/-g1/-g2/-g3 are the level spellings. badc accepts only -g, so all of
+# them map onto it.
+DEBUG_EXACT = {"-g", "-g1", "-g2", "-g3", "-ggdb"}
+DEBUG_PREFIX = ("-gdwarf", "-ggdb")
+
 # Speculative-execution mitigations. These change what the built object
 # guarantees, not just how it is built, so they are forwarded rather than
 # dropped: a mitigation flag that the compiler never sees produces an
@@ -118,6 +124,7 @@ def hardening_arg(a: str) -> str | None:
 def rewrite(argv: list[str]) -> list[str]:
     out: list[str] = []
     opt: str | None = None
+    debug = False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -137,6 +144,18 @@ def rewrite(argv: list[str]) -> list[str]:
             i += 2
         elif a.startswith("-O"):
             opt = a  # last one wins, as with gcc
+            i += 1
+        elif a == "-g0":
+            debug = False
+            i += 1
+        elif a in DEBUG_EXACT or a.startswith(DEBUG_PREFIX):
+            # Debug info. A configuration that asks for it and gets a kernel
+            # without it is a silent divergence: layout.py and any debugger
+            # have nothing to read. badc spells every level and version `-g`,
+            # so the request is honored at what badc emits (DWARF 4) rather
+            # than dropped. CONFIG_DEBUG_INFO_NONE passes no such flag, so
+            # configurations that ask for none are unaffected.
+            debug = True
             i += 1
         elif a == "-mstrict-align":
             # Early-boot units that run with the MMU off are built with
@@ -185,6 +204,8 @@ def rewrite(argv: list[str]) -> list[str]:
             i += 1  # positional: the source (re-added by the caller)
     if opt is not None and opt != "-O0":
         out.append("-O")
+    if debug:
+        out.append("-g")
     return out
 
 

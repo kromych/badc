@@ -892,6 +892,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // when the unit defines a macro of that function's name, which is
     // the shape the fortified string headers compile to.
     ("builtin_library_alias_macro_shadow.c", 0),
+    // A trailing `packed` on a union body drops its tail padding; the
+    // arms keep overlapping at offset 0.
+    ("packed_union_tail_padding.c", 0),
     // An empty structure member contributes no storage but keeps its
     // alignment, so an `aligned(N)` empty type spaces what follows.
     ("empty_struct_member_align.c", 0),

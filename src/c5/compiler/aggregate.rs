@@ -934,6 +934,7 @@ impl Compiler {
         self.structs[struct_id].align = 1;
         self.structs[struct_id].explicit_align = 0;
         if self.structs[struct_id].is_union {
+            self.repack_union(struct_id);
             return;
         }
         let n = self.structs[struct_id].fields.len();
@@ -1041,6 +1042,39 @@ impl Compiler {
             0
         };
         self.structs[struct_id].size = round_up(size, max_explicit_align);
+    }
+
+    /// Re-size a union whose body was followed by
+    /// `__attribute__((packed))`. Its members already sit at offset 0,
+    /// so packing only drops the tail padding the natural alignment
+    /// added: the size becomes the widest member's storage. A member
+    /// carrying an explicit `aligned(N)` keeps raising the union.
+    fn repack_union(&mut self, struct_id: usize) {
+        let n = self.structs[struct_id].fields.len();
+        let mut max_explicit_align = 1usize;
+        let mut size = 0usize;
+        for i in 0..n {
+            let f = &self.structs[struct_id].fields[i];
+            let (offset, bit_end, explicit_align) = (
+                f.offset,
+                f.bit_offset as usize + f.bit_width as usize,
+                f.explicit_align as usize,
+            );
+            max_explicit_align = max_explicit_align.max(explicit_align);
+            let storage = if bit_end > 0 {
+                bit_end.div_ceil(8)
+            } else {
+                self.packed_member_storage(struct_id, i)
+            };
+            size = size.max(offset + storage);
+        }
+        self.structs[struct_id].align = max_explicit_align;
+        self.structs[struct_id].explicit_align = if max_explicit_align > 1 {
+            max_explicit_align as u32
+        } else {
+            0
+        };
+        self.structs[struct_id].size = round_up(size.max(1), max_explicit_align);
     }
 
     /// Byte storage a non-bitfield member occupies in a packed layout:

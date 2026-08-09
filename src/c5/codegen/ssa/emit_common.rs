@@ -1791,7 +1791,8 @@ pub(crate) fn expand_asm_gas_macros(
         || text.contains(".set")
         || text.contains(".purgem")
         || text.contains(".req")
-        || text.contains(".if"))
+        || text.contains(".if")
+        || has_gas_assignment(text))
     {
         return Ok(None);
     }
@@ -2021,6 +2022,7 @@ fn expand_gas_statements(
                     Some(v) => {
                         st.equ.insert(alloc::string::String::from(sym.trim()), v);
                     }
+                    None if bind_register_equate(sym.trim(), expr.trim(), st) => {}
                     // A value the expander cannot fold names a symbol or reads
                     // the location counter; neither is known before layout, so
                     // pass it through for the section parser.
@@ -2070,6 +2072,7 @@ fn expand_gas_statements(
                         Some(v) => {
                             st.equ.insert(alloc::string::String::from(aname), v);
                         }
+                        None if bind_register_equate(aname, aexpr, st) => {}
                         None => {
                             out.push_str(&alloc::format!(".set {aname}, {aexpr}\n"));
                         }
@@ -2134,6 +2137,39 @@ fn expand_gas_statements(
         ));
     }
     Ok(())
+}
+
+/// Whether the text holds a `name = expr` assignment, the GNU as spelling of
+/// `.set`. An `=` that is part of a comparison or a compound operator is not
+/// one, and neither is a macro parameter's `=default`, which the directives
+/// above already trigger on.
+fn has_gas_assignment(text: &str) -> bool {
+    const OPS: &[u8] = b"=!<>+-*/%&|^";
+    let b = text.as_bytes();
+    (0..b.len()).any(|i| {
+        b[i] == b'='
+            && b.get(i + 1) != Some(&b'=')
+            && !i.checked_sub(1).is_some_and(|p| OPS.contains(&b[p]))
+    })
+}
+
+/// `name = %reg` / `.set name, %reg`: the GNU as register equate, the same
+/// binding `name .req reg` makes. Records the alias and reports that the
+/// assignment defined no symbol; a value that is neither a register name nor
+/// an established alias leaves the assignment for the section parser.
+fn bind_register_equate(name: &str, expr: &str, st: &mut GasExpandState) -> bool {
+    let reg = match st.aliases.get(expr) {
+        Some(r) => r.clone(),
+        None => {
+            let bare = expr.strip_prefix('%').unwrap_or("");
+            if bare.is_empty() || !bare.bytes().all(|c| c.is_ascii_alphanumeric()) {
+                return false;
+            }
+            alloc::string::String::from(expr)
+        }
+    };
+    st.aliases.insert(alloc::string::String::from(name), reg);
+    true
 }
 
 /// Whether a GNU as `.if`-family directive takes its branch: evaluate the
@@ -6382,7 +6418,9 @@ pub(crate) fn eval_asm_expr_with_labels(
 /// Substitute each identifier `resolve` knows with its value, leaving other
 /// tokens -- numeric literals, unknown symbols, the location counter `.` --
 /// as written. Identifier characters are the assembler's: alphanumeric plus
-/// `_` / `.` / `$`.
+/// `_` / `.` / `$`; `$` continues a name but does not start one, so the AT&T
+/// immediate sigil in `$sym` separates from the name it prefixes while a
+/// symbol spelled `x$y` stays one token.
 pub(crate) fn subst_asm_idents(
     text: &str,
     resolve: &dyn Fn(&str) -> Option<i64>,
@@ -6398,10 +6436,11 @@ pub(crate) fn subst_asm_idents_text(
 ) -> alloc::string::String {
     let b = text.as_bytes();
     let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
+    let ident_start = |c: u8| ident(c) && c != b'$';
     let mut out = alloc::string::String::with_capacity(text.len());
     let mut i = 0;
     while i < b.len() {
-        if ident(b[i]) {
+        if ident_start(b[i]) {
             let start = i;
             while i < b.len() && ident(b[i]) {
                 i += 1;
@@ -8664,6 +8703,46 @@ mod asm_section_tests {
         let text = ".macro m a\n.byte \\a\n.endm\nm %1+2\n";
         let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
         assert!(out.contains("%1+2"), "{out}");
+    }
+
+    /// `name = expr` is the GNU as spelling of `.set`, so a unit that uses no
+    /// other directive still resolves its symbols. A value naming a register
+    /// is a register equate -- the binding `.req` makes -- and defines no
+    /// symbol; every later use of the name substitutes the register. `$name`
+    /// splits at the AT&T immediate sigil, while a `$` inside a name does not.
+    #[test]
+    fn gas_assignments_bind_constants_and_registers() {
+        let expand = |text: &str| {
+            expand_asm_gas_macros(text, 4, &|_| None)
+                .unwrap()
+                .expect("an assignment triggers the pass")
+                .trim()
+                .to_string()
+        };
+        assert_eq!(
+            expand("_A = 8\n_B = _A + 8\nK = _B + 16\nsubq $K, %rsp\n"),
+            "subq $32, %rsp"
+        );
+        assert_eq!(
+            expand("IN_KEY = %rdx\nmovdqu 16(IN_KEY), %xmm1\n"),
+            "movdqu 16(%rdx), %xmm1"
+        );
+        assert_eq!(expand("A = %rdx\nB = A\nmov (%r9), B\n"), "mov (%r9), %rdx");
+        assert_eq!(
+            expand(".set copy0, %xmm5\nmovdqa copy0, %xmm1\n"),
+            "movdqa %xmm5, %xmm1"
+        );
+        // A `$` inside a name belongs to it; `x$y` is one token.
+        assert_eq!(expand("x$y = 5\nmovl $x$y, %eax\n"), "movl $5, %eax");
+        // An assignment naming a symbol is not an equate: it reaches the
+        // section parser, which emits the object-level alias.
+        assert_eq!(expand("alias = target\nnop\n"), ".set alias, target\nnop");
+        // A comparison is not an assignment, so it triggers nothing.
+        assert!(
+            expand_asm_gas_macros("cmpl $1, %eax\nsete %al\n", 4, &|_| None)
+                .unwrap()
+                .is_none()
+        );
     }
 
     fn rept(text: &str) -> Result<alloc::string::String, alloc::string::String> {

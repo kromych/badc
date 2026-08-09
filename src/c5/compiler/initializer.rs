@@ -853,11 +853,22 @@ impl Compiler {
                         }
                         self.next()?;
                     }
-                    if stars >= 1 && self.lex.tk == ')' {
-                        // Simple pointer cast: record the pointee size so
-                        // a following `+ N` strides by it.
-                        let pointee = base + (stars - 1) * (Ty::Ptr as i64);
-                        cast_stride = Some(self.size_of_type(pointee) as i64);
+                    let cast_ty = base + stars * (Ty::Ptr as i64);
+                    if self.lex.tk == ')' && !is_struct_value_ty(cast_ty) {
+                        // The cast retypes the address and so sets the
+                        // stride of a following `+ N`: a pointer target
+                        // strides by its pointee (C99 6.5.6p8), an integer
+                        // target by bytes (6.3.2.3p6). Same rule the
+                        // const-expr evaluator applies to `ConstAddr`.
+                        cast_stride = Some(
+                            if is_pointer_ty(cast_ty)
+                                || (is_struct_ty(cast_ty) && struct_ptr_depth(cast_ty) > 0)
+                            {
+                                (self.size_of_type(cast_ty - Ty::Ptr as i64) as i64).max(1)
+                            } else {
+                                1
+                            },
+                        );
                         self.next()?; // consume `)`
                     } else {
                         // A more elaborate abstract declarator (function

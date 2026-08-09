@@ -726,7 +726,9 @@ Three input modes:
   Kbuild command plus `-gdwarf-4`, and badc's flag set plus `-g` -- and
   compares per unit. Both sides then run the same preprocessor surface over
   the same sources by construction, and the corpus is every translation
-  unit rather than the types that reached `vmlinux`.
+  unit rather than the types that reached `vmlinux`. Objects already in the
+  scratch directory are reused, so a re-run costs only the extraction and an
+  interrupted run resumes.
 
 Reported per aggregate: total size, and per member the byte offset, size,
 bit offset and bit width. Comparison is on those facts only; member type

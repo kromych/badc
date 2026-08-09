@@ -71,20 +71,23 @@ file-scope `asm` path; badc's own assembler currently takes 46 of 68 x86_64
 units and 62 of 77 aarch64 units that way. That is a probe, not a build path.
 
 **Some links.** Under `LD=badc` the shim routes by facts of the command line,
-and three classes go to the real linker:
+and one class goes to the real linker:
 
 * i386 links (`-m elf_i386`) -- the x86 boot setup, the realmode blob and the
   32-bit vDSO. badc emits ELF64 x86-64 and aarch64 only, so these need the
-  i386 target as a whole, not a linker fix.
-* Links asking for dynamic-linking metadata (`-soname`, `--hash-style`,
-  `--dynamic-linker`) -- the vDSO images need `.dynsym`/`.dynstr`/`.hash`/
-  `.dynamic`, which the script-driven engine does not emit. badc rejects those
-  options rather than ignoring them.
-* One scriptless final link (`scripts/tools-support-relr.sh`): badc has no
-  built-in default script, so a link with no `-T` has no layout to follow.
+  i386 target, not a linker fix.
 
 Everything else is badc's and only badc's: the `-r` merges, every `vmlinux`
-kallsyms pass, and the x86 boot decompressor.
+kallsyms pass, the x86 boot decompressor, both 64-bit vDSOs, and the
+scriptless probes.
+
+The vDSOs are shared objects, so badc emits the dynamic-linking metadata a
+loader searches -- `.dynsym`/`.dynstr`, `.hash` and `.gnu.hash` per
+`--hash-style`, `.gnu.version`/`.gnu.version_d` for the version the symbols are
+exported under, and a `.dynamic` with `DT_SONAME`, the table addresses and the
+RELA/RELR tags -- plus `PT_DYNAMIC`. A link with no `-T` runs under a built-in
+default script per output kind, as GNU ld falls back on its internal one, which
+is what `scripts/tools-support-relr.sh` probes with.
 
 **Configuration classification.** `scripts/cc-version.sh` still classifies the
 reference compiler, so `CONFIG_GCC_VERSION` keeps the reference toolchain's

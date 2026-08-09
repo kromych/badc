@@ -8,20 +8,13 @@ invocation, not from a list of paths:
   linker. badc targets x86-64 and aarch64 only, so the 16/32-bit boot
   links (``arch/x86/boot/setup.elf``, ``arch/x86/realmode/rm``,
   ``vdso32``) cannot be badc's. Recorded as `ld` with the emulation.
-- A final link with no ``-T``/``--script``: the real linker. badc has
-  no built-in default script, so a scriptless link has no layout to
-  follow. Recorded as `ld`.
-- A link asking for dynamic-linking metadata (``-soname``,
-  ``--hash-style``, ``--dynamic-linker``): the real linker. badc's
-  script-driven engine emits relocation tables but no
-  ``.dynsym``/``.dynstr``/``.hash``/``.dynamic``, which the vDSO images
-  need and the kernel image does not. badc rejects these options rather
-  than ignoring them, so this routing only anticipates that refusal.
-  Recorded as `ld`.
-- Everything else -- ``-r`` merges and script-driven final links,
-  including every ``vmlinux`` pass -- badc, and only badc. A badc
-  failure is the shim's failure: its exit status and diagnostic go to
-  make, which stops at the defect. Recorded as `badc` or `fail`.
+- Everything else is badc's, and only badc's: ``-r`` merges, every
+  ``vmlinux`` pass, the vDSO shared objects -- badc emits
+  ``.dynsym``/``.dynstr``/``.hash``/``.gnu.hash``/``.dynamic`` and the
+  symbol-version tables -- and scriptless links such as kbuild's RELR
+  probe, which run under badc's built-in default script. A badc failure
+  is the shim's failure: its exit status and diagnostic go to make,
+  which stops at the defect. Recorded as `badc` or `fail`.
 - Version and capability probes (``-v``/``--version`` with no output
   file): badc answers, so what the configuration records about the
   linker is what badc actually implements. ``$(call ld-option,...)``
@@ -51,18 +44,6 @@ import sys
 # linker's: badc emits ELF64 little-endian x86-64 / aarch64 only.
 BADC_EMULATIONS = {"elf_x86_64", "aarch64linux", "aarch64elf"}
 
-# Options that can only be honored by writing a dynamic section.
-DYNAMIC_EXACT = {"-soname", "-h", "--dynamic-linker"}
-DYNAMIC_PREFIX = ("-soname=", "--soname=", "--dynamic-linker=", "--hash-style=")
-
-
-def wants_dynamic_metadata(argv: list[str]) -> str | None:
-    """The first option requesting a dynamic section, or None."""
-    for a in argv:
-        if a in DYNAMIC_EXACT or a.startswith(DYNAMIC_PREFIX):
-            return a
-    return None
-
 
 def emulation(argv: list[str]) -> str | None:
     """The last `-m EMU` on the line, joined or separate, as ld resolves
@@ -87,15 +68,6 @@ def output_of(argv: list[str]) -> str | None:
         if a.startswith("--output="):
             return a[len("--output="):]
     return None
-
-
-def has_script(argv: list[str]) -> bool:
-    for i, a in enumerate(argv):
-        if a in ("-T", "--script") and i + 1 < len(argv):
-            return True
-        if a.startswith(("--script=", "-T")) and len(a) > 2:
-            return True
-    return False
 
 
 def manifest(status: str, output: str, detail: str = "") -> None:
@@ -131,7 +103,6 @@ def main(argv: list[str]) -> int:
     badc = os.environ.get("BADC")
     out = output_of(argv)
     emu = emulation(argv)
-    relocatable = any(a in ("-r", "--relocatable", "-i") for a in argv)
 
     if out is None:
         # A probe, not a link. badc answers so the recorded linker
@@ -143,12 +114,6 @@ def main(argv: list[str]) -> int:
 
     if emu is not None and emu not in BADC_EMULATIONS:
         manifest("ld", out, f"emulation {emu}")
-        os.execvp(real, [real, *argv])
-    if not relocatable and not has_script(argv):
-        manifest("ld", out, "final link without a linker script")
-        os.execvp(real, [real, *argv])
-    if (dyn := wants_dynamic_metadata(argv)) is not None:
-        manifest("ld", out, f"{dyn} needs a dynamic section")
         os.execvp(real, [real, *argv])
     if fallback_listed(out):
         manifest("fallback", out, "listed")

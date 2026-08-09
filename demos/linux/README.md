@@ -247,19 +247,26 @@ paths, and records every decision in `$BADC_LD_MANIFEST`:
   linker. badc emits ELF64 x86-64 and aarch64 only, so `arch/x86/boot/setup.elf`,
   `arch/x86/realmode/rm/realmode.elf` and the 32-bit vDSO are not links a
   linker fix could take -- they need the i386 target as a whole.
-* A final link with no `-T`/`--script` goes to the real linker: badc has no
-  built-in default script, so a scriptless link has no layout to follow. The
-  only such call in a kernel build is `scripts/tools-support-relr.sh`.
-* A link asking for dynamic-linking metadata (`-soname`, `--hash-style`,
-  `--dynamic-linker`) goes to the real linker: the script-driven engine emits
-  relocation tables but no `.dynsym`/`.dynstr`/`.hash`/`.dynamic`, which the
-  vDSO images need and the kernel image does not. badc rejects those options
-  rather than ignoring them, so a direct `LD=badc` fails loudly instead of
-  producing an unusable vDSO.
 * Everything else is badc's and only badc's: the `-r` merges (`vmlinux.o`,
-  `arch/arm64/kvm/hyp/nvhe/*`), every `vmlinux` kallsyms pass, and the x86
-  boot decompressor. A badc failure is the shim's failure, as with the CC
-  shim.
+  `arch/arm64/kvm/hyp/nvhe/*`), every `vmlinux` kallsyms pass, the x86 boot
+  decompressor, both 64-bit vDSOs, and kbuild's scriptless probes. A badc
+  failure is the shim's failure, as with the CC shim.
+
+  The vDSOs are shared objects, so badc builds the dynamic-linking metadata a
+  loader searches: `.dynsym`/`.dynstr` from the symbols the script's `VERSION`
+  block exports, `.hash` and `.gnu.hash` per `--hash-style`, `.gnu.version` /
+  `.gnu.version_d` for the version the kernel's own loader and glibc look the
+  symbols up under, and a `.dynamic` carrying `DT_SONAME`, the table
+  addresses, and the RELA/RELR tags where relocations exist. bfd builds these
+  for every `-shared` link and the kernel's own scripts discard the ones it
+  does not want (`vmlinux.lds.S` sends `.dynsym`/`.dynstr`/`.hash`/`.gnu.hash`/
+  `.dynamic` to `/DISCARD/`), so badc does the same and those links are
+  unchanged.
+
+  A scriptless final link runs under badc's built-in default script, one per
+  output kind, the way GNU ld falls back on its internal one. The only such
+  call in a kernel build is `scripts/tools-support-relr.sh`, which is what
+  decides `CONFIG_TOOLS_SUPPORT_RELR`.
 * Version and capability probes (`-v`/`--version` with no output file) are
   answered by badc, so what the configuration records about the linker comes
   from the linker that will do the linking. `$(call ld-option,...)` runs the

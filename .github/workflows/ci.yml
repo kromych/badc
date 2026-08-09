@@ -1599,8 +1599,9 @@ jobs:
     # badc-built: the reference compiler still assembles the .S units and
     # builds kbuild's host tools, and GNU ld still takes the links ldshim.py
     # routes to it -- x86's 16/32-bit boot and vDSO links, which need the i386
-    # target; the vDSO images, which need a dynamic section; and kbuild's
-    # scriptless linker probe. `verify.py` names those one by one and fails on
+    # target. The 64-bit vDSOs are badc's, dynamic metadata and symbol
+    # versions included, and so is kbuild's scriptless linker probe.
+    # `verify.py` names what was left to GNU ld one by one and fails on
     # a link leaving badc for any other reason. The boot uses the emulator's
     # -kernel loader rather than badc-built firmware; booting through
     # OVMF/AAVMF is the qemu lane's dimension.

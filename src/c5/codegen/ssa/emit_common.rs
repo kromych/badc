@@ -5984,10 +5984,9 @@ pub(crate) fn materialize_asm_sections(
                     let mut buf = bytes.clone();
                     for r in relocs {
                         let mut r = r.clone();
-                        // An operand written as an expression resolves against
-                        // the layout here: what folds to a constant lands in
-                        // the field, what keeps a symbol becomes a relocation
-                        // against it.
+                        // An operand expression resolves against the layout
+                        // here: what folds lands in the field, what keeps a
+                        // symbol relocates against it.
                         if let AsmSectionTarget::Expr(text) = &r.target {
                             let place = base as i64 + r.offset as i64;
                             // `.` in an operand is the instruction's own

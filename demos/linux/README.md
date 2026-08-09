@@ -776,13 +776,29 @@ badc emits `DW_TAG_structure_type` / `DW_TAG_union_type` with
 bitfield members with `DW_AT_data_bit_offset` + `DW_AT_bit_size`, which is
 what the comparison needs.
 
-Two gaps bound what can be compared. Objects with static storage duration
-get no `DW_TAG_variable`, so an aggregate reachable only through a global
-gets no DIE and appears on the reference side only -- a debug-info gap, not
-a layout match, which is why the summary counts one-sided names separately.
-Anonymous aggregates are emitted with synthesized `__anon_struct_<n>` names
-whose serial numbers are per-unit, so they match nothing across compilers or
-units; `layout.py` treats those names as unnamed on both sides.
+What it does emit agrees: on the defconfig kernel every member both
+compilers describe lands at the same byte offset, bit offset and bit width.
+What bounds the check is coverage, and these are the gaps (TODO):
+
+* Objects with static storage duration get no `DW_TAG_variable`, so an
+  aggregate reachable only through a global gets no DIE and appears on the
+  reference side only. That is why one-sided names are counted separately:
+  a struct missing from badc's DWARF is a debug-info gap, not a match.
+* A member whose type DIE the emitter did not write is dropped, leaving an
+  aggregate that presents itself as a complete definition with members
+  missing. This is the largest of the gaps.
+* A forward-declared aggregate is emitted as a complete definition of size
+  zero rather than carrying `DW_AT_declaration`.
+* An array-of-aggregate member is described by its element type, and a
+  function-pointer member by a pointer to the return type.
+* Anonymous aggregates get synthesized `__anon_struct_<n>` names whose
+  serial numbers are per-unit, so they match nothing across compilers or
+  units; `layout.py` treats those names as unnamed on both sides.
+
+The middle three move no member, so `layout.py` keeps them out of the
+layout bucket: a member-size difference with every offset intact is counted
+as a member type difference, and a member only one side describes is
+counted as a coverage gap.
 
 `buildcc.py` forwards the debug-info request: `-gdwarf-4`, `-gdwarf-5` and
 the `-g<level>` spellings all map to badc's `-g`. A configuration that asks

@@ -37,7 +37,10 @@ use super::lds::{
     AssignOp, Assignment, BinOp, Command, DataWidth, Expr, InputSpec, LinkerScript, OutputSection,
     OutputSectionType, SectionContent, SectionsItem, SortKind, UnOp, glob_match,
 };
-use super::object::{Elf64Ehdr, Elf64Shdr, read_struct};
+use super::object::{
+    Elf32Ehdr, Elf32Rel, Elf32Rela, Elf32Shdr, Elf32Sym, Elf64Ehdr, Elf64Rel, Elf64Shdr, ElfClass,
+    read_struct,
+};
 use crate::c5::object::elf_reloc_types as rt;
 
 fn err(msg: &str) -> C5Error {
@@ -104,8 +107,24 @@ const PF_R: u32 = 4;
 
 const ET_EXEC: u16 = 2;
 const ET_DYN: u16 = 3;
+const EM_386: u16 = 3;
 const EM_X86_64: u16 = 62;
 const EM_AARCH64: u16 = 183;
+
+/// ELF class an emulation's machine is linked at. Only i386 among the
+/// machines badc targets is ELF32.
+pub fn class_for_machine(machine: u16) -> ElfClass {
+    match machine {
+        EM_386 => ElfClass::Elf32,
+        _ => ElfClass::Elf64,
+    }
+}
+
+/// True where the target's default relocation format carries an
+/// explicit addend (`SHT_RELA`). i386 uses `SHT_REL`.
+fn machine_uses_rela(machine: u16) -> bool {
+    machine != EM_386
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -138,6 +157,32 @@ struct Elf64Rela {
     r_info: u64,
     r_addend: i64,
 }
+
+/// bfd's orphan buckets, in layout order: code, read-only data,
+/// writable data, `.bss`, then everything unallocated.
+fn orphan_class(flags: u64, shtype: u32) -> u32 {
+    if flags & SHF_ALLOC == 0 {
+        4
+    } else if flags & SHF_EXECINSTR != 0 {
+        0
+    } else if shtype == SHT_NOBITS {
+        3
+    } else if flags & SHF_WRITE == 0 {
+        1
+    } else {
+        2
+    }
+}
+
+/// The output section each orphan class anchors on when the script
+/// names one; otherwise the last compatible section takes the orphan.
+const ORPHAN_ANCHOR_NAMES: [Option<&str>; 5] = [
+    Some(".text"),
+    Some(".rodata"),
+    Some(".data"),
+    Some(".bss"),
+    None,
+];
 
 fn align_up(v: u64, align: u64) -> u64 {
     if align <= 1 {
@@ -198,6 +243,7 @@ pub struct LdsObject {
     pub source: String,
     pub bytes: Vec<u8>,
     pub machine: u16,
+    pub class: ElfClass,
     pub sections: Vec<RawSection>,
     pub symbols: Vec<RawSym>,
     /// Original section header index -> `sections` index.
@@ -213,34 +259,43 @@ impl LdsObject {
     }
 }
 
-/// Parse an ELF64 little-endian ET_REL object preserving every
-/// section. Symbol/string/reloc tables are consumed into structured
-/// form; group and addrsig metadata is dropped.
+/// Parse a little-endian ET_REL object of either ELF class preserving
+/// every section. Symbol/string/reloc tables are consumed into
+/// structured form; group and addrsig metadata is dropped.
 pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Error> {
-    if bytes.len() < 64 || &bytes[0..4] != b"\x7fELF" {
+    if bytes.len() < 52 || &bytes[0..4] != b"\x7fELF" {
         return Err(err(&format!("{source}: not an ELF object")));
     }
-    let ehdr: Elf64Ehdr = read_struct(&bytes, 0)?;
-    if ehdr.e_ident[4] != 2 || ehdr.e_ident[5] != 1 {
-        return Err(err(&format!("{source}: not a little-endian ELF64 object")));
-    }
+    let Some(class) = ElfClass::from_ei_class(bytes[4]).filter(|_| bytes[5] == 1) else {
+        return Err(err(&format!("{source}: not a little-endian ELF object")));
+    };
+    let read_shdr = |off: usize| -> Result<Elf64Shdr, C5Error> {
+        match class {
+            ElfClass::Elf32 => read_struct::<Elf32Shdr>(&bytes, off).map(Into::into),
+            ElfClass::Elf64 => read_struct::<Elf64Shdr>(&bytes, off),
+        }
+    };
+    let ehdr: Elf64Ehdr = match class {
+        ElfClass::Elf32 => read_struct::<Elf32Ehdr>(&bytes, 0)?.into(),
+        ElfClass::Elf64 => read_struct::<Elf64Ehdr>(&bytes, 0)?,
+    };
     if ehdr.e_type != 1 {
         return Err(err(&format!(
             "{source}: not a relocatable object (e_type {})",
             ehdr.e_type
         )));
     }
+    let shdr_size = class.shdr_size() as usize;
     let shoff = ehdr.e_shoff as usize;
     let mut shnum = ehdr.e_shnum as usize;
     // Extended section count: e_shnum 0 stores the real count in
     // section header 0's sh_size.
     if shnum == 0 && shoff != 0 {
-        let sh0: Elf64Shdr = read_struct(&bytes, shoff)?;
-        shnum = sh0.sh_size as usize;
+        shnum = read_shdr(shoff)?.sh_size as usize;
     }
     let mut shdrs: Vec<Elf64Shdr> = Vec::with_capacity(shnum);
     for i in 0..shnum {
-        shdrs.push(read_struct(&bytes, shoff + i * 64)?);
+        shdrs.push(read_shdr(shoff + i * shdr_size)?);
     }
     let mut shstrndx = ehdr.e_shstrndx as usize;
     if shstrndx == SHN_XINDEX as usize {
@@ -269,10 +324,24 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
         let sh = &shdrs[si];
         let strtab = section_bytes(&bytes, shdrs.get(sh.sh_link as usize), source)?;
         let raw = section_bytes(&bytes, Some(sh), source)?;
-        let count = raw.len() / 24;
+        let sym_size = class.sym_size() as usize;
+        let count = raw.len() / sym_size;
         symbols.reserve(count);
         for k in 0..count {
-            let sym: Elf64Sym = read_struct(raw, k * 24)?;
+            let sym: Elf64Sym = match class {
+                ElfClass::Elf32 => {
+                    let s: Elf32Sym = read_struct(raw, k * sym_size)?;
+                    Elf64Sym {
+                        st_name: s.st_name,
+                        st_info: s.st_info,
+                        st_other: s.st_other,
+                        st_shndx: s.st_shndx,
+                        st_value: s.st_value as u64,
+                        st_size: s.st_size as u64,
+                    }
+                }
+                ElfClass::Elf64 => read_struct(raw, k * sym_size)?,
+            };
             let shndx = if sym.st_shndx == SHN_XINDEX {
                 shndx_ext.get(k).copied().unwrap_or(0)
             } else {
@@ -332,7 +401,9 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
             orig_shndx: i as u32,
         });
     }
-    // Attach relocation tables to their sections via sh_info.
+    // Attach relocation tables to their sections via sh_info. SHT_REL
+    // carries no addend field: it lives in the target bytes, so it is
+    // read out here and the entry becomes RELA-shaped for the engine.
     for sh in &shdrs {
         if sh.sh_type != SHT_RELA && sh.sh_type != SHT_REL {
             continue;
@@ -341,33 +412,114 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
             continue;
         };
         let raw = section_bytes(&bytes, Some(sh), source)?;
-        if sh.sh_type == SHT_RELA {
-            let count = raw.len() / 24;
-            let list = &mut sections[target].relocs;
-            list.reserve(count);
-            for k in 0..count {
-                let re: Elf64Rela = read_struct(raw, k * 24)?;
-                list.push(RawReloc {
-                    offset: re.r_offset,
-                    sym: (re.r_info >> 32) as u32,
-                    rtype: re.r_info as u32,
-                    addend: re.r_addend,
-                });
-            }
+        let rel = sh.sh_type == SHT_REL;
+        let ent = if rel {
+            class.rel_size() as usize
         } else {
-            return Err(err(&format!(
-                "{source}: SHT_REL (implicit-addend) relocations are not supported"
-            )));
+            class.rela_size() as usize
+        };
+        let count = raw.len() / ent;
+        let mut list: Vec<RawReloc> = Vec::with_capacity(count);
+        for k in 0..count {
+            let (r_offset, r_info, r_addend) = match (class, rel) {
+                (ElfClass::Elf32, true) => {
+                    let re: Elf32Rel = read_struct(raw, k * ent)?;
+                    (re.r_offset as u64, re.r_info as u64, 0)
+                }
+                (ElfClass::Elf32, false) => {
+                    let re: Elf32Rela = read_struct(raw, k * ent)?;
+                    (re.r_offset as u64, re.r_info as u64, re.r_addend as i64)
+                }
+                (ElfClass::Elf64, true) => {
+                    let re: Elf64Rel = read_struct(raw, k * ent)?;
+                    (re.r_offset, re.r_info, 0)
+                }
+                (ElfClass::Elf64, false) => {
+                    let re: Elf64Rela = read_struct(raw, k * ent)?;
+                    (re.r_offset, re.r_info, re.r_addend)
+                }
+            };
+            let rtype = class.reloc_type(r_info);
+            let addend = if rel {
+                implicit_addend(
+                    &bytes,
+                    &sections[target],
+                    ehdr.e_machine,
+                    rtype,
+                    r_offset,
+                    source,
+                )?
+            } else {
+                r_addend
+            };
+            list.push(RawReloc {
+                offset: r_offset,
+                sym: class.reloc_sym(r_info),
+                rtype,
+                addend,
+            });
         }
+        sections[target].relocs.extend(list);
     }
     Ok(LdsObject {
         source: source.to_string(),
         bytes,
         machine: ehdr.e_machine,
+        class,
         sections,
         symbols,
         shndx_map,
     })
+}
+
+/// The addend an `SHT_REL` entry keeps in the field it relocates,
+/// sign-extended from the field's width. A type that touches no field
+/// (`R_*_NONE`) has none.
+fn implicit_addend(
+    bytes: &[u8],
+    sec: &RawSection,
+    machine: u16,
+    rtype: u32,
+    offset: u64,
+    source: &str,
+) -> Result<i64, C5Error> {
+    if rtype == R_NONE {
+        return Ok(0);
+    }
+    let width = match machine {
+        EM_386 => rt::i386_field_width(rtype),
+        _ => None,
+    };
+    let Some(width) = width else {
+        return Err(err(&format!(
+            "{source}: {} in `{}' has no implicit-addend field",
+            reloc_desc(machine, rtype),
+            sec.name
+        )));
+    };
+    let end = offset + width as u64;
+    if sec.shtype == SHT_NOBITS || end > sec.size {
+        return Err(err(&format!(
+            "{source}: relocation offset 0x{offset:x} outside `{}'",
+            sec.name
+        )));
+    }
+    let at = sec.data_off + offset as usize;
+    let raw = &bytes[at..at + width as usize];
+    Ok(match width {
+        1 => raw[0] as i8 as i64,
+        2 => i16::from_le_bytes([raw[0], raw[1]]) as i64,
+        _ => i32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]) as i64,
+    })
+}
+
+/// A relocation type named the way `readelf -r` prints it.
+fn reloc_desc(machine: u16, rtype: u32) -> String {
+    match machine {
+        EM_386 => rt::i386_reloc_desc(rtype),
+        EM_AARCH64 => rt::aarch64_reloc_desc(rtype),
+        _ => rt::x86_64_reloc_desc(rtype),
+    }
 }
 
 fn section_bytes<'a>(
@@ -613,6 +765,7 @@ pub struct LdsLinker<'a> {
     objects: Vec<LdsObject>,
     opts: LdsOptions,
     machine: u16,
+    class: ElfClass,
 
     /// Flattened input sections across objects.
     insecs: Vec<InSecId>,
@@ -621,6 +774,8 @@ pub struct LdsLinker<'a> {
     fates: Vec<SecFate>,
     /// insec index -> merge pool key, for merged sections.
     merge_of: HashMap<usize, usize>,
+    /// Orphan class -> the output section later orphans stack after.
+    orphan_anchor: HashMap<u32, usize>,
     pools: Vec<MergePool>,
 
     outs: Vec<OutSec>,
@@ -716,6 +871,7 @@ enum Stmt {
 }
 
 const SYNTH_RELA: &str = ".rela.dyn";
+const SYNTH_REL: &str = ".rel.dyn";
 const SYNTH_RELR: &str = ".relr.dyn";
 const SYNTH_GOT: &str = ".got";
 const SYNTH_GOTPLT: &str = ".got.plt";
@@ -765,6 +921,14 @@ impl<'a> LdsLinker<'a> {
                 )));
             }
         }
+        for o in &objects {
+            if o.class != class_for_machine(machine) {
+                return Err(err(&format!(
+                    "{}: ELF class does not match machine {machine}",
+                    o.source
+                )));
+            }
+        }
         // `.note.GNU-stack` conveys stack executability and nothing
         // else; bfd consumes it and never places it. Keeping it would
         // put a PROGBITS input in whatever `*(.note*)` rule claims it,
@@ -790,20 +954,24 @@ impl<'a> LdsLinker<'a> {
             source: "<linker>".to_string(),
             bytes: Vec::new(),
             machine,
+            class: class_for_machine(machine),
             sections: Vec::new(),
             symbols: Vec::new(),
             shndx_map: HashMap::new(),
         });
 
+        let class = class_for_machine(machine);
         let mut linker = LdsLinker {
             script,
             objects,
             opts,
             machine,
+            class,
             insecs: Vec::new(),
             obj_base: Vec::new(),
             fates: Vec::new(),
             merge_of: HashMap::new(),
+            orphan_anchor: HashMap::new(),
             pools: Vec::new(),
             outs: Vec::new(),
             stmts: Vec::new(),
@@ -925,6 +1093,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     fn push_synth_section(&mut self, name: &str, shtype: u32, flags: u64) -> usize {
+        let align = self.class.addr_size();
         let synth = self.synth_obj;
         let obj = &mut self.objects[synth];
         let idx = obj.sections.len();
@@ -933,7 +1102,7 @@ impl<'a> LdsLinker<'a> {
             name: name.to_string(),
             shtype,
             flags,
-            addralign: 8,
+            addralign: align,
             entsize: 0,
             data_off: 0,
             size: 0,
@@ -958,7 +1127,8 @@ impl<'a> LdsLinker<'a> {
             sec.size = 36; // 12-byte header + "GNU\0" + 20-byte sha1
         }
         if self.opts.emit == LdsEmit::Dyn {
-            let rela = self.push_synth_section(SYNTH_RELA, SHT_RELA, SHF_ALLOC);
+            let (rela_name, rela_type, rela_ent) = self.dyn_reloc_kind();
+            let rela = self.push_synth_section(rela_name, rela_type, SHF_ALLOC);
             // `.relr.dyn` exists only where RELR packing was asked for.
             // Creating it unconditionally leaves an empty section no
             // script names, which `--orphan-handling=error` rejects.
@@ -969,16 +1139,17 @@ impl<'a> LdsLinker<'a> {
             let got = self.push_synth_section(SYNTH_GOT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let gotplt = self.push_synth_section(SYNTH_GOTPLT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let synth = self.synth_obj;
-            self.objects[synth].sections[rela].entsize = 24;
+            let slot = self.class.addr_size();
+            self.objects[synth].sections[rela].entsize = rela_ent;
             if let Some(relr) = relr {
-                self.objects[synth].sections[relr].entsize = 8;
+                self.objects[synth].sections[relr].entsize = slot;
             }
-            self.objects[synth].sections[got].entsize = 8;
+            self.objects[synth].sections[got].entsize = slot;
             // .got: one reserved header slot; GOT slots append per use.
-            self.objects[synth].sections[got].size = 8;
+            self.objects[synth].sections[got].size = slot;
             // .got.plt: three reserved slots, no PLT entries.
-            self.objects[synth].sections[gotplt].entsize = 8;
-            self.objects[synth].sections[gotplt].size = 24;
+            self.objects[synth].sections[gotplt].entsize = slot;
+            self.objects[synth].sections[gotplt].size = 3 * slot;
             self.synthesize_dynamic_sections();
         }
     }
@@ -993,9 +1164,17 @@ impl<'a> LdsLinker<'a> {
             secs.push((SYNTH_HASH, dynamic::SHT_HASH, SHF_ALLOC, 4));
         }
         if self.opts.hash_style.gnu() {
-            secs.push((SYNTH_GNU_HASH, dynamic::SHT_GNU_HASH, SHF_ALLOC, 0));
+            // bfd gives `.gnu.hash` a 4-byte entsize on ELF32 only:
+            // the ELF64 table's Bloom words are wider than its words.
+            let ent = if self.class.is32() { 4 } else { 0 };
+            secs.push((SYNTH_GNU_HASH, dynamic::SHT_GNU_HASH, SHF_ALLOC, ent));
         }
-        secs.push((SYNTH_DYNSYM, dynamic::SHT_DYNSYM, SHF_ALLOC, 24));
+        secs.push((
+            SYNTH_DYNSYM,
+            dynamic::SHT_DYNSYM,
+            SHF_ALLOC,
+            self.class.sym_size(),
+        ));
         secs.push((SYNTH_DYNSTR, SHT_STRTAB, SHF_ALLOC, 0));
         if !self.verdefs.is_empty() {
             secs.push((SYNTH_VERSYM, dynamic::SHT_GNU_VERSYM, SHF_ALLOC, 2));
@@ -1005,8 +1184,9 @@ impl<'a> LdsLinker<'a> {
             SYNTH_DYNAMIC,
             dynamic::SHT_DYNAMIC,
             SHF_ALLOC | SHF_WRITE,
-            16,
+            self.class.dyn_size(),
         ));
+        let default_align = self.class.addr_size();
         for (name, shtype, flags, entsize) in secs {
             let idx = self.push_synth_section(name, shtype, flags);
             let synth = self.synth_obj;
@@ -1015,7 +1195,7 @@ impl<'a> LdsLinker<'a> {
             sec.addralign = match name {
                 SYNTH_DYNSTR => 1,
                 SYNTH_VERSYM => 2,
-                _ => 8,
+                _ => default_align,
             };
         }
     }
@@ -1291,9 +1471,9 @@ impl<'a> LdsLinker<'a> {
     }
 
     fn place_orphan(&mut self, i: usize) {
-        let (name, flags) = {
+        let (name, flags, shtype) = {
             let s = self.insec(i);
-            (s.name.clone(), s.flags)
+            (s.name.clone(), s.flags, s.shtype)
         };
         // Same-name output section: append there.
         if let Some((oi, _)) = self.outs.iter().enumerate().find(|(_, o)| o.name == name) {
@@ -1301,27 +1481,31 @@ impl<'a> LdsLinker<'a> {
             self.outs[oi].pieces.push(Piece::Inputs(alloc::vec![i]));
             return;
         }
-        // New output section named after the input, placed after the
-        // last section of the same allocation class (walk the
-        // statement stream to keep layout order consistent).
-        let class = |f: u64| -> u32 {
-            if f & SHF_ALLOC == 0 {
-                3
-            } else if f & SHF_EXECINSTR != 0 {
-                0
-            } else if f & SHF_WRITE == 0 {
-                1
-            } else {
-                2
-            }
+        // New output section named after the input. bfd anchors an
+        // orphan on the output section canonically named for its class
+        // (`.text`, `.rodata`, `.data`, `.bss`), falling back to the
+        // last section of a compatible class; further orphans of the
+        // same class stack after the one already placed.
+        let want = orphan_class(flags, shtype);
+        let anchor = match self.orphan_anchor.get(&want) {
+            Some(&oi) => Some(oi),
+            None => self
+                .outs
+                .iter()
+                .position(|o| Some(o.name.as_str()) == ORPHAN_ANCHOR_NAMES[want as usize]),
         };
-        let want = class(flags);
         let mut insert_after: Option<usize> = None; // index into stmts
         for (si, st) in self.stmts.iter().enumerate() {
             if let Stmt::Open(oi) = st {
-                let of = self.section_input_flags(*oi);
-                if class(of) <= want {
+                if Some(*oi) == anchor {
                     insert_after = Some(si);
+                    break;
+                }
+                if anchor.is_none() {
+                    let of = self.section_input_flags(*oi);
+                    if orphan_class(of, self.outs[*oi].shtype) <= want {
+                        insert_after = Some(si);
+                    }
                 }
             }
         }
@@ -1351,6 +1535,7 @@ impl<'a> LdsLinker<'a> {
         let pos = insert_after.map(|s| s + 1).unwrap_or(self.stmts.len());
         self.stmts.insert(pos, Stmt::Open(new_out));
         self.fates[i] = SecFate::Placed { out: new_out };
+        self.orphan_anchor.insert(want, new_out);
     }
 
     /// Union of the input flags currently claimed by output `oi`.
@@ -1849,6 +2034,8 @@ impl<'a> LdsLinker<'a> {
             let v = self.eval(e).v;
             fill_pattern(v)
         });
+        let code = self.section_input_flags(oi) & SHF_EXECINSTR != 0;
+        let machine = self.machine;
         let mut file_bytes = false;
         for pi in 0..pieces_len {
             match self.outs[oi].pieces[pi].clone() {
@@ -1878,11 +2065,10 @@ impl<'a> LdsLinker<'a> {
                         };
                         let aligned = align_up(off, a);
                         if aligned > off {
-                            if let Some(f) = &fill_bytes
-                                && !nobits
-                                && !all_nobits
-                            {
-                                chunks.push((off, aligned - off, ChunkSrc::Pad(f.clone())));
+                            if !nobits && !all_nobits {
+                                let len = aligned - off;
+                                let pad = pad_bytes(&fill_bytes, machine, code, len);
+                                chunks.push((off, len, ChunkSrc::Pad(pad)));
                             }
                             off = aligned;
                         }
@@ -1912,11 +2098,10 @@ impl<'a> LdsLinker<'a> {
                                 self.outs[oi].name
                             ));
                         } else {
-                            if new_off > off
-                                && let Some(f) = &fill_bytes
-                                && !all_nobits
-                            {
-                                chunks.push((off, new_off - off, ChunkSrc::Pad(f.clone())));
+                            if new_off > off && !all_nobits {
+                                let len = new_off - off;
+                                let pad = pad_bytes(&fill_bytes, machine, code, len);
+                                chunks.push((off, len, ChunkSrc::Pad(pad)));
                             }
                             off = new_off;
                             end = end.max(off);
@@ -1973,7 +2158,8 @@ impl<'a> LdsLinker<'a> {
             flags &= !SHF_ALLOC;
         }
         // RELA/RELR synthesized content keeps its own type.
-        if self.outs[oi].name == SYNTH_RELA && self.opts.emit == LdsEmit::Dyn && size > 0 {
+        if self.outs[oi].name == self.dyn_reloc_name() && self.opts.emit == LdsEmit::Dyn && size > 0
+        {
             // keep type from the synth input (SHT_RELA)
         }
 
@@ -2396,7 +2582,7 @@ impl<'a> LdsLinker<'a> {
             ),
             Expr::SizeofHeaders => {
                 let phnum = self.phdr_count_estimate();
-                Val::abs(64 + phnum as u64 * 56)
+                Val::abs(self.class.ehdr_size() + phnum as u64 * self.class.phdr_size())
             }
             Expr::Defined(name) => {
                 let defined = self.script_now.contains_key(name)
@@ -2426,6 +2612,21 @@ impl<'a> LdsLinker<'a> {
         self.outs.iter().position(|o| o.name == name)
     }
 
+    /// Name, section type and entry size of the dynamic relocation
+    /// table this target uses. i386 relocations carry implicit
+    /// addends, so the table is `.rel.dyn`/`SHT_REL`.
+    fn dyn_reloc_kind(&self) -> (&'static str, u32, u64) {
+        if machine_uses_rela(self.machine) {
+            (SYNTH_RELA, SHT_RELA, self.class.rela_size())
+        } else {
+            (SYNTH_REL, SHT_REL, self.class.rel_size())
+        }
+    }
+
+    fn dyn_reloc_name(&self) -> &'static str {
+        self.dyn_reloc_kind().0
+    }
+
     /// bfd's `CONSTANT(COMMONPAGESIZE)`: 4 KiB on x86-64, 64 KiB on
     /// aarch64, and never above the configured maximum.
     fn common_page_size(&self) -> u64 {
@@ -2435,6 +2636,25 @@ impl<'a> LdsLinker<'a> {
             0x1000
         };
         common.min(self.opts.max_page_size)
+    }
+
+    /// Relocation types the dynamic tables are built from: the
+    /// address-width absolute form the input uses, and the load-time
+    /// forms bfd rewrites it to.
+    fn dyn_reloc_types(&self) -> (u32, u32, u32) {
+        match self.machine {
+            EM_AARCH64 => (
+                rt::R_AARCH64_ABS64,
+                rt::R_AARCH64_RELATIVE,
+                rt::R_AARCH64_GLOB_DAT,
+            ),
+            EM_386 => (rt::R_386_32, rt::R_386_RELATIVE, rt::R_386_GLOB_DAT),
+            _ => (
+                rt::R_X86_64_64,
+                rt::R_X86_64_RELATIVE,
+                rt::R_X86_64_GLOB_DAT,
+            ),
+        }
     }
 
     fn phdr_count_estimate(&self) -> usize {
@@ -2488,11 +2708,7 @@ impl<'a> LdsLinker<'a> {
         // other sites keep RELA entries.
         let mut rel_addrs: Vec<(u64, i64, bool)> = Vec::new();
         let mut sym_relas: Vec<DynReloc> = Vec::new();
-        let abs64 = if self.machine == EM_AARCH64 {
-            rt::R_AARCH64_ABS64
-        } else {
-            rt::R_X86_64_64
-        };
+        let (abs_addr, relative, glob_dat) = self.dyn_reloc_types();
         for i in 0..self.insecs.len() {
             let SecFate::Placed { out } = self.fates[i] else {
                 continue;
@@ -2508,7 +2724,7 @@ impl<'a> LdsLinker<'a> {
             let base = self.outs[out].addr + p.off;
             let packable = self.objects[id.obj].sections[id.sec].addralign > 1;
             for r in &self.objects[id.obj].sections[id.sec].relocs {
-                if r.rtype != abs64 {
+                if r.rtype != abs_addr {
                     continue;
                 }
                 // Only a load-address (section-relative) target needs a
@@ -2520,7 +2736,7 @@ impl<'a> LdsLinker<'a> {
                     if self.undefweak_dynamic(id.obj, r.sym as usize) {
                         sym_relas.push(DynReloc {
                             offset: base + r.offset,
-                            rtype: abs64,
+                            rtype: abs_addr,
                             addend: r.addend,
                         });
                     }
@@ -2546,11 +2762,7 @@ impl<'a> LdsLinker<'a> {
                 } else {
                     sym_relas.push(DynReloc {
                         offset: slot,
-                        rtype: if self.machine == EM_AARCH64 {
-                            rt::R_AARCH64_GLOB_DAT
-                        } else {
-                            rt::R_X86_64_GLOB_DAT
-                        },
+                        rtype: glob_dat,
                         addend: 0,
                     });
                 }
@@ -2565,18 +2777,14 @@ impl<'a> LdsLinker<'a> {
             } else {
                 relas.push(DynReloc {
                     offset: addr,
-                    rtype: if self.machine == EM_AARCH64 {
-                        rt::R_AARCH64_RELATIVE
-                    } else {
-                        rt::R_X86_64_RELATIVE
-                    },
+                    rtype: relative,
                     addend,
                 });
             }
         }
         relas.extend(sym_relas);
         relas.sort_by_key(|d| d.offset);
-        let relr_words = encode_relr(&relr);
+        let relr_words = encode_relr(&relr, self.class.addr_size());
         self.dyn_relas = relas;
         self.relr_addrs = relr;
         // Update synthetic section sizes.
@@ -2595,18 +2803,23 @@ impl<'a> LdsLinker<'a> {
         // point at; a link with neither leaves `.got` empty, which
         // scripts assert on.
         let got_header = !self.got_slots.is_empty() || self.kept_synth(SYNTH_DYNAMIC).is_some();
+        let (rela_name, _, rela_ent) = self.dyn_reloc_kind();
+        let slot = self.class.addr_size();
         let synth = self.synth_obj;
         for sec in &mut self.objects[synth].sections {
             if let Some(&size) = dyn_sizes.get(sec.name.as_str()) {
                 sec.size = size;
                 continue;
             }
+            if sec.name == rela_name {
+                sec.size = (nones + self.dyn_relas.len() as u64) * rela_ent;
+                continue;
+            }
             match sec.name.as_str() {
-                SYNTH_RELA => sec.size = (nones + self.dyn_relas.len() as u64) * 24,
-                SYNTH_RELR => sec.size = relr_words.len() as u64 * 8,
+                SYNTH_RELR => sec.size = relr_words.len() as u64 * slot,
                 SYNTH_GOT => {
                     sec.size = if got_header {
-                        8 + self.got_slots.len() as u64 * 8
+                        slot + self.got_slots.len() as u64 * slot
                     } else {
                         0
                     }
@@ -2800,6 +3013,7 @@ impl<'a> LdsLinker<'a> {
             self.opts.soname.as_deref(),
             &verdefs,
             self.opts.hash_style,
+            self.class,
         ));
     }
 
@@ -2818,7 +3032,7 @@ impl<'a> LdsLinker<'a> {
         m.insert(SYNTH_VERDEF, t.verdef.len() as u64);
         m.insert(
             SYNTH_DYNAMIC,
-            dynamic::build_dynamic(&self.dyn_addrs()).len() as u64,
+            dynamic::build_dynamic(&self.dyn_addrs(), self.class).len() as u64,
         );
         m
     }
@@ -2844,7 +3058,8 @@ impl<'a> LdsLinker<'a> {
             strtab: addr(SYNTH_DYNSTR),
             strsz: t.map(|t| t.dynstr().len() as u64).unwrap_or(0),
             symtab: addr(SYNTH_DYNSYM),
-            rela: sized(SYNTH_RELA),
+            rela: sized(self.dyn_reloc_name()),
+            use_rela: machine_uses_rela(self.machine),
             relr: sized(SYNTH_RELR),
             verdef: addr(SYNTH_VERDEF).map(|a| (a, t.map(|t| t.verdef_count).unwrap_or(0))),
             versym: addr(SYNTH_VERSYM),
@@ -2896,11 +3111,7 @@ impl<'a> LdsLinker<'a> {
     /// reclaimed by RELR packing, so it survives as a zeroed
     /// R_*_NONE entry. Reserve the same slots for size parity.
     fn count_reserved_none_slots(&self) -> u64 {
-        let abs64 = if self.machine == EM_AARCH64 {
-            rt::R_AARCH64_ABS64
-        } else {
-            rt::R_X86_64_64
-        };
+        let abs_addr = self.dyn_reloc_types().0;
         let mut n = 0u64;
         for i in 0..self.insecs.len() {
             if self.fates[i] != SecFate::Discarded {
@@ -2912,7 +3123,7 @@ impl<'a> LdsLinker<'a> {
                 continue;
             }
             for r in &s.relocs {
-                if r.rtype != abs64 {
+                if r.rtype != abs_addr {
                     continue;
                 }
                 let sym = &self.objects[id.obj].symbols[r.sym as usize];
@@ -3090,32 +3301,69 @@ fn fill_pattern(v: u64) -> Vec<u8> {
     be[first..].to_vec()
 }
 
+/// A gap's padding: the script's fill pattern where it gave one, the
+/// architecture's otherwise.
+fn pad_bytes(fill: &Option<Vec<u8>>, machine: u16, code: bool, len: u64) -> Vec<u8> {
+    match fill {
+        Some(f) => f.clone(),
+        None => arch_fill(machine, code, len as usize),
+    }
+}
+
+/// Padding bytes for a gap a script gave no fill for: bfd takes them
+/// from the architecture (`bfd/cpu-*.c`), which is a NOP sequence in a
+/// code section and zeros everywhere else, so padding a control-flow
+/// path reaches is not an instruction stream of its own.
+fn arch_fill(machine: u16, code: bool, len: usize) -> Vec<u8> {
+    if !code || len == 0 {
+        return alloc::vec![0u8; len];
+    }
+    match machine {
+        EM_386 | EM_X86_64 => {
+            let mut v = alloc::vec![0x90u8; len];
+            for k in (0..len.saturating_sub(1)).step_by(2) {
+                v[k] = 0x66;
+            }
+            v
+        }
+        EM_AARCH64 if len.is_multiple_of(4) => {
+            let mut v = Vec::with_capacity(len);
+            for _ in 0..len / 4 {
+                v.extend_from_slice(&[0x1f, 0x20, 0x03, 0xd5]);
+            }
+            v
+        }
+        _ => alloc::vec![0u8; len],
+    }
+}
+
 /// Pack sorted 8-aligned addresses into SHT_RELR words: an even
 /// entry relocates its own address and rebases the window at
 /// `addr + 8`; each following odd entry's bits `1..=63` relocate
 /// `base + (bit-1)*8` and advance the base by `63*8`.
-fn encode_relr(addrs: &[u64]) -> Vec<u64> {
+fn encode_relr(addrs: &[u64], word_size: u64) -> Vec<u64> {
+    let span = (word_size * 8 - 1) * word_size;
     let mut out: Vec<u64> = Vec::new();
     let mut i = 0usize;
     while i < addrs.len() {
         out.push(addrs[i]);
-        let mut base = addrs[i] + 8;
+        let mut base = addrs[i] + word_size;
         i += 1;
         loop {
             let mut word: u64 = 0;
             while i < addrs.len() {
                 let d = addrs[i].wrapping_sub(base);
-                if d >= 63 * 8 || !d.is_multiple_of(8) {
+                if d >= span || !d.is_multiple_of(word_size) {
                     break;
                 }
-                word |= 1u64 << (d / 8);
+                word |= 1u64 << (d / word_size);
                 i += 1;
             }
             if word == 0 {
                 break;
             }
             out.push((word << 1) | 1);
-            base += 63 * 8;
+            base += span;
         }
     }
     out
@@ -3573,8 +3821,83 @@ impl<'a> LdsLinker<'a> {
                     ));
                 }
             },
+            EM_386 => self.apply_i386(buf, site, p, sa, r, errors, oi),
             EM_AARCH64 => self.apply_aarch64(buf, site, p, sa, r, alloc, relr_set, errors, oi),
             _ => errors.push(format!("unsupported machine {machine}")),
+        }
+    }
+
+    /// Intel386 psABI: every type is `S + A`, `S + A - P` or a GOT-base
+    /// form, written at the field's own width. bfd complains on
+    /// overflow only where the field is narrower than an address.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_i386(
+        &self,
+        buf: &mut [u8],
+        site: usize,
+        p: u64,
+        sa: u64,
+        r: &RawReloc,
+        errors: &mut Vec<String>,
+        oi: usize,
+    ) {
+        let name = || {
+            let sym = &self.objects[oi].symbols[r.sym as usize];
+            if sym.name.is_empty() {
+                format!("section symbol {}", sym.shndx)
+            } else {
+                sym.name.clone()
+            }
+        };
+        let v = match r.rtype {
+            rt::R_386_32 | rt::R_386_16 | rt::R_386_8 => sa,
+            // GOTPC's symbol is `_GLOBAL_OFFSET_TABLE_`, so `sa` is
+            // already the GOT base plus the addend.
+            rt::R_386_PC32 | rt::R_386_PC16 | rt::R_386_PC8 | rt::R_386_GOTPC | rt::R_386_PLT32 => {
+                sa.wrapping_sub(p)
+            }
+            rt::R_386_GOTOFF => match self.got_addr_prevpass() {
+                Some(g) => sa.wrapping_sub(g),
+                None => {
+                    errors.push(format!(
+                        "{} against `{}' with no GOT",
+                        rt::i386_reloc_desc(r.rtype),
+                        name()
+                    ));
+                    return;
+                }
+            },
+            other => {
+                errors.push(format!(
+                    "unsupported relocation {} against `{}'",
+                    rt::i386_reloc_desc(other),
+                    name()
+                ));
+                return;
+            }
+        };
+        let Some(width) = rt::i386_field_width(r.rtype) else {
+            return;
+        };
+        // bfd's `complain_overflow_bitfield` accepts a value that fits
+        // the field read either as signed or as unsigned. A 32-bit
+        // field holds every address of an ELF32 image.
+        let sv = v as i64;
+        let fits = match width {
+            1 => (-0x80..=0xff).contains(&sv),
+            2 => (-0x8000..=0xffff).contains(&sv),
+            _ => true,
+        };
+        if !fits {
+            errors.push(format!(
+                "relocation truncated: {} against `{}' (0x{v:x})",
+                rt::i386_reloc_desc(r.rtype),
+                name()
+            ));
+        }
+        let n = width as usize;
+        if site + n <= buf.len() {
+            buf[site..site + n].copy_from_slice(&v.to_le_bytes()[..n]);
         }
     }
 
@@ -3821,7 +4144,12 @@ impl<'a> LdsLinker<'a> {
         self.build_dyn_tables(out_shndx);
         let addrs = self.dyn_addrs();
         let dyn_section_addr = self.dyn_section_addr();
-        let dynamic_bytes = dynamic::build_dynamic(&addrs);
+        let class = self.class;
+        let dynamic_bytes = dynamic::build_dynamic(&addrs, class);
+        let (rela_name, _, rela_ent) = self.dyn_reloc_kind();
+        let slot = class.addr_size();
+        let aw = slot as usize;
+        let use_rela = machine_uses_rela(self.machine);
         let synth = self.synth_obj;
         for sec_idx in 0..self.objects[synth].sections.len() {
             let name = self.objects[synth].sections[sec_idx].name.clone();
@@ -3834,88 +4162,96 @@ impl<'a> LdsLinker<'a> {
             }
             let off = self.placements[i].off as usize;
             let mut bytes: Vec<u8> = Vec::new();
-            match name.as_str() {
-                SYNTH_RELA => {
-                    // Reserved slots stay zeroed (R_*_NONE) ahead of
-                    // the live entries, as bfd leaves them.
-                    bytes.resize(self.dyn_nones.unwrap_or(0) as usize * 24, 0);
-                    for d in &self.dyn_relas {
-                        bytes.extend_from_slice(&d.offset.to_le_bytes());
-                        bytes.extend_from_slice(&(d.rtype as u64).to_le_bytes());
-                        bytes.extend_from_slice(&d.addend.to_le_bytes());
+            if name == rela_name {
+                // Reserved slots stay zeroed (R_*_NONE) ahead of the
+                // live entries, as bfd leaves them.
+                bytes.resize(self.dyn_nones.unwrap_or(0) as usize * rela_ent as usize, 0);
+                for d in &self.dyn_relas {
+                    bytes.extend_from_slice(&class.addr_bytes(d.offset)[..aw]);
+                    bytes.extend_from_slice(&class.addr_bytes(class.reloc_info(0, d.rtype))[..aw]);
+                    if use_rela {
+                        bytes.extend_from_slice(&class.addr_bytes(d.addend as u64)[..aw]);
                     }
                 }
-                SYNTH_RELR => {
-                    for wdd in encode_relr(&self.relr_addrs) {
-                        bytes.extend_from_slice(&wdd.to_le_bytes());
-                    }
-                }
-                SYNTH_GOT if self.objects[synth].sections[sec_idx].size == 0 => {}
-                SYNTH_GOT => {
-                    // The header slot holds the `.dynamic` address, as
-                    // bfd writes `_GLOBAL_OFFSET_TABLE_[0]`.
-                    bytes.extend_from_slice(&dyn_section_addr.unwrap_or(0).to_le_bytes());
-                    let base = self.got_addr_prevpass().unwrap_or(0);
-                    for (k, gname) in self.got_slots.clone().iter().enumerate() {
-                        let v = self.resolve_name(gname).unwrap_or(0);
-                        let slot_addr = base + 8 + k as u64 * 8;
-                        let write = relr_set.contains(&slot_addr) || self.opts.apply_dynamic_relocs;
-                        bytes.extend_from_slice(&if write { v } else { 0 }.to_le_bytes());
-                    }
-                }
-                SYNTH_GOTPLT => {
-                    bytes.extend_from_slice(&[0u8; 24]);
-                }
-                SYNTH_BUILD_ID => {
-                    bytes.extend_from_slice(&4u32.to_le_bytes()); // namesz
-                    bytes.extend_from_slice(&20u32.to_le_bytes()); // descsz
-                    bytes.extend_from_slice(&3u32.to_le_bytes()); // NT_GNU_BUILD_ID
-                    bytes.extend_from_slice(b"GNU\0");
-                    bytes.extend_from_slice(&[0u8; 20]);
-                }
-                SYNTH_DYNAMIC => bytes = dynamic_bytes.clone(),
-                SYNTH_EH_FRAME_HDR => {
-                    let Some(hdr_addr) = self.synth_addr(SYNTH_EH_FRAME_HDR) else {
-                        continue;
-                    };
-                    let Some((eh_out, eh_addr)) = self
-                        .outs
-                        .iter()
-                        .position(|o| o.name == OUT_EH_FRAME && !o.removed)
-                        .map(|k| (k, self.outs[k].addr))
-                    else {
-                        continue;
-                    };
-                    // The linked `.eh_frame` is relocated by now, so
-                    // its FDE pointers name final addresses.
-                    let Some(body) = contents.get(&eh_out) else {
-                        continue;
-                    };
-                    match eh_frame::scan(body, eh_addr)
-                        .and_then(|e| eh_frame::build(hdr_addr, eh_addr, &e))
-                    {
-                        Ok(b) => bytes = b,
-                        Err(e) => {
-                            self.errors.push(e);
-                            continue;
+            } else {
+                match name.as_str() {
+                    SYNTH_RELR => {
+                        for wdd in encode_relr(&self.relr_addrs, slot) {
+                            bytes.extend_from_slice(&class.addr_bytes(wdd)[..slot as usize]);
                         }
                     }
+                    SYNTH_GOT if self.objects[synth].sections[sec_idx].size == 0 => {}
+                    SYNTH_GOT => {
+                        // The header slot holds the `.dynamic` address, as
+                        // bfd writes `_GLOBAL_OFFSET_TABLE_[0]`.
+                        bytes.extend_from_slice(
+                            &class.addr_bytes(dyn_section_addr.unwrap_or(0))[..aw],
+                        );
+                        let base = self.got_addr_prevpass().unwrap_or(0);
+                        for (k, gname) in self.got_slots.clone().iter().enumerate() {
+                            let v = self.resolve_name(gname).unwrap_or(0);
+                            let slot_addr = base + slot + k as u64 * slot;
+                            let write =
+                                relr_set.contains(&slot_addr) || self.opts.apply_dynamic_relocs;
+                            bytes.extend_from_slice(
+                                &class.addr_bytes(if write { v } else { 0 })[..aw],
+                            );
+                        }
+                    }
+                    SYNTH_GOTPLT => {
+                        bytes.resize(3 * aw, 0);
+                    }
+                    SYNTH_BUILD_ID => {
+                        bytes.extend_from_slice(&4u32.to_le_bytes()); // namesz
+                        bytes.extend_from_slice(&20u32.to_le_bytes()); // descsz
+                        bytes.extend_from_slice(&3u32.to_le_bytes()); // NT_GNU_BUILD_ID
+                        bytes.extend_from_slice(b"GNU\0");
+                        bytes.extend_from_slice(&[0u8; 20]);
+                    }
+                    SYNTH_DYNAMIC => bytes = dynamic_bytes.clone(),
+                    SYNTH_EH_FRAME_HDR => {
+                        let Some(hdr_addr) = self.synth_addr(SYNTH_EH_FRAME_HDR) else {
+                            continue;
+                        };
+                        let Some((eh_out, eh_addr)) = self
+                            .outs
+                            .iter()
+                            .position(|o| o.name == OUT_EH_FRAME && !o.removed)
+                            .map(|k| (k, self.outs[k].addr))
+                        else {
+                            continue;
+                        };
+                        // The linked `.eh_frame` is relocated by now, so
+                        // its FDE pointers name final addresses.
+                        let Some(body) = contents.get(&eh_out) else {
+                            continue;
+                        };
+                        match eh_frame::scan(body, eh_addr)
+                            .and_then(|e| eh_frame::build(hdr_addr, eh_addr, &e))
+                        {
+                            Ok(b) => bytes = b,
+                            Err(e) => {
+                                self.errors.push(e);
+                                continue;
+                            }
+                        }
+                    }
+                    SYNTH_DYNSYM | SYNTH_DYNSTR | SYNTH_HASH | SYNTH_GNU_HASH | SYNTH_VERSYM
+                    | SYNTH_VERDEF => {
+                        let Some(t) = &self.dyn_tables else {
+                            continue;
+                        };
+                        bytes = match name.as_str() {
+                            SYNTH_DYNSYM => t.dynsym.clone(),
+                            SYNTH_DYNSTR => t.dynstr().to_vec(),
+                            SYNTH_HASH => t.hash.clone(),
+                            SYNTH_GNU_HASH => t.gnu_hash.clone(),
+                            SYNTH_VERSYM => t.versym.clone(),
+                            _ => t.verdef.clone(),
+                        };
+                    }
+                    _ => continue,
                 }
-                SYNTH_DYNSYM | SYNTH_DYNSTR | SYNTH_HASH | SYNTH_GNU_HASH | SYNTH_VERSYM
-                | SYNTH_VERDEF => {
-                    let Some(t) = &self.dyn_tables else {
-                        continue;
-                    };
-                    bytes = match name.as_str() {
-                        SYNTH_DYNSYM => t.dynsym.clone(),
-                        SYNTH_DYNSTR => t.dynstr().to_vec(),
-                        SYNTH_HASH => t.hash.clone(),
-                        SYNTH_GNU_HASH => t.gnu_hash.clone(),
-                        SYNTH_VERSYM => t.versym.clone(),
-                        _ => t.verdef.clone(),
-                    };
-                }
-                _ => continue,
             }
             // Content longer than the section sized for it means the
             // sizing pass and the writer disagreed. Truncating leaves a
@@ -4336,6 +4672,14 @@ impl<'a> LdsLinker<'a> {
         syms: &[FinalSym],
     ) -> Result<Vec<(usize, Vec<u8>)>, C5Error> {
         let index = &self.sym_index;
+        let class = self.class;
+        let aw = class.addr_size() as usize;
+        let use_rela = machine_uses_rela(self.machine);
+        let ent = if use_rela {
+            class.rela_size()
+        } else {
+            class.rel_size()
+        };
         if self.emitted.is_empty() {
             return Ok(Vec::new());
         }
@@ -4347,7 +4691,7 @@ impl<'a> LdsLinker<'a> {
         let mut out: Vec<(usize, Vec<u8>)> = Vec::new();
         for (oi, mut recs) in by_out {
             recs.sort_by_key(|r| r.addr);
-            let mut body: Vec<u8> = Vec::with_capacity(recs.len() * 24);
+            let mut body: Vec<u8> = Vec::with_capacity(recs.len() * ent as usize);
             for r in recs {
                 let slot = self.emitted_sym_slot(r, index);
                 let sym = match slot {
@@ -4368,9 +4712,14 @@ impl<'a> LdsLinker<'a> {
                 // is the resolved target less the named symbol's value.
                 let base = slot.map_or(0, |pos| syms[pos].value);
                 let addend = r.target.wrapping_sub(base) as i64;
-                body.extend_from_slice(&r.addr.to_le_bytes());
-                body.extend_from_slice(&(((sym as u64) << 32) | r.rtype as u64).to_le_bytes());
-                body.extend_from_slice(&addend.to_le_bytes());
+                let info = class.reloc_info(sym, r.rtype);
+                body.extend_from_slice(&class.addr_bytes(r.addr)[..aw]);
+                body.extend_from_slice(&class.addr_bytes(info)[..aw]);
+                // SHT_REL keeps the addend in the relocated field, which
+                // already holds it after the relocation was applied.
+                if use_rela {
+                    body.extend_from_slice(&class.addr_bytes(addend as u64)[..aw]);
+                }
             }
             out.push((oi, body));
         }
@@ -4410,8 +4759,9 @@ impl<'a> LdsLinker<'a> {
         syms: Vec<FinalSym>,
         entry: u64,
     ) -> Result<Vec<u8>, C5Error> {
+        let class = self.class;
         let phnum = phdrs.len();
-        let headers_end = 64 + phnum as u64 * 56;
+        let headers_end = class.ehdr_size() + phnum as u64 * class.phdr_size();
 
         // File offsets. PT_LOAD members get congruent placement;
         // everything else follows section order.
@@ -4500,7 +4850,7 @@ impl<'a> LdsLinker<'a> {
             if let Some(d) = defs.get(k) {
                 let cover = match (d.filehdr, d.phdrs) {
                     (true, _) => Some(0),
-                    (false, true) => Some(64),
+                    (false, true) => Some(class.ehdr_size()),
                     _ => None,
                 };
                 if let Some(want) = cover.filter(|&w| w < ph.p_offset) {
@@ -4539,14 +4889,23 @@ impl<'a> LdsLinker<'a> {
                     off
                 };
                 sym_bytes.extend_from_slice(&name_off.to_le_bytes());
-                sym_bytes.push(s.info);
-                sym_bytes.push(s.other);
-                sym_bytes.extend_from_slice(&s.shndx.to_le_bytes());
-                sym_bytes.extend_from_slice(&s.value.to_le_bytes());
-                sym_bytes.extend_from_slice(&s.size.to_le_bytes());
+                // Elf32_Sym puts value and size ahead of st_info.
+                if class.is32() {
+                    sym_bytes.extend_from_slice(&(s.value as u32).to_le_bytes());
+                    sym_bytes.extend_from_slice(&(s.size as u32).to_le_bytes());
+                    sym_bytes.push(s.info);
+                    sym_bytes.push(s.other);
+                    sym_bytes.extend_from_slice(&s.shndx.to_le_bytes());
+                } else {
+                    sym_bytes.push(s.info);
+                    sym_bytes.push(s.other);
+                    sym_bytes.extend_from_slice(&s.shndx.to_le_bytes());
+                    sym_bytes.extend_from_slice(&s.value.to_le_bytes());
+                    sym_bytes.extend_from_slice(&s.size.to_le_bytes());
+                }
             };
             // Null entry.
-            sym_bytes.extend_from_slice(&[0u8; 24]);
+            sym_bytes.resize(class.sym_size() as usize, 0);
             let mut next = 1u32;
             for (i, s) in syms.iter().enumerate() {
                 if s.info >> 4 == STB_LOCAL {
@@ -4581,7 +4940,8 @@ impl<'a> LdsLinker<'a> {
             off
         };
 
-        let symtab_off = align_up(pos, 8);
+        let talign = class.addr_size();
+        let symtab_off = align_up(pos, talign);
         let strtab_off = symtab_off + sym_bytes.len() as u64;
         let shstr_names: Vec<u32> = emit_order
             .iter()
@@ -4590,10 +4950,17 @@ impl<'a> LdsLinker<'a> {
         let n_symtab = intern(".symtab", &mut shstrtab, &mut shname);
         let n_strtab = intern(".strtab", &mut shstrtab, &mut shname);
         let n_shstrtab = intern(".shstrtab", &mut shstrtab, &mut shname);
+        // `--emit-relocs` writes the target's own relocation format:
+        // `.rel.<sec>` where inputs carry implicit addends.
+        let use_rela = machine_uses_rela(self.machine);
         let rela_names: Vec<u32> = rela
             .iter()
             .map(|(oi, _)| {
-                let n = format!(".rela{}", self.outs[*oi].name);
+                let n = if use_rela {
+                    format!(".rela{}", self.outs[*oi].name)
+                } else {
+                    format!(".rel{}", self.outs[*oi].name)
+                };
                 intern(&n, &mut shstrtab, &mut shname)
             })
             .collect();
@@ -4601,15 +4968,16 @@ impl<'a> LdsLinker<'a> {
         let mut rela_off: Vec<u64> = Vec::with_capacity(rela.len());
         let mut pos_after = shstr_off + shstrtab.len() as u64;
         for (_, body) in &rela {
-            let at = align_up(pos_after, 8);
+            let at = align_up(pos_after, talign);
             rela_off.push(at);
             pos_after = at + body.len() as u64;
         }
-        let shoff = align_up(pos_after, 8);
+        let shoff = align_up(pos_after, talign);
         // null + sections + symtab + strtab + shstrtab + one per rela
         let shnum = emit_order.len() + 4 + rela.len();
 
-        let mut image: Vec<u8> = alloc::vec![0u8; shoff as usize + shnum * 64];
+        let mut image: Vec<u8> =
+            alloc::vec![0u8; shoff as usize + shnum * class.shdr_size() as usize];
 
         // ELF header.
         let e_type = match self.opts.emit {
@@ -4617,35 +4985,57 @@ impl<'a> LdsLinker<'a> {
             LdsEmit::Dyn => ET_DYN,
         };
         image[0..4].copy_from_slice(b"\x7fELF");
-        image[4] = 2;
+        image[4] = class.ei_class();
         image[5] = 1;
         image[6] = 1;
         image[16..18].copy_from_slice(&e_type.to_le_bytes());
         image[18..20].copy_from_slice(&self.machine.to_le_bytes());
         image[20..24].copy_from_slice(&1u32.to_le_bytes());
-        image[24..32].copy_from_slice(&entry.to_le_bytes());
-        image[32..40].copy_from_slice(&64u64.to_le_bytes());
-        image[40..48].copy_from_slice(&shoff.to_le_bytes());
-        image[52..54].copy_from_slice(&64u16.to_le_bytes());
-        image[54..56].copy_from_slice(&56u16.to_le_bytes());
-        image[56..58].copy_from_slice(&(phnum as u16).to_le_bytes());
-        image[58..60].copy_from_slice(&64u16.to_le_bytes());
-        image[60..62].copy_from_slice(&(shnum as u16).to_le_bytes());
+        let aw = class.addr_size() as usize;
+        let put = |image: &mut Vec<u8>, at: usize, v: u64| {
+            image[at..at + aw].copy_from_slice(&class.addr_bytes(v)[..aw]);
+        };
+        put(&mut image, 24, entry);
+        put(&mut image, 24 + aw, class.ehdr_size());
+        put(&mut image, 24 + 2 * aw, shoff);
+        let hdr_tail = 24 + 3 * aw + 4;
+        image[hdr_tail..hdr_tail + 2].copy_from_slice(&(class.ehdr_size() as u16).to_le_bytes());
+        image[hdr_tail + 2..hdr_tail + 4]
+            .copy_from_slice(&(class.phdr_size() as u16).to_le_bytes());
+        image[hdr_tail + 4..hdr_tail + 6].copy_from_slice(&(phnum as u16).to_le_bytes());
+        image[hdr_tail + 6..hdr_tail + 8]
+            .copy_from_slice(&(class.shdr_size() as u16).to_le_bytes());
+        image[hdr_tail + 8..hdr_tail + 10].copy_from_slice(&(shnum as u16).to_le_bytes());
         // `.shstrtab` keeps its index whether or not `--emit-relocs`
         // appended tables after it.
-        image[62..64].copy_from_slice(&((emit_order.len() + 3) as u16).to_le_bytes());
+        image[hdr_tail + 10..hdr_tail + 12]
+            .copy_from_slice(&((emit_order.len() + 3) as u16).to_le_bytes());
 
-        // Program headers.
+        // Program headers. Elf32_Phdr puts p_flags after the sizes.
         for (k, (ph, _)) in phdrs.iter().enumerate() {
-            let at = 64 + k * 56;
+            let at = class.ehdr_size() as usize + k * class.phdr_size() as usize;
             image[at..at + 4].copy_from_slice(&ph.p_type.to_le_bytes());
-            image[at + 4..at + 8].copy_from_slice(&ph.p_flags.to_le_bytes());
-            image[at + 8..at + 16].copy_from_slice(&ph.p_offset.to_le_bytes());
-            image[at + 16..at + 24].copy_from_slice(&ph.p_vaddr.to_le_bytes());
-            image[at + 24..at + 32].copy_from_slice(&ph.p_paddr.to_le_bytes());
-            image[at + 32..at + 40].copy_from_slice(&ph.p_filesz.to_le_bytes());
-            image[at + 40..at + 48].copy_from_slice(&ph.p_memsz.to_le_bytes());
-            image[at + 48..at + 56].copy_from_slice(&ph.p_align.to_le_bytes());
+            let (word, flags_at) = if class.is32() {
+                (at + 4, at + 24)
+            } else {
+                (at + 8, at + 4)
+            };
+            image[flags_at..flags_at + 4].copy_from_slice(&ph.p_flags.to_le_bytes());
+            for (f, v) in [
+                ph.p_offset,
+                ph.p_vaddr,
+                ph.p_paddr,
+                ph.p_filesz,
+                ph.p_memsz,
+                ph.p_align,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                // p_flags splits the ELF32 sequence before p_align.
+                let skip = usize::from(class.is32() && f == 5) * 4;
+                put(&mut image, word + f * aw + skip, v);
+            }
         }
 
         // Section bodies.
@@ -4670,17 +5060,23 @@ impl<'a> LdsLinker<'a> {
 
         // Section headers.
         let wr_shdr = |idx: usize, sh: Elf64Shdr, image: &mut Vec<u8>| {
-            let at = shoff as usize + idx * 64;
+            let at = shoff as usize + idx * class.shdr_size() as usize;
             image[at..at + 4].copy_from_slice(&sh.sh_name.to_le_bytes());
             image[at + 4..at + 8].copy_from_slice(&sh.sh_type.to_le_bytes());
-            image[at + 8..at + 16].copy_from_slice(&sh.sh_flags.to_le_bytes());
-            image[at + 16..at + 24].copy_from_slice(&sh.sh_addr.to_le_bytes());
-            image[at + 24..at + 32].copy_from_slice(&sh.sh_offset.to_le_bytes());
-            image[at + 32..at + 40].copy_from_slice(&sh.sh_size.to_le_bytes());
-            image[at + 40..at + 44].copy_from_slice(&sh.sh_link.to_le_bytes());
-            image[at + 44..at + 48].copy_from_slice(&sh.sh_info.to_le_bytes());
-            image[at + 48..at + 56].copy_from_slice(&sh.sh_addralign.to_le_bytes());
-            image[at + 56..at + 64].copy_from_slice(&sh.sh_entsize.to_le_bytes());
+            for (f, v) in [sh.sh_flags, sh.sh_addr, sh.sh_offset, sh.sh_size]
+                .into_iter()
+                .enumerate()
+            {
+                let o = at + 8 + f * aw;
+                image[o..o + aw].copy_from_slice(&class.addr_bytes(v)[..aw]);
+            }
+            let o = at + 8 + 4 * aw;
+            image[o..o + 4].copy_from_slice(&sh.sh_link.to_le_bytes());
+            image[o + 4..o + 8].copy_from_slice(&sh.sh_info.to_le_bytes());
+            for (f, v) in [sh.sh_addralign, sh.sh_entsize].into_iter().enumerate() {
+                let o = o + 8 + f * aw;
+                image[o..o + aw].copy_from_slice(&class.addr_bytes(v)[..aw]);
+            }
         };
         // `sh_link`/`sh_info` for the dynamic tables: each names the
         // table a consumer must read alongside it.
@@ -4692,8 +5088,28 @@ impl<'a> LdsLinker<'a> {
                 .unwrap_or(0)
         };
         let (dynsym_ndx, dynstr_ndx) = (out_index(SYNTH_DYNSYM), out_index(SYNTH_DYNSTR));
+        let dyn_rel_name = self.dyn_reloc_name();
         for (k, &oi) in emit_order.iter().enumerate() {
             let o = &self.outs[oi];
+            if o.name == dyn_rel_name {
+                wr_shdr(
+                    k + 1,
+                    Elf64Shdr {
+                        sh_name: shstr_names[k],
+                        sh_type: o.shtype,
+                        sh_flags: o.flags,
+                        sh_addr: o.addr,
+                        sh_offset: file_off[&oi],
+                        sh_size: o.size,
+                        sh_link: dynsym_ndx,
+                        sh_info: 0,
+                        sh_addralign: o.align,
+                        sh_entsize: o.entsize,
+                    },
+                    &mut image,
+                );
+                continue;
+            }
             let (sh_link, sh_info) = match o.name.as_str() {
                 SYNTH_DYNSYM => (
                     dynstr_ndx,
@@ -4711,7 +5127,6 @@ impl<'a> LdsLinker<'a> {
                         .unwrap_or(0),
                 ),
                 SYNTH_DYNAMIC => (dynstr_ndx, 0),
-                SYNTH_RELA => (dynsym_ndx, 0),
                 _ => (0, 0),
             };
             wr_shdr(
@@ -4743,8 +5158,8 @@ impl<'a> LdsLinker<'a> {
                 sh_size: sym_bytes.len() as u64,
                 sh_link: (symtab_idx + 1) as u32,
                 sh_info: locals,
-                sh_addralign: 8,
-                sh_entsize: 24,
+                sh_addralign: talign,
+                sh_entsize: class.sym_size(),
             },
             &mut image,
         );
@@ -4785,15 +5200,19 @@ impl<'a> LdsLinker<'a> {
                 symtab_idx + 3 + k,
                 Elf64Shdr {
                     sh_name: rela_names[k],
-                    sh_type: SHT_RELA,
+                    sh_type: if use_rela { SHT_RELA } else { SHT_REL },
                     sh_flags: 0,
                     sh_addr: 0,
                     sh_offset: rela_off[k],
                     sh_size: body.len() as u64,
                     sh_link: symtab_idx as u32,
                     sh_info: shndx_of_out[oi] as u32,
-                    sh_addralign: 8,
-                    sh_entsize: 24,
+                    sh_addralign: talign,
+                    sh_entsize: if use_rela {
+                        class.rela_size()
+                    } else {
+                        class.rel_size()
+                    },
                 },
                 &mut image,
             );
@@ -4833,6 +5252,8 @@ impl<'a> LdsLinker<'a> {
 
     fn render_map(&self, emit_order: &[usize]) -> String {
         use core::fmt::Write as _;
+        // bfd prints a vma at the target's address width.
+        let w = self.class.addr_size() as usize * 2;
         let mut s = String::new();
         let _ = writeln!(s, "Memory Configuration\n");
         let _ = writeln!(
@@ -4841,19 +5262,21 @@ impl<'a> LdsLinker<'a> {
         );
         let _ = writeln!(
             s,
-            "*default*        0x0000000000000000 0xffffffffffffffff\n"
+            "*default*        0x{:0w$x} 0x{:0w$x}\n",
+            0,
+            u64::MAX >> (64 - w * 4)
         );
         let _ = writeln!(s, "Linker script and memory map\n");
         for &oi in emit_order {
             let o = &self.outs[oi];
             let _ = writeln!(
                 s,
-                "{:<15} 0x{:016x} 0x{:x}{}",
+                "{:<15} 0x{:0w$x} 0x{:x}{}",
                 o.name,
                 o.addr,
                 o.size,
                 if o.lma != o.addr {
-                    format!(" load address 0x{:016x}", o.lma)
+                    format!(" load address 0x{:0w$x}", o.lma)
                 } else {
                     String::new()
                 }
@@ -4863,7 +5286,7 @@ impl<'a> LdsLinker<'a> {
                     let id = self.insecs[*i];
                     let _ = writeln!(
                         s,
-                        " {:<14} 0x{:016x} 0x{:x} {}",
+                        " {:<14} 0x{:0w$x} 0x{:x} {}",
                         self.insec(*i).name,
                         o.addr + off,
                         len,
@@ -5035,34 +5458,72 @@ mod tests {
         }
 
         fn build(self, machine: u16) -> Vec<u8> {
+            self.build_class(machine, ElfClass::Elf64, true)
+        }
+
+        /// `rela = false` stores each addend in the field it relocates
+        /// and emits `SHT_REL` tables, the way gas does for i386.
+        fn build_class(mut self, machine: u16, class: ElfClass, rela: bool) -> Vec<u8> {
+            let aw = class.addr_size() as usize;
+            let ent = if rela {
+                class.rela_size() as usize
+            } else {
+                class.rel_size() as usize
+            };
+            if !rela {
+                for (_, _, _, _, body, relocs) in self.secs.iter_mut() {
+                    for r in relocs.iter() {
+                        let w = rt::i386_field_width(r.rtype).unwrap_or(4) as usize;
+                        let at = r.offset as usize;
+                        if at + w <= body.len() {
+                            body[at..at + w].copy_from_slice(&r.addend.to_le_bytes()[..w]);
+                        }
+                    }
+                }
+            }
             let nsec = self.secs.len();
             let mut bodies: Vec<u8> = Vec::new();
             let mut body_off: Vec<usize> = Vec::new();
             for (_, shtype, _, _, body, _) in &self.secs {
-                body_off.push(64 + bodies.len());
+                body_off.push(class.ehdr_size() as usize + bodies.len());
                 if *shtype != SHT_NOBITS {
                     bodies.extend_from_slice(body);
                 }
             }
+            let sym_entry = |name: u32, info: u8, other: u8, shndx: u16, value: u64, size: u64| {
+                let mut e = alloc::vec![0u8; class.sym_size() as usize];
+                e[0..4].copy_from_slice(&name.to_le_bytes());
+                if class.is32() {
+                    e[4..8].copy_from_slice(&(value as u32).to_le_bytes());
+                    e[8..12].copy_from_slice(&(size as u32).to_le_bytes());
+                    e[12] = info;
+                    e[13] = other;
+                    e[14..16].copy_from_slice(&shndx.to_le_bytes());
+                } else {
+                    e[4] = info;
+                    e[5] = other;
+                    e[6..8].copy_from_slice(&shndx.to_le_bytes());
+                    e[8..16].copy_from_slice(&value.to_le_bytes());
+                    e[16..24].copy_from_slice(&size.to_le_bytes());
+                }
+                e
+            };
             // Symtab: null + one section symbol per section + named.
             let mut strtab: Vec<u8> = alloc::vec![0];
-            let mut symtab: Vec<u8> = alloc::vec![0; 24];
+            let mut symtab: Vec<u8> = alloc::vec![0; class.sym_size() as usize];
             for k in 0..nsec {
-                let mut e = [0u8; 24];
-                e[4] = STT_SECTION;
-                e[6..8].copy_from_slice(&((k + 1) as u16).to_le_bytes());
-                symtab.extend_from_slice(&e);
+                symtab.extend_from_slice(&sym_entry(0, STT_SECTION, 0, (k + 1) as u16, 0, 0));
             }
             for (k, (name, bind, kind, sec, value, size)) in self.syms.iter().enumerate() {
                 let noff = strtab.len() as u32;
                 strtab.extend_from_slice(name.as_bytes());
                 strtab.push(0);
-                let mut e = [0u8; 24];
-                e[0..4].copy_from_slice(&noff.to_le_bytes());
-                e[4] = (bind << 4) | kind;
-                if let Some(&(_, other)) = self.sym_vis.iter().find(|&&(i, _)| i == k) {
-                    e[5] = other;
-                }
+                let other = self
+                    .sym_vis
+                    .iter()
+                    .find(|&&(i, _)| i == k)
+                    .map(|&(_, o)| o)
+                    .unwrap_or(0);
                 let shndx: u16 = if *sec == usize::MAX {
                     0
                 } else if *sec == usize::MAX - 1 {
@@ -5070,12 +5531,16 @@ mod tests {
                 } else {
                     (*sec + 1) as u16
                 };
-                e[6..8].copy_from_slice(&shndx.to_le_bytes());
-                e[8..16].copy_from_slice(&value.to_le_bytes());
-                e[16..24].copy_from_slice(&size.to_le_bytes());
-                symtab.extend_from_slice(&e);
+                symtab.extend_from_slice(&sym_entry(
+                    noff,
+                    (bind << 4) | kind,
+                    other,
+                    shndx,
+                    *value,
+                    *size,
+                ));
             }
-            let mut out: Vec<u8> = alloc::vec![0; 64];
+            let mut out: Vec<u8> = alloc::vec![0; class.ehdr_size() as usize];
             out.extend_from_slice(&bodies);
             let symtab_at = out.len();
             out.extend_from_slice(&symtab);
@@ -5088,10 +5553,12 @@ mod tests {
                 }
                 let at = out.len();
                 for r in relocs {
-                    out.extend_from_slice(&r.offset.to_le_bytes());
-                    let info = ((r.sym as u64) << 32) | r.rtype as u64;
-                    out.extend_from_slice(&info.to_le_bytes());
-                    out.extend_from_slice(&r.addend.to_le_bytes());
+                    out.extend_from_slice(&class.addr_bytes(r.offset)[..aw]);
+                    let info = class.reloc_info(r.sym, r.rtype);
+                    out.extend_from_slice(&class.addr_bytes(info)[..aw]);
+                    if rela {
+                        out.extend_from_slice(&class.addr_bytes(r.addend as u64)[..aw]);
+                    }
                 }
                 rela_at.push((k, at, relocs.len()));
             }
@@ -5111,15 +5578,16 @@ mod tests {
             let n_strtab = add_name(".strtab", &mut shstr);
             let mut rela_names: Vec<u32> = Vec::new();
             for (target, _, _) in &rela_at {
+                let prefix = if rela { ".rela" } else { ".rel" };
                 rela_names.push(add_name(
-                    &format!(".rela{}", self.secs[*target].0),
+                    &format!("{prefix}{}", self.secs[*target].0),
                     &mut shstr,
                 ));
             }
             let n_shstr = add_name(".shstrtab", &mut shstr);
             let shstr_at = out.len();
             out.extend_from_slice(&shstr);
-            while !out.len().is_multiple_of(8) {
+            while !out.len().is_multiple_of(aw) {
                 out.push(0);
             }
             let shoff = out.len();
@@ -5134,19 +5602,23 @@ mod tests {
                        info: u32,
                        align: u64,
                        entsize: u64| {
-                let mut h = [0u8; 64];
+                let mut h = alloc::vec![0u8; class.shdr_size() as usize];
                 h[0..4].copy_from_slice(&name.to_le_bytes());
                 h[4..8].copy_from_slice(&shtype.to_le_bytes());
-                h[8..16].copy_from_slice(&flags.to_le_bytes());
-                h[24..32].copy_from_slice(&(off as u64).to_le_bytes());
-                h[32..40].copy_from_slice(&(size as u64).to_le_bytes());
-                h[40..44].copy_from_slice(&link.to_le_bytes());
-                h[44..48].copy_from_slice(&info.to_le_bytes());
-                h[48..56].copy_from_slice(&align.to_le_bytes());
-                h[56..64].copy_from_slice(&entsize.to_le_bytes());
+                for (f, v) in [flags, 0, off as u64, size as u64].into_iter().enumerate() {
+                    let o = 8 + f * aw;
+                    h[o..o + aw].copy_from_slice(&class.addr_bytes(v)[..aw]);
+                }
+                let o = 8 + 4 * aw;
+                h[o..o + 4].copy_from_slice(&link.to_le_bytes());
+                h[o + 4..o + 8].copy_from_slice(&info.to_le_bytes());
+                for (f, v) in [align, entsize].into_iter().enumerate() {
+                    let o = o + 8 + f * aw;
+                    h[o..o + aw].copy_from_slice(&class.addr_bytes(v)[..aw]);
+                }
                 h
             };
-            let mut shdrs: Vec<[u8; 64]> = alloc::vec![[0u8; 64]];
+            let mut shdrs: Vec<Vec<u8>> = alloc::vec![alloc::vec![0u8; class.shdr_size() as usize]];
             for (k, (_, shtype, flags, align, body, _)) in self.secs.iter().enumerate() {
                 let entsize = self
                     .entsizes
@@ -5174,8 +5646,8 @@ mod tests {
                 symtab.len(),
                 (symtab_shndx + 1) as u32,
                 (1 + nsec) as u32,
-                8,
-                24,
+                aw as u64,
+                class.sym_size(),
             ));
             shdrs.push(hdr(
                 n_strtab,
@@ -5191,14 +5663,14 @@ mod tests {
             for (j, (target, at, count)) in rela_at.iter().enumerate() {
                 shdrs.push(hdr(
                     rela_names[j],
-                    SHT_RELA,
+                    if rela { SHT_RELA } else { SHT_REL },
                     0,
                     *at,
-                    count * 24,
+                    count * ent,
                     symtab_shndx as u32,
                     (*target + 1) as u32,
-                    8,
-                    24,
+                    aw as u64,
+                    ent as u64,
                 ));
             }
             shdrs.push(hdr(
@@ -5217,16 +5689,18 @@ mod tests {
                 out.extend_from_slice(h);
             }
             out[0..4].copy_from_slice(b"\x7fELF");
-            out[4] = 2;
+            out[4] = class.ei_class();
             out[5] = 1;
             out[6] = 1;
             out[16..18].copy_from_slice(&1u16.to_le_bytes());
             out[18..20].copy_from_slice(&machine.to_le_bytes());
-            out[40..48].copy_from_slice(&(shoff as u64).to_le_bytes());
-            out[52..54].copy_from_slice(&64u16.to_le_bytes());
-            out[58..60].copy_from_slice(&64u16.to_le_bytes());
-            out[60..62].copy_from_slice(&(shnum as u16).to_le_bytes());
-            out[62..64].copy_from_slice(&((shnum - 1) as u16).to_le_bytes());
+            let at = 24 + 2 * aw;
+            out[at..at + aw].copy_from_slice(&class.addr_bytes(shoff as u64)[..aw]);
+            let tail = 24 + 3 * aw + 4;
+            out[tail..tail + 2].copy_from_slice(&(class.ehdr_size() as u16).to_le_bytes());
+            out[tail + 6..tail + 8].copy_from_slice(&(class.shdr_size() as u16).to_le_bytes());
+            out[tail + 8..tail + 10].copy_from_slice(&(shnum as u16).to_le_bytes());
+            out[tail + 10..tail + 12].copy_from_slice(&((shnum - 1) as u16).to_le_bytes());
             out
         }
     }
@@ -5647,7 +6121,7 @@ SECTIONS {
     #[test]
     fn relr_encoding_round_trips() {
         let addrs = [0x1000u64, 0x1008, 0x1010, 0x1400, 0x1408 + 63 * 8];
-        let words = encode_relr(&addrs);
+        let words = encode_relr(&addrs, 8);
         let mut got: Vec<u64> = Vec::new();
         let mut base = 0u64;
         for w in words {
@@ -6546,5 +7020,409 @@ SECTIONS {
             }
         }
         assert_eq!(hid_info.expect("hid emitted") >> 4, STB_LOCAL);
+    }
+
+    // ---------------------------------------------------- ELF32 / i386
+
+    const I386_SCRIPT: &str = r#"
+ENTRY(_start)
+SECTIONS {
+  . = 0x1000;
+  .text : { *(.text) }
+  .text32 : { *(.text32) }
+  . = ALIGN(0x1000);
+  .rodata : { *(.rodata) }
+  .data : { *(.data) }
+}
+"#;
+
+    /// `(name, sh_type, sh_addr, sh_offset, sh_size, sh_flags, sh_entsize)`
+    /// of every ELF32 section but the null one, in table order.
+    fn elf32_sections(image: &[u8]) -> Vec<(String, u32, u64, u64, u64, u64, u64)> {
+        let shoff = u32::from_le_bytes(image[32..36].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(image[48..50].try_into().unwrap()) as usize;
+        let shstrndx = u16::from_le_bytes(image[50..52].try_into().unwrap()) as usize;
+        let sh = |i: usize| -> Elf64Shdr {
+            read_struct::<Elf32Shdr>(image, shoff + i * 40)
+                .unwrap()
+                .into()
+        };
+        let str_sh = sh(shstrndx);
+        let strtab =
+            &image[str_sh.sh_offset as usize..(str_sh.sh_offset + str_sh.sh_size) as usize];
+        (1..shnum)
+            .map(|i| {
+                let h = sh(i);
+                (
+                    strz(strtab, h.sh_name as usize),
+                    h.sh_type,
+                    h.sh_addr,
+                    h.sh_offset,
+                    h.sh_size,
+                    h.sh_flags,
+                    h.sh_entsize,
+                )
+            })
+            .collect()
+    }
+
+    fn elf32_section(image: &[u8], name: &str) -> (String, u32, u64, u64, u64, u64, u64) {
+        elf32_sections(image)
+            .into_iter()
+            .find(|s| s.0 == name)
+            .unwrap_or_else(|| panic!("no `{name}' in the image"))
+    }
+
+    fn elf32_body<'a>(image: &'a [u8], name: &str) -> &'a [u8] {
+        let s = elf32_section(image, name);
+        &image[s.3 as usize..(s.3 + s.4) as usize]
+    }
+
+    /// One object exercising every `R_386_*` width the boot links use.
+    /// Each relocation's addend is stored in the field it relocates,
+    /// which is where an `SHT_REL` entry keeps it.
+    fn i386_object() -> Vec<u8> {
+        TestObj::new()
+            // 0: .text -- PC32 at 1, PC16 at 8, PC8 at 12.
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            // 1: .text32 -- an orphan anchor check needs a second code
+            // section the script names.
+            .sec(
+                ".text32",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 4],
+            )
+            // 2: .data -- 32 at 0, 16 at 4, 8 at 6.
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+            .sym("target", STB_GLOBAL, STT_NOTYPE, 1, 0, 0)
+            // The 8- and 16-bit fields hold no image address, so they
+            // reference absolute symbols the way the boot code does.
+            .sym("small", STB_GLOBAL, STT_NOTYPE, usize::MAX - 1, 0x1234, 0)
+            .sym("tiny", STB_GLOBAL, STT_NOTYPE, usize::MAX - 1, 0x40, 0)
+            // Symtab: null(0), sections(1..=3), _start(4), target(5),
+            // small(6), tiny(7).
+            .reloc(0, 1, 5, rt::R_386_PC32, -4)
+            .reloc(0, 8, 5, rt::R_386_PC16, -2)
+            .reloc(0, 12, 4, rt::R_386_PC8, -1)
+            .reloc(2, 0, 5, rt::R_386_32, 0x10)
+            .reloc(2, 4, 6, rt::R_386_16, 0)
+            .reloc(2, 6, 7, rt::R_386_8, 0)
+            .build_class(EM_386, ElfClass::Elf32, false)
+    }
+
+    #[test]
+    fn i386_rel_addends_come_from_the_relocated_field() {
+        let script = parse_linker_script(I386_SCRIPT).expect("script parses");
+        let objs = alloc::vec![parse_lds_object("a.o", i386_object()).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let text = elf32_section(&res.image, ".text");
+        let t32 = elf32_section(&res.image, ".text32");
+        let (text_addr, t32_addr) = (text.2, t32.2);
+        let tb = elf32_body(&res.image, ".text");
+        let db = elf32_body(&res.image, ".data");
+        // S + A - P at each width, A read back out of the field.
+        let pc32 = i32::from_le_bytes(tb[1..5].try_into().unwrap()) as i64;
+        assert_eq!(pc32, t32_addr as i64 - 4 - (text_addr as i64 + 1));
+        let pc16 = i16::from_le_bytes(tb[8..10].try_into().unwrap()) as i64;
+        assert_eq!(pc16, t32_addr as i64 - 2 - (text_addr as i64 + 8));
+        let pc8 = tb[12] as i8 as i64;
+        assert_eq!(pc8, text_addr as i64 - 1 - (text_addr as i64 + 12));
+        // S + A at each width.
+        assert_eq!(
+            u32::from_le_bytes(db[0..4].try_into().unwrap()) as u64,
+            t32_addr + 0x10
+        );
+        assert_eq!(u16::from_le_bytes(db[4..6].try_into().unwrap()), 0x1234);
+        assert_eq!(db[6], 0x40);
+    }
+
+    #[test]
+    fn i386_image_is_elf32() {
+        let script = parse_linker_script(I386_SCRIPT).expect("script parses");
+        let objs = alloc::vec![parse_lds_object("a.o", i386_object()).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let img = &res.image;
+        assert_eq!(img[4], 1, "EI_CLASS is ELFCLASS32");
+        assert_eq!(u16::from_le_bytes(img[18..20].try_into().unwrap()), EM_386);
+        assert_eq!(
+            u32::from_le_bytes(img[28..32].try_into().unwrap()),
+            52,
+            "e_phoff follows the ELF32 header"
+        );
+        assert_eq!(u16::from_le_bytes(img[40..42].try_into().unwrap()), 52); // e_ehsize
+        assert_eq!(u16::from_le_bytes(img[42..44].try_into().unwrap()), 32); // e_phentsize
+        assert_eq!(u16::from_le_bytes(img[46..48].try_into().unwrap()), 40); // e_shentsize
+        let symtab = elf32_section(img, ".symtab");
+        assert_eq!(symtab.6, 16, "Elf32_Sym is 16 bytes");
+        // `_start` is found through the ELF32 symbol layout.
+        let (_, _, _, off, size, _, ent) = symtab;
+        let strtab = elf32_section(img, ".strtab");
+        let names = &img[strtab.3 as usize..(strtab.3 + strtab.4) as usize];
+        let text_addr = elf32_section(img, ".text").2;
+        let start = (0..size / ent).find_map(|k| {
+            let at = (off + k * ent) as usize;
+            let n = u32::from_le_bytes(img[at..at + 4].try_into().unwrap());
+            (strz(names, n as usize) == "_start")
+                .then(|| u32::from_le_bytes(img[at + 4..at + 8].try_into().unwrap()) as u64)
+        });
+        assert_eq!(start, Some(text_addr));
+        // The entry point is `_start`, written at address width.
+        assert_eq!(
+            u32::from_le_bytes(img[24..28].try_into().unwrap()) as u64,
+            text_addr
+        );
+    }
+
+    #[test]
+    fn i386_emit_relocs_writes_rel_tables() {
+        let script = parse_linker_script(I386_SCRIPT).expect("script parses");
+        let objs = alloc::vec![parse_lds_object("a.o", i386_object()).expect("parses")];
+        let opts = LdsOptions {
+            emit_relocs: true,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let rel = elf32_section(&res.image, ".rel.data");
+        assert_eq!(rel.1, SHT_REL);
+        assert_eq!(rel.6, 8, "Elf32_Rel is 8 bytes");
+        assert_eq!(rel.4, 3 * 8, "three relocations in .data");
+        assert!(
+            elf32_sections(&res.image)
+                .iter()
+                .all(|s| !s.0.starts_with(".rela")),
+            "a REL target emits no RELA table"
+        );
+        // r_info keeps the type in the low byte on ELF32.
+        let body = &res.image[rel.3 as usize..(rel.3 + rel.4) as usize];
+        let info = u32::from_le_bytes(body[4..8].try_into().unwrap());
+        assert_eq!(info & 0xff, rt::R_386_32);
+    }
+
+    #[test]
+    fn i386_narrow_relocation_overflow_is_reported() {
+        let script = parse_linker_script(I386_SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 4],
+            )
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+            // Symtab: null(0), section(1), _start(2).
+            .reloc(0, 0, 2, rt::R_386_8, 0)
+            .build_class(EM_386, ElfClass::Elf32, false);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let e = link_with_script(&script, objs, &LdsOptions::default())
+            .expect_err("0x1000 does not fit an 8-bit field");
+        assert!(format!("{e}").contains("R_386_8"), "{e}");
+    }
+
+    #[test]
+    fn i386_shared_object_carries_elf32_dynamic_metadata() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = SIZEOF_HEADERS;
+  .hash : { *(.hash) }
+  .gnu.hash : { *(.gnu.hash) }
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .gnu.version : { *(.gnu.version) }
+  .gnu.version_d : { *(.gnu.version_d) }
+  .dynamic : { *(.dynamic) }
+  .rodata : { *(.rodata) *(.got.plt) *(.got) }
+  .text : { *(.text) }
+}
+VERSION { LINUX_2.6 { global: exported; local: *; }; }
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            .sym("exported", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+            .build_class(EM_386, ElfClass::Elf32, false);
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            soname: Some("linux-gate.so.1".to_string()),
+            hash_style: HashStyle::Both,
+            ..Default::default()
+        };
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        assert_eq!(elf32_section(&res.image, ".dynsym").6, 16);
+        assert_eq!(elf32_section(&res.image, ".dynamic").6, 8);
+        // bfd gives `.gnu.hash` an entsize on ELF32 only.
+        assert_eq!(elf32_section(&res.image, ".gnu.hash").6, 4);
+        // `.gnu.hash` Bloom words are address-width, so ELF32 needs
+        // twice as many for the same mask and always shifts by 5.
+        let gh = elf32_body(&res.image, ".gnu.hash");
+        let word = |at: usize| u32::from_le_bytes(gh[at..at + 4].try_into().unwrap()) as usize;
+        let (nbuckets, maskwords, shift2) = (word(0), word(8), word(12) as u32);
+        let nhashed = elf32_section(&res.image, ".dynsym").4 as usize / 16 - 1;
+        assert_eq!(
+            (maskwords, shift2),
+            dynamic::bloom_params(nhashed, ElfClass::Elf32)
+        );
+        assert_eq!(
+            gh.len(),
+            16 + maskwords * 4 + nbuckets * 4 + nhashed * 4,
+            "the Bloom words are 4 bytes wide"
+        );
+        // DT_SYMENT names the ELF32 entry size; every tag is 8 bytes.
+        let dynamic = elf32_body(&res.image, ".dynamic");
+        assert!(dynamic.len().is_multiple_of(8));
+        let mut syment = None;
+        for e in dynamic.chunks_exact(8) {
+            let (t, v) = (
+                u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64,
+                u32::from_le_bytes(e[4..8].try_into().unwrap()) as u64,
+            );
+            if t == dynamic::DT_SYMENT {
+                syment = Some(v);
+            }
+        }
+        assert_eq!(syment, Some(16));
+    }
+
+    #[test]
+    fn code_padding_is_the_architecture_nop() {
+        // `.text` claims two inputs; the second's alignment leaves a
+        // gap the script gave no fill for.
+        let script =
+            parse_linker_script("SECTIONS { . = 0x1000; .text : { *(.text) *(.text.hot) } }")
+                .expect("script parses");
+        let build = |machine: u16, class: ElfClass, first: usize| {
+            TestObj::new()
+                .sec(
+                    ".text",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    16,
+                    &alloc::vec![0xccu8; first],
+                )
+                .sec(
+                    ".text.hot",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    16,
+                    &[0xccu8; 4],
+                )
+                .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, first as u64)
+                .build_class(machine, class, machine != EM_386)
+        };
+        let objs =
+            alloc::vec![parse_lds_object("a.o", build(EM_386, ElfClass::Elf32, 5)).expect("p")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        // 11 bytes of padding: five `66 90` pairs and a trailing `90`.
+        let body = elf32_body(&res.image, ".text");
+        assert_eq!(
+            &body[5..16],
+            &[
+                0x66, 0x90, 0x66, 0x90, 0x66, 0x90, 0x66, 0x90, 0x66, 0x90, 0x90
+            ]
+        );
+        // aarch64 pads only whole instructions, so the gap is a
+        // multiple of four here.
+        let objs =
+            alloc::vec![parse_lds_object("a.o", build(EM_AARCH64, ElfClass::Elf64, 8)).expect("p")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let shoff = u64::from_le_bytes(res.image[40..48].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(res.image[60..62].try_into().unwrap()) as usize;
+        let shstrndx = u16::from_le_bytes(res.image[62..64].try_into().unwrap()) as usize;
+        let sh = |i: usize| -> Elf64Shdr { read_struct(&res.image, shoff + i * 64).unwrap() };
+        let str_sh = sh(shstrndx);
+        let names =
+            &res.image[str_sh.sh_offset as usize..(str_sh.sh_offset + str_sh.sh_size) as usize];
+        let text = (1..shnum)
+            .map(sh)
+            .find(|h| strz(names, h.sh_name as usize) == ".text")
+            .expect("has .text");
+        let body = &res.image[text.sh_offset as usize..(text.sh_offset + text.sh_size) as usize];
+        assert_eq!(
+            &body[8..16],
+            &[0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5]
+        );
+    }
+
+    #[test]
+    fn orphan_anchors_on_the_canonically_named_section() {
+        // bfd puts a code orphan after the output section named
+        // `.text`, not after the last executable one.
+        let script = parse_linker_script(I386_SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            .sec(
+                ".text32",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            .sec(
+                ".inittext",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                1,
+                &[0u8; 4],
+            )
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+            .build_class(EM_386, ElfClass::Elf32, false);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let order: Vec<String> = elf32_sections(&res.image)
+            .into_iter()
+            .filter(|s| s.5 & SHF_EXECINSTR != 0)
+            .map(|s| s.0)
+            .collect();
+        assert_eq!(
+            order,
+            alloc::vec![
+                ".text".to_string(),
+                ".inittext".to_string(),
+                ".text32".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn elf32_object_in_an_x86_64_link_is_rejected() {
+        let script = parse_linker_script(I386_SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 4],
+            )
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+            .build_class(EM_X86_64, ElfClass::Elf32, true);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let e = link_with_script(&script, objs, &LdsOptions::default())
+            .expect_err("an ELF32 x86-64 object has no emulation here");
+        assert!(format!("{e}").contains("ELF class"), "{e}");
     }
 }

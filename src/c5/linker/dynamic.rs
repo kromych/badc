@@ -14,6 +14,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use hashbrown::HashMap;
 
+use super::object::ElfClass;
+
 pub const SHT_HASH: u32 = 5;
 pub const SHT_DYNAMIC: u32 = 6;
 pub const SHT_DYNSYM: u32 = 11;
@@ -26,6 +28,9 @@ pub const DT_HASH: u64 = 4;
 pub const DT_STRTAB: u64 = 5;
 pub const DT_SYMTAB: u64 = 6;
 pub const DT_RELA: u64 = 7;
+pub const DT_REL: u64 = 17;
+pub const DT_RELSZ: u64 = 18;
+pub const DT_RELENT: u64 = 19;
 pub const DT_RELASZ: u64 = 8;
 pub const DT_RELAENT: u64 = 9;
 pub const DT_STRSZ: u64 = 10;
@@ -147,9 +152,10 @@ pub fn bucket_count(nsyms: usize) -> usize {
     best
 }
 
-/// bfd's `.gnu.hash` Bloom-filter geometry for a 64-bit target:
-/// `(maskwords, shift2)`.
-pub fn bloom_params(nsyms: usize) -> (usize, u32) {
+/// bfd's `.gnu.hash` Bloom-filter geometry: `(maskwords, shift2)`.
+/// The Bloom words are address-width, so ELF32 splits the same mask
+/// into twice as many of them.
+pub fn bloom_params(nsyms: usize, class: ElfClass) -> (usize, u32) {
     let mut bits: u32 = 1;
     let mut x = nsyms;
     while {
@@ -165,7 +171,7 @@ pub fn bloom_params(nsyms: usize) -> (usize, u32) {
     } else {
         bits += 2;
     }
-    let shift1 = if bits == 5 { 5 } else { 6 };
+    let shift1 = if class.is32() || bits == 5 { 5 } else { 6 };
     (1usize << (bits - shift1), bits)
 }
 
@@ -239,8 +245,6 @@ impl DynTables {
     }
 }
 
-const SYM_SIZE: usize = 24;
-
 /// Build every dynamic table from the exported symbols. `exports` need
 /// not be ordered; the `.gnu.hash` bucket order is imposed here.
 pub fn build_tables(
@@ -248,6 +252,7 @@ pub fn build_tables(
     soname: Option<&str>,
     versions: &[VerDef],
     style: HashStyle,
+    class: ElfClass,
 ) -> DynTables {
     // Symbols a loader can find go in bucket order after the ones it
     // cannot (the null entry and any undefined). bfd records the first
@@ -283,14 +288,23 @@ pub fn build_tables(
     }
     let strtab = StrTab::build(&str_names);
 
-    let mut dynsym = Vec::with_capacity(symbols.len() * SYM_SIZE);
+    let mut dynsym = Vec::with_capacity(symbols.len() * class.sym_size() as usize);
     for s in &symbols {
         dynsym.extend_from_slice(&strtab.offset_of(&s.name).to_le_bytes());
-        dynsym.push(s.info);
-        dynsym.push(s.other);
-        dynsym.extend_from_slice(&s.shndx.to_le_bytes());
-        dynsym.extend_from_slice(&s.value.to_le_bytes());
-        dynsym.extend_from_slice(&s.size.to_le_bytes());
+        // Elf32_Sym puts value and size ahead of st_info.
+        if class.is32() {
+            dynsym.extend_from_slice(&(s.value as u32).to_le_bytes());
+            dynsym.extend_from_slice(&(s.size as u32).to_le_bytes());
+            dynsym.push(s.info);
+            dynsym.push(s.other);
+            dynsym.extend_from_slice(&s.shndx.to_le_bytes());
+        } else {
+            dynsym.push(s.info);
+            dynsym.push(s.other);
+            dynsym.extend_from_slice(&s.shndx.to_le_bytes());
+            dynsym.extend_from_slice(&s.value.to_le_bytes());
+            dynsym.extend_from_slice(&s.size.to_le_bytes());
+        }
     }
 
     let hash = if style.sysv() {
@@ -299,7 +313,7 @@ pub fn build_tables(
         Vec::new()
     };
     let gnu = if style.gnu() {
-        build_gnu_hash(&hashed, nbuckets)
+        build_gnu_hash(&hashed, nbuckets, class)
     } else {
         Vec::new()
     };
@@ -348,18 +362,20 @@ fn build_sysv_hash(symbols: &[DynSym]) -> Vec<u8> {
     out
 }
 
-fn build_gnu_hash(hashed: &[(usize, u32)], nbuckets: usize) -> Vec<u8> {
+fn build_gnu_hash(hashed: &[(usize, u32)], nbuckets: usize, class: ElfClass) -> Vec<u8> {
     // The null entry at index 0 is never hashed, so hashing starts at
     // index 1 and the chain array runs one per hashed symbol.
     let symndx: u32 = 1;
-    let (maskwords, shift2) = bloom_params(hashed.len());
+    let (maskwords, shift2) = bloom_params(hashed.len(), class);
+    let bloom_bits = class.addr_size() as u32 * 8;
     let mut bloom = alloc::vec![0u64; maskwords];
     let mut buckets = alloc::vec![0u32; nbuckets];
     let mut chain: Vec<u32> = Vec::with_capacity(hashed.len());
     for (k, &(_, h)) in hashed.iter().enumerate() {
         let idx = symndx as usize + k;
         let b = h as usize % nbuckets;
-        bloom[(h as usize / 64) % maskwords] |= (1u64 << (h % 64)) | (1u64 << ((h >> shift2) % 64));
+        bloom[(h / bloom_bits) as usize % maskwords] |=
+            (1u64 << (h % bloom_bits)) | (1u64 << ((h >> shift2) % bloom_bits));
         if buckets[b] == 0 {
             buckets[b] = idx as u32;
         }
@@ -369,13 +385,14 @@ fn build_gnu_hash(hashed: &[(usize, u32)], nbuckets: usize) -> Vec<u8> {
             .is_none_or(|&(_, nh)| nh as usize % nbuckets != b);
         chain.push((h & !1) | u32::from(last));
     }
-    let mut out = Vec::with_capacity(16 + maskwords * 8 + nbuckets * 4 + chain.len() * 4);
+    let aw = class.addr_size() as usize;
+    let mut out = Vec::with_capacity(16 + maskwords * aw + nbuckets * 4 + chain.len() * 4);
     out.extend_from_slice(&(nbuckets as u32).to_le_bytes());
     out.extend_from_slice(&symndx.to_le_bytes());
     out.extend_from_slice(&(maskwords as u32).to_le_bytes());
     out.extend_from_slice(&shift2.to_le_bytes());
     for w in bloom {
-        out.extend_from_slice(&w.to_le_bytes());
+        out.extend_from_slice(&class.addr_bytes(w)[..aw]);
     }
     for b in buckets {
         out.extend_from_slice(&b.to_le_bytes());
@@ -423,6 +440,9 @@ pub struct DynAddrs {
     pub strsz: u64,
     pub symtab: Option<u64>,
     pub rela: Option<(u64, u64)>,
+    /// The dynamic relocation table carries explicit addends
+    /// (`DT_RELA`); i386 uses `DT_REL`.
+    pub use_rela: bool,
     pub relr: Option<(u64, u64)>,
     pub verdef: Option<(u64, u16)>,
     pub versym: Option<u64>,
@@ -437,7 +457,7 @@ pub struct DynAddrs {
 }
 
 /// `.dynamic` contents in bfd's tag order. `DT_NULL` terminates.
-pub fn build_dynamic(a: &DynAddrs) -> Vec<u8> {
+pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     let mut tags: Vec<(u64, u64)> = Vec::new();
     let mut flags: u64 = 0;
     if let Some(off) = a.soname {
@@ -460,7 +480,7 @@ pub fn build_dynamic(a: &DynAddrs) -> Vec<u8> {
         tags.push((DT_SYMTAB, v));
     }
     tags.push((DT_STRSZ, a.strsz));
-    tags.push((DT_SYMENT, SYM_SIZE as u64));
+    tags.push((DT_SYMENT, class.sym_size()));
     for (arr, tag, sz) in [
         (a.preinit_array, DT_PREINIT_ARRAY, DT_PREINIT_ARRAYSZ),
         (a.init_array, DT_INIT_ARRAY, DT_INIT_ARRAYSZ),
@@ -472,9 +492,21 @@ pub fn build_dynamic(a: &DynAddrs) -> Vec<u8> {
         }
     }
     if let Some((addr, size)) = a.rela {
-        tags.push((DT_RELA, addr));
-        tags.push((DT_RELASZ, size));
-        tags.push((DT_RELAENT, 24));
+        let (t, sz, ent) = if a.use_rela {
+            (DT_RELA, DT_RELASZ, DT_RELAENT)
+        } else {
+            (DT_REL, DT_RELSZ, DT_RELENT)
+        };
+        tags.push((t, addr));
+        tags.push((sz, size));
+        tags.push((
+            ent,
+            if a.use_rela {
+                class.rela_size()
+            } else {
+                class.rel_size()
+            },
+        ));
     }
     if let Some((addr, count)) = a.verdef {
         tags.push((DT_VERDEF, addr));
@@ -493,13 +525,14 @@ pub fn build_dynamic(a: &DynAddrs) -> Vec<u8> {
     if let Some((addr, size)) = a.relr {
         tags.push((DT_RELR, addr));
         tags.push((DT_RELRSZ, size));
-        tags.push((DT_RELRENT, 8));
+        tags.push((DT_RELRENT, class.addr_size()));
     }
     tags.push((DT_NULL, 0));
-    let mut out = Vec::with_capacity(tags.len() * 16);
+    let aw = class.addr_size() as usize;
+    let mut out = Vec::with_capacity(tags.len() * class.dyn_size() as usize);
     for (t, v) in tags {
-        out.extend_from_slice(&t.to_le_bytes());
-        out.extend_from_slice(&v.to_le_bytes());
+        out.extend_from_slice(&class.addr_bytes(t)[..aw]);
+        out.extend_from_slice(&class.addr_bytes(v)[..aw]);
     }
     out
 }
@@ -523,8 +556,10 @@ mod tests {
     #[test]
     fn bloom_params_match_the_measured_vdso() {
         // ld's x86-64 vDSO: 13 hashed symbols -> two mask words, shift 7.
-        assert_eq!(bloom_params(13), (2, 7));
-        assert_eq!(bloom_params(1), (1, 5));
+        assert_eq!(bloom_params(13, ElfClass::Elf64), (2, 7));
+        // ELF32 halves the Bloom word, doubling the mask words.
+        assert_eq!(bloom_params(12, ElfClass::Elf32), (4, 7));
+        assert_eq!(bloom_params(1, ElfClass::Elf64), (1, 5));
     }
 
     #[test]

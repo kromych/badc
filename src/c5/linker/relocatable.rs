@@ -29,6 +29,7 @@ use super::lds::{
 };
 use super::object::{Elf64Ehdr, Elf64Shdr, read_struct};
 
+pub const EM_386: u16 = 3;
 pub const EM_X86_64: u16 = 62;
 pub const EM_AARCH64: u16 = 183;
 

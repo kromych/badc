@@ -28,6 +28,22 @@ pub(crate) const R_X86_64_TPOFF32: u32 = 23;
 pub(crate) const R_X86_64_PC64: u32 = 24;
 pub(crate) const R_X86_64_REX_GOTPCRELX: u32 = 42;
 
+// ---- i386 ----
+pub(crate) const R_386_32: u32 = 1;
+pub(crate) const R_386_PC32: u32 = 2;
+pub(crate) const R_386_GOT32: u32 = 3;
+pub(crate) const R_386_PLT32: u32 = 4;
+pub(crate) const R_386_COPY: u32 = 5;
+pub(crate) const R_386_GLOB_DAT: u32 = 6;
+pub(crate) const R_386_JUMP_SLOT: u32 = 7;
+pub(crate) const R_386_RELATIVE: u32 = 8;
+pub(crate) const R_386_GOTOFF: u32 = 9;
+pub(crate) const R_386_GOTPC: u32 = 10;
+pub(crate) const R_386_16: u32 = 20;
+pub(crate) const R_386_PC16: u32 = 21;
+pub(crate) const R_386_8: u32 = 22;
+pub(crate) const R_386_PC8: u32 = 23;
+
 // ---- aarch64 ----
 pub(crate) const R_AARCH64_ABS64: u32 = 257;
 pub(crate) const R_AARCH64_ABS32: u32 = 258;
@@ -82,6 +98,24 @@ pub(crate) fn aarch64_reloc_desc(rtype: u32) -> String {
     desc(AARCH64_RELOC_NAMES, rtype)
 }
 
+/// i386 counterpart of [`x86_64_reloc_desc`].
+pub(crate) fn i386_reloc_desc(rtype: u32) -> String {
+    desc(I386_RELOC_NAMES, rtype)
+}
+
+/// Byte width of the field an `R_386_*` relocation reads and writes, or
+/// `None` for a type that touches no field. i386 uses `SHT_REL`, so the
+/// width is also what the implicit addend is read at.
+pub(crate) fn i386_field_width(rtype: u32) -> Option<u32> {
+    match rtype {
+        R_386_8 | R_386_PC8 => Some(1),
+        R_386_16 | R_386_PC16 => Some(2),
+        R_386_32 | R_386_PC32 | R_386_GOT32 | R_386_PLT32 | R_386_GLOB_DAT | R_386_JUMP_SLOT
+        | R_386_RELATIVE | R_386_GOTOFF | R_386_GOTPC | R_386_COPY => Some(4),
+        _ => None,
+    }
+}
+
 fn desc(names: &[(u32, &str)], rtype: u32) -> String {
     match names.iter().find(|(v, _)| *v == rtype) {
         Some((_, name)) => format!("{name} ({rtype})"),
@@ -132,6 +166,49 @@ pub(crate) static X86_64_RELOC_NAMES: &[(u32, &str)] = &[
     (38, "R_X86_64_RELATIVE64"),
     (41, "R_X86_64_GOTPCRELX"),
     (42, "R_X86_64_REX_GOTPCRELX"),
+];
+
+/// Intel386 psABI relocation numbering, in ABI order.
+pub(crate) static I386_RELOC_NAMES: &[(u32, &str)] = &[
+    (0, "R_386_NONE"),
+    (1, "R_386_32"),
+    (2, "R_386_PC32"),
+    (3, "R_386_GOT32"),
+    (4, "R_386_PLT32"),
+    (5, "R_386_COPY"),
+    (6, "R_386_GLOB_DAT"),
+    (7, "R_386_JMP_SLOT"),
+    (8, "R_386_RELATIVE"),
+    (9, "R_386_GOTOFF"),
+    (10, "R_386_GOTPC"),
+    (11, "R_386_32PLT"),
+    (14, "R_386_TLS_TPOFF"),
+    (15, "R_386_TLS_IE"),
+    (16, "R_386_TLS_GOTIE"),
+    (17, "R_386_TLS_LE"),
+    (18, "R_386_TLS_GD"),
+    (19, "R_386_TLS_LDM"),
+    (20, "R_386_16"),
+    (21, "R_386_PC16"),
+    (22, "R_386_8"),
+    (23, "R_386_PC8"),
+    (24, "R_386_TLS_GD_32"),
+    (25, "R_386_TLS_GD_PUSH"),
+    (26, "R_386_TLS_GD_CALL"),
+    (27, "R_386_TLS_GD_POP"),
+    (28, "R_386_TLS_LDM_32"),
+    (29, "R_386_TLS_LDM_PUSH"),
+    (30, "R_386_TLS_LDM_CALL"),
+    (31, "R_386_TLS_LDM_POP"),
+    (32, "R_386_TLS_LDO_32"),
+    (33, "R_386_TLS_IE_32"),
+    (34, "R_386_TLS_LE_32"),
+    (35, "R_386_TLS_DTPMOD32"),
+    (36, "R_386_TLS_DTPOFF32"),
+    (37, "R_386_TLS_TPOFF32"),
+    (38, "R_386_SIZE32"),
+    (42, "R_386_IRELATIVE"),
+    (43, "R_386_GOT32X"),
 ];
 
 /// AArch64 ELF ABI relocation numbering, in ABI order.

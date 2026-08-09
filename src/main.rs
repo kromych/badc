@@ -3598,10 +3598,13 @@ fn run_script_link(cli: ScriptLinkCli) {
             badc::LdsEmit::Exec
         },
         entry_override: cli.entry_override,
-        // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64.
-        max_page_size: cli
-            .max_page_size
-            .unwrap_or(if machine == 183 { 0x10000 } else { 0x200000 }),
+        // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
+        // on i386.
+        max_page_size: cli.max_page_size.unwrap_or(match machine {
+            183 => 0x10000,
+            3 => 0x1000,
+            _ => 0x200000,
+        }),
         orphan_handling: cli.orphan_handling,
         build_id_sha1: cli.build_id_sha1,
         strip_debug: cli.strip_debug,

@@ -19,8 +19,12 @@ use alloc::vec::Vec;
 use crate::c5::error::C5Error;
 
 use super::link::{MergedNative, SectionContribution};
-use super::object::{Elf64Ehdr, Elf64Shdr, NativeSymSection, read_struct, section_slice};
+use super::object::{
+    Elf32Ehdr, Elf32Shdr, Elf64Ehdr, Elf64Shdr, ElfClass, NativeSymSection, read_struct,
+    section_slice,
+};
 
+const EM_386: u16 = 3;
 const EM_X86_64: u16 = 62;
 const EM_AARCH64: u16 = 183;
 
@@ -322,31 +326,41 @@ fn push_columns(out: &mut String, name: &str, addr: u64, size: u64) {
 /// Read the image's section table: `(name, sh_addr, sh_size)` in file
 /// order plus the BFD format name for the `OUTPUT(...)` line.
 fn parse_image_sections(image: &[u8]) -> Result<(Vec<OutSec>, &'static str), C5Error> {
-    if image.len() < 6 || &image[0..4] != b"\x7fELF" || image[4] != 2 || image[5] != 1 {
+    let class = (image.len() >= 6 && &image[0..4] == b"\x7fELF" && image[5] == 1)
+        .then(|| ElfClass::from_ei_class(image[4]))
+        .flatten();
+    let Some(class) = class else {
         return Err(map_err(
-            "the output image is not a little-endian ELF64; \
+            "the output image is not a little-endian ELF; \
              the link map is produced for ELF output only",
         ));
-    }
-    let ehdr: Elf64Ehdr = read_struct(image, 0)?;
-    let bfd_format = match ehdr.e_machine {
-        EM_X86_64 => "elf64-x86-64",
-        EM_AARCH64 => "elf64-littleaarch64",
-        other => {
+    };
+    let ehdr: Elf64Ehdr = match class {
+        ElfClass::Elf32 => read_struct::<Elf32Ehdr>(image, 0)?.into(),
+        ElfClass::Elf64 => read_struct(image, 0)?,
+    };
+    let bfd_format = match (class, ehdr.e_machine) {
+        (_, EM_X86_64) => "elf64-x86-64",
+        (_, EM_AARCH64) => "elf64-littleaarch64",
+        (_, EM_386) => "elf32-i386",
+        (_, other) => {
             return Err(map_err(&format!("unsupported e_machine {other}")));
         }
     };
     let shoff = ehdr.e_shoff as usize;
     let shentsize = ehdr.e_shentsize as usize;
-    if shentsize != core::mem::size_of::<Elf64Shdr>() {
+    if shentsize as u64 != class.shdr_size() {
         return Err(map_err(&format!(
             "section header entry size {shentsize} is not {}",
-            core::mem::size_of::<Elf64Shdr>(),
+            class.shdr_size(),
         )));
     }
     let mut shdrs: Vec<Elf64Shdr> = Vec::with_capacity(ehdr.e_shnum as usize);
     for i in 0..ehdr.e_shnum as usize {
-        shdrs.push(read_struct(image, shoff + i * shentsize)?);
+        shdrs.push(match class {
+            ElfClass::Elf32 => read_struct::<Elf32Shdr>(image, shoff + i * shentsize)?.into(),
+            ElfClass::Elf64 => read_struct(image, shoff + i * shentsize)?,
+        });
     }
     let shstrtab = shdrs
         .get(ehdr.e_shstrndx as usize)

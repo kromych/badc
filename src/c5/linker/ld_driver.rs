@@ -22,7 +22,7 @@ use super::dynamic::HashStyle;
 use super::lds::parse_linker_script;
 use super::lds_link::{LdsEmit, LdsObject, LdsOptions, OrphanHandling, parse_lds_object};
 use super::relocatable::{
-    DiscardLocals, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
+    DiscardLocals, EM_386, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
     parse_et_rel, parse_module_script,
 };
 
@@ -376,6 +376,7 @@ pub fn run_ld(args: &[String]) -> i32 {
     let machine = match a.emulation.as_deref() {
         None => None,
         Some("elf_x86_64") => Some(EM_X86_64),
+        Some("elf_i386") => Some(EM_386),
         Some("aarch64linux" | "aarch64elf") => Some(EM_AARCH64),
         Some(other) => return ld_err(format!("unsupported emulation `{other}`")),
     };
@@ -734,10 +735,13 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
             LdsEmit::Exec
         },
         entry_override: a.entry.clone(),
-        // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64.
-        max_page_size: a
-            .max_page_size
-            .unwrap_or(if m == EM_AARCH64 { 0x10000 } else { 0x200000 }),
+        // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
+        // on i386.
+        max_page_size: a.max_page_size.unwrap_or(match m {
+            EM_AARCH64 => 0x10000,
+            EM_386 => 0x1000,
+            _ => 0x200000,
+        }),
         orphan_handling: match a.orphan_handling.as_deref() {
             Some("warn") => OrphanHandling::Warn,
             Some("error") => OrphanHandling::Error,

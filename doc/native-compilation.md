@@ -48,8 +48,8 @@ from the remaining objects or archive members.
 
 ## Linking
 
-Beyond the compile-and-link path above, the linker takes GNU-ld-shaped work
-directly: linker scripts (`-T` / `--script`), `--emit-relocs`, `-z` keywords,
+The linker also takes GNU-ld-shaped work directly: linker scripts
+(`-T` / `--script`), `--emit-relocs`, `-z` keywords,
 `--build-id`, link maps (`-Map`, `--print-map`), `--whole-archive` spans, and
 symbol-export control (`--export-all`, `--export-data`). Invoked as `ld`,
 `ld.badc`, or with `--ld`, badc presents a GNU ld persona with its own flag
@@ -58,11 +58,9 @@ including [the Linux kernel's](linux-kernel.md).
 
 ## What is supported
 
-A summary of what the dialect parses and lowers, and where it diverges from
-C99, lives in [`std-conformance.md`](std-conformance.md). Short version: c5
-covers most of C99 plus the C11 and C23 features real code gates on, and a
-substantial GCC extension surface. That document enumerates the rejected
-idioms, the divergent behavior, and the c5-only extensions.
+c5 covers most of C99, the C11 and C23 features real code gates on, and a wide
+GCC extension surface. [`std-conformance.md`](std-conformance.md) enumerates
+the rejected idioms, the divergent behavior, and the c5-only extensions.
 
 ### From the preprocessor side
 
@@ -235,8 +233,8 @@ cargo run --release --example bench -- --iter 10
 ```
 
 Assembly and SSA snapshots of the test fixtures live under
-[`tests/snapshots/`](../tests/snapshots/); they are the readable record of
-codegen quality and of every change to it.
+[`tests/snapshots/`](../tests/snapshots/), where a codegen change shows up as a
+reviewable diff.
 
 ## Hardening and code-model knobs
 

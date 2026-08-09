@@ -1,7 +1,5 @@
 # Using badc as a library, and `no_std`
 
-badc is a compiler-as-library first; the CLI is one consumer of it.
-
 `Compiler::new(source).compile()` returns a `Program`. From there:
 
 * `emit_native` / `emit_native_with_options` lower it to bytes you can write to

@@ -71,12 +71,10 @@ correctly when the callee is named: `int (*f(void))(int)` then `(*f())(3)`,
 `f()(3)`, or `int (*q)(int) = f(); q(3)`. The unhandled shape is calling
 such a function *through a function-pointer variable*
 (`int (*(*p)(int))(int) = f; (*p)(0)(3)`): c5 records a function pointer's
-indirection as a single scalar on the flat type, so `p` and
-`int (**)(int)` collapse to the same encoding, and the indirect-call result
-type drops the return type's own function-pointer level. The shape is
-accepted rather than diagnosed, and the resulting call transfers to a
-wrong address. TODO: reject it at compile time until the encoding carries
-the extra level.
+indirection as a single scalar on the flat type, so `p` and `int (**)(int)`
+collapse to the same encoding. The shape is accepted rather than diagnosed,
+and the call branches to a word read out of the callee's own instruction
+stream. TODO: reject it, then carry the extra level in the encoding.
 
 ### An inline definition is materialized unit-locally, severity 5
 

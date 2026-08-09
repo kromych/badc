@@ -1,33 +1,41 @@
 # The Linux kernel
 
 badc compiles every C translation unit of a Linux 7.1.6 `defconfig` kernel on
-x86_64 and aarch64, links it, and the result boots. This page states what that
-covers and, just as important, what it does not.
-
-The harness lives in [`demos/linux/`](../demos/linux/); its
-[README](../demos/linux/README.md) documents every script, flag and pin. This
-page is the summary and the scope statement.
+x86_64 and aarch64, links it, and the result boots. The harness is
+[`demos/linux/`](../demos/linux/), whose
+[README](../demos/linux/README.md) documents every script, flag and pin.
 
 ## What holds today
 
 **Compile.** Every kernel C unit of the architecture's own `defconfig` is
-badc's, with zero fallbacks to another compiler. At the pinned release that is
-2921 units on x86_64 and 4434 on aarch64 for the kernel image; the full corpus
-including modules is larger and is recorded per run in the build manifest. A
-unit badc cannot compile fails the build rather than being handed to gcc:
-`buildcc.py`, the `CC=` shim, removes the partial object and exits nonzero.
-The one route to another compiler is `$BADC_FALLBACK`, which names units
-explicitly and marks the build impure in the manifest, and the gate fails when
-that count is nonzero.
+badc's, with zero fallbacks to another compiler. Two unit counts circulate at
+the 7.1.6 pin, and they differ only in which make targets were built:
 
-**Boot.** Both kernels boot under qemu and are checked by more than reaching
+| build | x86_64 | aarch64 | measured by |
+|---|---|---|---|
+| kernel image (`bzImage` / `Image`, vmlinux included, no modules) | 2921 | 4434 | `verify.py` |
+| kernel plus modules (` ... modules`) | 2953 | 10489 | `packages.py` |
+
+Both come from the same counter -- one manifest line per successful badc
+compile of a kernel C unit -- so the deltas are exactly the module corpus.
+x86_64 `defconfig` builds virtio, ext4 and most of the rest `=y` and aarch64
+builds them `=m`, which is why the aarch64 count more than doubles while the
+x86_64 count moves by 32.
+
+A unit badc cannot compile fails the build rather than being handed to gcc:
+`buildcc.py`, the `CC=` shim, removes the partial object and exits nonzero. The
+one route to another compiler is `$BADC_FALLBACK`, which names units explicitly
+and marks the build impure in the manifest; the gate fails when that count is
+nonzero.
+
+**Boot.** Both kernels boot under qemu, checked by more than reaching
 userspace. The initramfs `/init` prints a marker, then mounts procfs and sysfs
 and asserts the contents of a fixed set of files, reading them in 64-byte
 requests and once more from a non-zero offset, so a seq_file that replays
 records rather than continuing is caught. Only then does it print the second
 marker. Each boot's `Linux version` banner -- the text `/proc/version` serves
--- must name badc, which pins the claim in the booted kernel rather than in
-the configuration.
+-- must name badc, which pins the claim in the booted kernel rather than in the
+configuration.
 
 **Relocated output.** The aarch64 gate boots at pinned KASLR displacements: it
 writes seeds into the machine's own device tree and boots against the result,
@@ -56,12 +64,11 @@ same userspace.
 
 ## What is not badc's
 
-**Assembly.** Every `.S` unit still goes to gas. badc has no standalone
-assembler driver, and `.S` units are out of scope for the build. Measured
-separately by `tools/probe_asm_units/`, which feeds each preprocessed `.S`
-through badc's file-scope `asm` path, badc's own assembler currently takes
-46 of 68 x86_64 units and 62 of 77 aarch64 units. That probe measures the
-assembler surface only; it is not a build path.
+**Assembly.** Every `.S` unit goes to gas: badc has no standalone assembler
+driver, so `.S` units are out of scope for the build. `tools/probe_asm_units/`
+measures the surface separately, feeding each preprocessed `.S` through badc's
+file-scope `asm` path; badc's own assembler currently takes 46 of 68 x86_64
+units and 62 of 77 aarch64 units that way. That is a probe, not a build path.
 
 **Some links.** Under `LD=badc` the shim routes by facts of the command line,
 and three classes go to the real linker:

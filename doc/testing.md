@@ -28,7 +28,7 @@ cargo test --release --lib
 
 ## Fixtures worth reading
 
-A few sources under `tests/fixtures/c/` each pin a distinct hard feature:
+Each of these under `tests/fixtures/c/` pins a distinct hard feature:
 
 * `c4.c` -- the original c4 compiler; self-hosts.
 * `fma_numeric_kernels.c` -- Horner polynomial evaluation, a dense

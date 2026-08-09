@@ -2,8 +2,8 @@
 
 ## Install
 
-Download one of the binary release packages matching your hardware and OS.
-There is one small binary inside, and that is all you need.
+Download the binary release package matching your hardware and OS; it holds one
+small binary and nothing else.
 
 If you have Rust installed, clone the repo and install with
 
@@ -70,8 +70,6 @@ info: wrote file hello for target `macos-aarch64`
 | (default)  | Lower to a native Mach-O / ELF / PE32+ at `-o <path>` and exit.  |
 | `--jit`    | Lower in-process, mmap the result, call `main` directly.         |
 | `--interp` | Run the SSA IR under a watchful VM (pointer tracking, traces).   |
-
-See [native compilation](native-compilation.md) and [the interpreter](interpreter.md).
 
 ## Flags
 

@@ -2985,18 +2985,6 @@ pub(super) fn write_relocatable(
     // keep source order.
     let init_sections =
         build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64)?;
-    // badc has no i386 code generator, so every relocation in an
-    // ELFCLASS32 object comes from the assembler. The compiler's own
-    // tables carry x86-64 numbers, whose meanings differ under i386
-    // (`R_X86_64_64` and `R_386_32` share the number 1), so reaching
-    // this writer with one is an internal inconsistency, not input.
-    if class.is32()
-        && !(rela_bytes.is_empty() && rela_data_bytes.is_empty() && init_sections.is_empty())
-    {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            "elf_reloc: compiler-generated relocations in an ELFCLASS32 object",
-        )));
-    }
     // Every named section's relocation list is settled; a `.rela`
     // companion exists exactly for the entries that carry relocations.
     let named_rela_count = carve
@@ -3047,6 +3035,23 @@ pub(super) fn write_relocatable(
                 text_sym_idx,
             ),
         );
+    }
+
+    // badc has no i386 code generator, so every relocation in an
+    // ELFCLASS32 object comes from the assembler, which reaches only the
+    // named-section tables. The fixed set carries x86-64 numbers, whose
+    // meanings differ under i386 (`R_X86_64_64` and `R_386_32` share the
+    // number 1), so an entry there is an internal inconsistency.
+    if class.is32()
+        && !(rela_bytes.is_empty()
+            && rela_data_bytes.is_empty()
+            && rela_debug_info_bytes.is_empty()
+            && rela_debug_line_bytes.is_empty()
+            && init_sections.is_empty())
+    {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "elf_reloc: compiler-generated relocations in an ELFCLASS32 object",
+        )));
     }
 
     // Every relocation table of the fixed set is final here. A

@@ -1,7 +1,8 @@
 // SSE4.2 accumulate-CRC32 (`crc32b` / `crc32w` / `crc32l` / `crc32q`).
 // The AT&T suffix is the SOURCE width; the accumulator is a general
 // register, 64-bit only for `q`. Both a register and a memory source are
-// spelled.
+// spelled, and the unsuffixed spelling, whose widths come from the
+// registers alone.
 //
 // The expected values are the CRC-32C (Castagnoli, polynomial 0x1EDC6F41)
 // residues the instruction defines, cross-checked against a table-free
@@ -59,6 +60,28 @@ static uint64_t crc_q_mem(uint64_t crc, const uint64_t *p) {
     return crc;
 }
 
+/* Unsuffixed: the source register's own width is the source width, and the
+   accumulator's is what REX.W encodes. */
+static uint32_t crc_b_bare(uint32_t crc, uint8_t v) {
+    asm("crc32 %1, %0" : "+r"(crc) : "r"(v));
+    return crc;
+}
+
+static uint32_t crc_w_bare(uint32_t crc, uint16_t v) {
+    asm("crc32 %1, %0" : "+r"(crc) : "r"(v));
+    return crc;
+}
+
+static uint32_t crc_l_bare(uint32_t crc, uint32_t v) {
+    asm("crc32 %1, %0" : "+r"(crc) : "r"(v));
+    return crc;
+}
+
+static uint64_t crc_q_bare(uint64_t crc, uint64_t v) {
+    asm("crc32 %1, %q0" : "+r"(crc) : "r"(v));
+    return crc;
+}
+
 static const uint8_t byte_src = 0xA5;
 static const uint64_t quad_src = 0x0123456789ABCDEFull;
 
@@ -73,6 +96,12 @@ int main(void) {
     /* The 64-bit form leaves a 32-bit residue zero-extended. */
     if (crc_q(0xFFFFFFFFull, quad_src) != ref_crc32c(0xFFFFFFFFu, quad_src, 64)) return 5;
     if (crc_q_mem(0xFFFFFFFFull, &quad_src) != ref_crc32c(0xFFFFFFFFu, quad_src, 64)) return 6;
+
+    if (crc_b_bare(0xFFFFFFFFu, 0xA5) != ref_crc32c(0xFFFFFFFFu, 0xA5, 8)) return 8;
+    if (crc_w_bare(0xFFFFFFFFu, 0x1234) != ref_crc32c(0xFFFFFFFFu, 0x1234, 16)) return 9;
+    if (crc_l_bare(0xFFFFFFFFu, 0xDEADBEEFu) != ref_crc32c(0xFFFFFFFFu, 0xDEADBEEFu, 32))
+        return 10;
+    if (crc_q_bare(0xFFFFFFFFull, quad_src) != ref_crc32c(0xFFFFFFFFu, quad_src, 64)) return 11;
 
     /* Accumulation chains: four bytes match one long. */
     {

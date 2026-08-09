@@ -102,11 +102,30 @@ def parse_cmd_file(path: Path) -> list[str] | None:
         return None
 
 
+def positional(argv: list[str], suffix: str) -> str | None:
+    """The first positional argument ending in `suffix`.
+
+    An option's separate argument is not positional. The kernel's vDSO
+    units carry `-include lib/vdso/gettimeofday.c` ahead of the source, so
+    scanning for any `.c` token names the wrong unit."""
+    takes_arg = KEEP_ARG | FOLD_TO_I | DROP_ARG
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in takes_arg:
+            i += 2
+            continue
+        if not a.startswith("-") and a.endswith(suffix):
+            return a
+        i += 1
+    return None
+
+
 def classify(argv: list[str]) -> tuple[str, str | None]:
     """(kind, source): kind is 'c' for a kernel C compile, 'asm' for a .S
     compile, 'other' for anything else (host compile, link, archive)."""
-    src = next((a for a in argv if a.endswith(".c") and not a.startswith("-")), None)
-    asm = next((a for a in argv if a.endswith(".S") and not a.startswith("-")), None)
+    src = positional(argv, ".c")
+    asm = positional(argv, ".S")
     if "-D__KERNEL__" not in argv:
         return ("other", None)
     if asm is not None and src is None:

@@ -207,13 +207,34 @@ def fallback_listed(src: str, obj: str) -> bool:
                for e in entries for p in (src, obj))
 
 
+def source_of(argv: list[str]) -> str | None:
+    """The compiled source: a positional `.c` argument.
+
+    An option's separate argument is not positional, so the value of
+    `-include`, `-I` and the rest is skipped. The kernel's vDSO units are
+    built with `-include lib/vdso/gettimeofday.c` ahead of the source, and
+    taking the first `.c` token anywhere on the line picks that up instead
+    and compiles a translation unit the build never asked for.
+    """
+    takes_arg = KEEP_ARG | FOLD_TO_I | DROP_ARG
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in takes_arg:
+            i += 2
+            continue
+        if not a.startswith("-") and a.endswith(".c"):
+            return a
+        i += 1
+    return None
+
+
 def main(argv: list[str]) -> int:
     real = os.environ.get("BADC_REAL_CC", "gcc")
     badc = os.environ.get("BADC")
     if argv == ["--version"] and badc:
         os.execvp(badc, [badc, "--version"])
-    src = next((a for a in argv
-                if a.endswith(".c") and not a.startswith("-")), None)
+    src = source_of(argv)
     kernel_c = (src is not None and "-c" in argv and "-D__KERNEL__" in argv
                 and "-m16" not in argv and "-m32" not in argv)
     if not kernel_c:

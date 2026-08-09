@@ -692,6 +692,104 @@ trace; a core from a badc-compiled binary is a reported finding. A kernel
 oops or panic leaves no userspace core -- the qemu serial console log is that
 record and is kept per boot regardless.
 
+## Struct layouts (`layout.py`)
+
+A struct-layout difference between the two compilers is an ABI defect that
+produces memory corruption rather than a diagnostic: the kernel boots, the
+modules load, and a wrong member offset shows up later as a corrupted field
+somewhere unrelated. Neither the sweep nor the boot gate can see one.
+`layout.py` reads the DWARF both compilers emit and compares the layouts.
+
+```sh
+python3 demos/linux/layout.py --arch x86_64 \
+    --ref-tree ~/k/ref --badc-tree ~/k/badc \
+    --cross-check 40 --report layout-x86_64.json
+```
+
+Both trees must carry debug info (`CONFIG_DEBUG_INFO_DWARF4`; badc emits
+DWARF 4) and must hold the same source and the same configuration. The run
+enforces the second part rather than assuming it: it refuses to compare
+unless the two `.config` files agree once the toolchain identification
+symbols -- `CONFIG_CC_VERSION_TEXT`, the `*_VERSION` strings -- are removed,
+and unless the kernel releases match. Everything else, including the
+`CONFIG_CC_HAS_*` capability answers, has to be identical, because a
+difference there can move a member on its own and the comparison would then
+measure the configuration instead of the compiler.
+
+Three input modes:
+
+* `--ref-elf` / `--badc-elf` compares two ELF files (a `vmlinux`, a `.ko` or
+  a single `.o`).
+* `--ref-tree` / `--badc-tree` compares `vmlinux` plus every `.ko` both
+  trees built, paired by tree-relative path.
+* `--replay --tree` compiles each unit of one tree twice -- the recorded
+  Kbuild command plus `-gdwarf-4`, and badc's flag set plus `-g` -- and
+  compares per unit. Both sides then run the same preprocessor surface over
+  the same sources by construction, and the corpus is every translation
+  unit rather than the types that reached `vmlinux`.
+
+Reported per aggregate: total size, and per member the byte offset, size,
+bit offset and bit width. Comparison is on those facts only; member type
+spellings are recorded in the JSON but not compared, because the two
+compilers name types differently and that is not an ABI difference. The
+summary counts structs compared, identical, differing, and present on only
+one side, and ranks differences by incidence -- the number of units defining
+the type -- so a defect in a widely used struct sorts to the top. A name
+that carries more than one layout within a single build (the kernel does
+define distinct types under one tag name in different units) is counted
+separately as ambiguous rather than reported as a difference.
+
+`--report` writes the full result set as JSON; the summary is a ranked
+excerpt of it. Exit status is 1 when any layout differs.
+
+### Extraction
+
+Layouts come from `llvm-dwarfdump --debug-info`, parsed directly. Its
+one-attribute-per-line DIE dump keeps the DIE offsets, so a member's type,
+its size and the anonymous aggregates the C11 member syntax produces can be
+resolved exactly, and both DWARF bitfield encodings -- `DW_AT_data_bit_offset`
+and the pre-4 `DW_AT_bit_offset` plus `DW_AT_byte_size`, which counts from
+the other end of the storage unit on a little-endian target -- normalize to
+one absolute bit offset. The parse holds one compile unit at a time, which
+is what makes a 500 MB `vmlinux` tractable.
+
+`pahole` and `gdb`'s `ptype /o` were the alternatives. Both render C rather
+than DWARF: nested aggregates are expanded inline, so attributing an offset
+to a member means re-parsing C, and neither can name an anonymous aggregate
+at all. `pahole` is also absent from the x86_64 box and cannot be installed
+there without root, so it cannot be the primary reader for a two-architecture
+check.
+
+`gdb` is used for what it is good for: `--cross-check N` re-reads N
+aggregates with `ptype /o` and asserts the offsets agree with the parse.
+That validates the reader and demonstrates that a debugger consumes badc's
+DWARF at all. It costs about 2 ms per type, which is why it samples rather
+than extracts.
+
+`--self-test` checks the DWARF parse and the differ against a synthetic dump
+and needs no toolchain, tree or kernel.
+
+### What badc's DWARF carries
+
+badc emits `DW_TAG_structure_type` / `DW_TAG_union_type` with
+`DW_AT_byte_size`, `DW_TAG_member` with `DW_AT_data_member_location`, and
+bitfield members with `DW_AT_data_bit_offset` + `DW_AT_bit_size`, which is
+what the comparison needs.
+
+Two gaps bound what can be compared. Objects with static storage duration
+get no `DW_TAG_variable`, so an aggregate reachable only through a global
+gets no DIE and appears on the reference side only -- a debug-info gap, not
+a layout match, which is why the summary counts one-sided names separately.
+Anonymous aggregates are emitted with synthesized `__anon_struct_<n>` names
+whose serial numbers are per-unit, so they match nothing across compilers or
+units; `layout.py` treats those names as unnamed on both sides.
+
+`buildcc.py` forwards the debug-info request: `-gdwarf-4`, `-gdwarf-5` and
+the `-g<level>` spellings all map to badc's `-g`. A configuration that asks
+for debug info and silently gets a kernel without it would leave `layout.py`
+and any debugger with nothing to read. `CONFIG_DEBUG_INFO_NONE` passes no
+such flag, so configurations that ask for none are unaffected.
+
 ## Scope
 
 The sweep gates nothing; it is a measurement. A unit that gcc compiles and

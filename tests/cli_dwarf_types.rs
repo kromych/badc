@@ -96,8 +96,9 @@ fn u64le(b: &[u8], off: usize) -> u64 {
     u64::from_le_bytes(v)
 }
 
-/// The named section's bytes from a little-endian ELF64 object.
-fn section(elf: &[u8], want: &str) -> Vec<u8> {
+/// The named section's runtime address, file offset and size in a
+/// little-endian ELF64 object.
+fn section_header(elf: &[u8], want: &str) -> (u64, usize, usize) {
     assert_eq!(&elf[..4], b"\x7fELF", "not an ELF object");
     let shoff = u64le(elf, 0x28) as usize;
     let shentsize = u16le(elf, 0x3a) as usize;
@@ -114,12 +115,20 @@ fn section(elf: &[u8], want: &str) -> Vec<u8> {
         let name_off = u32le(elf, sh) as usize;
         let end = strtab[name_off..].iter().position(|&c| c == 0).unwrap();
         if &strtab[name_off..name_off + end] == want.as_bytes() {
-            let off = u64le(elf, sh + 0x18) as usize;
-            let size = u64le(elf, sh + 0x20) as usize;
-            return elf[off..off + size].to_vec();
+            return (
+                u64le(elf, sh + 0x10),
+                u64le(elf, sh + 0x18) as usize,
+                u64le(elf, sh + 0x20) as usize,
+            );
         }
     }
     panic!("section {want} not found");
+}
+
+/// The named section's bytes.
+fn section(elf: &[u8], want: &str) -> Vec<u8> {
+    let (_, off, size) = section_header(elf, want);
+    elf[off..off + size].to_vec()
 }
 
 struct Reader<'a> {
@@ -248,6 +257,9 @@ impl Val {
 #[derive(Clone)]
 struct Die {
     offset: u32,
+    /// `.debug_info` offset of the owning compile unit's header.
+    /// `DW_FORM_ref4` is relative to it.
+    cu_base: u32,
     tag: u64,
     depth: usize,
     attrs: Vec<(u64, Val)>,
@@ -293,13 +305,14 @@ impl Unit {
             .unwrap_or_else(|| panic!("no DIE at 0x{offset:x}\n{}", self.render()))
     }
 
-    /// The DIE `die`'s `DW_AT_type` names.
+    /// The DIE `die`'s `DW_AT_type` names. `DW_FORM_ref4` is relative
+    /// to the owning unit's header.
     fn type_of(&self, die: &Die) -> &Die {
-        self.find(
-            die.at(DW_AT_TYPE)
-                .unwrap_or_else(|| panic!("DIE has no DW_AT_type\n{}", self.render()))
-                .as_ref(),
-        )
+        let r = die
+            .at(DW_AT_TYPE)
+            .unwrap_or_else(|| panic!("DIE has no DW_AT_type\n{}", self.render()))
+            .as_ref();
+        self.find(die.cu_base + r)
     }
 
     /// Direct children of `die`, in order.
@@ -352,62 +365,72 @@ impl Unit {
     }
 }
 
+/// Walk every compile unit in the object's `.debug_info`. A `-c`
+/// object holds one; a linked image holds the units it merged, each
+/// with its own abbreviation table.
 fn parse_object(path: &Path) -> Unit {
     let elf = std::fs::read(path).expect("read object");
     let info = section(&elf, ".debug_info");
-    let abbrevs = parse_abbrev(&section(&elf, ".debug_abbrev"));
-    // One CU per object; the header is unit_length(4) + version(2) +
-    // abbrev_offset(4) + address_size(1).
-    let version = u16le(&info, 4);
-    assert_eq!(version, 4, "expected DWARF 4");
-    let addr_size = info[10] as usize;
-    let mut r = Reader::new(&info);
-    r.p = 11;
+    let abbrev_section = section(&elf, ".debug_abbrev");
     let mut dies = Vec::new();
-    let mut depth = 0usize;
-    while r.p < info.len() {
-        let offset = r.p as u32;
-        let code = r.uleb();
-        if code == 0 {
-            if depth == 0 {
-                break;
+    let mut cu_base = 0usize;
+    while cu_base + 11 <= info.len() {
+        // unit_length(4) + version(2) + abbrev_offset(4) + address_size(1).
+        let unit_length = u32le(&info, cu_base) as usize;
+        let unit_end = cu_base + 4 + unit_length;
+        assert_eq!(u16le(&info, cu_base + 4), 4, "expected DWARF 4");
+        let abbrev_off = u32le(&info, cu_base + 6) as usize;
+        let addr_size = info[cu_base + 10] as usize;
+        let abbrevs = parse_abbrev(&abbrev_section[abbrev_off..]);
+        let mut r = Reader::new(&info);
+        r.p = cu_base + 11;
+        let mut depth = 0usize;
+        while r.p < unit_end {
+            let offset = r.p as u32;
+            let code = r.uleb();
+            if code == 0 {
+                if depth == 0 {
+                    break;
+                }
+                depth -= 1;
+                continue;
             }
-            depth -= 1;
-            continue;
+            let ab = abbrevs
+                .get(&code)
+                .unwrap_or_else(|| panic!("abbrev code {code} not in the table"));
+            let mut attrs = Vec::new();
+            for &(at, form) in &ab.attrs {
+                let v = match form {
+                    0x01 => Val::Uint(u64le(r.take(addr_size), 0)), // addr
+                    0x06 => Val::Uint(u32le(r.take(4), 0) as u64),  // data4
+                    0x07 => Val::Uint(u64le(r.take(8), 0)),         // data8
+                    0x08 => Val::Str(r.cstr()),                     // string
+                    0x0b => Val::Uint(r.u8() as u64),               // data1
+                    0x0d => Val::Int(r.sleb()),                     // sdata
+                    0x0f => Val::Uint(r.uleb()),                    // udata
+                    0x13 => Val::Ref(u32le(r.take(4), 0)),          // ref4
+                    0x17 => Val::Uint(u32le(r.take(4), 0) as u64),  // sec_offset
+                    0x18 => {
+                        let n = r.uleb() as usize;
+                        Val::Block(r.take(n).to_vec())
+                    } // exprloc
+                    0x19 => Val::Flag,                              // flag_present
+                    other => panic!("unhandled DW_FORM 0x{other:x}"),
+                };
+                attrs.push((at, v));
+            }
+            dies.push(Die {
+                offset,
+                cu_base: cu_base as u32,
+                tag: ab.tag,
+                depth,
+                attrs,
+            });
+            if ab.has_children {
+                depth += 1;
+            }
         }
-        let ab = abbrevs
-            .get(&code)
-            .unwrap_or_else(|| panic!("abbrev code {code} not in the table"));
-        let mut attrs = Vec::new();
-        for &(at, form) in &ab.attrs {
-            let v = match form {
-                0x01 => Val::Uint(u64le(r.take(addr_size), 0)), // addr
-                0x06 => Val::Uint(u32le(r.take(4), 0) as u64),  // data4
-                0x07 => Val::Uint(u64le(r.take(8), 0)),         // data8
-                0x08 => Val::Str(r.cstr()),                     // string
-                0x0b => Val::Uint(r.u8() as u64),               // data1
-                0x0d => Val::Int(r.sleb()),                     // sdata
-                0x0f => Val::Uint(r.uleb()),                    // udata
-                0x13 => Val::Ref(u32le(r.take(4), 0)),          // ref4
-                0x17 => Val::Uint(u32le(r.take(4), 0) as u64),  // sec_offset
-                0x18 => {
-                    let n = r.uleb() as usize;
-                    Val::Block(r.take(n).to_vec())
-                } // exprloc
-                0x19 => Val::Flag,                              // flag_present
-                other => panic!("unhandled DW_FORM 0x{other:x}"),
-            };
-            attrs.push((at, v));
-        }
-        dies.push(Die {
-            offset,
-            tag: ab.tag,
-            depth,
-            attrs,
-        });
-        if ab.has_children {
-            depth += 1;
-        }
+        cu_base = unit_end;
     }
     Unit { dies }
 }
@@ -707,6 +730,87 @@ fn void_pointer_has_no_pointee_type() {
     );
     let c = u.type_of(u.member(vp, "c"));
     assert_eq!(u.type_of(c).name(), Some("char"));
+}
+
+/// After a badc link, a static-storage object's `DW_OP_addr` holds the
+/// object's runtime address: the linker defers the data-image slot the
+/// way it defers a text one, and the writer commits it. Covers an
+/// internal-linkage object in a second translation unit, whose address
+/// only the link resolves.
+#[test]
+fn linked_image_locations_name_the_object() {
+    let dir = tempdir("linked-globals");
+    let a = dir.join("a.c");
+    let b = dir.join("b.c");
+    std::fs::write(
+        &a,
+        "struct rec { int a; long b; };\n\
+         struct rec g_data = { 1, 2 };\n\
+         extern int helper(void);\n\
+         int main(void) { return helper() + g_data.a; }\n",
+    )
+    .expect("write a.c");
+    std::fs::write(
+        &b,
+        "static int counter = 7;\nint helper(void) { return counter; }\n",
+    )
+    .expect("write b.c");
+    for src in [&a, &b] {
+        let out = Command::new(badc())
+            .arg("-g")
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .arg(src)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "compile failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    let exe = dir.join("prog");
+    let out = Command::new(badc())
+        .arg("-g")
+        .arg("--target=linux-x64")
+        .arg("-o")
+        .arg(&exe)
+        .arg(dir.join("a.o"))
+        .arg(dir.join("b.o"))
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "link failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let elf = std::fs::read(&exe).expect("read image");
+    let u = parse_object(&exe);
+    let (data_addr, data_off, data_size) = section_header(&elf, ".data");
+    // `struct rec { int a; long b; }` initialized to { 1, 2 }, and a
+    // second unit's `static int counter = 7`.
+    for (name, want) in [("g_data", vec![1i64, 2]), ("counter", vec![7])] {
+        let v = u.named(DW_TAG_VARIABLE, name);
+        let loc = match v.at(DW_AT_LOCATION).unwrap() {
+            Val::Block(bytes) => bytes.clone(),
+            other => panic!("expected an exprloc location, got {other:?}"),
+        };
+        assert_eq!(loc[0], DW_OP_ADDR);
+        let addr = u64le(&loc, 1);
+        assert!(
+            (data_addr..data_addr + data_size as u64).contains(&addr),
+            "`{name}` at 0x{addr:x} is outside .data [0x{data_addr:x}, \
+             0x{:x})",
+            data_addr + data_size as u64
+        );
+        let at = data_off + (addr - data_addr) as usize;
+        assert_eq!(u32le(&elf, at) as i64, want[0], "`{name}` first word");
+        if want.len() > 1 {
+            assert_eq!(u64le(&elf, at + 8) as i64, want[1], "`{name}` second");
+        }
+    }
 }
 
 /// Every member of every aggregate in the unit is described, and the

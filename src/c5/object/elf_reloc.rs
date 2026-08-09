@@ -1822,9 +1822,14 @@ pub(super) fn write_relocatable(
             let sec_sym = carve.sym_idx[e];
             s.labels.iter().map(move |l| AsmLabelSym {
                 name: l.name.as_str(),
-                shndx,
+                // A `.set` that folded to a constant is absolute: it has no
+                // section and no placement, as in GNU as.
+                shndx: if l.absolute.is_some() { SHN_ABS } else { shndx },
                 sec_sym,
-                value: base + l.offset as u64,
+                value: match l.absolute {
+                    Some(v) => v as u64,
+                    None => base + l.offset as u64,
+                },
                 global: l.global,
                 // `.weak` in the defining statement, or a file-scope `.weak`
                 // in another statement of the unit.
@@ -2144,7 +2149,7 @@ pub(super) fn write_relocatable(
     let mut asm_label_secref: alloc::collections::BTreeMap<&str, (u64, i64)> =
         alloc::collections::BTreeMap::new();
     for l in &asm_labels {
-        if l.global || l.weak || l.st_type != STT_NOTYPE {
+        if l.global || l.weak || l.st_type != STT_NOTYPE || l.shndx == SHN_ABS {
             continue;
         }
         asm_label_secref.insert(l.name, (l.sec_sym, l.value as i64));

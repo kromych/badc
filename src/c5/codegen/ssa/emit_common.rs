@@ -1000,6 +1000,14 @@ pub(crate) enum AsmSectionItem {
         name: alloc::string::String,
         expr: alloc::string::String,
     },
+    /// `.set name, <constant>`, which GNU as records as an absolute symbol.
+    /// The expander folds a constant assignment into the expressions that
+    /// read it and re-emits the statement only for a name the unit gave
+    /// external linkage, which is where the symbol is what a reader needs.
+    AbsSet {
+        name: alloc::string::String,
+        value: i64,
+    },
     /// An AArch64 literal pool: the values the `ldr Rt, =value` loads since
     /// the previous flush deposit here. Parsed from `.ltorg` with no entries;
     /// the arch backend assigns them before layout, and also appends one at
@@ -1461,7 +1469,7 @@ pub(crate) enum AsmSymType {
 }
 
 /// A label defined inside a named section.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct AsmSectionLabel {
     pub name: alloc::string::String,
     /// Byte offset of the definition within the section's own bytes.
@@ -1474,6 +1482,9 @@ pub(crate) struct AsmSectionLabel {
     pub sym_type: AsmSymType,
     /// `st_size` from a `.size` directive; `None` leaves it zero.
     pub size: Option<u64>,
+    /// Value of a `.set` / `=` assignment that folded to a constant. The
+    /// symbol is `SHN_ABS` and `offset` does not apply, as in GNU as.
+    pub absolute: Option<i64>,
 }
 
 /// A snapshot of the accumulated section sink, taken before a function
@@ -1801,7 +1812,10 @@ pub(crate) fn expand_asm_gas_macros(
         .into_iter()
         .map(|s| alloc::string::String::from(s.trim()))
         .collect();
-    let mut st = GasExpandState::default();
+    let mut st = GasExpandState {
+        exported: gas_exported_names(&stmts),
+        ..Default::default()
+    };
     let mut out = alloc::string::String::with_capacity(text.len());
     expand_gas_statements(&stmts, &mut st, &mut out, inst_width, 0)?;
     Ok(Some(out))
@@ -1817,6 +1831,40 @@ struct GasExpandState {
     equ: alloc::collections::BTreeMap<alloc::string::String, i64>,
     aliases: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     altmacro: bool,
+    /// Names the unit declares `.globl` / `.global` / `.weak`. A folded
+    /// `.set` over one of them stays in the stream so the section parse
+    /// defines the absolute symbol the declaration promises; folding it
+    /// away would leave the declaration naming nothing.
+    exported: alloc::collections::BTreeSet<alloc::string::String>,
+}
+
+impl GasExpandState {
+    /// Re-emit a folded assignment when its name carries external linkage.
+    fn keep_exported_set(&self, name: &str, value: i64, out: &mut alloc::string::String) {
+        if self.exported.contains(name) {
+            out.push_str(&alloc::format!(".set {name}, {value}\n"));
+        }
+    }
+}
+
+/// The `.globl` / `.global` / `.weak` names a statement list declares.
+fn gas_exported_names(
+    stmts: &[alloc::string::String],
+) -> alloc::collections::BTreeSet<alloc::string::String> {
+    let mut out = alloc::collections::BTreeSet::new();
+    for s in stmts {
+        let (_, s) = split_leading_labels(s);
+        let (tok, rest) = split_first_token(s);
+        if matches!(tok, ".globl" | ".global" | ".weak") {
+            for name in rest.split(',') {
+                let name = name.trim();
+                if is_asm_symbol_name(name) {
+                    out.insert(alloc::string::String::from(name));
+                }
+            }
+        }
+    }
+    out
 }
 
 fn expand_gas_statements(
@@ -2021,6 +2069,7 @@ fn expand_gas_statements(
                 match eval_asm_expr_with_labels(expr.trim(), &|t| table.get(t).copied()) {
                     Some(v) => {
                         st.equ.insert(alloc::string::String::from(sym.trim()), v);
+                        st.keep_exported_set(sym.trim(), v, out);
                     }
                     None if bind_register_equate(sym.trim(), expr.trim(), st) => {}
                     // A value the expander cannot fold names a symbol or reads
@@ -2071,6 +2120,7 @@ fn expand_gas_statements(
                     match eval_asm_expr_with_labels(aexpr, &|t| table.get(t).copied()) {
                         Some(v) => {
                             st.equ.insert(alloc::string::String::from(aname), v);
+                            st.keep_exported_set(aname, v, out);
                         }
                         None if bind_register_equate(aname, aexpr, st) => {}
                         None => {
@@ -2788,6 +2838,19 @@ pub(crate) fn asm_stream_is_globl_only(text: &str) -> bool {
         })
 }
 
+/// The names a `.globl`-only statement stream declares, one per operand.
+pub(crate) fn gas_globl_operands(text: &str) -> alloc::vec::Vec<alloc::string::String> {
+    split_asm_statements(text)
+        .into_iter()
+        .filter_map(|p| p.trim().split_once(char::is_whitespace))
+        .filter(|(tok, _)| matches!(*tok, ".globl" | ".global"))
+        .flat_map(|(_, rest)| rest.split(','))
+        .map(str::trim)
+        .filter(|n| is_asm_symbol_name(n))
+        .map(alloc::string::String::from)
+        .collect()
+}
+
 /// A bare section directive naming a well-known section (`.text` == `.section
 /// .text`). GNU as accepts these shorthands; file-scope asm uses them to place
 /// a trampoline body. The dotted-suffix form is not a shorthand.
@@ -2905,10 +2968,11 @@ fn extract_asm_sections_impl(
     } else {
         alloc::vec![None]
     };
-    // The block current before the last same-level section or subsection
-    // switch, for a `.previous` with nothing pushed (the `.subsection 1` /
-    // `.previous` toggle of the AArch64 alternatives).
-    let mut prev_top: Option<usize> = None;
+    // The section left by the most recent change of any kind. GNU as keeps
+    // this slot beside the `.pushsection` stack and `.previous` swaps the two,
+    // so a `.section` / `.previous` pair nested inside a pushed region returns
+    // to the pushed section rather than unwinding the stack.
+    let mut prev_top: Option<Option<usize>> = None;
     // Open `.rept` bodies of the current section; items nest into the top
     // until `.endr` closes it into a `Rept` item.
     let mut rept_stack: alloc::vec::Vec<(alloc::string::String, alloc::vec::Vec<AsmSectionItem>)> =
@@ -3043,10 +3107,10 @@ fn extract_asm_sections_impl(
                 let block = parse_section_args(rest)?;
                 let idx = blocks.len();
                 blocks.push(block);
+                prev_top = Some(*stack.last().unwrap());
                 if tok == ".pushsection" {
                     stack.push(Some(idx));
                 } else {
-                    prev_top = *stack.last().unwrap();
                     *stack.last_mut().unwrap() = Some(idx);
                 }
                 continue;
@@ -3057,22 +3121,22 @@ fn extract_asm_sections_impl(
                         "inline asm: `.popsection` without `.pushsection`",
                     ));
                 }
+                prev_top = Some(*stack.last().unwrap());
                 stack.pop();
                 continue;
             }
             ".previous" => {
-                if stack.len() >= 2 {
-                    let n = stack.len();
-                    stack.swap(n - 1, n - 2);
-                } else if let Some(p) = prev_top.filter(|_| file_scope) {
-                    // Swap with the block current before the last same-level
-                    // switch (`.subsection 1` / `.previous`).
-                    prev_top = *stack.last().unwrap();
-                    stack[0] = Some(p);
-                } else if !file_scope {
-                    // A `.section` at stack bottom returns to the code
-                    // stream; file-scope asm has no code stream to return to.
-                    stack[0] = None;
+                match prev_top {
+                    Some(p) => {
+                        prev_top = Some(*stack.last().unwrap());
+                        *stack.last_mut().unwrap() = p;
+                    }
+                    // Nothing was left yet. A function-body template starts in
+                    // the code stream, which is where `.previous` returns to;
+                    // file-scope asm has no code stream, so the current
+                    // section stands.
+                    None if !file_scope => stack[0] = None,
+                    None => {}
                 }
                 continue;
             }
@@ -3090,7 +3154,7 @@ fn extract_asm_sections_impl(
                         blocks.len() - 1
                     }
                 };
-                prev_top = *stack.last().unwrap();
+                prev_top = Some(*stack.last().unwrap());
                 *stack.last_mut().unwrap() = Some(idx);
                 continue;
             }
@@ -3127,7 +3191,7 @@ fn extract_asm_sections_impl(
                     items: alloc::vec::Vec::new(),
                 });
                 let idx = blocks.len() - 1;
-                prev_top = Some(cur);
+                prev_top = Some(Some(cur));
                 *stack.last_mut().unwrap() = Some(idx);
                 continue;
             }
@@ -3546,9 +3610,9 @@ fn parse_section_item(
             }
             Ok(AsmSectionItem::Local(alloc::string::String::from(name)))
         }
-        // A `.set` / `.equ` with a literal-constant value is consumed by the
-        // macro expander; what survives it names a symbol (`.set alias,
-        // target`, a unit-level alias) or an expression over section-local
+        // A `.set` / `.equ` names a symbol (`.set alias, target`, a unit-level
+        // alias), an absolute value (a constant the expander re-emitted for a
+        // name with external linkage), or an expression over section-local
         // locations (`.set .Lsz, . - f`).
         ".set" | ".equ" => {
             let (name, value) = rest
@@ -3562,6 +3626,9 @@ fn parse_section_item(
                     name,
                     target: alloc::string::String::from(value),
                 });
+            }
+            if let Some(v) = parse_raw_int(value) {
+                return Ok(AsmSectionItem::AbsSet { name, value: v });
             }
             Ok(AsmSectionItem::SetExpr {
                 name,
@@ -4925,6 +4992,11 @@ fn measure_round_inner(
                 AsmSectionItem::SetExpr { name, expr } => {
                     sets.push((name.clone(), expr.clone(), key.clone(), at));
                 }
+                // An absolute value, so its reads resolve like any other
+                // assignment without depending on the layout.
+                AsmSectionItem::AbsSet { name, value } => {
+                    sets.push((name.clone(), alloc::format!("{value}"), key.clone(), at));
+                }
                 AsmSectionItem::LiteralPool(entries) => {
                     let (offs, end) = literal_pool_layout(entries, at);
                     for (e, off) in entries.iter().zip(&offs) {
@@ -5136,6 +5208,9 @@ pub(crate) fn materialize_asm_sections(
     let measured = measure_asm_section_offsets(blocks, const_of, align_is_p2, sink)?;
     let mut defined: alloc::vec::Vec<MaterializedLabel> = alloc::vec::Vec::new();
     let mut weak_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
+    // `.globl` is a unit-level declaration in GNU as: the name it binds
+    // external may be defined in any section of the unit, before or after.
+    let mut global_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
     // Sections this call merges into, with the label count each had on
     // first touch. Pending entries never outlive a call, so this is also
     // the exact set the settle pass below has to inspect.
@@ -5336,6 +5411,7 @@ pub(crate) fn materialize_asm_sections(
                             weak: false,
                             sym_type: AsmSymType::NoType,
                             size: None,
+                            absolute: None,
                         }),
                     }
                     defined.push(MaterializedLabel {
@@ -5399,6 +5475,7 @@ pub(crate) fn materialize_asm_sections(
                             weak: false,
                             sym_type: AsmSymType::NoType,
                             size: None,
+                            absolute: None,
                         });
                         match &e.value {
                             AsmPoolValue::Const(v) => {
@@ -5430,7 +5507,23 @@ pub(crate) fn materialize_asm_sections(
                 AsmSectionItem::Weak(name) => weak_names.push(name.clone()),
                 // `.set name, sym` is a unit-level alias; a `.set` over
                 // section-local locations was valued during measurement.
-                AsmSectionItem::SymSet { .. } | AsmSectionItem::SetExpr { .. } => {}
+                AsmSectionItem::SymSet { .. } => {}
+                AsmSectionItem::SetExpr { .. } => {}
+                // `.set name, <constant>` defines an absolute symbol, as in
+                // GNU as. A later assignment to the same name wins.
+                AsmSectionItem::AbsSet { name, value } => {
+                    match sec.labels.iter_mut().find(|l| l.name == *name) {
+                        Some(l) => {
+                            l.offset = 0;
+                            l.absolute = Some(*value);
+                        }
+                        None => sec.labels.push(AsmSectionLabel {
+                            name: name.clone(),
+                            absolute: Some(*value),
+                            ..Default::default()
+                        }),
+                    }
+                }
                 // A section label is local unless `.globl` marked it; record a
                 // pending entry so the definition below keeps that binding.
                 AsmSectionItem::Local(name) => {
@@ -5443,10 +5536,12 @@ pub(crate) fn materialize_asm_sections(
                             weak: false,
                             sym_type: AsmSymType::NoType,
                             size: None,
+                            absolute: None,
                         }),
                     }
                 }
                 AsmSectionItem::Global(name) => {
+                    global_names.push(name.clone());
                     match sec.labels.iter_mut().find(|l| l.name == *name) {
                         // `.globl` may precede its label; record the pending name
                         // as a zero-length forward entry the definition fills in.
@@ -5458,6 +5553,7 @@ pub(crate) fn materialize_asm_sections(
                             weak: false,
                             sym_type: AsmSymType::NoType,
                             size: None,
+                            absolute: None,
                         }),
                     }
                 }
@@ -5476,6 +5572,7 @@ pub(crate) fn materialize_asm_sections(
                             weak: false,
                             sym_type: *sym_type,
                             size: None,
+                            absolute: None,
                         }),
                     }
                 }
@@ -5526,6 +5623,7 @@ pub(crate) fn materialize_asm_sections(
                             weak: false,
                             sym_type: AsmSymType::NoType,
                             size: Some(val as u64),
+                            absolute: None,
                         }),
                     }
                 }
@@ -5887,6 +5985,21 @@ pub(crate) fn materialize_asm_sections(
             }
         }
     }
+    // The same for `.globl`, whose declaration and definition need not share
+    // a section: the kernel's `vdso-wrap.S` declares in the default section
+    // and defines in `.rodata`. The per-section pass above already bound the
+    // same-section case; this reaches the rest.
+    for name in &global_names {
+        for s in sink.sections.iter_mut() {
+            for l in s
+                .labels
+                .iter_mut()
+                .filter(|l| l.name == *name && l.offset != PENDING_LABEL)
+            {
+                l.global = true;
+            }
+        }
+    }
     // A `.globl` naming no label in the section declares an external symbol,
     // not a definition here; it defines no section symbol. A `.type` / `.size`
     // that stays pending named a label the section never defines -- rejected
@@ -6006,7 +6119,17 @@ pub(crate) fn materialize_file_asm(
         };
         let mut blocks = if globl_only {
             match extracted.expect("globl_only implies extraction succeeded") {
-                Some((_code, blocks)) => blocks,
+                Some((code, mut blocks)) => {
+                    // `.globl` is unit-level, so it binds a label this
+                    // template defines in one of its sections as well as the
+                    // C symbol the parse already applied it to.
+                    if let Some(first) = blocks.first_mut() {
+                        for name in gas_globl_operands(&code) {
+                            first.items.push(AsmSectionItem::Global(name));
+                        }
+                    }
+                    blocks
+                }
                 None => continue,
             }
         } else {
@@ -7120,6 +7243,107 @@ mod asm_comment_tests {
 #[cfg(test)]
 mod asm_section_tests {
     use super::*;
+
+    /// The name of the block each statement's items landed in, for the
+    /// section-stack tests below.
+    fn block_of(blocks: &[AsmSectionBlock], label: &str) -> alloc::string::String {
+        blocks
+            .iter()
+            .find(|b| {
+                b.items
+                    .iter()
+                    .any(|i| matches!(i, AsmSectionItem::Label(n) if n == label))
+            })
+            .map(|b| b.name.clone())
+            .unwrap_or_else(|| alloc::string::String::from("<none>"))
+    }
+
+    /// GNU as keeps the previous section beside the `.pushsection` stack, so
+    /// a `.section` / `.previous` pair nested in a pushed region returns to
+    /// the pushed section and leaves the stack depth alone. This is the shape
+    /// the kernel's `EXPORT_SYMBOL` assembly macro has inside a
+    /// `.pushsection`-bracketed function.
+    #[test]
+    fn previous_returns_to_the_section_a_section_directive_left() {
+        let text = ".pushsection .noinstr.text,\"ax\"\ninner:\n.section \"a\",\"a\"\nexported:\n\
+                    .previous\nback:\n.popsection\nouter:\n";
+        let blocks = extract_file_scope_asm_sections(text, false).unwrap();
+        assert_eq!(block_of(&blocks, "inner"), ".noinstr.text");
+        assert_eq!(block_of(&blocks, "exported"), "a");
+        assert_eq!(block_of(&blocks, "back"), ".noinstr.text");
+        assert_eq!(block_of(&blocks, "outer"), ".text");
+    }
+
+    /// `.previous` toggles: a second one returns to where the first came
+    /// from, as GNU as does with its single previous-section slot.
+    #[test]
+    fn previous_toggles_between_two_sections() {
+        let text = ".section \"a\",\"a\"\nin_a:\n.section \"b\",\"a\"\nin_b:\n\
+                    .previous\nback_a:\n.previous\nback_b:\n";
+        let blocks = extract_file_scope_asm_sections(text, false).unwrap();
+        assert_eq!(block_of(&blocks, "back_a"), "a");
+        assert_eq!(block_of(&blocks, "back_b"), "b");
+    }
+
+    /// `.globl` is a unit-level declaration: the definition may be in another
+    /// section, which is how the kernel's `vdso-wrap.S` names its payload
+    /// bounds.
+    #[test]
+    fn globl_binds_a_label_defined_in_another_section() {
+        let text = ".globl start, end\n.section .rodata,\"a\"\nstart:\n.byte 1\nend:\n";
+        let blocks = extract_file_scope_asm_sections(text, false).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            false,
+            &mut sink,
+        )
+        .unwrap();
+        let labels: alloc::vec::Vec<_> = sink
+            .iter()
+            .flat_map(|s| s.labels.iter())
+            .map(|l| (l.name.as_str(), l.global))
+            .collect();
+        assert!(labels.contains(&("start", true)), "{labels:?}");
+        assert!(labels.contains(&("end", true)), "{labels:?}");
+    }
+
+    /// A `.set` to a constant folds into the expressions that read it, and
+    /// additionally defines an absolute symbol when the unit gave the name
+    /// external linkage -- what GNU as puts in `.symtab` as `SHN_ABS`.
+    #[test]
+    fn an_exported_constant_assignment_defines_an_absolute_symbol() {
+        let text = ".globl len\n.section .rodata,\"a\"\nlen = 12345\nblob:\n.long len\n";
+        let prepared = prepare_file_asm_text(text, AsmComments::X86).unwrap();
+        let blocks = extract_file_scope_asm_sections(&prepared, false).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            false,
+            &mut sink,
+        )
+        .unwrap();
+        let s = sink
+            .iter()
+            .find(|s| s.name == ".rodata")
+            .expect("section built");
+        assert_eq!(&s.bytes[..], &12345u32.to_le_bytes(), "the read folds");
+        let len = s
+            .labels
+            .iter()
+            .find(|l| l.name == "len")
+            .expect("symbol defined");
+        assert_eq!(len.absolute, Some(12345));
+        assert!(len.global);
+    }
 
     #[test]
     fn extract_and_materialize() {
@@ -8360,6 +8584,7 @@ mod asm_section_tests {
                     weak: false,
                     sym_type: AsmSymType::NoType,
                     size: None,
+                    absolute: None,
                 },
                 AsmSectionLabel {
                     name: alloc::string::String::from("second"),
@@ -8368,6 +8593,7 @@ mod asm_section_tests {
                     weak: false,
                     sym_type: AsmSymType::NoType,
                     size: None,
+                    absolute: None,
                 },
             ],
             "a `.globl` naming no label here defines no symbol",

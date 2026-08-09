@@ -315,9 +315,12 @@ pub(crate) enum AsmOpnd {
         scale: u8,
         disp: i32,
     },
-    /// `seg:disp` with no base register (`%%gs:0x28`): an absolute
-    /// displacement, meaningful under the instruction's segment override.
-    AbsMem { disp: i32 },
+    /// An absolute address with no base register: a bare displacement, written
+    /// as a literal (`%%gs:0x28`, `movl %eax, 0x1234`) or as a symbol name
+    /// (`btsl $0, tr_lock`). `sym` marks a link-time symbol displacement (its
+    /// name in the instruction's `sym_target`, `disp` the addend); otherwise
+    /// `disp` is the whole address.
+    AbsMem { disp: i32, sym: bool },
     /// `%cN` / `%PN` as a bare instruction operand (`%%gs:%c1`, `movq %c1, %0`):
     /// a memory reference whose displacement is the substituted operand -- AT&T
     /// marks an immediate with `$`. The emitter resolves a compile-time constant
@@ -1360,8 +1363,8 @@ fn movq_xmm(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
         (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
             let Some(mr) = MemRm::of(m) else { return false };
             code.push(0xF3);
-            if d >= 8 || mr.rex_b() {
-                code.push(rex(false, d >= 8, false, mr.rex_b()));
+            if d >= 8 || mr.rex_x() || mr.rex_b() {
+                code.push(rex(false, d >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x7E]);
             mr.emit(code, d & 7);
@@ -1370,8 +1373,8 @@ fn movq_xmm(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
         (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
             let Some(mr) = MemRm::of(m) else { return false };
             code.push(0x66);
-            if s >= 8 || mr.rex_b() {
-                code.push(rex(false, s >= 8, false, mr.rex_b()));
+            if s >= 8 || mr.rex_x() || mr.rex_b() {
+                code.push(rex(false, s >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0xD6]);
             mr.emit(code, s & 7);
@@ -1401,16 +1404,16 @@ fn movq_mmx(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
         }
         (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
             let Some(mr) = MemRm::of(m) else { return false };
-            if mr.rex_b() {
-                code.push(rex(false, false, false, true));
+            if mr.rex_x() || mr.rex_b() {
+                code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x6F]);
             mr.emit(code, d);
         }
         (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
             let Some(mr) = MemRm::of(m) else { return false };
-            if mr.rex_b() {
-                code.push(rex(false, false, false, true));
+            if mr.rex_x() || mr.rex_b() {
+                code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x7F]);
             mr.emit(code, s);
@@ -1686,7 +1689,14 @@ fn takes_bare_address(mnem: &str) -> bool {
 /// Segment-override prefix byte for a leading `%%fs:` / `%%gs:` (or the
 /// single-`%` basic-asm spelling), with the remainder of the token.
 fn split_seg_prefix(tok: &str) -> Option<(u8, &str)> {
-    for (name, byte) in [("fs:", 0x64u8), ("gs:", 0x65)] {
+    for (name, byte) in [
+        ("es:", 0x26u8),
+        ("cs:", 0x2E),
+        ("ss:", 0x36),
+        ("ds:", 0x3E),
+        ("fs:", 0x64),
+        ("gs:", 0x65),
+    ] {
         if let Some(rest) = tok
             .strip_prefix("%%")
             .or_else(|| tok.strip_prefix('%'))
@@ -2280,7 +2290,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                         if let Some(v) = parse_int(rem) {
                             let disp = i32::try_from(v)
                                 .map_err(|_| format!("inline asm: bad displacement `{op}`"))?;
-                            operands.push(AsmOpnd::AbsMem { disp });
+                            operands.push(AsmOpnd::AbsMem { disp, sym: false });
                             continue;
                         }
                         rem
@@ -2319,6 +2329,30 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                     sym_target = Some(String::from(sym));
                     operands.push(opnd);
                     continue;
+                }
+                // A bare address with no base register: AT&T spells an
+                // absolute memory reference without the `$` an immediate
+                // carries. The literal form is the whole address; a symbol
+                // form takes a relocation in the displacement field.
+                if !takes_bare_address(mnem_tok) && !tok.starts_with('%') {
+                    if let Some(v) = parse_int(tok)
+                        && let Ok(disp) = i32::try_from(v)
+                    {
+                        operands.push(AsmOpnd::AbsMem { disp, sym: false });
+                        continue;
+                    }
+                    if let Some((sym, addend)) = parse_sym_disp(tok, &names)
+                        && let Ok(disp) = i32::try_from(addend)
+                    {
+                        if sym_target.is_some() {
+                            return Err(String::from(
+                                "inline asm: more than one symbol reference per instruction",
+                            ));
+                        }
+                        sym_target = Some(String::from(sym));
+                        operands.push(AsmOpnd::AbsMem { disp, sym: true });
+                        continue;
+                    }
                 }
                 // A bare `%cN` / `%PN` dereferences, except where the
                 // instruction consumes the value as an address.
@@ -2438,14 +2472,18 @@ fn modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8, disp: i32) {
     }
 }
 
-/// The r/m addressing of a memory operand for the arms below, which reach
-/// `disp(%base)` and the RIP-relative form. A scaled index is rejected
-/// before them.
+/// The r/m addressing of a memory operand for the arms below: `disp(%base)`,
+/// the scaled-index forms, and the RIP-relative one.
 #[derive(Clone, Copy)]
 struct MemRm {
-    /// Base register, or `None` for a RIP-relative reference.
+    /// Base register, or `None` for a RIP-relative or base-less reference.
     base: Option<u8>,
+    /// Scaled index register and its scale.
+    index: Option<(u8, u8)>,
     disp: i32,
+    /// A base-less reference is RIP-relative without an index and an absolute
+    /// SIB (base=101, mod=00) with one.
+    riprel: bool,
 }
 
 impl MemRm {
@@ -2453,33 +2491,82 @@ impl MemRm {
         match *c {
             Concrete::Mem {
                 base,
-                index: None,
+                index,
+                scale,
                 disp,
                 ..
             } => Some(MemRm {
                 base: Some(base),
+                index: index.map(|i| (i, scale)),
                 disp,
+                riprel: false,
             }),
-            Concrete::RipRel { disp, .. } => Some(MemRm { base: None, disp }),
+            Concrete::IndexMem {
+                index, scale, disp, ..
+            } => Some(MemRm {
+                base: None,
+                index: Some((index, scale)),
+                disp,
+                riprel: false,
+            }),
+            Concrete::RipRel { disp, .. } => Some(MemRm {
+                base: None,
+                index: None,
+                disp,
+                riprel: true,
+            }),
             _ => None,
         }
     }
 
-    /// REX.B, set by a high base register. RIP-relative names no register.
+    /// REX.B, set by a high base register. A base-less reference names none.
     fn rex_b(self) -> bool {
         self.base.is_some_and(|b| b >= 8)
+    }
+
+    /// REX.X, set by a high index register.
+    fn rex_x(self) -> bool {
+        self.index.is_some_and(|(i, _)| i >= 8)
     }
 
     /// Emit the ModR/M (plus SIB / displacement) with ModRM.reg = `reg`.
     /// RIP-relative is mod=00, r/m=101 with a disp32.
     fn emit(self, code: &mut Vec<u8>, reg: u8) {
-        match self.base {
-            Some(base) => modrm_mem(code, reg, base, self.disp),
-            None => {
+        match (self.base, self.index) {
+            (Some(base), None) => modrm_mem(code, reg, base, self.disp),
+            (base, Some((index, scale))) => modrm_sib(code, reg, base, index, scale, self.disp),
+            (None, None) => {
+                debug_assert!(self.riprel);
                 code.push(((reg & 7) << 3) | 5);
                 code.extend_from_slice(&self.disp.to_le_bytes());
             }
         }
+    }
+}
+
+/// Emit the ModR/M + SIB + displacement of a scaled-index reference. A
+/// base-less one is mod=00 with SIB.base=101 and a disp32 (the absolute
+/// `disp(,%index,scale)` form); rbp / r13 as a base has no zero-displacement
+/// encoding, so it takes a disp8 of zero.
+fn modrm_sib(code: &mut Vec<u8>, reg: u8, base: Option<u8>, index: u8, scale: u8, disp: i32) {
+    let log_scale = match scale {
+        1 => 0u8,
+        2 => 1,
+        4 => 2,
+        _ => 3,
+    };
+    let mod_: u8 = match base {
+        None => 0,
+        Some(b) if disp == 0 && (b & 7) != 5 => 0,
+        Some(_) if (-128..=127).contains(&disp) => 1,
+        Some(_) => 2,
+    };
+    code.push((mod_ << 6) | ((reg & 7) << 3) | 4);
+    code.push((log_scale << 6) | ((index & 7) << 3) | base.map_or(5, |b| b & 7));
+    match mod_ {
+        1 => code.push(disp as u8),
+        _ if base.is_none() || mod_ == 2 => code.extend_from_slice(&disp.to_le_bytes()),
+        _ => {}
     }
 }
 
@@ -2725,6 +2812,60 @@ pub(crate) fn encode(
     encode_in(code, mode, mode.addrsize(), mnemonic, suffix, ops)
 }
 
+/// `mov` between the accumulator and an absolute address: the `A0`..`A3`
+/// moffs forms, one byte shorter than the ModRM ones, which is what GNU as
+/// selects outside long mode. In long mode the moffs address is 64 bits, a
+/// width only the `movabs` spelling reaches, so a plain `mov` there keeps the
+/// ModRM form. Returns whether the instruction was encoded.
+fn mov_moffs(
+    code: &mut Vec<u8>,
+    mode: super::table::Mode,
+    addr: u8,
+    mnemonic: Mnemonic,
+    suffix: Option<AsmRegSize>,
+    ops: &[Concrete],
+) -> bool {
+    if mode == super::table::Mode::Bits64 || !matches!(mnemonic, Mnemonic::Mov) {
+        return false;
+    }
+    let acc = |c: &Concrete| match *c {
+        Concrete::Reg { reg: 0, size } => Some(size),
+        _ => None,
+    };
+    let abs = |c: &Concrete| match *c {
+        Concrete::AbsMem { disp, size } => Some((disp, size)),
+        _ => None,
+    };
+    let (store, (disp, msize), rsize) = match ops {
+        [src, dst] => match (acc(src), abs(dst), abs(src), acc(dst)) {
+            (Some(r), Some(m), ..) => (true, m, r),
+            (_, _, Some(m), Some(r)) => (false, m, r),
+            _ => return false,
+        },
+        _ => return false,
+    };
+    // The accumulator and the memory operand must agree on the width, and it
+    // must be one the mode encodes without REX.
+    if msize != rsize || suffix.is_some_and(|s| s != rsize) || rsize == AsmRegSize::Quad {
+        return false;
+    }
+    let byte = rsize == AsmRegSize::Byte;
+    if !byte && (rsize == AsmRegSize::Word) != (mode == super::table::Mode::Bits16) {
+        code.push(0x66);
+    }
+    if addr != mode.addrsize() {
+        code.push(0x67);
+    }
+    code.push(match (byte, store) {
+        (true, false) => 0xA0,
+        (false, false) => 0xA1,
+        (true, true) => 0xA2,
+        (false, true) => 0xA3,
+    });
+    code.extend_from_slice(&(disp as u32).to_le_bytes()[..addr as usize]);
+    true
+}
+
 /// Encode one resolved instruction in `mode`. `addr` is the address size in
 /// bytes the instruction's memory operand was written at.
 pub(crate) fn encode_in(
@@ -2735,6 +2876,9 @@ pub(crate) fn encode_in(
     suffix: Option<AsmRegSize>,
     ops: &[Concrete],
 ) -> Result<(), String> {
+    if mov_moffs(code, mode, addr, mnemonic, suffix, ops) {
+        return Ok(());
+    }
     // An AT&T extending move: the spelled source width lands on the r/m
     // operand (AT&T first), then the catalogue encodes the Intel form.
     if let Mnemonic::ExtMov { name, src } = mnemonic {
@@ -2815,19 +2959,6 @@ fn encode_bespoke(
     suffix: Option<AsmRegSize>,
     ops: &[Concrete],
 ) -> Result<(), String> {
-    // The bespoke arms below address memory through `modrm_mem` (base +
-    // displacement only); a scaled index reaches them only on an
-    // unmodelled shape.
-    if ops.iter().any(|o| {
-        matches!(
-            o,
-            Concrete::Mem { index: Some(_), .. } | Concrete::IndexMem { .. }
-        )
-    }) {
-        return Err(String::from(
-            "inline asm: scaled-index memory operand unsupported for this instruction",
-        ));
-    }
     match mnemonic {
         // Raw bytes carry their payload on the `AsmInsn`, not in `ops`; the
         // caller emits them directly and never routes them here.
@@ -2862,10 +2993,10 @@ fn encode_bespoke(
                 ));
             }
             let w = suffix.unwrap_or(AsmRegSize::Long);
-            let (rm, rm_b) = match src {
-                Concrete::Reg { reg, .. } if reg < MMX_BASE => (Ok(reg), reg >= 8),
+            let (rm, rm_x, rm_b) = match src {
+                Concrete::Reg { reg, .. } if reg < MMX_BASE => (Ok(reg), false, reg >= 8),
                 _ => match MemRm::of(&src) {
-                    Some(mr) => (Err(mr), mr.rex_b()),
+                    Some(mr) => (Err(mr), mr.rex_x(), mr.rex_b()),
                     None => {
                         return Err(String::from(
                             "inline asm: register or memory source expected for `crc32`",
@@ -2877,8 +3008,8 @@ fn encode_bespoke(
                 code.push(0x66);
             }
             code.push(0xF2);
-            if w == AsmRegSize::Quad || acc >= 8 || rm_b {
-                code.push(rex(w == AsmRegSize::Quad, acc >= 8, false, rm_b));
+            if w == AsmRegSize::Quad || acc >= 8 || rm_x || rm_b {
+                code.push(rex(w == AsmRegSize::Quad, acc >= 8, rm_x, rm_b));
             }
             let opcode = if w == AsmRegSize::Byte { 0xF0 } else { 0xF1 };
             code.extend_from_slice(&[0x0F, 0x38, opcode]);
@@ -2931,8 +3062,8 @@ fn encode_bespoke(
             if osz {
                 code.push(0x66);
             }
-            if rex_w || mr.rex_b() {
-                code.push(rex(rex_w, false, false, mr.rex_b()));
+            if rex_w || mr.rex_x() || mr.rex_b() {
+                code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
             }
             code.push(opcode);
             mr.emit(code, ext);
@@ -2944,8 +3075,8 @@ fn encode_bespoke(
                     "inline asm: this instruction takes a memory operand",
                 ));
             };
-            if rex_w || mr.rex_b() {
-                code.push(rex(rex_w, false, false, mr.rex_b()));
+            if rex_w || mr.rex_x() || mr.rex_b() {
+                code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
             }
             code.push(0x0F);
             code.push(opcode);
@@ -2969,8 +3100,8 @@ fn encode_bespoke(
                 ));
             };
             code.push(0x66);
-            if gpr >= 8 || mr.rex_b() {
-                code.push(rex(false, gpr >= 8, false, mr.rex_b()));
+            if gpr >= 8 || mr.rex_x() || mr.rex_b() {
+                code.push(rex(false, gpr >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x38, opcode]);
             mr.emit(code, gpr & 7);
@@ -3041,8 +3172,8 @@ fn encode_bespoke(
                             "inline asm: `movd` operand must be a register or memory",
                         ));
                     };
-                    if v_field >= 8 || mr.rex_b() {
-                        code.push(rex(false, v_field >= 8, false, mr.rex_b()));
+                    if v_field >= 8 || mr.rex_x() || mr.rex_b() {
+                        code.push(rex(false, v_field >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
                     mr.emit(code, v_field & 7);
@@ -3093,8 +3224,8 @@ fn encode_bespoke(
                     code.push(modrm_reg(d & 7, s & 7));
                 }
                 (None, Some(mr)) => {
-                    if d >= 8 || mr.rex_b() {
-                        code.push(rex(false, d >= 8, false, mr.rex_b()));
+                    if d >= 8 || mr.rex_x() || mr.rex_b() {
+                        code.push(rex(false, d >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     escape(code);
                     code.push(opcode);
@@ -3148,16 +3279,16 @@ fn encode_bespoke(
                 }
                 (None, Some(mr), Some(dn), _) => {
                     let op = dir(load_op, "load")?;
-                    if dn >= 8 || mr.rex_b() {
-                        code.push(rex(false, dn >= 8, false, mr.rex_b()));
+                    if dn >= 8 || mr.rex_x() || mr.rex_b() {
+                        code.push(rex(false, dn >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     opcode(code, op);
                     mr.emit(code, dn & 7);
                 }
                 (Some(sn), _, None, Some(mr)) => {
                     let op = dir(store_op, "store")?;
-                    if sn >= 8 || mr.rex_b() {
-                        code.push(rex(false, sn >= 8, false, mr.rex_b()));
+                    if sn >= 8 || mr.rex_x() || mr.rex_b() {
+                        code.push(rex(false, sn >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     opcode(code, op);
                     mr.emit(code, sn & 7);
@@ -3227,8 +3358,8 @@ fn encode_bespoke(
                     code.push(modrm_reg(v & 7, o & 7));
                 }
                 (None, Some(mr)) => {
-                    if w || v >= 8 || mr.rex_b() {
-                        code.push(rex(w, v >= 8, false, mr.rex_b()));
+                    if w || v >= 8 || mr.rex_x() || mr.rex_b() {
+                        code.push(rex(w, v >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     escape(code);
                     code.push(opcode);
@@ -3296,7 +3427,7 @@ fn encode_bespoke(
                         ));
                     };
                     let l = u8::from(dy || s1y);
-                    emit_vex(code, d >= 8, false, mr.rex_b(), map, w, s1, l, pp);
+                    emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, w, s1, l, pp);
                     code.push(opcode);
                     mr.emit(code, d & 7);
                 }
@@ -3338,7 +3469,7 @@ fn encode_bespoke(
                         emit_vex(
                             code,
                             d >= 8,
-                            false,
+                            mr.rex_x(),
                             mr.rex_b(),
                             1,
                             false,
@@ -3355,7 +3486,7 @@ fn encode_bespoke(
                 emit_vex(
                     code,
                     s >= 8,
-                    false,
+                    mr.rex_x(),
                     mr.rex_b(),
                     1,
                     false,
@@ -3402,7 +3533,7 @@ fn encode_bespoke(
                     emit_vex(
                         code,
                         d >= 8,
-                        false,
+                        mr.rex_x(),
                         mr.rex_b(),
                         map,
                         false,
@@ -3447,7 +3578,7 @@ fn encode_bespoke(
                         ));
                     };
                     let l = u8::from(dy || s1y);
-                    emit_vex(code, d >= 8, false, mr.rex_b(), map, false, s1, l, pp);
+                    emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, false, s1, l, pp);
                     code.push(opcode);
                     mr.emit(code, d & 7);
                 }
@@ -3497,7 +3628,7 @@ fn encode_bespoke(
                     emit_vex(
                         code,
                         r >= 8,
-                        false,
+                        mr.rex_x(),
                         mr.rex_b(),
                         map,
                         false,
@@ -3852,7 +3983,7 @@ mod tests {
                         disp,
                         size: mem_size.unwrap_or(AsmRegSize::Quad),
                     },
-                    AsmOpnd::AbsMem { disp } => Concrete::AbsMem {
+                    AsmOpnd::AbsMem { disp, .. } => Concrete::AbsMem {
                         disp,
                         size: mem_size.unwrap_or(AsmRegSize::Quad),
                     },

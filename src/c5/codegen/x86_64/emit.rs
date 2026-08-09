@@ -10582,6 +10582,97 @@ mod code_mode_tests {
         (out, rs)
     }
 
+    /// The diagnostic a stream the assembler rejects produces.
+    fn assemble_err(text: &str) -> alloc::string::String {
+        use super::super::ssa::emit_common::{AsmComments, prepare_file_asm_text};
+        let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
+        let mut blocks = extract_file_scope_asm_sections(&text, false).expect("parses");
+        super::encode_x86_file_asm_section_code(&mut blocks, crate::c5::ElfClass::Elf64)
+            .expect_err("rejected")
+    }
+
+    /// `crc32` encodes `r32, r/m8|r/m16|r/m32` and `r64, r/m8|r/m64`: REX.W is
+    /// the accumulator width, a register source names the source width, and the
+    /// size suffix supplies it only for a memory source. Bytes measured with
+    /// GNU as 2.46.1.
+    #[test]
+    fn crc32_operand_widths_match_gnu_as() {
+        for (src, want) in [
+            ("crc32 %al, %edi\n", &[0xf2, 0x0f, 0x38, 0xf0, 0xf8][..]),
+            (
+                "crc32 %al, %rdi\n",
+                &[0xf2, 0x48, 0x0f, 0x38, 0xf0, 0xf8][..],
+            ),
+            (
+                "crc32 %ax, %edi\n",
+                &[0x66, 0xf2, 0x0f, 0x38, 0xf1, 0xf8][..],
+            ),
+            ("crc32 %eax, %edi\n", &[0xf2, 0x0f, 0x38, 0xf1, 0xf8][..]),
+            // The 3-way crc32c combine step: a 64-bit register source with a
+            // 64-bit accumulator, which the unsuffixed spelling names.
+            (
+                "crc32 %rax, %rdi\n",
+                &[0xf2, 0x48, 0x0f, 0x38, 0xf1, 0xf8][..],
+            ),
+            (
+                "crc32q %rax, %rdi\n",
+                &[0xf2, 0x48, 0x0f, 0x38, 0xf1, 0xf8][..],
+            ),
+            (
+                "crc32 %r15, %r8\n",
+                &[0xf2, 0x4d, 0x0f, 0x38, 0xf1, 0xc7][..],
+            ),
+            (
+                "crc32 %r15b, %r8d\n",
+                &[0xf2, 0x45, 0x0f, 0x38, 0xf0, 0xc7][..],
+            ),
+            // spl/bpl/sil/dil as the byte source take a bare REX.
+            (
+                "crc32 %sil, %edi\n",
+                &[0xf2, 0x40, 0x0f, 0x38, 0xf0, 0xfe][..],
+            ),
+            // A memory source takes its width from the suffix, or from the
+            // accumulator when unsuffixed.
+            ("crc32b (%rsi), %edi\n", &[0xf2, 0x0f, 0x38, 0xf0, 0x3e][..]),
+            (
+                "crc32b (%rsi), %rdi\n",
+                &[0xf2, 0x48, 0x0f, 0x38, 0xf0, 0x3e][..],
+            ),
+            (
+                "crc32w (%rsi), %edi\n",
+                &[0x66, 0xf2, 0x0f, 0x38, 0xf1, 0x3e][..],
+            ),
+            ("crc32 (%rsi), %edi\n", &[0xf2, 0x0f, 0x38, 0xf1, 0x3e][..]),
+            (
+                "crc32 (%rsi), %rdi\n",
+                &[0xf2, 0x48, 0x0f, 0x38, 0xf1, 0x3e][..],
+            ),
+            (
+                "crc32q (%rsi,%rcx,2), %r9\n",
+                &[0xf2, 0x4c, 0x0f, 0x38, 0xf1, 0x0c, 0x4e][..],
+            ),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+        // Pairs the encoding has no room for, and a suffix contradicting the
+        // source register: GNU as rejects each.
+        for src in [
+            "crc32 %rax, %edi\n",
+            "crc32 %eax, %rdi\n",
+            "crc32 %ax, %rdi\n",
+            "crc32l %eax, %rdi\n",
+            "crc32q (%rsi), %edi\n",
+            "crc32w (%rsi), %rdi\n",
+            "crc32 %al, %di\n",
+            "crc32 %al, %dil\n",
+            "crc32 (%rsi), %di\n",
+            "crc32b %eax, %edi\n",
+            "crc32l %al, %edi\n",
+        ] {
+            assert!(assemble_err(src).contains("crc32"), "{src}");
+        }
+    }
+
     /// `.code16` / `.code32` / `.code64` select the encoding mode of the
     /// instructions that follow, and the state carries across a section switch
     /// as it does in the assembler's input stream. Bytes measured with GNU as

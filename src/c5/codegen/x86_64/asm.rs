@@ -3015,22 +3015,27 @@ fn encode_bespoke(
         }
         Mnemonic::Crc32 => {
             // AT&T `crc32<w> src, acc`: the accumulator in ModR/M.reg, the
-            // source (register or memory) the r/m. The suffix is the source
-            // width; a 16-bit source takes the operand-size prefix and a
-            // 64-bit one REX.W, both of which precede the F2 mandatory
-            // prefix in the order GNU as emits.
+            // source (register or memory) the r/m. The encoded forms are
+            // `r32, r/m8|r/m16|r/m32` and `r64, r/m8|r/m64`, so REX.W is the
+            // accumulator width and the source width must equal it unless the
+            // source is a byte. A register source names its own width; the
+            // size suffix supplies it for a memory source and must not
+            // contradict a register one. The 0x66 prefix for a 16-bit source
+            // and REX precede the F2 mandatory prefix in the order GNU as
+            // emits.
             let [src, dst] = two(ops)?;
-            let (acc, _) = as_reg(dst)?;
-            if acc >= MMX_BASE {
+            let (acc, acc_size) = as_reg(dst)?;
+            if acc >= MMX_BASE || !matches!(acc_size, AsmRegSize::Long | AsmRegSize::Quad) {
                 return Err(String::from(
-                    "inline asm: general register expected for this instruction",
+                    "inline asm: `crc32` takes a 32- or 64-bit general register accumulator",
                 ));
             }
-            let w = suffix.unwrap_or(AsmRegSize::Long);
-            let (rm, rm_x, rm_b) = match src {
-                Concrete::Reg { reg, .. } if reg < MMX_BASE => (Ok(reg), false, reg >= 8),
+            let (rm, rm_size, rm_x, rm_b) = match src {
+                Concrete::Reg { reg, size } if reg < MMX_BASE => {
+                    (Ok(reg), Some(size), false, reg >= 8)
+                }
                 _ => match MemRm::of(&src) {
-                    Some(mr) => (Err(mr), mr.rex_x(), mr.rex_b()),
+                    Some(mr) => (Err(mr), None, mr.rex_x(), mr.rex_b()),
                     None => {
                         return Err(String::from(
                             "inline asm: register or memory source expected for `crc32`",
@@ -3038,12 +3043,31 @@ fn encode_bespoke(
                     }
                 },
             };
+            let w = match (rm_size, suffix) {
+                (Some(rs), Some(s)) if rs != s => {
+                    return Err(String::from(
+                        "inline asm: `crc32` size suffix disagrees with its source register",
+                    ));
+                }
+                (Some(rs), _) => rs,
+                (None, Some(s)) => s,
+                (None, None) => acc_size,
+            };
+            let rex_w = acc_size == AsmRegSize::Quad;
+            if w != AsmRegSize::Byte && (w == AsmRegSize::Quad) != rex_w {
+                return Err(String::from(
+                    "inline asm: `crc32` source width does not pair with its accumulator",
+                ));
+            }
             if w == AsmRegSize::Word {
                 code.push(0x66);
             }
             code.push(0xF2);
-            if w == AsmRegSize::Quad || acc >= 8 || rm_x || rm_b {
-                code.push(rex(w == AsmRegSize::Quad, acc >= 8, rm_x, rm_b));
+            // spl/bpl/sil/dil as a byte source need a REX to select them over
+            // ah/ch/dh/bh; the accumulator is never a byte register here.
+            let byte_rex = w == AsmRegSize::Byte && matches!(rm, Ok(reg) if (4..8).contains(&reg));
+            if rex_w || acc >= 8 || rm_x || rm_b || byte_rex {
+                code.push(rex(rex_w, acc >= 8, rm_x, rm_b));
             }
             let opcode = if w == AsmRegSize::Byte { 0xF0 } else { 0xF1 };
             code.extend_from_slice(&[0x0F, 0x38, opcode]);

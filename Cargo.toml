@@ -16,6 +16,8 @@ include = [
     "build.rs",
     "Cargo.toml",
     "README.md",
+    # The README is the crate's front page and links into `doc/`.
+    "doc/**",
     "LICENSE",
 ]
 

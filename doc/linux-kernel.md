@@ -72,22 +72,25 @@ expected, so it is measured rather than fatal. At the 7.1.6 `defconfig` pin:
 
 | | assembly units | badc | gas |
 |---|---|---|---|
-| x86_64 | 71 | 54 | 17 |
+| x86_64 | 71 | 56 | 15 |
 | aarch64 | 77 | 69 | 8 |
 
 The x86_64 row moved from 45 of 71 once `-m16` / `-m32` units stopped
 being refused: the writer emits ELFCLASS32 / EM_386 objects, so the nine
-of those fourteen units the assembler can encode are badc's.
+of those fourteen units the assembler can encode are badc's. It moved
+again from 54 with the direct far branch (`ljmp` / `lcall $seg, $off`,
+the `ptr16:16` and `ptr16:32` forms), which takes two of the four
+real-mode units it was keeping on gas.
 
 What keeps a unit with gas, ranked by incidence:
 
 | units | class |
 |---|---|
-| 4 (x86_64) | `ljmp $seg, $off`. The far jump with an immediate segment and offset has no encoding, and a symbol in the offset finds no relocatable field. Every one is real-mode mode-switch code. |
-| 4 (x86_64), 3 (aarch64) | Operand forms: symbol arithmetic inside an immediate or a memory operand, `:abs_g2_s:` over a label, an operand over a label difference. |
+| 6 (x86_64), 3 (aarch64) | Operand forms: symbol arithmetic inside an immediate or a memory operand, two symbol references in one instruction, `:abs_g2_s:` over a label, an operand over a label difference. |
 | 4 (x86_64), 3 (aarch64) | Instruction encodings the tables do not carry: AVX `vmovd`, `lsl r64, r64`, `verw m16`, `ud2a`, the NEON `str q` / `orr v.2s, #imm` post-index and immediate forms, `sha1c`. |
 | 2 (x86_64), 2 (aarch64) | Directives: `.hidden`, `.reloc`, `.endr` reached without its `.rept`. |
 | 2 (x86_64) | Pseudo-instruction macros (`ANNOTATE`) and a macro-body comment the preprocessor leaves in its output as `/ *`. |
+| 1 (x86_64) | AT&T's indirect marker on a symbol memory operand (`jmpq *sym(%rip)`): the marker is stripped after the symbol-memory dispatch, not before it. |
 
 These figures supersede `tools/probe_asm_units/`'s 46 of 68 and 62 of 77. The
 probe feeds each preprocessed unit through the file-scope `asm` path in
@@ -106,11 +109,14 @@ Against GNU as 2.46.1's object for the same source, byte for byte over every
 allocatable section plus the symbol table and the relocations: 18 of the
 x86_64 units that were already badc's and, setting aside the DWARF badc emits
 none of for an assembled unit and the AArch64 `$x` / `$d` mapping symbols, 62
-of 69 aarch64 units are identical. Of the nine the 32-bit container adds,
-three are identical and the rest differ only in that DWARF and in one class --
-a branch to a named label in the same section always takes the wide
-displacement, where GNU as relaxes it to `rel8`. The bytes execute the same;
-the sections are longer.
+of 69 aarch64 units are identical. Of the nine the 32-bit container first
+added, three are identical and the rest differ only in that DWARF and in one
+class -- a branch to a named label in the same section always takes the wide
+displacement, where GNU as relaxes it to `rel8`. The two the direct far branch
+adds carry every far branch byte for byte and differ in that class and in one
+more: a reference to a `.L` label is relocated against the label, where GNU as
+folds it to the section symbol plus an addend. The bytes execute the same; the
+sections are longer.
 
 Every link is badc's and only badc's: the `-r` merges, every `vmlinux` kallsyms
 pass, the x86 boot decompressor, all three vDSOs, the `-m elf_i386` boot links

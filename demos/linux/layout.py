@@ -123,7 +123,7 @@ def attr_int(raw: str) -> int | None:
     """An integer attribute value, including the exprloc spellings Kbuild's
     compilers use for member locations."""
     raw = raw.strip()
-    m = re.match(r"^(0x[0-9a-fA-F]+|\d+)$", raw)
+    m = re.match(r"^(0x[0-9a-fA-F]+|-?\d+)$", raw)
     if m:
         return int(m.group(1), 0)
     m = re.match(r"^DW_OP_plus_uconst\s+(0x[0-9a-fA-F]+|\d+)$", raw)
@@ -143,6 +143,15 @@ def attr_str(raw: str) -> str | None:
 def attr_ref(raw: str) -> int | None:
     m = re.match(r"^\(?(0x[0-9a-fA-F]+)", raw.strip())
     return int(m.group(1), 0) if m else None
+
+
+def ref_die(die: "Die", table: dict[int, "Die"]) -> "Die | None":
+    """The DIE a `DW_AT_type` attribute names, or None when there is no such
+    attribute or it leaves the unit."""
+    if "type" not in die.attrs:
+        return None
+    off = attr_ref(die.attrs["type"])
+    return None if off is None else table.get(off)
 
 
 class Die:
@@ -215,7 +224,7 @@ def type_size(die: Die | None, table: dict[int, Die], addr_size: int,
         # size; without this every typedef'd pointer member reports unknown.
         return addr_size
     if die.tag == "array_type":
-        elem = table.get(attr_ref(die.attrs.get("type", "")) or -1)
+        elem = ref_die(die, table)
         esz = type_size(elem, table, addr_size, depth + 1)
         if esz is None:
             return None
@@ -229,7 +238,10 @@ def type_size(die: Die | None, table: dict[int, Die], addr_size: int,
                 n = attr_int(k.attrs["count"])
             elif "upper_bound" in k.attrs:
                 ub = attr_int(k.attrs["upper_bound"])
-                n = None if ub is None else ub + 1
+                # An unbounded array is spelled with a negative bound or an
+                # all-ones unsigned one; both mean no elements, not 2**32.
+                n = None if ub is None else (0 if ub < 0 or ub >= 1 << 31
+                                             else ub + 1)
             else:
                 n = 0  # flexible array member
             if n is None:
@@ -258,7 +270,7 @@ def type_name(die: Die | None, table: dict[int, Die],
         return f"enum {nm}" if nm else "enum <anon>"
     if nm is not None:
         return nm
-    inner = table.get(attr_ref(die.attrs.get("type", "")) or -1)
+    inner = ref_die(die, table)
     if die.tag == "pointer_type":
         return (type_name(inner, table, depth + 1) + " *") if inner else "void *"
     if die.tag == "array_type":
@@ -282,7 +294,7 @@ def member_facts(m: Die, table: dict[int, Die], big_endian: bool,
     the complement of the position wanted.
     """
     name = attr_str(m.attrs.get("name", ""))
-    tdie = table.get(attr_ref(m.attrs.get("type", "")) or -1)
+    tdie = ref_die(m, table)
     out: dict = {
         "name": name,
         "type": type_name(tdie, table),
@@ -325,7 +337,7 @@ def strip_type(die: Die | None, table: dict[int, Die]) -> Die | None:
                                           "volatile_type", "restrict_type",
                                           "atomic_type"):
             return die
-        die = table.get(attr_ref(die.attrs.get("type", "")) or -1)
+        die = ref_die(die, table)
     return die
 
 
@@ -345,8 +357,7 @@ def flat_members(die: Die, table: dict[int, Die], big_endian: bool,
         if k.tag != "member":
             continue
         f = member_facts(k, table, big_endian, addr_size)
-        inner = strip_type(table.get(attr_ref(k.attrs.get("type", "")) or -1),
-                           table)
+        inner = strip_type(ref_die(k, table), table)
         anon_agg = (inner is not None and inner.tag in AGG_TAGS
                     and (attr_str(inner.attrs.get("name", "")) is None
                          or ANON_NAME.match(
@@ -409,9 +420,12 @@ def extract(path: Path, dwarfdump: str) -> dict:
     # extraction bound by the dumper instead of by the interpreter.
     cmd = (f"{shlex.quote(dwarfdump)} --debug-info {shlex.quote(str(path))} "
            f"| grep -E {shlex.quote(FILTER_ERE)}")
-    proc = subprocess.Popen(["sh", "-c", cmd], stdout=subprocess.PIPE,
-                            stderr=subprocess.DEVNULL, text=True,
-                            errors="replace", bufsize=1 << 20)
+    # `grep` exits 1 on no match, so the dumper's own status is what says
+    # whether the read worked; without pipefail the pipeline would hide it
+    # and an unreadable file would report as a clean comparison of nothing.
+    proc = subprocess.Popen(["sh", "-c", f"set -o pipefail; {cmd}"],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, errors="replace", bufsize=1 << 20)
     assert proc.stdout is not None
     out: dict = {}
     units = 0
@@ -432,6 +446,10 @@ def extract(path: Path, dwarfdump: str) -> dict:
     finally:
         proc.stdout.close()
         proc.wait()
+    if proc.returncode not in (0, 1):
+        err = (proc.stderr.read() if proc.stderr else "").strip()
+        die(f"reading DWARF from {path} failed (rc={proc.returncode})"
+            + (f": {err.splitlines()[0]}" if err else ""))
     return {"aggregates": out, "units": units,
             "big_endian": big_endian, "addr_size": addr_size}
 
@@ -537,11 +555,21 @@ def compare(ref: dict, badc: dict) -> dict:
                 "name": nm, "ref_layouts": len(ra[nm]["layouts"]),
                 "badc_layouts": len(ba[nm]["layouts"]), "incidence": incidence})
         mdiffs, mtypes, mgaps = compare_members(r["members"], b["members"])
-        # A side that reports no members and no size holds a forward
-        # declaration it emitted as a definition: a gap, not a difference.
-        incomplete = [s for s, lay in (("reference", r), ("badc", b))
-                      if not lay["members"] and not lay["size"]]
+        # A side that describes nothing where the other describes a definition
+        # holds a forward declaration it emitted as one: a gap, not a
+        # difference. An aggregate both sides agree is empty is not that.
+        described = {"reference": bool(r["members"]) or bool(r["size"]),
+                     "badc": bool(b["members"]) or bool(b["size"])}
+        incomplete = ([] if all(described.values())
+                      or not any(described.values())
+                      else [s for s, on in described.items() if not on])
         size_diff = (r["size"] != b["size"]) and not incomplete
+        if r_amb or b_amb:
+            # The build defines this tag name more than once and the two
+            # sides need not have picked the same definition, so neither
+            # agreement nor disagreement is evidence. Counted as ambiguous
+            # only, and kept out of the exit status.
+            continue
         if size_diff or mdiffs:
             res["counts"]["layout_differing"] += 1
             res["differences"].append({
@@ -639,9 +667,12 @@ def cross_check(path: Path, extracted: dict, names: list[str],
             byte_off = int(m.group(1) or m.group(2))
             # Only top-level members: gdb indents nested aggregates inline.
             if depth == 1:
-                ident = re.findall(r"(\w+)\s*(?:\[[^\]]*\])?\s*[:;]", body)
+                # The member name is the identifier immediately before the
+                # first array bound, bitfield colon or terminating semicolon;
+                # indexing a findall picks the bitfield width instead.
+                ident = re.match(r"^.*?\b(\w+)\s*(?:\[|:|;)", body)
                 if ident:
-                    seen.setdefault(ident[-1], byte_off)
+                    seen.setdefault(ident.group(1), byte_off)
             depth += line.count("{") - line.count("}")
         bad = []
         for m2 in lay["members"]:
@@ -778,7 +809,7 @@ def replay_units(tree: Path, arch: str, badc: Path, scratch: Path,
                "ref_rc": None, "badc_rc": None}
         ro = scratch / f"{stem}.ref.o"
         cmd = list(argv)
-        for i, a in enumerate(cmd):
+        for i, a in enumerate(cmd[:-1]):
             if a == "-o":
                 cmd[i + 1] = str(ro)
         cmd += ["-gdwarf-4"]
@@ -798,8 +829,10 @@ def replay_units(tree: Path, arch: str, badc: Path, scratch: Path,
                 rec[f"{key}_rc"] = r.returncode
                 if r.returncode == 0 and obj.is_file():
                     rec[f"{key}_obj"] = str(obj)
-            except (subprocess.TimeoutExpired, OSError):
+            except subprocess.TimeoutExpired:
                 rec[f"{key}_rc"] = "timeout"
+            except OSError as e:
+                rec[f"{key}_rc"] = f"exec-failed: {e.strerror}"
         return rec
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -1044,6 +1077,54 @@ def _self_test() -> int:
     assert res["coverage"][0]["members"] == [
         {"member": "b", "kind": "missing-in-badc"}], res["coverage"]
 
+    # An aggregate both sides agree is empty is identical, not a gap.
+    empty = {"aggregates": {"e": {"kind": "struct", "layouts": {
+        "k": {"count": 1, "size": 0, "members": []}}}},
+        "units": 1, "big_endian": False, "addr_size": 8}
+    assert compare(empty, empty)["counts"]["identical"] == 1, \
+        compare(empty, empty)["counts"]
+    # ... but one side describing nothing where the other has a definition is.
+    assert compare(ref, empty)["counts"]["coverage_gap"] == 0  # name differs
+    two = json.loads(json.dumps(ref))
+    two["aggregates"]["e"] = empty["aggregates"]["e"]
+    other = json.loads(json.dumps(two))
+    other["aggregates"]["e"]["layouts"]["k"] = {
+        "count": 1, "size": 8, "members": [
+            {"name": "q", "offset": 0, "size": 8, "bit_offset": None,
+             "bit_size": None, "type": "long"}]}
+    assert compare(two, other)["counts"]["coverage_gap"] == 1, \
+        compare(two, other)["counts"]
+
+    # A tag name the build defines twice is evidence of nothing: the two
+    # sides need not have picked the same definition.
+    amb = json.loads(json.dumps(ref))
+    amb["aggregates"]["s"]["layouts"]["other"] = {
+        "count": 1, "size": 99, "members": []}
+    res = compare(ref, amb)
+    assert res["counts"]["ambiguous"] == 1, res["counts"]
+    assert res["counts"]["layout_differing"] == 0, res["counts"]
+
+    # An unbounded array's extent is zero, not 2**32.
+    tbl = {0: Die(0, "base_type")}
+    tbl[0].attrs["byte_size"] = "0x04"
+    arr = Die(1, "array_type")
+    arr.attrs["type"] = "0x00000000"
+    sub = Die(2, "subrange_type")
+    sub.attrs["upper_bound"] = "0xffffffff"
+    arr.kids.append(sub)
+    tbl[1] = arr
+    assert type_size(arr, tbl, 8) == 0, type_size(arr, tbl, 8)
+    sub.attrs["upper_bound"] = "-1"
+    assert type_size(arr, tbl, 8) == 0
+    sub.attrs["upper_bound"] = "0x07"
+    assert type_size(arr, tbl, 8) == 32
+
+    # gdb renders a bitfield as `unsigned int b : 3;`; the member is `b`.
+    line = "/*      4: 0   |       4 */    unsigned int b : 3;"
+    m = GDB_OFFSET_RE.match(line.strip())
+    assert m and re.match(r"^.*?\b(\w+)\s*(?:\[|:|;)",
+                          m.group(5)).group(1) == "b", line
+
     # An unnamed member holding an anonymous aggregate flattens to its leaves.
     anon = list(parse_units(ln for ln in ANON_TEST_DUMP.splitlines(True)
                             if DUMP_FILTER.search(ln)))[0]
@@ -1177,8 +1258,10 @@ def main(argv: list[str] | None = None) -> int:
                                     "ref_units": ref_acc["units"],
                                     "badc_units": badc_acc["units"]})
 
-    if not ref_acc or not badc_acc:
-        die("no DWARF aggregates were extracted from one of the two sides")
+    for side, acc in (("reference", ref_acc), ("badc", badc_acc)):
+        if not acc or not acc.get("aggregates"):
+            die(f"the {side} side yielded no aggregates; it carries no debug "
+                "info (CONFIG_DEBUG_INFO_DWARF4) or could not be read")
 
     res = compare(ref_acc, badc_acc)
     report["result"] = res
@@ -1187,9 +1270,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cross_check and sample_elf is not None:
         gdb = tool(args.gdb)
         names = [d["name"] for d in res["differences"][:args.cross_check]]
-        pool = [n for n, e in badc_acc["aggregates"].items()
-                if dominant(e)[0]["members"]]
-        names += sorted(pool)[:max(0, args.cross_check - len(names))]
+        pool = [n for n, e in sorted(badc_acc["aggregates"].items())
+                if dominant(e)[0]["members"] and n not in names]
+        names += pool[:max(0, args.cross_check - len(names))]
         log(f"gdb cross-check on {len(names)} aggregates in {sample_elf.name}")
         report["cross_check"] = cross_check(sample_elf, badc_acc, names, gdb)
         cc = report["cross_check"]

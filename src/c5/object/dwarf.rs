@@ -634,17 +634,33 @@ fn collect_subprograms(
     // in emission order. Native start is
     // `pc_to_native[ent_pc]`; native end is the start of the
     // next function's emission (or `total_native` for the last).
-    // A function's source name comes from `build.func_names`
-    // (populated by the per-arch emit from `FunctionSsa::name`),
-    // with `Program::source_functions[ent_pc]` as a fallback for
-    // archive-reloaded units. The per-arch emit pushes
-    // `(ent_pc, name)` pairs in lockstep, so an `ent_pc -> name`
-    // map covers the sort-by-native-offset reorder below.
+    // A function's name comes from `build.func_names` (populated by the
+    // per-arch emit from `FunctionSsa::name`). The per-arch emit pushes
+    // `(ent_pc, name)` pairs in lockstep, so an `ent_pc -> name` map
+    // covers the sort-by-native-offset reorder below.
+    //
+    // `func_names` holds assembler names. A GNU asm-label rename makes
+    // that differ from the identifier, and `DW_AT_name` is the source
+    // name (the symbol table already carries the assembler one), so the
+    // identifier is recovered from the symbol table where one exists.
+    let ident_by_pc: BTreeMap<usize, &alloc::string::String> = {
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Fun as i64 && s.asm_name.is_some() && !s.name.is_empty())
+            .map(|s| (s.val as usize, &s.name))
+            .collect()
+    };
     let func_name_by_pc: BTreeMap<usize, alloc::string::String> = build
         .func_ent_pcs
         .iter()
         .copied()
         .zip(build.func_names.iter().cloned())
+        .map(|(pc, n)| match ident_by_pc.get(&pc) {
+            Some(ident) => (pc, (*ident).clone()),
+            None => (pc, n),
+        })
         .filter(|(_, n)| !n.is_empty())
         .collect();
     let mut ent_pcs: Vec<usize> = build.func_ent_pcs.clone();

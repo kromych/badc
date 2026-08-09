@@ -676,28 +676,48 @@ impl Compiler {
         Ok(name)
     }
 
-    /// A GNU asm-label (`decl asm("name")`) sets the declared object's or
-    /// function's assembler symbol name. When the label restates the
-    /// identifier the rename is a no-op and is accepted; a differing name
-    /// would have to rename the emitted symbol across every backend's symbol
-    /// and relocation tables, which is not yet wired.
-    /// TODO: honor an assembler name that differs from the identifier.
+    /// A GNU asm-label (`decl asm("name")`) sets the assembler symbol name
+    /// emitted for the declared object or function. The identifier keeps its
+    /// own identity: it stays the lookup key and the spelling every
+    /// diagnostic uses. The label applies to the entity, so a later
+    /// declaration -- including one that follows the definition -- renames
+    /// the symbol the whole unit emits, as gcc does.
     pub(super) fn parse_declarator_asm_label(&mut self, id_idx: usize) -> Result<(), C5Error> {
         let label = self.parse_asm_register_suffix()?;
-        if label != self.symbols[id_idx].name {
-            return Err(self.compile_err(format!(
-                "assembler name `{label}` differing from `{}` is not yet supported",
+        self.set_asm_label(id_idx, label)
+    }
+
+    /// Record an asm label on `id_idx`. Repeating the same label is
+    /// accepted; a second, differing label for one identifier is
+    /// rejected -- the entity has one assembler name and the two
+    /// declarations disagree about it.
+    pub(super) fn set_asm_label(
+        &mut self,
+        id_idx: usize,
+        label: alloc::string::String,
+    ) -> Result<(), C5Error> {
+        if let Some(prev) = &self.symbols[id_idx].asm_name
+            && *prev != label
+        {
+            let msg = format!(
+                "conflicting assembler name `{label}` for `{}`, already declared as `{prev}`",
                 self.symbols[id_idx].name
-            )));
+            );
+            return Err(self.compile_err(msg));
         }
+        self.symbols[id_idx].asm_name = Some(label);
         Ok(())
     }
 
-    /// Consume an optional `asm("reg")` explicit-register suffix on a
-    /// block-scope declarator. The binding requires the `register`
-    /// storage class and automatic duration.
+    /// Consume an optional `asm(...)` suffix on a block-scope declarator.
+    /// With the `register` storage class it is an explicit-register
+    /// binding, which requires automatic duration. Without it the suffix
+    /// is an asm-label rename: it applies to an object with static storage
+    /// duration (`static` or `extern`) and is ignored on an automatic one,
+    /// which has no assembler symbol to rename.
     pub(super) fn parse_register_asm_binding(
         &mut self,
+        id_idx: usize,
         is_static: bool,
         is_extern: bool,
     ) -> Result<Option<crate::c5::symbol::AsmRegister>, C5Error> {
@@ -706,9 +726,17 @@ impl Compiler {
         }
         let name = self.parse_asm_register_suffix()?;
         if !self.pending.saw_register_storage {
-            return Err(self.compile_err(
-                "an explicit-register binding requires the `register` storage class",
-            ));
+            if is_static || is_extern {
+                self.set_asm_label(id_idx, name)?;
+            } else {
+                let ident = self.symbols[id_idx].name.clone();
+                let line = self.lex.line;
+                self.warn_at(
+                    line,
+                    format!("assembler name ignored for the automatic variable `{ident}`"),
+                );
+            }
+            return Ok(None);
         }
         if is_static || is_extern {
             return Err(

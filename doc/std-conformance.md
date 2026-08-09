@@ -132,12 +132,6 @@ therefore fail the invocation rather than being dropped. A build system
 that passes a compiler's whole flag set through has to filter it; the
 kernel harness under `demos/linux/` does exactly that.
 
-### An assembler name differing from the C name is rejected, severity 3
-
-`int f(void) __asm__("real_f");` -- the GCC asm-label form used by glibc
-and by symbol-versioning headers -- is a compile error when the label
-differs from the declared name. A label equal to the name is accepted.
-
 ## Extensions implemented
 
 ### C11 / C23
@@ -237,6 +231,16 @@ differs from the declared name. A label equal to the name is accepted.
   through it, and that badc assembles most of the Linux kernel's `.S`
   units ([kernel work](linux-kernel.md) carries the counts). It is not a
   complete GAS implementation.
+- The asm-label rename, `T name asm("label")`, on objects and functions at
+  file and block scope. The label is the assembler symbol name the
+  declaration emits, taken as written; the identifier keeps its own
+  identity, so it stays the lookup key, the redeclaration match and the
+  spelling every diagnostic uses. It composes with `extern`, `static`,
+  `weak`, `alias` and the visibility attributes, and reaches the object
+  writers, the linker and inline-asm references to the name. Two
+  declarations of one identifier with different labels are rejected; a
+  label on an automatic object is ignored with a warning, as it names no
+  symbol.
 - `__attribute__((...))` / `__declspec(...)` / C23 `[[...]]` decorators.
   The honored ones: `packed` (struct / union packing; an anonymous union
   inside a packed struct keeps its members overlapping), `aligned(N)` /

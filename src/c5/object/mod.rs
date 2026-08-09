@@ -434,7 +434,7 @@ fn resolve_single_tu_extern_refs(
         .symbols
         .iter()
         .filter(|s| s.is_weak && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64))
-        .map(|s| s.name.as_str())
+        .map(|s| s.link_name())
         .collect();
     // Data objects this unit defines, by name and unified data offset --
     // the set the object writer binds named relocations against. An
@@ -453,7 +453,7 @@ fn resolve_single_tu_extern_refs(
                     && !s.name.is_empty()
                     && matches!(s.linkage, Linkage::External | Linkage::Internal)
             })
-            .map(|s| (s.name.as_str(), s.val))
+            .map(|s| (s.link_name(), s.val))
             .collect()
     };
     let data_bindings: alloc::collections::BTreeSet<&str> = build

@@ -86,6 +86,13 @@ impl Compiler {
                     crate::c5::symbol::Linkage::External
                 };
             }
+            self.skip_attribute_specifiers()?;
+            // A block-scope prototype takes the same GNU asm-label rename a
+            // file-scope one does; the declared entity has external linkage
+            // either way (C99 6.2.2p4).
+            if self.lex.tk == Token::Asm {
+                self.parse_declarator_asm_label(id_idx)?;
+            }
             // A trailing comma list (`int foo(int), bar(int);`) is rare;
             // skip any remainder to the terminator.
             while self.lex.tk != ';' && self.lex.tk != 0 {

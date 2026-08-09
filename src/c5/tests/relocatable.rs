@@ -121,6 +121,78 @@ fn undefined_globals_stay_undefined() {
 }
 
 #[test]
+fn asm_label_renames_every_emitted_symbol() {
+    // A GNU asm-label is the assembler name of the entity: definitions,
+    // undefined references and the relocations against them all carry it,
+    // and the identifier reaches the object nowhere.
+    const STB_LOCAL: u8 = 0;
+    const STB_WEAK: u8 = 2;
+    const STV_HIDDEN: u8 = 2;
+    let a = compile_obj(
+        "int fn(void) __asm__(\"real_fn\");\n\
+         int fn(void) { return 1; }\n\
+         static int stat_fn(void) __asm__(\"real_stat\");\n\
+         static int stat_fn(void) { return 2; }\n\
+         int weak_fn(void) __asm__(\"real_weak\") __attribute__((weak));\n\
+         int weak_fn(void) { return 3; }\n\
+         int hid_fn(void) __asm__(\"real_hid\") __attribute__((visibility(\"hidden\")));\n\
+         int hid_fn(void) { return 4; }\n\
+         int obj __asm__(\"real_obj\") = 5;\n\
+         extern int ext_fn(void) __asm__(\"real_ext\");\n\
+         extern int ext_obj __asm__(\"real_ext_obj\");\n\
+         int *p __asm__(\"real_p\") = &ext_obj;\n\
+         int use(void) { return fn() + stat_fn() + weak_fn() + hid_fn() + obj + ext_fn(); }\n",
+        "a.o",
+    );
+    let sym = |n: &str| {
+        a.symbols
+            .iter()
+            .find(|s| s.name == n)
+            .unwrap_or_else(|| panic!("`{n}` missing from the symbol table"))
+    };
+    for name in [
+        "real_fn",
+        "real_stat",
+        "real_weak",
+        "real_hid",
+        "real_obj",
+        "real_ext",
+        "real_ext_obj",
+        "real_p",
+    ] {
+        sym(name);
+    }
+    // The identifier names nothing in the object.
+    for ident in [
+        "fn", "stat_fn", "weak_fn", "hid_fn", "obj", "ext_fn", "ext_obj", "p",
+    ] {
+        assert!(
+            !a.symbols.iter().any(|s| s.name == ident),
+            "identifier `{ident}` must not reach the object"
+        );
+    }
+    // The rename composes with, rather than replaces, the linkage and
+    // visibility the declaration asked for.
+    assert_eq!(sym("real_stat").binding, STB_LOCAL);
+    assert_eq!(sym("real_weak").binding, STB_WEAK);
+    assert_eq!(sym("real_hid").other & 0x3, STV_HIDDEN);
+    assert!(matches!(sym("real_ext").sec, EtSymRef::Undef));
+    assert!(matches!(sym("real_ext_obj").sec, EtSymRef::Undef));
+    // Every relocation resolves through the renamed symbol.
+    let named: alloc::vec::Vec<&str> = a
+        .sections
+        .iter()
+        .flat_map(|sec| sec.relocs.iter())
+        .map(|r| a.symbols[r.sym as usize].name.as_str())
+        .collect();
+    assert!(named.contains(&"real_ext"), "call reloc names the label");
+    assert!(
+        named.contains(&"real_ext_obj"),
+        "data reloc names the label"
+    );
+}
+
+#[test]
 fn duplicate_strong_definitions_are_rejected() {
     let a = compile_obj("int dup_val = 1;\n", "a.o");
     let b = compile_obj("int dup_val = 2;\n", "b.o");

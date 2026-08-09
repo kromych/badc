@@ -119,7 +119,7 @@ impl Compiler {
             && t.linkage == crate::c5::symbol::Linkage::External
             && !t.has_initializer;
         if is_extern_data {
-            let name = self.symbols[target_idx].name.clone();
+            let name = self.symbols[target_idx].link_name().into();
             self.extern_data_relocs
                 .push(crate::c5::program::ExternDataReloc {
                     data_offset: var_offset as u64,
@@ -377,7 +377,7 @@ impl Compiler {
                 && t.linkage == crate::c5::symbol::Linkage::External
                 && !t.has_initializer;
             if is_extern_data {
-                let name = self.symbols[target_idx].name.clone();
+                let name = self.symbols[target_idx].link_name().into();
                 self.extern_data_relocs
                     .push(crate::c5::program::ExternDataReloc {
                         data_offset: var_offset as u64,

@@ -1197,7 +1197,9 @@ impl Compiler {
                         // through it resolve to the target's entry.
                         if let Some(target) = self.pending.attr_alias.take() {
                             let tgt = self.symbols.iter().position(|s| {
-                                s.name == target && s.class == Token::Fun as i64 && s.defined_here
+                                s.link_name() == target
+                                    && s.class == Token::Fun as i64
+                                    && s.defined_here
                             });
                             let Some(tgt) = tgt else {
                                 // The target may be defined later in the unit;
@@ -1216,7 +1218,7 @@ impl Compiler {
                             // placeholder pc over the resolved entry.
                             self.symbols[id_idx].defined_here = true;
                             self.symbols[id_idx].is_alias = true;
-                            let name = self.symbols[id_idx].name.clone();
+                            let name = self.symbols[id_idx].link_name().into();
                             let weak = self.symbols[id_idx].is_weak;
                             self.function_aliases
                                 .push(crate::c5::program::FunctionAlias { name, target, weak });
@@ -2765,7 +2767,7 @@ impl Compiler {
             let tgt = self
                 .symbols
                 .iter()
-                .position(|s| s.name == target && s.class == want && s.defined_here);
+                .position(|s| s.link_name() == target && s.class == want && s.defined_here);
             let Some(tgt) = tgt else {
                 let kind = if is_object { "an object" } else { "a function" };
                 return Err(self.compile_err(format!(
@@ -2779,7 +2781,7 @@ impl Compiler {
             if is_object {
                 self.symbols[id_idx].array_size = self.symbols[tgt].array_size;
             } else {
-                let name = self.symbols[id_idx].name.clone();
+                let name = self.symbols[id_idx].link_name().into();
                 let weak = self.symbols[id_idx].is_weak;
                 self.function_aliases
                     .push(crate::c5::program::FunctionAlias { name, target, weak });

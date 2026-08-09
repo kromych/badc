@@ -423,7 +423,7 @@ impl Compiler {
                 self.accept_declarator_separator()?;
                 continue;
             }
-            let asm_reg = self.parse_register_asm_binding(is_static, is_extern)?;
+            let asm_reg = self.parse_register_asm_binding(loc_idx, is_static, is_extern)?;
             // Trailing cleanup wins for this declarator; else the leading one.
             let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
             if maybe_unused && loc_idx != usize::MAX {

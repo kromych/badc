@@ -769,6 +769,10 @@ impl Compiler {
         s.asm_register = None;
         s.h_is_global_register = s.is_global_register;
         s.is_global_register = false;
+        // Cloned, not taken: a block-scope `extern` redeclaration names the
+        // same entity (C99 6.2.2p4) and keeps its rename. The save exists so
+        // scope exit cannot drop the outer binding's label.
+        s.h_asm_name = s.asm_name.clone();
         // The inner binding records its own folded const value, if any.
         s.h_const_object_value = s.const_object_value;
         s.const_object_value = None;
@@ -796,6 +800,7 @@ impl Compiler {
         sym.is_zero_len_array = sym.h_is_zero_len_array;
         sym.asm_register = sym.h_asm_register;
         sym.is_global_register = sym.h_is_global_register;
+        sym.asm_name = sym.h_asm_name.take();
         sym.const_object_value = sym.h_const_object_value;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
@@ -827,6 +832,7 @@ impl Compiler {
             && sym.is_zero_len_array == sym.h_is_zero_len_array
             && sym.asm_register == sym.h_asm_register
             && sym.is_global_register == sym.h_is_global_register
+            && sym.asm_name == sym.h_asm_name
             && sym.const_object_value == sym.h_const_object_value
             && !sym.is_scope_static
             && !sym.is_scope_typedef

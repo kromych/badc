@@ -36,6 +36,21 @@ fn function_sections(
         .collect()
 }
 
+/// Assembler name per function identifier the unit renames with a GNU
+/// asm label. Only renamed entries appear; every other function emits
+/// under its identifier.
+fn renamed_functions(
+    program: &Program,
+) -> alloc::collections::BTreeMap<&str, &alloc::string::String> {
+    use crate::c5::token::Token;
+    program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
+        .filter_map(|s| Some((s.name.as_str(), s.asm_name.as_ref()?)))
+        .collect()
+}
+
 /// Names of function definitions with internal linkage (C99 6.2.2).
 fn internal_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> {
     use crate::c5::symbol::Linkage;
@@ -69,6 +84,7 @@ pub(crate) fn walk_program(
     let weak_names = weak_function_names(program);
     let internal_names = internal_function_names(program);
     let sections = function_sections(program);
+    let renamed = renamed_functions(program);
     let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
     let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
@@ -90,7 +106,13 @@ pub(crate) fn walk_program(
                 e,
             )))
         })?;
-        func.name = f.name.clone();
+        // `FunctionSsa::name` is the assembler name from here down: it feeds
+        // `Build::func_names`, every writer's symbol table, and the bare-name
+        // lookup an inline-asm `call`/`bl` resolves against. The identifier
+        // stays available through `Program::symbols` for DWARF.
+        func.name = renamed
+            .get(f.name.as_str())
+            .map_or_else(|| f.name.clone(), |n| (*n).clone());
         func.is_inline = f.is_inline;
         func.is_always_inline = f.is_always_inline;
         func.is_naked = f.is_naked;

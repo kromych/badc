@@ -10991,4 +10991,61 @@ mod code_mode_tests {
             assert_eq!(assemble(src), want, "{src}");
         }
     }
+
+    /// The BMI / BMI2 set encodes with VEX but names no vector register:
+    /// VEX.W follows the operand width and VEX.L is zero. The shift-like ops
+    /// hold their count in VEX.vvvv, so their AT&T sources are the other way
+    /// round from `andn` and friends. Bytes measured with GNU as 2.46.1.
+    #[test]
+    fn vex_general_register_forms_match_gnu_as() {
+        for (src, want) in [
+            (
+                "rorx $2, %esi, %esi\n",
+                &[0xc4, 0xe3, 0x7b, 0xf0, 0xf6, 0x02][..],
+            ),
+            (
+                "rorx $25, %edx, %r13d\n",
+                &[0xc4, 0x63, 0x7b, 0xf0, 0xea, 0x19][..],
+            ),
+            // A quadword operand sets VEX.W.
+            (
+                "rorx $7, %rax, %rbx\n",
+                &[0xc4, 0xe3, 0xfb, 0xf0, 0xd8, 0x07][..],
+            ),
+            (
+                "rorx $3, 8(%rdi), %ecx\n",
+                &[0xc4, 0xe3, 0x7b, 0xf0, 0x4f, 0x08, 0x03][..],
+            ),
+            (
+                "andn %eax, %ebx, %ecx\n",
+                &[0xc4, 0xe2, 0x60, 0xf2, 0xc8][..],
+            ),
+            (
+                "andn %rax, %rbx, %rcx\n",
+                &[0xc4, 0xe2, 0xe0, 0xf2, 0xc8][..],
+            ),
+            (
+                "bzhi %eax, %ebx, %ecx\n",
+                &[0xc4, 0xe2, 0x78, 0xf5, 0xcb][..],
+            ),
+            (
+                "sarx %ecx, %eax, %edx\n",
+                &[0xc4, 0xe2, 0x72, 0xf7, 0xd0][..],
+            ),
+            (
+                "shlx %ecx, %eax, %edx\n",
+                &[0xc4, 0xe2, 0x71, 0xf7, 0xd0][..],
+            ),
+            (
+                "shrx %rcx, %rax, %rdx\n",
+                &[0xc4, 0xe2, 0xf3, 0xf7, 0xd0][..],
+            ),
+            (
+                "sarx %ecx, (%rdi,%rsi,4), %edx\n",
+                &[0xc4, 0xe2, 0x72, 0xf7, 0x14, 0xb7][..],
+            ),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
 }

@@ -170,6 +170,20 @@ pub(crate) enum Mnemonic {
     VexNullary {
         l: u8,
     },
+    /// A VEX-encoded general-register op (the BMI / BMI2 set). `src2` rides
+    /// ModRM.rm, `dst` ModRM.reg, and `src1` VEX.vvvv -- absent for the
+    /// two-operand-plus-immediate `rorx`, whose `imm` is a trailing byte.
+    /// VEX.W follows the operand width, VEX.L is zero.
+    VexGpr {
+        pp: u8,
+        map: u8,
+        opcode: u8,
+        imm: bool,
+        /// The AT&T source order is `src2, src1, dst` for the shift-like ops
+        /// (`sarx count, src, dst`), whose VEX.vvvv holds the count, and
+        /// `src1, src2, dst` for the rest.
+        vvvv_first: bool,
+    },
     /// Privileged / model-specific operandless forms (operands, where any,
     /// ride fixed registers via the statement's constraints). `cli` / `sti`
     /// clear / set the interrupt flag; `invd` / `wbinvd` invalidate caches;
@@ -1161,6 +1175,26 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         _ => None,
     } {
         return Some(Mnemonic::VexNullary { l });
+    }
+    // VEX general-register ops as `(name, pp, map, opcode, imm, vvvv_first)`:
+    // the BMI / BMI2 set, which encodes with VEX but names no vector register.
+    #[rustfmt::skip]
+    const GPR: &[(&str, u8, u8, u8, bool, bool)] = &[
+        ("rorx", 3, 3, 0xF0, true, false),
+        ("andn", 0, 2, 0xF2, false, false), ("mulx", 3, 2, 0xF6, false, false),
+        ("bzhi", 0, 2, 0xF5, false, true), ("pdep", 3, 2, 0xF5, false, false),
+        ("pext", 2, 2, 0xF5, false, false),
+        ("sarx", 2, 2, 0xF7, false, true), ("shlx", 1, 2, 0xF7, false, true),
+        ("shrx", 3, 2, 0xF7, false, true),
+    ];
+    if let Some(&(_, pp, map, opcode, imm, vvvv_first)) = GPR.iter().find(|r| r.0 == name) {
+        return Some(Mnemonic::VexGpr {
+            pp,
+            map,
+            opcode,
+            imm,
+            vvvv_first,
+        });
     }
     // VEX packed shifts by immediate as `(name, opcode, /digit)`; the
     // destination rides VEX.vvvv, so they are their own shape.
@@ -3684,6 +3718,68 @@ fn encode_bespoke(
             }
             emit_vex(code, false, false, false, 1, false, 0, l, 0);
             code.push(0x77);
+            Ok(())
+        }
+        Mnemonic::VexGpr {
+            pp,
+            map,
+            opcode,
+            imm,
+            vvvv_first,
+        } => {
+            let gpr = |c: &Concrete| match *c {
+                Concrete::Reg { reg, size } if reg < MMX_BASE => Some((reg, size)),
+                _ => None,
+            };
+            // `rorx $imm, src2, dst` binds no VEX.vvvv; the rest are
+            // `src, src, dst` with one of the two sources in VEX.vvvv.
+            let (ib, src2, src1, dst) = match (imm, ops) {
+                (true, [i, s2, d]) => (Some(i), s2, None, d),
+                (false, [a, b, d]) if vvvv_first => (None, b, Some(a), d),
+                (false, [a, b, d]) => (None, a, Some(b), d),
+                _ => {
+                    return Err(String::from(
+                        "inline asm: bad operand count for this VEX op",
+                    ));
+                }
+            };
+            let Some((dn, size)) = gpr(dst) else {
+                return Err(String::from(
+                    "inline asm: this VEX op's destination must be a general register",
+                ));
+            };
+            let vvvv = match src1 {
+                Some(s) => match gpr(s) {
+                    Some((n, _)) => n,
+                    None => {
+                        return Err(String::from(
+                            "inline asm: this VEX op's source must be a general register",
+                        ));
+                    }
+                },
+                None => 0,
+            };
+            let w = size == AsmRegSize::Quad;
+            match gpr(src2) {
+                Some((sn, _)) => {
+                    emit_vex(code, dn >= 8, false, sn >= 8, map, w, vvvv, 0, pp);
+                    code.push(opcode);
+                    code.push(modrm_reg(dn & 7, sn & 7));
+                }
+                None => {
+                    let Some(mr) = MemRm::of(src2) else {
+                        return Err(String::from(
+                            "inline asm: this VEX op's source must be a register or memory",
+                        ));
+                    };
+                    emit_vex(code, dn >= 8, mr.rex_x(), mr.rex_b(), map, w, vvvv, 0, pp);
+                    code.push(opcode);
+                    mr.emit(code, dn & 7);
+                }
+            }
+            if let Some(Concrete::Imm(v)) = ib {
+                code.push(*v as u8);
+            }
             Ok(())
         }
         Mnemonic::In | Mnemonic::Out => {

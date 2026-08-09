@@ -1397,11 +1397,19 @@ pub(crate) fn patch_asm_insn_field(
         buf[at..at + 4].copy_from_slice(&w.to_le_bytes());
     };
     match kind {
-        AsmRelocKind::Data if pcrel && width == 4 => {
-            let v = i32::try_from(disp).map_err(|_| {
-                alloc::string::String::from("inline asm: PC-relative field out of range")
-            })?;
-            buf[at..at + 4].copy_from_slice(&v.to_le_bytes());
+        // A same-section PC-relative reference resolves here, at whatever
+        // width the field is: 2 bytes for a `.code16` near branch, 1 for a
+        // short one. Leaving it to a relocation would work but would put
+        // one in the object for a distance the assembler already knows.
+        AsmRelocKind::Data if pcrel && matches!(width, 1 | 2 | 4) => {
+            let w = width as usize;
+            let lim = 1i64 << (8 * w - 1);
+            if !(-lim..lim).contains(&disp) {
+                return Err(alloc::string::String::from(
+                    "inline asm: PC-relative field out of range",
+                ));
+            }
+            buf[at..at + w].copy_from_slice(&disp.to_le_bytes()[..w]);
             Ok(true)
         }
         AsmRelocKind::Data => Ok(false),
@@ -5647,9 +5655,9 @@ pub(crate) fn materialize_asm_sections(
                                             "inline asm: non-constant section data value",
                                         )
                                     })?;
-                                    if !matches!(width, 4 | 8) {
+                                    if !matches!(width, 1 | 2 | 4 | 8) {
                                         return Err(alloc::string::String::from(
-                                            "inline asm: section reference needs a 4- or 8-byte field",
+                                            "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
                                         ));
                                     }
                                     sec.relocs.push(AsmSectionReloc {
@@ -5712,9 +5720,9 @@ pub(crate) fn materialize_asm_sections(
                                         addend,
                                         pcrel,
                                     } => {
-                                        if !matches!(width, 4 | 8) {
+                                        if !matches!(width, 1 | 2 | 4 | 8) {
                                             return Err(alloc::string::String::from(
-                                                "inline asm: section reference needs a 4- or 8-byte field",
+                                                "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
                                             ));
                                         }
                                         sec.relocs.push(AsmSectionReloc {
@@ -5810,9 +5818,9 @@ pub(crate) fn materialize_asm_sections(
                                         addend,
                                         pcrel,
                                     } => {
-                                        if !matches!(width, 4 | 8) {
+                                        if !matches!(width, 1 | 2 | 4 | 8) {
                                             return Err(alloc::string::String::from(
-                                                "inline asm: section reference needs a 4- or 8-byte field",
+                                                "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
                                             ));
                                         }
                                         sec.relocs.push(AsmSectionReloc {
@@ -5835,9 +5843,9 @@ pub(crate) fn materialize_asm_sections(
                                 addend,
                                 pcrel,
                             } => {
-                                if !matches!(width, 4 | 8) {
+                                if !matches!(width, 1 | 2 | 4 | 8) {
                                     return Err(alloc::string::String::from(
-                                        "inline asm: section reference needs a 4- or 8-byte field",
+                                        "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
                                     ));
                                 }
                                 let (target, base_add) = if *goto {

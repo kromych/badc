@@ -283,9 +283,12 @@ fn legacy66(f: &Form) -> bool {
 
 /// Whether the operand-size prefix selects the form's operand width even
 /// though no slot carries the `v` class. The catalogue pins a width the
-/// architecture leaves to that class in two places: an extending move's
-/// destination (`movzx r32, r/m16`) and a fixed accumulator wider than a byte
-/// (`in eax, dx`). Both name the operation width.
+/// architecture leaves to that class in three places: an extending move's
+/// destination (`movzx r32, r/m16`), a fixed accumulator wider than a byte
+/// (`in eax, dx`), and a register-in-opcode group whose members differ only
+/// by operand size (`B8+rd mov`, whose immediate width follows it, so the
+/// catalogue splits the group into `iw` / `id` / `iq` members). All three
+/// name the operation width.
 fn pinned_width(f: &Form) -> bool {
     let slot = |p: Option<&OpPat>| match p {
         Some(&(OpPat::Reg(w) | OpPat::Rm(w) | OpPat::Mem(w))) => wbytes(w, 0),
@@ -298,6 +301,10 @@ fn pinned_width(f: &Form) -> bool {
         || f.ops
             .iter()
             .any(|p| matches!(p, OpPat::Fixed(0, W::Wd | W::L | W::Q)))
+        || (f.plus_r
+            && f.ops
+                .iter()
+                .any(|p| matches!(p, OpPat::Reg(W::Wd | W::L | W::Q))))
 }
 
 /// Byte size of a form's relative-offset slot. The near-branch group's

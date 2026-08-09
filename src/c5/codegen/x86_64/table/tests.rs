@@ -495,6 +495,19 @@ fn code16_operand_size_prefix_matches_gnu_as() {
         e("movzx", Some(4), &[r(4, 4), r(4, 2)]),
         [0x66, 0x0f, 0xb7, 0xe4]
     );
+    // `B8+rd mov` is a width class the catalogue splits by immediate width;
+    // the 32-bit member still takes the prefix outside 32-bit mode. The 8-bit
+    // member (`B0+rb`) is its own opcode and never does.
+    assert_eq!(
+        e("mov", None, &[r(0, 4), Opnd::Imm(0x1234_5678)]),
+        [0x66, 0xb8, 0x78, 0x56, 0x34, 0x12]
+    );
+    assert_eq!(
+        e("mov", None, &[r(3, 4), Opnd::Imm(0x1122_3344)]),
+        [0x66, 0xbb, 0x44, 0x33, 0x22, 0x11]
+    );
+    assert_eq!(e("mov", None, &[r(0, 2), Opnd::Imm(7)]), [0xb8, 0x07, 0x00]);
+    assert_eq!(e("mov", None, &[r(0, 1), Opnd::Imm(7)]), [0xb0, 0x07]);
     // A form whose operand size is baked into the opcode takes no prefix.
     assert_eq!(e("lldt", None, &[r(0, 2)]), [0x0f, 0x00, 0xd0]);
     assert_eq!(e("in", None, &[r(0, 2), r(2, 2)]), [0xed]);
@@ -588,6 +601,15 @@ fn code32_matches_gnu_as() {
     assert_eq!(
         e(4, "movzx", Some(2), &[r(0, 2), r(0, 1)]),
         [0x66, 0x0f, 0xb6, 0xc0]
+    );
+    // The `B8+rd mov` class the other way round: 32 is the default here.
+    assert_eq!(
+        e(4, "mov", None, &[r(0, 4), Opnd::Imm(0x1234_5678)]),
+        [0xb8, 0x78, 0x56, 0x34, 0x12]
+    );
+    assert_eq!(
+        e(4, "mov", None, &[r(0, 2), Opnd::Imm(0x1234)]),
+        [0x66, 0xb8, 0x34, 0x12]
     );
     assert_eq!(e(4, "lldt", None, &[r(0, 2)]), [0x0f, 0x00, 0xd0]);
     assert_eq!(e(4, "lgdt", Some(4), &[m(3, 4)]), [0x0f, 0x01, 0x13]);

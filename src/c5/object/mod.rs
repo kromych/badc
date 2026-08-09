@@ -9,6 +9,7 @@ pub(crate) mod dwarf;
 pub(crate) mod dwarf_reloc;
 #[cfg(feature = "native-emit")]
 pub(crate) mod elf;
+pub(crate) mod elf_class;
 #[cfg(feature = "native-emit")]
 pub(crate) mod elf_reloc;
 #[cfg(feature = "native-emit")]

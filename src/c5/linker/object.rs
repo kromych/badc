@@ -33,10 +33,7 @@ use crate::c5::error::C5Error;
 /// within it.
 type ConcatStream = (Vec<u8>, usize, Vec<(usize, u64)>);
 
-// ELF64 on-disk constants. Kept verbatim from
-// `codegen/elf_reloc.rs` so the encoder and decoder share a
-// single source of truth; a future refactor can lift them into
-// a common module.
+// ELF constants the reader matches on.
 const ELF_CLASS_64: u8 = 2;
 const ELF_DATA_LSB: u8 = 1;
 const ET_REL: u16 = 1;
@@ -57,258 +54,12 @@ const ELF64_SHDR_SIZE: usize = core::mem::size_of::<Elf64Shdr>();
 const ELF64_SYM_SIZE: usize = core::mem::size_of::<Elf64Sym>();
 const ELF64_RELA_SIZE: usize = core::mem::size_of::<Elf64Rela>();
 
-// On-disk ELF64 records as `#[repr(C)]` structs. The struct
-// layout matches the ELF spec verbatim because every field is
-// naturally aligned at the offset the spec calls out and the
-// platforms we target (x86_64, aarch64) are little-endian, so
-// field byte-order matches on-disk order. `static_assert`-style
-// sanity checks at the bottom of this block lock the sizes.
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Elf64Ehdr {
-    pub(crate) e_ident: [u8; 16],
-    pub(crate) e_type: u16,
-    pub(crate) e_machine: u16,
-    pub(crate) e_version: u32,
-    pub(crate) e_entry: u64,
-    pub(crate) e_phoff: u64,
-    pub(crate) e_shoff: u64,
-    pub(crate) e_flags: u32,
-    pub(crate) e_ehsize: u16,
-    pub(crate) e_phentsize: u16,
-    pub(crate) e_phnum: u16,
-    pub(crate) e_shentsize: u16,
-    pub(crate) e_shnum: u16,
-    pub(crate) e_shstrndx: u16,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Elf64Shdr {
-    pub(crate) sh_name: u32,
-    pub(crate) sh_type: u32,
-    pub(crate) sh_flags: u64,
-    pub(crate) sh_addr: u64,
-    pub(crate) sh_offset: u64,
-    pub(crate) sh_size: u64,
-    pub(crate) sh_link: u32,
-    pub(crate) sh_info: u32,
-    pub(crate) sh_addralign: u64,
-    pub(crate) sh_entsize: u64,
-}
-
-// ELF32 records. The reader widens them into the ELF64 shapes above so
-// that only the decode step is class-dependent.
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Elf32Ehdr {
-    pub(crate) e_ident: [u8; 16],
-    pub(crate) e_type: u16,
-    pub(crate) e_machine: u16,
-    pub(crate) e_version: u32,
-    pub(crate) e_entry: u32,
-    pub(crate) e_phoff: u32,
-    pub(crate) e_shoff: u32,
-    pub(crate) e_flags: u32,
-    pub(crate) e_ehsize: u16,
-    pub(crate) e_phentsize: u16,
-    pub(crate) e_phnum: u16,
-    pub(crate) e_shentsize: u16,
-    pub(crate) e_shnum: u16,
-    pub(crate) e_shstrndx: u16,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Elf32Shdr {
-    pub(crate) sh_name: u32,
-    pub(crate) sh_type: u32,
-    pub(crate) sh_flags: u32,
-    pub(crate) sh_addr: u32,
-    pub(crate) sh_offset: u32,
-    pub(crate) sh_size: u32,
-    pub(crate) sh_link: u32,
-    pub(crate) sh_info: u32,
-    pub(crate) sh_addralign: u32,
-    pub(crate) sh_entsize: u32,
-}
-
-impl From<Elf32Ehdr> for Elf64Ehdr {
-    fn from(e: Elf32Ehdr) -> Elf64Ehdr {
-        Elf64Ehdr {
-            e_ident: e.e_ident,
-            e_type: e.e_type,
-            e_machine: e.e_machine,
-            e_version: e.e_version,
-            e_entry: e.e_entry as u64,
-            e_phoff: e.e_phoff as u64,
-            e_shoff: e.e_shoff as u64,
-            e_flags: e.e_flags,
-            e_ehsize: e.e_ehsize,
-            e_phentsize: e.e_phentsize,
-            e_phnum: e.e_phnum,
-            e_shentsize: e.e_shentsize,
-            e_shnum: e.e_shnum,
-            e_shstrndx: e.e_shstrndx,
-        }
-    }
-}
-
-impl From<Elf32Shdr> for Elf64Shdr {
-    fn from(s: Elf32Shdr) -> Elf64Shdr {
-        Elf64Shdr {
-            sh_name: s.sh_name,
-            sh_type: s.sh_type,
-            sh_flags: s.sh_flags as u64,
-            sh_addr: s.sh_addr as u64,
-            sh_offset: s.sh_offset as u64,
-            sh_size: s.sh_size as u64,
-            sh_link: s.sh_link,
-            sh_info: s.sh_info,
-            sh_addralign: s.sh_addralign as u64,
-            sh_entsize: s.sh_entsize as u64,
-        }
-    }
-}
-
-/// ELF class of an object or image. Fixes the width of every on-disk
-/// record the reader decodes and the writer emits.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum ElfClass {
-    Elf32,
-    #[default]
-    Elf64,
-}
-
-impl ElfClass {
-    /// `e_ident[EI_CLASS]`.
-    pub fn ei_class(self) -> u8 {
-        match self {
-            ElfClass::Elf32 => 1,
-            ElfClass::Elf64 => 2,
-        }
-    }
-    pub fn from_ei_class(b: u8) -> Option<ElfClass> {
-        match b {
-            1 => Some(ElfClass::Elf32),
-            2 => Some(ElfClass::Elf64),
-            _ => None,
-        }
-    }
-    pub fn is32(self) -> bool {
-        self == ElfClass::Elf32
-    }
-    /// Width of an address / offset field.
-    pub fn addr_size(self) -> u64 {
-        if self.is32() { 4 } else { 8 }
-    }
-    pub fn ehdr_size(self) -> u64 {
-        if self.is32() { 52 } else { 64 }
-    }
-    pub fn phdr_size(self) -> u64 {
-        if self.is32() { 32 } else { 56 }
-    }
-    pub fn shdr_size(self) -> u64 {
-        if self.is32() { 40 } else { 64 }
-    }
-    pub fn sym_size(self) -> u64 {
-        if self.is32() { 16 } else { 24 }
-    }
-    pub fn rel_size(self) -> u64 {
-        if self.is32() { 8 } else { 16 }
-    }
-    pub fn rela_size(self) -> u64 {
-        if self.is32() { 12 } else { 24 }
-    }
-    pub fn dyn_size(self) -> u64 {
-        if self.is32() { 8 } else { 16 }
-    }
-    /// `r_info` split: ELF32 keeps the type in the low byte.
-    pub fn reloc_info(self, sym: u32, rtype: u32) -> u64 {
-        if self.is32() {
-            ((sym as u64) << 8) | (rtype as u64 & 0xff)
-        } else {
-            ((sym as u64) << 32) | rtype as u64
-        }
-    }
-    pub fn reloc_sym(self, info: u64) -> u32 {
-        if self.is32() {
-            (info >> 8) as u32
-        } else {
-            (info >> 32) as u32
-        }
-    }
-    pub fn reloc_type(self, info: u64) -> u32 {
-        if self.is32() {
-            (info & 0xff) as u32
-        } else {
-            info as u32
-        }
-    }
-    /// Little-endian encoding of an address-width value.
-    pub fn addr_bytes(self, v: u64) -> [u8; 8] {
-        if self.is32() {
-            let b = (v as u32).to_le_bytes();
-            [b[0], b[1], b[2], b[3], 0, 0, 0, 0]
-        } else {
-            v.to_le_bytes()
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-struct Elf64Sym {
-    st_name: u32,
-    st_info: u8,
-    st_other: u8,
-    st_shndx: u16,
-    st_value: u64,
-    st_size: u64,
-}
-
-/// ELF32 symbol: the value and size fields sit before `st_info`,
-/// unlike the ELF64 record.
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Elf32Sym {
-    pub(crate) st_name: u32,
-    pub(crate) st_value: u32,
-    pub(crate) st_size: u32,
-    pub(crate) st_info: u8,
-    pub(crate) st_other: u8,
-    pub(crate) st_shndx: u16,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Elf32Rel {
-    pub(crate) r_offset: u32,
-    pub(crate) r_info: u32,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Elf32Rela {
-    pub(crate) r_offset: u32,
-    pub(crate) r_info: u32,
-    pub(crate) r_addend: i32,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Elf64Rel {
-    pub(crate) r_offset: u64,
-    pub(crate) r_info: u64,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-struct Elf64Rela {
-    r_offset: u64,
-    r_info: u64,
-    r_addend: i64,
-}
+// On-disk record shapes and the class oracle are shared with the
+// object writer; `object::elf_class` is their definition site.
+pub(crate) use crate::c5::object::elf_class::{
+    Elf32Ehdr, Elf32Rel, Elf32Rela, Elf32Shdr, Elf32Sym, Elf64Ehdr, Elf64Rel, Elf64Rela, Elf64Shdr,
+    Elf64Sym, ElfClass,
+};
 
 /// On-disk ELF64 `.dynamic` entry: a `(tag, value)` directive read by
 /// the dynamic loader (DT_NEEDED, DT_SONAME, ...).
@@ -330,18 +81,8 @@ struct Elf64Nhdr {
 }
 
 const _: () = {
-    assert!(core::mem::size_of::<Elf64Ehdr>() == 64);
-    assert!(core::mem::size_of::<Elf64Shdr>() == 64);
-    assert!(core::mem::size_of::<Elf64Sym>() == 24);
-    assert!(core::mem::size_of::<Elf64Rel>() == 16);
-    assert!(core::mem::size_of::<Elf64Rela>() == 24);
     assert!(core::mem::size_of::<Elf64Nhdr>() == 12);
     assert!(core::mem::size_of::<Elf64Dyn>() == 16);
-    assert!(core::mem::size_of::<Elf32Ehdr>() == 52);
-    assert!(core::mem::size_of::<Elf32Shdr>() == 40);
-    assert!(core::mem::size_of::<Elf32Sym>() == 16);
-    assert!(core::mem::size_of::<Elf32Rel>() == 8);
-    assert!(core::mem::size_of::<Elf32Rela>() == 12);
 };
 
 /// Read a `#[repr(C)]` ELF record at byte offset `off`. Bounds-

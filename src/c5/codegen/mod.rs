@@ -55,6 +55,8 @@ pub(crate) use x86_64::decode_x86_64_prologue_unwind;
 
 pub use jit::{jit_run, jit_run_with_options};
 
+pub use crate::c5::object::elf_class::ElfClass;
+
 /// Which native binary to produce. Adding a target is a structural
 /// change (new variant, new match arm in [`emit_native`]) rather than
 /// a silent string parse, and gives `--target=...` somewhere to grow.
@@ -1529,6 +1531,9 @@ pub(crate) struct Build {
     /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
     /// reads it to pick the external-address form; see [`CodeModel`].
     pub code_model: CodeModel,
+    /// Mirror of [`NativeOptions::elf_class`]. Fixes the on-disk
+    /// record widths and the relocation ABI of a `-c` object.
+    pub elf_class: ElfClass,
     /// The shared library's own name, recorded in the image so a
     /// consumer that links against it by name references the file it
     /// loads at runtime (PE export-directory Name, Mach-O
@@ -2278,6 +2283,12 @@ pub struct NativeOptions {
     /// Speculative-execution mitigations (the `-m` hardening flags).
     /// Default is every field off; see [`Hardening`].
     pub hardening: Hardening,
+    /// ELF class of a relocatable object (`-m32` / `-m16` on an
+    /// assembly unit). An ELFCLASS32 x86 object is an i386 object:
+    /// `EM_386`, `SHT_REL` relocation tables whose addend lives in
+    /// the relocated field, and the `R_386_*` type numbers. Final
+    /// images are unaffected.
+    pub elf_class: ElfClass,
 }
 
 /// x86-64 psABI code model (`-mcmodel=`). Chooses how a relocatable
@@ -2370,6 +2381,7 @@ impl NativeOptions {
             strict_align: false,
             pic: false,
             code_model: CodeModel::Small,
+            elf_class: ElfClass::Elf64,
             hardening: Hardening::NONE,
         }
     }
@@ -2572,10 +2584,11 @@ pub(crate) fn lower_for_with_prebuilt(
 pub(crate) fn encode_file_asm_section_code(
     blocks: &mut [ssa::emit_common::AsmSectionBlock],
     target: Target,
+    class: ElfClass,
 ) -> Result<(), alloc::string::String> {
     match target {
         Target::LinuxX64 | Target::WindowsX64 => {
-            x86_64::emit::encode_x86_file_asm_section_code(blocks)
+            x86_64::emit::encode_x86_file_asm_section_code(blocks, class)
         }
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
             aarch64::emit::encode_a64_file_asm_section_code(blocks)

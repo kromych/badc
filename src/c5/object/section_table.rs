@@ -4,8 +4,8 @@
 //! `__attribute__((section("name")))` placements and assembler
 //! `.pushsection` payloads. Entries are keyed by name; the writer
 //! assigns section indices, emits one STT_SECTION symbol per entry,
-//! and appends each entry's bytes plus a companion `.rela<name>` when
-//! it carries relocations.
+//! and appends each entry's bytes plus a companion relocation
+//! section when it carries relocations.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -28,9 +28,6 @@ pub(crate) struct SectionRela {
 #[derive(Debug, Clone)]
 pub(crate) struct SectionSpec {
     pub name: String,
-    /// `.rela<name>`, kept alongside so the section-header string
-    /// table can reference it by slice.
-    pub rela_name: String,
     /// SHT_* value, SHT_PROGBITS for both code and data placements.
     pub sh_type: u32,
     /// SHF_* mask; SHF_ALLOC|SHF_EXECINSTR for text-like entries,
@@ -75,12 +72,8 @@ impl SectionTable {
             e.align = e.align.max(align);
             return Ok(i);
         }
-        let mut rela_name = String::with_capacity(name.len() + 5);
-        rela_name.push_str(".rela");
-        rela_name.push_str(name);
         self.entries.push(SectionSpec {
             name: name.into(),
-            rela_name,
             sh_type,
             flags,
             align,

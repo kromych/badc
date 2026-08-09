@@ -35,6 +35,9 @@ use super::super::program::{ExportedFunction, Program};
 use super::Build;
 use super::Machine;
 use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget, DwarfRelocWidth};
+use super::elf_class::{
+    Elf64Ehdr, Elf64Rela, Elf64Shdr, Elf64Sym, ElfClass, write_ehdr, write_shdr, write_sym,
+};
 use crate::c5::CodeModel;
 use crate::c5::layout::{round_up, write_struct};
 // Relocation types this writer emits. `R_X86_64_TPOFF32` and the
@@ -52,28 +55,30 @@ use crate::c5::layout::{round_up, write_struct};
 // fully static link needs no GOT; otherwise it behaves exactly like
 // `R_X86_64_GOTPCREL`, which linkers never relax.
 use super::elf_reloc_types::{
-    R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
-    R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_CONDBR19,
-    R_AARCH64_JUMP26, R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC,
-    R_AARCH64_LDST8_ABS_LO12_NC, R_AARCH64_LDST16_ABS_LO12_NC, R_AARCH64_LDST32_ABS_LO12_NC,
-    R_AARCH64_LDST64_ABS_LO12_NC, R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32,
-    R_AARCH64_PREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
-    R_AARCH64_TSTBR14, R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64,
-    R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
-    R_X86_64_TPOFF32,
+    R_386_8, R_386_16, R_386_32, R_386_PC8, R_386_PC16, R_386_PC32, R_386_PLT32, R_AARCH64_ABS32,
+    R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_LO21,
+    R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_CONDBR19, R_AARCH64_JUMP26,
+    R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_LDST8_ABS_LO12_NC,
+    R_AARCH64_LDST16_ABS_LO12_NC, R_AARCH64_LDST32_ABS_LO12_NC, R_AARCH64_LDST64_ABS_LO12_NC,
+    R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
+    R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_AARCH64_TSTBR14,
+    R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_PC16, R_X86_64_PC32,
+    R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, i386_field_width,
+    i386_reloc_desc,
 };
 
 // ELF64 constants (Elf.h subset).
-const ELF_CLASS_64: u8 = 2;
 const ELF_DATA_LSB: u8 = 1;
 const ELF_VERSION_CURRENT: u8 = 1;
 const ET_REL: u16 = 1;
+const EM_386: u16 = 3;
 const EM_X86_64: u16 = 62;
 const EM_AARCH64: u16 = 183;
 const SHT_PROGBITS: u32 = 1;
 const SHT_SYMTAB: u32 = 2;
 const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
+const SHT_REL: u32 = 9;
 const SHT_NOTE: u32 = 7;
 const SHT_NOBITS: u32 = 8;
 // SHT_INIT_ARRAY / SHT_FINI_ARRAY (ELF gABI): arrays of function
@@ -224,67 +229,9 @@ const SHN_UNDEF: u16 = 0;
 const SHN_LORESERVE: u16 = 0xff00;
 const SHN_ABS: u16 = 0xfff1;
 
-const ELF64_EHDR_SIZE: usize = 64;
-const ELF64_SHDR_SIZE: usize = 64;
-const ELF64_SYM_SIZE: usize = 24;
+/// Size of the ELF64 relocation record the in-memory tables use
+/// before [`encode_reloc_table`] narrows them for the class.
 const ELF64_RELA_SIZE: usize = 24;
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-struct Elf64Ehdr {
-    e_ident: [u8; 16],
-    e_type: u16,
-    e_machine: u16,
-    e_version: u32,
-    e_entry: u64,
-    e_phoff: u64,
-    e_shoff: u64,
-    e_flags: u32,
-    e_ehsize: u16,
-    e_phentsize: u16,
-    e_phnum: u16,
-    e_shentsize: u16,
-    e_shnum: u16,
-    e_shstrndx: u16,
-}
-const _: () = assert!(core::mem::size_of::<Elf64Ehdr>() == ELF64_EHDR_SIZE);
-
-#[repr(C)]
-#[derive(Copy, Clone, Default)]
-struct Elf64Shdr {
-    sh_name: u32,
-    sh_type: u32,
-    sh_flags: u64,
-    sh_addr: u64,
-    sh_offset: u64,
-    sh_size: u64,
-    sh_link: u32,
-    sh_info: u32,
-    sh_addralign: u64,
-    sh_entsize: u64,
-}
-const _: () = assert!(core::mem::size_of::<Elf64Shdr>() == ELF64_SHDR_SIZE);
-
-#[repr(C)]
-#[derive(Copy, Clone, Default)]
-struct Elf64Rela {
-    r_offset: u64,
-    r_info: u64,
-    r_addend: i64,
-}
-const _: () = assert!(core::mem::size_of::<Elf64Rela>() == ELF64_RELA_SIZE);
-
-#[repr(C)]
-#[derive(Copy, Clone, Default)]
-struct Elf64Sym {
-    st_name: u32,
-    st_info: u8,
-    st_other: u8,
-    st_shndx: u16,
-    st_value: u64,
-    st_size: u64,
-}
-const _: () = assert!(core::mem::size_of::<Elf64Sym>() == ELF64_SYM_SIZE);
 
 /// Build a NUL-separated string blob. Returns (`bytes`, `offsets`)
 /// where `offsets[i]` is the offset of `names[i]` in `bytes`.
@@ -302,11 +249,108 @@ fn build_strtab(names: &[&str]) -> (Vec<u8>, Vec<u32>) {
     (bytes, offsets)
 }
 
-fn e_machine_for(machine: Machine) -> u16 {
-    match machine {
-        Machine::X86_64 => EM_X86_64,
-        Machine::Aarch64 => EM_AARCH64,
+/// psABI whose relocation numbers an object carries. Fixed by the
+/// machine and the ELF class: an ELFCLASS32 x86 object is an i386
+/// object, which numbers its relocations differently from x86-64 and
+/// carries their addends in the relocated field.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RelocAbi {
+    X86_64,
+    I386,
+    Aarch64,
+}
+
+impl RelocAbi {
+    fn of(machine: Machine, class: ElfClass) -> RelocAbi {
+        match (machine, class.is32()) {
+            (Machine::X86_64, false) => RelocAbi::X86_64,
+            (Machine::X86_64, true) => RelocAbi::I386,
+            (Machine::Aarch64, _) => RelocAbi::Aarch64,
+        }
     }
+}
+
+fn e_machine_for(abi: RelocAbi) -> u16 {
+    match abi {
+        RelocAbi::X86_64 => EM_X86_64,
+        RelocAbi::I386 => EM_386,
+        RelocAbi::Aarch64 => EM_AARCH64,
+    }
+}
+
+/// Section type a relocation table takes in this class. i386 is the
+/// only psABI badc emits that uses `SHT_REL`, whose records carry no
+/// addend field.
+fn reloc_sht(class: ElfClass) -> u32 {
+    if class.is32() { SHT_REL } else { SHT_RELA }
+}
+
+/// On-disk size of one relocation record, matching [`reloc_sht`].
+fn reloc_entsize(class: ElfClass) -> u64 {
+    if class.is32() {
+        class.rel_size()
+    } else {
+        class.rela_size()
+    }
+}
+
+/// Section-name prefix matching [`reloc_sht`].
+fn reloc_prefix(class: ElfClass) -> &'static str {
+    if class.is32() { ".rel" } else { ".rela" }
+}
+
+/// Write each entry's addend into the field it relocates, at the
+/// width its type reads. `SHT_REL` records have no addend field, so
+/// the relocated field is the only place it can live. A no-op for the
+/// RELA classes.
+fn fold_rel_addends(class: ElfClass, table: &[u8], body: &mut [u8]) -> Result<(), C5Error> {
+    if !class.is32() {
+        return Ok(());
+    }
+    for row in table.chunks_exact(ELF64_RELA_SIZE) {
+        let off = u64::from_le_bytes(row[0..8].try_into().unwrap()) as usize;
+        let rtype = u64::from_le_bytes(row[8..16].try_into().unwrap()) as u32;
+        let addend = i64::from_le_bytes(row[16..24].try_into().unwrap());
+        let Some(width) = i386_field_width(rtype) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &alloc::format!(
+                    "elf_reloc: {} carries no field for an implicit addend",
+                    i386_reloc_desc(rtype)
+                ),
+            )));
+        };
+        let end = off + width as usize;
+        if end > body.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &alloc::format!(
+                    "elf_reloc: {} at 0x{off:x} (width {width}) past section end (length {})",
+                    i386_reloc_desc(rtype),
+                    body.len()
+                ),
+            )));
+        }
+        body[off..end].copy_from_slice(&addend.to_le_bytes()[..width as usize]);
+    }
+    Ok(())
+}
+
+/// Encode an ELF64-shaped relocation table at the class's width,
+/// re-splitting `r_info` for the class. `SHT_REL` drops the addend
+/// word; [`fold_rel_addends`] must have folded it into the section
+/// bytes first.
+fn encode_reloc_table(class: ElfClass, table: &[u8]) -> Vec<u8> {
+    if !class.is32() {
+        return table.to_vec();
+    }
+    let mut out = Vec::with_capacity(table.len() / ELF64_RELA_SIZE * 8);
+    for row in table.chunks_exact(ELF64_RELA_SIZE) {
+        let r_offset = u64::from_le_bytes(row[0..8].try_into().unwrap());
+        let r_info = u64::from_le_bytes(row[8..16].try_into().unwrap());
+        let info = class.reloc_info((r_info >> 32) as u32, r_info as u32);
+        out.extend_from_slice(&(r_offset as u32).to_le_bytes());
+        out.extend_from_slice(&(info as u32).to_le_bytes());
+    }
+    out
 }
 
 /// One `.init_array` / `.fini_array` section plus its companion
@@ -314,7 +358,6 @@ fn e_machine_for(machine: Machine) -> u16 {
 /// priority. The writer appends the pair after the fixed sections.
 struct InitArraySection {
     name: String,
-    rela_name: String,
     sh_type: u32,
     /// Entry count -- each is an 8-byte function pointer, so the
     /// section's byte size is `count * 8`.
@@ -366,7 +409,6 @@ fn build_init_array_sections(
         } else {
             format!("{base}.{prio:05}")
         };
-        let rela_name = format!(".rela{name}");
         let mut rela = Vec::with_capacity(sym_idxs.len() * ELF64_RELA_SIZE);
         for (i, sym_idx) in sym_idxs.iter().enumerate() {
             write_struct(
@@ -380,7 +422,6 @@ fn build_init_array_sections(
         }
         out.push(InitArraySection {
             name,
-            rela_name,
             sh_type: if is_dtor {
                 SHT_FINI_ARRAY
             } else {
@@ -890,6 +931,8 @@ pub(super) fn write_relocatable(
     // merged layout; that case is rejected in `link_native_objects`
     // (macOS TLV descriptors + Win64 `_tls_index` are the format
     // equivalents). TODO.
+    let class = build.elf_class;
+    let abi = RelocAbi::of(machine, class);
     let source_path = program.source_path.as_str();
     // Section layout (indices used in symtab st_shndx):
     //   1 = .text
@@ -2728,29 +2771,45 @@ pub(super) fn write_relocatable(
                 };
                 use crate::c5::codegen::ssa::emit_common::AsmRelocKind as RK;
                 let rtype = match r.kind {
-                    RK::Data => match (machine_for_rela, r.pcrel, r.width) {
+                    RK::Data => match (abi, r.pcrel, r.width) {
                         // A replacement instruction's direct `call` / `jmp` to a
                         // symbol reaches it through the PLT slot, like a compiler-
                         // emitted call: `R_X86_64_PLT32`, not a data `PC32`.
-                        (Machine::X86_64, true, 4) if r.branch => R_X86_64_PLT32,
-                        (Machine::X86_64, false, 8) => R_X86_64_64,
+                        (RelocAbi::X86_64, true, 4) if r.branch => R_X86_64_PLT32,
+                        (RelocAbi::X86_64, false, 8) => R_X86_64_64,
                         // A `push $symbol` imm32 the CPU sign-extends takes 32S.
-                        (Machine::X86_64, false, 4) if r.signed => R_X86_64_32S,
+                        (RelocAbi::X86_64, false, 4) if r.signed => R_X86_64_32S,
                         // A 16-bit field is the `.code16` boot stubs' address
                         // and near-branch width; the reloc must match it or the
                         // link writes over the following instruction. An 8-bit
                         // field is a byte-width symbol immediate (`movb $sym,
                         // %al`).
-                        (Machine::X86_64, false, 2) => R_X86_64_16,
-                        (Machine::X86_64, false, 1) => R_X86_64_8,
-                        (Machine::X86_64, false, _) => R_X86_64_32,
-                        (Machine::X86_64, true, 8) => R_X86_64_PC64,
-                        (Machine::X86_64, true, 2) => R_X86_64_PC16,
-                        (Machine::X86_64, true, _) => R_X86_64_PC32,
-                        (Machine::Aarch64, false, 8) => R_AARCH64_ABS64,
-                        (Machine::Aarch64, false, _) => R_AARCH64_ABS32,
-                        (Machine::Aarch64, true, 8) => R_AARCH64_PREL64,
-                        (Machine::Aarch64, true, _) => R_AARCH64_PREL32,
+                        (RelocAbi::X86_64, false, 2) => R_X86_64_16,
+                        (RelocAbi::X86_64, false, 1) => R_X86_64_8,
+                        (RelocAbi::X86_64, false, _) => R_X86_64_32,
+                        (RelocAbi::X86_64, true, 8) => R_X86_64_PC64,
+                        (RelocAbi::X86_64, true, 2) => R_X86_64_PC16,
+                        (RelocAbi::X86_64, true, _) => R_X86_64_PC32,
+                        // i386 has no 64-bit field: the psABI defines no
+                        // 8-byte absolute or PC-relative relocation, so a
+                        // `.quad` naming a symbol cannot be represented.
+                        (RelocAbi::I386, _, 8) => {
+                            return Err(asm_section_err(
+                                carve.table.entries[e].name.as_str(),
+                                "needs an 8-byte relocation, which the i386 psABI has none of",
+                            ));
+                        }
+                        (RelocAbi::I386, true, 4) if r.branch => R_386_PLT32,
+                        (RelocAbi::I386, false, 2) => R_386_16,
+                        (RelocAbi::I386, false, 1) => R_386_8,
+                        (RelocAbi::I386, false, _) => R_386_32,
+                        (RelocAbi::I386, true, 2) => R_386_PC16,
+                        (RelocAbi::I386, true, 1) => R_386_PC8,
+                        (RelocAbi::I386, true, _) => R_386_PC32,
+                        (RelocAbi::Aarch64, false, 8) => R_AARCH64_ABS64,
+                        (RelocAbi::Aarch64, false, _) => R_AARCH64_ABS32,
+                        (RelocAbi::Aarch64, true, 8) => R_AARCH64_PREL64,
+                        (RelocAbi::Aarch64, true, _) => R_AARCH64_PREL32,
                     },
                     RK::A64Branch26 { link: true } => R_AARCH64_CALL26,
                     RK::A64Branch26 { link: false } => R_AARCH64_JUMP26,
@@ -2926,6 +2985,18 @@ pub(super) fn write_relocatable(
     // keep source order.
     let init_sections =
         build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64)?;
+    // badc has no i386 code generator, so every relocation in an
+    // ELFCLASS32 object comes from the assembler. The compiler's own
+    // tables carry x86-64 numbers, whose meanings differ under i386
+    // (`R_X86_64_64` and `R_386_32` share the number 1), so reaching
+    // this writer with one is an internal inconsistency, not input.
+    if class.is32()
+        && !(rela_bytes.is_empty() && rela_data_bytes.is_empty() && init_sections.is_empty())
+    {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "elf_reloc: compiler-generated relocations in an ELFCLASS32 object",
+        )));
+    }
     // Every named section's relocation list is settled; a `.rela`
     // companion exists exactly for the entries that carry relocations.
     let named_rela_count = carve
@@ -3032,44 +3103,45 @@ pub(super) fn write_relocatable(
 
     // Section name table. One entry per non-null section, in section
     // order, so the name of section `n` sits at `shndx_map(n) - 1`.
-    let fixed_names: [&str; 14] = [
-        ".text",
-        ".rela.text",
-        ".data",
-        ".bss",
-        ".symtab",
-        ".strtab",
-        ".shstrtab",
-        ".rela.data",
-        ".note.badc",
-        ".debug_info",
-        ".rela.debug_info",
-        ".debug_abbrev",
-        ".debug_line",
-        ".rela.debug_line",
+    let rp = reloc_prefix(class);
+    let fixed_names: [String; 14] = [
+        ".text".to_string(),
+        format!("{rp}.text"),
+        ".data".to_string(),
+        ".bss".to_string(),
+        ".symtab".to_string(),
+        ".strtab".to_string(),
+        ".shstrtab".to_string(),
+        format!("{rp}.data"),
+        ".note.badc".to_string(),
+        ".debug_info".to_string(),
+        format!("{rp}.debug_info"),
+        ".debug_abbrev".to_string(),
+        ".debug_line".to_string(),
+        format!("{rp}.debug_line"),
     ];
-    let mut shstrtab_names: Vec<&str> = Vec::with_capacity(num_sections);
+    let mut shstrtab_names: Vec<String> = Vec::with_capacity(num_sections);
     for (i, name) in fixed_names.iter().enumerate() {
         let nominal = i as u16 + 1;
         if !fixed_rela_empty
             .iter()
             .any(|&(idx, empty)| empty && idx == nominal)
         {
-            shstrtab_names.push(name);
+            shstrtab_names.push(name.clone());
         }
     }
     // `.tdata` / `.tbss` names follow the fixed set when the unit
     // carries TLS.
     if has_tls {
-        shstrtab_names.push(".tdata");
-        shstrtab_names.push(".tbss");
+        shstrtab_names.push(".tdata".to_string());
+        shstrtab_names.push(".tbss".to_string());
     }
     // Named sections (attribute placements + inline-asm payloads) take
     // the indices right after the fixed set; the on-demand `.rela`
     // companions follow the block.
     let named_names_start = shstrtab_names.len();
     for e in &carve.table.entries {
-        shstrtab_names.push(e.name.as_str());
+        shstrtab_names.push(e.name.clone());
     }
     // `named_rela_pos[k]` is entry k's position among the rela-bearing
     // entries; only those contribute a `.rela<name>` string.
@@ -3078,36 +3150,33 @@ pub(super) fn write_relocatable(
     for e in &carve.table.entries {
         named_rela_pos.push(shstrtab_names.len() - named_rela_names_start);
         if !e.relas.is_empty() {
-            shstrtab_names.push(e.rela_name.as_str());
+            shstrtab_names.push(format!("{rp}{}", e.name));
         }
     }
     // `.init_array*` / `.fini_array*` names and their `.rela.*`
     // companions, appended last so the fixed and TLS indices stay put.
     let init_names_start = shstrtab_names.len();
     for s in &init_sections {
-        shstrtab_names.push(s.name.as_str());
-        shstrtab_names.push(s.rela_name.as_str());
+        shstrtab_names.push(s.name.clone());
+        shstrtab_names.push(format!("{rp}{}", s.name));
     }
     let comment_name_idx = shstrtab_names.len();
-    shstrtab_names.push(".comment");
-    let (shstrtab_bytes, shstrtab_offs) = build_strtab(&shstrtab_names);
+    shstrtab_names.push(".comment".to_string());
+    let name_refs: Vec<&str> = shstrtab_names.iter().map(|n| n.as_str()).collect();
+    let (shstrtab_bytes, shstrtab_offs) = build_strtab(&name_refs);
     // Name offset of a fixed section, addressed by its nominal index.
     let fixed_name = |nominal: u16| shstrtab_offs[shndx_map(nominal) as usize - 1];
 
     // Serialized last of all, so `shndx_map` has already compacted
     // every `st_shndx`.
-    let symtab_bytes: Vec<u8> = symbols
-        .iter()
-        .flat_map(|s| {
-            let mut v = Vec::with_capacity(ELF64_SYM_SIZE);
-            write_struct(&mut v, s);
-            v
-        })
-        .collect();
+    let mut symtab_bytes: Vec<u8> = Vec::with_capacity(symbols.len() * class.sym_size() as usize);
+    for s in &symbols {
+        write_sym(class, s, &mut symtab_bytes);
+    }
 
     // Section data layout. Each section's offset starts at the
     // running tail of the output, rounded to its alignment.
-    let mut out: Vec<u8> = alloc::vec![0u8; ELF64_EHDR_SIZE];
+    let mut out: Vec<u8> = alloc::vec![0u8; class.ehdr_size() as usize];
 
     let mut sh: Vec<Elf64Shdr> = Vec::with_capacity(num_sections);
     sh.push(Elf64Shdr::default()); // SHN_UNDEF
@@ -3161,6 +3230,7 @@ pub(super) fn write_relocatable(
             .unwrap_or(0);
         text_body.drain(carve.text_keep_len..carve_hi);
     }
+    fold_rel_addends(class, &rela_bytes, &mut text_body)?;
     let text_align = build.text_align.max(16) as u64;
     let text_off = round_up(out.len() as u64, text_align);
     out.resize(text_off as usize, 0);
@@ -3180,19 +3250,20 @@ pub(super) fn write_relocatable(
     // relocations apply to (`.text`). The `SHF_INFO_LINK` flag
     // signals the latter usage of `sh_info`.
     if !rela_bytes.is_empty() {
-        let rela_off = round_up(out.len() as u64, 8);
+        let table = encode_reloc_table(class, &rela_bytes);
+        let rela_off = round_up(out.len() as u64, class.addr_size());
         out.resize(rela_off as usize, 0);
-        out.extend_from_slice(&rela_bytes);
+        out.extend_from_slice(&table);
         sh.push(Elf64Shdr {
             sh_name: fixed_name(SHIDX_RELA_TEXT),
-            sh_type: SHT_RELA,
+            sh_type: reloc_sht(class),
             sh_flags: SHF_INFO_LINK,
             sh_offset: rela_off,
-            sh_size: rela_bytes.len() as u64,
+            sh_size: table.len() as u64,
             sh_link: shidx_symtab as u32,
             sh_info: shidx_text as u32,
-            sh_addralign: 8,
-            sh_entsize: ELF64_RELA_SIZE as u64,
+            sh_addralign: class.addr_size(),
+            sh_entsize: reloc_entsize(class),
             ..Default::default()
         });
     }
@@ -3317,7 +3388,7 @@ pub(super) fn write_relocatable(
         sh_link: shidx_strtab as u32,
         sh_info: first_global,
         sh_addralign: 8,
-        sh_entsize: ELF64_SYM_SIZE as u64,
+        sh_entsize: class.sym_size(),
         ..Default::default()
     });
 
@@ -3348,19 +3419,20 @@ pub(super) fn write_relocatable(
     // .rela.data -- built and carve-partitioned above, before the
     // section-count planning.
     if !rela_data_bytes.is_empty() {
-        let rela_data_off = round_up(out.len() as u64, 8);
+        let table = encode_reloc_table(class, &rela_data_bytes);
+        let rela_data_off = round_up(out.len() as u64, class.addr_size());
         out.resize(rela_data_off as usize, 0);
-        out.extend_from_slice(&rela_data_bytes);
+        out.extend_from_slice(&table);
         sh.push(Elf64Shdr {
             sh_name: fixed_name(SHIDX_RELA_DATA),
-            sh_type: SHT_RELA,
+            sh_type: reloc_sht(class),
             sh_flags: SHF_INFO_LINK,
             sh_offset: rela_data_off,
-            sh_size: rela_data_bytes.len() as u64,
+            sh_size: table.len() as u64,
             sh_link: shidx_symtab as u32,
             sh_info: shidx_data as u32,
-            sh_addralign: 8,
-            sh_entsize: ELF64_RELA_SIZE as u64,
+            sh_addralign: class.addr_size(),
+            sh_entsize: reloc_entsize(class),
             ..Default::default()
         });
     }
@@ -3417,19 +3489,20 @@ pub(super) fn write_relocatable(
 
     // .rela.debug_info -- placeholder slots described above.
     if !rela_debug_info_bytes.is_empty() {
-        let rela_debug_info_off = round_up(out.len() as u64, 8);
+        let table = encode_reloc_table(class, &rela_debug_info_bytes);
+        let rela_debug_info_off = round_up(out.len() as u64, class.addr_size());
         out.resize(rela_debug_info_off as usize, 0);
-        out.extend_from_slice(&rela_debug_info_bytes);
+        out.extend_from_slice(&table);
         sh.push(Elf64Shdr {
             sh_name: fixed_name(SHIDX_RELA_DEBUG_INFO),
-            sh_type: SHT_RELA,
+            sh_type: reloc_sht(class),
             sh_flags: SHF_INFO_LINK,
             sh_offset: rela_debug_info_off,
-            sh_size: rela_debug_info_bytes.len() as u64,
+            sh_size: table.len() as u64,
             sh_link: shidx_symtab as u32,
             sh_info: shidx_debug_info as u32,
-            sh_addralign: 8,
-            sh_entsize: ELF64_RELA_SIZE as u64,
+            sh_addralign: class.addr_size(),
+            sh_entsize: reloc_entsize(class),
             ..Default::default()
         });
     }
@@ -3463,19 +3536,20 @@ pub(super) fn write_relocatable(
 
     // .rela.debug_line -- the placeholder slots above.
     if !rela_debug_line_bytes.is_empty() {
-        let rela_debug_line_off = round_up(out.len() as u64, 8);
+        let table = encode_reloc_table(class, &rela_debug_line_bytes);
+        let rela_debug_line_off = round_up(out.len() as u64, class.addr_size());
         out.resize(rela_debug_line_off as usize, 0);
-        out.extend_from_slice(&rela_debug_line_bytes);
+        out.extend_from_slice(&table);
         sh.push(Elf64Shdr {
             sh_name: fixed_name(SHIDX_RELA_DEBUG_LINE),
-            sh_type: SHT_RELA,
+            sh_type: reloc_sht(class),
             sh_flags: SHF_INFO_LINK,
             sh_offset: rela_debug_line_off,
-            sh_size: rela_debug_line_bytes.len() as u64,
+            sh_size: table.len() as u64,
             sh_link: shidx_symtab as u32,
             sh_info: shidx_debug_line as u32,
-            sh_addralign: 8,
-            sh_entsize: ELF64_RELA_SIZE as u64,
+            sh_addralign: class.addr_size(),
+            sh_entsize: reloc_entsize(class),
             ..Default::default()
         });
     }
@@ -3525,6 +3599,22 @@ pub(super) fn write_relocatable(
     // the indices planned right after the fixed set (`carve.shndx`).
     // `SHT_NOBITS` entries keep their size but contribute no file
     // bytes.
+    for e in carve.table.entries.iter_mut() {
+        let mut table: Vec<u8> = Vec::with_capacity(e.relas.len() * ELF64_RELA_SIZE);
+        for r in &e.relas {
+            write_struct(
+                &mut table,
+                &Elf64Rela {
+                    r_offset: r.offset,
+                    r_info: (r.sym << 32) | r.rtype as u64,
+                    r_addend: r.addend,
+                },
+            );
+        }
+        let mut bytes = core::mem::take(&mut e.bytes);
+        fold_rel_addends(class, &table, &mut bytes)?;
+        e.bytes = bytes;
+    }
     for (k, e) in carve.table.entries.iter().enumerate() {
         debug_assert_eq!(sh.len(), carve.shndx[k] as usize);
         // `SHT_NOBITS` contributes no file bytes and needs no file
@@ -3561,19 +3651,20 @@ pub(super) fn write_relocatable(
             };
             write_struct(&mut rb, &rela);
         }
-        let rela_off = round_up(out.len() as u64, 8);
+        let table = encode_reloc_table(class, &rb);
+        let rela_off = round_up(out.len() as u64, class.addr_size());
         out.resize(rela_off as usize, 0);
-        out.extend_from_slice(&rb);
+        out.extend_from_slice(&table);
         sh.push(Elf64Shdr {
             sh_name: shstrtab_offs[named_rela_names_start + named_rela_pos[k]],
-            sh_type: SHT_RELA,
+            sh_type: reloc_sht(class),
             sh_flags: SHF_INFO_LINK,
             sh_offset: rela_off,
-            sh_size: rb.len() as u64,
+            sh_size: table.len() as u64,
             sh_link: shidx_symtab as u32,
             sh_info: carve.shndx[k] as u32,
-            sh_addralign: 8,
-            sh_entsize: ELF64_RELA_SIZE as u64,
+            sh_addralign: class.addr_size(),
+            sh_entsize: reloc_entsize(class),
             ..Default::default()
         });
     }
@@ -3598,19 +3689,20 @@ pub(super) fn write_relocatable(
             sh_entsize: 8,
             ..Default::default()
         });
-        let rela_off = round_up(out.len() as u64, 8);
+        let table = encode_reloc_table(class, &s.rela);
+        let rela_off = round_up(out.len() as u64, class.addr_size());
         out.resize(rela_off as usize, 0);
-        out.extend_from_slice(&s.rela);
+        out.extend_from_slice(&table);
         sh.push(Elf64Shdr {
             sh_name: shstrtab_offs[init_names_start + 2 * k + 1],
-            sh_type: SHT_RELA,
+            sh_type: reloc_sht(class),
             sh_flags: SHF_INFO_LINK,
             sh_offset: rela_off,
-            sh_size: s.rela.len() as u64,
+            sh_size: table.len() as u64,
             sh_link: shidx_symtab as u32,
             sh_info: array_shndx,
-            sh_addralign: 8,
-            sh_entsize: ELF64_RELA_SIZE as u64,
+            sh_addralign: class.addr_size(),
+            sh_entsize: reloc_entsize(class),
             ..Default::default()
         });
     }
@@ -3638,37 +3730,37 @@ pub(super) fn write_relocatable(
 
     // Section header table at the tail. Rounded to 8 so the
     // headers' u64 fields read cleanly.
-    let shoff = round_up(out.len() as u64, 8);
+    let shoff = round_up(out.len() as u64, class.addr_size());
     out.resize(shoff as usize, 0);
     for entry in &sh {
-        write_struct(&mut out, entry);
+        write_shdr(class, entry, &mut out);
     }
 
     // Patch the file header now that all offsets are known.
     let mut e_ident = [0u8; 16];
     e_ident[0..4].copy_from_slice(b"\x7fELF");
-    e_ident[4] = ELF_CLASS_64;
+    e_ident[4] = class.ei_class();
     e_ident[5] = ELF_DATA_LSB;
     e_ident[6] = ELF_VERSION_CURRENT;
     let ehdr = Elf64Ehdr {
         e_ident,
         e_type: ET_REL,
-        e_machine: e_machine_for(machine),
+        e_machine: e_machine_for(abi),
         e_version: ELF_VERSION_CURRENT as u32,
         e_entry: 0,
         e_phoff: 0,
         e_shoff: shoff,
         e_flags: 0,
-        e_ehsize: ELF64_EHDR_SIZE as u16,
+        e_ehsize: class.ehdr_size() as u16,
         e_phentsize: 0,
         e_phnum: 0,
-        e_shentsize: ELF64_SHDR_SIZE as u16,
+        e_shentsize: class.shdr_size() as u16,
         e_shnum: num_sections as u16,
         e_shstrndx: shidx_shstrtab,
     };
-    let mut hdr_bytes: Vec<u8> = Vec::with_capacity(ELF64_EHDR_SIZE);
-    write_struct(&mut hdr_bytes, &ehdr);
-    out[..ELF64_EHDR_SIZE].copy_from_slice(&hdr_bytes);
+    let mut hdr_bytes: Vec<u8> = Vec::with_capacity(class.ehdr_size() as usize);
+    write_ehdr(class, &ehdr, &mut hdr_bytes);
+    out[..hdr_bytes.len()].copy_from_slice(&hdr_bytes);
 
     Ok(out)
 }
@@ -4157,14 +4249,73 @@ mod tests {
             crate::c5::Target::LinuxX64,
         )
         .expect("write");
-        assert!(bytes.len() >= ELF64_EHDR_SIZE);
+        assert!(bytes.len() >= ElfClass::Elf64.ehdr_size() as usize);
         assert_eq!(&bytes[0..4], b"\x7fELF");
-        assert_eq!(bytes[4], ELF_CLASS_64);
+        assert_eq!(bytes[4], ElfClass::Elf64.ei_class());
         assert_eq!(bytes[5], ELF_DATA_LSB);
         let e_type = u16::from_le_bytes([bytes[16], bytes[17]]);
         assert_eq!(e_type, ET_REL);
         let e_machine = u16::from_le_bytes([bytes[18], bytes[19]]);
         assert_eq!(e_machine, EM_X86_64);
+    }
+
+    /// An ELFCLASS32 x86 object is an i386 object: EM_386, and every
+    /// on-disk record at the 32-bit width.
+    #[test]
+    fn elf32_build_produces_an_i386_header() {
+        let mut build = empty_build_for(Machine::X86_64);
+        build.elf_class = ElfClass::Elf32;
+        let program = empty_program("test.s");
+        let bytes = write_relocatable(
+            &program,
+            &build,
+            Machine::X86_64,
+            crate::c5::Target::LinuxX64,
+        )
+        .expect("write");
+        assert_eq!(bytes[4], ElfClass::Elf32.ei_class());
+        assert_eq!(u16::from_le_bytes([bytes[16], bytes[17]]), ET_REL);
+        assert_eq!(u16::from_le_bytes([bytes[18], bytes[19]]), EM_386);
+        assert_eq!(u16::from_le_bytes([bytes[40], bytes[41]]), 52);
+        assert_eq!(u16::from_le_bytes([bytes[46], bytes[47]]), 40);
+    }
+
+    /// `SHT_REL` has no addend field, so the addend is written into the
+    /// field the relocation patches, at the width its type reads.
+    #[test]
+    fn rel_addends_fold_into_the_relocated_field() {
+        let mut table = Vec::new();
+        for (off, rtype, addend) in [
+            (0u64, R_386_32, 0x1234i64),
+            (8, R_386_8, -3),
+            (12, R_386_16, 5),
+        ] {
+            write_struct(
+                &mut table,
+                &Elf64Rela {
+                    r_offset: off,
+                    r_info: (7u64 << 32) | rtype as u64,
+                    r_addend: addend,
+                },
+            );
+        }
+        let mut body = alloc::vec![0u8; 16];
+        fold_rel_addends(ElfClass::Elf32, &table, &mut body).expect("folds");
+        assert_eq!(&body[0..4], &0x1234u32.to_le_bytes());
+        assert_eq!(body[8], (-3i8) as u8);
+        assert_eq!(&body[12..14], &5u16.to_le_bytes());
+        // The RELA classes carry the addend in the record instead.
+        let mut body64 = alloc::vec![0u8; 16];
+        fold_rel_addends(ElfClass::Elf64, &table, &mut body64).expect("no-op");
+        assert!(body64.iter().all(|&b| b == 0));
+        // ELF32 narrows each record to `Elf32_Rel`: offset and info only,
+        // with the type in the low byte of `r_info`.
+        let rel = encode_reloc_table(ElfClass::Elf32, &table);
+        assert_eq!(rel.len(), 3 * 8);
+        assert_eq!(
+            u32::from_le_bytes(rel[4..8].try_into().unwrap()),
+            (7 << 8) | R_386_32
+        );
     }
 
     /// The kernel-model rewrite moves the destination from the lea's
@@ -4245,6 +4396,7 @@ mod tests {
             data_ro_len: 0,
             pic: false,
             code_model: Default::default(),
+            elf_class: Default::default(),
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
             data_align: 8,

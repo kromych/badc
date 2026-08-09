@@ -144,8 +144,12 @@ Compile knobs:
                            checked against what it implements rather
                            than passed on; an option it does not
                            implement is refused by name.
-  -m64                     Accepted (the only code model badc emits).
-                           `-m16` / `-m32` are refused by name.
+  -m16 / -m32 / -m64       Code model. `-m16` and `-m32` put an
+                           assembly unit's object out as ELFCLASS32 /
+                           EM_386, as gcc's `as --32` does; `.code16` /
+                           `.code32` in the source select the encoding.
+                           badc generates no i386 machine code, so a
+                           `.c` source under either is refused.
   -Wp,-MD,file             The preprocessor spellings of -MD / -MMD,
   -Wp,-MMD,file            which take the output path as an operand.
                            kbuild passes dependency generation this
@@ -537,6 +541,10 @@ fn run() {
     // Errors and warnings still print; only informational lines
     // are quieted.
     let mut quiet = false;
+    // `-m16` / `-m32` as the user spelled it. Its presence selects
+    // ELFCLASS32 for a `-c` object; the spelling is what the
+    // diagnostic for a `.c` source under it names.
+    let mut code_model_flag: Option<String> = None;
     let mut mno_fp_regs = false;
     let mut mstrict_align = false;
     let mut fpic = false;
@@ -863,14 +871,17 @@ fn run() {
                     std::process::exit(1);
                 }
             },
-            // gcc's x86 code-mode selectors. badc's object writers emit
-            // ELFCLASS64 only, so the 16- and 32-bit modes are refused by
-            // name rather than assembled as 64-bit code.
+            // gcc's x86 code-mode selectors. `-m16` and `-m32` both put
+            // the object out as ELFCLASS32 / EM_386, matching the
+            // `as --32` gcc hands its assembler for either; the encoding
+            // mode itself comes from `.code16` / `.code32` in the source.
+            // `-m31` (s390) and `-mx32` name ABIs badc has no encoder or
+            // container for.
             "-m64" => {}
-            s @ ("-m16" | "-m32" | "-m31" | "-mx32") => {
+            s @ ("-m16" | "-m32") => code_model_flag = Some(s.to_string()),
+            s @ ("-m31" | "-mx32") => {
                 eprint_diagnostic(format!(
-                    "badc: error: `{s}` selects a non-64-bit code model, which badc \
-                     does not emit"
+                    "badc: error: `{s}` selects an ABI badc does not emit"
                 ));
                 std::process::exit(1);
             }
@@ -1665,6 +1676,24 @@ fn run() {
         std::process::exit(1);
     }
 
+    // badc generates no i386 machine code, so `-m16` / `-m32` reach
+    // only the assembler, whose encoder already follows `.code16` /
+    // `.code32`. A C source under either is refused by name rather
+    // than compiled as x86-64 into an EM_386 container.
+    if let Some(flag) = &code_model_flag
+        && let Some(src) = sources.iter().find(|s| !SourceKind::of(s).is_asm())
+    {
+        eprint_diagnostic(format!(
+            "badc: error: `{flag}` applies to assembly units only; `{src}` is a C source \
+             and badc emits no 32-bit code"
+        ));
+        std::process::exit(1);
+    }
+    let object_elf_class = match code_model_flag {
+        Some(_) => badc::ElfClass::Elf32,
+        None => badc::ElfClass::Elf64,
+    };
+
     let deps = dep_kind.map(|kind| DepOptions {
         kind,
         system: dep_system,
@@ -1959,6 +1988,7 @@ fn run() {
         reloc_opts.pic = fpic;
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
+        reloc_opts.elf_class = object_elf_class;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -2580,6 +2610,7 @@ fn run() {
         reloc_opts.pic = fpic;
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
+        reloc_opts.elf_class = object_elf_class;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -2707,6 +2738,7 @@ fn run() {
         reloc_opts.pic = fpic;
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
+        reloc_opts.elf_class = object_elf_class;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -3224,6 +3256,7 @@ fn tu_compile_options(
         .with_export_all_functions(cfg.export_all)
         .with_implicit_extern_fns(implicit_externs.to_vec())
         .with_no_entry_point(true)
+        .with_elf_class(cfg.reloc_opts.elf_class)
 }
 
 /// GNU line markers (`# <line> "<file>" [flags]`) blanked in place. gas reads

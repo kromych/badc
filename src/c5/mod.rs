@@ -27,6 +27,7 @@ mod tests;
 // re-exports that aren't reached from `main.rs` (only from tests, which
 // resolve through the inner module path) -- they are still part of the
 // intended public API.
+pub use object::elf_class::ElfClass;
 #[allow(unused_imports)]
 #[cfg(feature = "native-emit")]
 pub use object::{emit_native, emit_native_with_options};

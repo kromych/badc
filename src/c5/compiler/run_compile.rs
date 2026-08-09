@@ -256,7 +256,7 @@ impl Compiler {
         // sink now so directive and encoding errors are diagnosed at the source
         // line; the codegen re-materializes into the object's sections under
         // the emit target's conventions.
-        crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target)?;
+        crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target, self.elf_class)?;
         let mut scratch = engine::AsmSectionSink::default();
         engine::materialize_asm_sections(
             &blocks,

@@ -6480,6 +6480,7 @@ fn encode_x86_asm_section_code(
 /// resetting per section.
 pub(crate) fn encode_x86_file_asm_section_code(
     blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    class: crate::c5::ElfClass,
 ) -> Result<(), alloc::string::String> {
     use super::ssa::emit_common::{AsmSectionItem, AsmSectionTarget};
     let operand_target = |_: u8| -> Option<AsmSectionTarget> { None };
@@ -6492,7 +6493,11 @@ pub(crate) fn encode_x86_file_asm_section_code(
         imm_of: &imm_of,
         addr_of: &addr_of,
     };
-    let mut mode = super::table::Mode::Bits64;
+    let mut mode = if class.is32() {
+        super::table::Mode::Bits32
+    } else {
+        super::table::Mode::Bits64
+    };
     super::ssa::emit_common::for_each_section_item_mut(blocks, &mut |item| {
         let AsmSectionItem::Code(text) = item else {
             return Ok(());
@@ -10549,7 +10554,8 @@ mod code_mode_tests {
         // macro and equate expansion) before the section parse reads it.
         let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
         let mut blocks = extract_file_scope_asm_sections(&text, false).expect("parses");
-        super::encode_x86_file_asm_section_code(&mut blocks).expect("assembles");
+        super::encode_x86_file_asm_section_code(&mut blocks, crate::c5::ElfClass::Elf64)
+            .expect("assembles");
         let (mut out, mut rs) = (Vec::new(), Vec::new());
         for b in blocks.iter_mut() {
             for_each_section_item_mut(core::slice::from_mut(b), &mut |item| {

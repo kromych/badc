@@ -2807,6 +2807,7 @@ mod tests {
             data_ro_len: 0,
             pic: false,
             code_model: Default::default(),
+            elf_class: Default::default(),
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),

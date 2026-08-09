@@ -325,12 +325,23 @@ pub struct CompileOptions {
     /// default inline linkage model instead of C99's, and predefine
     /// `__GNUC_GNU_INLINE__` in place of `__GNUC_STDC_INLINE__`.
     pub gnu89_inline: bool,
+    /// Mirror of [`crate::NativeOptions::elf_class`]. The assembler's
+    /// starting code mode follows it, the way `as --32` starts in
+    /// 32-bit mode and `as --64` in 64-bit; a `.code16` / `.code32` /
+    /// `.code64` directive overrides it from that point on.
+    pub elf_class: crate::c5::ElfClass,
 }
 
 impl CompileOptions {
     /// Enable the `--gnu` GCC identity predefines.
     pub fn with_gnu(mut self, gnu: bool) -> Self {
         self.gnu = gnu;
+        self
+    }
+    /// ELF class of the object being produced; the assembler's
+    /// starting code mode follows it.
+    pub fn with_elf_class(mut self, class: crate::c5::ElfClass) -> Self {
+        self.elf_class = class;
         self
     }
     /// Select the GNU89 inline linkage model as the unit default
@@ -1587,6 +1598,9 @@ pub struct Compiler {
     /// `resolve_exports` adds every non-static defined function to the
     /// export list so a `--shared` consumer can `dlsym` it.
     export_all_functions: bool,
+    /// Mirror of [`CompileOptions::elf_class`]: the assembler's
+    /// starting code mode.
+    elf_class: crate::c5::ElfClass,
 
     /// The unit's default inline linkage model, from
     /// [`CompileOptions::gnu89_inline`]. A function carrying
@@ -2092,6 +2106,7 @@ impl Compiler {
             data_align: 8,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
+            elf_class: opts.elf_class,
             inline_model: if opts.gnu89_inline {
                 crate::c5::symbol::InlineModel::Gnu89
             } else {

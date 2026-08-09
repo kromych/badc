@@ -1657,7 +1657,9 @@ pub(crate) fn lower(
         &program.file_asm,
         true,
         super::ssa::emit_common::AsmComments::A64,
-        &|blocks| crate::c5::codegen::encode_file_asm_section_code(blocks, target),
+        &|blocks| {
+            crate::c5::codegen::encode_file_asm_section_code(blocks, target, native.elf_class)
+        },
         &mut asm_sections,
     )
     .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
@@ -2344,6 +2346,7 @@ pub(crate) fn lower(
         output_kind: super::OutputKind::Executable,
         pic: native.pic,
         code_model: native.code_model,
+        elf_class: native.elf_class,
         shared_lib_name: None,
         dllmain_pc: None,
         macho_tlv_fixups,

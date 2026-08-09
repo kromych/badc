@@ -116,10 +116,11 @@ pub mod c5;
 
 #[allow(unused_imports)]
 pub use c5::{
-    C5Error, CodeModel, CompileOptions, Compiler, Hardening, Host, IncludeOrigin, IncludeRecord,
-    IncludeStatus, IndirectBranch, NativeOptions, OutputKind, Overwrite, PredefinedKind,
-    PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm, dep_escape, dep_prerequisites,
-    dep_render, embedded_headers, jit_run, jit_run_with_options, predefined_symbols,
+    C5Error, CodeModel, CompileOptions, Compiler, ElfClass, Hardening, Host, IncludeOrigin,
+    IncludeRecord, IncludeStatus, IndirectBranch, NativeOptions, OutputKind, Overwrite,
+    PredefinedKind, PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm, dep_escape,
+    dep_prerequisites, dep_render, embedded_headers, jit_run, jit_run_with_options,
+    predefined_symbols,
 };
 #[cfg(feature = "native-emit")]
 pub use c5::{emit_native, emit_native_with_options};

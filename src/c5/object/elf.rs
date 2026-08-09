@@ -3757,6 +3757,7 @@ mod tests {
             data_ro_len: 0,
             pic: false,
             code_model: Default::default(),
+            elf_class: Default::default(),
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
             data_align: 8,

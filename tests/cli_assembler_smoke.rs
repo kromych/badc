@@ -302,25 +302,196 @@ fn assembler_options_are_checked_rather_than_passed_on() {
     assert!(ok, "-Xassembler must accept what -Wa, accepts");
 }
 
+/// One ELF32 section as `(name, sh_type, sh_offset, sh_size, sh_info,
+/// sh_entsize)`, in header order.
+fn elf32_sections(b: &[u8]) -> Vec<(String, u32, usize, usize, u32, u32)> {
+    let u16at = |o: usize| u16::from_le_bytes([b[o], b[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let shoff = u32at(0x20) as usize;
+    let (shentsize, shnum, shstrndx) = (u16at(0x2e), u16at(0x30), u16at(0x32));
+    let strtab = u32at(shoff + shstrndx * shentsize + 0x10) as usize;
+    (0..shnum)
+        .map(|i| {
+            let sh = shoff + i * shentsize;
+            let n = strtab + u32at(sh) as usize;
+            let end = b[n..].iter().position(|&c| c == 0).unwrap();
+            (
+                String::from_utf8_lossy(&b[n..n + end]).into_owned(),
+                u32at(sh + 4),
+                u32at(sh + 0x10) as usize,
+                u32at(sh + 0x14) as usize,
+                u32at(sh + 0x1c),
+                u32at(sh + 0x24),
+            )
+        })
+        .collect()
+}
+
+/// `-m16` / `-m32` put an assembly unit's object out as ELFCLASS32 /
+/// EM_386, the container `as --32` writes for either. Record widths,
+/// `SHT_REL` shape, `R_386_*` numbering and the implicit addend are the
+/// values GNU as 2.46.1 produces for the same source.
 #[test]
-fn non_64_bit_code_models_are_refused_by_name() {
-    let d = dir("m16");
-    write(&d, "leaf.s", LEAF);
+fn m16_and_m32_write_an_i386_object() {
+    const SRC: &str = concat!(
+        "\t.code16\n\t.section .text,\"ax\"\n\t.globl entry\nentry:\n",
+        "\tmovw $msg, %ax\n\tcalll far_fn\n\t.byte msg\n\t.word msg\n\t.long msg\n",
+        "\t.section .data,\"aw\"\nptr:\t.long entry\n",
+    );
     for flag in ["-m16", "-m32"] {
+        let d = dir(&format!("i386{}", &flag[2..]));
+        write(&d, "rm.s", SRC);
+        run_ok(
+            &d,
+            &["-q", "-c", "--target=linux-x64", flag, "rm.s", "-o", "rm.o"],
+        );
+        let b = std::fs::read(d.join("rm.o")).expect("object");
+        assert_eq!(b[4], 1, "{flag}: EI_CLASS must be ELFCLASS32");
+        assert_eq!(
+            u16::from_le_bytes([b[18], b[19]]),
+            3,
+            "{flag}: e_machine must be EM_386"
+        );
+        assert_eq!(
+            u16::from_le_bytes([b[16], b[17]]),
+            1,
+            "e_type must be ET_REL"
+        );
+        assert_eq!(
+            u16::from_le_bytes([b[40], b[41]]),
+            52,
+            "Elf32_Ehdr is 52 bytes"
+        );
+        assert_eq!(
+            u16::from_le_bytes([b[46], b[47]]),
+            40,
+            "Elf32_Shdr is 40 bytes"
+        );
+
+        let secs = elf32_sections(&b);
+        let symtab = secs.iter().find(|s| s.1 == 2).expect(".symtab");
+        assert_eq!(symtab.5, 16, "Elf32_Sym is 16 bytes");
+        // i386 uses SHT_REL: the table is named `.rel<section>`, its
+        // entries are 8 bytes, and no `.rela*` is emitted.
+        assert!(
+            !secs.iter().any(|s| s.0.starts_with(".rela")),
+            "{flag}: an i386 object carries no RELA table: {secs:?}"
+        );
+        let rel = secs
+            .iter()
+            .find(|s| s.0 == ".rel.text")
+            .unwrap_or_else(|| panic!("{flag}: no .rel.text in {secs:?}"));
+        assert_eq!(rel.1, 9, "sh_type must be SHT_REL");
+        assert_eq!(rel.5, 8, "Elf32_Rel is 8 bytes");
+        let text = secs
+            .iter()
+            .find(|s| s.0 == ".text" && s.3 != 0)
+            .expect(".text");
+        assert_eq!(
+            rel.4,
+            secs.iter().position(|s| std::ptr::eq(s, text)).unwrap() as u32
+        );
+
+        // R_386_16 / R_386_8 / R_386_32 for the symbol-width data
+        // directives, R_386_PC32 for the far call.
+        let types: Vec<(u32, u32)> = (0..rel.3 / 8)
+            .map(|i| {
+                let o = rel.2 + i * 8;
+                let off = u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+                let info = u32::from_le_bytes(b[o + 4..o + 8].try_into().unwrap());
+                (off, info & 0xff)
+            })
+            .collect();
+        assert_eq!(
+            types.iter().map(|&(_, t)| t).collect::<Vec<_>>(),
+            [20, 2, 22, 20, 1],
+            "{flag}: R_386_16, R_386_PC32, R_386_8, R_386_16, R_386_32: {types:?}"
+        );
+        // SHT_REL has no addend field, so the `calll`'s -4 rides in the
+        // relocated field, as gas writes it.
+        let (pc32_off, _) = types[1];
+        let field = &b[text.2 + pc32_off as usize..text.2 + pc32_off as usize + 4];
+        assert_eq!(field, (-4i32).to_le_bytes(), "{flag}: implicit addend");
+    }
+}
+
+/// The assembler starts in 32-bit mode under `-m16` / `-m32`, the way
+/// `as --32` does; `.code16` in the source moves it from there. Bytes
+/// are GNU as 2.46.1's.
+#[test]
+fn m32_starts_the_encoder_in_32_bit_mode() {
+    let d = dir("m32-mode");
+    write(
+        &d,
+        "m.s",
+        "\tmovl $7, %eax\n\tpushl %eax\n\tpopl %eax\n\tret\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "-m32", "m.s", "-o", "m.o"],
+    );
+    let b = std::fs::read(d.join("m.o")).expect("object");
+    let secs = elf32_sections(&b);
+    let t = secs
+        .iter()
+        .find(|s| s.0 == ".text" && s.3 != 0)
+        .expect(".text");
+    assert_eq!(
+        &b[t.2..t.2 + t.3],
+        [0xb8, 0x07, 0x00, 0x00, 0x00, 0x50, 0x58, 0xc3],
+        "32-bit default operand size, no 0x66 prefixes"
+    );
+}
+
+/// A `.code16` branch to a label in the same section resolves at
+/// assembly time at the 2-byte field's width, leaving no relocation.
+#[test]
+fn code16_same_section_branches_resolve_in_place() {
+    let d = dir("code16-br");
+    write(
+        &d,
+        "b.s",
+        "\t.code16\nc:\tnop\n\tjmp c\n\tnop\n\tjmp f\n\tnop\nf:\tnop\n\tje c\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "-m16", "b.s", "-o", "b.o"],
+    );
+    let b = std::fs::read(d.join("b.o")).expect("object");
+    let secs = elf32_sections(&b);
+    assert!(
+        !secs.iter().any(|s| s.0.starts_with(".rel")),
+        "a same-section branch needs no relocation: {secs:?}"
+    );
+    let t = secs
+        .iter()
+        .find(|s| s.0 == ".text" && s.3 != 0)
+        .expect(".text");
+    assert_eq!(
+        &b[t.2..t.2 + t.3],
+        [
+            0x90, 0xe9, 0xfc, 0xff, 0x90, 0xe9, 0x01, 0x00, 0x90, 0x90, 0x0f, 0x84, 0xf2, 0xff
+        ],
+        "16-bit near-branch displacements"
+    );
+}
+
+#[test]
+fn non_64_bit_abis_are_refused_by_name() {
+    let d = dir("m31");
+    write(&d, "leaf.s", LEAF);
+    for flag in ["-m31", "-mx32"] {
         let (ok, text) = run(
             &d,
             &["-q", "-c", &format!("--target={TARGET}"), flag, "leaf.s"],
         );
-        assert!(
-            !ok,
-            "{flag} must be refused rather than assembled as 64-bit"
-        );
+        assert!(!ok, "{flag} must be refused rather than assembled");
         assert!(
             text.contains(flag),
             "the diagnostic must name {flag}: {text}"
         );
     }
-    // The 64-bit spelling is the one badc emits, and is accepted.
+    // The 64-bit spelling is the default, and is accepted.
     run_ok(
         &d,
         &[
@@ -332,6 +503,23 @@ fn non_64_bit_code_models_are_refused_by_name() {
             "-o",
             "leaf.o",
         ],
+    );
+}
+
+/// badc generates no i386 machine code, so `-m16` / `-m32` reach the
+/// assembler only; a C source under either is refused by name.
+#[test]
+fn a_c_source_under_m32_is_refused_by_name() {
+    let d = dir("m32-c");
+    write(&d, "u.c", "int f(void) { return 1; }\n");
+    let (ok, text) = run(
+        &d,
+        &["-q", "-c", &format!("--target={TARGET}"), "-m32", "u.c"],
+    );
+    assert!(!ok, "a C source under -m32 must be refused");
+    assert!(
+        text.contains("-m32") && text.contains("u.c"),
+        "the diagnostic must name the flag and the source: {text}"
     );
 }
 

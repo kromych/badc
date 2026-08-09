@@ -10606,4 +10606,132 @@ mod code_mode_tests {
             [0x48, 0x83, 0xec, 0x20]
         );
     }
+
+    /// The SSSE3 / SSE4.1 / AES / SHA / carry-less families sit on the 0F38 and
+    /// 0F3A maps, whose escape byte and operand direction the two-operand and
+    /// immediate SSE shapes now carry. The extract forms write their r/m
+    /// operand, so their vector operand is the ModRM.reg one. Bytes measured
+    /// with GNU as 2.46.1 for the same source.
+    #[test]
+    fn sse_map38_and_map3a_forms_match_gnu_as() {
+        for (src, want) in [
+            ("pshufb %xmm7, %xmm2\n", &[0x66, 0x0f, 0x38, 0x00, 0xd7][..]),
+            (
+                "pshufb 16(%rdi), %xmm10\n",
+                &[0x66, 0x44, 0x0f, 0x38, 0x00, 0x57, 0x10][..],
+            ),
+            ("punpcklqdq %xmm2, %xmm1\n", &[0x66, 0x0f, 0x6c, 0xca][..]),
+            ("punpckhqdq %xmm2, %xmm1\n", &[0x66, 0x0f, 0x6d, 0xca][..]),
+            (
+                "pclmulqdq $0x00, %xmm1, %xmm0\n",
+                &[0x66, 0x0f, 0x3a, 0x44, 0xc1, 0x00][..],
+            ),
+            (
+                "pclmulqdq $0x11, %xmm9, %xmm10\n",
+                &[0x66, 0x45, 0x0f, 0x3a, 0x44, 0xd1, 0x11][..],
+            ),
+            (
+                "palignr $8, %xmm1, %xmm2\n",
+                &[0x66, 0x0f, 0x3a, 0x0f, 0xd1, 0x08][..],
+            ),
+            (
+                "pinsrd $3, 16(%rdi), %xmm1\n",
+                &[0x66, 0x0f, 0x3a, 0x22, 0x4f, 0x10, 0x03][..],
+            ),
+            (
+                "pinsrq $1, %rax, %xmm5\n",
+                &[0x66, 0x48, 0x0f, 0x3a, 0x22, 0xe8, 0x01][..],
+            ),
+            // The extract's destination is the r/m: `%eax` sits there, `%xmm1`
+            // in ModRM.reg.
+            (
+                "pextrd $3, %xmm1, %eax\n",
+                &[0x66, 0x0f, 0x3a, 0x16, 0xc8, 0x03][..],
+            ),
+            (
+                "pextrd $2, %xmm9, 8(%rsi)\n",
+                &[0x66, 0x44, 0x0f, 0x3a, 0x16, 0x4e, 0x08, 0x02][..],
+            ),
+            (
+                "pmovzxdq %xmm1, %xmm2\n",
+                &[0x66, 0x0f, 0x38, 0x35, 0xd1][..],
+            ),
+            ("aesenc %xmm1, %xmm0\n", &[0x66, 0x0f, 0x38, 0xdc, 0xc1][..]),
+            (
+                "aesenclast %xmm9, %xmm10\n",
+                &[0x66, 0x45, 0x0f, 0x38, 0xdd, 0xd1][..],
+            ),
+            // The SHA extensions take no mandatory prefix.
+            ("sha1nexte %xmm1, %xmm0\n", &[0x0f, 0x38, 0xc8, 0xc1][..]),
+            ("sha256rnds2 %xmm1, %xmm0\n", &[0x0f, 0x38, 0xcb, 0xc1][..]),
+            (
+                "sha1rnds4 $3, %xmm1, %xmm0\n",
+                &[0x0f, 0x3a, 0xcc, 0xc1, 0x03][..],
+            ),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// The AVX counterparts: the 0F38 three-operand set, the packed shifts
+    /// (destination in VEX.vvvv), the 0F3A lane ops, the lane extracts (whose
+    /// `L` follows the wide ModRM.reg source), and the operandless upper-lane
+    /// clears. Bytes measured with GNU as 2.46.1 for the same source.
+    #[test]
+    fn vex_map38_shift_and_lane_forms_match_gnu_as() {
+        for (src, want) in [
+            (
+                "vpshufb %xmm13, %xmm4, %xmm4\n",
+                &[0xc4, 0xc2, 0x59, 0x00, 0xe5][..],
+            ),
+            (
+                "vpshufb %ymm13, %ymm0, %ymm0\n",
+                &[0xc4, 0xc2, 0x7d, 0x00, 0xc5][..],
+            ),
+            (
+                "vpslld $2, %xmm1, %xmm2\n",
+                &[0xc5, 0xe9, 0x72, 0xf1, 0x02][..],
+            ),
+            (
+                "vpsrld $30, %ymm1, %ymm2\n",
+                &[0xc5, 0xed, 0x72, 0xd1, 0x1e][..],
+            ),
+            (
+                "vpslldq $8, %xmm0, %xmm1\n",
+                &[0xc5, 0xf1, 0x73, 0xf8, 0x08][..],
+            ),
+            (
+                "vpsrldq $4, %xmm11, %xmm12\n",
+                &[0xc4, 0xc1, 0x19, 0x73, 0xdb, 0x04][..],
+            ),
+            (
+                "vpclmulqdq $0x01, %xmm0, %xmm1, %xmm14\n",
+                &[0xc4, 0x63, 0x71, 0x44, 0xf0, 0x01][..],
+            ),
+            (
+                "vperm2i128 $0x20, %ymm2, %ymm1, %ymm0\n",
+                &[0xc4, 0xe3, 0x75, 0x46, 0xc2, 0x20][..],
+            ),
+            (
+                "vinserti128 $1, %xmm2, %ymm1, %ymm0\n",
+                &[0xc4, 0xe3, 0x75, 0x38, 0xc2, 0x01][..],
+            ),
+            (
+                "vextracti128 $1, %ymm0, %xmm1\n",
+                &[0xc4, 0xe3, 0x7d, 0x39, 0xc1, 0x01][..],
+            ),
+            (
+                "vextracti128 $1, %ymm10, 16(%rdi)\n",
+                &[0xc4, 0x63, 0x7d, 0x39, 0x57, 0x10, 0x01][..],
+            ),
+            ("vzeroupper\n", &[0xc5, 0xf8, 0x77][..]),
+            ("vzeroall\n", &[0xc5, 0xfc, 0x77][..]),
+            (
+                "vaesenc %xmm1, %xmm2, %xmm3\n",
+                &[0xc4, 0xe2, 0x69, 0xdc, 0xd9][..],
+            ),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
 }

@@ -3197,6 +3197,10 @@ impl<'a> LdsLinker<'a> {
                     self.default_entry(&emit_order)
                 }
             },
+            // Nothing named an entry. A shared object has none, as bfd
+            // leaves `e_entry` zero for one; an executable starts at
+            // its first text address.
+            None if self.opts.emit == LdsEmit::Dyn => 0,
             None => self.default_entry(&emit_order),
         };
 

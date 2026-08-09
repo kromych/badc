@@ -769,7 +769,10 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         Err(e) => return ld_err(format!("{e}")),
     };
     for w in &res.warnings {
-        eprintln!("badc-ld: warning: {w}");
+        eprintln!(
+            "badc-ld: warning: {}",
+            w.strip_prefix("warning: ").unwrap_or(w)
+        );
     }
     if a.fatal_warnings && !res.warnings.is_empty() {
         return ld_err(format!(

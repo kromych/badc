@@ -23,9 +23,10 @@ pub fn default_script(shared: bool) -> String {
     let base = if shared { "0" } else { TEXT_BASE };
     // The read-only group runs from the headers; the writable group
     // starts on a fresh page so it can carry different permissions.
+    // No `ENTRY`: an entry the caller never named is not a diagnostic,
+    // and an unnamed one resolves per output kind in the engine.
     alloc::format!(
-        r#"ENTRY(_start)
-SECTIONS
+        r#"SECTIONS
 {{
   . = {base} + SIZEOF_HEADERS;
   .note.gnu.build-id : {{ *(.note.gnu.build-id) }}

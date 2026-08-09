@@ -458,7 +458,7 @@ pub(super) fn write(
     // Order matches the original `DWARF_LONG_NAMES` table below;
     // changing the order would change which section names land in
     // the COFF string table.
-    let dwarf_blobs: [(&'static str, Vec<u8>); 5] = [
+    let mut dwarf_blobs: [(&'static str, Vec<u8>); 5] = [
         (".debug_info", dwarf_sections_raw.debug_info.clone()),
         (".debug_abbrev", dwarf_sections_raw.debug_abbrev.clone()),
         (".debug_line", dwarf_sections_raw.debug_line.clone()),
@@ -564,6 +564,15 @@ pub(super) fn write(
             data_rva + data_size + (off - file_len)
         }
     };
+    // Data-targeting DWARF placeholders resolve here rather than with
+    // the text ones above: `.data`'s RVA is only settled now, and
+    // patching in place leaves every section size unchanged.
+    if let Some(md) = &build.merged_dwarf {
+        let to_vmaddr = |off: u64| -> u64 { IMAGE_BASE + data_off_to_rva(off as u32) as u64 };
+        for r in &md.debug_info_data_relocs {
+            super::apply_merged_dwarf_data_reloc(&mut dwarf_blobs[0].1, r, &to_vmaddr)?;
+        }
+    }
     let data_file_off: u32 = idata_file_off + idata_raw_size;
     let data_raw_size: u32 = if data_section_present {
         round_up(data_size, FILE_ALIGNMENT)

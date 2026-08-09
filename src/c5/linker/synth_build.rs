@@ -582,6 +582,15 @@ fn synth_program_and_build(
                         width: r.width,
                     })
                     .collect(),
+                debug_info_data_relocs: merged
+                    .debug_info_data_relocs
+                    .iter()
+                    .map(|r| crate::c5::codegen::DwarfDataReloc {
+                        byte_offset: r.byte_offset,
+                        merged_data_offset: r.merged_data_offset,
+                        width: r.width,
+                    })
+                    .collect(),
             })
         },
         plt_trampoline_offsets,
@@ -1176,6 +1185,7 @@ mod tests {
             unit_for_debug_info_reloc: alloc::vec![],
             unit_for_debug_line_reloc: alloc::vec![],
             debug_info_text_relocs: alloc::vec![],
+            debug_info_data_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
             prologue_ends: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),

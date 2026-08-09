@@ -211,6 +211,9 @@ pub struct MergedNative {
     /// committed text vmaddr to `merged_text_offset` and writes
     /// the result in little-endian over `width` bytes.
     pub debug_info_text_relocs: Vec<DebugTextReloc>,
+    /// Data-image-targeting `.debug_info` placeholders: the
+    /// `DW_OP_addr` of an object with static storage duration.
+    pub debug_info_data_relocs: Vec<DebugDataReloc>,
     pub debug_line_text_relocs: Vec<DebugTextReloc>,
     /// Post-prologue byte offset in [`Self::text`], keyed by the
     /// function's merged entry offset. Sourced from each unit's
@@ -1796,6 +1799,13 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // text offset of the target.
     let mut debug_info_text_relocs: Vec<DebugTextReloc> = Vec::new();
     let mut debug_line_text_relocs: Vec<DebugTextReloc> = Vec::new();
+    let mut debug_info_data_relocs: Vec<DebugDataReloc> = Vec::new();
+    // The line program addresses code only, so a data-targeting reloc there
+    // is another toolchain's shape and reaches no writer.
+    let mut unused_line_data_relocs: Vec<DebugDataReloc> = Vec::new();
+    // `data` stops growing before the relocation passes, so this matches the
+    // length `merged_target` folds a `.bss` offset against.
+    let merged_data_len = data.len();
     for (i, reloc) in debug_info_relocs.iter().enumerate() {
         let unit_idx = unit_for_debug_info_reloc[i];
         let obj = &objs[unit_idx];
@@ -1809,10 +1819,15 @@ pub fn link_native_objects_with_shared_libs<'a>(
             machine,
             &mut debug_info,
             &mut debug_info_text_relocs,
+            &mut debug_info_data_relocs,
             unit_idx,
             reloc,
             sym,
             &text_bases,
+            &rodata_bases,
+            &data_bases,
+            &bss_bases,
+            merged_data_len,
             &debug_abbrev_bases,
             &debug_line_bases,
             &debug_str_bases,
@@ -1832,17 +1847,21 @@ pub fn link_native_objects_with_shared_libs<'a>(
             machine,
             &mut debug_line,
             &mut debug_line_text_relocs,
+            &mut unused_line_data_relocs,
             unit_idx,
             reloc,
             sym,
             &text_bases,
+            &rodata_bases,
+            &data_bases,
+            &bss_bases,
+            merged_data_len,
             &debug_abbrev_bases,
             &debug_line_bases,
             &debug_str_bases,
             &defined,
         )?;
     }
-
     // The writers iterate the merged table, so it leaves the link as an
     // ordered map: the static symbol table and the dynamic export list
     // follow this order byte for byte.
@@ -1889,6 +1908,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
         unit_for_debug_line_reloc,
         debug_info_text_relocs,
         debug_line_text_relocs,
+        debug_info_data_relocs,
         prologue_ends,
         local_funcs,
         tls_data,
@@ -1917,6 +1937,18 @@ pub struct DebugTextReloc {
     pub width: u8,
 }
 
+/// A DWARF placeholder naming a byte of the merged data image: the
+/// `DW_OP_addr` of an object with static storage duration. The offset
+/// follows [`merged_target`]'s convention, so a `.bss` object sits past
+/// the image length and the writer's data-offset-to-address map places
+/// it in the zero-fill tail.
+#[derive(Debug, Clone, Copy)]
+pub struct DebugDataReloc {
+    pub byte_offset: u64,
+    pub merged_data_offset: u64,
+    pub width: u8,
+}
+
 #[allow(clippy::too_many_arguments)]
 /// Record the PLT pool `[pool_start, text.len())` as a linker-
 /// materialized `.plt` contribution. No-op when no stub was emitted.
@@ -1936,26 +1968,41 @@ fn resolve_debug_reloc(
     machine: NativeMachine,
     section_bytes: &mut [u8],
     text_relocs_out: &mut Vec<DebugTextReloc>,
+    data_relocs_out: &mut Vec<DebugDataReloc>,
     unit_idx: usize,
     reloc: &super::object::NativeReloc,
     sym: &super::object::NativeSymbol,
     text_bases: &[usize],
+    rodata_bases: &[usize],
+    data_bases: &[usize],
+    bss_bases: &[usize],
+    data_len: usize,
     debug_abbrev_bases: &[usize],
     debug_line_bases: &[usize],
     debug_str_bases: &[usize],
     defined: &HashMap<&str, MergedSymbol>,
 ) -> Result<(), C5Error> {
     let patch_off = reloc.offset as usize;
-    // Resolve the reloc's symbol to a merged offset, noting whether it lands
-    // in `.text` (whose runtime base the writer commits later) and whether it
-    // is resolvable at all. A same-unit symbol uses this unit's merged section
-    // base. An `Undef` symbol -- debug info from another toolchain naming an
-    // external symbol -- resolves through the global table: a text definition
-    // defers like any text reference; a data/bss definition or a true import
-    // has no debug-usable link-time address and is left null rather than
-    // aborting the link.
+    // Resolve the reloc's symbol to a merged offset, noting which image it
+    // lands in and whether it is resolvable at all. A same-unit symbol uses
+    // this unit's merged section base. `.text` and the data image both defer:
+    // their runtime bases are the writer's to commit. An `Undef` symbol --
+    // debug info from another toolchain naming an external symbol -- resolves
+    // through the global table, and a definition with no debug-usable
+    // link-time address is left null rather than aborting the link.
+    let in_data = matches!(
+        sym.section,
+        NativeSymSection::RoData | NativeSymSection::Data | NativeSymSection::Bss
+    );
     let (merged_value, in_text, resolvable) = match sym.section {
         NativeSymSection::Text => (text_bases[unit_idx] as u64 + sym.value, true, true),
+        NativeSymSection::RoData => (rodata_bases[unit_idx] as u64 + sym.value, false, true),
+        NativeSymSection::Data => (data_bases[unit_idx] as u64 + sym.value, false, true),
+        NativeSymSection::Bss => (
+            data_len as u64 + bss_bases[unit_idx] as u64 + sym.value,
+            false,
+            true,
+        ),
         NativeSymSection::DebugAbbrev => {
             (debug_abbrev_bases[unit_idx] as u64 + sym.value, false, true)
         }
@@ -1965,10 +2012,9 @@ fn resolve_debug_reloc(
             Some(m) if m.section == NativeSymSection::Text => (m.value, true, true),
             _ => (0, false, false),
         },
-        // A data/bss definition, an absolute symbol, or a common tentative has
-        // no deferred debug-address path here (badc emits only text- and
-        // debug-section-targeting debug relocs of its own). Leave the reference
-        // null rather than aborting the link on another toolchain's debug info.
+        // An absolute symbol, a common tentative or a TLS object has no
+        // deferred debug-address path. Leave the reference null rather
+        // than aborting the link on another toolchain's debug info.
         _ => (0, false, false),
     };
     let resolved = merged_value.wrapping_add(reloc.addend as u64);
@@ -2005,6 +2051,13 @@ fn resolve_debug_reloc(
         });
         // Leave it cleared so a writer that ignores `debug_*_text_relocs`
         // produces deterministic bytes.
+        section_bytes[patch_off..end].fill(0);
+    } else if resolvable && in_data && width == 8 {
+        data_relocs_out.push(DebugDataReloc {
+            byte_offset: patch_off as u64,
+            merged_data_offset: resolved,
+            width,
+        });
         section_bytes[patch_off..end].fill(0);
     } else if resolvable {
         // A section-relative offset (debug-section cross-reference, or a

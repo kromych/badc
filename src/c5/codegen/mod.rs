@@ -896,6 +896,11 @@ pub(crate) struct MergedDwarf {
     /// little-endian bytes over the placeholder.
     pub debug_info_text_relocs: Vec<DwarfTextReloc>,
     pub debug_line_text_relocs: Vec<DwarfTextReloc>,
+    /// Data-targeting DWARF relocs, the same shape against the merged
+    /// data image: a `DW_OP_addr` in an object's `DW_AT_location`. The
+    /// offset follows the linker's data convention, with the zero-fill
+    /// tail continuing past the image length.
+    pub debug_info_data_relocs: Vec<DwarfDataReloc>,
 }
 
 /// One text-targeting DWARF reloc surfaced through
@@ -907,6 +912,15 @@ pub(crate) struct MergedDwarf {
 pub(crate) struct DwarfTextReloc {
     pub byte_offset: u64,
     pub merged_text_offset: u64,
+    pub width: u8,
+}
+
+/// One data-targeting DWARF reloc surfaced through [`MergedDwarf`].
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct DwarfDataReloc {
+    pub byte_offset: u64,
+    pub merged_data_offset: u64,
     pub width: u8,
 }
 

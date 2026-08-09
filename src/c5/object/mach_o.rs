@@ -2256,6 +2256,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             for r in &md.debug_line_text_relocs {
                 super::apply_merged_dwarf_text_reloc(&mut debug_line, r, code_vmaddr_base)?;
             }
+            for r in &md.debug_info_data_relocs {
+                super::apply_merged_dwarf_data_reloc(&mut debug_info, r, &data_off_to_vaddr)?;
+            }
             let fresh = dwarf::emit(
                 program,
                 build,

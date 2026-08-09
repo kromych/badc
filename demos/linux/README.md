@@ -528,6 +528,38 @@ they name are ones this build produces itself: `CONFIG_INITRAMFS_SOURCE`,
 `CONFIG_SYSTEM_TRUSTED_KEYS`, `CONFIG_SYSTEM_REVOCATION_KEYS` and
 `CONFIG_MODULE_SIG_KEY`. Each clearing appears in the deviations.
 
+#### What a distribution configuration compiles today
+
+Neither architecture builds one yet. Surveyed at the 7.1.6 pin with
+`--keep-going`, so the counts are the whole corpus rather than the first
+defect:
+
+| | `badc` | `fail` | `badc-asm` | `gas` | image | wall |
+|---|---|---|---|---|---|---|
+| x86_64, Debian 13 | 138 | 5015 | 58 | 46 | none | 3m43s (12 jobs) |
+| aarch64, Fedora 44 | 179 | 17546 | 87 | 8 | none | 10m42s (8 jobs) |
+
+Ranked by normalized signature, one gap is 5014 of the 5015 x86_64 failures
+and 17544 of the 17546 aarch64 ones: the GNU asm-label symbol rename in
+`include/linux/fortify-string.h` (issue #714). `linux/string.h` includes that
+header, so nearly every unit sees it, and the units that compiled are the ones
+that do not. The header is compiled only under `CONFIG_FORTIFY_SOURCE`, which
+has no `default y` and which no arch defconfig sets, while both distributions
+enable it -- that single option is what separates the defconfig corpus from a
+distribution one.
+
+The remainder is four defects, one unit each: #718 (x86_64, `%c` on a cast
+address constant), #717 and #716 (aarch64, an initializer designator overcount
+and a compound assignment on a vector lvalue), and #715 (aarch64, a `.bss`
+allocation that the vDSO's linker script discards). #715 stops the arm64 build
+at `vdso_prepare`, which is a hard prerequisite, so measuring past it needs
+`--fallback` on the two `arch/arm64/kernel/vdso` C units; that is what the two
+`fallback` units in the aarch64 row are.
+
+No `vmlinux` is produced on either architecture, so the package and vm phases
+are unreachable and nothing is said here about installing or booting a
+distribution-configured kernel.
+
 ### Surveying a kernel and configuration from a URL
 
 The same script is the local survey tool: `--tarball-url` fetches a kernel

@@ -73,6 +73,36 @@ pub(crate) fn apply_merged_dwarf_text_reloc(
     Ok(())
 }
 
+/// Apply a data-targeting DWARF placeholder once the writer can map a
+/// merged data offset to its runtime address.
+#[cfg(feature = "native-emit")]
+pub(crate) fn apply_merged_dwarf_data_reloc(
+    section_bytes: &mut [u8],
+    r: &crate::c5::codegen::DwarfDataReloc,
+    data_off_to_vaddr: &dyn Fn(u64) -> u64,
+) -> Result<(), C5Error> {
+    let off = r.byte_offset as usize;
+    let end = off.checked_add(r.width as usize).ok_or_else(|| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+            "DWARF data reloc offset 0x{off:x} + width {} overflows",
+            r.width,
+        )))
+    })?;
+    if end > section_bytes.len() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "DWARF data reloc past section end (offset 0x{off:x}, width {}, section length {})",
+                r.width,
+                section_bytes.len(),
+            ),
+        )));
+    }
+    let resolved = data_off_to_vaddr(r.merged_data_offset);
+    let bytes = &resolved.to_le_bytes()[..r.width as usize];
+    section_bytes[off..end].copy_from_slice(bytes);
+    Ok(())
+}
+
 #[cfg(feature = "native-emit")]
 pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error> {
     emit_native_with_options(program, target, NativeOptions::default())

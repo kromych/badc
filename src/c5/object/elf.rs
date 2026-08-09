@@ -2054,6 +2054,9 @@ pub(super) fn write(
         for r in &md.debug_line_text_relocs {
             super::apply_merged_dwarf_text_reloc(&mut debug_line, r, dwarf_text_vmaddr)?;
         }
+        for r in &md.debug_info_data_relocs {
+            super::apply_merged_dwarf_data_reloc(&mut debug_info, r, &data_off_to_vaddr)?;
+        }
         let fresh = dwarf::emit(
             program,
             build,

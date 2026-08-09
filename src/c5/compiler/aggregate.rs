@@ -115,6 +115,7 @@ impl Compiler {
                     is_complete: false,
                     is_vector: false,
                     is_array: false,
+                    is_anonymous: false,
                 });
                 let id = self.structs.len() - 1;
                 if let Some(scope) = self.tag_scopes.last_mut() {
@@ -265,6 +266,7 @@ impl Compiler {
                 // with no declarator -- next token `;` -- is an unnamed
                 // member whose fields promote into the enclosing
                 // aggregate.
+                let mut inner_anonymous = false;
                 let inner_name = if self.lex.tk == Token::Id {
                     let name = self.symbols[self.lex.curr_id_idx].name.clone();
                     self.next()?;
@@ -275,6 +277,7 @@ impl Compiler {
                     } else {
                         "anon_struct"
                     };
+                    inner_anonymous = true;
                     format!("__{kind}_{}_in_{}", self.structs.len(), name)
                 } else {
                     return Err(self.compile_err("aggregate name or `{{` expected in field type"));
@@ -282,10 +285,11 @@ impl Compiler {
                 let inner_id = if self.lex.tk == '{' {
                     let id =
                         self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
+                    self.structs[id].is_anonymous = inner_anonymous;
                     self.apply_post_body_attributes(id)?;
                     id
                 } else {
-                    self.find_or_forward_declare_struct(&inner_name)
+                    self.find_or_forward_declare_struct(&inner_name, nested_is_union)
                 };
                 anon_aggregate_inner_id = Some(inner_id);
                 struct_ty_for(inner_id)

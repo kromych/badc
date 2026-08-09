@@ -84,11 +84,11 @@ WANT_ATTRS = ("name", "byte_size", "bit_size", "bit_offset", "data_bit_offset",
 FILTER_ERE = (r"DW_TAG_|Compile Unit:|DW_AT_(" + "|".join(WANT_ATTRS) + r")\b")
 DUMP_FILTER = re.compile("(" + FILTER_ERE + ")")
 
-# badc gives anonymous aggregates synthesized tags -- `__anon_struct_<n>`
-# for an anonymous declaration and `__anon_struct_<n>_in_<parent>` for an
-# anonymous member, nesting the latter -- where the reference compiler leaves
-# them unnamed. The serial numbers are per-unit, so the names match nothing
-# across compilers or units; both sides treat them as unnamed.
+# An aggregate the source left untagged carries no DW_AT_name on either
+# side. badc once synthesized one from its registry key, with a per-unit
+# serial that matched nothing across compilers or units; the pattern is
+# kept so such a name is recognized as the anonymous type it describes
+# rather than counted as a type only badc has.
 ANON_NAME = re.compile(r"^__anon_(?:struct|union)_\d+(?:_in_.*)?$")
 
 DIE_RE = re.compile(r"^0x([0-9a-f]+):(\s+)DW_TAG_(\w+)\s*$")

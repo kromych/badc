@@ -1915,6 +1915,13 @@ impl Compiler {
                     self.unwind_scope_bound(bound);
                 } else {
                     self.symbols[id_idx].class = Token::Glo as i64;
+                    // First declaration wins the source position, as it does
+                    // for functions; it feeds DW_AT_decl_file / decl_line.
+                    if self.symbols[id_idx].decl_line == 0 {
+                        self.symbols[id_idx].decl_line = self.lex.line;
+                        self.symbols[id_idx].decl_file = self.intern_source_file() as u32;
+                        self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+                    }
                     if !was_tentative_glo {
                         self.symbols[id_idx].is_thread_local = thread_local;
                     }

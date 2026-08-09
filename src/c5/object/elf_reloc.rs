@@ -2026,12 +2026,15 @@ pub(super) fn write_relocatable(
     // Internal-linkage data objects: STB_LOCAL + STT_OBJECT, placed
     // through the same layout plan the external ones use, so
     // compaction and named-section moves are reflected.
-    for (i, (_, val, size)) in defined_data_locals.iter().enumerate() {
+    let mut defined_data_local_symidx: alloc::collections::BTreeMap<&str, u64> =
+        alloc::collections::BTreeMap::new();
+    for (i, (name, val, size)) in defined_data_locals.iter().enumerate() {
         let (shndx, value) = match plan.map((*val).max(0) as u64) {
             DataHome::Data(o) => (SHIDX_DATA, o),
             DataHome::Bss(o) => (SHIDX_BSS, o),
             DataHome::Named(e, o) => (carve.shndx[e], o),
         };
+        defined_data_local_symidx.insert(name, symbols.len() as u64);
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_data_locals_start + i],
             st_info: pack_sym_info(STB_LOCAL, STT_OBJECT),
@@ -3016,33 +3019,45 @@ pub(super) fn write_relocatable(
     } else {
         dwarf_reloc::DwarfRelocatable::default()
     };
+    // `DW_OP_addr` in a variable's location names the object by its
+    // link name; both linkage classes carry a symbol-table entry, and an
+    // inline-asm label may have claimed the name first.
+    let dwarf_obj_sym_idx = |name: &str| -> Option<u64> {
+        defined_data_symidx
+            .get(name)
+            .copied()
+            .or_else(|| defined_data_local_symidx.get(name).copied())
+            .or_else(|| asm_label_symidx.get(name).map(|&i| i as u64))
+    };
     let mut rela_debug_info_bytes: Vec<u8> =
         Vec::with_capacity(dwarf.info_relocs.len() * ELF64_RELA_SIZE);
     for r in &dwarf.info_relocs {
-        write_struct(
-            &mut rela_debug_info_bytes,
-            &dwarf_reloc_to_elf_rela(
-                r,
-                machine_for_rela,
-                debug_line_sym_idx,
-                debug_abbrev_sym_idx,
-                text_sym_idx,
-            ),
-        );
+        if let Some(rela) = dwarf_reloc_to_elf_rela(
+            r,
+            machine_for_rela,
+            debug_line_sym_idx,
+            debug_abbrev_sym_idx,
+            text_sym_idx,
+            &dwarf.reloc_symbols,
+            &dwarf_obj_sym_idx,
+        ) {
+            write_struct(&mut rela_debug_info_bytes, &rela);
+        }
     }
     let mut rela_debug_line_bytes: Vec<u8> =
         Vec::with_capacity(dwarf.line_relocs.len() * ELF64_RELA_SIZE);
     for r in &dwarf.line_relocs {
-        write_struct(
-            &mut rela_debug_line_bytes,
-            &dwarf_reloc_to_elf_rela(
-                r,
-                machine_for_rela,
-                debug_line_sym_idx,
-                debug_abbrev_sym_idx,
-                text_sym_idx,
-            ),
-        );
+        if let Some(rela) = dwarf_reloc_to_elf_rela(
+            r,
+            machine_for_rela,
+            debug_line_sym_idx,
+            debug_abbrev_sym_idx,
+            text_sym_idx,
+            &dwarf.reloc_symbols,
+            &dwarf_obj_sym_idx,
+        ) {
+            write_struct(&mut rela_debug_line_bytes, &rela);
+        }
     }
 
     // badc has no i386 code generator, so every relocation in an
@@ -4031,18 +4046,26 @@ fn build_badc_note(
 /// 32-bit slots use `R_X86_64_32` / `R_AARCH64_ABS32`, 64-bit
 /// slots use `R_X86_64_64` / `R_AARCH64_ABS64`. The target
 /// section's symtab index is looked up from the three indices the
-/// caller pre-resolved when laying out the symbol table.
+/// caller pre-resolved when laying out the symbol table; a
+/// `DW_OP_addr` slot resolves through `obj_sym_idx` instead, and
+/// yields no entry when the name reached no symbol, leaving the
+/// address null rather than pointing it somewhere else.
 fn dwarf_reloc_to_elf_rela(
     r: &DwarfReloc,
     machine: Machine,
     debug_line_sym_idx: u64,
     debug_abbrev_sym_idx: u64,
     text_sym_idx: u64,
-) -> Elf64Rela {
+    reloc_symbols: &[String],
+    obj_sym_idx: &dyn Fn(&str) -> Option<u64>,
+) -> Option<Elf64Rela> {
     let sym_idx = match r.target {
         DwarfRelocTarget::Text => text_sym_idx,
         DwarfRelocTarget::DebugLine => debug_line_sym_idx,
         DwarfRelocTarget::DebugAbbrev => debug_abbrev_sym_idx,
+        DwarfRelocTarget::Symbol(i) => {
+            obj_sym_idx(reloc_symbols.get(i as usize).map(|s| s.as_str())?)?
+        }
     };
     let rtype = match (r.width, machine) {
         (DwarfRelocWidth::W8, Machine::X86_64) => R_X86_64_64,
@@ -4050,11 +4073,11 @@ fn dwarf_reloc_to_elf_rela(
         (DwarfRelocWidth::W8, Machine::Aarch64) => R_AARCH64_ABS64,
         (DwarfRelocWidth::W4, Machine::Aarch64) => R_AARCH64_ABS32,
     };
-    Elf64Rela {
+    Some(Elf64Rela {
         r_offset: r.offset,
         r_info: (sym_idx << 32) | (rtype as u64),
         r_addend: r.addend,
-    }
+    })
 }
 
 /// Emit the relocs the per-arch lowering left behind for an

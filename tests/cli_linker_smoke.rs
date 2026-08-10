@@ -3941,3 +3941,267 @@ fn map_option_requires_a_link() {
         "diagnostic must say the map needs a link: {stderr:?}"
     );
 }
+
+/// The archive reader's member names must agree with the platform
+/// `ar`'s own view of the same file. Which variant that exercises
+/// follows the host: `/usr/bin/ar` on macOS writes the BSD `#1/<len>`
+/// inline-name form and a `__.SYMDEF` index, GNU `ar` on Linux writes
+/// the `//` long-name table and a `/` index. The names straddle the
+/// 16-byte header field so both the short and the spilled encoding
+/// appear.
+#[test]
+fn platform_ar_member_names_match_ar_t() {
+    let dir = tempdir("platform-ar");
+    let names = [
+        "a_very_long_member_name_over_sixteen.o",
+        "short.o",
+        "exactly_sixteen.o",
+    ];
+    // The members are built by the host C compiler, not by badc: macOS
+    // `ar` drops a member whose container is not Mach-O, so only a
+    // host-native object exercises the archiver at all. Only the names
+    // and the verbatim bodies matter here.
+    let mut objects: Vec<PathBuf> = Vec::new();
+    for (i, name) in names.iter().enumerate() {
+        let src = write_source(
+            &dir,
+            &format!("m{i}.c"),
+            &format!("int m{i}(void) {{ return {i}; }}\n"),
+        );
+        let obj = dir.join(name);
+        let built = Command::new("cc")
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj)
+            .current_dir(&dir)
+            .output();
+        match built {
+            Ok(o) if o.status.success() => {}
+            // No host C compiler; the byte-level encodings of both ar
+            // variants are covered by the archive reader's own tests.
+            _ => return,
+        }
+        objects.push(obj);
+    }
+    let lib = dir.join("libmix.a");
+    let made = Command::new("ar")
+        .arg("rcs")
+        .arg(&lib)
+        .args(&objects)
+        .current_dir(&dir)
+        .output();
+    match made {
+        Ok(o) if o.status.success() => {}
+        _ => return, // no platform `ar` on this host
+    }
+    let listing = Command::new("ar")
+        .arg("t")
+        .arg(&lib)
+        .current_dir(&dir)
+        .output()
+        .expect("run ar t");
+    let expected: Vec<String> = String::from_utf8_lossy(&listing.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty() && !l.starts_with("__.SYMDEF"))
+        .collect();
+    assert_eq!(expected.len(), names.len(), "ar t must list every member");
+
+    let blob = std::fs::read(&lib).expect("read the archive");
+    let members = badc::read_archive(&blob).expect("read the archive members");
+    let got: Vec<String> = members.iter().map(|m| m.name.clone()).collect();
+    assert_eq!(got, expected, "badc's member names must match `ar t`");
+    for m in &members {
+        let on_disk = std::fs::read(dir.join(&m.name)).expect("read the member's source object");
+        assert_eq!(
+            m.bytes, on_disk,
+            "member `{}` body must be verbatim",
+            m.name
+        );
+    }
+}
+
+/// A member whose container is not ELF is named by its resolved member
+/// name and by its own format. badc's relocatable format is ELF on
+/// every target, so a Mach-O member cannot be linked even where the
+/// target's images are Mach-O; the diagnostic says that rather than
+/// reporting the raw header field.
+#[test]
+fn foreign_format_archive_member_is_diagnosed_by_name_and_format() {
+    let dir = tempdir("foreign-member");
+    let src = write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    // MH_CIGAM_64 leads a 64-bit Mach-O object; the rest is padding,
+    // since the input is rejected on the container alone.
+    let mut macho = vec![0xCFu8, 0xFA, 0xED, 0xFE];
+    macho.extend_from_slice(&[0u8; 28]);
+    let lib = dir.join("libforeign.a");
+    let blob = badc::write_archive(
+        &[badc::ArchiveMember {
+            name: "a_very_long_member_name_over_sixteen.o".into(),
+            bytes: macho,
+        }],
+        &[(0, vec!["_unused".into()])],
+    );
+    std::fs::write(&lib, &blob).expect("write the archive");
+
+    for target in ["macos-aarch64", "linux-x64"] {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["-o", "prog"])
+            .arg(&lib)
+            .arg(&src)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        assert!(!out.status.success(), "a Mach-O member must be rejected");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            err.contains("a_very_long_member_name_over_sixteen.o") && err.contains("Mach-O"),
+            "diagnostic must name the member and its format on {target}: {err}",
+        );
+        assert!(
+            !err.contains("#1/"),
+            "diagnostic must not surface a raw header field on {target}: {err}",
+        );
+    }
+}
+
+/// `-l<name>` looks for the shared spelling the target's container
+/// format uses, and says so when nothing is found: `.so` for ELF,
+/// `.dylib` for Mach-O, `.dll` for PE.
+#[test]
+fn library_search_spelling_follows_the_target_format() {
+    let dir = tempdir("lib-spelling");
+    let src = write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    for (target, shared) in [
+        ("linux-x64", "libnosuchlib.so"),
+        ("macos-aarch64", "libnosuchlib.dylib"),
+        ("windows-x64", "libnosuchlib.dll"),
+    ] {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["-o", "prog", "-lnosuchlib"])
+            .arg(&src)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        assert!(!out.status.success(), "the library does not exist");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            err.contains(shared) && err.contains("libnosuchlib.a"),
+            "search must name the {target} spellings: {err}",
+        );
+    }
+}
+
+/// A shared library in a container the linker cannot read is reported
+/// as such. Without the check the bytes fall through to the linker-
+/// script reader, which finds no GROUP / INPUT entries in them and
+/// resolves the `-l` to nothing at all.
+#[test]
+fn foreign_format_shared_library_is_diagnosed() {
+    let dir = tempdir("foreign-dylib");
+    let src = write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    let mut macho = vec![0xCFu8, 0xFA, 0xED, 0xFE];
+    macho.extend_from_slice(&[0u8; 28]);
+    std::fs::write(dir.join("libfake.dylib"), &macho).expect("write the dylib");
+    let out = Command::new(badc())
+        .args(["--target=macos-aarch64", "-o", "prog", "-L.", "-lfake"])
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(!out.status.success(), "a Mach-O dylib must be rejected");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("libfake.dylib") && err.contains("Mach-O"),
+        "diagnostic must name the file and its format: {err}",
+    );
+}
+
+/// Append a member to a BSD-format archive: `#1/<len>` in the header
+/// with the name NUL-padded at the head of the body, the size field
+/// covering both. `/usr/bin/ar` pads the name to a multiple of eight.
+fn push_bsd_ar_member(out: &mut Vec<u8>, name: &str, body: &[u8]) {
+    let field = name.len().div_ceil(8) * 8;
+    let size = field + body.len();
+    let mut hdr = [b' '; 60];
+    let name_field = format!("#1/{field}");
+    hdr[..name_field.len()].copy_from_slice(name_field.as_bytes());
+    for i in [16, 28, 34, 40] {
+        hdr[i] = b'0';
+    }
+    let size_field = format!("{size}");
+    hdr[48..48 + size_field.len()].copy_from_slice(size_field.as_bytes());
+    hdr[58] = 0x60;
+    hdr[59] = 0x0A;
+    out.extend_from_slice(&hdr);
+    out.extend_from_slice(name.as_bytes());
+    out.extend(std::iter::repeat_n(0u8, field - name.len()));
+    out.extend_from_slice(body);
+    if !size.is_multiple_of(2) {
+        out.push(b'\n');
+    }
+}
+
+/// A BSD-format archive links like a GNU one: the archive variant is a
+/// property of the producer, not of the target, so the reader has to
+/// resolve `#1/<len>` names and skip the `__.SYMDEF` index whatever is
+/// being linked. Members carry no symbol index here, which is legal --
+/// the linker scans member symbol tables to decide inclusion.
+#[test]
+fn bsd_format_archive_links_on_the_host_target() {
+    let dir = tempdir("bsd-archive-link");
+    write_source(
+        &dir,
+        "util.c",
+        "int doubled(int n) { return n + n; }\nint trebled(int n) { return n * 3; }\n",
+    );
+    write_source(&dir, "unused.c", "int unused_helper(void) { return 99; }\n");
+    let main = write_source(
+        &dir,
+        "main.c",
+        "extern int doubled(int);\nextern int trebled(int);\n\
+         int main(void) { return doubled(7) + trebled(8); }\n",
+    );
+    let mut blob: Vec<u8> = b"!<arch>\n".to_vec();
+    push_bsd_ar_member(&mut blob, "__.SYMDEF SORTED", &[0u8; 4]);
+    for (src, member) in [
+        ("util.c", "util_with_a_name_over_sixteen_bytes.o"),
+        ("unused.c", "unused.o"),
+    ] {
+        let obj = dir.join(member);
+        run(
+            Command::new(badc())
+                .args(["-c", "-q", "-o"])
+                .arg(&obj)
+                .arg(dir.join(src))
+                .current_dir(&dir),
+            "compile an archive member",
+        );
+        let bytes = std::fs::read(&obj).expect("read the member object");
+        push_bsd_ar_member(&mut blob, member, &bytes);
+    }
+    let lib = dir.join("libbsd.a");
+    std::fs::write(&lib, &blob).expect("write the archive");
+
+    let members = badc::read_archive(&blob).expect("read the archive");
+    let names: Vec<&str> = members.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(names, ["util_with_a_name_over_sixteen_bytes.o", "unused.o"]);
+
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["-q", "-o"])
+            .arg(&exe)
+            .arg(&main)
+            .arg("-L")
+            .arg(&dir)
+            .args(["-l", "bsd"])
+            .current_dir(&dir),
+        "link against a BSD-format archive",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(38), "14 + 24");
+}

@@ -1639,18 +1639,24 @@ fn run() {
         search_paths.push(d.to_string());
     }
     for name in &lib_names {
-        match find_library(name, &search_paths) {
+        match find_library(name, &search_paths, target) {
             Some(p) => {
-                if let Err(e) =
-                    ingest_linker_input(&p, &search_paths, &mut shared_libs, &mut archives, 0)
-                {
+                if let Err(e) = ingest_linker_input(
+                    &p,
+                    &search_paths,
+                    target,
+                    &mut shared_libs,
+                    &mut archives,
+                    0,
+                ) {
                     eprintln!("badc: error: {e}");
                     std::process::exit(1);
                 }
             }
             None => {
+                let [shared, archive] = library_spellings(name, target);
                 eprintln!(
-                    "badc: cannot find `lib{name}.so` or `lib{name}.a` on any search path \
+                    "badc: cannot find `{shared}` or `{archive}` on any search path \
                      ({} probed)",
                     search_paths.len()
                 );
@@ -1674,7 +1680,14 @@ fn run() {
                 .find(|p| p.exists())
             {
                 let p = p.to_string_lossy().into_owned();
-                let _ = ingest_linker_input(&p, &search_paths, &mut shared_libs, &mut archives, 0);
+                let _ = ingest_linker_input(
+                    &p,
+                    &search_paths,
+                    target,
+                    &mut shared_libs,
+                    &mut archives,
+                    0,
+                );
                 break;
             }
         }
@@ -2276,8 +2289,8 @@ fn run() {
             };
             if !badc::is_elf_object(&bytes) {
                 eprint_diagnostic(format!(
-                    "badc: error: `{obj_path}` is not a native ELF object; \
-                     only the ELF format is supported"
+                    "badc: error: `{obj_path}`: {}",
+                    unreadable_object_reason(&bytes, target)
                 ));
                 std::process::exit(1);
             }
@@ -2322,8 +2335,9 @@ fn run() {
             for m in members {
                 if !badc::is_elf_object(&m.bytes) {
                     eprint_diagnostic(format!(
-                        "badc: error: archive `{a_path}` member `{}` is not a native ELF object",
-                        m.name
+                        "badc: error: archive `{a_path}` member `{}`: {}",
+                        m.name,
+                        unreadable_object_reason(&m.bytes, target)
                     ));
                     std::process::exit(1);
                 }
@@ -2865,8 +2879,8 @@ fn run() {
             };
             if !badc::is_elf_object(&bytes) {
                 eprint_diagnostic(format!(
-                    "badc: error: `{obj_path}` is not a native ELF object; \
-                     only the ELF format is supported"
+                    "badc: error: `{obj_path}`: {}",
+                    unreadable_object_reason(&bytes, target)
                 ));
                 std::process::exit(1);
             }
@@ -2918,22 +2932,71 @@ fn default_system_include_paths(target: badc::Target, freestanding: bool) -> Vec
     .collect()
 }
 
-/// Locate `lib<name>.so` (preferred), a versioned `lib<name>.so.N`
-/// (shortest match -- the bare SONAME version), or `lib<name>.a` on the
-/// search path, mirroring `ld`'s `-l<name>` order.
-fn find_library(name: &str, search_paths: &[String]) -> Option<String> {
+/// Why the linker cannot read `bytes` as an input object, phrased in
+/// the detected format's own terms. badc's relocatable format is ELF
+/// on every target -- the target's container appears only in the final
+/// image -- so a foreign object is named by what it is.
+fn unreadable_object_reason(bytes: &[u8], target: Target) -> String {
+    let reads = "badc links ELF relocatable objects on every target";
+    match badc::detect_binary_format(bytes) {
+        Some(badc::BinaryFormat::Elf) => format!("malformed ELF object; {reads}"),
+        Some(f) => {
+            let image = target.binary_format();
+            let mut s = format!("is a {} object; {reads}", f.name());
+            if image != badc::BinaryFormat::Elf {
+                s.push_str(&format!(
+                    " -- --target={} writes a {} image from ELF inputs",
+                    target.id_str(),
+                    image.name()
+                ));
+            }
+            s
+        }
+        None => format!("is not an object file in any format badc recognises; {reads}"),
+    }
+}
+
+/// The file names `-l<name>` looks for on `target`, in `ld`'s order:
+/// the unversioned shared library first, then the static archive. The
+/// shared spelling follows the target's container format -- `.so` for
+/// ELF, `.dylib` for Mach-O, `.dll` for PE.
+fn library_spellings(name: &str, target: Target) -> [String; 2] {
+    let ext = target.binary_format().shared_lib_ext();
+    [format!("lib{name}.{ext}"), format!("lib{name}.a")]
+}
+
+/// Locate a `-l<name>` library on the search path. Prefers the
+/// unversioned shared library, then a versioned one (shortest match --
+/// the bare SONAME version), then the static archive. ELF spells the
+/// version after the extension (`libfoo.so.3`), Mach-O and PE before
+/// it (`libfoo.3.dylib`).
+fn find_library(name: &str, search_paths: &[String], target: Target) -> Option<String> {
+    let fmt = target.binary_format();
+    let [shared, archive] = library_spellings(name, target);
     for dir in search_paths {
-        let so = std::path::Path::new(dir).join(format!("lib{name}.so"));
+        let so = std::path::Path::new(dir).join(&shared);
         if so.exists() {
             return Some(so.to_string_lossy().into_owned());
         }
         if let Ok(rd) = std::fs::read_dir(dir) {
-            let prefix = format!("lib{name}.so.");
+            let (prefix, suffix) = if fmt.version_before_ext() {
+                (format!("lib{name}."), format!(".{}", fmt.shared_lib_ext()))
+            } else {
+                (format!("{shared}."), String::new())
+            };
             let mut best: Option<String> = None;
             for ent in rd.flatten() {
                 let fname = ent.file_name().to_string_lossy().into_owned();
-                if fname.starts_with(&prefix) && best.as_ref().is_none_or(|b| fname.len() < b.len())
+                // A versioned name carries at least one character
+                // between the prefix and the suffix; `starts_with`
+                // alone would also match the unversioned spelling.
+                if fname.len() <= prefix.len() + suffix.len()
+                    || !fname.starts_with(&prefix)
+                    || !fname.ends_with(&suffix)
                 {
+                    continue;
+                }
+                if best.as_ref().is_none_or(|b| fname.len() < b.len()) {
                     best = Some(fname);
                 }
             }
@@ -2946,7 +3009,7 @@ fn find_library(name: &str, search_paths: &[String]) -> Option<String> {
                 );
             }
         }
-        let a = std::path::Path::new(dir).join(format!("lib{name}.a"));
+        let a = std::path::Path::new(dir).join(&archive);
         if a.exists() {
             return Some(a.to_string_lossy().into_owned());
         }
@@ -2981,13 +3044,16 @@ fn parse_ld_script_inputs(bytes: &[u8]) -> Vec<String> {
 }
 
 /// Ingest one resolved `-l` / positional linker input, following GNU
-/// ld scripts. An ELF shared object is parsed for its SONAME +
-/// exports; a static archive (`!<arch>` / `!<thin>`) is recorded
-/// positionally; anything else is treated as a linker script whose
+/// ld scripts. A static archive (`!<arch>` / `!<thin>`) is recorded
+/// positionally; an ELF shared object is parsed for its SONAME +
+/// exports; a binary in another container is rejected by name, since
+/// the fallthrough would read it as a linker script and resolve to no
+/// inputs at all; anything else is treated as a linker script whose
 /// GROUP / INPUT / AS_NEEDED file list is resolved recursively.
 fn ingest_linker_input(
     path: &str,
     search_paths: &[String],
+    target: Target,
     shared_libs: &mut Vec<badc::SharedLibrary>,
     archives: &mut Vec<String>,
     depth: usize,
@@ -2996,7 +3062,9 @@ fn ingest_linker_input(
         return Err(format!("linker-script nesting too deep at `{path}`"));
     }
     let bytes = std::fs::read(path).map_err(|e| format!("cannot read `{path}`: {e}"))?;
-    if bytes.starts_with(b"\x7fELF") {
+    if bytes.starts_with(b"!<arch>\n") || bytes.starts_with(b"!<thin>\n") {
+        archives.push(path.to_string());
+    } else if bytes.starts_with(b"\x7fELF") {
         let mut lib = badc::parse_shared_library(&bytes)
             .map_err(|e| format!("reading `{path}` as a shared library: {e}"))?;
         if lib.soname.is_empty() {
@@ -3006,16 +3074,27 @@ fn ingest_linker_input(
                 .unwrap_or_else(|| path.to_string());
         }
         shared_libs.push(lib);
-    } else if bytes.starts_with(b"!<arch>\n") || bytes.starts_with(b"!<thin>\n") {
-        archives.push(path.to_string());
+    } else if let Some(f) = badc::detect_binary_format(&bytes) {
+        return Err(format!(
+            "`{path}` is a {} binary; badc links ELF objects and ELF shared objects, \
+             and static archives",
+            f.name()
+        ));
     } else {
         for entry in parse_ld_script_inputs(&bytes) {
             let resolved = match entry.strip_prefix("-l") {
-                Some(n) => find_library(n, search_paths)
+                Some(n) => find_library(n, search_paths, target)
                     .ok_or_else(|| format!("linker script `{path}`: cannot find `-l{n}`"))?,
                 None => entry,
             };
-            ingest_linker_input(&resolved, search_paths, shared_libs, archives, depth + 1)?;
+            ingest_linker_input(
+                &resolved,
+                search_paths,
+                target,
+                shared_libs,
+                archives,
+                depth + 1,
+            )?;
         }
     }
     Ok(())

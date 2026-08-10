@@ -193,13 +193,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", type=Path, help="write the per-unit results here")
     ap.add_argument("--link", action="store_true",
                     help="relink every tool whose units all compiled")
+    ap.add_argument("--target",
+                    help="badc target triple, overriding the one --arch "
+                         "implies; the host tools are ordinary hosted "
+                         "programs, so any target can compile them. "
+                         "--link stays off unless the target is the host's.")
     args = ap.parse_args(argv)
 
     badc = resolve_badc(args.badc)
     kdir = args.kernel_dir.resolve()
     if not (kdir / "Makefile").is_file():
         sys.exit(f"host tools: {kdir} is not a kernel tree")
-    target = TARGETS[args.arch]
+    target = args.target or TARGETS[args.arch]
     units, tools = collect(kdir)
     if not units:
         sys.exit("host tools: no host compile commands found")
@@ -249,7 +254,11 @@ def main(argv: list[str] | None = None) -> int:
             log(f"  incomplete {t.out}")
 
     links: list[dict] = []
-    if args.link:
+    # The relink reuses the reference build's own link command, which is
+    # the host's toolchain, so it only applies to host-target objects.
+    if args.link and target != TARGETS[args.arch]:
+        log(f"--link skipped: objects are {target}, not the recorded host's")
+    elif args.link:
         for t in sorted(whole, key=lambda t: t.out):
             if not t.link:
                 continue

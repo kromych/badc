@@ -554,15 +554,17 @@ fn shift(a: Range, by: i64, op: BinOp) -> Range {
 
 /// Bounds a remainder by a constant divisor. The C99 6.5.5p6 result has
 /// the sign of the dividend, so a dividend that may be negative reaches
-/// down to `-(|k| - 1)`.
+/// down to `-(|k| - 1)`. The unsigned form reads both operands as
+/// unsigned, where a negative immediate is a divisor above `2^63` and a
+/// negative dividend a huge numerator, neither of which `|k|` describes.
 fn remainder(a: Range, k: i64, unsigned: bool) -> Range {
+    if unsigned && !(a.non_negative() && k > 0) {
+        return UNIVERSE;
+    }
     let m = match (k as i128).checked_abs() {
         Some(m) if m > 0 => m - 1,
         _ => return UNIVERSE,
     };
-    if unsigned && !a.non_negative() {
-        return UNIVERSE;
-    }
     Range {
         lo: if a.non_negative() { 0 } else { -m },
         hi: m,
@@ -1459,6 +1461,40 @@ mod tests {
             1,
         );
         assert!(!run_one(&mut f, &[]), "a negative dividend is not excluded");
+        // An unsigned remainder reads a negative immediate as a divisor
+        // above 2^63, which `|k|` does not describe: `x %u 2^63` on a
+        // dividend up to 2^63 - 1 is the dividend itself, above the
+        // `|k| - 1` the signed reading would give.
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::BinopI {
+                    op: BinOp::Ge,
+                    lhs: 0,
+                    rhs_imm: 0,
+                },
+                Inst::BinopI {
+                    op: BinOp::Modu,
+                    lhs: 0,
+                    rhs_imm: i64::MIN,
+                },
+                Inst::BinopI {
+                    op: BinOp::Le,
+                    lhs: 2,
+                    rhs_imm: i64::MAX - 1,
+                },
+            ],
+            1,
+        );
+        run_one(&mut f, &[]);
+        assert!(
+            matches!(f.insts[3], Inst::BinopI { .. }),
+            "a divisor above 2^63 bounds nothing: {:?}",
+            f.insts[3]
+        );
     }
 
     /// A branch on a masked or offset expression bounds the value it was

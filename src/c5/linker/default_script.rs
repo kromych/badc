@@ -21,6 +21,7 @@ pub fn default_script(shared: bool) -> String {
         r#"SECTIONS
 {{
   . = {base} + SIZEOF_HEADERS;
+  .note.gnu.property : {{ *(.note.gnu.property) }}
   .note.gnu.build-id : {{ *(.note.gnu.build-id) }}
   .hash : {{ *(.hash) }}
   .gnu.hash : {{ *(.gnu.hash) }}

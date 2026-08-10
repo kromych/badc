@@ -33,6 +33,7 @@ use crate::c5::error::C5Error;
 
 use super::dynamic::{self, DynSym, DynTables, HashStyle, VerDef};
 use super::eh_frame;
+use super::gnu_property;
 use super::lds::{
     AssignOp, Assignment, BinOp, Command, DataWidth, Expr, InputSpec, LinkerScript, OutputSection,
     OutputSectionType, SectionContent, SectionsItem, SortKind, UnOp, glob_match,
@@ -101,6 +102,7 @@ const PT_DYNAMIC: u32 = 2;
 const PT_NOTE: u32 = 4;
 const PT_GNU_EH_FRAME: u32 = 0x6474e550;
 const PT_GNU_STACK: u32 = 0x6474e551;
+const PT_GNU_PROPERTY: u32 = 0x6474e553;
 const PF_X: u32 = 1;
 const PF_W: u32 = 2;
 const PF_R: u32 = 4;
@@ -834,6 +836,9 @@ pub struct LdsLinker<'a> {
     emitted: Vec<EmittedReloc>,
     /// Where `build_symtab` put each symbol, for resolving `emitted`.
     sym_index: SymIndex,
+    /// Merged `.note.gnu.property` body, empty when no input carries a
+    /// property that survives the merge.
+    gnu_property: Vec<u8>,
 }
 
 /// Where each symbol landed in `build_symtab`'s output, for resolving
@@ -885,6 +890,7 @@ const SYNTH_VERSYM: &str = ".gnu.version";
 const SYNTH_VERDEF: &str = ".gnu.version_d";
 const SYNTH_DYNAMIC: &str = ".dynamic";
 const SYNTH_EH_FRAME_HDR: &str = ".eh_frame_hdr";
+const SYNTH_GNU_PROPERTY: &str = ".note.gnu.property";
 const OUT_EH_FRAME: &str = ".eh_frame";
 
 #[derive(Debug)]
@@ -929,12 +935,33 @@ impl<'a> LdsLinker<'a> {
                 )));
             }
         }
+        // Property notes are merged into one synthesized note rather
+        // than concatenated: a consumer reading the first note must see
+        // the whole image's claim, not one input's. Every input counts
+        // towards the merge, including those with no property section.
+        let prop_notes: Vec<Vec<&[u8]>> = objects
+            .iter()
+            .map(|o| {
+                o.sections
+                    .iter()
+                    .filter(|s| s.name == SYNTH_GNU_PROPERTY && s.shtype == SHT_NOTE)
+                    .filter_map(|s| o.bytes.get(s.data_off..s.data_off + s.size as usize))
+                    .collect()
+            })
+            .collect();
+        let gnu_property = gnu_property::merge_section(
+            &prop_notes,
+            class_for_machine(machine).addr_size() as usize,
+        )
+        .unwrap_or_default();
         // `.note.GNU-stack` conveys stack executability and nothing
         // else; bfd consumes it and never places it. Keeping it would
         // put a PROGBITS input in whatever `*(.note*)` rule claims it,
         // which then stops being a note section.
         let drop_input = |s: &RawSection| {
-            s.name == ".note.GNU-stack" || (opts.strip_debug && is_debug_section(&s.name))
+            s.name == ".note.GNU-stack"
+                || (s.name == SYNTH_GNU_PROPERTY && s.shtype == SHT_NOTE)
+                || (opts.strip_debug && is_debug_section(&s.name))
         };
         for o in &mut objects {
             if !o.sections.iter().any(drop_input) {
@@ -1003,6 +1030,7 @@ impl<'a> LdsLinker<'a> {
             verdefs: Vec::new(),
             emitted: Vec::new(),
             sym_index: SymIndex::default(),
+            gnu_property,
         };
         linker.resolve_globals()?;
         linker.synthesize_sections();
@@ -1114,6 +1142,13 @@ impl<'a> LdsLinker<'a> {
     }
 
     fn synthesize_sections(&mut self) {
+        if !self.gnu_property.is_empty() {
+            let idx = self.push_synth_section(SYNTH_GNU_PROPERTY, SHT_NOTE, SHF_ALLOC);
+            let synth = self.synth_obj;
+            let sec = &mut self.objects[synth].sections[idx];
+            sec.addralign = self.class.addr_size();
+            sec.size = self.gnu_property.len() as u64;
+        }
         if self.opts.eh_frame_hdr {
             let idx = self.push_synth_section(SYNTH_EH_FRAME_HDR, SHT_PROGBITS, SHF_ALLOC);
             let synth = self.synth_obj;
@@ -4208,6 +4243,7 @@ impl<'a> LdsLinker<'a> {
                         bytes.extend_from_slice(b"GNU\0");
                         bytes.extend_from_slice(&[0u8; 20]);
                     }
+                    SYNTH_GNU_PROPERTY => bytes = self.gnu_property.clone(),
                     SYNTH_DYNAMIC => bytes = dynamic_bytes.clone(),
                     SYNTH_EH_FRAME_HDR => {
                         let Some(hdr_addr) = self.synth_addr(SYNTH_EH_FRAME_HDR) else {
@@ -4394,13 +4430,32 @@ impl<'a> LdsLinker<'a> {
             }
             // PT_NOTE per run of NOTE sections.
             let mut note_members: Vec<usize> = Vec::new();
+            let mut note_runs: Vec<Vec<usize>> = Vec::new();
             for &oi in emit_order {
                 let o = &self.outs[oi];
+                let contiguous = note_members
+                    .last()
+                    .map(|&p: &usize| self.outs[p].addr + self.outs[p].size == o.addr)
+                    .unwrap_or(true);
+                if o.alloc && o.shtype == SHT_NOTE && contiguous {
+                    note_members.push(oi);
+                    continue;
+                }
+                // A segment covers a range, so a note section separated
+                // from the previous one by anything else starts a new
+                // PT_NOTE rather than pulling what lies between into
+                // the walk a consumer makes over the segment.
+                if !note_members.is_empty() {
+                    note_runs.push(core::mem::take(&mut note_members));
+                }
                 if o.alloc && o.shtype == SHT_NOTE {
                     note_members.push(oi);
                 }
             }
             if !note_members.is_empty() {
+                note_runs.push(note_members);
+            }
+            for run in note_runs {
                 segs.push((
                     Elf64Phdr {
                         p_type: PT_NOTE,
@@ -4408,15 +4463,18 @@ impl<'a> LdsLinker<'a> {
                         p_align: 4,
                         ..Default::default()
                     },
-                    note_members,
+                    run,
                 ));
             }
             // PT_DYNAMIC over `.dynamic`, so a loader finds the tables
             // without walking section headers; PT_GNU_EH_FRAME over
-            // `.eh_frame_hdr`, which is how an unwinder finds it.
+            // `.eh_frame_hdr`, which is how an unwinder finds it;
+            // PT_GNU_PROPERTY over the merged note, which is where a
+            // loader looks for the image's feature claims.
             for (name, ptype, flags) in [
                 (SYNTH_DYNAMIC, PT_DYNAMIC, PF_R | PF_W),
                 (SYNTH_EH_FRAME_HDR, PT_GNU_EH_FRAME, PF_R),
+                (SYNTH_GNU_PROPERTY, PT_GNU_PROPERTY, PF_R),
             ] {
                 if let Some(&oi) = emit_order
                     .iter()
@@ -6286,6 +6344,175 @@ SECTIONS {
   /DISCARD/ : { *(.note*) *(.comment) }
 }
 "#;
+
+    /// Property notes reach the output as one merged note, not one per
+    /// input. The inputs disagree on every property here, which is what
+    /// makes the merge observable: a consumer reading the first note
+    /// must see the intersection rather than whichever input landed
+    /// first.
+    #[test]
+    fn property_notes_merge_into_one_note_under_a_gnu_property_segment() {
+        const X86_FEATURE_1_AND: u32 = 0xc000_0002;
+        const X86_ISA_1_USED: u32 = 0xc001_0002;
+        let note = |props: &[(u32, usize, u64)]| {
+            gnu_property::encode(
+                &props
+                    .iter()
+                    .map(|&(ty, datasz, value)| gnu_property::Property { ty, datasz, value })
+                    .collect::<Vec<_>>(),
+                8,
+            )
+        };
+        let obj = |feature: u64, isa: u64| {
+            let body = note(&[
+                // A type outside every defined range: dropped, and it
+                // must not end the walk over the properties behind it.
+                (0x10, 4, 0xaabb_ccdd),
+                (X86_FEATURE_1_AND, 4, feature),
+                (X86_ISA_1_USED, 4, isa),
+            ]);
+            TestObj::new()
+                .sec(
+                    ".text",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    16,
+                    &[0u8; 16],
+                )
+                .sec(".note.gnu.property", SHT_NOTE, SHF_ALLOC, 8, &body)
+                .build(EM_X86_64)
+        };
+        let script = parse_linker_script(&super::super::default_script::default_script(false))
+            .expect("the built-in default script parses");
+        // Build-id on, so the image holds two note sections: PT_NOTE
+        // covers a range, and a second note is the first thing that
+        // can put a non-note inside it.
+        let opts = LdsOptions {
+            max_page_size: 0x1000,
+            build_id_sha1: true,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![
+                parse_lds_object("a.o", obj(0x3, 0x0)).expect("parses"),
+                parse_lds_object("b.o", obj(0x1, 0x1)).expect("parses"),
+            ],
+            &opts,
+        )
+        .expect("the link succeeds");
+        let secs = readelf_sections(&res.image);
+        let notes: Vec<_> = secs
+            .iter()
+            .filter(|s| s.0 == ".note.gnu.property")
+            .collect();
+        assert_eq!(notes.len(), 1, "one merged note section, not one per input");
+        // IBT|SHSTK against IBT intersects to IBT; ISA_1_USED is an
+        // all-input union, so 0 against 1 keeps 1.
+        let want = note(&[(X86_FEATURE_1_AND, 4, 0x1), (X86_ISA_1_USED, 4, 0x1)]);
+        assert_eq!(notes[0].3 as usize, want.len(), "sized for the merged note");
+        let off = section_file_off(&res.image, notes[0].2);
+        assert_eq!(&res.image[off..off + want.len()], &want[..]);
+        let phdrs = image_phdrs(&res.image);
+        let prop = phdrs
+            .iter()
+            .find(|p| p.p_type == PT_GNU_PROPERTY)
+            .expect("PT_GNU_PROPERTY covers the merged note");
+        assert_eq!((prop.p_vaddr, prop.p_filesz), (notes[0].2, notes[0].3));
+        // PT_NOTE spans a range, so every allocated section inside it
+        // has to be a note: a consumer walks the segment end to end.
+        let pt_note = phdrs
+            .iter()
+            .find(|p| p.p_type == PT_NOTE)
+            .expect("PT_NOTE covers the notes");
+        let covered: Vec<_> = secs
+            .iter()
+            .filter(|s| {
+                s.4 & SHF_ALLOC != 0
+                    && s.2 >= pt_note.p_vaddr
+                    && s.2 < pt_note.p_vaddr + pt_note.p_memsz
+            })
+            .collect();
+        assert_eq!(
+            covered.iter().map(|s| s.3).sum::<u64>(),
+            pt_note.p_memsz,
+            "PT_NOTE holds notes and nothing between them"
+        );
+        assert!(
+            covered.iter().all(|s| s.1 == SHT_NOTE),
+            "every section under PT_NOTE is a note: {:?}",
+            covered.iter().map(|s| &s.0).collect::<Vec<_>>()
+        );
+        assert_eq!(covered.len(), 2, "the merged note and the build id");
+    }
+
+    /// A script can put something between two note sections. Each run
+    /// gets its own PT_NOTE, the way ld emits them, so what a consumer
+    /// reads end to end over a segment is notes only.
+    #[test]
+    fn separated_note_sections_get_a_segment_each() {
+        const SEP_SCRIPT: &str = r#"
+SECTIONS {
+  . = 0x400000 + SIZEOF_HEADERS;
+  .note.gnu.property : { *(.note.gnu.property) }
+  .text : { *(.text) }
+  .note.gnu.build-id : { *(.note.gnu.build-id) }
+}
+"#;
+        let body = gnu_property::encode(
+            &[gnu_property::Property {
+                ty: 0xc000_0002,
+                datasz: 4,
+                value: 0x3,
+            }],
+            8,
+        );
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            .sec(".note.gnu.property", SHT_NOTE, SHF_ALLOC, 8, &body)
+            .build(EM_X86_64);
+        let script = parse_linker_script(SEP_SCRIPT).expect("parses");
+        let opts = LdsOptions {
+            build_id_sha1: true,
+            max_page_size: 0x1000,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("the link succeeds");
+        let secs = readelf_sections(&res.image);
+        let sec = |n: &str| {
+            secs.iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{n}"))
+        };
+        let notes = image_phdrs(&res.image)
+            .into_iter()
+            .filter(|p| p.p_type == PT_NOTE)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            notes.len(),
+            2,
+            "one segment per run, not one spanning .text"
+        );
+        for (seg, name) in notes
+            .iter()
+            .zip([".note.gnu.property", ".note.gnu.build-id"])
+        {
+            assert_eq!((seg.p_vaddr, seg.p_memsz), (sec(name).2, sec(name).3));
+        }
+        // ld gives each segment the alignment of what it holds.
+        assert_eq!((notes[0].p_align, notes[1].p_align), (8, 4));
+    }
 
     /// ET_DYN link: every absolute pointer becomes a load-time
     /// RELATIVE fixup, packed into .relr.dyn under

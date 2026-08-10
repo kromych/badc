@@ -4049,6 +4049,13 @@ fn parse_section_item(
         // name with external linkage), or an expression over section-local
         // locations (`.set .Lsz, . - f`).
         ".set" | ".equ" => {
+            // `.set ., expr` moves the location counter, as `.org` does; the
+            // kernel's exception-vector table places its entries that way.
+            if let Some(v) = rest.trim_start().strip_prefix('.')
+                && let Some(v) = v.trim_start().strip_prefix(',')
+            {
+                return parse_section_item(".org", v.trim(), is_aarch64);
+            }
             let (name, value) = rest
                 .split_once(',')
                 .map(|(n, t)| (n.trim(), t.trim()))

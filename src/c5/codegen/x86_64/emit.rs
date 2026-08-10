@@ -11116,6 +11116,25 @@ mod code_mode_tests {
         );
     }
 
+    /// `. = expr` moves the location counter, as `.org` does; the kernel's
+    /// kexec exception-vector table places its 6-byte entries that way.
+    #[test]
+    fn location_counter_assignment_places_like_org() {
+        assert_eq!(
+            assemble("base:\n.byte 1\n. = base + 4\n.byte 2\n"),
+            [1, 0, 0, 0, 2]
+        );
+        assert_eq!(
+            assemble("base:\n.byte 1\n.set ., base + 4\n.byte 2\n"),
+            [1, 0, 0, 0, 2]
+        );
+        // Moving backwards is rejected, as GNU as rejects it.
+        assert!(
+            assemble_err("base:\n.byte 1, 2, 3\n. = base + 1\n").contains("backwards"),
+            "a backward move must be diagnosed"
+        );
+    }
+
     /// The count- and rcx-conditional branches take a rel8 field only. A
     /// same-section target resolves to the byte displacement with no
     /// relocation, as GNU as emits it.

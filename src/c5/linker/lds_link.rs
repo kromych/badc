@@ -3207,7 +3207,12 @@ impl<'a> LdsLinker<'a> {
         match sym.shndx as u16 {
             SHN_ABS | SHN_UNDEF | SHN_COMMON => {
                 if sym.binding() != STB_LOCAL {
-                    if let Some(&(doi, dsi)) = self.globals.get(&sym.name) {
+                    // A global SHN_ABS definition is its own entry in
+                    // the global table; following it would not
+                    // terminate. Only a reference resolves elsewhere.
+                    if let Some(&(doi, dsi)) = self.globals.get(&sym.name)
+                        && (doi, dsi) != (oi, si)
+                    {
                         return self.reloc_is_relative(doi, dsi);
                     }
                     if let Some(s) = self
@@ -6684,6 +6689,53 @@ SECTIONS {
         assert_eq!(r_offset, data_addr + 9);
         assert_eq!(r_type, rt::R_AARCH64_RELATIVE);
         let _ = syms;
+    }
+
+    /// An ABS64 slot against a global SHN_ABS symbol holds a link-time
+    /// constant: no load address is involved, so the slot keeps its
+    /// value and needs no dynamic entry. Such a symbol is its own
+    /// entry in the global table, which the load-address test used to
+    /// follow until the stack ran out.
+    #[test]
+    fn a_dyn_link_keeps_an_absolute_global_constant() {
+        let script = parse_linker_script(DYN_SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+            .sym("KCONST", STB_GLOBAL, STT_OBJECT, usize::MAX - 1, 0x1234, 0)
+            // Symtab: null(0), sections(1,2), _start(3), KCONST(4).
+            .reloc(1, 0, 4, rt::R_X86_64_64, 0)
+            .build(EM_X86_64);
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("t.o", a).expect("parses")],
+            &LdsOptions {
+                emit: LdsEmit::Dyn,
+                max_page_size: 0x1000,
+                ..Default::default()
+            },
+        )
+        .expect("an absolute constant links");
+        let secs = readelf_sections(&res.image);
+        let data_off = section_file_off(
+            &res.image,
+            secs.iter().find(|s| s.0 == ".data").expect(".data").2,
+        );
+        assert_eq!(
+            u64::from_le_bytes(res.image[data_off..data_off + 8].try_into().unwrap()),
+            0x1234
+        );
+        assert!(
+            !secs.iter().any(|s| s.0 == ".rela.dyn" && s.3 > 0),
+            "a constant needs no dynamic entry"
+        );
     }
 
     /// An ABS64 slot against a symbol only the script defines is a

@@ -33,8 +33,8 @@ pub use object::elf_class::ElfClass;
 pub use object::{emit_native, emit_native_with_options};
 pub use {
     codegen::{
-        CodeModel, Hardening, IndirectBranch, NativeOptions, OutputKind, Target, jit_run,
-        jit_run_with_options,
+        BinaryFormat, CodeModel, Hardening, IndirectBranch, NativeOptions, OutputKind, Target,
+        jit_run, jit_run_with_options,
     },
     compiler::{CompileOptions, Compiler, StructDef, StructField},
     depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},
@@ -59,10 +59,11 @@ pub use linker::{
     ArchiveInclusion, LdsEmit, LdsObject, LdsOptions, LdsResult, LinkerScript, MergedNative,
     MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
     OrphanHandling, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
-    SharedLibrary, emit_aarch64_plt, emit_x86_64_plt, is_elf_object, link_native_objects,
-    link_native_objects_with_options, link_native_objects_with_shared_libs, link_with_script,
-    parse_lds_object, parse_linker_script, parse_native_elf, parse_shared_library, render_link_map,
-    write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
+    SharedLibrary, detect_binary_format, emit_aarch64_plt, emit_x86_64_plt, is_elf_object,
+    link_native_objects, link_native_objects_with_options, link_native_objects_with_shared_libs,
+    link_with_script, parse_lds_object, parse_linker_script, parse_native_elf,
+    parse_shared_library, render_link_map, write_executable_elf64, write_native_image_from_merged,
+    write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]
 #[allow(unused_imports)]

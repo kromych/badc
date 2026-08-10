@@ -181,6 +181,10 @@ jobs:
             --workdir "$RUNNER_TEMP/pkg" \
             --report "$RUNNER_TEMP/pkg/vm-${{ matrix.arch }}.json"
       - name: publish the validation record
+        # Covers the build phase as well as the VM phase: when the build
+        # fails, the log, the manifest and the config deviations are the only
+        # outputs that exist, and without them the run page carries no
+        # diagnostic at all.
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -189,6 +193,9 @@ jobs:
             ${{ runner.temp }}/pkg/vm-${{ matrix.arch }}.json
             ${{ runner.temp }}/pkg/package-${{ matrix.arch }}.json
             ${{ runner.temp }}/pkg/console-${{ matrix.arch }}.log
+            ${{ runner.temp }}/pkg/build-${{ matrix.arch }}.log
+            ${{ runner.temp }}/pkg/manifest-${{ matrix.arch }}.txt
+            ${{ runner.temp }}/pkg/config-deviations-${{ matrix.arch }}.txt
             ${{ runner.temp }}/pkg/cores/**
           if-no-files-found: ignore
           retention-days: 30

@@ -152,6 +152,19 @@ def die(m: str) -> None:
     sys.exit(1)
 
 
+def tail(path: Path, lines: int = 60) -> str:
+    # A build log written on a runner is gone with the runner, so a failure
+    # reproduces from the run output alone.
+    try:
+        text = path.read_text(errors="replace").splitlines()
+    except OSError as e:
+        return f"\n  (cannot read {path}: {e})"
+    if not text:
+        return f"\n  ({path} is empty)"
+    head = f"\n--- last {min(lines, len(text))} lines of {path} ---\n"
+    return head + "\n".join(text[-lines:])
+
+
 def host_arch() -> str:
     m = platform.machine().lower()
     return {"arm64": "aarch64", "amd64": "x86_64"}.get(m, m)
@@ -375,9 +388,10 @@ def kbuild(args, arch, tree, targets, extra=(), log_name="build",
                             stdin=subprocess.DEVNULL, stdout=fh,
                             stderr=subprocess.STDOUT).returncode
     if rc != 0:
+        detail = f"make {' '.join(targets)} exited {rc} (see {build_log})"
         if not tolerate_rc:
-            die(f"make {' '.join(targets)} exited {rc} (see {build_log})")
-        log(f"make {' '.join(targets)} exited {rc} (see {build_log})")
+            die(detail + tail(build_log))
+        log(detail)
     return build_log
 
 

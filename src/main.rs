@@ -3953,6 +3953,7 @@ fn run_script_link(cli: ScriptLinkCli) {
         } else {
             badc::LdsEmit::Exec
         },
+        shared: cli.shared,
         entry_override: cli.entry_override,
         // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
         // on i386.

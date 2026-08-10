@@ -298,6 +298,19 @@ pub(crate) fn reloc_desc(machine: NativeMachine, rtype: u32) -> String {
     }
 }
 
+/// [`reloc_desc`] selected by the ELF `e_machine` number, for the script
+/// engine, whose machine set spans i386 as well.
+pub(crate) fn elf_reloc_desc(em_machine: u16, rtype: u32) -> String {
+    use crate::c5::object::elf_reloc_types::{
+        aarch64_reloc_desc, i386_reloc_desc, x86_64_reloc_desc,
+    };
+    match em_machine {
+        super::relocatable::EM_386 => i386_reloc_desc(rtype),
+        EM_AARCH64 => aarch64_reloc_desc(rtype),
+        _ => x86_64_reloc_desc(rtype),
+    }
+}
+
 /// Where a relocation entry came from. Held by a [`RelocSite`] so a
 /// diagnostic can name the containing object and the input section;
 /// the section lookup runs only when a diagnostic is formatted.
@@ -428,7 +441,7 @@ impl RelocSite<'_> {
                     && self.offset < s.offset + s.size.max(1)
             })
             .map_or(self.origin.label, |s| s.name.as_str());
-        format!("{obj}({sec}+{:#x})", self.offset)
+        locate_reloc(obj, sec, self.offset)
     }
 
     /// An input carrying a relocation form the linker has no patcher
@@ -442,22 +455,14 @@ impl RelocSite<'_> {
     }
 
     /// An absolute relocation in an image the loader places at an
-    /// address of its choosing: `S + A` is not a link-time constant,
-    /// and neither ELF `ET_DYN` nor Mach-O `MH_PIE` admits a relocation
-    /// against an executable section. GNU ld declines the same input
-    /// for the same reason, naming the output kind.
+    /// address of its choosing. See [`absolute_in_pie_body`].
     pub(crate) fn absolute_in_pie(&self, shared: bool) -> C5Error {
-        let kind = if shared {
-            "a shared object"
-        } else {
-            "a position-independent executable"
-        };
-        self.rejected(&format!(
-            "{} against symbol `{}` can not be used when making {kind}: the reference \
-             needs an absolute address, which no load address supplies",
-            reloc_desc(self.machine, self.rtype),
+        C5Error::Compile(crate::c5::error::fmt_link_err(&absolute_in_pie_body(
+            &self.locate(),
+            &reloc_desc(self.machine, self.rtype),
             self.symbol,
-        ))
+            shared,
+        )))
     }
 
     /// A resolved value the relocation's field cannot hold. GNU ld
@@ -489,17 +494,40 @@ impl RelocSite<'_> {
             self.locate()
         )))
     }
+}
 
-    /// `<location>: <msg>` under the link-error prefix, for a reference
-    /// the output format admits no encoding of. Unlike [`Self::located`]
-    /// the refusal follows from the reference and the output kind, so
-    /// implementing more of badc does not lift it.
-    fn rejected(&self, msg: &str) -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
-            "{}: {msg}",
-            self.locate()
-        )))
-    }
+/// `<object>(<section>+<offset>)`, the way GNU ld locates a site.
+pub(crate) fn locate_reloc(source: &str, section: &str, offset: u64) -> String {
+    let obj = if source.is_empty() {
+        "<merged image>"
+    } else {
+        source
+    };
+    format!("{obj}({section}+{offset:#x})")
+}
+
+/// Refusal for an absolute relocation in an image the loader places at
+/// an address of its choosing: the load-time forms (`R_*_RELATIVE`,
+/// Mach-O's rebase opcodes) write an address-width word, so a narrower
+/// field has no dynamic form to carry it. GNU ld declines the same
+/// input, naming the output kind. Both link engines report through
+/// this; the body carries no diagnostic prefix, since the script engine
+/// collects several and wraps them once.
+pub(crate) fn absolute_in_pie_body(
+    location: &str,
+    reloc: &str,
+    symbol: &str,
+    shared: bool,
+) -> String {
+    let kind = if shared {
+        "a shared object"
+    } else {
+        "a position-independent executable"
+    };
+    format!(
+        "{location}: {reloc} against symbol `{symbol}` can not be used when making {kind}: \
+         the reference needs an absolute address, which no load address supplies"
+    )
 }
 
 /// Which section a symbol's value lives in.

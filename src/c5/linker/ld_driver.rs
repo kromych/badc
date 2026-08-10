@@ -77,6 +77,9 @@ struct LdArgs {
     // Final-link options; ignored under `-r`, which has no layout.
     /// `-shared` / `-pie`: ET_DYN output.
     shared: bool,
+    /// `-shared` alone: a shared object rather than a
+    /// position-independent executable.
+    shared_object: bool,
     entry: Option<String>,
     map_path: Option<PathBuf>,
     print_map: bool,
@@ -226,6 +229,7 @@ pub fn run_ld(args: &[String]) -> i32 {
         gnu_stack: None,
         print_version: false,
         shared: false,
+        shared_object: false,
         entry: None,
         map_path: None,
         print_map: false,
@@ -289,7 +293,11 @@ pub fn run_ld(args: &[String]) -> i32 {
             }
             "--fatal-warnings" => a.fatal_warnings = true,
             "--no-fatal-warnings" => a.fatal_warnings = false,
-            "-shared" | "-pie" | "--pic-executable" => a.shared = true,
+            "-shared" => {
+                a.shared = true;
+                a.shared_object = true;
+            }
+            "-pie" | "--pic-executable" => a.shared = true,
             "-e" | "--entry" => match next_of(&mut it, "-e") {
                 Ok(s) => a.entry = Some(s),
                 Err(c) => return c,
@@ -828,6 +836,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         } else {
             LdsEmit::Exec
         },
+        shared: a.shared_object,
         entry_override: a.entry.clone(),
         // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
         // on i386.

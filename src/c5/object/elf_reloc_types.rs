@@ -48,6 +48,7 @@ pub(crate) const R_386_PC8: u32 = 23;
 // ---- aarch64 ----
 pub(crate) const R_AARCH64_ABS64: u32 = 257;
 pub(crate) const R_AARCH64_ABS32: u32 = 258;
+pub(crate) const R_AARCH64_ABS16: u32 = 259;
 pub(crate) const R_AARCH64_PREL64: u32 = 260;
 pub(crate) const R_AARCH64_PREL32: u32 = 261;
 pub(crate) const R_AARCH64_MOVW_UABS_G0: u32 = 263;

@@ -40,7 +40,7 @@ use super::lds::{
 };
 use super::object::{
     Elf32Ehdr, Elf32Rel, Elf32Rela, Elf32Shdr, Elf32Sym, Elf64Ehdr, Elf64Rel, Elf64Shdr, ElfClass,
-    read_struct,
+    absolute_in_pie_body, elf_reloc_desc, locate_reloc, read_struct,
 };
 use crate::c5::object::elf_reloc_types as rt;
 
@@ -495,7 +495,7 @@ fn implicit_addend(
     let Some(width) = width else {
         return Err(err(&format!(
             "{source}: {} in `{}' has no implicit-addend field",
-            reloc_desc(machine, rtype),
+            elf_reloc_desc(machine, rtype),
             sec.name
         )));
     };
@@ -515,12 +515,22 @@ fn implicit_addend(
     })
 }
 
-/// A relocation type named the way `readelf -r` prints it.
-fn reloc_desc(machine: u16, rtype: u32) -> String {
+/// A relocation writing a whole load address into a field narrower
+/// than an address. `size_dynamic_sections` rewrites the address-width
+/// form to `R_*_RELATIVE`; no dynamic form writes a narrower field.
+/// The `*_ABS_LO12_NC` group is excluded: it takes only the target's
+/// page offset, which a page-aligned load base leaves alone.
+fn narrow_absolute(machine: u16, rtype: u32) -> bool {
     match machine {
-        EM_386 => rt::i386_reloc_desc(rtype),
-        EM_AARCH64 => rt::aarch64_reloc_desc(rtype),
-        _ => rt::x86_64_reloc_desc(rtype),
+        EM_386 => matches!(rtype, rt::R_386_16 | rt::R_386_8),
+        EM_AARCH64 => {
+            matches!(rtype, rt::R_AARCH64_ABS32 | rt::R_AARCH64_ABS16)
+                || rt::aarch64_movw_field(rtype).is_some()
+        }
+        _ => matches!(
+            rtype,
+            rt::R_X86_64_32 | rt::R_X86_64_32S | rt::R_X86_64_16 | rt::R_X86_64_8
+        ),
     }
 }
 
@@ -572,6 +582,9 @@ pub enum LdsEmit {
 #[derive(Debug, Clone)]
 pub struct LdsOptions {
     pub emit: LdsEmit,
+    /// `-shared` rather than `-pie`. Both emit `ET_DYN`; the two
+    /// differ in the output kind a diagnostic names.
+    pub shared: bool,
     pub entry_override: Option<String>,
     pub max_page_size: u64,
     pub orphan_handling: OrphanHandling,
@@ -611,6 +624,7 @@ impl Default for LdsOptions {
     fn default() -> Self {
         LdsOptions {
             emit: LdsEmit::Exec,
+            shared: false,
             entry_override: None,
             max_page_size: 0x1000,
             orphan_handling: OrphanHandling::Place,
@@ -3233,6 +3247,44 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
+    /// Refusal for a site an `ET_DYN` image has no way to carry, or
+    /// `None` when it is representable. Writing a link-time address
+    /// into a field no dynamic relocation covers bakes an address the
+    /// loader then slides out from under. A non-allocated section,
+    /// which the loader never maps, and a value that is not a load
+    /// address both keep the link-time value.
+    fn unrepresentable_in_dyn(
+        &self,
+        oi: usize,
+        si: usize,
+        r: &RawReloc,
+        alloc: bool,
+    ) -> Option<String> {
+        if self.opts.emit != LdsEmit::Dyn
+            || !alloc
+            || !narrow_absolute(self.machine, r.rtype)
+            || !self.reloc_is_relative(oi, r.sym as usize)
+        {
+            return None;
+        }
+        let obj = &self.objects[oi];
+        let sym = &obj.symbols[r.sym as usize];
+        let target = if !sym.name.is_empty() {
+            sym.name.as_str()
+        } else {
+            // A section symbol: ld names the section it points at.
+            obj.shndx_map
+                .get(&sym.shndx)
+                .map_or("<section>", |&t| obj.sections[t].name.as_str())
+        };
+        Some(absolute_in_pie_body(
+            &locate_reloc(&obj.source, &obj.sections[si].name, r.offset),
+            &elf_reloc_desc(self.machine, r.rtype),
+            target,
+            self.opts.shared,
+        ))
+    }
+
     fn resolve_sym_prevpass(&self, oi: usize, si: usize, addend: i64) -> Option<u64> {
         let sym = &self.objects[oi].symbols[si];
         match sym.shndx as u16 {
@@ -3642,6 +3694,10 @@ impl<'a> LdsLinker<'a> {
                 if r.rtype == R_NONE {
                     continue; // recorded, applies nothing
                 }
+                if let Some(e) = self.unrepresentable_in_dyn(id.obj, id.sec, r, alloc) {
+                    errors.push(e);
+                    continue;
+                }
                 self.apply_one(
                     buf,
                     site,
@@ -4001,8 +4057,7 @@ impl<'a> LdsLinker<'a> {
                     buf[site..site + 4].copy_from_slice(&(sa as u32).to_le_bytes());
                 }
             }
-            259 => {
-                // R_AARCH64_ABS16
+            rt::R_AARCH64_ABS16 => {
                 if !rt::AbsCheck::SignedOrUnsigned.admits(sa as i64, 2) {
                     errors.push(format!(
                         "relocation truncated to fit: R_AARCH64_ABS16 against `{}' (0x{sa:x})",
@@ -6691,11 +6746,121 @@ SECTIONS {
         let _ = syms;
     }
 
-    /// An ABS64 slot against a global SHN_ABS symbol holds a link-time
-    /// constant: no load address is involved, so the slot keeps its
-    /// value and needs no dynamic entry. Such a symbol is its own
-    /// entry in the global table, which the load-address test used to
-    /// follow until the stack ran out.
+    /// A `.text` displacement holding `slot`'s address as a 32-bit
+    /// absolute, plus an address-width `.data` pointer to it.
+    fn narrow_abs_object() -> Vec<u8> {
+        TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 16])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+            .sym("slot", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            // Symtab: null(0), sections(1,2), _start(3), slot(4).
+            .reloc(0, 4, 4, rt::R_X86_64_32S, 0)
+            .reloc(1, 8, 4, rt::R_X86_64_64, 0)
+            .build(EM_X86_64)
+    }
+
+    /// An absolute relocation narrower than an address has no dynamic
+    /// form -- `R_X86_64_RELATIVE` writes an 8-byte word -- so an
+    /// ET_DYN image cannot carry the site. The engine used to write
+    /// the link-time address and emit no `.rela.dyn` entry covering
+    /// it, which the loader's slide then invalidated. GNU ld declines
+    /// the same input. The ET_EXEC link, where the address is a
+    /// link-time constant, still writes it.
+    #[test]
+    fn a_narrow_absolute_is_declined_in_a_dyn_link() {
+        let script = parse_linker_script(DYN_SCRIPT).expect("script parses");
+        let link = |emit, shared| {
+            link_with_script(
+                &script,
+                alloc::vec![parse_lds_object("t.o", narrow_abs_object()).expect("parses")],
+                &LdsOptions {
+                    emit,
+                    shared,
+                    max_page_size: 0x1000,
+                    ..Default::default()
+                },
+            )
+        };
+        let res = link(LdsEmit::Exec, false).expect("exec link succeeds");
+        let secs = readelf_sections(&res.image);
+        let data_addr = secs.iter().find(|s| s.0 == ".data").expect(".data").2;
+        let text_off = section_file_off(
+            &res.image,
+            secs.iter().find(|s| s.0 == ".text").expect(".text").2,
+        );
+        assert_eq!(
+            u32::from_le_bytes(res.image[text_off + 4..text_off + 8].try_into().unwrap()) as u64,
+            data_addr,
+            "ET_EXEC keeps writing the link-time address"
+        );
+        assert_eq!(
+            alloc::format!("{}", link(LdsEmit::Dyn, false).expect_err("pie link fails")),
+            "error: t.o(.text+0x4): R_X86_64_32S (11) against symbol `slot` can not be used \
+             when making a position-independent executable: the reference needs an absolute \
+             address, which no load address supplies"
+        );
+        assert!(
+            alloc::format!(
+                "{}",
+                link(LdsEmit::Dyn, true).expect_err("shared link fails")
+            )
+            .contains("when making a shared object"),
+            "the refusal names the output kind"
+        );
+    }
+
+    /// The screen fires only where no dynamic form exists. An
+    /// address-width absolute against a load address is exactly what
+    /// `.rela.dyn` carries, so the same input that loses its narrow
+    /// site keeps its RELATIVE entry.
+    #[test]
+    fn a_dyn_link_covers_an_address_width_absolute() {
+        let script = parse_linker_script(DYN_SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 16])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+            .sym("slot", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            .reloc(1, 8, 4, rt::R_X86_64_64, 0)
+            .build(EM_X86_64);
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("t.o", a).expect("parses")],
+            &LdsOptions {
+                emit: LdsEmit::Dyn,
+                max_page_size: 0x1000,
+                ..Default::default()
+            },
+        )
+        .expect("abs64 links");
+        let secs = readelf_sections(&res.image);
+        let rela = secs.iter().find(|s| s.0 == ".rela.dyn").expect(".rela.dyn");
+        let off = section_file_off(&res.image, rela.2);
+        assert_eq!(rela.3, 24, "one RELA entry covers the ABS64 slot");
+        assert_eq!(
+            u32::from_le_bytes(res.image[off + 8..off + 12].try_into().unwrap()),
+            rt::R_X86_64_RELATIVE
+        );
+    }
+
+    /// An absolute against a global SHN_ABS symbol holds a link-time
+    /// constant at any field width: no load address is involved, so
+    /// the site keeps its value and needs no dynamic entry. Such a
+    /// symbol is its own entry in the global table, which the
+    /// load-address test used to follow until the stack ran out.
     #[test]
     fn a_dyn_link_keeps_an_absolute_global_constant() {
         let script = parse_linker_script(DYN_SCRIPT).expect("script parses");
@@ -6711,6 +6876,7 @@ SECTIONS {
             .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
             .sym("KCONST", STB_GLOBAL, STT_OBJECT, usize::MAX - 1, 0x1234, 0)
             // Symtab: null(0), sections(1,2), _start(3), KCONST(4).
+            .reloc(0, 4, 4, rt::R_X86_64_32S, 0)
             .reloc(1, 0, 4, rt::R_X86_64_64, 0)
             .build(EM_X86_64);
         let res = link_with_script(
@@ -6724,10 +6890,15 @@ SECTIONS {
         )
         .expect("an absolute constant links");
         let secs = readelf_sections(&res.image);
-        let data_off = section_file_off(
-            &res.image,
-            secs.iter().find(|s| s.0 == ".data").expect(".data").2,
+        let body = |name: &str| {
+            section_file_off(&res.image, secs.iter().find(|s| s.0 == name).expect(name).2)
+        };
+        let text_off = body(".text");
+        assert_eq!(
+            u32::from_le_bytes(res.image[text_off + 4..text_off + 8].try_into().unwrap()),
+            0x1234
         );
+        let data_off = body(".data");
         assert_eq!(
             u64::from_le_bytes(res.image[data_off..data_off + 8].try_into().unwrap()),
             0x1234

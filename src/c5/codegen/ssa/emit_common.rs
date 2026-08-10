@@ -2091,23 +2091,30 @@ impl GasExpandState {
     }
 }
 
-/// Names a `.set` / `.equ` assigns after an earlier statement referenced
-/// them. GNU as resolves such a reference against the later assignment;
-/// folding the assignment away would leave the reference undefined.
+/// Names a statement reads before any `.set` / `.equ` assigns them. The
+/// expander has no value to substitute at such a read, so it passes the name
+/// through and the later assignment has to stay in the stream to define it.
+/// A reassignment is not one of these: every read after the first assignment
+/// folds, so re-emitting it would put a directive in a stream that only holds
+/// instructions.
 fn gas_forward_set_names(
     stmts: &[alloc::string::String],
 ) -> alloc::collections::BTreeSet<alloc::string::String> {
     let ident = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$');
     let mut used: alloc::collections::BTreeSet<&str> = alloc::collections::BTreeSet::new();
+    let mut assigned: alloc::collections::BTreeSet<&str> = alloc::collections::BTreeSet::new();
     let mut out = alloc::collections::BTreeSet::new();
     for s in stmts {
         let (_, body) = split_leading_labels(s);
         let (tok, rest) = split_first_token(body);
         if matches!(tok, ".equ" | ".set" | ".equiv")
             && let Some((sym, _)) = rest.split_once(',')
-            && used.contains(sym.trim())
         {
-            out.insert(alloc::string::String::from(sym.trim()));
+            let sym = sym.trim();
+            if used.contains(sym) && !assigned.contains(sym) {
+                out.insert(alloc::string::String::from(sym));
+            }
+            assigned.insert(sym);
         }
         used.extend(body.split(|c: char| !ident(c)).filter(|t| !t.is_empty()));
     }
@@ -9778,6 +9785,53 @@ mod asm_section_tests {
         let out = expand_asm_gas_macros(text, 4, &subst).unwrap().unwrap();
         assert!(out.contains(".short (((2) << 0) | ((31) << 5))"), "{out}");
         assert!(out.contains(".pushsection __ex_table"), "{out}");
+    }
+
+    /// Every `_ASM_EXTABLE_*` carries its own copy of the `.L__gpr_num_*`
+    /// table, so two of them in one template assign each name twice with a
+    /// read in between. Both reads fold against the assignment in effect, so
+    /// neither assignment may survive as a directive: what is left of a
+    /// function-body template is an instruction stream, and no backend
+    /// encodes `.set` as an instruction.
+    #[test]
+    fn gas_macro_repeated_extable_leaves_no_assignment_in_the_stream() {
+        let block = concat!(
+            "\t.irp\tnum,0,1,2\n",
+            "\t.equ\t.L__gpr_num_w\\num, \\num\n",
+            "\t.endr\n",
+            "\t.equ\t.L__gpr_num_wzr, 31\n",
+            "\t.pushsection __ex_table, \"a\"\n",
+            "\t.short (((.L__gpr_num_%w0) << 0) | ((.L__gpr_num_wzr) << 5))\n",
+            "\t.popsection\n",
+        );
+        let subst = |t: &str| (t == "%w0").then(|| alloc::string::String::from("w2"));
+        let out = expand_asm_gas_macros(&alloc::format!("{block}{block}"), 4, &subst)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            out.matches(".short (((2) << 0) | ((31) << 5))").count(),
+            2,
+            "{out}"
+        );
+        assert!(!out.contains(".set"), "{out}");
+        assert!(!out.contains(".equ"), "{out}");
+    }
+
+    /// A read with no assignment before it has nothing to fold against, so
+    /// the assignment stays for the section parse to define the name:
+    /// `arch/x86/boot/header.S` reads `textsize` in its PE header and
+    /// assigns it further down.
+    #[test]
+    fn gas_macro_keeps_an_assignment_an_earlier_statement_read() {
+        let text = concat!(
+            "\t.pushsection .pehdr, \"a\"\n",
+            "\t.long textsize\n",
+            "\t.popsection\n",
+            "\t.set textsize, 0x1234\n",
+        );
+        let out = expand_asm_gas_macros(text, 4, &|_| None).unwrap().unwrap();
+        assert!(out.contains(".long textsize"), "{out}");
+        assert!(out.contains(".set textsize, 4660"), "{out}");
     }
 
     #[test]

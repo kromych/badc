@@ -979,9 +979,13 @@ pub(crate) enum AsmSectionItem {
     /// A replacement instruction encoded to machine bytes, with its
     /// relocations at offsets within those bytes (the layout rebases them by
     /// the item's section offset). Produced from `Code` by the arch backend.
+    /// `short` is a narrower encoding of the same branch, taken when the
+    /// layout finds the target in this section within the short field's
+    /// reach.
     CodeBytes {
         bytes: alloc::vec::Vec<u8>,
         relocs: alloc::vec::Vec<AsmSectionReloc>,
+        short: Option<AsmShortBranch>,
     },
     /// `.weak name`: weak symbol binding. The materializer marks a label
     /// defined in this statement's sections; a name defined elsewhere in the
@@ -1176,6 +1180,17 @@ pub(crate) struct AsmSectionReloc {
     pub signed: bool,
     pub target: AsmSectionTarget,
     pub addend: i64,
+}
+
+/// A branch's short encoding, supplied by the arch encoder next to the long
+/// one. The two differ only in the displacement field's width, so one
+/// relocation describes the short form; the layout selects it when the
+/// target is a label of the branch's own section that the narrow field
+/// reaches. GNU as makes the same choice by the same rule.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AsmShortBranch {
+    pub bytes: alloc::vec::Vec<u8>,
+    pub reloc: AsmSectionReloc,
 }
 
 /// Relocation target of a section field.
@@ -5102,6 +5117,11 @@ pub(crate) struct SectionLabelOffsets {
     /// `.set` / `.equ` symbols assigned an expression over section-local
     /// locations, each holding the expression's value at its assignment.
     syms: alloc::collections::BTreeMap<alloc::string::String, i64>,
+    /// Branches the layout keeps in their long form, by block and item index.
+    /// Everything the arch encoder marked relaxable and that is absent here
+    /// takes its short form; these offsets were measured under that choice,
+    /// so the materializer has to encode from the same set.
+    long: AsmRelaxSet,
 }
 
 impl SectionLabelOffsets {
@@ -5123,6 +5143,20 @@ impl SectionLabelOffsets {
     pub(crate) fn symbol(&self, name: &str) -> Option<i64> {
         self.syms.get(name).copied()
     }
+    /// Whether a relaxable branch keeps its long form under these offsets.
+    fn long_form(&self, site: (usize, usize)) -> bool {
+        self.long.contains(&site)
+    }
+}
+
+/// Relaxable branches identified by `(block index, item index)`.
+type AsmRelaxSet = alloc::collections::BTreeSet<(usize, usize)>;
+
+/// A relaxable branch as one measurement round placed it, by block and
+/// item index, with the section offset the instruction starts at.
+struct AsmRelaxSite {
+    site: (usize, usize),
+    at: i64,
 }
 
 /// Evaluate a `.set` value over section-local locations: `.` is the offset at
@@ -5316,7 +5350,7 @@ fn rept_item_len(
     Ok(match item {
         AsmSectionItem::Data { width, values } => *width as i64 * values.len() as i64,
         AsmSectionItem::Bytes(bs) => bs.len() as i64,
-        AsmSectionItem::CodeBytes { bytes, relocs } if relocs.is_empty() => bytes.len() as i64,
+        AsmSectionItem::CodeBytes { bytes, relocs, .. } if relocs.is_empty() => bytes.len() as i64,
         AsmSectionItem::Fill { count, unit, .. } => {
             eval_fill_count(count, const_of)? * *unit as i64
         }
@@ -5412,13 +5446,123 @@ pub(crate) const X86_NOP_OPCODE: u8 = 0x90;
 /// over label differences (the alternatives `.skip` padding sized by
 /// labels of another section) resolves in a second round against the
 /// first round's offsets.
+///
+/// A branch the arch encoder gave a short form starts short and is
+/// lengthened, permanently, when the round's layout leaves its displacement
+/// outside the short field. Each round either lengthens a branch or stops,
+/// so the walk ends after at most one round per candidate, and the round it
+/// stops on is a layout in which every short branch reaches -- the layout
+/// the materializer lays down, since it encodes from this result.
+/// Lengthening is what makes that sound: it never puts a displacement out
+/// of reach that was in reach, while shortening can, through an alignment
+/// or `.org` that absorbs the bytes saved ahead of it.
 pub(crate) fn measure_asm_section_offsets(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
     align_is_p2: bool,
     sink: &AsmSectionSink,
 ) -> Result<SectionLabelOffsets, alloc::string::String> {
-    match measure_round(blocks, const_of, align_is_p2, sink, None) {
+    let mut long = AsmRelaxSet::new();
+    let mut sites = alloc::vec::Vec::new();
+    let mut m = measure_fill_rounds(blocks, const_of, align_is_p2, sink, &long, &mut sites)?;
+    if sites.is_empty() {
+        return Ok(m);
+    }
+    let weak = asm_weak_names(blocks, sink);
+    loop {
+        let grown: AsmRelaxSet = sites
+            .iter()
+            .filter(|s| !long.contains(&s.site) && !short_branch_reaches(blocks, &m, &weak, s))
+            .map(|s| s.site)
+            .collect();
+        if grown.is_empty() {
+            m.long = long;
+            return Ok(m);
+        }
+        long.extend(grown);
+        sites.clear();
+        m = measure_fill_rounds(blocks, const_of, align_is_p2, sink, &long, &mut sites)?;
+    }
+}
+
+/// Whether the short form of the branch at `site` reaches its target under
+/// `m`. Only a label of the branch's own section that the materializer
+/// resolves in place can be reached: any other target keeps a relocation,
+/// which the link fills at the long form's width.
+fn short_branch_reaches(
+    blocks: &[AsmSectionBlock],
+    m: &SectionLabelOffsets,
+    weak: &alloc::collections::BTreeSet<alloc::string::String>,
+    s: &AsmRelaxSite,
+) -> bool {
+    let Some(AsmSectionItem::CodeBytes {
+        short: Some(short), ..
+    }) = blocks[s.site.0].items.get(s.site.1)
+    else {
+        return false;
+    };
+    let AsmSectionTarget::Symbol(name) = &short.reloc.target else {
+        return false;
+    };
+    // A `.set` name is an absolute value, not a location in this section,
+    // and a weak name may bind to another definition at link time.
+    if m.symbol(name).is_some() || weak.contains(name.as_str()) {
+        return false;
+    }
+    let (Some(sec), Some(off)) = (m.section(name), m.offset(name)) else {
+        return false;
+    };
+    if sec != section_key(&blocks[s.site.0]) {
+        return false;
+    }
+    let place = s.at + short.reloc.offset as i64;
+    let disp = off + short.reloc.addend - place;
+    let lim = 1i64 << (8 * short.reloc.width as u32 - 1);
+    (-lim..lim).contains(&disp)
+}
+
+/// Names the unit binds weak, from the blocks and from what earlier
+/// statements recorded. A reference to one keeps its relocation, so the
+/// materializer does not resolve it in place.
+fn asm_weak_names(
+    blocks: &[AsmSectionBlock],
+    sink: &AsmSectionSink,
+) -> alloc::collections::BTreeSet<alloc::string::String> {
+    blocks
+        .iter()
+        .flat_map(|b| &b.items)
+        .filter_map(|it| match it {
+            AsmSectionItem::Weak(n) => Some(n.clone()),
+            _ => None,
+        })
+        .chain(
+            sink.sym_decls
+                .iter()
+                .filter(|d| d.bind == AsmSymBind::Weak)
+                .map(|d| d.name.clone()),
+        )
+        .chain(
+            sink.sections
+                .iter()
+                .flat_map(|s| &s.labels)
+                .filter(|l| l.weak)
+                .map(|l| l.name.clone()),
+        )
+        .collect()
+}
+
+/// Measure with the branch forms `long` fixes, running the second round a
+/// label-valued fill count needs. `sites` collects the relaxable branches
+/// the settled round placed.
+fn measure_fill_rounds(
+    blocks: &[AsmSectionBlock],
+    const_of: &dyn Fn(u8) -> Option<i64>,
+    align_is_p2: bool,
+    sink: &AsmSectionSink,
+    long: &AsmRelaxSet,
+    sites: &mut alloc::vec::Vec<AsmRelaxSite>,
+) -> Result<SectionLabelOffsets, alloc::string::String> {
+    match measure_round(blocks, const_of, align_is_p2, sink, None, long, sites) {
         (Ok(m), false) => Ok(m),
         // A fill count referenced a label: re-measure with the offsets the
         // first round produced. The referenced labels must not sit after an
@@ -5426,7 +5570,16 @@ pub(crate) fn measure_asm_section_offsets(
         // the layout or nothing does.
         (first, true) => {
             let prev = first.unwrap_or_default();
-            match measure_round(blocks, const_of, align_is_p2, sink, Some(&prev)) {
+            sites.clear();
+            match measure_round(
+                blocks,
+                const_of,
+                align_is_p2,
+                sink,
+                Some(&prev),
+                long,
+                sites,
+            ) {
                 (Ok(m), false) => Ok(m),
                 (Err(e), _) => Err(e),
                 _ => Err(alloc::string::String::from(
@@ -5441,12 +5594,15 @@ pub(crate) fn measure_asm_section_offsets(
 /// One measurement round. `prev` supplies label offsets for fill counts;
 /// the second return reports whether a fill count needed a label the round
 /// could not resolve (round one measures it as zero length).
+#[allow(clippy::too_many_arguments)]
 fn measure_round(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
     align_is_p2: bool,
     sink: &AsmSectionSink,
     prev: Option<&SectionLabelOffsets>,
+    long: &AsmRelaxSet,
+    sites: &mut alloc::vec::Vec<AsmRelaxSite>,
 ) -> (Result<SectionLabelOffsets, alloc::string::String>, bool) {
     let mut unresolved_fill = false;
     let r = measure_round_inner(
@@ -5456,10 +5612,13 @@ fn measure_round(
         sink,
         prev,
         &mut unresolved_fill,
+        long,
+        sites,
     );
     (r, unresolved_fill)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn measure_round_inner(
     blocks: &[AsmSectionBlock],
     const_of: &dyn Fn(u8) -> Option<i64>,
@@ -5467,6 +5626,8 @@ fn measure_round_inner(
     sink: &AsmSectionSink,
     prev: Option<&SectionLabelOffsets>,
     unresolved_fill: &mut bool,
+    long: &AsmRelaxSet,
+    sites: &mut alloc::vec::Vec<AsmRelaxSite>,
 ) -> Result<SectionLabelOffsets, alloc::string::String> {
     let mut map: alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)> =
         alloc::collections::BTreeMap::new();
@@ -5494,7 +5655,7 @@ fn measure_round_inner(
         let mut at = *lens
             .entry(key.clone())
             .or_insert_with(|| sink.index_of(b).map_or(0, |i| sink[i].bytes.len() as i64));
-        for item in &b.items {
+        for (ii, item) in b.items.iter().enumerate() {
             match item {
                 AsmSectionItem::Label(name) => {
                     let digits = numeric_label_digits(name).unwrap_or(name);
@@ -5558,7 +5719,19 @@ fn measure_round_inner(
                     at += n.max(0) * *unit as i64;
                 }
                 AsmSectionItem::Bytes(bs) => at += bs.len() as i64,
-                AsmSectionItem::CodeBytes { bytes, .. } => at += bytes.len() as i64,
+                AsmSectionItem::CodeBytes { bytes, short, .. } => {
+                    at += match short {
+                        None => bytes.len() as i64,
+                        Some(s) => {
+                            sites.push(AsmRelaxSite { site: (bi, ii), at });
+                            if long.contains(&(bi, ii)) {
+                                bytes.len() as i64
+                            } else {
+                                s.bytes.len() as i64
+                            }
+                        }
+                    };
+                }
                 AsmSectionItem::Code(text) => {
                     return Err(alloc::format!(
                         "inline asm: replacement instruction `{text}` in a named section is not \
@@ -5677,7 +5850,11 @@ fn measure_round_inner(
     {
         return Err(e);
     }
-    Ok(SectionLabelOffsets { map, syms })
+    Ok(SectionLabelOffsets {
+        map,
+        syms,
+        long: AsmRelaxSet::new(),
+    })
 }
 
 /// A label defined by one `materialize_asm_sections` call, reported so a
@@ -5749,27 +5926,7 @@ pub(crate) fn materialize_asm_sections(
     // earlier statements recorded. A same-section reference to one keeps its
     // relocation so the link binds the definition that wins; only a local
     // name resolves in place, as GNU as resolves it.
-    let weak_bound: alloc::collections::BTreeSet<alloc::string::String> = blocks
-        .iter()
-        .flat_map(|b| &b.items)
-        .filter_map(|it| match it {
-            AsmSectionItem::Weak(n) => Some(n.clone()),
-            _ => None,
-        })
-        .chain(
-            sink.sym_decls
-                .iter()
-                .filter(|d| d.bind == AsmSymBind::Weak)
-                .map(|d| d.name.clone()),
-        )
-        .chain(
-            sink.sections
-                .iter()
-                .flat_map(|s| &s.labels)
-                .filter(|l| l.weak)
-                .map(|l| l.name.clone()),
-        )
-        .collect();
+    let weak_bound = asm_weak_names(blocks, sink);
     let non_local: alloc::collections::BTreeSet<alloc::string::String> = blocks
         .iter()
         .flat_map(|b| &b.items)
@@ -5814,7 +5971,7 @@ pub(crate) fn materialize_asm_sections(
             touched.push((sec_idx, sections[sec_idx].labels.len()));
         }
         let sec = &mut sections[sec_idx];
-        for item in &b.items {
+        for (ii, item) in b.items.iter().enumerate() {
             // `.align`'s argument is a byte count on x86 ELF, a
             // power-of-two exponent on AArch64 (GNU as convention).
             let resolved;
@@ -5927,7 +6084,7 @@ pub(crate) fn materialize_asm_sections(
                         for it in items {
                             match it {
                                 AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
-                                AsmSectionItem::CodeBytes { bytes, relocs }
+                                AsmSectionItem::CodeBytes { bytes, relocs, .. }
                                     if relocs.is_empty() =>
                                 {
                                     sec.bytes.extend_from_slice(bytes);
@@ -6489,7 +6646,11 @@ pub(crate) fn materialize_asm_sections(
                         }
                     }
                 }
-                AsmSectionItem::CodeBytes { bytes, relocs } => {
+                AsmSectionItem::CodeBytes {
+                    bytes,
+                    relocs,
+                    short,
+                } => {
                     // A replacement instruction's relocs are at offsets within
                     // its own bytes; rebase each to the section offset the
                     // instruction lands at, then append the machine bytes. A
@@ -6500,6 +6661,13 @@ pub(crate) fn materialize_asm_sections(
                     // its per-instance symbol).
                     let base = sec.bytes.len() as u32;
                     let key = section_key(b);
+                    // A relaxable branch takes the form the measurement
+                    // settled on; anything else has one encoding.
+                    let short = short.as_ref().filter(|_| !measured.long_form((bi, ii)));
+                    let (bytes, relocs) = match short {
+                        Some(s) => (&s.bytes, core::slice::from_ref(&s.reloc)),
+                        None => (bytes, relocs.as_slice()),
+                    };
                     let mut buf = bytes.clone();
                     for r in relocs {
                         let mut r = r.clone();
@@ -6636,6 +6804,16 @@ pub(crate) fn materialize_asm_sections(
                                 ));
                             }
                             None => {}
+                        }
+                        // The short form was chosen because the target is a
+                        // label of this section the field reaches. A
+                        // reference that instead needs a relocation would
+                        // hand the link a field too narrow to fill.
+                        if short.is_some() {
+                            return Err(alloc::format!(
+                                "inline asm: short branch to `{:?}` needs a relocation",
+                                r.target
+                            ));
                         }
                         r.offset += base;
                         sec.relocs.push(r);

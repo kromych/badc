@@ -1704,6 +1704,18 @@ impl<'a> Walker<'a> {
         b.set_src(src.line, src.file as u32);
         match self.ast.stmt(id) {
             Stmt::Return(Some(e)) => {
+                // C99 6.8.6.4p3: the operand converts as if by assignment. A
+                // scalar returned through the 128-bit integer carrier is a
+                // value, not an address, so widen it into a 16-byte object
+                // first -- the aggregate paths below read an address.
+                let widened = if self.is_int128_value_ty(self.scalar_return_ty)
+                    && !self.expr_is_int128_value(*e)
+                {
+                    let pair = self.int128_operand(b, *e)?;
+                    Some(self.int128_materialize(b, pair))
+                } else {
+                    None
+                };
                 if self.ret_in_regs || self.ret_indirect {
                     // C99 6.8.6.4 + AAPCS64 6.9 host-ABI struct return:
                     // yield the struct's address. The codegen scatters
@@ -1711,7 +1723,10 @@ impl<'a> Walker<'a> {
                     // bytes) or copies the value through the x8 result
                     // pointer (> 16 bytes); the VM copies it into the
                     // caller's result temp.
-                    let v = self.walk_expr_rvalue(b, *e)?;
+                    let v = match widened {
+                        Some(addr) => addr,
+                        None => self.walk_expr_rvalue(b, *e)?,
+                    };
                     b.return_(v);
                     return Ok(true);
                 }
@@ -1724,13 +1739,19 @@ impl<'a> Walker<'a> {
                     // stable value to chain into the surrounding
                     // assignment / Mcpy.
                     let out_ptr = b.load_local(2, super::super::ir::LoadKind::I64);
-                    let src = self.walk_expr_rvalue(b, *e)?;
+                    let src = match widened {
+                        Some(addr) => addr,
+                        None => self.walk_expr_rvalue(b, *e)?,
+                    };
                     if self.return_struct_size > 0 {
                         // The out-pointer is the caller's result temp, so
                         // only the returned type's own alignment holds.
-                        let align = expr_ty(self.ast.expr(*e))
-                            .map(|t| self.struct_align(t))
-                            .unwrap_or(1);
+                        let align = match widened {
+                            Some(_) => self.struct_align(self.scalar_return_ty),
+                            None => expr_ty(self.ast.expr(*e))
+                                .map(|t| self.struct_align(t))
+                                .unwrap_or(1),
+                        };
                         b.mcpy(out_ptr, src, self.return_struct_size, align);
                     }
                     b.return_(out_ptr);

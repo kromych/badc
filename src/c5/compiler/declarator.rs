@@ -301,10 +301,12 @@ impl Compiler {
         // C99 6.7.7p3 + 6.7.6.1: `A *p` for an array typedef `A` declares
         // a pointer to the array. Rebuild the flat tag into the
         // aggregate-backed pointer-to-array form so the array layer rides
-        // the type through typedefs and extra pointer levels. A deferred
-        // alias (`typedef T X[]`, carried as `-1`) has no complete pointee
-        // and stays a flat element pointer.
-        if leading_ptr_count > 0 && self.pending.typedef_base_array_size > 0 {
+        // the type through typedefs and extra pointer levels. An
+        // unspecified bound (`typedef T X[]`, carried as `-1`) is an
+        // incomplete array type (6.7.5.2p4), and `T (*)[]` is a pointer to
+        // it: `*p` still decays to `T *` under 6.3.2.1p3, which does not
+        // require a complete type.
+        if leading_ptr_count > 0 && self.pending.typedef_base_array_size != 0 {
             ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
         }
         // Fn-pointer lineage propagation: if the caller pre-seeded

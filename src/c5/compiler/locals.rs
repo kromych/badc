@@ -31,6 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::initializer::InitTarget;
 use super::types::{apply_qual_bits, is_pointer_ty, is_struct_value_ty, struct_id_of};
 
 /// Alignment facts a block-scope declarator carries into its storage
@@ -2572,6 +2573,27 @@ impl Compiler {
                     return Err(self.compile_err("`]` expected after array designator index"));
                 }
                 self.next()?; // consume `]`
+                // C99 6.7.8p7: the designator list may continue into the
+                // element (`[N].field... = v`), which names a sub-object of
+                // the element rather than the whole element.
+                if (self.lex.tk == Token::Dot || self.lex.tk == Token::Brak)
+                    && dims.len() == 1
+                    && self.is_traversable_aggregate_ty(ty)
+                {
+                    let here = base + n * sub_bytes;
+                    self.fill_element_field_designator_t(
+                        struct_id_of(ty),
+                        ty,
+                        here,
+                        InitTarget::Runtime {
+                            local_val,
+                            base: here,
+                        },
+                    )?;
+                    i = n + 1;
+                    self.accept(',')?;
+                    continue;
+                }
                 if self.lex.tk != Token::Assign {
                     return Err(self.compile_err("`=` expected after `[N]` designator"));
                 }

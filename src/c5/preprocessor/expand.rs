@@ -1458,28 +1458,45 @@ impl JoinScan {
     }
 }
 
-/// A name that heads a joinable invocation: a function-like macro,
-/// or an object-like macro whose single-identifier body is one (the
-/// C99 6.10.3.4 rescan makes such an alias head a call whose
-/// argument list may close on a later line).
+/// A name that heads a joinable invocation: a function-like macro, or an
+/// object-like macro whose replacement list *ends* in one. C99 6.10.3.4p1
+/// rescans the replacement list together with the tokens that follow, so
+/// it is the name ending the list that meets the `(` -- which may be on a
+/// later line (`#define dprintk if (debug) printk`).
 fn join_head(
     name: &str,
     fn_macros: &HashMap<String, FnMacro>,
     obj_macros: &HashMap<String, String>,
 ) -> bool {
-    if fn_macros.contains_key(name) {
-        return true;
+    let mut name = name;
+    for _ in 0..MAX_MACRO_DEPTH {
+        if fn_macros.contains_key(name) {
+            return true;
+        }
+        let Some(tail) = obj_macros.get(name).and_then(|b| trailing_identifier(b)) else {
+            return false;
+        };
+        if tail == name {
+            return false;
+        }
+        name = tail;
     }
-    obj_macros
-        .get(name)
-        .map(|body| {
-            let t = body.trim();
-            !t.is_empty()
-                && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
-                && t.bytes().next().is_some_and(|b| !b.is_ascii_digit())
-                && fn_macros.contains_key(t)
-        })
-        .unwrap_or(false)
+    false
+}
+
+/// The identifier ending a macro replacement list, or `None` when the
+/// list is empty or ends in punctuation, a literal, or a pp-number.
+fn trailing_identifier(body: &str) -> Option<&str> {
+    let body = body.trim_end();
+    let bytes = body.as_bytes();
+    let mut start = bytes.len();
+    while start > 0 && is_ident_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    if start == bytes.len() || bytes[start].is_ascii_digit() {
+        return None;
+    }
+    Some(&body[start..])
 }
 
 /// Cap on the argument-expansion nesting depth. Generous: real code

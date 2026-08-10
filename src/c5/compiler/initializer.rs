@@ -102,6 +102,17 @@ pub(super) enum InitTarget {
     Runtime { local_val: i64, base: i64 },
 }
 
+/// The sub-object a C99 6.7.8p7 designator list resolves to: its byte
+/// offset and field record, plus the run a GNU `[lo ... hi]` step selects
+/// (`extra` sub-objects after the first, `stride` bytes apart), which the
+/// caller fills by re-parsing the entry value once per index.
+pub(super) struct DesignatedSubobject {
+    pub offset: i64,
+    pub field: super::StructField,
+    pub extra: i64,
+    pub stride: i64,
+}
+
 impl InitTarget {
     /// The aggregate's start offset (data index for `Data`,
     /// local-relative for `Runtime`).
@@ -445,10 +456,6 @@ impl Compiler {
         // garbage. Read-and-clear so a recursive call into an
         // inner brace doesn't inherit it.
         let inner_dims = core::mem::take(&mut self.pending.init_inner_dims);
-        // Scalars each nested brace at this level spans: the product of
-        // the dimensions below it. The empty product is 1, which is
-        // also the designator scale for the innermost (scalar) level.
-        let child_span: usize = inner_dims.iter().map(|&d| d as usize).product();
         let target_size = core::mem::take(&mut self.pending.init_target_array_size);
         // C99 6.7.8p14: a string-literal initializer for a character
         // array may be enclosed in braces (`char x[] = {"abc"}`).
@@ -580,6 +587,10 @@ impl Compiler {
         // Set by a GCC range designator `[a ... b] = value` to the
         // one-past-the-last scalar index the next value fills.
         let mut desig_range_end: Option<usize> = None;
+        // Sub-array levels a chained designator descended (`[i][j] =` is
+        // one below `[i] =`), so the value that follows spans that
+        // level's row rather than this level's.
+        let mut desig_depth: usize = 0;
         while self.lex.tk != '}' {
             // Array designator `[N] = ...`, optionally a GCC range
             // `[a ... b] = ...`, and optionally chained for a
@@ -642,7 +653,12 @@ impl Compiler {
                 self.next()?;
                 cursor = base;
                 desig_range_end = if range_end > 0 { Some(range_end) } else { None };
+                desig_depth = depth - 1;
             }
+            // The level the entry that follows belongs to: this level for a
+            // positional entry or a single `[N]`, one deeper per extra
+            // chained subscript.
+            let level = core::mem::replace(&mut desig_depth, 0);
             // Nested brace list (multi-dim array): `{ {1,2}, {3,4}, ... }`.
             // c5's array-symbol storage carries a single flat
             // dimension, so the rows are flattened by recursing and
@@ -653,17 +669,19 @@ impl Compiler {
             // current level.
             if self.lex.tk == '{' {
                 let before = cursor;
-                self.pending.init_inner_dims = if inner_dims.is_empty() {
+                let dims_below = inner_dims.get(level..).unwrap_or(&[]);
+                let span: usize = dims_below.iter().map(|&d| d as usize).product();
+                self.pending.init_inner_dims = if dims_below.is_empty() {
                     alloc::vec::Vec::new()
                 } else {
-                    inner_dims[1..].to_vec()
+                    dims_below[1..].to_vec()
                 };
                 let inner = self.collect_array_initializer(elem_ty)?;
                 let written = inner.len();
-                // One sub-array copy spans `child_span` scalars (its
-                // declared element count), or its own length when the
-                // brace list is longer (no declared inner dimension).
-                let stride = child_span.max(written);
+                // One sub-array copy spans its declared element count, or
+                // its own length when the brace list is longer (no declared
+                // inner dimension).
+                let stride = span.max(written);
                 // A range designator (`[a ... b] = { ... }`) replicates the
                 // sub-array across every covered index; a plain designator or
                 // positional entry writes it once (C99 6.7.8 with the GCC
@@ -2026,13 +2044,15 @@ impl Compiler {
         mut cur_offset: i64,
         mut cur_ty: i64,
         entry_field: Option<super::StructField>,
-    ) -> Result<(i64, super::StructField), C5Error> {
+    ) -> Result<DesignatedSubobject, C5Error> {
         // `entry_field` seeds the current object so a leading `[N]` step can
         // index an array member the caller already consumed (`.member[i]`,
         // where `.member` was read before this call). A `.member` step
         // overwrites it.
         let mut last: Option<super::StructField> = entry_field;
         let mut took_step = false;
+        let mut extra: i64 = 0;
+        let mut stride: i64 = 0;
         while self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
             if self.lex.tk == Token::Dot {
                 if !is_struct_ty(cur_ty) || struct_ptr_depth(cur_ty) != 0 {
@@ -2080,9 +2100,22 @@ impl Compiler {
                 let inner: i64 = dims[1..].iter().product::<i64>().max(1);
                 self.next()?;
                 let m = self.parse_constant_int_folding_const_objects()?;
-                if m < 0 || m >= dims[0] {
+                // GNU range designator `[lo ... hi]`: one entry value fills
+                // every index in the range. A later step adds a constant
+                // offset to each, so the run is carried as (count, stride)
+                // and applied by the caller's re-parse loop.
+                let mut hi = m;
+                if self.lex.tk == Token::Ellipsis {
+                    if extra != 0 {
+                        return Err(self
+                            .compile_err("two `[lo ... hi]` designators in one designator list"));
+                    }
+                    self.next()?;
+                    hi = self.parse_constant_int_folding_const_objects()?;
+                }
+                if m < 0 || hi < m || hi >= dims[0] {
                     return Err(self.compile_err(format!(
-                        "array designator index {m} out of bounds [0, {})",
+                        "array designator index {m}..{hi} out of bounds [0, {})",
                         dims[0]
                     )));
                 }
@@ -2090,7 +2123,12 @@ impl Compiler {
                     return Err(self.compile_err("`]` expected after sub-designator index"));
                 }
                 self.next()?;
-                cur_offset += m * inner * self.size_of_type(cur_ty) as i64;
+                let step = inner * self.size_of_type(cur_ty) as i64;
+                cur_offset += m * step;
+                if hi > m {
+                    extra = hi - m;
+                    stride = step;
+                }
                 // Drop the indexed rank: the remaining dims describe the
                 // selected row, and a scalar leaf clears the array shape so
                 // the value fill writes a single element.
@@ -2111,7 +2149,12 @@ impl Compiler {
         }
         let field =
             last.ok_or_else(|| self.compile_err("empty designator chain after `.field`"))?;
-        Ok((cur_offset, field))
+        Ok(DesignatedSubobject {
+            offset: cur_offset,
+            field,
+            extra,
+            stride,
+        })
     }
 
     /// Continue a designator chain (`[i]`, `.inner`) from an already-selected
@@ -2128,35 +2171,41 @@ impl Compiler {
         entry_base: usize,
         target: InitTarget,
     ) -> Result<(), C5Error> {
-        let (final_offset, final_field) =
+        let d =
             self.resolve_nested_designator_chain(entry_base as i64, entry.ty, Some(entry.clone()))?;
         if self.lex.tk != Token::Assign {
             return Err(self.compile_err("`=` expected after nested-designator chain"));
         }
         self.next()?;
-        // A pointer final member stores the address of a compound literal, so
-        // keep the cast for the scalar leaf; a value member drops it.
-        if is_pointer_ty(final_field.ty) || struct_ptr_depth(final_field.ty) > 0 {
-            self.pending.compound_lit_close_parens = 0;
-        } else {
-            self.skip_opt_compound_literal_cast()?;
-        }
-        let chain_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
-        self.fill_member_value_t(
-            struct_id,
-            &final_field,
-            target,
-            final_offset as usize,
-            false,
-        )?;
-        for _ in 0..chain_parens {
-            self.accept(')')?;
+        let value = self.lex.snapshot();
+        for k in 0..=d.extra {
+            if k > 0 {
+                self.restore_lex(value);
+            }
+            // A pointer final member stores the address of a compound literal,
+            // so keep the cast for the scalar leaf; a value member drops it.
+            if is_pointer_ty(d.field.ty) || struct_ptr_depth(d.field.ty) > 0 {
+                self.pending.compound_lit_close_parens = 0;
+            } else {
+                self.skip_opt_compound_literal_cast()?;
+            }
+            let chain_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            self.fill_member_value_t(
+                struct_id,
+                &d.field,
+                target,
+                (d.offset + k * d.stride) as usize,
+                false,
+            )?;
+            for _ in 0..chain_parens {
+                self.accept(')')?;
+            }
         }
         Ok(())
     }
 
-    /// A compound array-element designator `[N].field... = v` in a const
-    /// struct array, entered with the cursor just past `[N]` on the leading
+    /// A compound array-element designator `[N].field... = v` in a struct
+    /// array, entered with the cursor just past `[N]` on the leading
     /// `.`/`[`. Resolves the field chain from the element's base and writes
     /// one value there, overriding only that field -- the shape that fills
     /// every element with `[lo ... hi] = { ... }`, then overrides one field
@@ -2167,38 +2216,58 @@ impl Compiler {
         elem_ty: i64,
         elem_base: i64,
     ) -> Result<(), C5Error> {
-        let (final_offset, final_field) =
-            self.resolve_nested_designator_chain(elem_base, elem_ty, None)?;
+        self.fill_element_field_designator_t(
+            struct_id,
+            elem_ty,
+            elem_base,
+            InitTarget::Data {
+                base: elem_base as usize,
+            },
+        )
+    }
+
+    /// [`Self::fill_element_field_designator`] against either target: an
+    /// array whose element values are not all constant stages nothing, so
+    /// the chain writes through the runtime store path instead.
+    pub(super) fn fill_element_field_designator_t(
+        &mut self,
+        struct_id: usize,
+        elem_ty: i64,
+        elem_base: i64,
+        target: InitTarget,
+    ) -> Result<(), C5Error> {
+        let d = self.resolve_nested_designator_chain(elem_base, elem_ty, None)?;
         if self.lex.tk != Token::Assign {
             return Err(self.compile_err("`=` expected after `[N].field` designator"));
         }
         self.next()?;
-        // A pointer final member stores the address of a compound literal, so
-        // keep the cast for the scalar leaf; a value member drops it.
-        if is_pointer_ty(final_field.ty) || struct_ptr_depth(final_field.ty) > 0 {
-            self.pending.compound_lit_close_parens = 0;
-        } else {
-            self.skip_opt_compound_literal_cast()?;
-        }
-        let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
-        let elem = self.size_of_type(final_field.ty);
-        let span = if final_field.array_size > 0 {
-            final_field.array_size as usize * elem
+        let elem = self.size_of_type(d.field.ty);
+        let span = if d.field.array_size > 0 {
+            d.field.array_size as usize * elem
         } else {
             elem
         };
-        self.clear_init_relocs_in(final_offset as usize, final_offset as usize + span);
-        self.fill_member_value_t(
-            struct_id,
-            &final_field,
-            InitTarget::Data {
-                base: elem_base as usize,
-            },
-            final_offset as usize,
-            false,
-        )?;
-        for _ in 0..close_parens {
-            self.accept(')')?;
+        let value = self.lex.snapshot();
+        for k in 0..=d.extra {
+            if k > 0 {
+                self.restore_lex(value);
+            }
+            let off = (d.offset + k * d.stride) as usize;
+            // A pointer final member stores the address of a compound literal,
+            // so keep the cast for the scalar leaf; a value member drops it.
+            if is_pointer_ty(d.field.ty) || struct_ptr_depth(d.field.ty) > 0 {
+                self.pending.compound_lit_close_parens = 0;
+            } else {
+                self.skip_opt_compound_literal_cast()?;
+            }
+            let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
+            if !target.is_runtime() {
+                self.clear_init_relocs_in(off, off + span);
+            }
+            self.fill_member_value_t(struct_id, &d.field, target, off, false)?;
+            for _ in 0..close_parens {
+                self.accept(')')?;
+            }
         }
         Ok(())
     }
@@ -3449,25 +3518,32 @@ impl Compiler {
                 if self.lex.tk == Token::Brak || self.lex.tk == Token::Dot {
                     let entry = self.structs[struct_id].fields[idx].clone();
                     let base = (var_offset as usize) + entry.offset;
-                    let (final_off, final_field) =
+                    let d =
                         self.resolve_nested_designator_chain(base as i64, entry.ty, Some(entry))?;
                     if self.lex.tk != Token::Assign {
                         return Err(self.compile_err("`=` expected after nested-designator chain"));
                     }
                     self.next()?;
-                    if self.is_traversable_aggregate_ty(final_field.ty) && self.lex.tk == '{' {
-                        self.collect_struct_initializer_t(
-                            struct_id_of(final_field.ty),
-                            target.rebased(final_off),
-                        )?;
-                    } else {
-                        self.fill_member_value_t(
-                            struct_id,
-                            &final_field,
-                            target,
-                            final_off as usize,
-                            false,
-                        )?;
+                    let value = self.lex.snapshot();
+                    for k in 0..=d.extra {
+                        if k > 0 {
+                            self.restore_lex(value);
+                        }
+                        let final_off = d.offset + k * d.stride;
+                        if self.is_traversable_aggregate_ty(d.field.ty) && self.lex.tk == '{' {
+                            self.collect_struct_initializer_t(
+                                struct_id_of(d.field.ty),
+                                target.rebased(final_off),
+                            )?;
+                        } else {
+                            self.fill_member_value_t(
+                                struct_id,
+                                &d.field,
+                                target,
+                                final_off as usize,
+                                false,
+                            )?;
+                        }
                     }
                     mem_pos = idx + 1;
                     self.accept(',')?;

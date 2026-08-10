@@ -4652,6 +4652,12 @@ impl Compiler {
                             // subscript decays to a scalar.
                             let dims = field.array_dims.clone();
                             let elem_size = self.size_of_type(field.ty) as i64;
+                            // The dimension list is what a wrapping `typeof`
+                            // rebuilds the undecayed array type from; without
+                            // it `typeof(s.xs)` names a 1D array of the whole
+                            // byte count and `typeof(s.xs) t; t[i][j]` has no
+                            // row to index.
+                            self.pending.last_array_decay_dims = dims.clone();
                             self.seed_multi_dim_strides(&dims, elem_size);
                         } else {
                             // A flexible array member (`array_size == -1`,

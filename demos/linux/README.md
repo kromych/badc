@@ -365,6 +365,55 @@ sections (`__jump_table`, `.altinstructions`, `__ex_table`, `.smp_locks`).
 A minimal initramfs whose `/init` prints a marker and powers off makes the
 boot a pass/fail check under `qemu-system-x86_64 -nographic`.
 
+## Building on macOS
+
+badc emits `macos-aarch64` and `linux-aarch64` from one binary, so an Apple
+Silicon host can build the kernel and kbuild's own host tools without a VM.
+arm64 is the architecture this covers: it uses no objtool, the one host tool
+with nothing to read a Mach-O toolchain's output.
+
+What the host has to supply:
+
+```sh
+brew install make coreutils findutils gnu-sed grep gawk gnu-tar bison flex \
+    musl-cross
+```
+
+`/usr/bin/make` is GNU Make 3.81 and the tree refuses anything below 4.0, so
+Homebrew's `gnubin` directories go ahead of the system ones; the same PATH
+gives GNU `sed`, `find`, `stat`, `cp`, `install`, `readlink` and `tar`, which
+`scripts/` and the packaging targets use with GNU-only options. `musl-cross`
+provides `aarch64-linux-musl-gcc` 14.2 with its binutils: badc compiles and
+links every kernel unit, and that toolchain answers the `cc-option` /
+`ld-option` probes `buildcc.py` delegates, assembles the `.S` units badc's
+assembler declines, and supplies `CROSS_COMPILE=` for `OBJCOPY`, `NM`, `AR`
+and `STRIP`.
+
+Four headers separate the host tools from a macOS SDK, and `hostcompat/`
+carries them. `elf.h` is self-contained: the tree's own uapi ELF header cannot
+stand in, because it defines `ELF64_ST_BIND` in terms of `ELF_ST_BIND` and
+`scripts/mod/modpost.h` defines that back to `ELF64_ST_BIND`. `byteswap.h` and
+`endian.h` sit on `<libkern/OSByteOrder.h>`. `gethostuuid.h` shadows the SDK
+header of that name and goes with `-D_UUID_T`: `scripts/mod/file2alias.c`
+reaches the kernel's `struct uuid_t` through `<linux/mod_devicetable.h>` while
+the SDK typedefs `uuid_t` to `unsigned char[16]`, and the SDK's only user of
+its own spelling is `gethostuuid()`. `hostcompat.h` is force-included and
+supplies `O_LARGEFILE` and `copy_file_range()` for `usr/gen_init_cpio.c`.
+
+```sh
+HC=$PWD/demos/linux/hostcompat
+make -C <tree> ARCH=arm64 CROSS_COMPILE=aarch64-linux-musl- \
+    CC=$PWD/demos/linux/buildcc.py LD=$PWD/demos/linux/ldshim.py \
+    HOSTCFLAGS="-I$HC -include $HC/hostcompat.h -D_UUID_T" \
+    DEPMOD=true \
+    Image modules
+```
+
+`DEPMOD=true` covers `modules_install`: macOS has no `depmod`, and without it
+`scripts/depmod.sh` warns and continues, so the installed tree carries modules
+but no `modules.dep` / `modules.alias`. A package built this way has to run
+`depmod` on the target machine before its modules resolve.
+
 ## Regression gate
 
 `verify.py` runs the build above with no fallback list and boots the

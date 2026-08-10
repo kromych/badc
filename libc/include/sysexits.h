@@ -1,8 +1,8 @@
-// sysexits.h -- BSD exit-status codes (sysexits(3)).
+// sysexits.h -- BSD exit-status codes (sysexits(3)). Integer constants
+// with nothing behind them, so every target gets the same set.
 
 #pragma once
 
-#if defined(__APPLE__) || defined(__linux__)
 #define EX_OK 0
 #define EX__BASE 64
 #define EX_USAGE 64
@@ -21,4 +21,3 @@
 #define EX_NOPERM 77
 #define EX_CONFIG 78
 #define EX__MAX 78
-#endif

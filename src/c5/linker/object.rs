@@ -433,7 +433,7 @@ impl RelocSite<'_> {
     /// An input carrying a relocation form the linker has no patcher
     /// for is unsupported input, not a broken invariant.
     pub(crate) fn unsupported(&self) -> C5Error {
-        self.link_err(&format!(
+        self.located(&format!(
             "unsupported {} against symbol `{}`",
             reloc_desc(self.machine, self.rtype),
             self.symbol,
@@ -444,7 +444,7 @@ impl RelocSite<'_> {
     /// makes this a link error rather than truncating, and so does
     /// badc: a silently narrowed address is a miscompile.
     pub(crate) fn truncated(&self, value: i64) -> C5Error {
-        self.link_err(&format!(
+        self.located(&format!(
             "relocation truncated to fit: {} against symbol `{}` ({value:#x})",
             reloc_desc(self.machine, self.rtype),
             self.symbol,
@@ -454,7 +454,7 @@ impl RelocSite<'_> {
     /// A resolved value whose alignment the relocation's field cannot
     /// represent, e.g. an odd displacement in a word-scaled immediate.
     pub(crate) fn misaligned(&self, value: i64, scale: u32) -> C5Error {
-        self.link_err(&format!(
+        self.located(&format!(
             "misaligned relocation: {} against symbol `{}` resolves to {value:#x}, not a \
              multiple of {scale}",
             reloc_desc(self.machine, self.rtype),
@@ -462,8 +462,9 @@ impl RelocSite<'_> {
         ))
     }
 
-    fn link_err(&self, msg: &str) -> C5Error {
-        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+    /// `<location>: <msg>` under the unsupported-input prefix.
+    fn located(&self, msg: &str) -> C5Error {
+        C5Error::Compile(crate::c5::error::fmt_unsupported_err(&format!(
             "{}: {msg}",
             self.locate()
         )))

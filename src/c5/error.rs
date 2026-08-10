@@ -58,6 +58,19 @@ pub(crate) fn fmt_internal_err(message: &str) -> String {
     format!("error: internal compiler error: {message}")
 }
 
+/// Helper: produce an `error: <message>` string for a well-formed
+/// input the compiler deliberately declines -- a relocation form the
+/// linker has no patcher for, an operation the selected backend does
+/// not provide. The distinction from [`fmt_internal_err`] is what the
+/// reader does next: an unsupported construct is theirs to work
+/// around, a broken invariant is badc's to fix. Anything reachable by
+/// valid input belongs here, so the `internal compiler error:` marker
+/// stays a reliable signal that badc is at fault.
+pub(crate) fn fmt_unsupported_err(message: &str) -> String {
+    use alloc::format;
+    format!("error: {message}")
+}
+
 /// Helper: produce an `error: <message>` string for user-level
 /// link / driver errors (undefined references, no input files,
 /// malformed archives). These describe a problem with the user's

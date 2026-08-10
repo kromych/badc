@@ -566,6 +566,37 @@ fn string_extensions_join_the_macos_link() {
     );
 }
 
+/// `copy_file_range` is a Linux system call with no libSystem export,
+/// so a macOS image takes the emulation from `libc/lib/unistd_ext.c`,
+/// which joins the link only because the fixture leaves the symbol
+/// undefined. Same reasoning as `string_extensions_join_the_macos_link`:
+/// `fixture_parity` emits one object and never links.
+#[test]
+fn unistd_extensions_join_the_macos_link() {
+    let program = super::compile_str_bare_for(
+        &super::load_fixture("copy_file_range_posix.c"),
+        Target::MacOSAarch64,
+    );
+    let bytes = super::link_executable_with_runtime(
+        &program,
+        Target::MacOSAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link the fixture for MacOSAarch64");
+
+    let path = std::env::temp_dir().join("badc-test-unistd-ext-link.bin");
+    std::fs::write(&path, &bytes).expect("write temp file");
+    set_executable(&path);
+    codesign(&path);
+    let output = Command::new(&path).output().expect("exec native binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "copy_file_range_posix.c must exit 0 once the bundled source is joined"
+    );
+}
+
 #[test]
 fn fixture_parity() {
     let mut failures: Vec<String> = Vec::new();

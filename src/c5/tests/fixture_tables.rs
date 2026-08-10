@@ -740,6 +740,13 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("dirent_readdir.c", 0),
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
+    // libSystem exports memmem / getline / getdelim / dprintf, so this
+    // lane binds them. `copy_file_range_posix.c` has no libSystem
+    // export to bind and needs the on-demand join, which one object
+    // and no link step cannot reach; `unistd_extensions_join_the_macos_link`
+    // covers it.
+    ("stdio_line_input.c", 0),
+    ("string_memmem.c", 0),
     ("stat_timespec.c", 0),
     ("malloc_size.c", 0),
     // sprintf with two fixed args + four variadic. macOS arm64
@@ -1309,6 +1316,11 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
     ("string_gnu_ext.c", 0),
+    // memmem / getline / getdelim / dprintf / copy_file_range: the
+    // Linux C library exports all five, so this lane binds them.
+    ("copy_file_range_posix.c", 0),
+    ("stdio_line_input.c", 0),
+    ("string_memmem.c", 0),
     ("stat_timespec.c", 0),
     ("malloc_size.c", 0),
     // sprintf 2-fixed + 4-variadic; cross-checks the ABI's
@@ -2044,6 +2056,11 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
     ("string_gnu_ext.c", 0),
+    // memmem / getline / getdelim / dprintf / copy_file_range: the
+    // Linux C library exports all five, so this lane binds them.
+    ("copy_file_range_posix.c", 0),
+    ("stdio_line_input.c", 0),
+    ("string_memmem.c", 0),
     ("stat_timespec.c", 0),
     ("malloc_size.c", 0),
     // sprintf 2-fixed + 4-variadic; SysV passes variadic in
@@ -2422,6 +2439,12 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // strchrnul / memrchr / explicit_bzero / strndup: msvcrt exports
     // none of them, so this lane runs `libc/lib/string_ext.c`.
     ("string_gnu_ext.c", 0),
+    // memmem / getline / getdelim / dprintf / copy_file_range: msvcrt
+    // exports none of them, so this lane runs `libc/lib/string_ext.c`,
+    // `stdio_ext.c` and `unistd_ext.c`.
+    ("copy_file_range_posix.c", 0),
+    ("stdio_line_input.c", 0),
+    ("string_memmem.c", 0),
     ("control_flow.c", 1),
     ("do_while.c", 5),
     ("break_continue.c", 4),
@@ -2915,6 +2938,12 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     // strchrnul / memrchr / explicit_bzero / strndup: msvcrt exports
     // none of them, so this lane runs `libc/lib/string_ext.c`.
     ("string_gnu_ext.c", 0),
+    // memmem / getline / getdelim / dprintf / copy_file_range: msvcrt
+    // exports none of them, so this lane runs `libc/lib/string_ext.c`,
+    // `stdio_ext.c` and `unistd_ext.c`.
+    ("copy_file_range_posix.c", 0),
+    ("stdio_line_input.c", 0),
+    ("string_memmem.c", 0),
     ("control_flow.c", 1),
     ("do_while.c", 5),
     ("break_continue.c", 4),
@@ -3620,6 +3649,12 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("dirent_readdir.c", 0),
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
+    // memmem / getline / getdelim / dprintf, bound on every host this
+    // module runs on. `copy_file_range_posix.c` is absent for the same
+    // reason `string_gnu_ext.c` is: on a macOS host it needs the
+    // bundled definition, and the JIT has no link step to join it.
+    ("stdio_line_input.c", 0),
+    ("string_memmem.c", 0),
     ("stat_timespec.c", 0),
     ("malloc_size.c", 0),
     // sprintf 2-fixed + 4-variadic; the JIT shares the lowering

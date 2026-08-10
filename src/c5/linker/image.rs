@@ -1141,6 +1141,22 @@ fn write_dyn(out: &mut Vec<u8>, d_tag: u64, d_val: u64) {
 mod tests {
     use super::*;
 
+    /// GNU ld 2.46.1 writes `00 00 10 81` for an `R_X86_64_32S` whose
+    /// `S + A` is `0xffffffff81100000` (`.text` at
+    /// `0xffffffff81000000`, `-mcmodel=kernel` placement) and reports
+    /// `relocation truncated to fit` once the value leaves the field's
+    /// signed range.
+    #[test]
+    fn absolute_field_bytes_match_gnu_ld() {
+        use crate::c5::object::elf_reloc_types::R_X86_64_32S;
+        let (w, c) = abs_field(NativeMachine::X86_64, R_X86_64_32S).expect("32S is absolute");
+        let mut buf = [0u8; 4];
+        write_abs_field(&mut buf, 0xffff_ffff_8110_0000u64 as i64, w, c).expect("in range");
+        assert_eq!(buf, [0x00, 0x00, 0x10, 0x81]);
+        write_abs_field(&mut buf, 0x8000_0000, w, c)
+            .expect_err("a value ld truncates must be a link error here too");
+    }
+
     fn text_then_data_image() -> MergedNative {
         let mut defined = alloc::collections::BTreeMap::new();
         defined.insert(

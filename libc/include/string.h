@@ -60,6 +60,7 @@
 // libSystem exports only the XSI `strerror_r`; there is no GNU form.
 #pragma binding(libc::strerror_r, "_strerror_r")
 #pragma binding(libc::strcasestr, "_strcasestr")
+#pragma binding(libc::memmem,   "_memmem")
 #endif
 
 #ifdef __linux__
@@ -100,6 +101,9 @@
 #pragma binding(libc::explicit_bzero, "explicit_bzero")
 // GNU extension: `strstr` ignoring case under the current locale.
 #pragma binding(libc::strcasestr, "strcasestr")
+// GNU extension: `strstr` over two counted regions. libSystem exports
+// it too; msvcrt has no equivalent.
+#pragma binding(libc::memmem, "memmem")
 // Two incompatible `strerror_r` return types share the name. The C
 // library exports the XSI form (POSIX.1-2001, `int`) as
 // `__xpg_strerror_r` and the GNU form (`char *`) as `strerror_r`; the
@@ -214,6 +218,15 @@ char *strcasestr(const char *haystack, const char *needle);
 char *strchrnul(const char *s, int c);
 char *memrchr(char *s, int c, int n);
 void explicit_bzero(void *s, size_t n);
+// GNU `memmem` -- the first occurrence of the `needlelen`-byte needle
+// in the `haystacklen`-byte haystack, or null. Both operands are
+// counted rather than NUL-terminated, which is what separates it from
+// `strstr`. Bound on macOS / Linux; on Windows `libc/lib/string_ext.c`
+// defines it and joins the link on demand. No standard covers it and
+// the two platform libraries disagree on one case: for an empty needle
+// the Linux C library returns the haystack and libSystem returns null.
+void *memmem(const void *haystack, size_t haystacklen,
+             const void *needle, size_t needlelen);
 // C11 K.3.7.4.1, visible on the Annex-K opt-in like the platform
 // header; libSystem exports it, glibc does not.
 #if defined(__APPLE__) && defined(__STDC_WANT_LIB_EXT1__) && __STDC_WANT_LIB_EXT1__ >= 1

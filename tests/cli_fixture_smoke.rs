@@ -536,6 +536,12 @@ fn quoted_include_resolves_relative_to_including_file() {
 // targets are built so the fold is exercised independently of the host,
 // and the host-target build is executed to confirm the surviving code
 // still computes the right answers.
+//
+// The same build at `-O0` must fail to link. Each of these is an
+// optimization, not a front-end fold, and the two halves together say
+// so: without the `-O0` half a fixture whose call the front end starts
+// resolving would keep passing while asserting nothing. gcc likewise
+// links every one of these at `-O1` and above and fails to at `-O0`.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn dead_branch_calls_are_eliminated_under_optimize() {
@@ -564,6 +570,19 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
                 String::from_utf8_lossy(&res.stderr)
             );
         }
+
+        let unopt = dir.join(format!("{stem}-O0"));
+        let res = Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(&unopt)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            !res.status.success(),
+            "{name}: the dead call must survive -O0, or the fixture asserts nothing at -O"
+        );
 
         let exe = dir.join(format!("{stem}-host"));
         let built = Command::new(badc)

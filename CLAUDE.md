@@ -29,14 +29,21 @@ boxes using `./scripts/validate_local_boxes.py`:
 
   * `cargo test`
   * `cargo test --release --lib` (release exercises the JIT + native fixture-parity paths that debug builds skip)
-  * `python3 demos/sqlite3/smoke.py`
-  * `python3 demos/lua/smoke.py`
-  * `python3 demos/miniz/smoke.py`
-  * `python3 demos/monocypher/smoke.py`
-  * `python3 demos/stb/smoke.py`
-  * `python3 demos/tweetnacl/smoke.py`
+  * the same run again under the register-pressure caps (`BADC_MAX_GPR=2
+    BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's pressure matrix does
+  * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,
+    miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
+    coroutines, nasm
+  * the kernel step: `demos/linux/verify.py --linker badc --no-boot` over the
+    pinned `defconfig` release, on each Linux lane
 
-Run the local validation with varying register pressure as CI does and use `--features codegen_test`.
+The script is the contract; this list describes it and has to be updated with it.
+
+The kernel step's corpus is `defconfig` on the pinned release -- the tree CI's
+`kernel` job builds. The vendored minimal configs under `demos/linux/configs/`
+are not a substitute: they compile a third to a half as many units and have passed
+while defconfig-only regressions reached the branch. `--no-kernel` skips the
+step; a push whose local run skipped it has no kernel cover.
 
 ## Debugging
 

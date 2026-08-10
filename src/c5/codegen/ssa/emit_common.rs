@@ -2108,6 +2108,11 @@ struct GasExpandState {
     /// Folding such an assignment away would leave that read naming nothing,
     /// so it stays in the stream for the section layer to define.
     forward_set: alloc::collections::BTreeSet<alloc::string::String>,
+    /// Names defined by the statements expanded so far, which is what
+    /// `.ifdef` answers against: a label, an assignment, or a common block,
+    /// in any section, taken only from branches that emit. A declaration
+    /// (`.globl`) or a reference to an undefined name defines nothing.
+    defined: alloc::collections::BTreeSet<alloc::string::String>,
 }
 
 impl GasExpandState {
@@ -2200,6 +2205,8 @@ fn expand_gas_statements(
         let (labels, s) = split_leading_labels(s);
         if emitting(&cond) {
             for l in &labels {
+                st.defined
+                    .insert(alloc::string::String::from(l.trim_end_matches(':')));
                 out.push_str(l);
                 out.push('\n');
             }
@@ -2208,6 +2215,14 @@ fn expand_gas_statements(
             continue;
         }
         let (tok, rest) = split_first_token(s);
+        // A common block defines its name, whichever branch below routes the
+        // statement itself.
+        if emitting(&cond)
+            && matches!(tok, ".comm" | ".lcomm")
+            && let Some(name) = rest.split(',').next()
+        {
+            st.defined.insert(alloc::string::String::from(name.trim()));
+        }
         // GNU as ends a directive or macro name at the first character that
         // cannot be part of one, so no space is needed before a parenthesized
         // operand list: `.inst(expr)`, and a macro invoked in the C-macro
@@ -2256,10 +2271,12 @@ fn expand_gas_statements(
                 cond.push((taken, taken));
                 continue;
             }
-            // Defined test against the assignment table the expansion has
-            // built (`.ifdef .Lframe_regcount`).
+            // Defined test against what the expansion has defined so far
+            // (`.ifdef .Lframe_regcount`, a label an earlier macro expansion
+            // placed). GNU as answers it one-pass, so a definition further
+            // down the stream does not count.
             ".ifdef" | ".ifndef" | ".ifnotdef" => {
-                let defined = st.equ.contains_key(rest.trim());
+                let defined = st.defined.contains(rest.trim());
                 let taken = emitting(&cond) && (defined == (tok == ".ifdef"));
                 cond.push((taken, taken));
                 continue;
@@ -2371,6 +2388,7 @@ fn expand_gas_statements(
                     out.push('\n');
                     continue;
                 };
+                st.defined.insert(alloc::string::String::from(sym.trim()));
                 let table = &st.equ;
                 match eval_asm_expr_with_labels(expr.trim(), &|t| table.get(t).copied()) {
                     Some(v) => {
@@ -2422,6 +2440,7 @@ fn expand_gas_statements(
                 };
                 if let Some((aname, aexpr)) = assign {
                     let aexpr = aexpr.trim();
+                    st.defined.insert(alloc::string::String::from(aname));
                     let table = &st.equ;
                     match eval_asm_expr_with_labels(aexpr, &|t| table.get(t).copied()) {
                         Some(v) => {
@@ -9954,6 +9973,55 @@ mod asm_section_tests {
         let text = ".macro m3, p = 64\n.if \\p == 32\nnop\n.else\nret\n.endif\n.endm\nm3\nm3 32\n";
         let out = expand_asm_gas_macros(text, 4, &none).unwrap().unwrap();
         assert!(out.contains("ret") && out.contains("nop"), "{out}");
+    }
+
+    /// `.ifdef` answers against the names defined so far, so the guard that
+    /// keeps one datum per variable across macro expansions sees the label
+    /// the first expansion placed. Measured against `as`: only the first
+    /// expansion emits the body, a definition further down the stream does
+    /// not count, and a declaration or a dead branch defines nothing.
+    #[test]
+    fn gas_ifdef_sees_definitions_like_gnu_as() {
+        let none = |_: &str| None;
+        let body = |text: &str| -> alloc::vec::Vec<alloc::string::String> {
+            expand_asm_gas_macros(text, 4, &none)
+                .unwrap()
+                .unwrap()
+                .lines()
+                .map(|l| alloc::string::String::from(l.trim()))
+                .filter(|l| !l.is_empty())
+                .collect()
+        };
+        let text = ".macro rv var\n\
+                    .ifndef .L__d_\\var\n\
+                    .L__d_\\var:\n\
+                    .quad 0\n\
+                    .endif\n\
+                    .endm\n\
+                    rv a\nrv a\nrv b\n";
+        assert_eq!(
+            body(text),
+            [".L__d_a:", ".quad 0", ".L__d_b:", ".quad 0"],
+            "the guarded body assembles once per variable"
+        );
+        // A label, an assignment and a common block define; a `.globl`
+        // declaration, a reference, a later definition and one in a dead
+        // branch do not.
+        for (t, want) in [
+            ("foo:\n.ifdef foo\nnop\n.endif\n", true),
+            (".set foo, 7\n.ifdef foo\nnop\n.endif\n", true),
+            (".comm foo,4,4\n.ifdef foo\nnop\n.endif\n", true),
+            (".globl foo\n.ifdef foo\nnop\n.endif\n", false),
+            (".quad foo\n.ifdef foo\nnop\n.endif\n", false),
+            (".ifdef foo\nnop\n.endif\nfoo:\n", false),
+            (".if 0\nfoo:\n.endif\n.ifdef foo\nnop\n.endif\n", false),
+        ] {
+            assert_eq!(
+                body(t).contains(&alloc::string::String::from("nop")),
+                want,
+                "{t}"
+            );
+        }
     }
 
     #[test]

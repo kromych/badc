@@ -131,6 +131,18 @@ pub(crate) enum AsmOpndA64 {
     /// `[base, :lo12:sym]`: a load/store whose scaled immediate is the low
     /// 12 bits of a symbol expression.
     MemSymLo12 { base: u8, expr: String },
+    /// An immediate written as an expression over labels (`#(1b - vs + 4)`):
+    /// absolute, but only the section layout knows the value, and on A64 the
+    /// value selects the encoding, so the section path folds it before
+    /// encoding.
+    ImmExpr(String),
+    /// A memory offset written as such an expression (`[x30, #(1b - vs)]`),
+    /// folded the same way.
+    MemExpr {
+        base: MemBase,
+        expr: String,
+        pre: bool,
+    },
     /// `ldr Rt, =value`: the value goes in the section's literal pool and the
     /// load reads it PC-relatively. The expression text is resolved when the
     /// pool is assigned, before layout.
@@ -723,9 +735,19 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
         // The offset is a GNU as constant expression, not just a literal
         // (`[xN, #4 * 0]` folds to 0), with the `#` optional. Operand
         // references do not appear in an offset, so the resolver yields None.
-        let expr = parts[1].strip_prefix('#').unwrap_or(parts[1]);
-        super::super::ssa::emit_common::eval_const_expr_ops(expr.trim(), &|_| None)
-            .ok_or_else(|| format!("inline asm: bad memory offset `{}`", parts[1]))?
+        let expr = parts[1].strip_prefix('#').unwrap_or(parts[1]).trim();
+        match super::super::ssa::emit_common::eval_const_expr_ops(expr, &|_| None) {
+            Some(v) => v,
+            // An expression over labels: the value is the section layout's.
+            None if is_layout_expr(expr) => {
+                return Ok(AsmOpndA64::MemExpr {
+                    base,
+                    expr: String::from(expr),
+                    pre,
+                });
+            }
+            None => return Err(format!("inline asm: bad memory offset `{}`", parts[1])),
+        }
     } else {
         0
     };
@@ -808,6 +830,10 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
         // A representable floating-point immediate (`fmov Vd, #1.5`).
         if let Some(fp) = parse_fp_imm(rest) {
             return Ok(AsmOpndA64::FpImm(fp));
+        }
+        // An expression over labels: the value is the section layout's.
+        if is_layout_expr(rest.trim()) {
+            return Ok(AsmOpndA64::ImmExpr(String::from(rest.trim())));
         }
         return Err(format!("inline asm: bad immediate `{tok}`"));
     }
@@ -1051,7 +1077,25 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             spec: SymSpec::Addr,
         });
     }
+    // GNU as makes the `#` optional, so an immediate written as an expression
+    // over labels also reaches here without one. A lone name is not one of
+    // these: the symbol form above already took it, or it is a bad operand.
+    if !emit_common::is_asm_symbol_name(tok) && is_layout_expr(tok) {
+        return Ok(AsmOpndA64::ImmExpr(String::from(tok)));
+    }
     Err(format!("inline asm: unsupported operand `{tok}`"))
+}
+
+/// Whether a token is a well-formed GNU as expression whose value only the
+/// section layout knows. Leaves stand in as zero, so this checks the syntax
+/// alone; the constant folder has already run.
+fn is_layout_expr(tok: &str) -> bool {
+    let ctx = emit_common::AsmExprCtx {
+        resolve: &|_| Some(emit_common::AsmExprLeaf::Abs(0)),
+        const_of: &|_| None,
+        lax_div: true,
+    };
+    !tok.is_empty() && emit_common::eval_asm_value(tok, &ctx).is_ok()
 }
 
 /// The group part of an `:abs_gN[_s|_nc]:` specifier. GNU as defines the
@@ -1418,12 +1462,13 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         }
         // `prfm <prfop>, [Xn{, #off | , Rm}]` prefetches; the prfop name (or a
         // raw #imm5) fills the Rt slot, and the memory operand is parsed as for
-        // a load. The encoder scales the immediate offset by 8.
-        if mnem == "prfm" {
+        // a load. The encoder scales `prfm`'s immediate offset by 8; `prfum`
+        // takes the unscaled signed one.
+        if mnem == "prfm" || mnem == "prfum" {
             let toks = split_operands(rest);
             if toks.len() != 2 {
-                return Err(String::from(
-                    "inline asm: `prfm` takes a prefetch op and a memory operand",
+                return Err(format!(
+                    "inline asm: `{mnem}` takes a prefetch op and a memory operand"
                 ));
             }
             let code = match prfop_code(toks[0]) {
@@ -1442,11 +1487,13 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     off: 0,
                     pre: false,
                 },
-                m @ (AsmOpndA64::Mem { .. } | AsmOpndA64::MemReg { .. }) => m,
-                _ => return Err(String::from("inline asm: `prfm` needs a memory operand")),
+                m @ (AsmOpndA64::Mem { .. }
+                | AsmOpndA64::MemReg { .. }
+                | AsmOpndA64::MemExpr { .. }) => m,
+                _ => return Err(format!("inline asm: `{mnem}` needs a memory operand")),
             };
             insns.push(AsmInsnA64 {
-                mnemonic: String::from("prfm"),
+                mnemonic: String::from(mnem),
                 operands: alloc::vec![AsmOpndA64::Imm(code), mem],
                 bytes: Vec::new(),
                 label_def: None,

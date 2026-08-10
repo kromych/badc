@@ -2674,8 +2674,7 @@ pub(crate) fn lower_for_with_prebuilt(
 /// Assemble a file-scope inline-asm named section's instructions to bytes for
 /// `target`, replacing each `Code` item with `CodeBytes`. The compile-time
 /// validation and the object emission both run this so an instruction is
-/// diagnosed and encoded the same way. AArch64 has no such encoder yet, so a
-/// named-section instruction there stays a `Code` item and is rejected later.
+/// diagnosed and encoded the same way.
 pub(crate) fn encode_file_asm_section_code(
     blocks: &mut [ssa::emit_common::AsmSectionBlock],
     target: Target,

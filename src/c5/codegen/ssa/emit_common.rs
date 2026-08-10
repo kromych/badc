@@ -3842,7 +3842,7 @@ fn default_section_flags(name: &str) -> &'static str {
 
 /// An assembler symbol name: identifier characters, not starting with a
 /// digit (which would be a local numeric label, not a symbol definition).
-fn is_asm_symbol_name(name: &str) -> bool {
+pub(crate) fn is_asm_symbol_name(name: &str) -> bool {
     !name.is_empty()
         && !name.as_bytes()[0].is_ascii_digit()
         && name
@@ -5309,6 +5309,37 @@ pub(crate) fn section_key(b: &AsmSectionBlock) -> alloc::string::String {
 /// The same identity key for a section already in the sink.
 pub(crate) fn section_key_of(s: &AsmSection) -> alloc::string::String {
     alloc::format!("{}\u{0}{}\u{0}{:?}", s.name, s.flags, s.sh_type)
+}
+
+/// Fold an instruction operand expression, assembled into section `key`, to
+/// the absolute value GNU as requires there: an instruction field carries no
+/// relocation, so the expression has to reduce to a literal, an assigned
+/// symbol, or a difference of two labels of one section. The location counter
+/// is not a leaf -- the fold precedes the instruction's placement.
+pub(crate) fn fold_asm_operand_expr(
+    expr: &str,
+    key: &str,
+    measured: &SectionLabelOffsets,
+) -> Result<i64, alloc::string::String> {
+    let sink_labels = AsmSinkLabels::new();
+    let num_unique = alloc::collections::BTreeMap::new();
+    let resolve = |t: &str| {
+        (t != ".")
+            .then(|| section_expr_leaf(t, key, 0, measured, &sink_labels, &num_unique, &|_| None))
+            .flatten()
+    };
+    let ctx = AsmExprCtx {
+        resolve: &resolve,
+        const_of: &|_| None,
+        lax_div: false,
+    };
+    let v = eval_asm_value(expr, &ctx).map_err(|e| alloc::format!("inline asm: `{expr}`: {e}"))?;
+    match resolve_asm_value(v, None) {
+        Ok(AsmResolved::Abs(c)) => Ok(c),
+        _ => Err(alloc::format!(
+            "inline asm: `{expr}` is not an absolute value in an instruction operand"
+        )),
+    }
 }
 
 /// Block processing order: stable by subsection number, so a section's

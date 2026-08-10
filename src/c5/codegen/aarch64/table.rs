@@ -387,6 +387,7 @@ fn unscaled_sibling(mnem: &str) -> Option<&'static str> {
         "str" => "stur",
         "strb" => "sturb",
         "strh" => "sturh",
+        "prfm" => "prfum",
         _ => return None,
     })
 }

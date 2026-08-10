@@ -158,21 +158,23 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     terminator Bz { cond=v107, target=b35, fall=b29 }   (exit_acc=v107)
   block 29  start_pc=0
     v108 LoadLocal { off=-2, kind=I64 }                   -> x1
-    v109 BinopI { op=shl, lhs=v104, rhs_imm=55 }          -> x0
-    v110 BinopI { op=ge, lhs=v109, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v110, target=b35, fall=b30 }   (exit_acc=v110)
+    v109 Imm(64)                                          -> x1
+    v110 Imm(55)                                          -> x1
+    v111 BinopI { op=shl, lhs=v104, rhs_imm=55 }          -> x0
+    v112 BinopI { op=ge, lhs=v111, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v112, target=b35, fall=b30 }   (exit_acc=v112)
   block 30  start_pc=0
-    v112 Imm(5)                                           -> x0
-    terminator Jmp(b31)   (exit_acc=v112)
+    v114 Imm(5)                                           -> x0
+    terminator Jmp(b31)   (exit_acc=v114)
   block 31  start_pc=0
-    v113 Phi { incoming=[b35:v111, b30:v112], kind=I64 }  -> x0
-    terminator Jmp(b32)   (exit_acc=v113)
+    v115 Phi { incoming=[b35:v113, b30:v114], kind=I64 }  -> x0
+    terminator Jmp(b32)   (exit_acc=v115)
   block 32  start_pc=0
     v29  Imm(0)                                           -> x1
-    v30  BinopI { op=ne, lhs=v113, rhs_imm=0 }            -> x1
+    v30  BinopI { op=ne, lhs=v115, rhs_imm=0 }            -> x1
     terminator Bz { cond=v30, target=b34, fall=b33 }   (exit_acc=v30)
   block 33  start_pc=0
-    v31  Extend { value=v113, kind=I32 }                  -> x0
+    v31  Extend { value=v115, kind=I32 }                  -> x0
     v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x1
     v33  Extend { value=v31, kind=I32 }                   -> x1
     terminator Return(v31)   (exit_acc=v31)
@@ -180,8 +182,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=2
     v34  Imm(0)                                           -> x0
     terminator Return(v34)   (exit_acc=v34)
   block 35  start_pc=0
-    v111 Imm(0)                                           -> x0
-    terminator Jmp(b31)   (exit_acc=v111)
+    v113 Imm(0)                                           -> x0
+    terminator Jmp(b31)   (exit_acc=v113)
   block 36  start_pc=0
     v100 Imm(0)                                           -> x1
     terminator Jmp(b25)   (exit_acc=v100)

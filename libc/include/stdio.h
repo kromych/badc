@@ -169,6 +169,7 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::getline,   "_getline")
 #pragma binding(libc::getdelim,  "_getdelim")
 #pragma binding(libc::dprintf,   "_dprintf")
+#pragma binding(libc::vdprintf,  "_vdprintf")
 #endif
 
 #ifdef __linux__
@@ -248,6 +249,7 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::getline,   "getline")
 #pragma binding(libc::getdelim,  "getdelim")
 #pragma binding(libc::dprintf,   "dprintf")
+#pragma binding(libc::vdprintf,  "vdprintf")
 #endif
 
 #ifdef _WIN32
@@ -546,16 +548,19 @@ int rename(char *old_path, char *new_path);
 // size_t) slots the libc updates as bytes are written; the
 // `size_t` is c5's `int`-shaped machine word.
 FILE *open_memstream(char **bufp, int *sizep);
+#endif
 // POSIX.1-2008 delimited line input: read through the next `delim`
 // (newline for `getline`) into a heap buffer `*lineptr` of capacity
 // `*n`, growing it as needed, and return the byte count or -1. The
-// return type is `ssize_t`, which is `long` on both targets that
-// export these (`<sys/types.h>`); msvcrt exports neither.
+// return type is `ssize_t`, which is `long` on the targets that export
+// these (`<sys/types.h>`). POSIX.1-2008 formatted output straight to a
+// file descriptor follows the same rule. msvcrt exports none of the
+// four; on Windows `libc/lib/stdio_ext.c` defines them and joins the
+// link on demand.
 long getline(char **lineptr, size_t *n, FILE *stream);
 long getdelim(char **lineptr, size_t *n, int delim, FILE *stream);
-// POSIX.1-2008 formatted output straight to a file descriptor.
 int dprintf(int fd, const char *fmt, ...);
-#endif
+int vdprintf(int fd, const char *fmt, __builtin_va_list ap);
 #ifdef _WIN32
 FILE *_wfopen(unsigned short *path, unsigned short *mode);
 FILE *_wpopen(unsigned short *cmd, unsigned short *mode);

@@ -56,23 +56,6 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movl	%eax, %eax
-               	subq	$0x3, %rax
-               	movl	%eax, %ecx
-               	xorq	$0x66, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movl	%eax, %esi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
                	movl	$0x3e8, %edi            # imm = 0x3E8
                	callq	<addr>
                	leaq	0x19f(%rax), %rsi

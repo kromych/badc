@@ -46,21 +46,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v14  Imm(1)                                           -> x0
     terminator Return(v14)   (exit_acc=v14)
   block 2  start_pc=0
-    v15  BinopI { op=and, lhs=v5, rhs_imm=4294967295 }    -> x0
-    v16  BinopI { op=sub, lhs=v15, rhs_imm=3 }            -> x0
-    v17  Imm(0)                                           -> x1
-    v18  BinopI { op=and, lhs=v16, rhs_imm=4294967295 }   -> x1
-    v19  BinopI { op=xor, lhs=v18, rhs_imm=102 }          -> x1
-    v20  BinopI { op=and, lhs=v19, rhs_imm=4294967295 }   -> x1
-    v21  BinopI { op=ne, lhs=v20, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v21, target=b4, fall=b3 }   (exit_acc=v21)
+    v15  Imm(105)                                         -> x0
+    v16  Imm(102)                                         -> x0
+    v17  Imm(0)                                           -> x0
+    v18  Imm(102)                                         -> x0
+    v19  Imm(0)                                           -> x0
+    v20  Imm(0)                                           -> x0
+    v21  Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v21)
   block 3  start_pc=0
-    v22  ImmData(42)                                      -> x7
-    v23  BinopI { op=and, lhs=v16, rhs_imm=4294967295 }   -> x6
-    v24  CallExt { binding_idx=0, args=[v22, v23], fp_arg_mask=0x0 } -> x0
-    v25  Imm(1)                                           -> x0
-    terminator Return(v25)   (exit_acc=v25)
-  block 4  start_pc=0
     v26  Imm(1000)                                        -> x7
     v27  Call { target_pc=2, args=[v26], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v28  Imm(0)                                           -> x1
@@ -69,14 +63,14 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v31  Imm(0)                                           -> x0
     v32  LoadLocal { off=-5, kind=I64 }                   -> x0
     v33  BinopI { op=ne, lhs=v30, rhs_imm=1415 }          -> x0
-    terminator Bz { cond=v33, target=b6, fall=b5 }   (exit_acc=v33)
-  block 5  start_pc=0
-    v34  ImmData(64)                                      -> x7
+    terminator Bz { cond=v33, target=b5, fall=b4 }   (exit_acc=v33)
+  block 4  start_pc=0
+    v34  ImmData(48)                                      -> x7
     v35  LoadLocal { off=-5, kind=I64 }                   -> x0
     v36  CallExt { binding_idx=0, args=[v34, v30], fp_arg_mask=0x0 } -> x0
     v37  Imm(1)                                           -> x0
     terminator Return(v37)   (exit_acc=v37)
-  block 6  start_pc=0
+  block 5  start_pc=0
     v38  Imm(1052)                                        -> x7
     v39  Call { target_pc=1, args=[v38], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x3
     v40  Imm(0)                                           -> x0
@@ -96,14 +90,14 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v54  BinopI { op=xor, lhs=v53, rhs_imm=1467 }         -> x1
     v55  BinopI { op=and, lhs=v54, rhs_imm=4294967295 }   -> x1
     v56  BinopI { op=ne, lhs=v55, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v56, target=b8, fall=b7 }   (exit_acc=v56)
-  block 7  start_pc=0
-    v57  ImmData(89)                                      -> x7
+    terminator Bz { cond=v56, target=b7, fall=b6 }   (exit_acc=v56)
+  block 6  start_pc=0
+    v57  ImmData(73)                                      -> x7
     v58  BinopI { op=and, lhs=v51, rhs_imm=4294967295 }   -> x6
     v59  CallExt { binding_idx=0, args=[v57, v58], fp_arg_mask=0x0 } -> x0
     v60  Imm(1)                                           -> x0
     terminator Return(v60)   (exit_acc=v60)
-  block 8  start_pc=0
+  block 7  start_pc=0
     v61  Imm(200)                                         -> x7
     v62  Call { target_pc=1, args=[v61], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v63  BinopI { op=and, lhs=v62, rhs_imm=255 }          -> x0
@@ -115,14 +109,14 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v69  BinopI { op=xor, lhs=v68, rhs_imm=4 }            -> x1
     v70  BinopI { op=and, lhs=v69, rhs_imm=4294967295 }   -> x1
     v71  BinopI { op=ne, lhs=v70, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v71, target=b10, fall=b9 }   (exit_acc=v71)
-  block 9  start_pc=0
-    v72  ImmData(122)                                     -> x7
+    terminator Bz { cond=v71, target=b9, fall=b8 }   (exit_acc=v71)
+  block 8  start_pc=0
+    v72  ImmData(106)                                     -> x7
     v73  BinopI { op=and, lhs=v66, rhs_imm=255 }          -> x6
     v74  CallExt { binding_idx=0, args=[v72, v73], fp_arg_mask=0x0 } -> x0
     v75  Imm(1)                                           -> x0
     terminator Return(v75)   (exit_acc=v75)
-  block 10  start_pc=0
+  block 9  start_pc=0
     v76  LocalAddr(-3)                                    -> x0
     v77  Imm(0)                                           -> x1
     v78  Store { addr=v76, disp=0, value=v77, kind=I32 }  -> -
@@ -156,15 +150,15 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v106 LoadLocal { off=-5, kind=I64 }                   -> x1
     v107 Load { addr=v101, disp=12, kind=I32 }            -> x1
     v108 BinopI { op=ne, lhs=v107, rhs_imm=30 }           -> x1
-    terminator Bz { cond=v108, target=b12, fall=b11 }   (exit_acc=v108)
-  block 11  start_pc=0
-    v109 ImmData(150)                                     -> x7
+    terminator Bz { cond=v108, target=b11, fall=b10 }   (exit_acc=v108)
+  block 10  start_pc=0
+    v109 ImmData(134)                                     -> x7
     v110 LoadLocal { off=-5, kind=I64 }                   -> x1
     v111 Load { addr=v101, disp=12, kind=I32 }            -> x6
     v112 CallExt { binding_idx=0, args=[v109, v111], fp_arg_mask=0x0 } -> x0
     v113 Imm(1)                                           -> x0
     terminator Return(v113)   (exit_acc=v113)
-  block 12  start_pc=0
+  block 11  start_pc=0
     v114 Imm(0)                                           -> x0
     terminator Return(v114)   (exit_acc=v114)
 ; --- SSA dump (ok=true) ent_pc=0 ---

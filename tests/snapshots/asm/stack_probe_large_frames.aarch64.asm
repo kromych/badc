@@ -15,9 +15,7 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	strb	w2, [x0]
                	mov	x2, #0x2                // =2
-               	asr	x3, x1, #63
-               	lsr	x3, x3, #63
-               	add	x3, x1, x3
+               	add	x3, x1, #0x0
                	asr	x3, x3, #1
                	add	x3, x0, x3
                	strb	w2, [x3]
@@ -26,9 +24,7 @@ Disassembly of section .text:
                	mov	x3, #0x3                // =3
                	strb	w3, [x2]
                	ldrb	w2, [x0]
-               	asr	x3, x1, #63
-               	lsr	x3, x3, #63
-               	add	x3, x1, x3
+               	add	x3, x1, #0x0
                	asr	x3, x3, #1
                	add	x3, x0, x3
                	ldrb	w3, [x3]

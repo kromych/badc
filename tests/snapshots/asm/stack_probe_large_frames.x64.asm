@@ -14,10 +14,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movb	%al, (%rdi)
                	movl	$0x2, %eax
-               	movq	%rsi, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x3f, %rcx
-               	addq	%rsi, %rcx
+               	leaq	(%rsi), %rcx
                	sarq	%rcx
                	addq	%rdi, %rcx
                	movb	%al, (%rcx)
@@ -26,10 +23,7 @@ Disassembly of section .text:
                	movl	$0x3, %ecx
                	movb	%cl, (%rax)
                	movsbq	(%rdi), %rax
-               	movq	%rsi, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x3f, %rcx
-               	addq	%rsi, %rcx
+               	leaq	(%rsi), %rcx
                	sarq	%rcx
                	addq	%rdi, %rcx
                	movsbq	(%rcx), %rcx

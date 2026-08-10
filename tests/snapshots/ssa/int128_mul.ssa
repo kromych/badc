@@ -94,7 +94,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=49
     terminator Bz { cond=v419, target=b8, fall=b7 }   (exit_acc=v419)
   block 7  start_pc=0
     v50  Extend { value=v419, kind=I32 }                  -> x0
-    v51  BinopI { op=shl, lhs=v50, rhs_imm=32 }           -> x1
+    v51  Imm(4294967296)                                  -> x1
     v52  Extend { value=v50, kind=I32 }                   -> x1
     terminator Return(v50)   (exit_acc=v50)
   block 8  start_pc=0
@@ -181,7 +181,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=49
     v83  Binop { op=mul, lhs=v2, rhs=v60 }                -> x9
     v84  Binop { op=mul, lhs=v60, rhs=v5 }                -> x8
     v85  Binop { op=add, lhs=v82, rhs=v83 }               -> x7
-    v86  Binop { op=add, lhs=v85, rhs=v84 }               -> x7
+    v86  Imm(-2468143618787689925)                        -> x7
     v87  LocalAddr(-8)                                    -> x7
     v88  Imm(0)                                           -> x8
     v89  BinopI { op=add, lhs=v87, rhs_imm=8 }            -> x8

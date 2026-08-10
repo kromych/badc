@@ -2830,7 +2830,7 @@ mod tests {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
 
     use crate::c5::object::elf_reloc_types::{
-        R_AARCH64_CONDBR19, R_AARCH64_LD_PREL_LO19, R_AARCH64_TSTBR14,
+        R_AARCH64_CONDBR19, R_AARCH64_LD_PREL_LO19, R_AARCH64_TSTBR14, R_X86_64_32S,
     };
 
     /// A relocation site with no containing object, for exercising a
@@ -2947,6 +2947,27 @@ mod tests {
             alloc::format!("{e}"),
             "error: vmlinux.o(.init.text+0x30): unsupported R_AARCH64_MOVW_UABS_G0 (263) \
              against symbol `primary_entry`"
+        );
+    }
+
+    /// An absolute form in a position-independent image is refused on
+    /// the reference, not on a missing patcher, and names the output
+    /// kind the way GNU ld does.
+    #[test]
+    fn an_absolute_in_a_pie_names_the_constraint_and_the_output_kind() {
+        let origin = RelocOrigin::in_named_section("t.o", ".text");
+        let site = origin.at(NativeMachine::X86_64, R_X86_64_32S, "per_slot_base", 0x4);
+        assert_eq!(
+            alloc::format!("{}", site.absolute_in_pie(false)),
+            "error: t.o(.text+0x4): R_X86_64_32S (11) against symbol `per_slot_base` can not \
+             be used when making a position-independent executable: the reference needs an \
+             absolute address, which no load address supplies"
+        );
+        assert_eq!(
+            alloc::format!("{}", site.absolute_in_pie(true)),
+            "error: t.o(.text+0x4): R_X86_64_32S (11) against symbol `per_slot_base` can not \
+             be used when making a shared object: the reference needs an absolute address, \
+             which no load address supplies"
         );
     }
 

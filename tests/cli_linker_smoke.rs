@@ -3605,6 +3605,27 @@ fn absolute_text_reloc_is_rejected_for_a_pie() {
             && err.contains("position-independent"),
         "diagnostic should name the relocation, the symbol and the constraint: {err}",
     );
+    // Same constraint, different output kind: GNU ld says "shared
+    // object" here, and the reason it gives is the reference's, not a
+    // missing patcher's.
+    let out = Command::new(badc())
+        .args(["--target=linux-x64", "--shared", "-o"])
+        .arg(dir.join("libt.so"))
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        !out.status.success(),
+        "expected the shared-object link to be rejected"
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("R_X86_64_32S")
+            && err.contains("shared object")
+            && !err.contains("unsupported"),
+        "diagnostic should name the relocation and the output kind: {err}",
+    );
 }
 
 // Gated on Linux: the read-only data page only exists on the native ELF

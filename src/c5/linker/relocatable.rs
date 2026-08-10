@@ -844,9 +844,8 @@ fn is_attributes_section(sh_type: u32) -> bool {
     matches!(sh_type, SHT_GNU_ATTRIBUTES | SHT_ARCH_ATTRIBUTES)
 }
 
-fn merge_property_notes(notes: &[Vec<u8>], n_inputs: usize, align: u64) -> Option<EtSection> {
-    let refs: Vec<&[u8]> = notes.iter().map(|n| n.as_slice()).collect();
-    let bytes = gnu_property::merge_section(&refs, n_inputs, align as usize)?;
+fn merge_property_notes(inputs: &[Vec<&[u8]>], align: u64) -> Option<EtSection> {
+    let bytes = gnu_property::merge_section(inputs, align as usize)?;
     Some(EtSection {
         name: ".note.gnu.property".to_string(),
         sh_type: SHT_NOTE,
@@ -917,12 +916,12 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
     // --strip-debug drop sections outright.
     let empty = LdScript::default();
     let script = opts.script.as_ref().unwrap_or(&empty);
-    let mut prop_notes: Vec<Vec<u8>> = Vec::new();
+    let mut prop_notes: Vec<Vec<&[u8]>> = alloc::vec![Vec::new(); objs.len()];
     let mut prop_align = 4u64;
     for (oi, o) in objs.iter().enumerate() {
         for (si, s) in o.sections.iter().enumerate() {
             if s.name == ".note.gnu.property" && s.sh_type == SHT_NOTE {
-                prop_notes.push(s.bytes.clone());
+                prop_notes[oi].push(&s.bytes);
                 prop_align = prop_align.max(s.addralign);
                 dropped.insert((oi, si));
             } else if (opts.strip_debug && s.name.starts_with(".debug"))
@@ -1046,7 +1045,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             }
         }
     }
-    if let Some(p) = merge_property_notes(&prop_notes, objs.len(), prop_align) {
+    if let Some(p) = merge_property_notes(&prop_notes, prop_align) {
         let mut out = OutSec::new(&p.name, exec_fill);
         out.sh_type = p.sh_type;
         out.flags = p.flags;

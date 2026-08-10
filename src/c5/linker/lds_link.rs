@@ -939,18 +939,18 @@ impl<'a> LdsLinker<'a> {
         // than concatenated: a consumer reading the first note must see
         // the whole image's claim, not one input's. Every input counts
         // towards the merge, including those with no property section.
-        let prop_notes: Vec<&[u8]> = objects
+        let prop_notes: Vec<Vec<&[u8]>> = objects
             .iter()
-            .flat_map(|o| {
+            .map(|o| {
                 o.sections
                     .iter()
                     .filter(|s| s.name == SYNTH_GNU_PROPERTY && s.shtype == SHT_NOTE)
                     .filter_map(|s| o.bytes.get(s.data_off..s.data_off + s.size as usize))
+                    .collect()
             })
             .collect();
         let gnu_property = gnu_property::merge_section(
             &prop_notes,
-            objects.len(),
             class_for_machine(machine).addr_size() as usize,
         )
         .unwrap_or_default();

@@ -61,29 +61,46 @@ pub struct Property {
     pub value: u64,
 }
 
-/// Merge the `NT_GNU_PROPERTY_TYPE_0` notes of `notes` (one entry per
-/// input section) over a link of `n_inputs` relocatable inputs.
-/// `align` is the note alignment: 8 for ELF64, 4 for ELF32. An input
-/// with no property section still counts: it withholds every all-input
+/// Merge the `NT_GNU_PROPERTY_TYPE_0` notes of every relocatable input,
+/// each given as its `.note.gnu.property` section bodies. `align` is
+/// the note alignment: 8 for ELF64, 4 for ELF32. An input with no
+/// property section still counts: it withholds every all-input
 /// property.
-pub fn merge(notes: &[&[u8]], n_inputs: usize, align: usize) -> Vec<Property> {
+pub fn merge(inputs: &[Vec<&[u8]>], align: usize) -> Vec<Property> {
+    let n_inputs = inputs.len();
     let mut accs: BTreeMap<u32, Acc> = BTreeMap::new();
-    for note in notes {
-        for (ty, data) in properties(note, align) {
-            // Every rule here combines a value of at most eight bytes.
-            // A wider payload is malformed for the type, and merging it
-            // would emit a `pr_datasz` past what the value holds.
-            let Some(rule) = rule_for(ty).filter(|_| data.len() <= 8) else {
-                continue;
-            };
-            let value = match rule {
-                Rule::Present => 0,
-                _ => read_le(data),
-            };
+    for notes in inputs {
+        // Fold the input's own notes first, so a type it repeats
+        // counts once against the all-input rules.
+        let mut own: BTreeMap<u32, (Rule, u64, usize)> = BTreeMap::new();
+        for note in notes {
+            for (ty, data) in properties(note, align) {
+                // Every rule here combines a value of at most eight
+                // bytes. A wider payload is malformed for the type, and
+                // merging it would emit a `pr_datasz` past what the
+                // value holds.
+                let Some(rule) = rule_for(ty).filter(|_| data.len() <= 8) else {
+                    continue;
+                };
+                let value = if rule == Rule::Present {
+                    0
+                } else {
+                    read_le(data)
+                };
+                let e = own.entry(ty).or_insert((rule, 0, data.len()));
+                e.1 = if rule == Rule::Max {
+                    e.1.max(value)
+                } else {
+                    e.1 | value
+                };
+                e.2 = e.2.max(data.len());
+            }
+        }
+        for (ty, (rule, value, datasz)) in own {
             let e = accs.entry(ty).or_insert(Acc {
                 rule,
                 value: if rule == Rule::And { u64::MAX } else { 0 },
-                datasz: data.len(),
+                datasz,
                 seen: 0,
             });
             match rule {
@@ -92,7 +109,7 @@ pub fn merge(notes: &[&[u8]], n_inputs: usize, align: usize) -> Vec<Property> {
                 Rule::Max => e.value = e.value.max(value),
                 Rule::Present => {}
             }
-            e.datasz = e.datasz.max(data.len());
+            e.datasz = e.datasz.max(datasz);
             e.seen += 1;
         }
     }
@@ -173,8 +190,8 @@ pub fn encode(props: &[Property], align: usize) -> Vec<u8> {
 }
 
 /// Merged section body for the inputs, or `None` when nothing survives.
-pub fn merge_section(notes: &[&[u8]], n_inputs: usize, align: usize) -> Option<Vec<u8>> {
-    let props = merge(notes, n_inputs, align);
+pub fn merge_section(inputs: &[Vec<&[u8]>], align: usize) -> Option<Vec<u8>> {
+    let props = merge(inputs, align);
     (!props.is_empty()).then(|| encode(&props, align))
 }
 
@@ -198,9 +215,12 @@ mod tests {
         )
     }
 
+    /// One note section per entry of `notes`, then `n_inputs` total
+    /// inputs: the rest carry no property section at all.
     fn merged(notes: &[Vec<u8>], n_inputs: usize) -> Vec<(u32, u64)> {
-        let refs: Vec<&[u8]> = notes.iter().map(|n| n.as_slice()).collect();
-        merge(&refs, n_inputs, 8)
+        let mut inputs: Vec<Vec<&[u8]>> = notes.iter().map(|n| alloc::vec![n.as_slice()]).collect();
+        inputs.resize(n_inputs, Vec::new());
+        merge(&inputs, 8)
             .into_iter()
             .map(|p| (p.ty, p.value))
             .collect()
@@ -296,6 +316,27 @@ mod tests {
         let a = note(&[(0xc000_0042, 4, 0x1122_3344)]);
         let b = note(&[(0xc000_0042, 4, 0x5566_7788)]);
         assert_eq!(merged(&[a, b], 2), [(0xc000_0042, 0x1122_3300)]);
+    }
+
+    /// One input repeating a type claims it once, not once per note:
+    /// the all-input rules count inputs.
+    #[test]
+    fn a_type_an_input_repeats_counts_once_against_the_all_input_rules() {
+        let mut twice = note(&[(X86_FEATURE_1_AND, 4, 0x1)]);
+        twice.extend_from_slice(&note(&[(X86_FEATURE_1_AND, 4, 0x2)]));
+        let other = note(&[(X86_FEATURE_1_AND, 4, 0x3)]);
+        // Within the input the two notes union to IBT|SHSTK, which
+        // then intersects with the other input's.
+        assert_eq!(
+            merge(
+                &[alloc::vec![twice.as_slice()], alloc::vec![other.as_slice()]],
+                8
+            )
+            .into_iter()
+            .map(|p| (p.ty, p.value))
+            .collect::<Vec<_>>(),
+            [(X86_FEATURE_1_AND, 0x3)]
+        );
     }
 
     #[test]

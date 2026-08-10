@@ -53,4 +53,5 @@ pub(super) const EMBEDDED_LIBC: &[(&str, &str)] = &[
     ("pattern.c", include_str!("../../libc/lib/pattern.c")),
     ("stdio_ext.c", include_str!("../../libc/lib/stdio_ext.c")),
     ("string_ext.c", include_str!("../../libc/lib/string_ext.c")),
+    ("unistd_ext.c", include_str!("../../libc/lib/unistd_ext.c")),
 ];

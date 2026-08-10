@@ -34,7 +34,7 @@ use super::super::error::C5Error;
 use super::super::program::{ExportedFunction, Program};
 use super::Build;
 use super::Machine;
-use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget, DwarfRelocWidth};
+use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget};
 use super::elf_class::{
     Elf64Ehdr, Elf64Rela, Elf64Shdr, Elf64Sym, ElfClass, write_ehdr, write_shdr, write_sym,
 };
@@ -267,6 +267,19 @@ impl RelocAbi {
             (Machine::X86_64, true) => RelocAbi::I386,
             (Machine::Aarch64, _) => RelocAbi::Aarch64,
         }
+    }
+
+    /// Absolute relocation reading a `width`-byte field, or `None`
+    /// when the psABI defines none: i386 has no 8-byte relocation.
+    fn abs(self, width: u32) -> Option<u32> {
+        Some(match (self, width) {
+            (RelocAbi::X86_64, 8) => R_X86_64_64,
+            (RelocAbi::X86_64, 4) => R_X86_64_32,
+            (RelocAbi::I386, 4) => R_386_32,
+            (RelocAbi::Aarch64, 8) => R_AARCH64_ABS64,
+            (RelocAbi::Aarch64, 4) => R_AARCH64_ABS32,
+            _ => return None,
+        })
     }
 }
 
@@ -3077,13 +3090,13 @@ pub(super) fn write_relocatable(
     for r in &dwarf.info_relocs {
         if let Some(rela) = dwarf_reloc_to_elf_rela(
             r,
-            machine_for_rela,
+            abi,
             debug_line_sym_idx,
             debug_abbrev_sym_idx,
             text_sym_idx,
             &dwarf.reloc_symbols,
             &dwarf_obj_sym_idx,
-        ) {
+        )? {
             write_struct(&mut rela_debug_info_bytes, &rela);
         }
     }
@@ -3092,31 +3105,28 @@ pub(super) fn write_relocatable(
     for r in &dwarf.line_relocs {
         if let Some(rela) = dwarf_reloc_to_elf_rela(
             r,
-            machine_for_rela,
+            abi,
             debug_line_sym_idx,
             debug_abbrev_sym_idx,
             text_sym_idx,
             &dwarf.reloc_symbols,
             &dwarf_obj_sym_idx,
-        ) {
+        )? {
             write_struct(&mut rela_debug_line_bytes, &rela);
         }
     }
 
-    // badc has no i386 code generator, so every relocation in an
-    // ELFCLASS32 object comes from the assembler, which reaches only the
-    // named-section tables. The fixed set carries x86-64 numbers, whose
-    // meanings differ under i386 (`R_X86_64_64` and `R_386_32` share the
-    // number 1), so an entry there is an internal inconsistency.
+    // These tables hold the code generator's own relocations, whose
+    // numbers and field offsets name x86-64 / aarch64 instructions. The
+    // driver admits only assembled units to ELFCLASS32, so they stay
+    // empty; an entry means an i386 code generator arrived without the
+    // numbering, and `R_X86_64_64` and `R_386_32` share the number 1.
     if class.is32()
-        && !(rela_bytes.is_empty()
-            && rela_data_bytes.is_empty()
-            && rela_debug_info_bytes.is_empty()
-            && rela_debug_line_bytes.is_empty()
-            && init_sections.is_empty())
+        && !(rela_bytes.is_empty() && rela_data_bytes.is_empty() && init_sections.is_empty())
     {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            "elf_reloc: compiler-generated relocations in an ELFCLASS32 object",
+        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
+            "badc generates no 32-bit machine code; an ELFCLASS32 object carries \
+             assembled sections and debug info only",
         )));
     }
 
@@ -4097,33 +4107,51 @@ fn build_badc_note(
 /// module-relative TLS reloc rather than an absolute one.
 fn dwarf_reloc_to_elf_rela(
     r: &DwarfReloc,
-    machine: Machine,
+    abi: RelocAbi,
     debug_line_sym_idx: u64,
     debug_abbrev_sym_idx: u64,
     text_sym_idx: u64,
     reloc_symbols: &[String],
     obj_sym_idx: &dyn Fn(&str) -> Option<u64>,
-) -> Option<Elf64Rela> {
+) -> Result<Option<Elf64Rela>, C5Error> {
     let named = |i: u32| obj_sym_idx(reloc_symbols.get(i as usize).map(|s| s.as_str())?);
     let sym_idx = match r.target {
         DwarfRelocTarget::Text => text_sym_idx,
         DwarfRelocTarget::DebugLine => debug_line_sym_idx,
         DwarfRelocTarget::DebugAbbrev => debug_abbrev_sym_idx,
-        DwarfRelocTarget::Symbol(i) | DwarfRelocTarget::ThreadLocalSymbol(i) => named(i)?,
+        DwarfRelocTarget::Symbol(i) | DwarfRelocTarget::ThreadLocalSymbol(i) => match named(i) {
+            Some(idx) => idx,
+            None => return Ok(None),
+        },
     };
-    let rtype = match (r.target, r.width, machine) {
-        (DwarfRelocTarget::ThreadLocalSymbol(_), _, Machine::X86_64) => R_X86_64_DTPOFF64,
-        (DwarfRelocTarget::ThreadLocalSymbol(_), _, Machine::Aarch64) => R_AARCH64_TLS_DTPREL64,
-        (_, DwarfRelocWidth::W8, Machine::X86_64) => R_X86_64_64,
-        (_, DwarfRelocWidth::W4, Machine::X86_64) => R_X86_64_32,
-        (_, DwarfRelocWidth::W8, Machine::Aarch64) => R_AARCH64_ABS64,
-        (_, DwarfRelocWidth::W4, Machine::Aarch64) => R_AARCH64_ABS32,
+    let tls = matches!(r.target, DwarfRelocTarget::ThreadLocalSymbol(_));
+    let rtype = if tls {
+        match abi {
+            RelocAbi::X86_64 => Some(R_X86_64_DTPOFF64),
+            RelocAbi::Aarch64 => Some(R_AARCH64_TLS_DTPREL64),
+            // The location carrying it is emitted for ELFCLASS64 only.
+            RelocAbi::I386 => None,
+        }
+    } else {
+        abi.abs(r.width.bytes() as u32)
     };
-    Some(Elf64Rela {
+    let rtype = rtype.ok_or_else(|| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
+            "elf_reloc: debug info holds a {}-byte {} slot, which this psABI \
+             has no relocation for",
+            r.width.bytes(),
+            if tls {
+                "thread-local offset"
+            } else {
+                "address"
+            }
+        )))
+    })?;
+    Ok(Some(Elf64Rela {
         r_offset: r.offset,
         r_info: (sym_idx << 32) | (rtype as u64),
         r_addend: r.addend,
-    })
+    }))
 }
 
 /// Emit the relocs the per-arch lowering left behind for an
@@ -4360,6 +4388,72 @@ mod tests {
         assert_eq!(u16::from_le_bytes([bytes[18], bytes[19]]), EM_386);
         assert_eq!(u16::from_le_bytes([bytes[40], bytes[41]]), 52);
         assert_eq!(u16::from_le_bytes([bytes[46], bytes[47]]), 40);
+    }
+
+    /// `-g` on an ELFCLASS32 unit: the DWARF an i386 object carries is
+    /// 4-byte-address DWARF, and its relocations are `R_386_32` in
+    /// `SHT_REL` records like every other relocation in the object.
+    #[test]
+    fn elf32_debug_info_is_i386_dwarf() {
+        let mut build = empty_build_for(Machine::X86_64);
+        build.elf_class = ElfClass::Elf32;
+        build.debug_info = true;
+        // A function so the CU carries a subprogram DIE: its
+        // `DW_AT_low_pc` is a second address site, reached only when
+        // `.text` holds code.
+        build.text = alloc::vec![0x90; 4];
+        build.func_ent_pcs = alloc::vec![0];
+        build.pc_to_native = alloc::vec![0];
+        build.func_names = alloc::vec![alloc::string::String::from("f")];
+        let program = empty_program("test.s");
+        let bytes = write_relocatable(
+            &program,
+            &build,
+            Machine::X86_64,
+            crate::c5::Target::LinuxX64,
+        )
+        .expect("write");
+        let secs = elf32_sections(&bytes);
+        // `address_size` sits at byte 10 of the CU header, after
+        // unit_length(4) + version(2) + debug_abbrev_offset(4).
+        let (info_off, _) = secs[".debug_info"];
+        assert_eq!(bytes[info_off + 10], 4, "CU address_size");
+        // Both debug relocation tables take the `SHT_REL` form and
+        // number their entries as i386.
+        for name in [".rel.debug_info", ".rel.debug_line"] {
+            let (off, size) = secs[name];
+            assert!(size > 0 && size % 8 == 0, "{name} holds Elf32_Rel records");
+            for row in bytes[off..off + size].chunks_exact(8) {
+                let info = u32::from_le_bytes(row[4..8].try_into().unwrap());
+                assert_eq!(info & 0xff, R_386_32, "{name} entry type");
+            }
+        }
+        // A `.rela.debug_*` companion would mean the writer kept the
+        // 64-bit form for the debug tables alone.
+        assert!(!secs.contains_key(".rela.debug_info"));
+        assert!(!secs.contains_key(".rela.debug_line"));
+    }
+
+    /// `(offset, size)` of each named section of an ELFCLASS32 object.
+    fn elf32_sections(
+        bytes: &[u8],
+    ) -> alloc::collections::BTreeMap<alloc::string::String, (usize, usize)> {
+        let shoff = u32::from_le_bytes(bytes[0x20..0x24].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(bytes[0x30..0x32].try_into().unwrap()) as usize;
+        let shstrndx = u16::from_le_bytes(bytes[0x32..0x34].try_into().unwrap()) as usize;
+        let field = |i: usize, n: usize| {
+            let o = shoff + i * 40 + n * 4;
+            u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize
+        };
+        let strtab = field(shstrndx, 4);
+        let mut out = alloc::collections::BTreeMap::new();
+        for i in 0..shnum {
+            let at = strtab + field(i, 0);
+            let end = at + bytes[at..].iter().position(|&b| b == 0).expect("name ends");
+            let name = alloc::string::String::from_utf8_lossy(&bytes[at..end]).into_owned();
+            out.insert(name, (field(i, 4), field(i, 5)));
+        }
+        out
     }
 
     /// `SHT_REL` has no addend field, so the addend is written into the

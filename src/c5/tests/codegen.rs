@@ -3081,8 +3081,9 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
         (Target::LinuxX64, &[23u32][..]),
     ] {
         let src = "_Thread_local long counter = 7;\n\
+                   static _Thread_local long private_counter = 9;\n\
                    extern _Thread_local long other;\n\
-                   long bump(void) { counter += other; return counter; }\n\
+                   long bump(void) { counter += other + private_counter; return counter; }\n\
                    int main(void) { return (int)bump(); }\n";
         let program = Compiler::with_target(src.to_string(), target)
             .compile()
@@ -3114,7 +3115,7 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
             let end = strtab[off..].iter().position(|b| *b == 0).unwrap() + off;
             core::str::from_utf8(&strtab[off..end]).unwrap()
         };
-        let (mut saw_counter, mut saw_other_undef) = (false, false);
+        let (mut saw_counter, mut saw_other_undef, mut saw_private) = (false, false, false);
         for e in symtab.chunks_exact(24) {
             let st_name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;
             let st_info = e[4];
@@ -3125,7 +3126,17 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
             match name_at(st_name) {
                 "counter" => {
                     assert_ne!(st_shndx, 0, "{target:?}: `counter` must be defined STT_TLS");
+                    assert_eq!(st_info >> 4, 1, "{target:?}: `counter` binds STB_GLOBAL");
                     saw_counter = true;
+                }
+                "private_counter" => {
+                    assert_ne!(st_shndx, 0, "{target:?}: `private_counter` is defined");
+                    assert_eq!(
+                        st_info >> 4,
+                        0,
+                        "{target:?}: a `static` thread-local binds STB_LOCAL"
+                    );
+                    saw_private = true;
                 }
                 "other" => {
                     assert_eq!(st_shndx, 0, "{target:?}: `other` must be UNDEF STT_TLS");
@@ -3135,8 +3146,16 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
             }
         }
         assert!(
-            saw_counter && saw_other_undef,
-            "{target:?}: missing STT_TLS symtab entries (counter={saw_counter}, other={saw_other_undef})"
+            saw_counter && saw_other_undef && saw_private,
+            "{target:?}: missing STT_TLS symtab entries (counter={saw_counter}, \
+             other={saw_other_undef}, private_counter={saw_private})"
+        );
+        // ELF requires every STB_LOCAL entry to precede the first
+        // non-local one, which `.symtab`'s sh_info points at.
+        let bindings: Vec<u8> = symtab.chunks_exact(24).map(|e| e[4] >> 4).collect();
+        assert!(
+            bindings.windows(2).all(|w| !(w[0] != 0 && w[1] == 0)),
+            "{target:?}: an STB_LOCAL symbol follows a non-local one"
         );
     }
 }

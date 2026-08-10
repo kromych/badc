@@ -867,8 +867,10 @@ fn build_debug_info(
         // which needs a module-relative TLS relocation. Only the ELF
         // x86_64 surface has one both linkers resolve, matching what
         // gcc and clang describe per target; elsewhere the object gets
-        // its name and type and no location.
-        let tls_location = sym.is_thread_local && target == super::Target::LinuxX64;
+        // its name and type and no location. The 8-byte offset slot is
+        // ELFCLASS64's; i386 spells the relocation 4 bytes wide.
+        let tls_location =
+            sym.is_thread_local && target == super::Target::LinuxX64 && !build.elf_class.is32();
         let located = !sym.is_thread_local || tls_location;
         write_uleb128(
             &mut body,

@@ -1831,7 +1831,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             &debug_abbrev_bases,
             &debug_line_bases,
             &debug_str_bases,
-            &tls_symbol_offsets,
+            &tls_bases,
             &defined,
         )?;
     }
@@ -1860,7 +1860,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             &debug_abbrev_bases,
             &debug_line_bases,
             &debug_str_bases,
-            &tls_symbol_offsets,
+            &tls_bases,
             &defined,
         )?;
     }
@@ -1982,13 +1982,14 @@ fn resolve_debug_reloc(
     debug_abbrev_bases: &[usize],
     debug_line_bases: &[usize],
     debug_str_bases: &[usize],
-    tls_symbol_offsets: &HashMap<&str, u64>,
+    tls_bases: &[usize],
     defined: &HashMap<&str, MergedSymbol>,
 ) -> Result<(), C5Error> {
     let patch_off = reloc.offset as usize;
     // A thread-local's debug location holds its offset within the
-    // module's thread block, which the merged TLS layout gives
-    // directly; it is not an address, so no writer has to defer it.
+    // module's thread block: the unit's merged TLS base plus the
+    // symbol's offset in that unit's block. It is not an address, so no
+    // writer has to defer it.
     if matches!(
         (machine, reloc.rtype),
         (NativeMachine::X86_64, R_X86_64_DTPOFF64)
@@ -2002,10 +2003,14 @@ fn resolve_debug_reloc(
                 section_bytes.len(),
             )));
         }
-        let value = tls_symbol_offsets
-            .get(sym.name.as_str())
-            .copied()
-            .unwrap_or(0)
+        if sym.section != NativeSymSection::Tls {
+            return Err(link_err(&format!(
+                "thread-block offset in debug info against non-TLS symbol `{}`",
+                sym.name,
+            )));
+        }
+        let value = (tls_bases[unit_idx] as u64)
+            .wrapping_add(sym.value)
             .wrapping_add(reloc.addend as u64);
         section_bytes[patch_off..end].copy_from_slice(&value.to_le_bytes());
         return Ok(());

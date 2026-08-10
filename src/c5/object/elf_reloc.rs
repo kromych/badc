@@ -1633,6 +1633,11 @@ pub(super) fn write_relocatable(
     // `.data` symbol table -- their value is a TLS-block offset, not a
     // `.data` offset, and merging them as `.data` symbols would collide).
     let mut defined_tls_globals: Vec<(&str, i64, u64)> = Vec::new();
+    // Internal-linkage `_Thread_local` objects. They resolve nothing
+    // across units, so they bind STB_LOCAL and stay out of the note
+    // channel, which is name-keyed; a symbol still has to name them or
+    // their storage carries no description. Same shape gcc emits.
+    let mut defined_tls_locals: Vec<(&str, i64, u64)> = Vec::new();
     {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
@@ -1648,10 +1653,13 @@ pub(super) fn write_relocatable(
                 Linkage::External => {
                     defined_data_globals.push((sym.link_name(), sym.val, size));
                 }
-                // An alias names another object's storage and a
-                // thread-local static's value is a TLS-block offset, which
-                // `DataPlan::map` would read as a `.data` offset.
-                Linkage::Internal if !sym.is_thread_local && !sym.is_alias => {
+                // A thread-local's value is a TLS-block offset, which
+                // `DataPlan::map` would read as a `.data` offset. An
+                // alias names another object's storage.
+                Linkage::Internal if sym.is_thread_local && !sym.is_alias => {
+                    defined_tls_locals.push((sym.link_name(), sym.val, size));
+                }
+                Linkage::Internal if !sym.is_alias => {
                     defined_data_locals.push((sym.link_name(), sym.val, size));
                 }
                 _ => {}
@@ -1669,6 +1677,9 @@ pub(super) fn write_relocatable(
             .chain(asm_defined_labels.iter().copied())
             .collect();
         defined_data_locals.retain(|(n, _, _)| seen.insert(n));
+        let mut seen_tls: alloc::collections::BTreeSet<&str> =
+            defined_tls_globals.iter().map(|(n, _, _)| *n).collect();
+        defined_tls_locals.retain(|(n, _, _)| seen_tls.insert(n));
     }
 
     // Unique cross-TU user-data names referenced by
@@ -1830,6 +1841,12 @@ pub(super) fn write_relocatable(
     let defined_tls_globals_start = all_names.len();
     if elf_tls_interop {
         for (name, _, _) in &defined_tls_globals {
+            all_names.push(*name);
+        }
+    }
+    let defined_tls_locals_start = all_names.len();
+    if elf_tls_interop {
+        for (name, _, _) in &defined_tls_locals {
             all_names.push(*name);
         }
     }
@@ -2042,6 +2059,37 @@ pub(super) fn write_relocatable(
             st_shndx: shndx,
             st_value: value,
             st_size: *size,
+        });
+    }
+    // `_Thread_local` objects: STT_TLS against `.tdata` / `.tbss` with a
+    // section-relative value, so a sibling unit's local-exec relocation
+    // and this unit's debug info resolve through the merged TLS block.
+    // The unit's block is `.tdata` bytes then `.tbss` zero fill; an
+    // offset past the initialized bytes is `.tbss`-relative.
+    let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
+    let tls_home = |off: i64| {
+        if off >= tls_init_len {
+            (SHIDX_TBSS, off - tls_init_len)
+        } else {
+            (SHIDX_TDATA, off)
+        }
+    };
+    let mut defined_tls_symidx: alloc::collections::BTreeMap<&str, u64> =
+        alloc::collections::BTreeMap::new();
+    for (i, (name, off, size)) in defined_tls_locals
+        .iter()
+        .enumerate()
+        .take_while(|_| elf_tls_interop)
+    {
+        let (shndx, value) = tls_home(*off);
+        defined_tls_symidx.insert(name, symbols.len() as u64);
+        symbols.push(Elf64Sym {
+            st_name: name_offs[defined_tls_locals_start + i],
+            st_info: pack_sym_info(STB_LOCAL, STT_TLS),
+            st_shndx: shndx,
+            st_value: value as u64,
+            st_size: *size,
+            ..Default::default()
         });
     }
     let first_global = symbols.len() as u32;
@@ -2287,24 +2335,14 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // Defined `_Thread_local` globals: STB_GLOBAL + STT_TLS against
-    // `.tdata` / `.tbss` with a section-relative value, so sibling
-    // units' local-exec relocations resolve through the merged TLS
-    // block. The unit's block is `.tdata` bytes then `.tbss` zero
-    // fill; an offset past the initialized bytes is `.tbss`-relative.
-    let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
-    let mut defined_tls_symidx: alloc::collections::BTreeMap<&str, u64> =
-        alloc::collections::BTreeMap::new();
+    // Defined `_Thread_local` globals: the local form's shape under
+    // STB_GLOBAL.
     for (i, (name, off, size)) in defined_tls_globals
         .iter()
         .enumerate()
         .take_while(|_| elf_tls_interop)
     {
-        let (shndx, value) = if *off >= tls_init_len {
-            (SHIDX_TBSS, off - tls_init_len)
-        } else {
-            (SHIDX_TDATA, *off)
-        };
+        let (shndx, value) = tls_home(*off);
         defined_tls_symidx.insert(name, symbols.len() as u64);
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_tls_globals_start + i],

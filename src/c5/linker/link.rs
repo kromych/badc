@@ -2545,25 +2545,26 @@ fn resolve_weak_undef_to_zero(
     }
 }
 
+/// A patch site derives from an object's `r_offset`, which is
+/// untrusted input, so every patcher checks its field is inside the
+/// stream before indexing rather than panicking on the slice bound.
+fn check_patch_bounds(text: &[u8], offset: usize, width: usize) -> Result<(), C5Error> {
+    if offset.checked_add(width).is_none_or(|end| end > text.len()) {
+        return Err(err(&format!(
+            "relocation patch offset 0x{offset:x} past end of text (len {})",
+            text.len(),
+        )));
+    }
+    Ok(())
+}
+
 fn apply_reloc(
     text: &mut [u8],
     patch_offset: usize,
     target: i64,
     site: &RelocSite<'_>,
 ) -> Result<(), C5Error> {
-    // `patch_offset` derives from the object's r_offset, which is
-    // untrusted input. Every patch below writes a 4-byte instruction
-    // word; validate the site is in bounds before indexing so a
-    // malformed object yields a diagnostic, not a slice-index panic.
-    if patch_offset
-        .checked_add(4)
-        .is_none_or(|end| end > text.len())
-    {
-        return Err(err(&format!(
-            "relocation patch offset 0x{patch_offset:x} past end of text (len {})",
-            text.len(),
-        )));
-    }
+    check_patch_bounds(text, patch_offset, 4)?;
     if site.machine == NativeMachine::Aarch64 && aarch64_pcrel_imm_field(site.rtype).is_some() {
         return patch_aarch64_pcrel(text, patch_offset, target, site);
     }
@@ -2595,6 +2596,7 @@ fn patch_aarch64_pcrel(
 ) -> Result<(), C5Error> {
     let (lsb, width, scale) = aarch64_pcrel_imm_field(site.rtype)
         .ok_or_else(|| err("patch_aarch64_pcrel: type carries no PC-relative immediate"))?;
+    check_patch_bounds(text, offset, 4)?;
     let disp = target - offset as i64;
     if disp.rem_euclid(scale as i64) != 0 {
         return Err(site.misaligned(disp, scale));
@@ -2621,6 +2623,7 @@ fn patch_x86_64_pc32(
     // `A` the addend, and `P` the patch site. `apply_reloc`
     // passes the sum `S + A` in `target`; the subtraction lives
     // here so the contract matches [`patch_aarch64_pcrel`]'s.
+    check_patch_bounds(text, offset, 4)?;
     let disp = target - offset as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&disp) {
         return Err(site.truncated(disp));

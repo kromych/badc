@@ -194,6 +194,8 @@ pub fn link_executable_with_runtime(
         objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
     }
 
+    append_on_demand_objects(&mut objs, target, reloc)?;
+
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
     let plt = match merged.machine {
         NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
@@ -211,6 +213,77 @@ pub fn link_executable_with_runtime(
         None,
     )
     .map_err(|e| format!("write image: {e}"))
+}
+
+/// Offer the compiler-runtime and C-library sources the way the CLI's
+/// link does: each joins only when it defines a symbol the object set
+/// still leaves undefined. Nothing is compiled when nothing is
+/// undefined, which is the usual case for a fixture.
+#[cfg(feature = "full")]
+fn append_on_demand_objects(
+    objs: &mut Vec<crate::NativeObject>,
+    target: crate::Target,
+    reloc: crate::NativeOptions,
+) -> Result<(), String> {
+    use crate::{
+        CompileOptions, NativeSymSection, embedded_compiler_rt, embedded_libc,
+        emit_native_with_options, parse_native_elf,
+    };
+    let unresolved = |objs: &[crate::NativeObject]| {
+        let mut defined = alloc::collections::BTreeSet::new();
+        let mut undefined = alloc::collections::BTreeSet::new();
+        for o in objs {
+            for s in &o.symbols {
+                if s.binding == 0 {
+                    continue;
+                }
+                if s.section == NativeSymSection::Undef {
+                    if s.binding == 1 && !defined.contains(&s.name) {
+                        undefined.insert(s.name.clone());
+                    }
+                } else {
+                    defined.insert(s.name.clone());
+                    undefined.remove(&s.name);
+                }
+            }
+        }
+        undefined
+    };
+    if unresolved(objs).is_empty() {
+        return Ok(());
+    }
+    let mut pool = Vec::new();
+    for (name, body) in embedded_compiler_rt().iter().chain(embedded_libc().iter()) {
+        let copts = CompileOptions::default().with_no_entry_point(true);
+        let p = Compiler::with_options(body.to_string(), target, copts)
+            .compile()
+            .map_err(|e| format!("compile {name}: {e}"))?;
+        let bytes =
+            emit_native_with_options(&p, target, reloc).map_err(|e| format!("emit {name}: {e}"))?;
+        pool.push(Some(
+            parse_native_elf(&bytes).map_err(|e| format!("parse {name}: {e}"))?,
+        ));
+    }
+    loop {
+        let undefined = unresolved(objs);
+        let mut progress = false;
+        for slot in pool.iter_mut() {
+            let wanted = slot.as_ref().is_some_and(|o| {
+                o.symbols.iter().any(|s| {
+                    s.binding == 1
+                        && !matches!(s.section, NativeSymSection::Undef | NativeSymSection::Abs)
+                        && undefined.contains(&s.name)
+                })
+            });
+            if wanted {
+                objs.push(slot.take().expect("a wanted slot is occupied"));
+                progress = true;
+            }
+        }
+        if !progress {
+            return Ok(());
+        }
+    }
 }
 
 /// Link one translation unit into a shared library, the way the CLI's

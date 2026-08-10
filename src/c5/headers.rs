@@ -353,6 +353,8 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("libgen.h", include_str!("../../libc/include/libgen.h")),
     ("util.h", include_str!("../../libc/include/util.h")),
     ("glob.h", include_str!("../../libc/include/glob.h")),
+    ("fnmatch.h", include_str!("../../libc/include/fnmatch.h")),
+    ("regex.h", include_str!("../../libc/include/regex.h")),
     ("pthread.h", include_str!("../../libc/include/pthread.h")),
     (
         "semaphore.h",

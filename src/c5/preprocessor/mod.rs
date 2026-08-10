@@ -56,7 +56,7 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 use hashbrown::HashMap;
 
-use super::codegen::Target;
+use super::codegen::{ElfClass, Target};
 use super::error::C5Error;
 
 /// One declared dylib plus the bindings that target it. Created
@@ -381,6 +381,81 @@ pub enum Subsystem {
     EfiRom,
 }
 
+/// Install every predefine whose spelling or value follows the data
+/// model, replacing whatever a previous call left; sole owner of these
+/// names, so re-selecting leaves nothing from the other model behind.
+///
+/// `Elf32` on an x86 target is `-m16` / `-m32`, which gcc preprocesses
+/// as i386: `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit pointer
+/// / `long` / `size_t`, no `__int128`. `-m16` is `-m32` code generation
+/// with a 16-bit default operand size and shares its predefines. An
+/// `Elf32` AArch64 object would be AArch32, which badc neither encodes
+/// nor describes; the driver refuses the flag there and the target's own
+/// model stands.
+fn install_data_model(macros: &mut HashMap<String, String>, target: Target, class: ElfClass) {
+    let ilp32 = class.is32() && target.is_x86_64();
+    // Both reserved spellings of each name, as gcc has them; the
+    // unreserved `i386` stays out, as bare `linux` / `unix` do.
+    const X86_64_NAMES: &[&str] = &["__x86_64__", "__x86_64", "__amd64__", "__amd64"];
+    const I386_NAMES: &[&str] = &["__i386__", "__i386"];
+    for name in X86_64_NAMES.iter().chain(I386_NAMES).chain(&[
+        "__LP64__",
+        "_LP64",
+        "__ILP32__",
+        "_ILP32",
+        "__SIZEOF_INT128__",
+    ]) {
+        macros.remove(*name);
+    }
+    if target.is_x86_64() {
+        for name in if ilp32 { I386_NAMES } else { X86_64_NAMES } {
+            macros.insert(name.to_string(), "1".to_string());
+        }
+    }
+    // 64-bit `long` and pointer, or 32-bit both. Windows is LLP64
+    // (32-bit `long`, 64-bit pointer), so it gets neither pair.
+    let model_macros: &[&str] = match (ilp32, target.is_windows()) {
+        (true, _) => &["__ILP32__", "_ILP32"],
+        (false, false) => &["__LP64__", "_LP64"],
+        (false, true) => &[],
+    };
+    for name in model_macros {
+        macros.insert(name.to_string(), "1".to_string());
+    }
+    // Underlying type of size_t / ptrdiff_t / intptr_t, so headers can
+    // `typedef __SIZE_TYPE__ size_t;` without knowing the data model.
+    let (size_ty, ptrdiff_ty) = match (ilp32, target.is_windows()) {
+        (true, _) => ("unsigned int", "int"),
+        (false, true) => ("unsigned long long", "long long"),
+        (false, false) => ("unsigned long", "long"),
+    };
+    macros.insert("__SIZE_TYPE__".to_string(), size_ty.to_string());
+    macros.insert("__PTRDIFF_TYPE__".to_string(), ptrdiff_ty.to_string());
+    macros.insert("__INTPTR_TYPE__".to_string(), ptrdiff_ty.to_string());
+    macros.insert("__UINTPTR_TYPE__".to_string(), size_ty.to_string());
+    let ptr_bytes = if ilp32 { "4" } else { "8" };
+    for name in [
+        "__SIZEOF_POINTER__",
+        "__SIZEOF_SIZE_T__",
+        "__SIZEOF_PTRDIFF_T__",
+    ] {
+        macros.insert(name.to_string(), ptr_bytes.to_string());
+    }
+    // `long` is 32-bit under ILP32 and under LLP64 Windows.
+    let long_bytes = if ilp32 || target.is_windows() {
+        "4"
+    } else {
+        "8"
+    };
+    macros.insert("__SIZEOF_LONG__".to_string(), long_bytes.to_string());
+    // Headers gate their 128-bit typedefs on this rather than probing
+    // for `__int128`. gcc leaves it undefined on i386, which has no
+    // such type.
+    if !ilp32 {
+        macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());
+    }
+}
+
 impl Preprocessor {
     /// Build a preprocessor with the standard predefines set.
     ///
@@ -540,10 +615,7 @@ impl Preprocessor {
                 // arch-dispatch code keys its aarch64 branch on it.
                 macros.insert("__AARCH64EL__".to_string(), "1".to_string());
             }
-            Target::LinuxX64 | Target::WindowsX64 => {
-                macros.insert("__x86_64__".to_string(), "1".to_string());
-                macros.insert("__amd64__".to_string(), "1".to_string());
-            }
+            Target::LinuxX64 | Target::WindowsX64 => {}
         }
         // GCC/Clang define `__CHAR_UNSIGNED__` exactly when plain
         // `char` is unsigned (C99 6.2.5p15 leaves it
@@ -552,53 +624,23 @@ impl Preprocessor {
         if !target.plain_char_signed() {
             macros.insert("__CHAR_UNSIGNED__".to_string(), "1".to_string());
         }
-        // LP64 data model: 64-bit `long` and 64-bit pointer. GCC and
-        // Clang predefine `__LP64__` and `_LP64` on every LP64 target,
-        // and code that selects a 64-bit-wide integer type branches on
-        // them. Windows is LLP64 (32-bit `long`), so it is excluded.
-        match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::LinuxX64 => {
-                macros.insert("__LP64__".to_string(), "1".to_string());
-                macros.insert("_LP64".to_string(), "1".to_string());
-            }
-            Target::WindowsX64 | Target::WindowsAarch64 => {}
-        }
-        // GCC/Clang predefine the underlying type of size_t / ptrdiff_t /
-        // intptr_t so headers can `typedef __SIZE_TYPE__ size_t;` without
-        // knowing the data model. Spelling follows LP64 vs LLP64.
-        let (size_ty, ptrdiff_ty) = match target {
-            Target::WindowsX64 | Target::WindowsAarch64 => ("unsigned long long", "long long"),
-            _ => ("unsigned long", "long"),
-        };
-        macros.insert("__SIZE_TYPE__".to_string(), size_ty.to_string());
-        macros.insert("__PTRDIFF_TYPE__".to_string(), ptrdiff_ty.to_string());
-        macros.insert("__INTPTR_TYPE__".to_string(), ptrdiff_ty.to_string());
-        macros.insert("__UINTPTR_TYPE__".to_string(), size_ty.to_string());
         // GCC/Clang predefine each type's byte size so portable code can
         // select widths without <limits.h> (e.g. a pointer's bit width is
-        // `__SIZEOF_POINTER__ * 8`). All badc targets are 64-bit, so the
-        // pointer / size_t / ptrdiff_t sizes are 8; `long` and `wchar_t`
-        // follow the data model (LLP64 Windows narrows both).
+        // `__SIZEOF_POINTER__ * 8`). These are the sizes no data model
+        // moves; the rest go in through `install_data_model`.
         // C99 5.2.4.2.1: CHAR_BIT is 8 on every supported target.
         macros.insert("__CHAR_BIT__".to_string(), "8".to_string());
         macros.insert("__SIZEOF_SHORT__".to_string(), "2".to_string());
         macros.insert("__SIZEOF_INT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_LONG_LONG__".to_string(), "8".to_string());
-        macros.insert("__SIZEOF_POINTER__".to_string(), "8".to_string());
-        macros.insert("__SIZEOF_SIZE_T__".to_string(), "8".to_string());
-        macros.insert("__SIZEOF_PTRDIFF_T__".to_string(), "8".to_string());
         macros.insert("__SIZEOF_FLOAT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_DOUBLE__".to_string(), "8".to_string());
-        // Headers gate their own 128-bit typedefs on this macro rather
-        // than probing for `__int128`; the type and its operators are
-        // supported on every target.
-        macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());
-        let (long_bytes, wchar_bytes) = match target {
-            Target::WindowsX64 | Target::WindowsAarch64 => ("4", "2"),
-            _ => ("8", "4"),
+        let wchar_bytes = match target {
+            Target::WindowsX64 | Target::WindowsAarch64 => "2",
+            _ => "4",
         };
-        macros.insert("__SIZEOF_LONG__".to_string(), long_bytes.to_string());
         macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar_bytes.to_string());
+        install_data_model(&mut macros, target, ElfClass::Elf64);
         match target {
             Target::MacOSAarch64 => {
                 macros.insert("__APPLE__".to_string(), "1".to_string());
@@ -682,6 +724,13 @@ impl Preprocessor {
         }
     }
 
+    /// Re-select the data-model predefines for an object of `class`.
+    /// The driver calls this for `-m16` / `-m32`, which gcc preprocesses
+    /// with the i386 set; see [`install_data_model`].
+    pub fn set_elf_class(&mut self, class: ElfClass) {
+        install_data_model(&mut self.macros, self.target, class);
+    }
+
     /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
     /// only on request because it implements most, but not all, of the
     /// GNU C surface (`<x86intrin.h>` and the x86 intrinsics are
@@ -752,9 +801,10 @@ impl Preprocessor {
                 .insert("__STRICT_ANSI__".to_string(), "1".to_string());
         }
         // `=@cc<cond>` inline-asm flag outputs (GCC 6). Implemented for
-        // x86_64 only, so the macro follows the target predefine rather
-        // than the dialect alone.
-        if self.macros.contains_key("__x86_64__") {
+        // x86 only, so the macro follows the target rather than the
+        // dialect alone. gcc defines it under `-m32` too, so the test is
+        // the target and not the `__x86_64__` predefine.
+        if self.target.is_x86_64() {
             self.macros
                 .insert("__GCC_ASM_FLAG_OUTPUTS__".to_string(), "1".to_string());
         }

@@ -382,7 +382,9 @@ pub struct CompileOptions {
     /// Mirror of [`crate::NativeOptions::elf_class`]. The assembler's
     /// starting code mode follows it, the way `as --32` starts in
     /// 32-bit mode and `as --64` in 64-bit; a `.code16` / `.code32` /
-    /// `.code64` directive overrides it from that point on.
+    /// `.code64` directive overrides it from that point on. The
+    /// preprocessor's data-model predefines follow it as well, as gcc's
+    /// do under `-m16` / `-m32`.
     pub elf_class: crate::c5::ElfClass,
 }
 
@@ -1954,6 +1956,9 @@ impl Compiler {
     /// drive `process()` afterward.
     fn configure_preprocessor(target: Target, opts: &CompileOptions) -> Preprocessor {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        // `-m16` / `-m32` reach the front end as an ELFCLASS32 object;
+        // gcc preprocesses those units with the i386 predefine set.
+        pp.set_elf_class(opts.elf_class);
         if opts.gnu {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }

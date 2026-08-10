@@ -304,6 +304,61 @@ fn lp64_predefined_for_lp64_targets_only() {
     }
 }
 
+/// `set_elf_class` re-selects the whole data-model group, so an ILP32
+/// unit carries no macro from the LP64 one and back again is exact.
+/// Values are gcc 16.1.1's for `-m32` / `-m64` on `linux-x64`.
+#[test]
+fn elf_class_selects_the_data_model_predefines() {
+    use crate::c5::ElfClass;
+    let probe = concat!(
+        "#ifdef __x86_64__\nx86_64\n#endif\n#ifdef __amd64__\namd64\n#endif\n",
+        "#ifdef __i386__\ni386\n#endif\n#ifdef __i386\ni386_bare\n#endif\n",
+        "#ifdef __LP64__\nlp64\n#endif\n#ifdef __ILP32__\nilp32\n#endif\n",
+        "#ifdef __SIZEOF_INT128__\nint128\n#endif\n",
+        "sizes __SIZEOF_POINTER__ __SIZEOF_LONG__ __SIZEOF_SIZE_T__ __SIZEOF_PTRDIFF_T__\n",
+        "types __SIZE_TYPE__ / __PTRDIFF_TYPE__\n",
+    );
+    let names64 = ["x86_64", "amd64", "lp64", "int128"];
+    let names32 = ["i386", "i386_bare", "ilp32"];
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    pp.set_elf_class(ElfClass::Elf32);
+    let out = pp.process(probe).expect("preprocessor failed");
+    for n in names32 {
+        assert!(out.contains(n), "ELFCLASS32 must define {n}: {out}");
+    }
+    for n in names64 {
+        assert!(!out.contains(n), "ELFCLASS32 must not define {n}: {out}");
+    }
+    assert!(out.contains("sizes 4 4 4 4"), "ILP32 widths: {out}");
+    assert!(
+        out.contains("types unsigned int / int"),
+        "ILP32 size_t / ptrdiff_t: {out}"
+    );
+    // Back to ELFCLASS64: no i386 macro survives the round trip.
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    pp.set_elf_class(ElfClass::Elf32);
+    pp.set_elf_class(ElfClass::Elf64);
+    let out = pp.process(probe).expect("preprocessor failed");
+    for n in names64 {
+        assert!(out.contains(n), "ELFCLASS64 must define {n}: {out}");
+    }
+    for n in names32 {
+        assert!(!out.contains(n), "ELFCLASS64 must not define {n}: {out}");
+    }
+    assert!(out.contains("sizes 8 8 8 8"), "LP64 widths: {out}");
+    assert!(
+        out.contains("types unsigned long / long"),
+        "LP64 size_t / ptrdiff_t: {out}"
+    );
+    // An ELFCLASS32 AArch64 object would be AArch32, which badc neither
+    // encodes nor describes; the target's own model stands.
+    let mut pp = Preprocessor::new(Target::LinuxAarch64.id_str(), Target::LinuxAarch64, "0.1.0");
+    pp.set_elf_class(ElfClass::Elf32);
+    let out = pp.process(probe).expect("preprocessor failed");
+    assert!(out.contains("lp64") && !out.contains("ilp32"), "{out}");
+    assert!(out.contains("sizes 8 8 8 8"), "{out}");
+}
+
 #[test]
 fn glibc_predefined_for_linux_targets_only() {
     let probe = "#ifdef __GLIBC__\nint have;\n#endif\n\

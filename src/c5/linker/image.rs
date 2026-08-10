@@ -35,8 +35,9 @@ use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{R_AARCH64_JUMP_SLOT, R_X86_64_JUMP_SLOT};
 
 use super::link::MergedNative;
-use super::object::{NativeMachine, NativeSymSection, reloc_desc};
+use super::object::{NativeMachine, NativeSymSection};
 use crate::c5::layout::round_up;
+use crate::c5::object::elf_reloc_types::AbsCheck;
 
 /// Page-align `n` up to the next multiple of [`PAGE_SIZE`].
 fn round_up_page(n: u64) -> u64 {
@@ -195,6 +196,7 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
         data_vaddr,
         &merged.pending_imports,
         merged.machine,
+        &merged.section_map,
     )?;
 
     // Apply absolute data-segment relocations. `int *gp =
@@ -703,6 +705,7 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
         data_vaddr,
         &merged.pending_imports,
         merged.machine,
+        &merged.section_map,
     )?;
 
     // Apply absolute data-segment relocations the same way as
@@ -876,13 +879,15 @@ fn patch_data_refs(
     data_vaddr: u64,
     pending: &[super::link::PendingImportReloc],
     machine: NativeMachine,
+    map: &super::link::SectionMap,
 ) -> Result<(), C5Error> {
     use crate::c5::object::elf_reloc_types::{
         R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21, R_X86_64_PC32, R_X86_64_PLT32,
-        aarch64_ldst_lo12_scale,
+        aarch64_ldst_lo12_scale, aarch64_pcrel_imm_field,
     };
 
     use super::link::PendingImportReloc;
+    use super::object::RelocOrigin;
 
     for r in pending {
         let r: &PendingImportReloc = r;
@@ -913,10 +918,22 @@ fn patch_data_refs(
         };
         let target_vaddr = target_base + r.addend;
         let site = r.text_offset as usize;
-        // `text_offset` derives from an untrusted object's r_offset; each
-        // arm writes a 4-byte instruction word, so validate the site is in
-        // bounds before indexing rather than panicking on the slice bound.
-        if site.checked_add(4).is_none_or(|end| end > text.len()) {
+        // The merge pass drops the referencing symbol once a reference
+        // is parked; it screens the type there, while the name is still
+        // in hand, so what reaches here is located by section.
+        let sym = r
+            .sym_name
+            .clone()
+            .unwrap_or_else(|| format!("<{:?} section reference>", r.target_section).into());
+        let (source, section, offset) =
+            map.locate_text(r.text_offset)
+                .unwrap_or(("", ".text", r.text_offset));
+        let rs = RelocOrigin::in_named_section(source, section).at(machine, r.rtype, &sym, offset);
+        // `text_offset` derives from an untrusted object's r_offset, so
+        // validate the field's byte range before indexing rather than
+        // panicking on the slice bound.
+        let width = abs_field(machine, r.rtype).map_or(4, |(w, _)| w as usize);
+        if site.checked_add(width).is_none_or(|end| end > text.len()) {
             return Err(err(&format!(
                 "data-ref reloc patch offset {site:#x} past end of text (len {})",
                 text.len(),
@@ -930,11 +947,7 @@ fn patch_data_refs(
         {
             let lo12 = (target_vaddr as u64) & 0xfff;
             if !lo12.is_multiple_of(scale.into()) {
-                return Err(link_err(&format!(
-                    "{} at text offset {site:#x}: target low-12 offset {lo12:#x} is not a \
-                     multiple of the {scale}-byte access size",
-                    reloc_desc(machine, r.rtype),
-                )));
+                return Err(rs.misaligned(lo12 as i64, scale));
             }
             let mut w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
             w &= !(0xfff << 10);
@@ -942,15 +955,36 @@ fn patch_data_refs(
             text[site..site + 4].copy_from_slice(&w.to_le_bytes());
             continue;
         }
+        // The branch and PC-relative-literal immediates: a distance in
+        // scaled units, checked against the field's signed range.
+        if machine == NativeMachine::Aarch64
+            && let Some((lsb, bits, scale)) = aarch64_pcrel_imm_field(r.rtype)
+        {
+            let disp = target_vaddr - site_vaddr as i64;
+            if disp.rem_euclid(scale as i64) != 0 {
+                return Err(rs.misaligned(disp, scale));
+            }
+            let units = disp / scale as i64;
+            if !(-(1i64 << (bits - 1))..(1i64 << (bits - 1))).contains(&units) {
+                return Err(rs.truncated(disp));
+            }
+            let mask = ((1u32 << bits) - 1) << lsb;
+            let mut w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
+            w = (w & !mask) | (((units as u32) << lsb) & mask);
+            text[site..site + 4].copy_from_slice(&w.to_le_bytes());
+            continue;
+        }
+        // The absolute forms: `S + A` as a runtime address, which this
+        // writer knows because the image is `ET_EXEC` at a fixed base.
+        if let Some((bytes, check)) = abs_field(machine, r.rtype) {
+            write_abs_field(&mut text[site..], target_vaddr, bytes, check)
+                .map_err(|_| rs.truncated(target_vaddr))?;
+            continue;
+        }
         match (machine, r.rtype) {
             (NativeMachine::X86_64, R_X86_64_PC32) | (NativeMachine::X86_64, R_X86_64_PLT32) => {
                 let disp = target_vaddr - site_vaddr as i64;
-                let disp32 = i32::try_from(disp).map_err(|_| {
-                    err(&format!(
-                        "data-ref reloc at text[{site:#x}]: PC32 displacement {disp:#x} out of \
-                         range"
-                    ))
-                })?;
+                let disp32 = i32::try_from(disp).map_err(|_| rs.truncated(disp))?;
                 text[site..site + 4].copy_from_slice(&disp32.to_le_bytes());
             }
             (NativeMachine::Aarch64, R_AARCH64_ADR_PREL_PG_HI21) => {
@@ -974,15 +1008,39 @@ fn patch_data_refs(
                 w |= lo12 << 10;
                 text[site..site + 4].copy_from_slice(&w.to_le_bytes());
             }
-            _ => {
-                return Err(link_err(&format!(
-                    "unsupported {} against a {:?}-section reference at text offset {site:#x}",
-                    reloc_desc(machine, r.rtype),
-                    r.target_section,
-                )));
-            }
+            _ => return Err(rs.unsupported()),
         }
     }
+    Ok(())
+}
+
+/// Byte width and overflow rule of the field an absolute relocation
+/// writes `S + A` into, for either machine.
+pub(crate) fn abs_field(machine: NativeMachine, rtype: u32) -> Option<(u32, AbsCheck)> {
+    use crate::c5::object::elf_reloc_types::{aarch64_abs_field, x86_64_abs_field};
+    match machine {
+        NativeMachine::X86_64 => x86_64_abs_field(rtype),
+        NativeMachine::Aarch64 => aarch64_abs_field(rtype),
+    }
+}
+
+/// Store `S + A` little-endian into a `width`-byte field, rejecting a
+/// value the field's overflow rule does not admit.
+pub(crate) fn write_abs_field(
+    dst: &mut [u8],
+    value: i64,
+    width: u32,
+    check: AbsCheck,
+) -> Result<(), ()> {
+    if !check.admits(value, width) {
+        return Err(());
+    }
+    let bytes = value.to_le_bytes();
+    let n = width as usize;
+    if n > bytes.len() || dst.len() < n {
+        return Err(());
+    }
+    dst[..n].copy_from_slice(&bytes[..n]);
     Ok(())
 }
 

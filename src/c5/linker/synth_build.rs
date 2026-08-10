@@ -900,12 +900,18 @@ fn unsupported_reloc(
     reloc: &super::link::PendingImportReloc,
     rtype: u32,
 ) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_link_err(&alloc::format!(
-        "unsupported {} against `{}` at text offset {:#x}",
-        super::object::reloc_desc(merged.machine, rtype),
-        super::link::import_name(merged, reloc.import_index),
-        reloc.text_offset,
-    )))
+    use super::object::RelocOrigin;
+    let name = reloc
+        .sym_name
+        .as_deref()
+        .unwrap_or_else(|| super::link::import_name(merged, reloc.import_index));
+    let (source, section, offset) = merged
+        .section_map
+        .locate_text(reloc.text_offset)
+        .unwrap_or(("", ".text", reloc.text_offset));
+    RelocOrigin::in_named_section(source, section)
+        .at(merged.machine, rtype, name, offset)
+        .unsupported()
 }
 
 fn project_x86_64_pending(

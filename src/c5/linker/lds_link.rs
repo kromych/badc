@@ -4120,27 +4120,27 @@ impl<'a> LdsLinker<'a> {
                 let insn = rd32(buf, site) & 0xff00_001f;
                 wr32(buf, site, insn | ((((v >> 2) as u32) & 0x7ffff) << 5));
             }
-            263..=269 => {
-                // R_AARCH64_MOVW_UABS_G0..G3 (with _NC variants):
-                // 16-bit chunks of the absolute value into movz/movk.
-                let (shift, check) = match r.rtype {
-                    263 => (0, true),
-                    264 => (0, false),
-                    265 => (16, true),
-                    266 => (16, false),
-                    267 => (32, true),
-                    268 => (32, false),
-                    _ => (48, false),
-                };
-                if check && (sa >> shift) > 0xffff && r.rtype != 269 {
+            _ if rt::aarch64_movw_field(r.rtype).is_some() => {
+                // R_AARCH64_MOVW_[SU]ABS_G*: one 16-bit group of the
+                // absolute value into a `movz` / `movk` immediate.
+                use crate::c5::codegen::aarch64::patch;
+                let (group, signed, check) =
+                    rt::aarch64_movw_field(r.rtype).expect("guarded by the arm");
+                let v = sa as i64;
+                if let Some(bits) = check
+                    && !patch::movw_fits(v, bits, signed)
+                {
                     errors.push(format!(
-                        "MOVW_UABS overflow against `{}' (0x{sa:x})",
+                        "{} overflow against `{}' (0x{sa:x})",
+                        rt::aarch64_reloc_desc(r.rtype),
                         name()
                     ));
                 }
-                let imm = ((sa >> shift) & 0xffff) as u32;
-                let insn = rd32(buf, site) & 0xffe0_001f;
-                wr32(buf, site, insn | (imm << 5));
+                wr32(
+                    buf,
+                    site,
+                    patch::movw_word(rd32(buf, site), group, signed, v),
+                );
             }
             rt::R_AARCH64_ADR_GOT_PAGE | rt::R_AARCH64_LD64_GOT_LO12_NC => {
                 let slot = self.got_slot_addr(oi, r);
@@ -6189,6 +6189,103 @@ SECTIONS {
         let e = link_with_script(&script, objs, &LdsOptions::default())
             .expect_err("undefined reference fails");
         assert!(format!("{e}").contains("missing"), "{e}");
+    }
+
+    /// One `.text` section holding `insns` followed by `tgt`, with a
+    /// `SABS_G2` / `UABS_G1_NC` / `UABS_G0_NC` relocation over each in turn.
+    fn movw_seq_object(insns: &[u32]) -> Vec<LdsObject> {
+        let mut body: Vec<u8> = insns.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let tgt_off = body.len() as u64;
+        body.extend_from_slice(&0xd503201fu32.to_le_bytes());
+        let mut o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &body)
+            .sym("tgt", STB_GLOBAL, STT_FUNC, 0, tgt_off, 4);
+        // Symtab: null(0), section(1), tgt(2).
+        for (i, _) in insns.iter().enumerate() {
+            let ty = match i {
+                0 => rt::R_AARCH64_MOVW_SABS_G2,
+                1 => rt::R_AARCH64_MOVW_UABS_G1_NC,
+                _ => rt::R_AARCH64_MOVW_UABS_G0_NC,
+            };
+            o = o.reloc(0, i as u64 * 4, 2, ty, 0);
+        }
+        alloc::vec![parse_lds_object("a.o", o.build(EM_AARCH64)).expect("a.o parses")]
+    }
+
+    fn movw_script(base: &str) -> crate::c5::linker::lds::LinkerScript {
+        parse_linker_script(&format!(
+            "SECTIONS {{ . = {base}; .text : {{ *(.text) }} }}"
+        ))
+        .expect("script parses")
+    }
+
+    /// The `tramp_alias` sequence linked through a script: each half takes
+    /// its own 16-bit group of the target's final address. Words checked
+    /// against `ld -T` over the same script and object.
+    #[test]
+    fn aarch64_movw_groups_resolve_like_gnu_ld() {
+        // Placeholders as GNU as leaves them: the group's shift, zero imm.
+        let insns = [0xd2c0_0005u32, 0xf2a0_0005, 0xf280_0005];
+        let res = link_with_script(
+            &movw_script("0x123456780000"),
+            movw_seq_object(&insns),
+            &LdsOptions {
+                emit: LdsEmit::Exec,
+                max_page_size: 0x1000,
+                ..Default::default()
+            },
+        )
+        .expect("link succeeds");
+        let syms = image_symbols(&res.image);
+        let tgt = find_sym(&syms, "tgt");
+        assert_eq!(tgt, 0x1234_5678_000c);
+        let off = section_file_off(&res.image, 0x1234_5678_0000);
+        let got: Vec<u32> = (0..3)
+            .map(|i| {
+                u32::from_le_bytes(
+                    res.image[off + i * 4..off + i * 4 + 4]
+                        .try_into()
+                        .expect("4-byte word"),
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            alloc::vec![
+                0xd2c2_4685, // movz x5, #0x1234, lsl #32
+                0xf2aa_cf05, // movk x5, #0x5678, lsl #16
+                0xf280_0185, // movk x5, #0xc
+            ]
+        );
+    }
+
+    /// A `_S` group is checked: a target past its signed range fails the
+    /// link, as it does under GNU ld, rather than writing a truncated
+    /// address. The `_NC` halves of the same sequence never complain.
+    #[test]
+    fn aarch64_movw_sabs_overflow_fails_the_link() {
+        let insns = [0xd2c0_0005u32, 0xf2a0_0005, 0xf280_0005];
+        let opts = LdsOptions {
+            emit: LdsEmit::Exec,
+            max_page_size: 0x1000,
+            ..Default::default()
+        };
+        // The last address the signed group admits is 2^48 - 1.
+        link_with_script(
+            &movw_script("0xfffffffffff0"),
+            movw_seq_object(&insns),
+            &opts,
+        )
+        .expect("a target below 2^48 links");
+        let e = link_with_script(
+            &movw_script("0x1000000000000"),
+            movw_seq_object(&insns),
+            &opts,
+        )
+        .expect_err("a target at 2^48 overflows the signed group");
+        let e = format!("{e}");
+        assert!(e.contains("R_AARCH64_MOVW_SABS_G2"), "{e}");
+        assert!(e.contains("overflow against `tgt'"), "{e}");
     }
 
     #[test]

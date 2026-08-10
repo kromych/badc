@@ -177,6 +177,50 @@ fn lo12_base_reg(word: u32) -> Reg {
     Reg(((word >> 5) & 0x1F) as u8)
 }
 
+/// Whether `value` fits a checked field of `bits` bits, signed or unsigned.
+pub(crate) fn movw_fits(value: i64, bits: u32, signed: bool) -> bool {
+    if signed {
+        let lim = 1i128 << (bits - 1);
+        (-lim..lim).contains(&(value as i128))
+    } else {
+        (0..1i128 << bits).contains(&(value as i128))
+    }
+}
+
+/// `movz` / `movk` word carrying group `group` of `value` in the 16-bit
+/// immediate at bits 20:5. A signed group holding a negative value takes the
+/// complement's group and turns `movz` into `movn` (opcode bit 30), which is
+/// what sets the groups the sequence does not write; `movk` has no `movn`
+/// form, so a signed group is only encodable on `movz`.
+pub(crate) fn movw_word(word: u32, group: u8, signed: bool, value: i64) -> u32 {
+    let negate = signed && value < 0;
+    let src = if negate { !value } else { value };
+    let imm = ((src as u64) >> (16 * group as u32)) & 0xffff;
+    let word = (word & !(0xffff << 5)) | ((imm as u32) << 5);
+    if negate { word & !(1 << 30) } else { word }
+}
+
+/// `movw_word` over a value that folded to a constant, under the range
+/// check the specifier names. GNU as rejects such a value where it does
+/// not fit rather than narrowing it, and names the sign in the message.
+pub(crate) fn movw_const_word(
+    word: u32,
+    group: u8,
+    signed: bool,
+    check: Option<u32>,
+    value: i64,
+) -> Result<u32, String> {
+    if let Some(bits) = check
+        && !movw_fits(value, bits, signed)
+    {
+        return Err(format!(
+            "{} value out of range",
+            if signed { "signed" } else { "unsigned" }
+        ));
+    }
+    Ok(movw_word(word, group, signed, value))
+}
+
 fn read_word(code: &[u8], at: usize) -> u32 {
     u32::from_le_bytes([code[at], code[at + 1], code[at + 2], code[at + 3]])
 }
@@ -474,6 +518,82 @@ mod tests {
             u32::from_le_bytes(code[0..4].try_into().unwrap()),
             enc_ldr_imm(Reg(7), Reg(3), 0x40)
         );
+    }
+
+    /// The `tramp_alias` sequence -- `movz :abs_g2_s:` then `movk`
+    /// `:abs_g1_nc:` / `:abs_g0_nc:` over `x5` -- as GNU ld resolves it.
+    /// Words taken from `ld --defsym` over each value; the negative ones
+    /// come out `movn` over the complement, which is what sets the groups
+    /// the sequence never writes.
+    #[test]
+    fn movw_sequence_matches_gnu_ld() {
+        // The placeholder words GNU as leaves: the group's shift, zero imm.
+        const G2S: u32 = 0xd2c0_0005;
+        const G1NC: u32 = 0xf2a0_0005;
+        const G0NC: u32 = 0xf280_0005;
+        for (v, want) in [
+            (0i64, [0xd2c0_0005u32, 0xf2a0_0005, 0xf280_0005]),
+            (0x1234, [0xd2c0_0005, 0xf2a0_0005, 0xf282_4685]),
+            (0xffff_ffff_ffff, [0xd2df_ffe5, 0xf2bf_ffe5, 0xf29f_ffe5]),
+            (-0x1, [0x92c0_0005, 0xf2bf_ffe5, 0xf29f_ffe5]),
+            (-0x1234, [0x92c0_0005, 0xf2bf_ffe5, 0xf29d_b985]),
+            (-0x1_0000_0000_0000, [0x92df_ffe5, 0xf2a0_0005, 0xf280_0005]),
+            (0x1234_5678_9abc, [0xd2c2_4685, 0xf2aa_cf05, 0xf293_5785]),
+            (-0x1234_5678_9abc, [0x92c2_4685, 0xf2b5_30e5, 0xf28c_a885]),
+        ] {
+            assert_eq!(movw_word(G2S, 2, true, v), want[0], "g2_s of {v:#x}");
+            assert_eq!(movw_word(G1NC, 1, false, v), want[1], "g1_nc of {v:#x}");
+            assert_eq!(movw_word(G0NC, 0, false, v), want[2], "g0_nc of {v:#x}");
+        }
+    }
+
+    /// Only a signed group converts `movz` to `movn`; a no-check unsigned
+    /// group truncates a negative value in place and keeps the opcode.
+    #[test]
+    fn movw_movn_conversion_is_signed_only() {
+        let movz = 0xd280_0005u32;
+        assert_eq!(movw_word(movz, 0, false, -1), 0xd29f_ffe5);
+        assert_eq!(movw_word(movz, 0, true, -1), 0x9280_0005);
+        // `movk` keeps its opcode whatever the value, having no `movn`.
+        let movk = 0xf280_0005u32;
+        assert_eq!(movw_word(movk, 0, false, -1), 0xf29f_ffe5);
+    }
+
+    /// The ranges GNU ld admits: the ABI checks group `n` over
+    /// `16 * (n + 1)` bits, and the signed forms over one bit more.
+    /// Boundaries confirmed against `ld --defsym` in both directions.
+    #[test]
+    fn movw_link_ranges_match_gnu_ld() {
+        // R_AARCH64_MOVW_SABS_G0: [-2^16, 2^16).
+        assert!(movw_fits(0xffff, 17, true));
+        assert!(!movw_fits(0x10000, 17, true));
+        assert!(movw_fits(-0x10000, 17, true));
+        assert!(!movw_fits(-0x10001, 17, true));
+        // R_AARCH64_MOVW_SABS_G2: [-2^48, 2^48).
+        assert!(movw_fits(0xffff_ffff_ffff, 49, true));
+        assert!(!movw_fits(0x1_0000_0000_0000, 49, true));
+        assert!(movw_fits(-0x1_0000_0000_0000, 49, true));
+        assert!(!movw_fits(-0x1_0000_0000_0001, 49, true));
+        // R_AARCH64_MOVW_UABS_G0: [0, 2^16). A negative value never fits.
+        assert!(movw_fits(0xffff, 16, false));
+        assert!(!movw_fits(0x10000, 16, false));
+        assert!(!movw_fits(-1, 16, false));
+        // The widest signed check must not overflow its own bound.
+        assert!(movw_fits(i64::MAX, 64, true));
+        assert!(movw_fits(i64::MIN, 64, true));
+    }
+
+    /// The narrower ranges GNU as admits when the expression folds at
+    /// assembly: group `n` over `16 * (n + 1)` bits for both signs, which
+    /// for a signed group is one bit tighter than the link's rule.
+    #[test]
+    fn movw_assembly_ranges_match_gnu_as() {
+        assert!(movw_fits(0x7fff, 16, true));
+        assert!(!movw_fits(0x8000, 16, true));
+        assert!(movw_fits(-0x8000, 16, true));
+        assert!(!movw_fits(-0x8001, 16, true));
+        assert!(movw_fits(0x7fff_ffff_ffff, 48, true));
+        assert!(!movw_fits(0x8000_0000_0000, 48, true));
     }
 
     /// A slot whose in-page offset does not divide by the access width

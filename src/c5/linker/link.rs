@@ -42,8 +42,8 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12,
     R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF64,
     R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
-    R_X86_64_TPOFF32, aarch64_ldst_lo12_scale, aarch64_pcrel_data_field, aarch64_pcrel_imm_field,
-    x86_64_abs_field, x86_64_pcrel_data_field,
+    R_X86_64_TPOFF32, aarch64_ldst_lo12_scale, aarch64_movw_field, aarch64_pcrel_data_field,
+    aarch64_pcrel_imm_field, x86_64_abs_field, x86_64_pcrel_data_field,
 };
 
 /// A relocation whose site reads a GOT slot: the value it wants is the
@@ -2697,6 +2697,9 @@ fn needs_image_base(machine: NativeMachine, rtype: u32) -> bool {
         NativeMachine::Aarch64 => {
             is_aarch64_text_pageref(machine, rtype)
                 || matches!(rtype, R_AARCH64_ABS64 | R_AARCH64_ABS32)
+                // A MOVW group immediate holds a 16-bit group of the
+                // target's runtime address.
+                || aarch64_movw_field(rtype).is_some()
         }
         NativeMachine::X86_64 => x86_64_abs_field(rtype).is_some(),
     }
@@ -2939,13 +2942,13 @@ mod tests {
             size: 0x40,
         }];
         let origin = RelocOrigin::in_input("vmlinux.o", &sections, SectionFamily::Text);
-        // R_AARCH64_MOVW_UABS_G0 has no patcher in the native path.
+        // R_AARCH64_MOVW_PREL_G0 has no patcher in the native path.
         let e = origin
-            .at(NativeMachine::Aarch64, 263, "primary_entry", 0x30)
+            .at(NativeMachine::Aarch64, 287, "primary_entry", 0x30)
             .unsupported();
         assert_eq!(
             alloc::format!("{e}"),
-            "error: vmlinux.o(.init.text+0x30): unsupported R_AARCH64_MOVW_UABS_G0 (263) \
+            "error: vmlinux.o(.init.text+0x30): unsupported R_AARCH64_MOVW_PREL_G0 (287) \
              against symbol `primary_entry`"
         );
     }

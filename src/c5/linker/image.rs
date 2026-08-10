@@ -883,7 +883,7 @@ fn patch_data_refs(
 ) -> Result<(), C5Error> {
     use crate::c5::object::elf_reloc_types::{
         R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21, R_X86_64_PC32, R_X86_64_PLT32,
-        aarch64_ldst_lo12_scale, aarch64_pcrel_imm_field,
+        aarch64_ldst_lo12_scale, aarch64_movw_field, aarch64_pcrel_imm_field,
     };
 
     use super::link::PendingImportReloc;
@@ -976,6 +976,21 @@ fn patch_data_refs(
             let mask = ((1u32 << bits) - 1) << lsb;
             let mut w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
             w = (w & !mask) | (((units as u32) << lsb) & mask);
+            text[site..site + 4].copy_from_slice(&w.to_le_bytes());
+            continue;
+        }
+        // A `movz` / `movk` group immediate: one 16-bit group of `S + A`.
+        if machine == NativeMachine::Aarch64
+            && let Some((group, signed, check)) = aarch64_movw_field(r.rtype)
+        {
+            use crate::c5::codegen::aarch64::patch;
+            if let Some(bits) = check
+                && !patch::movw_fits(target_vaddr, bits, signed)
+            {
+                return Err(fail(&|rs| rs.truncated(target_vaddr)));
+            }
+            let w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
+            let w = patch::movw_word(w, group, signed, target_vaddr);
             text[site..site + 4].copy_from_slice(&w.to_le_bytes());
             continue;
         }

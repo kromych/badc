@@ -124,10 +124,10 @@ pub(crate) enum AsmOpndA64 {
     /// this form). The emitter branches to the label's target block.
     GotoLabel(u8),
     /// A symbol expression operand (`sym`, `sym + 24`, `sym + (2f - 1f)`):
-    /// a branch / `adr` / `adrp` target, or with `lo12` the `:lo12:sym`
-    /// low-12 immediate of an `add`. Only file-scope section code encodes
-    /// these (to a relocation); the in-function emitters reject them.
-    Sym { expr: String, lo12: bool },
+    /// a branch / `adr` / `adrp` target, or the part of the value `spec`
+    /// names. Only file-scope section code encodes these (to a relocation);
+    /// the in-function emitters reject them.
+    Sym { expr: String, spec: SymSpec },
     /// `[base, :lo12:sym]`: a load/store whose scaled immediate is the low
     /// 12 bits of a symbol expression.
     MemSymLo12 { base: u8, expr: String },
@@ -135,6 +135,26 @@ pub(crate) enum AsmOpndA64 {
     /// load reads it PC-relatively. The expression text is resolved when the
     /// pool is assigned, before layout.
     LitPool(String),
+}
+
+/// Which part of a symbol expression's value an operand takes, from the
+/// relocation specifier GNU as writes before the expression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SymSpec {
+    /// No specifier: the address itself, for a branch / `adr` / `adrp`.
+    Addr,
+    /// `:lo12:` -- the low 12 bits, for an `add` or a load/store immediate.
+    Lo12,
+    /// `:abs_gN[_s|_nc]:` -- the `group`th 16-bit group of the value, for a
+    /// `movz` / `movk` immediate. `signed` marks the `_s` forms, whose
+    /// negative values encode as `movn`; `check` is the value width GNU as
+    /// admits when the expression folds, `None` for the `_nc` forms and
+    /// `:abs_g3:`.
+    MovwAbs {
+        group: u8,
+        signed: bool,
+        check: Option<u32>,
+    },
 }
 
 /// The base register of a memory operand.
@@ -997,12 +1017,26 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
         return Ok(AsmOpndA64::Imm(v));
     }
     // `:lo12:sym` (with GAS's optional `#`): a symbol's low 12 bits.
-    if let Some(spec) = tok.strip_prefix('#').unwrap_or(tok).strip_prefix(":lo12:")
+    let bare = tok.strip_prefix('#').unwrap_or(tok);
+    if let Some(spec) = bare.strip_prefix(":lo12:")
         && let Some(expr) = split_sym_addend(spec)
     {
         return Ok(AsmOpndA64::Sym {
             expr: String::from(expr),
-            lo12: true,
+            spec: SymSpec::Lo12,
+        });
+    }
+    // `:abs_gN[_s|_nc]:expr`: one 16-bit group of the value. The expression
+    // is kept whole -- it may be a parenthesized constant or reach a symbol
+    // -- and resolved where the section is laid out.
+    if let Some(rest) = bare.strip_prefix(":abs_g") {
+        let (group, expr) = rest
+            .split_once(':')
+            .ok_or_else(|| format!("inline asm: `:abs_g` specifier `{tok}` is unterminated"))?;
+        return Ok(AsmOpndA64::Sym {
+            expr: String::from(expr.trim()),
+            spec: parse_movw_group(group)
+                .ok_or_else(|| format!("inline asm: unknown relocation modifier `{tok}`"))?,
         });
     }
     // A symbol name with an optional constant addend (`sym + 24`): a
@@ -1014,10 +1048,34 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     {
         return Ok(AsmOpndA64::Sym {
             expr: String::from(expr),
-            lo12: false,
+            spec: SymSpec::Addr,
         });
     }
     Err(format!("inline asm: unsupported operand `{tok}`"))
+}
+
+/// The group part of an `:abs_gN[_s|_nc]:` specifier. GNU as defines the
+/// unsuffixed and `_nc` forms for groups 0..2, `_s` for groups 0..2, and
+/// `:abs_g3:` alone for the top group; every other spelling is an unknown
+/// modifier. The check width is the group's cumulative one, which for a
+/// signed group leaves its top bit to the sign.
+fn parse_movw_group(group: &str) -> Option<SymSpec> {
+    let (digits, signed, checked) = match group.strip_suffix("_s") {
+        Some(d) => (d, true, true),
+        None => match group.strip_suffix("_nc") {
+            Some(d) => (d, false, false),
+            None => (group, false, true),
+        },
+    };
+    let group: u8 = digits.parse().ok().filter(|g| *g <= 3)?;
+    if group == 3 && (signed || !checked) {
+        return None;
+    }
+    Some(SymSpec::MovwAbs {
+        group,
+        signed,
+        check: (checked && group < 3).then(|| 16 * (group as u32 + 1)),
+    })
 }
 
 /// Drop parentheses enclosing a whole expression: `:lo12:(sym + 8)` and
@@ -1413,42 +1471,6 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     bytes: Vec::new(),
                     label_def: None,
                     sym_target: Some(String::from(rest)),
-                });
-                continue;
-            }
-        }
-        // `movz` / `movk` with an `:abs_gN[_s|_nc]:` specifier on a constant
-        // expression: GNU as resolves the 16-bit group of the value and the
-        // matching shift at assembly. Only the constant form is supported;
-        // a symbolic value would need a MOVW relocation.
-        if matches!(mnem, "movz" | "movk") && rest.contains(":abs_g") {
-            let toks = split_operands(rest);
-            if toks.len() == 2
-                && let Some(spec) = toks[1].strip_prefix(":abs_g")
-                && let Some((group, expr)) = spec.split_once(':')
-            {
-                let g = group.trim_end_matches("_nc").trim_end_matches("_s");
-                let shift: u32 = g
-                    .parse::<u32>()
-                    .ok()
-                    .filter(|g| *g <= 3)
-                    .map(|g| g * 16)
-                    .ok_or_else(|| format!("inline asm: bad `:abs_g` group `{}`", toks[1]))?;
-                let v =
-                    emit_common::eval_const_expr_ops(expr.trim(), &|_| None).ok_or_else(|| {
-                        format!("inline asm: `:abs_g` value `{expr}` is not a constant")
-                    })?;
-                let field = ((v as u64) >> shift) & 0xffff;
-                insns.push(AsmInsnA64 {
-                    mnemonic: String::from(mnem),
-                    operands: alloc::vec![
-                        parse_operand(toks[0])?,
-                        AsmOpndA64::Imm(field as i64),
-                        AsmOpndA64::Lsl(shift),
-                    ],
-                    bytes: Vec::new(),
-                    label_def: None,
-                    sym_target: None,
                 });
                 continue;
             }

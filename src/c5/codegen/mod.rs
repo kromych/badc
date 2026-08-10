@@ -88,6 +88,43 @@ pub enum Target {
     WindowsAarch64,
 }
 
+/// Object / image container format. A toolchain uses one throughout --
+/// relocatable objects, shared libraries and the final image share the
+/// container -- so one value answers both what `-l` searches for and
+/// what an input is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryFormat {
+    Elf,
+    MachO,
+    Pe,
+}
+
+impl BinaryFormat {
+    /// Name as the format's own specification spells it.
+    pub fn name(self) -> &'static str {
+        match self {
+            BinaryFormat::Elf => "ELF",
+            BinaryFormat::MachO => "Mach-O",
+            BinaryFormat::Pe => "PE/COFF",
+        }
+    }
+
+    /// Filename extension for a shared library in this format.
+    pub fn shared_lib_ext(self) -> &'static str {
+        match self {
+            BinaryFormat::Elf => "so",
+            BinaryFormat::MachO => "dylib",
+            BinaryFormat::Pe => "dll",
+        }
+    }
+
+    /// Whether a shared library's version precedes the extension
+    /// (`libfoo.3.dylib`) rather than following it (`libfoo.so.3`).
+    pub fn version_before_ext(self) -> bool {
+        !matches!(self, BinaryFormat::Elf)
+    }
+}
+
 impl Target {
     /// Canonical short name for this target. Round-trips through
     /// [`Target::parse`]; used as the value of the preprocessor's
@@ -135,6 +172,17 @@ impl Target {
     /// both.
     pub fn align_anon_bitfield(self) -> bool {
         self.is_aarch64()
+    }
+
+    /// Container format the target's toolchain uses for objects,
+    /// shared libraries and images. Drives the `-l` search spellings
+    /// and the format reported when an input object does not match.
+    pub fn binary_format(self) -> BinaryFormat {
+        match self {
+            Target::MacOSAarch64 => BinaryFormat::MachO,
+            Target::LinuxAarch64 | Target::LinuxX64 => BinaryFormat::Elf,
+            Target::WindowsX64 | Target::WindowsAarch64 => BinaryFormat::Pe,
+        }
     }
 
     /// Whether plain `char` is signed. C99 6.2.5p15 leaves the

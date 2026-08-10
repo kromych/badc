@@ -26,6 +26,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use crate::c5::codegen::BinaryFormat;
 use crate::c5::error::C5Error;
 
 /// One concatenated file-backed stream: its bytes, the alignment the
@@ -794,6 +795,34 @@ pub struct NativeObject {
 /// the header matches the ET_REL shape the writer produces.
 pub fn is_elf_object(bytes: &[u8]) -> bool {
     bytes.len() >= 4 && &bytes[0..4] == b"\x7fELF"
+}
+
+/// Container format of a blob, by leading magic; `None` when nothing
+/// matches. Reports what an input is when the linker cannot read it.
+/// Mach-O has 32- and 64-bit magics in both byte orders plus the
+/// fat/universal header; a PE/COFF object carries only the COFF
+/// `Machine` word, an image the `MZ` stub.
+pub fn detect_binary_format(bytes: &[u8]) -> Option<BinaryFormat> {
+    if bytes.len() < 4 {
+        return None;
+    }
+    if &bytes[0..4] == b"\x7fELF" {
+        return Some(BinaryFormat::Elf);
+    }
+    let magic = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    match magic {
+        0xFEED_FACE | 0xFEED_FACF | 0xCEFA_EDFE | 0xCFFA_EDFE | 0xCAFE_BABE | 0xBEBA_FECA => {
+            return Some(BinaryFormat::MachO);
+        }
+        _ => {}
+    }
+    if &bytes[0..2] == b"MZ" {
+        return Some(BinaryFormat::Pe);
+    }
+    match u16::from_le_bytes([bytes[0], bytes[1]]) {
+        0x8664 | 0xAA64 | 0x014C => Some(BinaryFormat::Pe),
+        _ => None,
+    }
 }
 
 /// Parse a native ELF64 ET_REL object. Returns

@@ -116,10 +116,10 @@ pub mod c5;
 
 #[allow(unused_imports)]
 pub use c5::{
-    C5Error, CodeModel, CompileOptions, Compiler, ElfClass, Hardening, Host, IncludeOrigin,
-    IncludeRecord, IncludeStatus, IndirectBranch, NativeOptions, OutputKind, Overwrite,
-    PredefinedKind, PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm, dep_escape,
-    dep_prerequisites, dep_render, embedded_headers, jit_run, jit_run_with_options,
+    BinaryFormat, C5Error, CodeModel, CompileOptions, Compiler, ElfClass, Hardening, Host,
+    IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch, NativeOptions, OutputKind,
+    Overwrite, PredefinedKind, PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm,
+    dep_escape, dep_prerequisites, dep_render, embedded_headers, jit_run, jit_run_with_options,
     predefined_symbols,
 };
 #[cfg(feature = "native-emit")]
@@ -139,9 +139,9 @@ pub use c5::{
     ArchiveInclusion, LdsEmit, LdsObject, LdsOptions, LdsResult, LinkerScript, MergedNative,
     MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
     OrphanHandling, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
-    SharedLibrary, emit_aarch64_plt, emit_x86_64_plt, is_elf_object, is_ld_invocation,
-    link_native_objects, link_native_objects_with_options, link_native_objects_with_shared_libs,
-    link_with_script, parse_lds_object, parse_linker_script, parse_native_elf,
-    parse_shared_library, read_archive_at, render_link_map, run_ld, write_executable_elf64,
-    write_native_image_from_merged, write_native_image_from_merged_ex,
+    SharedLibrary, detect_binary_format, emit_aarch64_plt, emit_x86_64_plt, is_elf_object,
+    is_ld_invocation, link_native_objects, link_native_objects_with_options,
+    link_native_objects_with_shared_libs, link_with_script, parse_lds_object, parse_linker_script,
+    parse_native_elf, parse_shared_library, read_archive_at, render_link_map, run_ld,
+    write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
 };

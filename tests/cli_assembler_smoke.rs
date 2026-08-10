@@ -752,6 +752,25 @@ fn m32_predefines_the_ilp32_data_model() {
     }
 }
 
+/// Which headers a unit opens depends on the predefine set, so the
+/// preprocess-only modes take the code model too, as gcc does. Refusing
+/// them would leave `-MM` describing a unit nobody builds.
+#[test]
+fn the_dependency_scan_follows_the_code_model() {
+    let d = dir("m32-deps");
+    write(&d, "i386.h", "");
+    write(&d, "x64.h", "");
+    write(
+        &d,
+        "dep.S",
+        "#ifdef __i386__\n#include \"i386.h\"\n#else\n#include \"x64.h\"\n#endif\n\t.text\n",
+    );
+    for (flag, want) in [("-m32", "i386.h"), ("-m64", "x64.h")] {
+        let out = run_ok(&d, &["-MM", "-I", ".", "--target=linux-x64", flag, "dep.S"]);
+        assert_eq!(out, format!("dep.o: dep.S {want}\n"), "{flag}");
+    }
+}
+
 /// `arch/x86/kernel/verify_cpu.S` guards its CPUID-presence probe with
 /// `#ifndef __x86_64__`, and the realmode units that include it are
 /// built `-m16`. Preprocessing that unit with `__x86_64__` defined drops

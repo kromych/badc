@@ -394,8 +394,8 @@ pub enum Subsystem {
 /// model stands.
 fn install_data_model(macros: &mut HashMap<String, String>, target: Target, class: ElfClass) {
     let ilp32 = class.is32() && target.is_x86_64();
-    // Both reserved spellings of each name, as gcc has them; the
-    // unreserved `i386` stays out, as bare `linux` / `unix` do.
+    // Both reserved spellings, as gcc has them; the unreserved `i386`
+    // stays out, as bare `linux` / `unix` do.
     const X86_64_NAMES: &[&str] = &["__x86_64__", "__x86_64", "__amd64__", "__amd64"];
     const I386_NAMES: &[&str] = &["__i386__", "__i386"];
     for name in X86_64_NAMES.iter().chain(I386_NAMES).chain(&[
@@ -412,8 +412,7 @@ fn install_data_model(macros: &mut HashMap<String, String>, target: Target, clas
             macros.insert(name.to_string(), "1".to_string());
         }
     }
-    // 64-bit `long` and pointer, or 32-bit both. Windows is LLP64
-    // (32-bit `long`, 64-bit pointer), so it gets neither pair.
+    // Windows is LLP64 -- 32-bit `long`, 64-bit pointer -- so neither.
     let model_macros: &[&str] = match (ilp32, target.is_windows()) {
         (true, _) => &["__ILP32__", "_ILP32"],
         (false, false) => &["__LP64__", "_LP64"],
@@ -422,8 +421,7 @@ fn install_data_model(macros: &mut HashMap<String, String>, target: Target, clas
     for name in model_macros {
         macros.insert(name.to_string(), "1".to_string());
     }
-    // Underlying type of size_t / ptrdiff_t / intptr_t, so headers can
-    // `typedef __SIZE_TYPE__ size_t;` without knowing the data model.
+    // Lets a header write `typedef __SIZE_TYPE__ size_t;` blind.
     let (size_ty, ptrdiff_ty) = match (ilp32, target.is_windows()) {
         (true, _) => ("unsigned int", "int"),
         (false, true) => ("unsigned long long", "long long"),
@@ -441,16 +439,13 @@ fn install_data_model(macros: &mut HashMap<String, String>, target: Target, clas
     ] {
         macros.insert(name.to_string(), ptr_bytes.to_string());
     }
-    // `long` is 32-bit under ILP32 and under LLP64 Windows.
     let long_bytes = if ilp32 || target.is_windows() {
         "4"
     } else {
         "8"
     };
     macros.insert("__SIZEOF_LONG__".to_string(), long_bytes.to_string());
-    // Headers gate their 128-bit typedefs on this rather than probing
-    // for `__int128`. gcc leaves it undefined on i386, which has no
-    // such type.
+    // gcc leaves this undefined on i386, which has no `__int128`.
     if !ilp32 {
         macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());
     }

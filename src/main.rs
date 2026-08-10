@@ -1714,9 +1714,10 @@ fn run() {
     // badc generates no i386 machine code, so `-m16` / `-m32` reach
     // only the assembler, whose encoder already follows `.code16` /
     // `.code32`. A C source under either is refused by name rather
-    // than compiled as x86-64 into an EM_386 container. `-E` is exempt
-    // from both restrictions: it emits no code, and the i386 predefine
-    // set the flag selects is exactly what it is asked to show.
+    // than compiled as x86-64 into an EM_386 container. The
+    // preprocess-only modes are exempt from both restrictions, as they
+    // are in gcc: they emit no code, and their output is a function of
+    // the predefine set the flag selects.
     if let Some(flag) = &code_model_flag {
         // The flags name an x86 code model. gcc's AArch64 driver has no
         // `-m32`, and badc has no AArch32 encoder or predefine set.
@@ -1727,7 +1728,9 @@ fn run() {
             ));
             std::process::exit(1);
         }
-        if mode != Mode::DumpPp {
+        let preprocess_only =
+            mode == Mode::DumpPp || dep_kind == Some(DepKind::Only) && !compile_only;
+        if !preprocess_only {
             if let Some(src) = sources.iter().find(|s| !SourceKind::of(s).is_asm()) {
                 eprint_diagnostic(format!(
                     "badc: error: `{flag}` applies to assembly units only; `{src}` is a C source \
@@ -1837,7 +1840,8 @@ fn run() {
                 .with_own_header_roots(own_header_roots.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(src.clone())
-                .with_track_includes(true);
+                .with_track_includes(true)
+                .with_elf_class(object_elf_class);
             let compiler = badc::Compiler::with_options(contents, target, copts);
             let mut log = TuLog::default();
             if show_includes {

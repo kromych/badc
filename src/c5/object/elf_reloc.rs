@@ -4434,6 +4434,41 @@ mod tests {
         assert!(!secs.contains_key(".rela.debug_line"));
     }
 
+    /// The driver's `-m16 -g -c <unit>.s` end to end: assemble a real
+    /// unit and write it as an i386 object. The `.code16` boot and
+    /// real-mode units the kernel builds this way reach the writer with
+    /// debug info attached.
+    #[test]
+    fn elf32_assembled_unit_with_debug_info_writes() {
+        use crate::c5::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+        let program = Compiler::assemble(
+            "\t.code16\n\t.text\n\t.globl memcpy\nmemcpy:\n\tpushw %si\n\tretl\n",
+            Target::LinuxX64,
+            CompileOptions {
+                no_entry_point: true,
+                ..Default::default()
+            },
+        )
+        .expect("assemble");
+        let bytes = crate::c5::emit_native_with_options(
+            &program,
+            Target::LinuxX64,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                elf_class: ElfClass::Elf32,
+                debug_info: true,
+                ..Default::default()
+            },
+        )
+        .expect("emit");
+        assert_eq!(bytes[4], ElfClass::Elf32.ei_class());
+        assert_eq!(u16::from_le_bytes([bytes[18], bytes[19]]), EM_386);
+        let secs = elf32_sections(&bytes);
+        assert_eq!(bytes[secs[".debug_info"].0 + 10], 4, "CU address_size");
+        assert!(secs.contains_key(".rel.debug_info"));
+        assert!(secs.contains_key(".rel.debug_line"));
+    }
+
     /// `(offset, size)` of each named section of an ELFCLASS32 object.
     fn elf32_sections(
         bytes: &[u8],

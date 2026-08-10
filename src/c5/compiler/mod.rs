@@ -119,6 +119,13 @@ pub struct StructDef {
     /// post-body `packed` re-lay replays them from here to reproduce
     /// the placement the natural pass computed.
     pub anon_bitfields: Vec<AnonBitfield>,
+    /// Members promoted from an anonymous struct/union, in declaration
+    /// order. `fields` cannot express the boundary between this
+    /// aggregate's members and a member's own members, which the
+    /// post-body `packed` re-lay needs: packing removes the padding
+    /// between an aggregate's members, not the padding inside a
+    /// member's type.
+    pub anon_members: Vec<AnonMember>,
     /// `true` for `union` definitions. The only effect on layout
     /// is that every field sits at offset 0 and the aggregate
     /// size is `max(field size)` instead of the sum. Member
@@ -162,6 +169,19 @@ pub struct AnonBitfield {
     pub before: u32,
     pub width: u32,
     pub unit: u8,
+}
+
+/// One member promoted from an anonymous struct/union (C11 6.7.2.1p13).
+/// `first` is its first entry in `StructDef::fields` and `count` how many
+/// it contributed -- 0 when the anonymous aggregate has no named member
+/// of its own -- with `offset` the member's byte offset in the enclosing
+/// aggregate and `size` its type's size.
+#[derive(Debug, Clone, Copy)]
+pub struct AnonMember {
+    pub first: u32,
+    pub count: u32,
+    pub offset: usize,
+    pub size: usize,
 }
 
 #[derive(Debug, Clone)]

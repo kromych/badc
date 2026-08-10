@@ -88,6 +88,100 @@ pub(crate) fn aarch64_ldst_lo12_scale(rtype: u32) -> Option<u32> {
     }
 }
 
+/// Contiguous signed PC-relative immediate an aarch64 instruction
+/// carries, as `(lowest bit, width, scale)`. The relocation writes
+/// `(S + A - P) / scale` into bits `[lsb + width - 1 : lsb]` and
+/// rejects a value the field cannot hold; the ABI gives every form
+/// below a class-2 (checked) overflow rule.
+pub(crate) fn aarch64_pcrel_imm_field(rtype: u32) -> Option<(u32, u32, u32)> {
+    match rtype {
+        R_AARCH64_TSTBR14 => Some((5, 14, 4)),
+        R_AARCH64_CONDBR19 | R_AARCH64_LD_PREL_LO19 => Some((5, 19, 4)),
+        R_AARCH64_JUMP26 | R_AARCH64_CALL26 => Some((0, 26, 4)),
+        _ => None,
+    }
+}
+
+/// Overflow rule an absolute relocation's field is checked under.
+/// A value the rule rejects is a link error in the GNU linkers and in
+/// badc: a narrowed address is a miscompile, not a warning.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum AbsCheck {
+    /// The field is as wide as an address; nothing to check.
+    None,
+    /// `S + A` must zero-extend back from the field.
+    Unsigned,
+    /// `S + A` must sign-extend back from the field.
+    Signed,
+    /// `S + A` must be representable in the field read either way,
+    /// i.e. `-2^(n-1) <= X < 2^n`.
+    SignedOrUnsigned,
+}
+
+impl AbsCheck {
+    /// Whether a `width`-byte field may hold `value` under this rule.
+    pub(crate) fn admits(self, value: i64, width: u32) -> bool {
+        if width >= 8 {
+            return true;
+        }
+        let bits = width * 8;
+        let signed_lo = -(1i64 << (bits - 1));
+        let unsigned_hi = 1i64 << bits;
+        match self {
+            AbsCheck::None => true,
+            AbsCheck::Unsigned => (0..unsigned_hi).contains(&value),
+            AbsCheck::Signed => (signed_lo..(1i64 << (bits - 1))).contains(&value),
+            AbsCheck::SignedOrUnsigned => (signed_lo..unsigned_hi).contains(&value),
+        }
+    }
+}
+
+/// Byte width and overflow rule of the plain data field a
+/// PC-relative relocation writes `S + A - P` into -- the `.long x - .`
+/// / `.quad x - .` forms, as opposed to an instruction immediate.
+/// AAELF64 checks `PREL32` the way it checks `ABS32`.
+pub(crate) fn aarch64_pcrel_data_field(rtype: u32) -> Option<(u32, AbsCheck)> {
+    match rtype {
+        R_AARCH64_PREL64 => Some((8, AbsCheck::None)),
+        R_AARCH64_PREL32 => Some((4, AbsCheck::SignedOrUnsigned)),
+        _ => None,
+    }
+}
+
+/// x86_64 counterpart of [`aarch64_pcrel_data_field`]. `R_X86_64_PC32`
+/// is an instruction displacement rather than a data word, so it keeps
+/// its own patcher.
+pub(crate) fn x86_64_pcrel_data_field(rtype: u32) -> Option<(u32, AbsCheck)> {
+    match rtype {
+        R_X86_64_PC64 => Some((8, AbsCheck::None)),
+        _ => None,
+    }
+}
+
+/// Byte width and overflow rule of the field an absolute x86_64
+/// relocation writes `S + A` into. `None` for every other type.
+/// SysV AMD64 psABI table 4.10: `R_X86_64_32` zero-extends,
+/// `R_X86_64_32S` sign-extends.
+pub(crate) fn x86_64_abs_field(rtype: u32) -> Option<(u32, AbsCheck)> {
+    match rtype {
+        R_X86_64_64 => Some((8, AbsCheck::None)),
+        R_X86_64_32 => Some((4, AbsCheck::Unsigned)),
+        R_X86_64_32S => Some((4, AbsCheck::Signed)),
+        _ => None,
+    }
+}
+
+/// aarch64 counterpart of [`x86_64_abs_field`]. AAELF64 gives
+/// `R_AARCH64_ABS32` the check `-2^31 <= X < 2^32`; GNU ld applies the
+/// narrower unsigned rule, so badc accepts a superset of what ld does.
+pub(crate) fn aarch64_abs_field(rtype: u32) -> Option<(u32, AbsCheck)> {
+    match rtype {
+        R_AARCH64_ABS64 => Some((8, AbsCheck::None)),
+        R_AARCH64_ABS32 => Some((4, AbsCheck::SignedOrUnsigned)),
+        _ => None,
+    }
+}
+
 /// `R_X86_64_<NAME> (<n>)` for an ABI-assigned type, `relocation
 /// type <n>` otherwise. Diagnostics name a relocation the way
 /// `readelf -r` prints it.
@@ -406,6 +500,43 @@ mod tests {
         a(R_AARCH64_RELATIVE, "R_AARCH64_RELATIVE");
     }
 
+    /// Type numbers observed in objects GNU as 2.46.1 produced, read
+    /// out of `r_info`'s low half by `readelf -rW`. The two checks
+    /// above compare badc's constants against badc's own table and
+    /// badc's own `<elf.h>`, so a value transcribed from the wrong ABI
+    /// row passes both; this one is anchored outside the tree.
+    #[test]
+    fn abi_numbering_matches_binutils_output() {
+        let observed: &[(u32, &str)] = &[
+            (0x02, "R_X86_64_PC32"),
+            (0x04, "R_X86_64_PLT32"),
+            (0x0a, "R_X86_64_32"),
+            (0x0b, "R_X86_64_32S"),
+            (0x101, "R_AARCH64_ABS64"),
+            (0x102, "R_AARCH64_ABS32"),
+            (0x111, "R_AARCH64_LD_PREL_LO19"),
+            (0x113, "R_AARCH64_ADR_PREL_PG_HI21"),
+            (0x115, "R_AARCH64_ADD_ABS_LO12_NC"),
+            (0x117, "R_AARCH64_TSTBR14"),
+            (0x118, "R_AARCH64_CONDBR19"),
+            (0x11b, "R_AARCH64_CALL26"),
+            (0x11e, "R_AARCH64_LDST64_ABS_LO12_NC"),
+            (0x12b, "R_AARCH64_LDST128_ABS_LO12_NC"),
+        ];
+        for &(value, name) in observed {
+            let names = if name.starts_with("R_X86_64_") {
+                X86_64_RELOC_NAMES
+            } else {
+                AARCH64_RELOC_NAMES
+            };
+            assert_eq!(
+                desc(names, value),
+                format!("{name} ({value})"),
+                "{name} must be {value}"
+            );
+        }
+    }
+
     /// The ABI assigns one name per number; a duplicate would mean a
     /// transcription slip that hides one of the two entries.
     #[test]
@@ -462,6 +593,63 @@ mod tests {
             checked >= 100,
             "expected the header to publish the relocation tables, matched {checked}"
         );
+    }
+
+    /// Accept / reject decisions measured from GNU ld 2.46.1 for the
+    /// same `S + A`: `R_X86_64_32S` takes a sign-extending value and
+    /// rejects `0x8000_0000`; `R_X86_64_32` takes `0x8000_0000` and
+    /// rejects a sign-extending one. `R_AARCH64_ABS32` follows AAELF64
+    /// (`-2^31 <= X < 2^32`), which admits both; ld applies the
+    /// narrower unsigned rule, so badc accepts a superset there.
+    #[test]
+    fn absolute_field_checks_match_the_abi() {
+        let kernel_va = 0xffff_ffff_8100_0000u64 as i64; // -0x7f000000
+        let (w, c) = x86_64_abs_field(R_X86_64_32S).expect("32S is an absolute form");
+        assert_eq!((w, c), (4, AbsCheck::Signed));
+        assert!(c.admits(kernel_va, w));
+        assert!(c.admits(0x7fff_ffff, w));
+        assert!(!c.admits(0x8000_0000, w));
+        assert!(!c.admits(0x1_0000_0000, w));
+        let (w, c) = x86_64_abs_field(R_X86_64_32).expect("32 is an absolute form");
+        assert_eq!((w, c), (4, AbsCheck::Unsigned));
+        assert!(c.admits(0x8000_0000, w));
+        assert!(c.admits(0xffff_ffff, w));
+        assert!(!c.admits(kernel_va, w));
+        assert!(!c.admits(0x1_0000_0000, w));
+        let (w, c) = x86_64_abs_field(R_X86_64_64).expect("64 is an absolute form");
+        assert_eq!((w, c), (8, AbsCheck::None));
+        assert!(c.admits(kernel_va, w));
+        let (w, c) = aarch64_abs_field(R_AARCH64_ABS32).expect("ABS32 is an absolute form");
+        assert_eq!((w, c), (4, AbsCheck::SignedOrUnsigned));
+        assert!(c.admits(0x8000_0000, w));
+        assert!(c.admits(kernel_va, w));
+        assert!(!c.admits(0x1_0000_0000, w));
+        assert!(!c.admits(-0x8000_0001, w));
+        assert_eq!(
+            aarch64_abs_field(R_AARCH64_ABS64),
+            Some((8, AbsCheck::None))
+        );
+        assert!(x86_64_abs_field(R_X86_64_PC32).is_none());
+        assert!(aarch64_abs_field(R_AARCH64_CALL26).is_none());
+    }
+
+    /// Field geometry of the PC-relative instruction immediates,
+    /// against the AAELF64 relocation table's operation column.
+    #[test]
+    fn aarch64_pcrel_fields_match_the_abi() {
+        assert_eq!(aarch64_pcrel_imm_field(R_AARCH64_TSTBR14), Some((5, 14, 4)));
+        assert_eq!(
+            aarch64_pcrel_imm_field(R_AARCH64_CONDBR19),
+            Some((5, 19, 4))
+        );
+        assert_eq!(
+            aarch64_pcrel_imm_field(R_AARCH64_LD_PREL_LO19),
+            Some((5, 19, 4))
+        );
+        assert_eq!(aarch64_pcrel_imm_field(R_AARCH64_CALL26), Some((0, 26, 4)));
+        assert_eq!(aarch64_pcrel_imm_field(R_AARCH64_JUMP26), Some((0, 26, 4)));
+        assert_eq!(aarch64_pcrel_imm_field(R_AARCH64_ABS64), None);
+        assert_eq!(aarch64_pcrel_imm_field(R_AARCH64_ADR_PREL_PG_HI21), None);
     }
 
     #[test]

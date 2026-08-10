@@ -3983,12 +3983,27 @@ impl<'a> LdsLinker<'a> {
                 }
             }
             rt::R_AARCH64_ABS32 => {
+                // AAELF64: the check is `-2^31 <= X < 2^32`, so a
+                // value outside 32 bits read either way is an error
+                // rather than a narrowed address.
+                if !rt::AbsCheck::SignedOrUnsigned.admits(sa as i64, 4) {
+                    errors.push(format!(
+                        "relocation truncated to fit: R_AARCH64_ABS32 against `{}' (0x{sa:x})",
+                        name()
+                    ));
+                }
                 if site + 4 <= buf.len() {
                     buf[site..site + 4].copy_from_slice(&(sa as u32).to_le_bytes());
                 }
             }
             259 => {
                 // R_AARCH64_ABS16
+                if !rt::AbsCheck::SignedOrUnsigned.admits(sa as i64, 2) {
+                    errors.push(format!(
+                        "relocation truncated to fit: R_AARCH64_ABS16 against `{}' (0x{sa:x})",
+                        name()
+                    ));
+                }
                 if site + 2 <= buf.len() {
                     buf[site..site + 2].copy_from_slice(&(sa as u16).to_le_bytes());
                 }

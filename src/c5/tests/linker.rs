@@ -5072,6 +5072,218 @@ fn aarch64_lo12_relocations_link_through_the_elf64_image_writer() {
     }
 }
 
+/// An aarch64 object with every stream empty, for a test to fill in
+/// the two or three fields it exercises.
+fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
+    use crate::c5::linker::NativeMachine;
+    crate::c5::linker::NativeObject {
+        source: alloc::string::String::new(),
+        sections: alloc::vec::Vec::new(),
+        discarded: alloc::vec::Vec::new(),
+        machine: NativeMachine::Aarch64,
+        text: alloc::vec::Vec::new(),
+        text_align: 16,
+        rodata: alloc::vec::Vec::new(),
+        rodata_align: 8,
+        data: alloc::vec::Vec::new(),
+        data_align: 8,
+        bss_size: 0,
+        bss_align: 1,
+        tls_data: alloc::vec::Vec::new(),
+        tls_bss_size: 0,
+        prologue_ends: alloc::vec::Vec::new(),
+        symbols: alloc::vec::Vec::new(),
+        text_relocs: alloc::vec::Vec::new(),
+        data_relocs: alloc::vec::Vec::new(),
+        init_funcs: alloc::vec::Vec::new(),
+        dylibs: alloc::vec::Vec::new(),
+        import_dylib_map: alloc::vec::Vec::new(),
+        exports: alloc::vec::Vec::new(),
+        tls_index_fixups: alloc::vec::Vec::new(),
+        macho_tlv_descriptors: alloc::vec::Vec::new(),
+        macho_tlv_fixups: alloc::vec::Vec::new(),
+        tls_symbols: alloc::vec::Vec::new(),
+        macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+        elf_tpoff_fixups: alloc::vec::Vec::new(),
+        copy_relocs: alloc::vec::Vec::new(),
+        debug_info: alloc::vec::Vec::new(),
+        debug_abbrev: alloc::vec::Vec::new(),
+        debug_line: alloc::vec::Vec::new(),
+        debug_str: alloc::vec::Vec::new(),
+        debug_info_relocs: alloc::vec::Vec::new(),
+        debug_line_relocs: alloc::vec::Vec::new(),
+    }
+}
+
+/// A one-symbol aarch64 object: `text` with `relocs` against `gfar`,
+/// which `gfar_object` defines. `text_align` is 16 so a pair of these
+/// merges with the second object's text at offset 16.
+fn aarch64_pcrel_object(
+    text: alloc::vec::Vec<u8>,
+    relocs: &[(u64, u32)],
+    gfar_here: bool,
+) -> crate::c5::linker::NativeObject {
+    use crate::c5::linker::object::{NativeReloc, NativeSymbol};
+    use crate::c5::linker::{NativeMachine, NativeSymSection};
+    let sym = |name: &str, section, value| NativeSymbol {
+        name: name.to_string(),
+        section,
+        value,
+        size: 0,
+        binding: 1,
+        kind: 0,
+        visibility: 0,
+    };
+    crate::c5::linker::NativeObject {
+        source: "reloc_ref.o".to_string(),
+        machine: NativeMachine::Aarch64,
+        text,
+        text_align: 16,
+        data_align: 8,
+        symbols: alloc::vec![
+            sym("", NativeSymSection::Undef, 0),
+            if gfar_here {
+                sym("gfar", NativeSymSection::Text, 0)
+            } else {
+                sym("gfar", NativeSymSection::Undef, 0)
+            },
+            sym(
+                if gfar_here { "_unused" } else { "_start" },
+                NativeSymSection::Text,
+                0,
+            ),
+        ],
+        text_relocs: relocs
+            .iter()
+            .map(|(offset, rtype)| NativeReloc {
+                offset: *offset,
+                sym_idx: 1,
+                rtype: *rtype,
+                addend: 0,
+            })
+            .collect(),
+        ..blank_aarch64_object()
+    }
+}
+
+#[test]
+fn aarch64_pcrel_relocations_reproduce_gnu_ld_bytes() {
+    // GNU ld 2.46.1 links `b.eq gfar` / `ldr x0, gfar` /
+    // `tbz x1, #3, gfar` / `bl gfar` at `.text` 0x400000 with `gfar`
+    // at 0x400010 into the words below (`objdump -s -j .text`). The
+    // displacements are PC-relative, so the merged-text offsets here
+    // reproduce them exactly.
+    use crate::c5::linker::link_native_objects;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_CALL26, R_AARCH64_CONDBR19, R_AARCH64_LD_PREL_LO19, R_AARCH64_TSTBR14,
+    };
+    let unpatched: [u32; 4] = [0x5400_0000, 0x5800_0000, 0x3618_0001, 0x9400_0000];
+    let ld_bytes: [u32; 4] = [0x5400_0080, 0x5800_0060, 0x3618_0041, 0x9400_0001];
+    let mut text = alloc::vec::Vec::new();
+    for w in unpatched {
+        text.extend_from_slice(&w.to_le_bytes());
+    }
+    let refs = aarch64_pcrel_object(
+        text,
+        &[
+            (0x0, R_AARCH64_CONDBR19),
+            (0x4, R_AARCH64_LD_PREL_LO19),
+            (0x8, R_AARCH64_TSTBR14),
+            (0xc, R_AARCH64_CALL26),
+        ],
+        false,
+    );
+    // `ret`, the body of GNU as's `gfar`.
+    let def = aarch64_pcrel_object(0xd65f_03c0u32.to_le_bytes().to_vec(), &[], true);
+    let merged = link_native_objects(&[refs, def]).expect("link");
+    let gfar = merged.defined.get("gfar").expect("gfar is defined").value as i64;
+    // Signed immediate each form carries, in 4-byte units.
+    let imm = |w: u32, lsb: u32, bits: u32| {
+        let raw = (w >> lsb) & ((1u32 << bits) - 1);
+        ((raw << (32 - bits)) as i32 >> (32 - bits)) as i64
+    };
+    let fields = [(5u32, 19u32), (5, 19), (5, 14), (0, 26)];
+    for (i, (lsb, bits)) in fields.iter().enumerate() {
+        let mask = ((1u32 << bits) - 1) << lsb;
+        let got = u32::from_le_bytes(merged.text[i * 4..i * 4 + 4].try_into().unwrap());
+        assert_eq!(
+            i as i64 * 4 + imm(got, *lsb, *bits) * 4,
+            gfar,
+            "word {i} ({got:#010x}) must reach gfar at {gfar:#x}"
+        );
+        // Only the immediate moves; ld leaves the rest of the word,
+        // and its own encoding is `ld_bytes` outside the field.
+        assert_eq!(got & !mask, unpatched[i], "word {i} lost opcode bits");
+        assert_eq!(ld_bytes[i] & !mask, unpatched[i]);
+    }
+}
+
+#[test]
+fn aarch64_absolute_text_relocations_take_the_image_base() {
+    // `.word gdata` / `.xword gdata` inside `.text`: GNU ld resolves
+    // both against the symbol's runtime address. The value depends on
+    // the load address, so the merge pass parks them and the ET_EXEC
+    // writer materialises them.
+    use crate::c5::linker::object::{NativeReloc, NativeSymbol};
+    use crate::c5::linker::{NativeMachine, NativeSymSection};
+    use crate::c5::linker::{link_native_objects, write_executable_elf64};
+    use crate::c5::object::elf_reloc_types::{R_AARCH64_ABS32, R_AARCH64_ABS64};
+    let mut text = alloc::vec![0u8; 16];
+    text.extend_from_slice(TEXT_MARKER);
+    let sym = |name: &str, section, value| NativeSymbol {
+        name: name.to_string(),
+        section,
+        value,
+        size: 0,
+        binding: 1,
+        kind: 0,
+        visibility: 0,
+    };
+    let obj = crate::c5::linker::NativeObject {
+        source: "abs_in_text.o".to_string(),
+        machine: NativeMachine::Aarch64,
+        text,
+        text_align: 16,
+        data: alloc::vec![0u8; 64],
+        data_align: 0x1000,
+        symbols: alloc::vec![
+            sym("", NativeSymSection::Undef, 0),
+            sym("gdata", NativeSymSection::Data, 16),
+            sym("_start", NativeSymSection::Text, 0),
+        ],
+        text_relocs: alloc::vec![
+            NativeReloc {
+                offset: 0,
+                sym_idx: 1,
+                rtype: R_AARCH64_ABS32,
+                addend: 0,
+            },
+            NativeReloc {
+                offset: 8,
+                sym_idx: 1,
+                rtype: R_AARCH64_ABS64,
+                addend: 0,
+            },
+        ],
+        ..blank_aarch64_object()
+    };
+    let merged = link_native_objects(&[obj]).expect("link");
+    let exe = write_executable_elf64(&merged, "_start")
+        .expect("absolute relocations in text resolve against the fixed load base");
+    let (text_off, _) = elf64_text_placement(&exe, 16);
+    let abs32 = u32::from_le_bytes(exe[text_off..text_off + 4].try_into().unwrap());
+    let abs64 = u64::from_le_bytes(exe[text_off + 8..text_off + 16].try_into().unwrap());
+    assert_eq!(
+        u64::from(abs32),
+        abs64,
+        "both forms name the same runtime address"
+    );
+    assert!(
+        abs64 > 0x400000,
+        "the value must be a runtime address, not a section offset: {abs64:#x}"
+    );
+}
+
 #[test]
 fn elf_section_offsets_respect_their_claimed_alignment() {
     // gABI: `sh_addr` (and the file offset for SHF_ALLOC sections)

@@ -842,7 +842,11 @@ fn project_aarch64_pending(
         return Ok(());
     }
     match reloc.rtype {
-        R_AARCH64_CALL26 => Err(synth_err(
+        // The PLT pass drains every import call; one still here is a
+        // broken invariant. A parked *section* reference is not: it
+        // reached a target whose runtime address only the writer
+        // knows, and this writer has no fixup that carries it.
+        R_AARCH64_CALL26 if reloc.target_section == NativeSymSection::Undef => Err(synth_err(
             "synthesizer: R_AARCH64_CALL26 still pending after PLT pass \
              -- emit_aarch64_plt should have drained it",
         )),
@@ -900,12 +904,18 @@ fn unsupported_reloc(
     reloc: &super::link::PendingImportReloc,
     rtype: u32,
 ) -> C5Error {
-    C5Error::Compile(crate::c5::error::fmt_link_err(&alloc::format!(
-        "unsupported {} against `{}` at text offset {:#x}",
-        super::object::reloc_desc(merged.machine, rtype),
-        super::link::import_name(merged, reloc.import_index),
-        reloc.text_offset,
-    )))
+    use super::object::RelocOrigin;
+    let name = reloc
+        .sym_name
+        .as_deref()
+        .unwrap_or_else(|| super::link::import_name(merged, reloc.import_index));
+    let (source, section, offset) = merged
+        .section_map
+        .locate_text(reloc.text_offset)
+        .unwrap_or(("", ".text", reloc.text_offset));
+    RelocOrigin::in_named_section(source, section)
+        .at(merged.machine, rtype, name, offset)
+        .unsupported()
 }
 
 fn project_x86_64_pending(

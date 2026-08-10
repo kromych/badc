@@ -97,6 +97,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("signal.h", include_str!("../../libc/include/signal.h")),
     ("errno.h", include_str!("../../libc/include/errno.h")),
     ("endian.h", include_str!("../../libc/include/endian.h")),
+    ("byteswap.h", include_str!("../../libc/include/byteswap.h")),
     (
         "sys/endian.h",
         include_str!("../../libc/include/sys/endian.h"),

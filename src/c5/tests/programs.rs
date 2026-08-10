@@ -3027,6 +3027,19 @@ fn builtin_bswap_expect() {
 }
 
 #[test]
+fn byteswap_glibc() {
+    // glibc <byteswap.h>: bswap_16/32/64 and the __bswap_N spellings,
+    // including the truncation to the operand width and the fold.
+    assert_eq!(run_fixture("byteswap_glibc.c"), 0);
+}
+
+#[test]
+fn sysexits_codes() {
+    // <sysexits.h>: the BSD exit-status codes, same on every target.
+    assert_eq!(run_fixture("sysexits_codes.c"), 0);
+}
+
+#[test]
 fn builtin_bit_count() {
     // GCC __builtin_clz / ctz / popcount (+ ll forms), lowered to a
     // portable shift / mask sequence; results match hand-computed

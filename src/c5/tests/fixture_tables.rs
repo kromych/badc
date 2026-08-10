@@ -431,6 +431,8 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("tentative_deferred_array_ref_before_definition.c", 0),
     ("directive_in_macro_argument.c", 0),
     ("builtin_bswap_expect.c", 0),
+    ("byteswap_glibc.c", 0),
+    ("sysexits_codes.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
     ("nested_compound_literal.c", 0),
@@ -1305,6 +1307,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("dirent_readdir.c", 0),
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
+    ("string_gnu_ext.c", 0),
     ("stat_timespec.c", 0),
     ("malloc_size.c", 0),
     // sprintf 2-fixed + 4-variadic; cross-checks the ABI's
@@ -1453,6 +1456,8 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("tentative_deferred_array_ref_before_definition.c", 0),
     ("directive_in_macro_argument.c", 0),
     ("builtin_bswap_expect.c", 0),
+    ("byteswap_glibc.c", 0),
+    ("sysexits_codes.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
     ("zero_length_array_sizeof.c", 0),
@@ -2035,6 +2040,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("dirent_readdir.c", 0),
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
+    ("string_gnu_ext.c", 0),
     ("stat_timespec.c", 0),
     ("malloc_size.c", 0),
     // sprintf 2-fixed + 4-variadic; SysV passes variadic in
@@ -2187,6 +2193,8 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("directive_in_macro_argument.c", 0),
     ("x87_control_word.c", 0),
     ("builtin_bswap_expect.c", 0),
+    ("byteswap_glibc.c", 0),
+    ("sysexits_codes.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
     ("nested_compound_literal.c", 0),
@@ -2408,6 +2416,9 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // runs badc's own engine (`libc/lib/pattern.c`) rather than a
     // platform library.
     ("pattern_match_posix.c", 0),
+    // strchrnul / memrchr / explicit_bzero / strndup: msvcrt exports
+    // none of them, so this lane runs `libc/lib/string_ext.c`.
+    ("string_gnu_ext.c", 0),
     ("control_flow.c", 1),
     ("do_while.c", 5),
     ("break_continue.c", 4),
@@ -2695,6 +2706,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("scanf_fscanf_binding.c", 0),
     ("builtin_bit_count.c", 0),
     ("builtin_bswap_expect.c", 0),
+    ("byteswap_glibc.c", 0),
+    ("sysexits_codes.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
     ("zero_length_array_sizeof.c", 0),
@@ -2896,6 +2909,9 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     // Runtime CRT shim: POSIX setenv overwrite semantics over msvcrt's
     // 2-parameter _putenv_s.
     ("setenv_overwrite.c", 0),
+    // strchrnul / memrchr / explicit_bzero / strndup: msvcrt exports
+    // none of them, so this lane runs `libc/lib/string_ext.c`.
+    ("string_gnu_ext.c", 0),
     ("control_flow.c", 1),
     ("do_while.c", 5),
     ("break_continue.c", 4),
@@ -3187,6 +3203,8 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("scanf_fscanf_binding.c", 0),
     ("builtin_bit_count.c", 0),
     ("builtin_bswap_expect.c", 0),
+    ("byteswap_glibc.c", 0),
+    ("sysexits_codes.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
     ("zero_length_array_sizeof.c", 0),
@@ -3777,6 +3795,8 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("tentative_deferred_array_ref_before_definition.c", 0),
     ("directive_in_macro_argument.c", 0),
     ("builtin_bswap_expect.c", 0),
+    ("byteswap_glibc.c", 0),
+    ("sysexits_codes.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
     ("zero_length_array_sizeof.c", 0),

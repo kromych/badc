@@ -535,6 +535,37 @@ fn original_c4_compiles_and_runs_hello_natively() {
     );
 }
 
+/// libSystem exports no `strchrnul` / `memrchr` / `explicit_bzero`, so a
+/// macOS image takes them from `libc/lib/string_ext.c`, which joins the
+/// link only because the fixture leaves them undefined. `fixture_parity`
+/// emits one object and never links, so it cannot reach that path; this
+/// builds the fixture through the object-then-link writer instead.
+#[test]
+fn string_extensions_join_the_macos_link() {
+    let program = super::compile_str_bare_for(
+        &super::load_fixture("string_gnu_ext.c"),
+        Target::MacOSAarch64,
+    );
+    let bytes = super::link_executable_with_runtime(
+        &program,
+        Target::MacOSAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link the fixture for MacOSAarch64");
+
+    let path = std::env::temp_dir().join("badc-test-string-ext-link.bin");
+    std::fs::write(&path, &bytes).expect("write temp file");
+    set_executable(&path);
+    codesign(&path);
+    let output = Command::new(&path).output().expect("exec native binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "string_gnu_ext.c must exit 0 once the bundled source is joined"
+    );
+}
+
 #[test]
 fn fixture_parity() {
     let mut failures: Vec<String> = Vec::new();

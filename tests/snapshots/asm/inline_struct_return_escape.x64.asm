@@ -17,11 +17,8 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	movq	%rax, (%rsi)
                	leaq	-0x8(%rbp), %rcx
-               	leaq	<rip>, %rdx
-               	pushq	%rax
-               	movq	(%rdx), %rax
-               	movq	%rax, (%rcx)
-               	popq	%rax
+               	xorq	%rdx, %rdx
+               	movq	%rdx, (%rcx)
                	leaq	-0x8(%rbp), %rcx
                	movq	%rax, (%rcx)
                	leaq	-0x8(%rbp), %rax

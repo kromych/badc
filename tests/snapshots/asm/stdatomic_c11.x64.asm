@@ -85,11 +85,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x20(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movzbq	(%rcx), %rdx
-               	movb	%dl, (%rax)
-               	popq	%rdx
+               	xorq	%rcx, %rcx
+               	movb	%cl, (%rax)
                	leaq	-0x20(%rbp), %rax
                	movl	$0x1, %ecx
                	movq	%rax, %r11

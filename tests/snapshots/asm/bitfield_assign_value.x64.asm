@@ -11,55 +11,8 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movzbq	(%rcx), %rdx
-               	movb	%dl, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	movb	%dl, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	movb	%dl, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	movb	%dl, 0x3(%rax)
-               	popq	%rdx
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x2, %ecx
-               	movl	%ecx, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x16, %ecx
-               	movl	%ecx, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x16, %ecx
-               	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movzbq	(%rcx), %rdx
-               	movb	%dl, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	movb	%dl, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	movb	%dl, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	movb	%dl, 0x3(%rax)
-               	popq	%rdx
-               	leaq	-0x8(%rbp), %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movl	$0x2, %edx
-               	movl	%edx, (%rcx)
-               	movl	$0x3, %ecx
-               	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x1b6, %ecx            # imm = 0x1B6
-               	movl	%ecx, (%rax)
                	xorq	%rax, %rax
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	retq

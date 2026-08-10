@@ -147,19 +147,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x20(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	movb	%dl, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	movb	%dl, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	movb	%dl, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	movb	%dl, 0xb(%rax)
-               	popq	%rdx
+               	xorq	%rcx, %rcx
+               	movq	%rcx, (%rax)
+               	movl	%ecx, 0x8(%rax)
                	movslq	-0x28(%rbp), %rax
                	leaq	-0x20(%rbp), %rcx
                	movl	%eax, (%rcx)

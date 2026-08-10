@@ -2325,6 +2325,54 @@ fn bss_segregation_resolves_data_pointer_into_bss() {
     );
 }
 
+/// A unit whose only aggregate initializers are zero must allocate no
+/// `.bss` and no `.data` beyond the leading guard: the zero image is
+/// stored, not copied from a template. A vDSO link script discards both
+/// sections, so a `.text` relocation into one fails the link. A template
+/// that does survive -- non-zero, or past the inline fill bound -- is
+/// never written, so it belongs in `.rodata`.
+#[test]
+fn zero_local_aggregate_emits_no_writable_template() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        extern void sink(void *);\n\
+        void zero(void) { unsigned counter[2] = { 0 }; sink(counter); }\n\
+        void big(void) { char buf[512] = { 0 }; sink(buf); }\n\
+        void nonzero(void) { unsigned a[4] = { 1, 2, 3, 4 }; sink(a); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let copts = crate::CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(String::from(src), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let bss = elf64_section_addr_size(&bytes, ".bss").map_or(0, |(_, size)| size);
+        assert_eq!(
+            bss, 0,
+            "{target:?}: no initializer template belongs in .bss"
+        );
+        // Both surviving templates are read-only; `.data` keeps only the
+        // 8-byte leading guard.
+        let data = elf64_section(&bytes, ".data").map_or(0, <[u8]>::len);
+        assert!(
+            data <= 8,
+            "{target:?}: .data is {data} bytes, expected <= 8"
+        );
+        let rodata = elf64_section(&bytes, ".rodata").expect(".rodata");
+        assert_eq!(
+            rodata.len(),
+            512 + 16,
+            "{target:?}: .rodata must hold the two surviving templates"
+        );
+    }
+}
+
 /// `-g` must not change emitted machine code: DWARF tables are
 /// appended to the image, never woven into `.text`. The function's
 /// disjoint-lifetime locals exercise slot coalescing -- the pass

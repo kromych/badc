@@ -12,8 +12,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v14  Imm(4631107791820423168)                         -> x0
     v15  Imm(0)                                           -> x1
     v16  LocalAddr(-1)                                    -> x1
-    v17  ImmData(32)                                      -> x2
-    v18  Mcpy { dst=v16, src=v17, size=8, align=8 }       -> x1
+    v17  Imm(0)                                           -> x2
+    v18  Store { addr=v16, disp=0, value=v17, kind=I64 }  -> -
     v19  LocalAddr(-1)                                    -> x1
     v20  Store { addr=v19, disp=0, value=v14, kind=I64 }  -> -
     v21  LocalAddr(-1)                                    -> x0
@@ -22,8 +22,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
   block 2  start_pc=0
     v23  Imm(0)                                           -> x0
     v24  LocalAddr(-1)                                    -> x0
-    v25  ImmData(24)                                      -> x1
-    v26  Mcpy { dst=v24, src=v25, size=8, align=8 }       -> x0
+    v25  Imm(0)                                           -> x1
+    v26  Store { addr=v24, disp=0, value=v25, kind=I64 }  -> -
     v27  LocalAddr(-1)                                    -> x0
     v28  Store { addr=v27, disp=0, value=v22, kind=F64 }  -> -
     v29  LocalAddr(-1)                                    -> x0

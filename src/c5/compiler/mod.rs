@@ -1364,7 +1364,7 @@ pub struct Compiler {
     /// can build `Decl::Local { init: Aggregate(_) }`. Holds the
     /// Mcpy source descriptor; `None` means the decl is scalar /
     /// uninitialized.
-    pub(super) pending_local_aggregate_ast: Option<(i64, i64)>,
+    pub(super) pending_local_aggregate_ast: Option<super::ast::LocalInitPrelude>,
 
     /// Cross-helper carry for runtime brace-list local
     /// initializers: `emit_local_array_init_runtime` and

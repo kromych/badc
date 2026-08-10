@@ -74,14 +74,9 @@ Disassembly of section .text:
                	mov	x20, #0x348             // =840
                	mov	x21, #0x21c             // =540
                	sub	x0, x29, #0x30
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [sp], #0x10
+               	mov	x1, #0x0                // =0
+               	str	x1, [x0]
+               	str	x1, [x0, #0x8]
                	scvtf	d0, x20
                	sub	x0, x29, #0x30
                	str	d0, [x0]
@@ -109,25 +104,17 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xb0
                	ret
                	sub	x0, x29, #0x50
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [x1, #0x10]
-               	str	x10, [x0, #0x10]
-               	ldr	x10, [x1, #0x18]
-               	str	x10, [x0, #0x18]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, #0x0                // =0
-               	sub	x1, x29, #0x50
-               	fmov	d16, x0
-               	str	d16, [x1]
-               	sub	x1, x29, #0x50
-               	fmov	d16, x0
-               	str	d16, [x1, #0x8]
+               	mov	x1, #0x0                // =0
+               	str	x1, [x0]
+               	str	x1, [x0, #0x8]
+               	str	x1, [x0, #0x10]
+               	str	x1, [x0, #0x18]
+               	sub	x0, x29, #0x50
+               	fmov	d16, x1
+               	str	d16, [x0]
+               	sub	x0, x29, #0x50
+               	fmov	d16, x1
+               	str	d16, [x0, #0x8]
                	scvtf	d0, x20
                	sub	x0, x29, #0x50
                	str	d0, [x0, #0x10]
@@ -155,14 +142,9 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xb0
                	ret
                	sub	x0, x29, #0x60
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [sp], #0x10
+               	mov	x1, #0x0                // =0
+               	str	x1, [x0]
+               	str	x1, [x0, #0x8]
                	scvtf	d0, x20
                	sub	x0, x29, #0x60
                	str	d0, [x0]
@@ -213,22 +195,11 @@ Disassembly of section .text:
                	fmov	s16, w0
                	sub	x17, x29, #0x80
                	str	s16, [x17]
-               	sub	x0, x29, #0x68
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x1]
-               	strb	w10, [x0]
-               	ldrb	w10, [x1, #0x1]
-               	strb	w10, [x0, #0x1]
-               	ldrb	w10, [x1, #0x2]
-               	strb	w10, [x0, #0x2]
-               	ldrb	w10, [x1, #0x3]
-               	strb	w10, [x0, #0x3]
-               	ldr	x10, [sp], #0x10
+               	sub	x1, x29, #0x68
+               	mov	x0, #0x0                // =0
+               	str	w0, [x1]
                	sub	x16, x29, #0x88
                	ldr	d0, [x16]
-               	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fadd	d0, d0, d17
                	fcvt	s0, d0
@@ -271,25 +242,17 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xb0
                	ret
                	sub	x0, x29, #0x20
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [x1, #0x10]
-               	str	x10, [x0, #0x10]
-               	ldr	x10, [x1, #0x18]
-               	str	x10, [x0, #0x18]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, #0x0                // =0
-               	sub	x1, x29, #0x20
-               	fmov	d16, x0
-               	str	d16, [x1]
-               	sub	x1, x29, #0x20
-               	fmov	d16, x0
-               	str	d16, [x1, #0x8]
+               	mov	x1, #0x0                // =0
+               	str	x1, [x0]
+               	str	x1, [x0, #0x8]
+               	str	x1, [x0, #0x10]
+               	str	x1, [x0, #0x18]
+               	sub	x0, x29, #0x20
+               	fmov	d16, x1
+               	str	d16, [x0]
+               	sub	x0, x29, #0x20
+               	fmov	d16, x1
+               	str	d16, [x0, #0x8]
                	scvtf	d0, x20
                	sub	x0, x29, #0x20
                	str	d0, [x0, #0x10]

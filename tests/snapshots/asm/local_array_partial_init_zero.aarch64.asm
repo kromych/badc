@@ -33,44 +33,21 @@ Disassembly of section .text:
                	mov	w0, w0
                	stur	w0, [x29, #-0xb0]
                	ldur	w0, [x29, #-0xb0]
-               	sub	x0, x29, #0x70
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [x1, #0x10]
-               	str	x10, [x0, #0x10]
-               	ldr	x10, [x1, #0x18]
-               	str	x10, [x0, #0x18]
-               	ldr	x10, [x1, #0x20]
-               	str	x10, [x0, #0x20]
-               	ldr	x10, [x1, #0x28]
-               	str	x10, [x0, #0x28]
-               	ldr	x10, [x1, #0x30]
-               	str	x10, [x0, #0x30]
-               	ldr	x10, [x1, #0x38]
-               	str	x10, [x0, #0x38]
-               	ldr	x10, [x1, #0x40]
-               	str	x10, [x0, #0x40]
-               	ldr	x10, [x1, #0x48]
-               	str	x10, [x0, #0x48]
-               	ldr	x10, [x1, #0x50]
-               	str	x10, [x0, #0x50]
-               	ldr	x10, [x1, #0x58]
-               	str	x10, [x0, #0x58]
-               	ldrb	w10, [x1, #0x60]
-               	strb	w10, [x0, #0x60]
-               	ldrb	w10, [x1, #0x61]
-               	strb	w10, [x0, #0x61]
-               	ldrb	w10, [x1, #0x62]
-               	strb	w10, [x0, #0x62]
-               	ldrb	w10, [x1, #0x63]
-               	strb	w10, [x0, #0x63]
-               	ldr	x10, [sp], #0x10
+               	sub	x1, x29, #0x70
                	mov	x0, #0x0                // =0
+               	str	x0, [x1]
+               	str	x0, [x1, #0x8]
+               	str	x0, [x1, #0x10]
+               	str	x0, [x1, #0x18]
+               	str	x0, [x1, #0x20]
+               	str	x0, [x1, #0x28]
+               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x38]
+               	str	x0, [x1, #0x40]
+               	str	x0, [x1, #0x48]
+               	str	x0, [x1, #0x50]
+               	str	x0, [x1, #0x58]
+               	str	w0, [x1, #0x60]
                	mov	x2, x0
                	b	<addr>
                	mov	w3, w2
@@ -100,44 +77,21 @@ Disassembly of section .text:
                	mov	w0, w0
                	stur	w0, [x29, #-0xb0]
                	ldur	w0, [x29, #-0xb0]
-               	sub	x0, x29, #0x70
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [x1, #0x10]
-               	str	x10, [x0, #0x10]
-               	ldr	x10, [x1, #0x18]
-               	str	x10, [x0, #0x18]
-               	ldr	x10, [x1, #0x20]
-               	str	x10, [x0, #0x20]
-               	ldr	x10, [x1, #0x28]
-               	str	x10, [x0, #0x28]
-               	ldr	x10, [x1, #0x30]
-               	str	x10, [x0, #0x30]
-               	ldr	x10, [x1, #0x38]
-               	str	x10, [x0, #0x38]
-               	ldr	x10, [x1, #0x40]
-               	str	x10, [x0, #0x40]
-               	ldr	x10, [x1, #0x48]
-               	str	x10, [x0, #0x48]
-               	ldr	x10, [x1, #0x50]
-               	str	x10, [x0, #0x50]
-               	ldr	x10, [x1, #0x58]
-               	str	x10, [x0, #0x58]
-               	ldrb	w10, [x1, #0x60]
-               	strb	w10, [x0, #0x60]
-               	ldrb	w10, [x1, #0x61]
-               	strb	w10, [x0, #0x61]
-               	ldrb	w10, [x1, #0x62]
-               	strb	w10, [x0, #0x62]
-               	ldrb	w10, [x1, #0x63]
-               	strb	w10, [x0, #0x63]
-               	ldr	x10, [sp], #0x10
+               	sub	x1, x29, #0x70
                	mov	x0, #0x0                // =0
+               	str	x0, [x1]
+               	str	x0, [x1, #0x8]
+               	str	x0, [x1, #0x10]
+               	str	x0, [x1, #0x18]
+               	str	x0, [x1, #0x20]
+               	str	x0, [x1, #0x28]
+               	str	x0, [x1, #0x30]
+               	str	x0, [x1, #0x38]
+               	str	x0, [x1, #0x40]
+               	str	x0, [x1, #0x48]
+               	str	x0, [x1, #0x50]
+               	str	x0, [x1, #0x58]
+               	str	w0, [x1, #0x60]
                	mov	x2, x0
                	b	<addr>
                	mov	w3, w2

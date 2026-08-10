@@ -132,21 +132,21 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Jmp(b11)   (exit_acc=v111)
   block 11  start_pc=0
     v113 LocalAddr(-1)                                    -> x0
-    v114 ImmData(16)                                      -> x1
-    v115 Mcpy { dst=v113, src=v114, size=4, align=8 }     -> x0
+    v114 Imm(0)                                           -> x0
+    v115 Imm(0)                                           -> x0
     v116 LocalAddr(-1)                                    -> x0
-    v117 Imm(0)                                           -> x1
-    v118 Imm(0)                                           -> x1
-    v119 Imm(0)                                           -> x1
-    v120 Imm(0)                                           -> x1
-    v121 Imm(0)                                           -> x1
-    v122 Imm(1)                                           -> x1
-    v123 Imm(0)                                           -> x1
-    v124 Imm(0)                                           -> x1
-    v125 Imm(1)                                           -> x1
-    v126 Imm(16)                                          -> x1
-    v127 Imm(16)                                          -> x1
-    v128 Store { addr=v116, disp=0, value=v127, kind=I32 } -> -
+    v117 Imm(0)                                           -> x0
+    v118 Imm(0)                                           -> x0
+    v119 Imm(0)                                           -> x0
+    v120 Imm(0)                                           -> x0
+    v121 Imm(0)                                           -> x0
+    v122 Imm(1)                                           -> x0
+    v123 Imm(0)                                           -> x0
+    v124 Imm(0)                                           -> x0
+    v125 Imm(1)                                           -> x0
+    v126 Imm(16)                                          -> x0
+    v127 Imm(16)                                          -> x0
+    v128 Imm(0)                                           -> x0
     v129 LocalAddr(-1)                                    -> x0
     v130 Imm(16)                                          -> x0
     v131 Imm(1)                                           -> x0
@@ -157,16 +157,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Jmp(b12)   (exit_acc=v135)
   block 12  start_pc=0
     v137 LocalAddr(-1)                                    -> x0
-    v138 Imm(16)                                          -> x1
-    v139 Imm(0)                                           -> x1
-    v140 Imm(0)                                           -> x1
-    v141 Imm(1)                                           -> x1
-    v142 Imm(16)                                          -> x1
-    v143 Imm(16)                                          -> x1
-    v144 Imm(1)                                           -> x1
-    v145 Imm(512)                                         -> x1
-    v146 Imm(528)                                         -> x1
-    v147 Store { addr=v137, disp=0, value=v146, kind=I32 } -> -
+    v138 Imm(16)                                          -> x0
+    v139 Imm(0)                                           -> x0
+    v140 Imm(0)                                           -> x0
+    v141 Imm(1)                                           -> x0
+    v142 Imm(16)                                          -> x0
+    v143 Imm(16)                                          -> x0
+    v144 Imm(1)                                           -> x0
+    v145 Imm(512)                                         -> x0
+    v146 Imm(528)                                         -> x0
+    v147 Imm(0)                                           -> x0
     v148 Imm(0)                                           -> x0
     v149 Imm(0)                                           -> x0
     v150 Imm(0)                                           -> x0
@@ -186,20 +186,20 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Jmp(b15)   (exit_acc=v158)
   block 15  start_pc=0
     v161 LocalAddr(-1)                                    -> x0
-    v162 Imm(15)                                          -> x1
-    v163 Imm(528)                                         -> x1
-    v164 Imm(528)                                         -> x1
-    v165 Imm(543)                                         -> x1
-    v166 Store { addr=v161, disp=0, value=v165, kind=I32 } -> -
+    v162 Imm(15)                                          -> x0
+    v163 Imm(528)                                         -> x0
+    v164 Imm(528)                                         -> x0
+    v165 Imm(543)                                         -> x0
+    v166 Imm(0)                                           -> x0
     v167 LocalAddr(-1)                                    -> x0
-    v168 Imm(543)                                         -> x1
-    v169 Imm(15)                                          -> x1
-    v170 Imm(16)                                          -> x1
-    v171 Imm(543)                                         -> x1
-    v172 Imm(528)                                         -> x1
-    v173 Imm(0)                                           -> x1
-    v174 Imm(528)                                         -> x1
-    v175 Store { addr=v167, disp=0, value=v174, kind=I32 } -> -
+    v168 Imm(543)                                         -> x0
+    v169 Imm(15)                                          -> x0
+    v170 Imm(16)                                          -> x0
+    v171 Imm(543)                                         -> x0
+    v172 Imm(528)                                         -> x0
+    v173 Imm(0)                                           -> x0
+    v174 Imm(528)                                         -> x0
+    v175 Imm(0)                                           -> x0
     v176 LocalAddr(-1)                                    -> x0
     v177 Imm(528)                                         -> x0
     v178 Imm(0)                                           -> x0

@@ -114,13 +114,10 @@ Disassembly of section .text:
                	movb	%cl, 0xf(%rax)
                	leaq	-0x30(%rbp), %rax
                	leaq	(%rax), %rcx
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x20(%rbp), %rax
                	addq	$0x0, %rax
                	movzbq	(%rax), %rax
-               	leaq	-0x20(%rbp), %rdx
-               	addq	$0x0, %rdx
-               	movzbq	(%rdx), %rdx
-               	addq	%rdx, %rax
+               	addq	$0x0, %rax
                	andq	$0xff, %rax
                	movb	%al, (%rcx)
                	leaq	-0x30(%rbp), %rcx

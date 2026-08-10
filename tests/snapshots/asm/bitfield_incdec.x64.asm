@@ -46,31 +46,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movl	$0x80000002, %ecx       # imm = 0x80000002
                	movl	%ecx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movzbq	(%rcx), %rdx
-               	movb	%dl, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	movb	%dl, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	movb	%dl, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	movb	%dl, 0x3(%rax)
-               	popq	%rdx
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x10, %ecx
-               	movl	%ecx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x210, %ecx            # imm = 0x210
-               	movl	%ecx, (%rax)
                	xorq	%rax, %rax
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x21f, %ecx            # imm = 0x21F
-               	movl	%ecx, (%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x210, %ecx            # imm = 0x210
-               	movl	%ecx, (%rax)
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	addq	$0x20, %rsp

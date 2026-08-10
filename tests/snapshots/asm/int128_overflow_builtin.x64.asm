@@ -564,7 +564,7 @@ Disassembly of section .text:
                	xorq	%rsi, %rsi
                	movl	%esi, (%rax)
                	movl	$0x1, %edi
-               	movl	-0x480(%rbp), %eax
+               	xorq	%rax, %rax
                	leaq	-0x310(%rbp), %rsi
                	movq	%rax, (%rsi)
                	movq	%rcx, 0x8(%rsi)
@@ -617,10 +617,10 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	movl	%edx, (%rax)
                	movl	$0x1, %edi
-               	movslq	-0x478(%rbp), %rax
+               	xorq	%rax, %rax
                	leaq	-0x370(%rbp), %rsi
                	movq	%rax, (%rsi)
-               	sarq	$0x3f, %rax
+               	xorq	%rax, %rax
                	movq	%rax, 0x8(%rsi)
                	movl	$0x1, %edx
                	movl	$0x40, %r9d

@@ -144,11 +144,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
+               	xorq	%rcx, %rcx
+               	movq	%rcx, (%rax)
                	leaq	-0x8(%rbp), %rdi
                	leaq	-0x8(%rbp), %rsi
                	leaq	-0x8(%rbp), %rdx

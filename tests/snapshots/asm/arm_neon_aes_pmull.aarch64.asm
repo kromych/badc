@@ -737,10 +737,9 @@ Disassembly of section .text:
                	strb	w1, [x0, #0xe]
                	sub	x0, x29, #0x110
                	sub	x1, x29, #0xc8
-               	ldrb	w2, [x1, #0xf]
-               	sub	x1, x29, #0xd8
                	ldrb	w1, [x1, #0xf]
-               	eor	x1, x2, x1
+               	mov	x17, #0x0               // =0
+               	eor	x1, x1, x17
                	mov	x17, #0xff              // =255
                	and	x1, x1, x17
                	strb	w1, [x0, #0xf]

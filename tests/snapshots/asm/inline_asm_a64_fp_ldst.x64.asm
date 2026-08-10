@@ -20,12 +20,8 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x18(%rbp,%riz)
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
+               	leaq	-0x8(%rbp), %rcx
+               	movq	%rax, (%rcx)
                	movsd	-0x20(%rbp,%riz), %xmm0
                	leaq	-0x8(%rbp), %rax
                	movsd	%xmm0, (%rax,%riz)

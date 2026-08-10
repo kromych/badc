@@ -573,8 +573,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	str	w1, [x0]
                	mov	x0, #0x1                // =1
-               	sub	x16, x29, #0x480
-               	ldr	w4, [x16]
+               	mov	x4, #0x0                // =0
                	sub	x1, x29, #0x310
                	str	x4, [x1]
                	str	x3, [x1, #0x8]
@@ -631,20 +630,18 @@ Disassembly of section .text:
                	sub	x0, x29, #0x478
                	mov	x1, #0x0                // =0
                	str	w1, [x0]
-               	mov	x2, #0x1                // =1
-               	sub	x16, x29, #0x478
-               	ldrsw	x0, [x16]
-               	sub	x1, x29, #0x370
-               	str	x0, [x1]
-               	asr	x0, x0, #63
-               	str	x0, [x1, #0x8]
                	mov	x0, #0x1                // =1
+               	mov	x2, #0x0                // =0
+               	sub	x1, x29, #0x370
+               	str	x2, [x1]
+               	mov	x2, #0x0                // =0
+               	str	x2, [x1, #0x8]
+               	mov	x2, #0x1                // =1
                	mov	x5, #0x40               // =64
                	mov	x4, x3
                	mov	x6, x5
                	mov	x5, x3
-               	mov	x3, x0
-               	mov	x0, x2
+               	mov	x3, x2
                	ldr	x2, [x1, #0x8]
                	ldr	x1, [x1]
                	bl	<addr>

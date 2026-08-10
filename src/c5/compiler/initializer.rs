@@ -4161,17 +4161,65 @@ impl Compiler {
         }
     }
 
-    /// Emit a Mcpy that copies `total_bytes` from `src_data_addr`
-    /// (a position in self.data) to the local at `local_val`. The
-    /// usual Lea/Psh/data_imm/Mcpy shape so the runtime VM and the
-    /// native codegen don't need new ops.
+    /// True when the bytes staged at `[off, off + len)` are the zero
+    /// image a local initializer stores directly instead of copying:
+    /// all zero, under no relocation (whose value lands in the slot
+    /// after staging), and within the inline fill bound.
+    fn staged_template_is_zero(&self, off: usize, len: usize) -> bool {
+        use super::super::ast::{MAX_MEM_FILL_ACCESSES, SLOT_ALIGN, mem_transfer_accesses};
+        let span = off as u64..(off + len) as u64;
+        let relocated = |o: &u64| span.contains(o);
+        mem_transfer_accesses(len as i64, SLOT_ALIGN) <= MAX_MEM_FILL_ACCESSES
+            && self
+                .data
+                .get(off..off + len)
+                .is_some_and(|s| s.iter().all(|&b| b == 0))
+            && !self.data_relocs.iter().any(|r| relocated(&r.data_offset))
+            && !self.code_relocs.iter().any(|r| relocated(&r.data_offset))
+            && !self
+                .extern_data_relocs
+                .iter()
+                .any(|r| relocated(&r.data_offset))
+            && !self
+                .pending_label_relocs
+                .iter()
+                .any(|r| relocated(&r.data_offset))
+    }
+
+    /// Initialize the local at `local_val` from the `total_bytes`
+    /// staged at `src_data_addr` (a position in self.data), either as
+    /// a Mcpy from those bytes or, when they are the zero image, as
+    /// stores that need no data object at all.
     pub(super) fn emit_local_array_init(
         &mut self,
         local_val: i64,
         src_data_addr: usize,
         total_bytes: usize,
     ) {
+        use super::super::ast::LocalInitPrelude;
         if total_bytes == 0 {
+            return;
+        }
+        self.emit_lea(local_val);
+        self.ast_psh();
+        // A zero image carries no information, and the object holding it
+        // is never written, so a writable section is the wrong home for
+        // it: a link script that discards `.data` / `.bss` -- every
+        // platform's vDSO -- rejects a `.text` relocation into one. The
+        // stores are also one access per unit against the copy's pair.
+        if self.staged_template_is_zero(src_data_addr, total_bytes) {
+            // Drop the staged bytes while they are still the tail of the
+            // image; otherwise they stay as an object nothing names,
+            // which static DCE removes.
+            if src_data_addr + total_bytes == self.data.len() {
+                self.data.truncate(src_data_addr);
+            } else {
+                self.data_object_starts.push(src_data_addr as i64);
+            }
+            self.mark_emit_other();
+            self.pending_local_aggregate_ast = Some(LocalInitPrelude::Zero {
+                size_bytes: total_bytes as i64,
+            });
             return;
         }
         // The staged template is an anonymous data object (the Mcpy
@@ -4182,15 +4230,16 @@ impl Compiler {
         self.data_object_starts.push(src_data_addr as i64);
         self.const_data_ranges
             .push((src_data_addr as i64, (src_data_addr + total_bytes) as i64));
-        self.emit_lea(local_val);
-        self.ast_psh();
         self.emit_data_imm(src_data_addr as i64);
         self.mark_emit_other();
         // Dual-emit: record the Mcpy source descriptor so the
         // surrounding decl-site caller can build
         // `Decl::Local { init: Aggregate { src_data_off,
         // size_bytes } }`.
-        self.pending_local_aggregate_ast = Some((src_data_addr as i64, total_bytes as i64));
+        self.pending_local_aggregate_ast = Some(LocalInitPrelude::Template {
+            src_data_off: src_data_addr as i64,
+            size_bytes: total_bytes as i64,
+        });
     }
 
     /// Emit the store sequence for a local-variable initializer:

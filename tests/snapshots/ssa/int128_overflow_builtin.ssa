@@ -1713,7 +1713,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=145
     v1568 Imm(1)                                           -> x0
     v1569 Imm(0)                                           -> x0
     v1570 Imm(1)                                           -> x7
-    v1571 LoadLocal { off=-144, kind=U32 }                 -> x0
+    v1571 Imm(0)                                           -> x0
     v1572 LocalAddr(-98)                                   -> x6
     v1573 Store { addr=v1572, disp=0, value=v1571, kind=I64 } -> -
     v1574 BinopI { op=add, lhs=v1572, rhs_imm=8 }          -> x0
@@ -1908,10 +1908,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=145
     v1755 Imm(1)                                           -> x0
     v1756 Imm(0)                                           -> x0
     v1757 Imm(1)                                           -> x7
-    v1758 LoadLocal { off=-143, kind=I32 }                 -> x0
+    v1758 Imm(0)                                           -> x0
     v1759 LocalAddr(-110)                                  -> x6
     v1760 Store { addr=v1759, disp=0, value=v1758, kind=I64 } -> -
-    v1761 BinopI { op=shr, lhs=v1758, rhs_imm=63 }         -> x0
+    v1761 Imm(0)                                           -> x0
     v1762 BinopI { op=add, lhs=v1759, rhs_imm=8 }          -> x2
     v1763 Store { addr=v1759, disp=8, value=v1761, kind=I64 } -> -
     v1764 Imm(1)                                           -> x2

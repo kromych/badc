@@ -16,21 +16,15 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movabsq	$0x4045000000000000, %rax # imm = 0x4045000000000000
                	leaq	-0x8(%rbp), %rcx
-               	leaq	<rip>, %rdx
-               	pushq	%rax
-               	movq	(%rdx), %rax
-               	movq	%rax, (%rcx)
-               	popq	%rax
+               	xorq	%rdx, %rdx
+               	movq	%rdx, (%rcx)
                	leaq	-0x8(%rbp), %rcx
                	movq	%rax, (%rcx)
                	leaq	-0x8(%rbp), %rax
                	movsd	(%rax,%riz), %xmm0
                	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
+               	xorq	%rcx, %rcx
+               	movq	%rcx, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movsd	%xmm0, (%rax,%riz)
                	leaq	-0x8(%rbp), %rax

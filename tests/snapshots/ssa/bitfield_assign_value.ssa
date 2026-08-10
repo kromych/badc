@@ -5,40 +5,40 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-2)                                    -> x0
-    v2   ImmData(24)                                      -> x1
-    v3   Mcpy { dst=v1, src=v2, size=4, align=8 }         -> x0
+    v2   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> x0
     v4   LocalAddr(-2)                                    -> x0
-    v5   Imm(1)                                           -> x1
-    v6   Imm(0)                                           -> x1
-    v7   Imm(0)                                           -> x1
-    v8   Imm(2)                                           -> x1
-    v9   Imm(2)                                           -> x1
-    v10  Store { addr=v4, disp=0, value=v9, kind=I32 }    -> -
+    v5   Imm(1)                                           -> x0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0
+    v8   Imm(2)                                           -> x0
+    v9   Imm(2)                                           -> x0
+    v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
     v12  LoadLocal { off=-3, kind=I32 }                   -> x0
     v13  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v13)
   block 1  start_pc=0
     v15  LocalAddr(-2)                                    -> x0
-    v16  Imm(5)                                           -> x1
-    v17  Imm(2)                                           -> x1
-    v18  Imm(2)                                           -> x1
-    v19  Imm(20)                                          -> x1
-    v20  Imm(22)                                          -> x1
-    v21  Store { addr=v15, disp=0, value=v20, kind=I32 }  -> -
+    v16  Imm(5)                                           -> x0
+    v17  Imm(2)                                           -> x0
+    v18  Imm(2)                                           -> x0
+    v19  Imm(20)                                          -> x0
+    v20  Imm(22)                                          -> x0
+    v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  LoadLocal { off=-3, kind=I32 }                   -> x0
     v24  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v24)
   block 2  start_pc=0
     v26  LocalAddr(-2)                                    -> x0
-    v27  Imm(13)                                          -> x1
-    v28  Imm(5)                                           -> x1
-    v29  Imm(22)                                          -> x1
-    v30  Imm(2)                                           -> x1
-    v31  Imm(20)                                          -> x1
-    v32  Imm(22)                                          -> x1
-    v33  Store { addr=v26, disp=0, value=v32, kind=I32 }  -> -
+    v27  Imm(13)                                          -> x0
+    v28  Imm(5)                                           -> x0
+    v29  Imm(22)                                          -> x0
+    v30  Imm(2)                                           -> x0
+    v31  Imm(20)                                          -> x0
+    v32  Imm(22)                                          -> x0
+    v33  Imm(0)                                           -> x0
     v34  Imm(0)                                           -> x0
     v35  LoadLocal { off=-3, kind=I32 }                   -> x0
     v36  Imm(0)                                           -> x0
@@ -58,20 +58,20 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Jmp(b5)   (exit_acc=v44)
   block 5  start_pc=0
     v47  LocalAddr(-1)                                    -> x0
-    v48  ImmData(32)                                      -> x1
-    v49  Mcpy { dst=v47, src=v48, size=4, align=8 }       -> x0
+    v48  Imm(0)                                           -> x0
+    v49  Imm(0)                                           -> x0
     v50  LocalAddr(-1)                                    -> x0
-    v51  LocalAddr(-1)                                    -> x1
-    v52  Imm(1)                                           -> x2
-    v53  Imm(0)                                           -> x2
-    v54  Imm(0)                                           -> x2
-    v55  Imm(2)                                           -> x2
-    v56  Imm(2)                                           -> x2
-    v57  Store { addr=v51, disp=0, value=v56, kind=I32 }  -> -
-    v58  Imm(2)                                           -> x1
-    v59  Imm(2)                                           -> x1
-    v60  Imm(3)                                           -> x1
-    v61  Store { addr=v50, disp=0, value=v60, kind=I32 }  -> -
+    v51  LocalAddr(-1)                                    -> x0
+    v52  Imm(1)                                           -> x0
+    v53  Imm(0)                                           -> x0
+    v54  Imm(0)                                           -> x0
+    v55  Imm(2)                                           -> x0
+    v56  Imm(2)                                           -> x0
+    v57  Imm(0)                                           -> x0
+    v58  Imm(2)                                           -> x0
+    v59  Imm(2)                                           -> x0
+    v60  Imm(3)                                           -> x0
+    v61  Imm(0)                                           -> x0
     v62  LocalAddr(-1)                                    -> x0
     v63  Imm(3)                                           -> x0
     v64  Imm(1)                                           -> x0
@@ -92,13 +92,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Jmp(b8)   (exit_acc=v73)
   block 8  start_pc=0
     v76  LocalAddr(-2)                                    -> x0
-    v77  Imm(-3)                                          -> x1
-    v78  Imm(13)                                          -> x1
-    v79  Imm(22)                                          -> x1
-    v80  Imm(22)                                          -> x1
-    v81  Imm(416)                                         -> x1
-    v82  Imm(438)                                         -> x1
-    v83  Store { addr=v76, disp=0, value=v82, kind=I32 }  -> -
+    v77  Imm(-3)                                          -> x0
+    v78  Imm(13)                                          -> x0
+    v79  Imm(22)                                          -> x0
+    v80  Imm(22)                                          -> x0
+    v81  Imm(416)                                         -> x0
+    v82  Imm(438)                                         -> x0
+    v83  Imm(0)                                           -> x0
     v84  Imm(-3458764513820540928)                        -> x0
     v85  Imm(0)                                           -> x0
     v86  LoadLocal { off=-3, kind=I32 }                   -> x0

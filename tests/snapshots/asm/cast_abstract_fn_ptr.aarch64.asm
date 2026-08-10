@@ -12,26 +12,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x8
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [sp], #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret

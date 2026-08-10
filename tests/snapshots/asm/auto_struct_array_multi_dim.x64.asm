@@ -154,29 +154,11 @@ Disassembly of section .text:
                	leaq	-0x120(%rbp), %rax
                	movq	%rcx, 0xb8(%rax)
                	xorq	%rax, %rax
-               	leaq	-0x120(%rbp), %rax
-               	movq	0xc0(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	-0x120(%rbp), %rax
-               	movq	0x118(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	addq	$0x130, %rsp            # imm = 0x130
-               	popq	%rbp
-               	retq
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	addq	$0x130, %rsp            # imm = 0x130
                	popq	%rbp
                	retq
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

@@ -121,13 +121,23 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x70]
                	ldr	x20, [sp], #0x80
                	ret
-               	ldrsw	x0, [x20]
-               	add	x0, x0, #0x1
-               	str	w0, [x20]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	sub	x0, x29, #0x10
                	mov	x1, #0x0                // =0
-               	str	w1, [x0]
+               	str	x1, [x0]
+               	str	x1, [x0, #0x8]
+               	sub	x0, x29, #0x10
+               	mov	x1, #0x9                // =9
+               	movk	x1, #0x5678, lsl #32
+               	movk	x1, #0x1234, lsl #48
+               	str	x1, [x0, #0x8]
+               	sub	x0, x29, #0x10
+               	ldrsw	x2, [x20]
+               	add	x2, x2, #0x1
+               	str	w2, [x20]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrsw	x0, [x0]
+               	str	w0, [x2]
                	mov	x0, #0x4                // =4
                	bl	<addr>
                	cmp	x0, #0x2a

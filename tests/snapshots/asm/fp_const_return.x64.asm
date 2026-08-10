@@ -55,25 +55,15 @@ Disassembly of section .text:
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
                	leaq	-0x50(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	movq	0x10(%rcx), %rdx
-               	movq	%rdx, 0x10(%rax)
-               	movq	0x18(%rcx), %rdx
-               	movq	%rdx, 0x18(%rax)
-               	movq	0x20(%rcx), %rdx
-               	movq	%rdx, 0x20(%rax)
-               	movq	0x28(%rcx), %rdx
-               	movq	%rdx, 0x28(%rax)
-               	movq	0x30(%rcx), %rdx
-               	movq	%rdx, 0x30(%rax)
-               	movq	0x38(%rcx), %rdx
-               	movq	%rdx, 0x38(%rax)
-               	popq	%rdx
+               	xorq	%rdi, %rdi
+               	movq	%rdi, (%rax)
+               	movq	%rdi, 0x8(%rax)
+               	movq	%rdi, 0x10(%rax)
+               	movq	%rdi, 0x18(%rax)
+               	movq	%rdi, 0x20(%rax)
+               	movq	%rdi, 0x28(%rax)
+               	movq	%rdi, 0x30(%rax)
+               	movq	%rdi, 0x38(%rax)
                	leaq	-0x10(%rbp), %rdx
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
@@ -89,9 +79,8 @@ Disassembly of section .text:
                	cmpq	$0x2, %rcx
                	jl	<addr>
                	xorq	%rax, %rax
-               	xorq	%rcx, %rcx
                	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
+               	movq	%rdi, %xmm15
                	ucomisd	%xmm15, %xmm14
                	setne	%al
                	movzbq	%al, %rax

@@ -32,21 +32,13 @@ Disassembly of section .text:
                	popq	%rdx
                	xorq	%rax, %rax
                	leaq	-0x80(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	movq	0x10(%rcx), %rdx
-               	movq	%rdx, 0x10(%rax)
-               	movq	0x18(%rcx), %rdx
-               	movq	%rdx, 0x18(%rax)
-               	movq	0x20(%rcx), %rdx
-               	movq	%rdx, 0x20(%rax)
-               	movq	0x28(%rcx), %rdx
-               	movq	%rdx, 0x28(%rax)
-               	popq	%rdx
+               	xorq	%rcx, %rcx
+               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x8(%rax)
+               	movq	%rcx, 0x10(%rax)
+               	movq	%rcx, 0x18(%rax)
+               	movq	%rcx, 0x20(%rax)
+               	movq	%rcx, 0x28(%rax)
                	leaq	-0x30(%rbp), %rax
                	leaq	-0x80(%rbp), %rcx
                	pushq	%rdx

@@ -1407,6 +1407,14 @@ fn label_addr_array_init() {
 }
 
 #[test]
+fn zero_local_aggregate_no_template() {
+    // A zero-initialized local aggregate takes stores; a non-zero one, one
+    // past the inline fill bound, and one whose zeros are a relocation's
+    // placeholder keep the copy.
+    assert_eq!(run_fixture("zero_local_aggregate_no_template.c"), 0);
+}
+
+#[test]
 fn label_addr_table_relocation() {
     // A static `&&label` table is filled by relocations, not by stores at
     // the declaration point: plain, section-attributed, and range-

@@ -20,17 +20,10 @@ use super::super::compiler::types::{
 use super::super::ir::{AsmSeg, AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
-use super::{AtomicKind, Expr, ExprId, FinishedFunction, Stmt, StmtId, UnOp};
+use super::{AtomicKind, Expr, ExprId, FinishedFunction, SLOT_ALIGN, Stmt, StmtId, UnOp};
 
 /// The low and high 64-bit halves of a 128-bit value, in that order.
 type Halves = (ValueId, ValueId);
-
-/// Alignment guaranteed for a frame slot address and for the `.data`
-/// staging area a brace-list initializer is laid into: both are
-/// 8-byte slotted. An `Inst::Mcpy` between two such addresses may be
-/// transferred 8 bytes at a time whatever the copied type's own
-/// alignment is.
-const SLOT_ALIGN: u32 = 8;
 
 /// Alignment of storage that is `base` aligned and then advanced by
 /// `off` bytes -- the largest power of two dividing both.
@@ -2370,6 +2363,45 @@ impl<'a> Walker<'a> {
         b.store(hi_addr, high, store_kind);
     }
 
+    /// Copy the `size` bytes staged at `src_data_off` into the local at
+    /// `slot`.
+    fn init_from_template(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        slot: i64,
+        src_data_off: i64,
+        size: i64,
+    ) {
+        let dst = b.local_addr(slot);
+        let src = b.imm_data(src_data_off);
+        b.mcpy(dst, src, size, offset_align(SLOT_ALIGN, src_data_off));
+    }
+
+    /// Store zeros over the first `size` bytes of the local at `slot`,
+    /// in place of copying the all-zero template the parser declined to
+    /// stage. A frame slot is `SLOT_ALIGN`-aligned, so the fill runs in
+    /// whole units down to the tail.
+    fn init_zero(
+        &mut self,
+        b: &mut super::super::codegen::ssa::build::SsaBuilder,
+        slot: i64,
+        size: i64,
+    ) {
+        if size <= 0 {
+            return;
+        }
+        let dst = b.local_addr(slot);
+        let zero = b.imm(0);
+        for (off, width) in super::mem_transfer_chunks(size, SLOT_ALIGN) {
+            let p = if off == 0 {
+                dst
+            } else {
+                b.binop_imm(BinOp::Add, dst, off)
+            };
+            b.store(p, zero, store_kind_for_width(width));
+        }
+    }
+
     fn emit_local_init(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
@@ -2409,32 +2441,28 @@ impl<'a> Walker<'a> {
                 src_data_off,
                 size_bytes,
             } => {
-                let dst = b.local_addr(slot);
-                let src = b.imm_data(*src_data_off);
-                b.mcpy(
-                    dst,
-                    src,
-                    *size_bytes,
-                    offset_align(SLOT_ALIGN, *src_data_off),
-                );
+                self.init_from_template(b, slot, *src_data_off, *size_bytes);
+                Ok(())
+            }
+            super::super::ast::LocalInit::Zero { size_bytes } => {
+                self.init_zero(b, slot, *size_bytes);
                 Ok(())
             }
             super::super::ast::LocalInit::Runtime {
                 zero_init,
                 elements,
             } => {
-                // C99 6.7.8p19 zero prelude (if the parser emitted
-                // one): Mcpy staged zero bytes before the per-element
-                // stores.
-                if let Some((src_data_off, size_bytes)) = zero_init {
-                    let dst = b.local_addr(slot);
-                    let src = b.imm_data(*src_data_off);
-                    b.mcpy(
-                        dst,
-                        src,
-                        *size_bytes,
-                        offset_align(SLOT_ALIGN, *src_data_off),
-                    );
+                // C99 6.7.8p19 zero prelude (if the parser emitted one),
+                // ahead of the per-element stores.
+                match zero_init {
+                    Some(super::super::ast::LocalInitPrelude::Template {
+                        src_data_off,
+                        size_bytes,
+                    }) => self.init_from_template(b, slot, *src_data_off, *size_bytes),
+                    Some(super::super::ast::LocalInitPrelude::Zero { size_bytes }) => {
+                        self.init_zero(b, slot, *size_bytes)
+                    }
+                    None => {}
                 }
                 for elem in elements {
                     let value = match elem.value {
@@ -2940,26 +2968,11 @@ impl<'a> Walker<'a> {
             b.mcpy(dst, src, size, align);
             return Ok(dst);
         }
-        // Chunk into the widest accesses the endpoints' alignment
-        // permits; the width is not raised past it, so the expansion
-        // holds on a target that faults on a misaligned access.
-        let unit = super::mem_transfer_unit(align);
-        let mut chunks: alloc::vec::Vec<(i64, LoadKind, StoreKind)> = alloc::vec::Vec::new();
-        let mut off = 0i64;
-        while off < size {
-            let left = size - off;
-            let w = [8u32, 4, 2, 1]
+        let chunks: alloc::vec::Vec<(i64, LoadKind, StoreKind)> =
+            super::mem_transfer_chunks(size, align)
                 .into_iter()
-                .find(|w| *w <= unit && i64::from(*w) <= left)
-                .unwrap_or(1);
-            chunks.push(match w {
-                8 => (off, LoadKind::I64, StoreKind::I64),
-                4 => (off, LoadKind::U32, StoreKind::I32),
-                2 => (off, LoadKind::U16, StoreKind::I16),
-                _ => (off, LoadKind::U8, StoreKind::I8),
-            });
-            off += i64::from(w);
-        }
+                .map(|(off, w)| (off, load_kind_for_width(w), store_kind_for_width(w)))
+                .collect();
         if op == MemTransferOp::Fill {
             // C99 7.21.6.1p2 converts the fill value to `unsigned char`;
             // the splat repeats that byte across the store width.
@@ -6501,7 +6514,18 @@ fn bitfield_mask_halves(width: u8, offset: u8) -> (i64, i64) {
 /// The unsigned kinds keep the unit's bits at their storage positions so
 /// the extraction's shift and mask see no sign extension from above.
 fn bitfield_load_kind(bf: super::BitfieldDesc) -> LoadKind {
-    match bf.unit_size {
+    load_kind_for_width(bf.unit_size as u32)
+}
+
+/// Store kind for a bitfield's addressable storage unit.
+fn bitfield_store_kind(bf: super::BitfieldDesc) -> StoreKind {
+    store_kind_for_width(bf.unit_size as u32)
+}
+
+/// Integer load kind for a `width`-byte access. Unsigned below eight
+/// bytes: a bit transfer must not sign-extend from the unit's top bit.
+fn load_kind_for_width(width: u32) -> LoadKind {
+    match width {
         1 => LoadKind::U8,
         2 => LoadKind::U16,
         4 => LoadKind::U32,
@@ -6509,9 +6533,9 @@ fn bitfield_load_kind(bf: super::BitfieldDesc) -> LoadKind {
     }
 }
 
-/// Store kind for a bitfield's addressable storage unit.
-fn bitfield_store_kind(bf: super::BitfieldDesc) -> StoreKind {
-    match bf.unit_size {
+/// Integer store kind for a `width`-byte access.
+fn store_kind_for_width(width: u32) -> StoreKind {
+    match width {
         1 => StoreKind::I8,
         2 => StoreKind::I16,
         4 => StoreKind::I32,

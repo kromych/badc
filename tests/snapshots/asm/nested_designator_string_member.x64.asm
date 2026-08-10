@@ -76,27 +76,22 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	popq	%rdx
-               	movl	$0x77, %ecx
-               	leaq	-0x10(%rbp), %rax
-               	movb	%cl, 0x4(%rax)
-               	movl	$0x78, %ecx
-               	leaq	-0x10(%rbp), %rax
-               	movb	%cl, 0x5(%rax)
-               	movl	$0x79, %ecx
-               	leaq	-0x10(%rbp), %rax
-               	movb	%cl, 0x6(%rax)
-               	movl	$0x7a, %ecx
-               	leaq	-0x10(%rbp), %rax
-               	movb	%cl, 0x7(%rax)
+               	leaq	-0x10(%rbp), %rcx
                	xorq	%rax, %rax
+               	movq	%rax, (%rcx)
+               	movq	%rax, 0x8(%rcx)
+               	movl	$0x77, %edx
+               	leaq	-0x10(%rbp), %rcx
+               	movb	%dl, 0x4(%rcx)
+               	movl	$0x78, %edx
+               	leaq	-0x10(%rbp), %rcx
+               	movb	%dl, 0x5(%rcx)
+               	movl	$0x79, %edx
+               	leaq	-0x10(%rbp), %rcx
+               	movb	%dl, 0x6(%rcx)
+               	movl	$0x7a, %edx
+               	leaq	-0x10(%rbp), %rcx
+               	movb	%dl, 0x7(%rcx)
                	leaq	-0x10(%rbp), %rcx
                	movb	%al, 0x8(%rcx)
                	leaq	-0x10(%rbp), %rcx

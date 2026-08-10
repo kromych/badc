@@ -22,11 +22,13 @@ two things:
   The checks end at the vDSO, which is the one image in the build a loader
   has to search rather than just map. It is resolved the way a loader
   resolves it -- ``AT_SYSINFO_EHDR``, ``PT_DYNAMIC``, ``DT_SONAME``,
-  ``DT_GNU_HASH``, then ``DT_VERSYM``/``DT_VERDEF`` for the version the
-  symbol is exported under -- and the function those tables hand back is
-  called and required to keep time. A linker that got the dynamic metadata
-  wrong fails here rather than producing an image that links and cannot be
-  searched. Reported under ``BADC-VDSO-OK``.
+  ``DT_GNU_HASH`` or ``DT_HASH``, then ``DT_VERSYM``/``DT_VERDEF`` for the
+  version the symbol is exported under -- and the function those tables
+  hand back is called and required to keep time. Which hash table a vDSO
+  carries is its ``--hash-style``: arm64 6.10 builds ``sysv`` only, so a
+  probe that required ``.gnu.hash`` could not read it at all. A linker that
+  got the dynamic metadata wrong fails here rather than producing an image
+  that links and cannot be searched. Reported under ``BADC-VDSO-OK``.
 
 The two markers are separate on purpose: a boot that prints the first and not
 the second reached userspace and failed the checks, which is a different defect
@@ -288,6 +290,43 @@ static unsigned long gnu_hash_of(const char *s)
     return h & 0xffffffffUL;
 }
 
+/* gABI ELF hash, the DT_HASH key. */
+static unsigned long sysv_hash_of(const char *s)
+{
+    unsigned long h = 0, g;
+
+    while (*s) {
+        h = (h << 4) + (unsigned char)*s++;
+        g = h & 0xf0000000UL;
+        if (g)
+            h ^= g >> 24;
+        h &= ~g;
+    }
+    return h;
+}
+
+/* Look `name' up in the vDSO's .hash: bucket, then the chain, ending at
+   STN_UNDEF. Returns the .dynsym index. The tables are 32-bit on both
+   ELF classes. */
+static int vdso_sysv_lookup(const unsigned int *h, const ElfW(Sym) *sym,
+                            const char *str, const char *name)
+{
+    unsigned int nbucket = h[0], nchain = h[1];
+    const unsigned int *bucket = &h[2];
+    const unsigned int *chain = &bucket[nbucket];
+    unsigned int i;
+
+    if (!nbucket || !nchain)
+        return -1;
+    for (i = bucket[sysv_hash_of(name) %% nbucket]; i; i = chain[i]) {
+        if (i >= nchain)
+            return -1;
+        if (!strcmp(str + sym[i].st_name, name))
+            return (int)i;
+    }
+    return -1;
+}
+
 /* Look `name' up in the vDSO's .gnu.hash exactly as a loader does:
    Bloom filter, bucket, then the chain. Returns the .dynsym index. */
 static int vdso_gnu_lookup(const unsigned int *h, const ElfW(Sym) *sym,
@@ -350,7 +389,7 @@ static int check_vdso(void)
     const ElfW(Sym) *sym = NULL;
     const ElfW(Verdef) *verdef = NULL;
     const unsigned short *versym = NULL;
-    const unsigned int *gnu = NULL;
+    const unsigned int *gnu = NULL, *sysv = NULL;
     unsigned long soname_off = 0;
     struct timespec a, b;
     int (*fn)(clockid_t, struct timespec *);
@@ -377,13 +416,26 @@ static int check_vdso(void)
         case DT_STRTAB:   str = (const char *)(base + dyn->d_un.d_ptr); break;
         case DT_SYMTAB:   sym = (const ElfW(Sym) *)(base + dyn->d_un.d_ptr); break;
         case DT_GNU_HASH: gnu = (const unsigned int *)(base + dyn->d_un.d_ptr); break;
+        case DT_HASH:     sysv = (const unsigned int *)(base + dyn->d_un.d_ptr); break;
         case DT_VERSYM:   versym = (const unsigned short *)(base + dyn->d_un.d_ptr); break;
         case DT_VERDEF:   verdef = (const ElfW(Verdef) *)(base + dyn->d_un.d_ptr); break;
         case DT_SONAME:   soname_off = dyn->d_un.d_val; break;
         }
     }
-    if (!str || !sym || !gnu) {
-        fail("vdso", "PT_DYNAMIC names no string, symbol or hash table");
+    if (!str) {
+        fail("vdso", "PT_DYNAMIC names no string table (DT_STRTAB)");
+        return 0;
+    }
+    if (!sym) {
+        fail("vdso", "PT_DYNAMIC names no symbol table (DT_SYMTAB)");
+        return 0;
+    }
+    /* Either hash table resolves the symbol. Which one is present is the
+       vDSO's --hash-style, which differs per architecture and kernel
+       version, not a property of the linker under test. A loader takes
+       DT_GNU_HASH when it is there and falls back to DT_HASH. */
+    if (!gnu && !sysv) {
+        fail("vdso", "PT_DYNAMIC names no hash table (DT_GNU_HASH or DT_HASH)");
         return 0;
     }
     soname = str + soname_off;
@@ -391,9 +443,11 @@ static int check_vdso(void)
         fail("vdso", "DT_SONAME is not " VDSO_SONAME);
         return 0;
     }
-    n = vdso_gnu_lookup(gnu, sym, str, VDSO_SYM);
+    n = gnu ? vdso_gnu_lookup(gnu, sym, str, VDSO_SYM)
+            : vdso_sysv_lookup(sysv, sym, str, VDSO_SYM);
     if (n < 0) {
-        fail("vdso", VDSO_SYM " is not in .gnu.hash");
+        fail("vdso", gnu ? VDSO_SYM " is not in .gnu.hash"
+                         : VDSO_SYM " is not in .hash");
         return 0;
     }
     ver = vdso_version_of(versym, verdef, str, n);

@@ -131,20 +131,9 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x50
                	ret
                	sub	x0, x29, #0x20
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldrb	w10, [x1, #0x8]
-               	strb	w10, [x0, #0x8]
-               	ldrb	w10, [x1, #0x9]
-               	strb	w10, [x0, #0x9]
-               	ldrb	w10, [x1, #0xa]
-               	strb	w10, [x0, #0xa]
-               	ldrb	w10, [x1, #0xb]
-               	strb	w10, [x0, #0xb]
-               	ldr	x10, [sp], #0x10
+               	mov	x1, #0x0                // =0
+               	str	x1, [x0]
+               	str	w1, [x0, #0x8]
                	ldursw	x0, [x29, #-0x28]
                	sub	x1, x29, #0x20
                	str	w0, [x1]

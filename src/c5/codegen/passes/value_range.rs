@@ -6,14 +6,22 @@
 //! test and the arm it selects stayed live -- including an arm holding a
 //! build-time-assert call the source expects to be unreachable.
 //!
-//! The analysis is a range per expression, carried down the dominator
-//! tree. Entering a block whose only predecessor ends in a conditional
-//! branch, the condition's comparison holds (or its negation does) on
-//! every path in, so the compared expression's range narrows for that
-//! subtree. Instructions contribute their own bounds on the way through:
-//! a mask bounds its result, an extension bounds it to the accessed
-//! width. A comparison the ranges settle is rewritten to its answer,
-//! which is what the branch folder and the unreachable-block prune in
+//! Two ranges bound each value. [`def_ranges`] is what the definition
+//! alone says, iterated over the tape to a settled table so a phi is
+//! bounded by the hull of what reaches it -- which is how a loop-carried
+//! state variable is bounded by the states it can hold. On top of that a
+//! range per expression is carried down the dominator tree: entering a
+//! block whose only predecessor ends in a conditional branch, the
+//! condition's comparison holds (or its negation does) on every path in,
+//! so the compared expression's range narrows for that subtree. Where
+//! the condition reaches the compared value through a step that
+//! preserves the comparison -- a mask that clears no bit the operand can
+//! hold, an exclusive-or or constant offset under an equality -- the
+//! comparison is rewritten onto that value and the bound recorded there
+//! too, along with the comparison's own answer and its negation. A
+//! comparison the ranges settle, or one a dominating branch already
+//! answered, is rewritten to that answer, which is what the branch
+//! folder and the unreachable-block prune in
 //! [`super::simplify_branches`] consume.
 //!
 //! Ranges are keyed by expression rather than by value id, so a
@@ -72,6 +80,25 @@ impl Range {
 
     pub(crate) fn is_universe(self) -> bool {
         self == UNIVERSE
+    }
+
+    /// Widening: an endpoint that moved outward goes to the end of the
+    /// register's range rather than to its new value. Contains both
+    /// operands, and sends each endpoint to its limit at most once, so
+    /// an iteration applying it cannot ascend forever.
+    fn widen(self, other: Range) -> Range {
+        Range {
+            lo: if other.lo < self.lo {
+                UNIVERSE.lo
+            } else {
+                self.lo
+            },
+            hi: if other.hi > self.hi {
+                UNIVERSE.hi
+            } else {
+                self.hi
+            },
+        }
     }
 
     fn contains(self, other: Range) -> bool {
@@ -680,19 +707,19 @@ pub(crate) fn arg_range(insts: &[Inst], v: ValueId) -> Range {
 }
 
 /// Rounds of the definition-range iteration, and the round from which a
-/// value that is still moving is widened to [`UNIVERSE`] so the
-/// ascending chain terminates.
+/// value that is still moving is widened so the ascending chain
+/// terminates.
 const WIDEN_ROUND: u32 = 3;
-const MAX_ROUNDS: u32 = 10;
+const MAX_ROUNDS: u32 = 16;
 
 /// Bounds a value's definition carries wherever it is live: the
 /// instruction's own rule over its operands' bounds, with a phi taking
 /// the hull of what reaches it. Iterating from the empty range makes
-/// each round's table an under-approximation, so only a converged
-/// table is returned; a run still moving after [`MAX_ROUNDS`] yields no
-/// bounds at all. Convergence means `r == transfer(r)`, and a fixed
-/// point of rules that each over-approximate their operation
-/// over-approximates every value the definition can produce, whatever
+/// each round's table an under-approximation, so only a settled table
+/// is returned; a run still moving after [`MAX_ROUNDS`] yields no
+/// bounds at all. Settled means every value already contains what its
+/// rule produces from the table, and a table with that property
+/// over-approximates every value a definition can produce, whatever
 /// order the iteration reached it in.
 fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
     let n = func.insts.len();
@@ -725,13 +752,13 @@ fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
                     if unreached { None } else { Some(r) }
                 }
             };
+            let next = match (round >= WIDEN_ROUND, cur[v], next) {
+                (true, Some(old), Some(new)) => Some(old.widen(new)),
+                (_, _, next) => next,
+            };
             if next != cur[v] {
                 changed = true;
-                cur[v] = if round >= WIDEN_ROUND {
-                    Some(UNIVERSE)
-                } else {
-                    next
-                };
+                cur[v] = next;
             }
         }
         if !changed {
@@ -1326,6 +1353,72 @@ mod tests {
             matches!(f.insts[3], Inst::Imm(0)),
             "the state is in [1, 2] on the body edge, so `== 0` is 0: {:?}",
             f.insts[3]
+        );
+    }
+
+    /// A loop-carried value whose rule does not reproduce the widened
+    /// bounds must still settle. `v = phi(0, (v + 1) & 0xff)` is that
+    /// shape: sending a moved endpoint to the end of the register keeps
+    /// the other, and the mask's own bound is inside the result, so the
+    /// next round changes nothing. Sending it to the whole register
+    /// instead would alternate with what the mask recomputes and the
+    /// iteration would never settle, discarding every bound in the
+    /// function. The lower endpoint survives, so the value is still
+    /// known non-negative.
+    ///
+    /// b0: v0 = 0                -> b1
+    /// b1: v1 = phi(v0, v3)
+    ///     v2 = v1 + 1
+    ///     v3 = v2 & 0xff
+    ///     v4 = (v1 >= 0)        -> b1
+    #[test]
+    fn a_widened_loop_value_settles_and_keeps_its_lower_bound() {
+        let insts = alloc::vec![
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: alloc::vec![(0, 0), (1, 3)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 1,
+                rhs_imm: 1,
+            },
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs: 2,
+                rhs_imm: 0xff,
+            },
+            Inst::BinopI {
+                op: BinOp::Ge,
+                lhs: 1,
+                rhs_imm: 0,
+            },
+        ];
+        let block = |range: core::ops::Range<u32>, t: Terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator: t,
+            exit_acc: 0,
+        };
+        let mut f = FunctionSsa {
+            inst_src: vec![(0, 0); 5],
+            f32_values: vec![false; 5],
+            insts,
+            blocks: vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..5, Terminator::Jmp(1)),
+            ],
+            ..FunctionSsa::default()
+        };
+        assert!(
+            run_one(&mut f, &[]),
+            "the iteration must settle with bounds"
+        );
+        assert!(
+            matches!(f.insts[4], Inst::Imm(1)),
+            "the widened lower endpoint still proves it non-negative: {:?}",
+            f.insts[4]
         );
     }
 

@@ -517,6 +517,12 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::BuiltinOffsetof as i64 => "`__builtin_offsetof`",
         x if x == Token::AutoType as i64 => "`__auto_type`",
         x if x == Token::Void as i64 => "`void`",
+        x if x == Token::Inline as i64 => "`inline`",
+        x if x == Token::ForceInline as i64 => "`__forceinline`",
+        x if x == Token::Noreturn as i64 => "`_Noreturn`",
+        x if x == Token::Typeof as i64 => "`typeof`",
+        x if x == Token::Attribute as i64 => "attribute specifier (`__attribute__` / `__declspec`)",
+        x if x == Token::Extension as i64 => "`__extension__`",
         _ => return format!("token id {tk}"),
     };
     name.to_string()

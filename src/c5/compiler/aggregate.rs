@@ -451,6 +451,7 @@ impl Compiler {
                         count: inner_fields.len() as u32,
                         offset: base_offset,
                         size: inner_size,
+                        inner: inner_id,
                     });
                     for inner_field in inner_fields {
                         // Reject name collisions early -- C11

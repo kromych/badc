@@ -2513,6 +2513,14 @@ impl Compiler {
                             if array_size > 0 || self.is_traversable_aggregate_ty(ty) {
                                 self.skip_opt_compound_literal_cast()?;
                             }
+                            // The two array branches below finish at the
+                            // literal's `}`; the grouping parens the strip
+                            // left behind close after it.
+                            let array_cl_parens = if array_size > 0 {
+                                core::mem::take(&mut self.pending.compound_lit_close_parens)
+                            } else {
+                                0
+                            };
                             if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
                                 if thread_local {
                                     return Err(self.compile_err(
@@ -2688,8 +2696,18 @@ impl Compiler {
                                         // literal.
                                         if inner_dims.is_empty() {
                                             self.init_struct_array_element(sid, here)?;
-                                        } else {
+                                        } else if self.lex.tk == '{' {
                                             self.collect_struct_array_data(ty, here, &inner_dims)?;
+                                        } else {
+                                            // C99 6.7.9p20: a row whose braces are
+                                            // elided takes its elements from this
+                                            // list and leaves the rest.
+                                            self.collect_struct_array_entries_braced(
+                                                ty,
+                                                here,
+                                                &inner_dims,
+                                                false,
+                                            )?;
                                         }
                                         if k >= last {
                                             break;
@@ -2700,6 +2718,9 @@ impl Compiler {
                                     self.accept(',')?;
                                 }
                                 self.next()?; // consume `}`
+                                for _ in 0..array_cl_parens {
+                                    self.accept(')')?;
+                                }
                             } else if array_size > 0 {
                                 if thread_local {
                                     return Err(self.compile_err(
@@ -2718,6 +2739,9 @@ impl Compiler {
                                     )));
                                 }
                                 self.write_array_init_into_data(var_offset, ty, &elements);
+                                for _ in 0..array_cl_parens {
+                                    self.accept(')')?;
+                                }
                             } else if self.is_traversable_aggregate_ty(ty) {
                                 if thread_local {
                                     return Err(self.compile_err(

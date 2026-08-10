@@ -3078,6 +3078,85 @@ fn packed_anon_struct_layout() {
 }
 
 #[test]
+fn attribute_statement() {
+    // An attribute specifier at statement position: a null statement of
+    // its own (`__attribute__((fallthrough));`) or a prefix on the
+    // declaration or statement that follows.
+    assert_eq!(run_fixture("attribute_statement.c"), 0);
+}
+
+#[test]
+fn typeof_member_array_dims() {
+    // `typeof` of a multi-dimensional array member keeps the row shape,
+    // so the named type indexes and measures like the member itself.
+    assert_eq!(run_fixture("typeof_member_array_dims.c"), 0);
+}
+
+#[test]
+fn ptr_to_incomplete_array() {
+    // C99 6.7.5.2p4 / 6.3.2.1p3: `T (*)[]` points at an incomplete array
+    // type and `*p` still decays to `T *`.
+    assert_eq!(run_fixture("ptr_to_incomplete_array.c"), 0);
+}
+
+#[test]
+fn int128_return_scalar() {
+    // C99 6.8.6.4p3: a scalar `return` operand converts to the 128-bit
+    // integer return type as if by assignment.
+    assert_eq!(run_fixture("int128_return_scalar.c"), 0);
+}
+
+#[test]
+fn designator_chain_runtime_array() {
+    // C99 6.7.8p7 `[N].member = value` in an array filled by stores
+    // because its element values are not all constant.
+    assert_eq!(run_fixture("designator_chain_runtime_array.c"), 0);
+}
+
+#[test]
+fn designator_range_in_chain() {
+    // The GNU `[lo ... hi]` range inside a designator list, not only as a
+    // whole-array designator.
+    assert_eq!(run_fixture("designator_range_in_chain.c"), 0);
+}
+
+#[test]
+fn designator_multidim_scalar_array() {
+    // A chained `[i][j] =` designator names a row of the innermost
+    // dimension, so its brace list spans that row.
+    assert_eq!(run_fixture("designator_multidim_scalar_array.c"), 0);
+}
+
+#[test]
+fn macro_alias_tail_invocation() {
+    // C99 6.10.3.4p1: a function-like macro name ending an object-like
+    // macro's body takes its arguments from the source that follows,
+    // across new-lines.
+    assert_eq!(run_fixture("macro_alias_tail_invocation.c"), 0);
+}
+
+#[test]
+fn anon_member_brace_nesting() {
+    // C11 6.7.2.1p13 + C99 6.7.9p17: each promoted anonymous aggregate is
+    // a sub-object with its own brace level, at any nesting depth.
+    assert_eq!(run_fixture("anon_member_brace_nesting.c"), 0);
+}
+
+#[test]
+fn compound_literal_array_init() {
+    // GCC compound literals: an array initialized by an array-typed
+    // compound literal takes the literal's brace list.
+    assert_eq!(run_fixture("compound_literal_array_init.c"), 0);
+}
+
+#[test]
+fn struct_array_brace_elision() {
+    // C99 6.7.9p20/p21: a sub-array of structs whose braces are elided
+    // takes what it holds from the enclosing list; the rest stays zero.
+    assert_eq!(run_fixture("struct_array_brace_elision.c"), 0);
+}
+
+#[test]
 fn packed_anon_union_layout() {
     // A trailing `__attribute__((packed))` repacks the fields; the promoted
     // members of an anonymous union must keep overlapping (and a nested

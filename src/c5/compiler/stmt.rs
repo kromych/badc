@@ -2870,6 +2870,21 @@ impl Compiler {
         // unary `*`, which would mis-apply the decay no-op and drop the
         // load an assignment lvalue needs.
         self.pending.fn_ptr_chain_depth = -1;
+        // GNU statement attributes: an attribute specifier at statement
+        // position appertains to the statement that follows, and
+        // `__attribute__((fallthrough));` -- what `<linux/compiler_attributes.h>`
+        // expands `fallthrough` to -- is a null statement. c5 acts on no
+        // statement attribute, so discard the tokens by paren balance
+        // (`skip_attribute_specifiers` writes `pending` state that belongs to
+        // a declaration) and continue with what follows.
+        while self.lex.tk == Token::Attribute {
+            self.next()?; // the attribute keyword
+            if self.lex.tk != '(' {
+                return Err(self.compile_err("`(` expected after attribute specifier"));
+            }
+            self.next()?; // the opening `(`
+            self.skip_balanced_parens_after_open()?;
+        }
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
             let name = self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
             // C99 6.8.1p3: a label name must be unique within its
@@ -3184,7 +3199,15 @@ impl Compiler {
                     self.mark_emit_other();
                     self.ast_psh();
                     self.expr(Token::Assign as i64)?;
-                    if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
+                    // The GCC 128-bit integer shares the aggregate carrier but
+                    // is an integer type: C99 6.8.6.4p3 converts the operand as
+                    // if by assignment, so a scalar widens into it the way the
+                    // assignment and argument paths already widen one.
+                    let int128_from_scalar =
+                        self.is_int128_ty(ret_ty) && !is_struct_value_ty(self.ty);
+                    if !int128_from_scalar
+                        && (!is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0)
+                    {
                         return Err(self.compile_err(
                             "returning a non-struct value from a \
                              struct-returning function",
@@ -3194,7 +3217,9 @@ impl Compiler {
                     // if by assignment. Diagnose a return of an
                     // incompatible struct type, matching the assignment
                     // path.
-                    if let Some(m) = Self::type_warning(&self.structs, ret_ty, self.ty, false) {
+                    if let Some(m) = Self::type_warning(&self.structs, ret_ty, self.ty, false)
+                        .filter(|_| !int128_from_scalar)
+                    {
                         let want = super::types::format_type(ret_ty, &self.structs);
                         let got = super::types::format_type(self.ty, &self.structs);
                         let text =

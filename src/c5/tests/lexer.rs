@@ -293,3 +293,17 @@ fn line_text_by_number_honours_line_markers() {
     assert_eq!(lex.line_text_by_number(7), Some("int gamma;"));
     assert_eq!(lex.line_text_by_number(99), None);
 }
+
+#[test]
+fn describe_names_every_token() {
+    // The ids are contiguous from `Num`, so this covers every variant and
+    // checks a newly added one without listing it. A raw id in a
+    // diagnostic is an internal number the reader cannot act on.
+    for raw in (Token::Num as i64)..=(Token::LocalLabel as i64) {
+        let text = crate::c5::token::describe(Tok(raw));
+        assert!(
+            !text.starts_with("token id"),
+            "token {raw} has no spelling in describe()"
+        );
+    }
+}

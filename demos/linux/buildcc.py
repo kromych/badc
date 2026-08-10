@@ -54,7 +54,7 @@ import sys
 
 # Flag policy as in sweep.py: keep the preprocessor surface and the code
 # model (-mcmodel=), fold -isystem/-idirafter into -I, honor the recorded
-# optimization level, drop the rest (warnings, -g/-std, the gcc hardening
+# optimization level, drop the rest (warnings, the gcc hardening
 # spellings badc has no equivalent for). It differs in the dependency
 # flags below: the sweep compiles into a scratch directory and wants no
 # .d files, while this shim is the kernel's CC and must produce them.
@@ -156,6 +156,14 @@ def rewrite(argv: list[str]) -> list[str]:
             # than dropped. CONFIG_DEBUG_INFO_NONE passes no such flag, so
             # configurations that ask for none are unaffected.
             debug = True
+            i += 1
+        elif a.startswith("-std="):
+            # The dialect selects which declarations the kernel's headers
+            # reach: `<asm/xen/interface_64.h>` gates the anonymous union
+            # naming both `rip` and `eip` on `__GNUC__ && !__STRICT_ANSI__`.
+            # badc keys `__STRICT_ANSI__` off this flag as gcc does, so the
+            # kernel's own `-std=gnu11` has to reach it.
+            out.append(a)
             i += 1
         elif a == "-mstrict-align":
             # Early-boot units that run with the MMU off are built with

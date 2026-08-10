@@ -126,11 +126,17 @@ anonymous members, `<stdatomic.h>`).
 
 badc's driver has no accept-and-ignore bucket: any dash-prefixed argument
 no option arm matches is an error, not a warning. Common gcc spellings
-badc does not implement -- `-std=`, `-Wall` and the rest of the `-W`
-family bar `-W[no-]dead-store`, `-x`, `-isystem`, `-nostdinc`, `-static` --
-therefore fail the invocation rather than being dropped. A build system
-that passes a compiler's whole flag set through has to filter it; the
-kernel harness under `demos/linux/` does exactly that.
+badc does not implement -- `-Wall` and the rest of the `-W` family bar
+`-W[no-]dead-store`, `-x`, `-isystem`, `-nostdinc`, `-static` -- therefore
+fail the invocation rather than being dropped. A build system that passes
+a compiler's whole flag set through has to filter it; the kernel harness
+under `demos/linux/` does exactly that.
+
+`-std=<dialect>` is accepted. badc compiles C99 with the GNU extensions
+always available, so the name selects only whether `__STRICT_ANSI__` is
+defined under `--gnu`: `gnu*` clears it and `c*` / `iso*` set it, as in
+gcc and clang. Without the flag `--gnu` reports strict conformance, so a
+header takes its standard-C path for the GNU features badc lacks.
 
 ## Extensions implemented
 

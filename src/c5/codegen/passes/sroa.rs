@@ -93,31 +93,45 @@ pub(crate) fn run(func: &mut FunctionSsa, usable_gpr: usize) -> Vec<i64> {
 }
 
 /// A constant-offset scalar access to an object, resolved to the byte
-/// range it reads or writes.
+/// range it reads or writes. `fill` carries the stored constant when the
+/// access is a store of an immediate, which is the one store form that
+/// can be rewritten to a narrower one.
 struct Access {
     id: u32,
     base: i64,
     off: i64,
     width: i64,
     store: bool,
+    fill: Option<i64>,
 }
 
-/// A whole-object block copy into an object's first byte. The copy's
-/// source is read off the tape at expansion time.
+/// Where the bytes an object-granularity write moves come from.
+enum InitSource {
+    /// `Mcpy`; the source pointer is read off the tape at expansion.
+    Copy,
+    /// `Store` of the given immediate.
+    Fill(i64),
+}
+
+/// A write covering a whole span of an object rather than one of its
+/// fields, decomposed below into a per-field write each.
 struct BlockInit {
     id: u32,
     base: i64,
+    off: i64,
     size: i64,
     align: i64,
+    source: InitSource,
 }
 
-/// One field of the copy a `BlockInit` is decomposed into: read `width`
-/// bytes at `off` from the copy's source and write them to `slot`.
+/// One field a [`BlockInit`] is decomposed into: write `width` bytes to
+/// `slot`, taken either from the copy source at `off` or from `imm`.
 struct CopyField {
     off: i64,
     slot: i64,
     load: LoadKind,
     store: StoreKind,
+    imm: Option<i64>,
 }
 
 /// Rewrite every splittable object's accesses to per-field slots,
@@ -189,6 +203,7 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
                             off,
                             width,
                             store: false,
+                            fill: None,
                         });
                     }
                 }
@@ -214,6 +229,10 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
                             off,
                             width,
                             store: true,
+                            fill: match func.insts.get(*value as usize) {
+                                Some(Inst::Imm(k)) => Some(*k),
+                                _ => None,
+                            },
                         });
                     }
                 }
@@ -241,8 +260,10 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
                         inits.push(BlockInit {
                             id: i as u32,
                             base,
+                            off: 0,
                             size: *size,
                             align: *align as i64,
+                            source: InitSource::Copy,
                         });
                     } else {
                         declined.insert(base);
@@ -272,10 +293,42 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
             declined.insert(base);
         }
     }
-    // A block copy's own value id must have no operand consumer: the
-    // decomposition below replaces it with per-field stores, which do
-    // not produce the copied object's address. `Block::exit_acc` is not
-    // a consumer -- it names the block's last defined value so liveness
+    // A store of an immediate spanning more than one of the object's
+    // fields is object-granularity initialization written as a store
+    // rather than a copy -- what an aggregate's zero fill emits per cell
+    // -- and is decomposed like one. It is recognised by strictly
+    // containing another access's byte range, so a store that is itself
+    // a field keeps its own width and stays a plain access.
+    let mut ranges_of: BTreeMap<i64, BTreeSet<(i64, i64)>> = BTreeMap::new();
+    for a in &accesses {
+        ranges_of
+            .entry(a.base)
+            .or_default()
+            .insert((a.off, a.width));
+    }
+    let mut demoted: BTreeSet<u32> = BTreeSet::new();
+    for a in &accesses {
+        let Some(k) = a.fill else { continue };
+        let spans = ranges_of[&a.base].iter().any(|&(off, width)| {
+            (off, width) != (a.off, a.width) && off >= a.off && off + width <= a.off + a.width
+        });
+        if spans {
+            demoted.insert(a.id);
+            inits.push(BlockInit {
+                id: a.id,
+                base: a.base,
+                off: a.off,
+                size: a.width,
+                align: a.width,
+                source: InitSource::Fill(k),
+            });
+        }
+    }
+
+    // A decomposed write's own value id must have no operand consumer:
+    // the per-field writes below produce neither the copied object's
+    // address nor the whole stored value. `Block::exit_acc` is not a
+    // consumer -- it names the block's last defined value so liveness
     // keeps it to the block end, and every rewrite here leaves that id
     // defining some value.
     if !inits.is_empty() {
@@ -303,7 +356,7 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
     // ranges partition: two accesses are the same field or disjoint.
     let mut fields_of: BTreeMap<i64, BTreeMap<(i64, i64), bool>> = BTreeMap::new();
     for a in &accesses {
-        if declined.contains(&a.base) {
+        if declined.contains(&a.base) || demoted.contains(&a.id) {
             continue;
         }
         let fp = match &func.insts[a.id as usize] {
@@ -327,21 +380,26 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
             end = off + width;
         }
     }
-    // A block initializer must decompose exactly: every field it covers
-    // has to sit wholly inside the copy, at its natural alignment within
-    // the guarantee the copy carries, and move through an integer
-    // register. A field outside the copy keeps its own slot's value.
+    // A block initializer must decompose exactly: every field is either
+    // wholly outside it, keeping its own slot's value, or wholly inside
+    // it, at its natural alignment within the guarantee a copy carries,
+    // and moving through an integer register. A field straddling either
+    // end satisfies neither and declines the object.
     for init in &inits {
         let Some(fields) = fields_of.get(&init.base) else {
             continue;
         };
+        let end = init.off + init.size;
         let ok = fields.iter().all(|(&(off, width), &fp)| {
-            off >= init.size
-                || (off + width <= init.size
-                    && !fp
-                    && width <= init.align
-                    && off % width == 0
-                    && off <= i32::MAX as i64)
+            if off + width <= init.off || off >= end {
+                return true;
+            }
+            off >= init.off
+                && off + width <= end
+                && !fp
+                && width <= init.align
+                && (off - init.off) % width == 0
+                && off <= i32::MAX as i64
         });
         if !ok {
             declined.insert(init.base);
@@ -388,27 +446,40 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
         let Some(assigned) = slots_of.get(&init.base) else {
             continue;
         };
+        let end = init.off + init.size;
         let copies = assigned
             .iter()
-            .filter(|((off, _), _)| *off < init.size)
+            .filter(|((off, width), _)| *off >= init.off && *off + *width <= end)
             .map(|(&(off, width), &slot)| {
                 let (load, store) = copy_kinds(width);
                 CopyField {
-                    off,
+                    off: off - init.off,
                     slot,
                     load,
                     store,
+                    // The field takes the bytes of the stored constant
+                    // that land on it, sign-extended to the register the
+                    // narrowed store reads, as a direct store of the same
+                    // constant to that member would produce.
+                    imm: match init.source {
+                        InitSource::Copy => None,
+                        InitSource::Fill(k) => Some(sub_word(k, off - init.off, width)),
+                    },
                 }
             })
             .collect();
         splits.insert(init.id, copies);
     }
 
-    // Commit: rewrite each surviving access to its field slot.
+    // Commit: rewrite each surviving access to its field slot. A demoted
+    // store names no field; the expansion below replaces it.
     for a in &accesses {
         let Some(assigned) = slots_of.get(&a.base) else {
             continue;
         };
+        if demoted.contains(&a.id) {
+            continue;
+        }
         let slot = assigned[&(a.off, a.width)];
         let inst = &mut func.insts[a.id as usize];
         if a.store {
@@ -516,8 +587,23 @@ fn pinned_slots(func: &FunctionSsa) -> BTreeSet<i64> {
     pinned
 }
 
-/// Replace each `Mcpy` named in `splits` with the per-field load / store
-/// pairs it decomposes into, renumbering the tape around the insertions.
+/// Bytes `[off, off + width)` of the little-endian representation of
+/// `k`, sign-extended to the register a store of that width reads.
+fn sub_word(k: i64, off: i64, width: i64) -> i64 {
+    if !(0..8).contains(&off) {
+        return 0;
+    }
+    let shifted = ((k as u64) >> (8 * off as u32)) as i64;
+    match width {
+        1 => shifted as i8 as i64,
+        2 => shifted as i16 as i64,
+        4 => shifted as i32 as i64,
+        _ => shifted,
+    }
+}
+
+/// Replace each write named in `splits` with the per-field writes it
+/// decomposes into, renumbering the tape around the insertions.
 fn expand_block_inits(func: &mut FunctionSsa, splits: &BTreeMap<u32, Vec<CopyField>>) {
     let n = func.insts.len();
     let old_ranges: Vec<core::ops::Range<u32>> =
@@ -556,11 +642,14 @@ fn expand_block_inits(func: &mut FunctionSsa, splits: &BTreeMap<u32, Vec<CopyFie
                     };
                     for c in copies {
                         let loaded = new_insts.len() as ValueId;
-                        new_insts.push(Inst::Load {
-                            addr: src,
-                            disp: c.off as i32,
-                            kind: c.load,
-                            volatile: false,
+                        new_insts.push(match c.imm {
+                            Some(k) => Inst::Imm(k),
+                            None => Inst::Load {
+                                addr: src,
+                                disp: c.off as i32,
+                                kind: c.load,
+                                volatile: false,
+                            },
                         });
                         new_insts.push(Inst::StoreLocal {
                             off: c.slot,
@@ -992,12 +1081,16 @@ mod tests {
         );
     }
 
-    /// An access that overlaps another at a second width leaves the
-    /// object in memory: the field decomposition is not a partition.
+    /// An access that overlaps another at a second width and carries a
+    /// value no narrower store can reproduce leaves the object in
+    /// memory: the field decomposition is not a partition.
     #[test]
     fn overlapping_widths_not_split() {
         let insts = alloc::vec![
-            Inst::Imm(1),        // v0
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64
+            }, // v0
             Inst::LocalAddr(-2), // v1
             store(1, 0),         // v2 8-byte store at 0
             Inst::LocalAddr(-2), // v3
@@ -1013,6 +1106,82 @@ mod tests {
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "overlapping widths must not split");
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+    }
+
+    /// A store of an immediate spanning a narrower field is
+    /// object-granularity initialization -- what an aggregate's zero
+    /// fill emits per cell -- and decomposes into a store of the bytes
+    /// that land on each field, which is what lets the object split.
+    #[test]
+    fn constant_fill_over_a_narrower_field_splits() {
+        let insts = alloc::vec![
+            Inst::Imm(0x9abc_def0_1234_5678u64 as i64), // v0
+            Inst::LocalAddr(-2),                        // v1
+            store(1, 0),                                // v2 8-byte fill at 0
+            Inst::LocalAddr(-2),                        // v3
+            Inst::Load {
+                addr: 3,
+                disp: 0,
+                kind: LoadKind::I32,
+                volatile: false
+            }, // v4 4-byte load at 0
+            Inst::Load {
+                addr: 3,
+                disp: 4,
+                kind: LoadKind::I32,
+                volatile: false
+            }, // v5 4-byte load at 4
+        ];
+        let mut f = func(insts, Terminator::Return(5), alloc::vec![(-2, 1)]);
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1, "the fill must not block the split");
+        // The fill became one immediate + store per field, little-endian:
+        // the low word to the field at 0, the high word to the field at 4.
+        let imms: Vec<i64> = f
+            .insts
+            .iter()
+            .filter_map(|i| match i {
+                Inst::Imm(k) => Some(*k),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            imms.contains(&0x1234_5678) && imms.contains(&(0x9abc_def0u32 as i32 as i64)),
+            "each field takes the bytes of the constant that land on it: {imms:x?}"
+        );
+        assert!(
+            !f.insts.iter().any(|i| matches!(i, Inst::Store { .. })),
+            "no address-based store survives the split"
+        );
+    }
+
+    /// A store of an immediate that is itself a field keeps its width:
+    /// demotion is for a store spanning more than one field, so an
+    /// ordinary constant member assignment stays a plain access.
+    #[test]
+    fn constant_store_matching_a_field_stays_an_access() {
+        let insts = alloc::vec![
+            Inst::Imm(7),        // v0
+            Inst::LocalAddr(-2), // v1
+            store(1, 0),         // v2 8-byte store at 0
+            Inst::LocalAddr(-2), // v3
+            load(3),             // v4 8-byte load at 0
+        ];
+        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 1)]);
+        let split = split_objects(&mut f, 64);
+        assert_eq!(split.len(), 1);
+        assert!(
+            f.insts.iter().any(|i| matches!(
+                i,
+                Inst::StoreLocal {
+                    value: 0,
+                    kind: StoreKind::I64,
+                    ..
+                }
+            )),
+            "the store keeps its own value and width: {:?}",
+            f.insts
+        );
     }
 
     /// A template `Mcpy` filling the object decomposes into a per-field

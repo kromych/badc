@@ -389,6 +389,126 @@ fn a_constant_assignment_with_external_linkage_becomes_an_absolute_symbol() {
     );
 }
 
+/// Contents of a named section, empty when the object has none.
+fn section_data(bytes: &[u8], want: &str) -> Vec<u8> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let shoff = u64at(0x28);
+    let (shentsize, shnum, shstrndx) = (u16at(0x3a), u16at(0x3c), u16at(0x3e));
+    let names = u64at(shoff + shstrndx * shentsize + 0x18);
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let n = names + u32at(sh);
+        let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+        if &bytes[n..n + end] == want.as_bytes() {
+            let off = u64at(sh + 0x18);
+            return bytes[off..off + u64at(sh + 0x20)].to_vec();
+        }
+    }
+    Vec::new()
+}
+
+/// The exception-table macros of `asm/asm-extable.h` each paste their own
+/// copy of the `.L__gpr_num_*` table from `asm/gpr-num.h`, so a template
+/// with two entries assigns every name twice with a read in between. Both
+/// reads fold against the assignment in effect, so neither assignment may
+/// reach the code stream: what is left of a function-body template is an
+/// instruction stream, and no backend encodes `.set` as an instruction.
+/// Each named it in its own words before -- aarch64 as a symbol operand
+/// needing a relocation, x86_64 as an unsupported instruction -- so both
+/// targets are checked here.
+///
+/// The section is GNU as 2.46.1's for the same source: two PC-relative
+/// `.long`s per entry, then the type and data shorts as `02 00 ff 03`
+/// (`EX_TYPE_UACCESS_ERR_ZERO`, and 31 in both 5-bit register fields).
+#[test]
+fn a_reassigned_gpr_number_table_leaves_the_exception_table_encodable() {
+    const HEAD: &str = r#"
+#define GPRNUMS \
+"	.irp	num,0,1,2,3\n" \
+"	.equ	.L__gpr_num_w\\num, \\num\n" \
+"	.endr\n" \
+"	.equ	.L__gpr_num_wzr, 31\n"
+
+#define EXTAB(insn, fixup) \
+	GPRNUMS \
+	".pushsection	__ex_table, \"a\"\n" \
+	".align		2\n" \
+	".long		((" insn ") - .)\n" \
+	".long		((" fixup ") - .)\n" \
+	".short		(2)\n" \
+	".short		(((.L__gpr_num_wzr) << 0) | ((.L__gpr_num_wzr) << 5))\n" \
+	".popsection\n"
+
+int f(unsigned *p)
+{
+	int ret = 0;
+	asm volatile(
+"#;
+    // `1b` faults, `2b` faults, both are fixed up at `3f`.
+    const A64_BODY: &str = r#""1:	ldxr	w0, [%[p]]\n"
+"	cbz	w0, 3f\n"
+"2:	stlxr	w1, w0, [%[p]]\n"
+"3:\n"
+	EXTAB("1b", "3b")
+	EXTAB("2b", "3b")
+	: "+r" (ret) : [p] "r" (p) : "memory", "w0", "w1");
+	return ret;
+}
+"#;
+    const X64_BODY: &str = r#""1:	movl	(%[p]), %%eax\n"
+"	testl	%%eax, %%eax\n"
+"	jz	3f\n"
+"2:	movl	%%eax, (%[p])\n"
+"3:\n"
+	EXTAB("1b", "3b")
+	EXTAB("2b", "3b")
+	: "+r" (ret) : [p] "r" (p) : "memory", "eax");
+	return ret;
+}
+"#;
+    // R_AARCH64_PREL32 / R_X86_64_PC32: the entry addresses the faulting
+    // instruction and its fixup relative to its own slot.
+    for (target, body, pcrel) in [
+        ("linux-aarch64", A64_BODY, 261u32),
+        ("linux-x64", X64_BODY, 2u32),
+    ] {
+        let d = dir(&format!("extable-{target}"));
+        write(&d, "ex.c", &format!("{HEAD}{body}"));
+        run_ok(
+            &d,
+            &[
+                "-q",
+                "-c",
+                &format!("--target={target}"),
+                "ex.c",
+                "-o",
+                "ex.o",
+            ],
+        );
+        let bytes = std::fs::read(d.join("ex.o")).unwrap();
+        assert_eq!(
+            section_data(&bytes, "__ex_table"),
+            [
+                0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0xff, 3, //
+                0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0xff, 3,
+            ],
+            "{target}"
+        );
+        let r = relocs(&bytes, ".rela__ex_table");
+        assert_eq!(
+            r.iter().map(|e| (e.0, e.1)).collect::<Vec<_>>(),
+            [(0, pcrel), (4, pcrel), (12, pcrel), (16, pcrel)],
+            "{target}"
+        );
+        // Both entries are fixed up at the same label, and each faulting
+        // instruction precedes it.
+        assert_eq!(r[1].2, r[3].2, "{target}");
+        assert!(r[0].2 < r[2].2 && r[2].2 < r[1].2, "{target}: {r:?}");
+    }
+}
+
 #[test]
 fn assembler_options_are_checked_rather_than_passed_on() {
     let d = dir("wa");

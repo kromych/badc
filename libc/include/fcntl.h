@@ -47,9 +47,7 @@
 #define O_NOATIME    01000000
 // O_DIRECT / O_DIRECTORY / O_NOFOLLOW use different bits per Linux
 // architecture (the aarch64 uapi rearranges them relative to the
-// asm-generic values x86-64 keeps). O_LARGEFILE is 0 on both 64-bit
-// targets (large offsets are native).
-#define O_LARGEFILE  0
+// asm-generic values x86-64 keeps).
 #if defined(__aarch64__)
 #define O_DIRECT     0200000
 #define O_DIRECTORY  040000
@@ -119,6 +117,13 @@
 #define _O_U16TEXT    O_U16TEXT
 #define _O_U8TEXT     O_U8TEXT
 #endif
+
+// O_LARGEFILE selects the 64-bit offset interface for open(). Every
+// target here has 64-bit offsets natively -- the Linux C library
+// already defines it as 0 on both 64-bit architectures -- so the flag
+// is a no-op everywhere and portable source that names it unguarded
+// compiles for every target.
+#define O_LARGEFILE  0
 
 // Most fcntl command numbers are stable across Linux and
 // macOS Darwin. The advisory-lock trio (`F_GETLK` / `F_SETLK` /

@@ -153,6 +153,10 @@ impl Compiler {
                         decl_line: sym.decl_line as u32,
                         array_size: sym.array_size.max(0) as u32,
                         decl_file: sym.decl_file,
+                        fn_ptr_indirection: sym.fn_ptr_indirection,
+                        params: sym.params.clone(),
+                        is_variadic: sym.is_variadic,
+                        array_dims: sym.array_dims.clone(),
                     });
             }
         }

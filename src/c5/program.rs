@@ -459,6 +459,23 @@ pub struct VariableInfo {
     /// file. Surfaces as `DW_AT_decl_file` after mapping to the
     /// DWARF file_names index. Zero is the primary source.
     pub decl_file: u32,
+    /// Function-pointer lineage tag (mirrors
+    /// `Symbol::fn_ptr_indirection`): 0 for a non-function-pointer,
+    /// `n >= 1` for a value that is the function pointer after
+    /// `n - 1` dereferences. With `params` and `is_variadic` it gives
+    /// the DWARF emitter the prototype to describe, so the DIE names a
+    /// pointer to a `DW_TAG_subroutine_type` rather than a pointer to
+    /// the return type.
+    pub fn_ptr_indirection: i64,
+    /// Parameter type tags of the prototype, empty for a
+    /// non-function-pointer or one declared without one.
+    pub params: Vec<i64>,
+    /// True when the prototype ends in `, ...`.
+    pub is_variadic: bool,
+    /// Dimension list of a multidimensional local array, outermost
+    /// first (mirrors `Symbol::array_dims`). Empty for a scalar or a
+    /// one-dimensional array, whose extent `array_size` already gives.
+    pub array_dims: Vec<i64>,
 }
 
 // ---- Data-offset surface ----

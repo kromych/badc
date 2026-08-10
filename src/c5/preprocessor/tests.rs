@@ -125,11 +125,24 @@ fn gnu_identity_macros_are_opt_in() {
 
     // `enable_gnu` (the `--gnu` flag) defines both.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    pp.enable_gnu(false);
+    pp.enable_gnu(false, true);
     let out = pp.process(probe).expect("preprocessor failed");
     assert!(
         out.contains("G yes") && out.contains("S yes"),
         "--gnu: {out}"
+    );
+
+    // `-std=gnu*` keeps `__GNUC__` and drops `__STRICT_ANSI__`, the
+    // combination gcc and clang produce for a GNU dialect. A header that
+    // gates a GNU declaration on the pair -- `<asm/xen/interface_64.h>`
+    // gates the anonymous union naming both `rip` and `eip` on it --
+    // then reaches the same declarations it gives gcc.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.enable_gnu(false, false);
+    let out = pp.process(probe).expect("preprocessor failed");
+    assert!(
+        out.contains("G yes") && out.contains("S no"),
+        "--gnu -std=gnu11: {out}"
     );
 }
 
@@ -140,7 +153,7 @@ fn gnu_identity_version_derives_from_the_shared_claim() {
     // and `__VERSION__` must name badc as the producer, as clang
     // names itself in its "<dialect> Compatible <producer>" form.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    pp.enable_gnu(false);
+    pp.enable_gnu(false, true);
     let out = pp
         .process("maj __GNUC__\nmin __GNUC_MINOR__\npat __GNUC_PATCHLEVEL__\nver __VERSION__\n")
         .expect("preprocessor failed");

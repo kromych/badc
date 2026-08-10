@@ -694,7 +694,7 @@ impl Preprocessor {
     /// ISO conformance alongside `__GNUC__`, exactly as
     /// `gcc`/`clang -std=c11` does, so portable code uses the standard
     /// path for the GNU-only features badc lacks.
-    pub fn enable_gnu(&mut self, gnu89_inline: bool) {
+    pub fn enable_gnu(&mut self, gnu89_inline: bool, strict_ansi: bool) {
         // The claimed version (`crate::GNU_COMPAT_VERSION`) stays at
         // 4.2.1. The language features a 5.1 claim implies are backed --
         // `__atomic_*` (4.7), `asm goto`
@@ -745,8 +745,12 @@ impl Preprocessor {
         // path rather than a GNU-dialect path for any extension badc
         // does not provide. Both the plain and `__`-prefixed spellings
         // of the extensions badc does implement stay available.
-        self.macros
-            .insert("__STRICT_ANSI__".to_string(), "1".to_string());
+        // `-std=gnu*` clears it: a header then reaches the GNU-dialect
+        // declarations the dialect promises, as under gcc and clang.
+        if strict_ansi {
+            self.macros
+                .insert("__STRICT_ANSI__".to_string(), "1".to_string());
+        }
         // `=@cc<cond>` inline-asm flag outputs (GCC 6). Implemented for
         // x86_64 only, so the macro follows the target predefine rather
         // than the dialect alone.

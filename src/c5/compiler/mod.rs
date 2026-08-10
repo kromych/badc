@@ -175,13 +175,17 @@ pub struct AnonBitfield {
 /// `first` is its first entry in `StructDef::fields` and `count` how many
 /// it contributed -- 0 when the anonymous aggregate has no named member
 /// of its own -- with `offset` the member's byte offset in the enclosing
-/// aggregate and `size` its type's size.
+/// aggregate and `size` its type's size. `inner` is the anonymous
+/// aggregate's own definition: the promoted run mirrors its field list
+/// one-to-one, so its `anon_members` describe the runs nested inside this
+/// one and the records form a tree of arbitrary depth.
 #[derive(Debug, Clone, Copy)]
 pub struct AnonMember {
     pub first: u32,
     pub count: u32,
     pub offset: usize,
     pub size: usize,
+    pub inner: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -369,6 +373,12 @@ pub struct CompileOptions {
     /// default inline linkage model instead of C99's, and predefine
     /// `__GNUC_GNU_INLINE__` in place of `__GNUC_STDC_INLINE__`.
     pub gnu89_inline: bool,
+    /// `-std=gnu*` -- the GNU dialect, which suppresses the
+    /// `__STRICT_ANSI__` predefine `--gnu` otherwise installs, as in gcc
+    /// and clang. Off by default: without `-std` badc reports strict
+    /// conformance so a header takes its standard-C path for the GNU
+    /// features badc lacks.
+    pub gnu_dialect: bool,
     /// Mirror of [`crate::NativeOptions::elf_class`]. The assembler's
     /// starting code mode follows it, the way `as --32` starts in
     /// 32-bit mode and `as --64` in 64-bit; a `.code16` / `.code32` /
@@ -392,6 +402,11 @@ impl CompileOptions {
     /// (`-fgnu89-inline`).
     pub fn with_gnu89_inline(mut self, on: bool) -> Self {
         self.gnu89_inline = on;
+        self
+    }
+    /// Select the GNU dialect (`-std=gnu*`) over strict ISO (`-std=c*`).
+    pub fn with_gnu_dialect(mut self, on: bool) -> Self {
+        self.gnu_dialect = on;
         self
     }
     /// Replace the `-D` predefine list.
@@ -1939,7 +1954,7 @@ impl Compiler {
     fn configure_preprocessor(target: Target, opts: &CompileOptions) -> Preprocessor {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         if opts.gnu {
-            pp.enable_gnu(opts.gnu89_inline);
+            pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }
         pp.set_source_label(&opts.source_label);
         pp.set_track_includes(opts.track_includes);

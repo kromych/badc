@@ -177,6 +177,12 @@ Compile knobs:
                            the GNU C surface, so code gating a feature
                            badc lacks (__int128) on __GNUC__ keeps
                            compiling unless this is requested.
+  -std=<dialect>           Language dialect. badc compiles C99 with the
+                           GNU extensions always available, so the name
+                           selects only whether __STRICT_ANSI__ is
+                           defined under --gnu: `gnu*` clears it, `c*` /
+                           `iso*` set it, as gcc and clang do. Without
+                           the flag --gnu reports strict conformance.
   -fgnu89-inline           Use the GNU89 inline linkage model: `extern
                            inline` provides no external definition and a
                            plain `inline` does. The default is C99
@@ -571,6 +577,11 @@ fn run() {
     let mut emit_relocs = false;
     // `--gnu` -- define the GCC identity macros (`__GNUC__` etc.).
     let mut gnu = false;
+    // `-std=` -- a `gnu` dialect suppresses `__STRICT_ANSI__`, an `iso` /
+    // `c` dialect defines it, as in gcc and clang. Without the flag the
+    // conservative default stands: `--gnu` reports strict conformance so a
+    // header takes its standard-C path for the GNU features badc lacks.
+    let mut gnu_dialect = false;
     let mut gnu89_inline = false;
     // Multi-translation-unit linker plumbing. Bytecode `.o`
     // inputs accumulate alongside C sources; `.a` archives
@@ -1052,6 +1063,19 @@ fn run() {
             // linkage model the unit default in place of C99's.
             "-fgnu89-inline" => gnu89_inline = true,
             "-fno-gnu89-inline" => gnu89_inline = false,
+            // gcc / clang `-std=<dialect>`: the language the unit is
+            // written in. badc compiles C99 with the GNU extensions
+            // always available, so the dialect selects only whether
+            // `__STRICT_ANSI__` is defined -- the macro headers read as
+            // "the user asked for ISO C".
+            _ if arg.starts_with("-std=") => {
+                let dialect = &arg["-std=".len()..];
+                if dialect.is_empty() {
+                    eprintln!("badc: error: -std= needs a dialect name");
+                    std::process::exit(1);
+                }
+                gnu_dialect = dialect.starts_with("gnu");
+            }
             // `-c` / `--compile-only` -- emit a c5 object file
             // (`.o`) per source instead of linking through to a
             // native binary. The output goes to either the
@@ -1780,6 +1804,7 @@ fn run() {
             let copts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_gnu_dialect(gnu_dialect)
                 .with_defines(tu_defines(src, &defines))
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -1851,6 +1876,7 @@ fn run() {
         let copts = badc::CompileOptions::default()
             .with_gnu(gnu)
             .with_gnu89_inline(gnu89_inline)
+            .with_gnu_dialect(gnu_dialect)
             .with_optimize(optimize_flag)
             .with_defines(defines.clone())
             .with_undefines(undefines.clone())
@@ -1940,6 +1966,7 @@ fn run() {
             let opts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_gnu_dialect(gnu_dialect)
                 .with_optimize(optimize_flag)
                 .with_defines(tu_defines(src_path, &defines))
                 .with_undefines(undefines.clone())
@@ -2024,6 +2051,7 @@ fn run() {
             target,
             reloc_opts,
             gnu,
+            gnu_dialect,
             gnu89_inline,
             optimize_flag,
             export_all,
@@ -2059,6 +2087,7 @@ fn run() {
             let copts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_gnu_dialect(gnu_dialect)
                 .with_optimize(optimize_flag)
                 .with_defines(copts_defines)
                 .with_undefines(undefines.clone())
@@ -2632,6 +2661,7 @@ fn run() {
             target,
             reloc_opts,
             gnu,
+            gnu_dialect,
             gnu89_inline,
             optimize_flag,
             export_all: false,
@@ -2760,6 +2790,7 @@ fn run() {
             target,
             reloc_opts,
             gnu,
+            gnu_dialect,
             gnu89_inline,
             optimize_flag,
             export_all: false,
@@ -3088,6 +3119,7 @@ struct CompileCfg<'a> {
     target: Target,
     reloc_opts: NativeOptions,
     gnu: bool,
+    gnu_dialect: bool,
     gnu89_inline: bool,
     optimize_flag: bool,
     export_all: bool,
@@ -3250,6 +3282,7 @@ fn tu_compile_options(
     badc::CompileOptions::default()
         .with_gnu(cfg.gnu)
         .with_gnu89_inline(cfg.gnu89_inline)
+        .with_gnu_dialect(cfg.gnu_dialect)
         .with_defines(tu_defines(src_path, cfg.defines))
         .with_undefines(cfg.undefines.to_vec())
         .with_include_paths(cfg.include_paths.to_vec())

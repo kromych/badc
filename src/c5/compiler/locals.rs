@@ -1102,7 +1102,13 @@ impl Compiler {
                     }
                     let here = var_offset + i * group_stride;
                     if !inner_dims.is_empty() {
-                        self.collect_struct_array_data(ty, here, &inner_dims)?;
+                        if self.lex.tk == '{' {
+                            self.collect_struct_array_data(ty, here, &inner_dims)?;
+                        } else {
+                            // C99 6.7.9p20: a row whose braces are elided takes
+                            // its elements from this list and leaves the rest.
+                            self.collect_struct_array_entries_braced(ty, here, &inner_dims, false)?;
+                        }
                     } else {
                         self.init_struct_array_element(sid, here)?;
                     }
@@ -2002,7 +2008,18 @@ impl Compiler {
                         // C99 6.7.8p20: a struct element's braces may be
                         // elided, filling its fields from the flat list.
                         if !inner_dims.is_empty() {
-                            self.collect_struct_array_data(ty, here, &inner_dims)?;
+                            if self.lex.tk == '{' {
+                                self.collect_struct_array_data(ty, here, &inner_dims)?;
+                            } else {
+                                // C99 6.7.9p20: a row whose braces are elided takes
+                                // its elements from this list and leaves the rest.
+                                self.collect_struct_array_entries_braced(
+                                    ty,
+                                    here,
+                                    &inner_dims,
+                                    false,
+                                )?;
+                            }
                         } else {
                             self.init_struct_array_element(sid, here)?;
                         }

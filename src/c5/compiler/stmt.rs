@@ -3205,7 +3205,8 @@ impl Compiler {
                     // assignment and argument paths already widen one.
                     let int128_from_scalar =
                         self.is_int128_ty(ret_ty) && !is_struct_value_ty(self.ty);
-                    if !int128_from_scalar && (!is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0)
+                    if !int128_from_scalar
+                        && (!is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0)
                     {
                         return Err(self.compile_err(
                             "returning a non-struct value from a \

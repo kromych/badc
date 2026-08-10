@@ -2287,9 +2287,11 @@ pub(crate) fn lower(
         off
     };
 
+    let (asm_section_list, asm_sym_decls) = asm_sections.into_parts();
     Ok(Build {
         emitted_relocs: Vec::new(),
-        asm_sections: asm_sections.into_sections(),
+        asm_sections: asm_section_list,
+        asm_sym_decls,
         // The aarch64 ALTERNATIVE replacement is appended to `.text` (a
         // deferred region), not a separately loaded section, so no
         // main-stream reference crosses into a pushed section here.

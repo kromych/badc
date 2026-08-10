@@ -212,10 +212,12 @@ impl Compiler {
         // only the file-scope one accepts (`.text` switches, `.subsection`),
         // so its error falls through to the file-scope parse.
         let mut blocks = match engine::extract_asm_sections(text, aarch64) {
-            Ok(Some((code, blocks))) if globl_shortcut && self.take_file_scope_asm_globl(&code) => {
-                blocks
+            Ok(Some(ex)) if globl_shortcut && ex.is_linkage_only() => {
+                for name in ex.globl_names() {
+                    self.pending_asm_globl.push(name.into());
+                }
+                ex.blocks
             }
-            Ok(None) if globl_shortcut && self.take_file_scope_asm_globl(text) => return Ok(()),
             _ => engine::extract_file_scope_asm_sections(text, aarch64)?,
         };
         for b in &blocks {
@@ -252,12 +254,13 @@ impl Compiler {
                 }
             }
         }
-        // Assemble the section's instructions and materialize into a scratch
-        // sink now so directive and encoding errors are diagnosed at the source
-        // line; the codegen re-materializes into the object's sections under
-        // the emit target's conventions.
+        // Assemble the section's instructions and materialize into the unit's
+        // validation sink now so directive and encoding errors are diagnosed at
+        // the source line; the codegen re-materializes into the object's
+        // sections under the emit target's conventions. The sink spans the unit
+        // so a template resolves the labels its predecessors defined, matching
+        // the codegen materialization, which shares one sink per unit.
         crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target, self.elf_class)?;
-        let mut scratch = engine::AsmSectionSink::default();
         engine::materialize_asm_sections(
             &blocks,
             &|_| None,
@@ -265,7 +268,7 @@ impl Compiler {
             &|_| None,
             &|_| None,
             aarch64,
-            &mut scratch,
+            &mut self.asm_validate_sink,
         )?;
         self.file_asm.push(prepared);
         Ok(())
@@ -2746,27 +2749,6 @@ impl Compiler {
         self.resolve_file_scope_asm_globl();
         self.warn_unused_static_functions();
         Ok(())
-    }
-
-    /// Record the `.globl` / `.global` names in file-scope asm text that sits
-    /// outside any section block, and report whether the text held nothing
-    /// else. A directive naming no symbol of this unit is accepted and has no
-    /// effect, as it does when the assembler sees it.
-    /// Collect the `.globl` / `.global` names of a file-scope asm whose stream
-    /// is nothing but those directives (the linkage-only form). Returns false
-    /// without side effects when any other directive appears, so it doubles as
-    /// the discriminator against the trampoline-body form.
-    fn take_file_scope_asm_globl(&mut self, text: &str) -> bool {
-        if !crate::c5::codegen::ssa::emit_common::asm_stream_is_globl_only(text) {
-            return false;
-        }
-        for piece in crate::c5::codegen::ssa::emit_common::split_asm_statements(text) {
-            let piece = piece.trim();
-            if let Some(p) = piece.find(char::is_whitespace) {
-                self.pending_asm_globl.push(piece[p..].trim().into());
-            }
-        }
-        true
     }
 
     /// Give external linkage to the names a file-scope `asm(".globl name");`

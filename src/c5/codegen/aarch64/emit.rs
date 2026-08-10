@@ -3092,10 +3092,18 @@ fn emit_inline_asm_aarch64(
         }
     };
     let (code_text, section_blocks) = match &extracted {
-        Some((c, b)) => (c.as_str(), b.as_slice()),
+        Some(ex) => (ex.code.as_str(), ex.blocks.as_slice()),
         None => (text, &[][..]),
     };
     if let Err(m) = super::ssa::emit_common::reject_unit_symbol_items(section_blocks) {
+        bail_msg(&m);
+        return false;
+    }
+    // The template's symbol directives declare names of the unit; the object
+    // writer applies them, where every definition is known.
+    if let Some(ex) = &extracted
+        && let Err(m) = asm_sections.push_sym_decls(&ex.sym_items)
+    {
         bail_msg(&m);
         return false;
     }

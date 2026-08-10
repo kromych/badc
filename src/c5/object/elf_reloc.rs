@@ -1450,6 +1450,7 @@ pub(super) fn write_relocatable(
     // STB_WEAK wherever the name surfaces: as a definition or as an UNDEF
     // reference.
     let weak_names: alloc::collections::BTreeSet<&str> = {
+        use crate::c5::codegen::ssa::emit_common::AsmSymBind;
         use crate::c5::token::Token;
         program
             .symbols
@@ -1461,6 +1462,13 @@ pub(super) fn write_relocatable(
             })
             .map(|s| s.link_name())
             .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
+            .chain(
+                build
+                    .asm_sym_decls
+                    .iter()
+                    .filter(|d| d.bind == AsmSymBind::Weak)
+                    .map(|d| d.name.as_str()),
+            )
             .collect()
     };
     let bind_for = |name: &str| -> u8 {
@@ -1844,7 +1852,19 @@ pub(super) fn write_relocatable(
     // Labels defined inside inline-asm named sections. The value is the
     // label's offset within the section, rebased by the block's placement;
     // `.type` / `.size` directives set `st_type` / `st_size`.
-    use crate::c5::codegen::ssa::emit_common::AsmSymType;
+    use crate::c5::codegen::ssa::emit_common::{AsmSymBind, AsmSymDecl, AsmSymType};
+    // A unit-level symbol directive an asm template carried outside any
+    // section. It reaches whichever definition the unit holds for the name --
+    // a section label, a main-stream label, or none at all.
+    let sym_decl =
+        |n: &str| -> Option<&AsmSymDecl> { build.asm_sym_decls.iter().find(|d| d.name == n) };
+    let st_type_of = |t: AsmSymType| -> u8 {
+        match t {
+            AsmSymType::Func => STT_FUNC,
+            AsmSymType::Object => STT_OBJECT,
+            AsmSymType::NoType => STT_NOTYPE,
+        }
+    };
     struct AsmLabelSym<'a> {
         name: &'a str,
         shndx: u16,
@@ -1863,26 +1883,35 @@ pub(super) fn write_relocatable(
         .flat_map(|(&(e, base), s)| {
             let shndx = carve.shndx[e];
             let sec_sym = carve.sym_idx[e];
-            s.labels.iter().map(move |l| AsmLabelSym {
-                name: l.name.as_str(),
-                // A `.set` that folded to a constant is absolute: it has no
-                // section and no placement, as in GNU as.
-                shndx: if l.absolute.is_some() { SHN_ABS } else { shndx },
-                sec_sym,
-                value: match l.absolute {
-                    Some(v) => v as u64,
-                    None => base + l.offset as u64,
-                },
-                global: l.global,
-                // `.weak` in the defining statement, or a file-scope `.weak`
-                // in another statement of the unit.
-                weak: l.weak || weak_names_ref.contains(l.name.as_str()),
-                st_type: match l.sym_type {
-                    AsmSymType::Func => STT_FUNC,
-                    AsmSymType::Object => STT_OBJECT,
-                    AsmSymType::NoType => STT_NOTYPE,
-                },
-                st_size: l.size.unwrap_or(0),
+            s.labels.iter().map(move |l| {
+                // A directive from another statement of the unit reaches this
+                // definition; the defining statement's own wins where both set
+                // the same field.
+                let d = sym_decl(l.name.as_str());
+                AsmLabelSym {
+                    name: l.name.as_str(),
+                    // A `.set` that folded to a constant is absolute: it has no
+                    // section and no placement, as in GNU as.
+                    shndx: if l.absolute.is_some() { SHN_ABS } else { shndx },
+                    sec_sym,
+                    value: match l.absolute {
+                        Some(v) => v as u64,
+                        None => base + l.offset as u64,
+                    },
+                    global: match d.map(|d| d.bind) {
+                        Some(AsmSymBind::Global) => true,
+                        Some(AsmSymBind::Local) => false,
+                        _ => l.global,
+                    },
+                    // `.weak` in the defining statement, or a file-scope `.weak`
+                    // in another statement of the unit.
+                    weak: l.weak || weak_names_ref.contains(l.name.as_str()),
+                    st_type: st_type_of(match l.sym_type {
+                        AsmSymType::NoType => d.map_or(AsmSymType::NoType, |d| d.sym_type),
+                        t => t,
+                    }),
+                    st_size: l.size.or(d.and_then(|d| d.size)).unwrap_or(0),
+                }
             })
         })
         .collect();
@@ -1893,19 +1922,62 @@ pub(super) fn write_relocatable(
     // Named labels an inline-asm template defined in the main code stream.
     // A name a pushed section already defines is that section's label; a
     // repeated main-stream name is one definition, so keep the first.
-    let mut asm_text_label_syms: Vec<(&str, usize)> = Vec::new();
+    struct AsmTextLabelSym<'a> {
+        name: &'a str,
+        offset: usize,
+        bind: u8,
+        st_type: u8,
+        st_size: u64,
+    }
+    let mut asm_text_label_syms: Vec<AsmTextLabelSym> = Vec::new();
     for l in &build.asm_text_labels {
         let n = l.name.as_str();
-        if asm_labels.iter().any(|a| a.name == n)
-            || asm_text_label_syms.iter().any(|&(m, _)| m == n)
+        if asm_labels.iter().any(|a| a.name == n) || asm_text_label_syms.iter().any(|s| s.name == n)
         {
             continue;
         }
-        asm_text_label_syms.push((n, l.text_offset));
+        // Local like every gas label with no directive naming it; a unit-level
+        // `.globl` / `.weak` on the name rebinds it.
+        let d = sym_decl(n);
+        asm_text_label_syms.push(AsmTextLabelSym {
+            name: n,
+            offset: l.text_offset,
+            bind: match d.map(|d| d.bind) {
+                Some(AsmSymBind::Global) => STB_GLOBAL,
+                Some(AsmSymBind::Weak) => STB_WEAK,
+                _ if weak_names.contains(n) => STB_WEAK,
+                _ => STB_LOCAL,
+            },
+            st_type: st_type_of(d.map_or(AsmSymType::NoType, |d| d.sym_type)),
+            st_size: d.and_then(|d| d.size).unwrap_or(0),
+        });
     }
     let asm_text_label_names_start = all_names.len();
-    for &(n, _) in &asm_text_label_syms {
-        all_names.push(n);
+    for s in &asm_text_label_syms {
+        all_names.push(s.name);
+    }
+    // A `.globl` naming nothing the unit defines is an undefined global, as
+    // GNU as emits for one with no definition. `.weak` is not: GNU as gives
+    // an undefined weak name a symbol only where something references it,
+    // and a reference gets STB_WEAK through `weak_names` above.
+    let asm_decl_undef: Vec<&AsmSymDecl> = build
+        .asm_sym_decls
+        .iter()
+        .filter(|d| {
+            d.bind == AsmSymBind::Global
+                && !defined_fn_names.contains(d.name.as_str())
+                && !program.function_aliases.iter().any(|a| a.name == d.name)
+                && !defined_data_by_name.contains_key(d.name.as_str())
+                && !asm_defined_labels.contains(d.name.as_str())
+                && !user_extern_names.contains(&d.name.as_str())
+                && !user_extern_data_names.contains(&d.name.as_str())
+                && !asm_extern_names.contains(&d.name.as_str())
+                && !asm_weak_undef.contains(&d.name.as_str())
+        })
+        .collect();
+    let asm_decl_undef_start = all_names.len();
+    for d in &asm_decl_undef {
+        all_names.push(d.name.as_str());
     }
     let (strtab_bytes, name_offs) = build_strtab(&all_names);
     // Patch the file symbol's name offset against the final
@@ -2009,17 +2081,20 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
-    // Main-stream inline-asm labels, local like every gas label with no
-    // `.globl`; a same-name C reference binds to the definition here.
-    for (j, &(n, off)) in asm_text_label_syms.iter().enumerate() {
-        let (shndx, value) = text_place(off as u64);
-        asm_label_symidx.insert(n, symbols.len() as u32);
+    // Main-stream inline-asm labels a directive left local; a same-name C
+    // reference binds to the definition here.
+    for (j, l) in asm_text_label_syms.iter().enumerate() {
+        if l.bind != STB_LOCAL {
+            continue;
+        }
+        let (shndx, value) = text_place(l.offset as u64);
+        asm_label_symidx.insert(l.name, symbols.len() as u32);
         symbols.push(Elf64Sym {
             st_name: name_offs[asm_text_label_names_start + j],
-            st_info: pack_sym_info(STB_LOCAL, STT_NOTYPE),
+            st_info: pack_sym_info(STB_LOCAL, l.st_type),
             st_shndx: shndx,
             st_value: value,
-            st_size: 0,
+            st_size: l.st_size,
             ..Default::default()
         });
     }
@@ -2056,6 +2131,22 @@ pub(super) fn write_relocatable(
             st_info: pack_sym_info(if l.weak { STB_WEAK } else { STB_GLOBAL }, l.st_type),
             st_shndx: l.shndx,
             st_value: l.value,
+            st_size: l.st_size,
+            ..Default::default()
+        });
+    }
+    // Main-stream labels a `.globl` / `.weak` rebound.
+    for (j, l) in asm_text_label_syms.iter().enumerate() {
+        if l.bind == STB_LOCAL {
+            continue;
+        }
+        let (shndx, value) = text_place(l.offset as u64);
+        asm_label_symidx.insert(l.name, symbols.len() as u32);
+        symbols.push(Elf64Sym {
+            st_name: name_offs[asm_text_label_names_start + j],
+            st_info: pack_sym_info(l.bind, l.st_type),
+            st_shndx: shndx,
+            st_value: value,
             st_size: l.st_size,
             ..Default::default()
         });
@@ -2200,12 +2291,15 @@ pub(super) fn write_relocatable(
         }
         asm_label_secref.insert(l.name, (l.sec_sym, l.value as i64));
     }
-    for &(n, off) in &asm_text_label_syms {
-        let (sym, value) = match carve.map_text(off as u64) {
+    for l in &asm_text_label_syms {
+        if l.bind != STB_LOCAL || l.st_type != STT_NOTYPE {
+            continue;
+        }
+        let (sym, value) = match carve.map_text(l.offset as u64) {
             Some((e, new_off)) => (named_sym_idx[e], new_off as i64),
-            None => (text_sym_idx, off as i64),
+            None => (text_sym_idx, l.offset as i64),
         };
-        asm_label_secref.insert(n, (sym, value));
+        asm_label_secref.insert(l.name, (sym, value));
     }
     // Resolve a name an inline-asm statement defined: the folded
     // (section symbol, offset) for a local label, else its own symbol
@@ -2283,6 +2377,18 @@ pub(super) fn write_relocatable(
             st_name: name_offs[asm_weak_undef_start + i],
             st_info: pack_sym_info(STB_WEAK, STT_NOTYPE),
             st_shndx: SHN_UNDEF,
+            ..Default::default()
+        });
+    }
+
+    // Undefined entries for the unit-level `.globl` declarations naming
+    // nothing the unit defines.
+    for (i, d) in asm_decl_undef.iter().enumerate() {
+        symbols.push(Elf64Sym {
+            st_name: name_offs[asm_decl_undef_start + i],
+            st_info: pack_sym_info(bind_for(&d.name), st_type_of(d.sym_type)),
+            st_shndx: SHN_UNDEF,
+            st_size: d.size.unwrap_or(0),
             ..Default::default()
         });
     }
@@ -4426,6 +4532,7 @@ mod tests {
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),
             asm_text_labels: Vec::new(),
+            asm_sym_decls: Vec::new(),
             copy_relocs: Default::default(),
             text: Vec::new(),
             data: Vec::new(),

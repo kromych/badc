@@ -1475,6 +1475,7 @@ pub struct Compiler {
     /// `.weak` symbol names from file-scope asm, bound STB_WEAK by the
     /// object writer wherever the name surfaces.
     pub(super) asm_weak_names: Vec<String>,
+    pub(super) asm_hidden_names: Vec<String>,
     /// `.set name, target` symbol aliases from file-scope asm, merged
     /// onto `Program::function_aliases`.
     pub(super) asm_sym_sets: Vec<(String, String)>,
@@ -2148,6 +2149,7 @@ impl Compiler {
             warnings: pp_warnings,
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
+            asm_hidden_names: Vec::new(),
             asm_sym_sets: Vec::new(),
             asm_validate_sink: Default::default(),
             include_records: pp_include_records,
@@ -2627,6 +2629,7 @@ impl Compiler {
             data: self.data,
             file_asm: self.file_asm,
             asm_weak_names: self.asm_weak_names,
+            asm_hidden_names: self.asm_hidden_names,
             data_align: self.data_align,
             data_object_starts: self.data_object_starts,
             const_data_ranges: self.const_data_ranges,

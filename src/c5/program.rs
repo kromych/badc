@@ -149,6 +149,9 @@ pub struct Program {
     /// reference -- and emits a weak undefined entry for a name that
     /// surfaces nowhere else, as GNU as does.
     pub asm_weak_names: Vec<String>,
+    /// `.hidden` symbol names from file-scope asm. The object writer sets
+    /// `STV_HIDDEN` in `st_other` wherever the name surfaces.
+    pub asm_hidden_names: Vec<String>,
     /// Base alignment `data` requires in the image, at least 8;
     /// raised to 16 when a file-scope object carries `_Alignas(16)`
     /// (or the attribute equivalents). The native writers place the
@@ -553,6 +556,7 @@ impl DataOffsets for Program {
             data: _, // the bytes the offsets index; the pass replaces them wholesale
             file_asm: _,
             asm_weak_names: _,
+            asm_hidden_names: _,
             data_align: _, // an alignment, not an offset
             data_object_starts,
             const_data_ranges,
@@ -670,6 +674,7 @@ mod data_offset_tests {
             data: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
+            asm_hidden_names: Vec::new(),
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),

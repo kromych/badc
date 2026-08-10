@@ -12,21 +12,32 @@ Two pins, with distinct jobs and no shared version:
 
 | `--config` | kernel | configuration | used by |
 |---|---|---|---|
-| `defconfig` (default) | 7.1.6, both arches | the tree's own `make defconfig` | the sweep |
-| `minimal` | 6.12.8 (x86_64), 6.10.1 (aarch64) | vendored `configs/<arch>-<version>.config` | the link-and-boot gate |
+| `defconfig` (default) | 7.1.6, both arches | the tree's own `make defconfig` | the sweep, CI's `kernel` gate, the pre-push kernel step |
+| `minimal` | 6.12.8 (x86_64), 6.10.1 (aarch64) | vendored `configs/<arch>-<version>.config` | boot bring-up and boot debugging |
 
-The sweep corpus is defconfig on the latest stable release: it is what a
-distribution builds, and it moves forward with the kernel, which is what makes
-it a gap finder. The configuration is not vendored. The tarball sha256 pins the
-tree and `make defconfig` is a function of the tree, so the configuration is
-already reproducible; a vendored copy would be a second artifact to regenerate
-on every version bump, and one that can silently disagree with the tree.
+Defconfig is the gate corpus. It is what a distribution builds, and it moves
+forward with the kernel, which is what makes it a gap finder. The configuration
+is not vendored. The tarball sha256 pins the tree and `make defconfig` is a
+function of the tree, so the configuration is already reproducible; a vendored
+copy would be a second artifact to regenerate on every version bump, and one
+that can silently disagree with the tree.
+
+CI's `kernel` job and `scripts/validate_local_boxes.py` both reach this corpus
+through `setup.py`'s pin, so a version bump moves local and CI together and
+neither can drift onto its own tree.
 
 The minimal configs are the opposite case and stay vendored. They are
-known-booting configurations that cannot be derived from the tree, and the
-link-and-boot gate's `--expect-units` floors are counts of exactly those
-configurations. A `.config` is only meaningful against the tree it was produced
-for, so each keeps its own release rather than being carried forward.
+known-booting configurations that cannot be derived from the tree, small enough
+to iterate on, and useful when a boot has to be debugged rather than gated. A
+`.config` is only meaningful against the tree it was produced for, so each keeps
+its own release rather than being carried forward.
+
+They are deliberately not gate cover, and a green run against them does not
+stand in for one against defconfig: they compile 1912 (x86_64) and 1346
+(aarch64) units against defconfig's 2921 and 4434. A mid-end regression that
+left a statically dead call in the object -- undefined at the `vmlinux` link --
+reached the branch with four independent minimal-config runs green, because
+none of the units carrying it are in those configurations.
 
 ## Run
 

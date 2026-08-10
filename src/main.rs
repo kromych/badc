@@ -1069,9 +1069,18 @@ fn run() {
             // `__STRICT_ANSI__` is defined -- the macro headers read as
             // "the user asked for ISO C".
             _ if arg.starts_with("-std=") => {
+                // The C dialect families gcc names: `cNN` / `gnuNN` and the
+                // `iso9899:` spellings, which are strict ISO. A name outside
+                // them is rejected rather than read as strict ISO, since a
+                // caller that misspells the dialect gets the other one.
                 let dialect = &arg["-std=".len()..];
-                if dialect.is_empty() {
-                    eprintln!("badc: error: -std= needs a dialect name");
+                let known = dialect.starts_with("gnu")
+                    || dialect.starts_with("iso9899:")
+                    || (dialect.starts_with('c')
+                        && dialect[1..].chars().all(|c| c.is_ascii_digit())
+                        && dialect.len() > 1);
+                if !known {
+                    eprintln!("badc: error: unknown C dialect `{dialect}` (-std=)");
                     std::process::exit(1);
                 }
                 gnu_dialect = dialect.starts_with("gnu");

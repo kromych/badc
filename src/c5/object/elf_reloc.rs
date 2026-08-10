@@ -60,11 +60,14 @@ use super::elf_reloc_types::{
     R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_CONDBR19, R_AARCH64_JUMP26,
     R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_LDST8_ABS_LO12_NC,
     R_AARCH64_LDST16_ABS_LO12_NC, R_AARCH64_LDST32_ABS_LO12_NC, R_AARCH64_LDST64_ABS_LO12_NC,
-    R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64,
-    R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_AARCH64_TSTBR14,
-    R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF64,
-    R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
-    R_X86_64_TPOFF32, i386_field_width, i386_reloc_desc,
+    R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_MOVW_SABS_G0, R_AARCH64_MOVW_SABS_G1,
+    R_AARCH64_MOVW_SABS_G2, R_AARCH64_MOVW_UABS_G0, R_AARCH64_MOVW_UABS_G0_NC,
+    R_AARCH64_MOVW_UABS_G1, R_AARCH64_MOVW_UABS_G1_NC, R_AARCH64_MOVW_UABS_G2,
+    R_AARCH64_MOVW_UABS_G2_NC, R_AARCH64_MOVW_UABS_G3, R_AARCH64_PREL32, R_AARCH64_PREL64,
+    R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
+    R_AARCH64_TSTBR14, R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64,
+    R_X86_64_DTPOFF64, R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
+    R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, i386_field_width, i386_reloc_desc,
 };
 
 // ELF64 constants (Elf.h subset).
@@ -2918,6 +2921,26 @@ pub(super) fn write_relocatable(
                     AsmSectionTarget::OwnSection(off) => {
                         (carve.sym_idx[e], base as i64 + *off as i64 + r.addend)
                     }
+                    // A bare section name: that section's own symbol. Its
+                    // placement carries the base the merge gave it.
+                    AsmSectionTarget::SectionStart(key) => {
+                        let at = build
+                            .asm_sections
+                            .iter()
+                            .position(|s| {
+                                crate::c5::codegen::ssa::emit_common::section_key_of(s) == *key
+                            })
+                            .ok_or_else(|| {
+                                C5Error::Compile(crate::c5::error::fmt_internal_err(
+                                    &alloc::format!(
+                                        "elf_reloc: asm relocation names section `{key}`, \
+                                         which the unit does not define"
+                                    ),
+                                ))
+                            })?;
+                        let (te, tbase) = asm_placements[at];
+                        (carve.sym_idx[te], tbase as i64 + r.addend)
+                    }
                     AsmSectionTarget::TextBlock(_) => {
                         // Rewritten to `Text` after block layout; an unresolved
                         // one here means the emit skipped resolve_asm_goto_relocs.
@@ -3023,6 +3046,22 @@ pub(super) fn write_relocatable(
                         4 => R_AARCH64_LDST32_ABS_LO12_NC,
                         8 => R_AARCH64_LDST64_ABS_LO12_NC,
                         _ => R_AARCH64_LDST128_ABS_LO12_NC,
+                    },
+                    RK::A64MovwAbs {
+                        group,
+                        signed,
+                        check,
+                    } => match (group, signed, check.is_some()) {
+                        (0, false, true) => R_AARCH64_MOVW_UABS_G0,
+                        (1, false, true) => R_AARCH64_MOVW_UABS_G1,
+                        (2, false, true) => R_AARCH64_MOVW_UABS_G2,
+                        (0, false, false) => R_AARCH64_MOVW_UABS_G0_NC,
+                        (1, false, false) => R_AARCH64_MOVW_UABS_G1_NC,
+                        (2, false, false) => R_AARCH64_MOVW_UABS_G2_NC,
+                        (0, true, _) => R_AARCH64_MOVW_SABS_G0,
+                        (1, true, _) => R_AARCH64_MOVW_SABS_G1,
+                        (2, true, _) => R_AARCH64_MOVW_SABS_G2,
+                        _ => R_AARCH64_MOVW_UABS_G3,
                     },
                 };
                 carve.table.entries[e]

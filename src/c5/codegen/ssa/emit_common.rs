@@ -1129,6 +1129,15 @@ pub(crate) enum AsmRelocKind {
     A64LdstLo12(u8),
     /// `ldr Rt, label` 19-bit literal load displacement.
     A64LdrLit19,
+    /// `movz` / `movk` with `:abs_gN[_s|_nc]:` -- one 16-bit group of an
+    /// absolute value. `check` is the value width GNU as admits when the
+    /// expression folds here; the link applies the ABI's own, which is
+    /// wider for the signed forms.
+    A64MovwAbs {
+        group: u8,
+        signed: bool,
+        check: Option<u32>,
+    },
     /// A relaxable x86 jump displacement (`jmp` / `jcc`). GNU as computes it
     /// while relaxing the branch, which resolves a target defined in the same
     /// section whatever its binding, unless the symbol is weak; every other
@@ -1229,6 +1238,10 @@ pub(crate) enum AsmSectionTarget {
     /// (`.quad .`): the writer resolves it against that section's own
     /// symbol.
     OwnSection(u32),
+    /// The start of a named section, by its identity key: a bare section
+    /// name used as a symbol. The writer resolves it against that
+    /// section's own symbol.
+    SectionStart(alloc::string::String),
 }
 
 /// Where a template label a section field references is defined. `label_off`
@@ -1537,6 +1550,7 @@ pub(crate) fn patch_asm_insn_field(
         AsmRelocKind::A64AdrpPage21
         | AsmRelocKind::A64AddLo12
         | AsmRelocKind::A64LdstLo12(_)
+        | AsmRelocKind::A64MovwAbs { .. }
         | AsmRelocKind::Explicit(_) => Ok(false),
     }
 }
@@ -1563,6 +1577,21 @@ pub(crate) fn store_asm_insn_const(
         }
         let w = r.width as usize;
         buf[at..at + w].copy_from_slice(&v.to_le_bytes()[..w]);
+        return Ok(());
+    }
+    // A MOVW group has a constant form: the value's own group goes in the
+    // immediate, as GNU as resolves it when the expression folds. The
+    // checked forms reject a value outside the width the specifier names.
+    if let AsmRelocKind::A64MovwAbs {
+        group,
+        signed,
+        check,
+    } = r.kind
+    {
+        use crate::c5::codegen::aarch64::patch;
+        let word = u32::from_le_bytes(buf[at..at + 4].try_into().expect("4-byte field"));
+        let word = patch::movw_const_word(word, group, signed, check, v)?;
+        buf[at..at + 4].copy_from_slice(&word.to_le_bytes());
         return Ok(());
     }
     patch_asm_insn_field(buf, at, r.kind, true, r.width, v)?
@@ -5129,6 +5158,10 @@ pub(crate) struct SectionLabelOffsets {
     /// takes its short form; these offsets were measured under that choice,
     /// so the materializer has to encode from the same set.
     long: AsmRelaxSet,
+    /// Section name -> its identity key. GNU as gives every section a
+    /// symbol of the section's own name whose value is the section start,
+    /// so a bare section name is usable in an expression.
+    sections: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
 }
 
 impl SectionLabelOffsets {
@@ -5154,6 +5187,10 @@ impl SectionLabelOffsets {
     fn long_form(&self, site: (usize, usize)) -> bool {
         self.long.contains(&site)
     }
+    /// The identity key of the section a bare section name refers to.
+    pub(crate) fn section_named(&self, name: &str) -> Option<&str> {
+        self.sections.get(name).map(|k| k.as_str())
+    }
 }
 
 /// Relaxable branches identified by `(block index, item index)`.
@@ -5164,6 +5201,20 @@ type AsmRelaxSet = alloc::collections::BTreeSet<(usize, usize)>;
 struct AsmRelaxSite {
     site: (usize, usize),
     at: i64,
+}
+
+/// Section name -> identity key over the blocks being laid out and the
+/// sections the sink already holds. A name defined by both agrees, the key
+/// being a function of the section's own attributes.
+fn section_name_keys(
+    blocks: &[AsmSectionBlock],
+    sink: &AsmSectionSink,
+) -> alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> {
+    blocks
+        .iter()
+        .map(|b| (b.name.clone(), section_key(b)))
+        .chain(sink.iter().map(|s| (s.name.clone(), section_key_of(s))))
+        .collect()
 }
 
 /// Evaluate a `.set` value over section-local locations: `.` is the offset at
@@ -5184,6 +5235,7 @@ fn eval_section_set_expr(
     labels: &alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)>,
     syms: &alloc::collections::BTreeMap<alloc::string::String, i64>,
     aliases: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
+    sections: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     const_of: &dyn Fn(u8) -> Option<i64>,
 ) -> Result<i64, alloc::string::String> {
     let resolve = |t: &str| -> Option<AsmExprLeaf> {
@@ -5206,7 +5258,11 @@ fn eval_section_set_expr(
                         target: AsmSectionTarget::Symbol(alloc::string::String::from(t)),
                     }));
                 }
-                None => t = aliases.get(t)?.as_str(),
+                None => match aliases.get(t) {
+                    Some(next) => t = next.as_str(),
+                    // Last, so a label of the same name wins.
+                    None => return sections.get(t).map(|sk| section_start_leaf(sk)),
+                },
             }
         }
         None
@@ -5232,7 +5288,7 @@ pub(crate) fn section_key(b: &AsmSectionBlock) -> alloc::string::String {
 }
 
 /// The same identity key for a section already in the sink.
-fn section_key_of(s: &AsmSection) -> alloc::string::String {
+pub(crate) fn section_key_of(s: &AsmSection) -> alloc::string::String {
     alloc::format!("{}\u{0}{}\u{0}{:?}", s.name, s.flags, s.sh_type)
 }
 
@@ -5302,7 +5358,17 @@ fn section_expr_leaf(
             target: AsmSectionTarget::Symbol(alloc::string::String::from(t)),
         }));
     }
-    None
+    // Last, so a label of the same name wins: a bare section name is that
+    // section's start.
+    measured.section_named(t).map(section_start_leaf)
+}
+
+/// The start of the section with identity key `sk`, as an expression leaf.
+fn section_start_leaf(sk: &str) -> AsmExprLeaf {
+    AsmExprLeaf::Loc(AsmExprTerm {
+        space: Some((AsmSpace::Section(alloc::string::String::from(sk)), 0)),
+        target: AsmSectionTarget::SectionStart(alloc::string::String::from(sk)),
+    })
 }
 
 /// Evaluate an `.org` target expression at offset `at` of section `key`:
@@ -5837,6 +5903,7 @@ fn measure_round_inner(
         }
         lens.insert(key, at);
     }
+    let sections = section_name_keys(blocks, sink);
     let mut syms: alloc::collections::BTreeMap<alloc::string::String, i64> =
         alloc::collections::BTreeMap::new();
     // An assignment this round cannot value is deferred while a fill count
@@ -5845,7 +5912,9 @@ fn measure_round_inner(
     // settled, or straight away when nothing is pending.
     let mut set_err = None;
     for (name, expr, key, at) in &sets {
-        match eval_section_set_expr(name, expr, key, *at, &map, &syms, &aliases, const_of) {
+        match eval_section_set_expr(
+            name, expr, key, *at, &map, &syms, &aliases, &sections, const_of,
+        ) {
             Ok(v) => {
                 syms.insert(name.clone(), v);
             }
@@ -5861,6 +5930,7 @@ fn measure_round_inner(
         map,
         syms,
         long: AsmRelaxSet::new(),
+        sections,
     })
 }
 

@@ -3590,6 +3590,49 @@ fn emit_inline_asm_aarch64(
             emit(code, 0);
             continue;
         }
+        // `movz` / `movk` with `:abs_gN:` over an expression that folds:
+        // a function body has no layout pass, so only a constant resolves,
+        // and it takes the same field encoding the section path applies.
+        if let Some(AsmOpndA64::Sym {
+            expr,
+            spec:
+                super::asm::SymSpec::MovwAbs {
+                    group,
+                    signed,
+                    check,
+                },
+        }) = insn.operands.last()
+            && matches!(insn.mnemonic.as_str(), "movz" | "movk")
+            && let Some(v) = super::super::ssa::emit_common::eval_const_expr_ops(expr, &|_| None)
+        {
+            let (rd, is64) = match conv(&insn.operands[0]) {
+                Ok(Opnd::Reg { num, is64, .. }) => (num, is64),
+                _ => {
+                    bail_msg("aarch64 inline asm: `:abs_g` destination must be a register");
+                    return false;
+                }
+            };
+            let movk = insn.mnemonic == "movk";
+            if movk && *signed {
+                bail_msg("aarch64 inline asm: `:abs_g<n>_s:` is not allowed on `movk`");
+                return false;
+            }
+            let word = match a64_movw_placeholder(rd, is64, movk, *group) {
+                Ok(w) => w,
+                Err(m) => {
+                    bail_msg(&alloc::format!("aarch64 {m}"));
+                    return false;
+                }
+            };
+            match super::patch::movw_const_word(word, *group, *signed, *check, v) {
+                Ok(w) => emit(code, w),
+                Err(m) => {
+                    bail_msg(&alloc::format!("aarch64 inline asm: {m}"));
+                    return false;
+                }
+            }
+            continue;
+        }
         let mut ops: Vec<Opnd> = Vec::new();
         for o in &insn.operands {
             match conv(o) {
@@ -9395,6 +9438,29 @@ pub(crate) fn encode_a64_file_asm_section_code(
     })
 }
 
+/// The `movz` / `movk` word an `:abs_gN:` operand relocates, with a zero
+/// immediate and the group's shift. A 32-bit destination clears the operand
+/// size bit and admits only the two groups that fit its width, as GNU as
+/// does.
+fn a64_movw_placeholder(
+    rd: u8,
+    is64: bool,
+    movk: bool,
+    group: u8,
+) -> Result<u32, alloc::string::String> {
+    if !is64 && group > 1 {
+        return Err(alloc::format!(
+            "inline asm: `:abs_g{group}` is not allowed for a 32-bit register"
+        ));
+    }
+    let word = if movk {
+        super::encode::enc_movk(super::Reg(rd), 0, group)
+    } else {
+        super::encode::enc_movz(super::Reg(rd), 0, group)
+    };
+    Ok(if is64 { word } else { word & !(1 << 31) })
+}
+
 /// Encode a file-scope section instruction that references a symbol to its
 /// placeholder word plus the relocation kind and symbol name: `b` / `bl` /
 /// `b.cond` / `cbz` / `cbnz` / `tbz` / `tbnz` / `adr` to a symbol, `adrp`,
@@ -9449,11 +9515,11 @@ fn encode_a64_sym_insn(
     // this call's label offsets are known; carry it as a symbol reference.
     // `.`-relative branches encode directly.
     let named;
-    let (name, lo12) = match insn.operands.last() {
-        Some(AsmOpndA64::Sym { expr, lo12 }) => (expr, *lo12),
+    let (name, spec) = match insn.operands.last() {
+        Some(AsmOpndA64::Sym { expr, spec }) => (expr, *spec),
         Some(&AsmOpndA64::Label { num, forward }) => {
             named = alloc::format!("{num}{}", if forward { 'f' } else { 'b' });
-            (&named, false)
+            (&named, super::asm::SymSpec::Addr)
         }
         Some(&AsmOpndA64::Here(off)) => {
             let kind = build_label_branch(insn, conv)?;
@@ -9465,23 +9531,69 @@ fn encode_a64_sym_insn(
         }
         _ => return Ok(None),
     };
-    if lo12 {
-        // `add Rd, Rn, :lo12:sym`.
-        if insn.mnemonic != "add" || insn.operands.len() != 3 {
-            return Err(alloc::string::String::from(
-                "inline asm: `:lo12:` operand outside `add` or a load/store",
-            ));
-        }
-        let (rd, rn) = match (conv(&insn.operands[0])?, conv(&insn.operands[1])?) {
-            (Opnd::Reg { num: rd, .. }, Opnd::Reg { num: rn, .. }) => (rd, rn),
-            _ => {
+    match spec {
+        super::asm::SymSpec::Addr => {}
+        super::asm::SymSpec::Lo12 => {
+            // `add Rd, Rn, :lo12:sym`.
+            if insn.mnemonic != "add" || insn.operands.len() != 3 {
                 return Err(alloc::string::String::from(
-                    "inline asm: `add :lo12:` needs register operands",
+                    "inline asm: `:lo12:` operand outside `add` or a load/store",
                 ));
             }
-        };
-        let word = super::encode::enc_add_imm(super::Reg(rd), super::Reg(rn), 0);
-        return Ok(Some((word, K::A64AddLo12, name.clone())));
+            let (rd, rn) = match (conv(&insn.operands[0])?, conv(&insn.operands[1])?) {
+                (Opnd::Reg { num: rd, .. }, Opnd::Reg { num: rn, .. }) => (rd, rn),
+                _ => {
+                    return Err(alloc::string::String::from(
+                        "inline asm: `add :lo12:` needs register operands",
+                    ));
+                }
+            };
+            let word = super::encode::enc_add_imm(super::Reg(rd), super::Reg(rn), 0);
+            return Ok(Some((word, K::A64AddLo12, name.clone())));
+        }
+        // `movz` / `movk` with `:abs_gN:`. The placeholder carries the
+        // group's shift and a zero immediate, which is the word GNU as
+        // leaves for the relocation to fill.
+        super::asm::SymSpec::MovwAbs {
+            group,
+            signed,
+            check,
+        } => {
+            let movk = match insn.mnemonic.as_str() {
+                "movz" => false,
+                "movk" => true,
+                _ => {
+                    return Err(alloc::string::String::from(
+                        "inline asm: `:abs_g` operand outside `movz` or `movk`",
+                    ));
+                }
+            };
+            // `movk` has no `movn` counterpart, so it cannot carry a group
+            // whose negative values need one.
+            if movk && signed {
+                return Err(alloc::string::String::from(
+                    "inline asm: `:abs_g<n>_s:` is not allowed on `movk`",
+                ));
+            }
+            let (rd, is64) = match conv(&insn.operands[0])? {
+                Opnd::Reg { num, is64, .. } => (num, is64),
+                _ => {
+                    return Err(alloc::string::String::from(
+                        "inline asm: `:abs_g` destination must be a register",
+                    ));
+                }
+            };
+            let word = a64_movw_placeholder(rd, is64, movk, group)?;
+            return Ok(Some((
+                word,
+                K::A64MovwAbs {
+                    group,
+                    signed,
+                    check,
+                },
+                name.clone(),
+            )));
+        }
     }
     match insn.mnemonic.as_str() {
         "adrp" => {
@@ -9968,6 +10080,263 @@ mod tests {
                 (12, AsmRelocKind::A64LdstLo12(8), "sym", 0),
             ]
         );
+    }
+
+    /// Materialize one file-scope section and return the sink, for the
+    /// `:abs_g` cases below.
+    #[cfg(test)]
+    fn materialize_one_section(text: &str) -> Result<AsmSectionSink, alloc::string::String> {
+        use super::super::ssa::emit_common::{
+            extract_file_scope_asm_sections, materialize_asm_sections,
+        };
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks)?;
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )?;
+        Ok(sink)
+    }
+
+    /// A bare section name is that section's start, so a `.set` over a
+    /// section-local difference folds and the `:abs_g` halves resolve at
+    /// assembly with no relocation -- which is what GNU as does with the
+    /// kernel's `tramp_alias`. Words from `as`; the value is negative, so
+    /// the signed group's `movz` becomes a `movn` over the complement.
+    #[test]
+    fn file_scope_a64_abs_g_over_section_symbol_matches_gnu_as() {
+        let text = ".pushsection .entry.tramp.text,\"ax\"\n\
+                    tramp_start:\n\
+                    nop\n\
+                    nop\n\
+                    tramp_exit:\n\
+                    nop\n\
+                    .popsection\n\
+                    .pushsection .t,\"ax\"\n\
+                    .set .Lalias, 0x1000 + tramp_exit - .entry.tramp.text\n\
+                    movz x5, :abs_g2_s:.Lalias\n\
+                    movk x5, :abs_g1_nc:.Lalias\n\
+                    movk x5, :abs_g0_nc:.Lalias\n\
+                    .set .Lneg, -0xc0d000 + tramp_exit - .entry.tramp.text\n\
+                    movz x6, :abs_g2_s:.Lneg\n\
+                    movk x6, :abs_g1_nc:.Lneg\n\
+                    movk x6, :abs_g0_nc:.Lneg\n\
+                    .popsection\n";
+        let sink = materialize_one_section(text).unwrap();
+        let want_words: [u32; 6] = [
+            0xd2c00005, // movz x5, #0x0, lsl #32
+            0xf2a00005, // movk x5, #0x0, lsl #16
+            0xf2820105, // movk x5, #0x1008
+            0x92c00006, // movn x6, #0x0, lsl #32   (0x1008 - 0xc0d000 < 0)
+            0xf2bfe7e6, // movk x6, #0xff3f, lsl #16
+            0xf2860106, // movk x6, #0x3008
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
+        assert!(
+            sec.relocs.is_empty(),
+            "a folded `:abs_g` keeps no relocation, as GNU as emits none: {:?}",
+            sec.relocs
+        );
+    }
+
+    /// A `:abs_g` value that does not fold relocates, one relocation per
+    /// half, against the named symbol. The placeholder words carry the
+    /// group's shift and a zero immediate, as GNU as leaves them.
+    #[test]
+    fn file_scope_a64_abs_g_over_undefined_symbol_relocates() {
+        let text = ".pushsection .t,\"ax\"\n\
+                    .globl ext_sym\n\
+                    movz x5, :abs_g2_s:ext_sym\n\
+                    movk x5, :abs_g1_nc:ext_sym\n\
+                    movk x5, :abs_g0_nc:ext_sym\n\
+                    movz x6, :abs_g3:ext_sym\n\
+                    movz x7, :abs_g0:ext_sym\n\
+                    .popsection\n";
+        use super::super::ssa::emit_common::AsmRelocKind;
+        let sink = materialize_one_section(text).unwrap();
+        let want_words: [u32; 5] = [
+            0xd2c00005, // movz x5, #0x0, lsl #32
+            0xf2a00005, // movk x5, #0x0, lsl #16
+            0xf2800005, // movk x5, #0x0
+            0xd2e00006, // movz x6, #0x0, lsl #48
+            0xd2800007, // movz x7, #0x0
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
+        let got: Vec<(u32, AsmRelocKind)> = sec.relocs.iter().map(|r| (r.offset, r.kind)).collect();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    0,
+                    AsmRelocKind::A64MovwAbs {
+                        group: 2,
+                        signed: true,
+                        check: Some(48)
+                    }
+                ),
+                (
+                    4,
+                    AsmRelocKind::A64MovwAbs {
+                        group: 1,
+                        signed: false,
+                        check: None
+                    }
+                ),
+                (
+                    8,
+                    AsmRelocKind::A64MovwAbs {
+                        group: 0,
+                        signed: false,
+                        check: None
+                    }
+                ),
+                (
+                    12,
+                    AsmRelocKind::A64MovwAbs {
+                        group: 3,
+                        signed: false,
+                        check: None
+                    }
+                ),
+                (
+                    16,
+                    AsmRelocKind::A64MovwAbs {
+                        group: 0,
+                        signed: false,
+                        check: Some(16)
+                    }
+                ),
+            ]
+        );
+    }
+
+    /// The checked groups reject a folded value outside the width the
+    /// specifier names, and the no-check groups truncate. Boundaries and
+    /// messages follow GNU as: `:abs_g0_s:` admits [-0x8000, 0x8000),
+    /// `:abs_g0:` admits [0, 0x10000).
+    #[test]
+    fn file_scope_a64_abs_g_range_matches_gnu_as() {
+        let one = |insn: &str| {
+            materialize_one_section(&alloc::format!(
+                ".pushsection .t,\"ax\"\n{insn}\n.popsection\n"
+            ))
+            .map(|s| {
+                let sec = s.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+                u32::from_le_bytes(sec.bytes[..4].try_into().unwrap())
+            })
+        };
+        // Signed group: the last value in range each way, and the first out.
+        assert_eq!(one("movz x5, :abs_g0_s:0x7fff").unwrap(), 0xd28fffe5);
+        assert_eq!(one("movz x5, :abs_g0_s:-0x8000").unwrap(), 0x928fffe5);
+        assert!(
+            one("movz x5, :abs_g0_s:0x8000")
+                .unwrap_err()
+                .contains("signed value out of range")
+        );
+        assert!(
+            one("movz x5, :abs_g0_s:-0x8001")
+                .unwrap_err()
+                .contains("signed value out of range")
+        );
+        // The `_s` groups reach the top of a 48-bit signed value.
+        assert_eq!(
+            one("movz x5, :abs_g2_s:0x7fffffffffff").unwrap(),
+            0xd2cfffe5
+        );
+        assert!(
+            one("movz x5, :abs_g2_s:0x800000000000")
+                .unwrap_err()
+                .contains("signed value out of range")
+        );
+        // Unsigned checked group: no negative value, and no value past 2^16.
+        assert_eq!(one("movz x5, :abs_g0:0xffff").unwrap(), 0xd29fffe5);
+        assert!(
+            one("movz x5, :abs_g0:0x10000")
+                .unwrap_err()
+                .contains("unsigned value out of range")
+        );
+        assert!(
+            one("movz x5, :abs_g0:-1")
+                .unwrap_err()
+                .contains("unsigned value out of range")
+        );
+        // No-check groups truncate rather than reject, and keep `movz`
+        // for a negative value -- only the signed groups take `movn`.
+        assert_eq!(one("movz x5, :abs_g0_nc:0x10000").unwrap(), 0xd2800005);
+        assert_eq!(one("movz x5, :abs_g0_nc:-1").unwrap(), 0xd29fffe5);
+        assert_eq!(one("movz x5, :abs_g1_nc:0x123456789").unwrap(), 0xd2a468a5);
+        assert_eq!(one("movz x5, :abs_g3:-1").unwrap(), 0xd2ffffe5);
+    }
+
+    /// A 32-bit destination clears the operand size bit and admits only
+    /// the two groups that fit its width; GNU as rejects the rest for a
+    /// `w` register. Words from `as`.
+    #[test]
+    fn file_scope_a64_abs_g_32bit_register_matches_gnu_as() {
+        let one = |insn: &str| {
+            materialize_one_section(&alloc::format!(
+                ".pushsection .t,\"ax\"\n{insn}\n.popsection\n"
+            ))
+            .map(|s| {
+                let sec = s.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+                u32::from_le_bytes(sec.bytes[..4].try_into().unwrap())
+            })
+        };
+        assert_eq!(one("movz w6, :abs_g0_nc:0x5a827999").unwrap(), 0x528f3326);
+        assert_eq!(one("movz w6, :abs_g1_nc:0x5a827999").unwrap(), 0x52ab5046);
+        assert_eq!(one("movk w6, :abs_g0_nc:0x5a827999").unwrap(), 0x728f3326);
+        assert_eq!(one("movk w6, :abs_g1_nc:0x5a827999").unwrap(), 0x72ab5046);
+        // A negative signed group takes `movn` at either width.
+        assert_eq!(one("movz w6, :abs_g0_s:-0x1234").unwrap(), 0x12824666);
+        assert_eq!(one("movz x6, :abs_g0_s:-0x1234").unwrap(), 0x92824666);
+        // Groups past the register's width have no encoding.
+        for bad in ["movz w6, :abs_g2_nc:0x1", "movz w6, :abs_g3:0x1"] {
+            assert!(
+                one(bad)
+                    .unwrap_err()
+                    .contains("is not allowed for a 32-bit register"),
+                "{bad}: {:?}",
+                one(bad)
+            );
+        }
+    }
+
+    /// GNU as defines `_s` only on `movz` (a `movk` has no `movn` form to
+    /// carry a negative value) and defines no `:abs_g3_s:` / `:abs_g3_nc:`
+    /// / `:abs_g0_s_nc:` spelling.
+    #[test]
+    fn file_scope_a64_abs_g_rejects_what_gnu_as_rejects() {
+        let one = |insn: &str| {
+            materialize_one_section(&alloc::format!(
+                ".pushsection .t,\"ax\"\n{insn}\n.popsection\n"
+            ))
+            .err()
+            .unwrap_or_default()
+        };
+        assert!(one("movk x5, :abs_g0_s:sym").contains("not allowed on `movk`"));
+        for bad in [
+            "movz x5, :abs_g3_s:sym",
+            "movz x5, :abs_g3_nc:sym",
+            "movz x5, :abs_g0_s_nc:sym",
+            "movz x5, :abs_g4:sym",
+        ] {
+            assert!(
+                one(bad).contains("unknown relocation modifier"),
+                "{bad}: {}",
+                one(bad)
+            );
+        }
+        assert!(one("add x5, x5, :abs_g0:sym").contains("outside `movz` or `movk`"));
     }
 
     /// The add/sub immediate field is unsigned, so GNU as encodes a negative

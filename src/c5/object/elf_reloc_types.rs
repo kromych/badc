@@ -50,6 +50,16 @@ pub(crate) const R_AARCH64_ABS64: u32 = 257;
 pub(crate) const R_AARCH64_ABS32: u32 = 258;
 pub(crate) const R_AARCH64_PREL64: u32 = 260;
 pub(crate) const R_AARCH64_PREL32: u32 = 261;
+pub(crate) const R_AARCH64_MOVW_UABS_G0: u32 = 263;
+pub(crate) const R_AARCH64_MOVW_UABS_G0_NC: u32 = 264;
+pub(crate) const R_AARCH64_MOVW_UABS_G1: u32 = 265;
+pub(crate) const R_AARCH64_MOVW_UABS_G1_NC: u32 = 266;
+pub(crate) const R_AARCH64_MOVW_UABS_G2: u32 = 267;
+pub(crate) const R_AARCH64_MOVW_UABS_G2_NC: u32 = 268;
+pub(crate) const R_AARCH64_MOVW_UABS_G3: u32 = 269;
+pub(crate) const R_AARCH64_MOVW_SABS_G0: u32 = 270;
+pub(crate) const R_AARCH64_MOVW_SABS_G1: u32 = 271;
+pub(crate) const R_AARCH64_MOVW_SABS_G2: u32 = 272;
 pub(crate) const R_AARCH64_LD_PREL_LO19: u32 = 273;
 pub(crate) const R_AARCH64_ADR_PREL_LO21: u32 = 274;
 pub(crate) const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
@@ -98,6 +108,30 @@ pub(crate) fn aarch64_pcrel_imm_field(rtype: u32) -> Option<(u32, u32, u32)> {
         R_AARCH64_TSTBR14 => Some((5, 14, 4)),
         R_AARCH64_CONDBR19 | R_AARCH64_LD_PREL_LO19 => Some((5, 19, 4)),
         R_AARCH64_JUMP26 | R_AARCH64_CALL26 => Some((0, 26, 4)),
+        _ => None,
+    }
+}
+
+/// MOVW group relocation's field rule as `(group, signed, check)`: which
+/// 16-bit group of `S + A` the `movz` / `movk` immediate takes, whether a
+/// negative value converts `movz` to `movn`, and the value width the link
+/// admits (`None` for the no-check forms). The ABI gives group `n` a check
+/// over `16 * (n + 1)` bits; the signed forms admit one bit more, because
+/// their range is `-2^(16*(n+1)) <= X < 2^(16*(n+1))`. `None` for any other
+/// type.
+pub(crate) fn aarch64_movw_field(rtype: u32) -> Option<(u8, bool, Option<u32>)> {
+    let group = |n: u8| 16 * (n as u32 + 1);
+    match rtype {
+        R_AARCH64_MOVW_UABS_G0 => Some((0, false, Some(group(0)))),
+        R_AARCH64_MOVW_UABS_G1 => Some((1, false, Some(group(1)))),
+        R_AARCH64_MOVW_UABS_G2 => Some((2, false, Some(group(2)))),
+        R_AARCH64_MOVW_UABS_G0_NC => Some((0, false, None)),
+        R_AARCH64_MOVW_UABS_G1_NC => Some((1, false, None)),
+        R_AARCH64_MOVW_UABS_G2_NC => Some((2, false, None)),
+        R_AARCH64_MOVW_UABS_G3 => Some((3, false, None)),
+        R_AARCH64_MOVW_SABS_G0 => Some((0, true, Some(group(0) + 1))),
+        R_AARCH64_MOVW_SABS_G1 => Some((1, true, Some(group(1) + 1))),
+        R_AARCH64_MOVW_SABS_G2 => Some((2, true, Some(group(2) + 1))),
         _ => None,
     }
 }
@@ -439,6 +473,60 @@ mod tests {
     use super::*;
     use alloc::format;
 
+    /// The MOVW field rules, against the specifiers GNU as emits each
+    /// type for: the group's shift, whether a negative value takes `movn`,
+    /// and the width the link checks. Only the `_NC` forms and
+    /// `MOVW_UABS_G3` go unchecked.
+    #[test]
+    fn movw_field_rules_cover_every_group() {
+        assert_eq!(
+            aarch64_movw_field(R_AARCH64_MOVW_UABS_G0),
+            Some((0, false, Some(16)))
+        );
+        assert_eq!(
+            aarch64_movw_field(R_AARCH64_MOVW_UABS_G1),
+            Some((1, false, Some(32)))
+        );
+        assert_eq!(
+            aarch64_movw_field(R_AARCH64_MOVW_UABS_G2),
+            Some((2, false, Some(48)))
+        );
+        assert_eq!(
+            aarch64_movw_field(R_AARCH64_MOVW_UABS_G0_NC),
+            Some((0, false, None))
+        );
+        assert_eq!(
+            aarch64_movw_field(R_AARCH64_MOVW_UABS_G1_NC),
+            Some((1, false, None))
+        );
+        assert_eq!(
+            aarch64_movw_field(R_AARCH64_MOVW_UABS_G2_NC),
+            Some((2, false, None))
+        );
+        assert_eq!(
+            aarch64_movw_field(R_AARCH64_MOVW_UABS_G3),
+            Some((3, false, None))
+        );
+        // The signed forms admit one bit more than the group's width.
+        assert_eq!(
+            aarch64_movw_field(R_AARCH64_MOVW_SABS_G0),
+            Some((0, true, Some(17)))
+        );
+        assert_eq!(
+            aarch64_movw_field(R_AARCH64_MOVW_SABS_G1),
+            Some((1, true, Some(33)))
+        );
+        assert_eq!(
+            aarch64_movw_field(R_AARCH64_MOVW_SABS_G2),
+            Some((2, true, Some(49)))
+        );
+        // The neighbouring types are not MOVW group relocations.
+        assert_eq!(aarch64_movw_field(R_AARCH64_PREL32), None);
+        assert_eq!(aarch64_movw_field(R_AARCH64_LD_PREL_LO19), None);
+        // The PC-relative MOVW family is a different rule and unhandled.
+        assert_eq!(aarch64_movw_field(287), None);
+    }
+
     /// Every named constant must carry the number the ABI table
     /// assigns to that name. Catches a constant transcribed from the
     /// wrong table row -- the defect class that let the linker match
@@ -484,6 +572,16 @@ mod tests {
             R_AARCH64_LDST128_ABS_LO12_NC,
             "R_AARCH64_LDST128_ABS_LO12_NC",
         );
+        a(R_AARCH64_MOVW_UABS_G0, "R_AARCH64_MOVW_UABS_G0");
+        a(R_AARCH64_MOVW_UABS_G0_NC, "R_AARCH64_MOVW_UABS_G0_NC");
+        a(R_AARCH64_MOVW_UABS_G1, "R_AARCH64_MOVW_UABS_G1");
+        a(R_AARCH64_MOVW_UABS_G1_NC, "R_AARCH64_MOVW_UABS_G1_NC");
+        a(R_AARCH64_MOVW_UABS_G2, "R_AARCH64_MOVW_UABS_G2");
+        a(R_AARCH64_MOVW_UABS_G2_NC, "R_AARCH64_MOVW_UABS_G2_NC");
+        a(R_AARCH64_MOVW_UABS_G3, "R_AARCH64_MOVW_UABS_G3");
+        a(R_AARCH64_MOVW_SABS_G0, "R_AARCH64_MOVW_SABS_G0");
+        a(R_AARCH64_MOVW_SABS_G1, "R_AARCH64_MOVW_SABS_G1");
+        a(R_AARCH64_MOVW_SABS_G2, "R_AARCH64_MOVW_SABS_G2");
         a(R_AARCH64_ADR_GOT_PAGE, "R_AARCH64_ADR_GOT_PAGE");
         a(R_AARCH64_LD64_GOT_LO12_NC, "R_AARCH64_LD64_GOT_LO12_NC");
         a(

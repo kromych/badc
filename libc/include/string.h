@@ -135,9 +135,7 @@
 // MSVC marks `strdup` as deprecated and exports the underscored form;
 // it's the universally available spelling on every modern msvcrt.
 #pragma binding(msvcrt::strdup,   "_strdup")
-// msvcrt has no `strndup` (POSIX.1-2008 7.24.1.4); programs
-// that need the bounded copy on Windows emulate via
-// `strnlen` + `malloc` + `memcpy`.
+// msvcrt has no `strndup`; `libc/lib/string_ext.c` supplies it.
 #pragma binding(msvcrt::strspn,   "strspn")
 #pragma binding(msvcrt::strcspn,  "strcspn")
 #pragma binding(msvcrt::strpbrk,  "strpbrk")
@@ -184,11 +182,11 @@ char *strcat(char *dst, char *src);
 char *strncat(char *dst, char *src, int n);
 char *strerror(int errnum);
 char *strdup(char *s);
-#ifndef _WIN32
 // POSIX.1-2008 7.24.1.4 `strndup` -- C2x but not in C99
-// `<string.h>`. Bound on macOS / Linux; msvcrt has no
-// equivalent so the prototype is gated out on Windows.
+// `<string.h>`. Bound on macOS / Linux; on Windows
+// `libc/lib/string_ext.c` defines it and joins the link on demand.
 char *strndup(char *s, int n);
+#ifndef _WIN32
 // POSIX descriptive name for a signal number. macOS / Linux only.
 char *strsignal(int sig);
 #endif
@@ -210,12 +208,12 @@ int strerror_r(int errnum, char *buf, size_t buflen);
 // BSD/GNU case-insensitive `strstr`. msvcrt has no equivalent.
 char *strcasestr(const char *haystack, const char *needle);
 #endif
-#ifdef __linux__
-// GNU extensions, declared only where they are bound.
+// GNU/BSD extensions. Bound to the C library on Linux; elsewhere
+// `libc/lib/string_ext.c` defines them and joins the link on demand,
+// so the declarations are portable.
 char *strchrnul(const char *s, int c);
 char *memrchr(char *s, int c, int n);
 void explicit_bzero(void *s, size_t n);
-#endif
 // C11 K.3.7.4.1, visible on the Annex-K opt-in like the platform
 // header; libSystem exports it, glibc does not.
 #if defined(__APPLE__) && defined(__STDC_WANT_LIB_EXT1__) && __STDC_WANT_LIB_EXT1__ >= 1

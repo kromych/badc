@@ -49,5 +49,7 @@ pub fn embedded_libc() -> &'static [(&'static str, &'static str)] {
     EMBEDDED_LIBC
 }
 
-pub(super) const EMBEDDED_LIBC: &[(&str, &str)] =
-    &[("pattern.c", include_str!("../../libc/lib/pattern.c"))];
+pub(super) const EMBEDDED_LIBC: &[(&str, &str)] = &[
+    ("pattern.c", include_str!("../../libc/lib/pattern.c")),
+    ("string_ext.c", include_str!("../../libc/lib/string_ext.c")),
+];

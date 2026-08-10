@@ -20,9 +20,9 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movslq	(%rdx), %rsi
-               	addq	%rsi, %rax
-               	incq	%rcx
+               	movslq	(%rdx), %rcx
+               	addq	%rcx, %rax
+               	movl	$0x1, %ecx
                	cmpq	$0x1, %rcx
                	jb	<addr>
                	movslq	%eax, %rax

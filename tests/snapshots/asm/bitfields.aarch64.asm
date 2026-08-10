@@ -324,24 +324,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0x18
-               	mov	w1, w0
-               	asr	x1, x1, #8
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
-               	add	x1, x1, #0x1
-               	sxtw	x1, w1
-               	mov	x17, #0xff              // =255
-               	and	x1, x1, x17
+               	sub	x1, x29, #0x18
                	mov	w0, w0
                	mov	x17, #0xff              // =255
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x0, x0, x17
-               	lsl	x1, x1, #8
-               	orr	x0, x0, x1
-               	str	w0, [x2]
+               	mov	x17, #0xc900            // =51456
+               	orr	x0, x0, x17
+               	str	w0, [x1]
                	mov	w0, w0
                	asr	x0, x0, #8
                	mov	x17, #0xff              // =255

@@ -33,9 +33,5 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x4, %eax
-               	retq
                	xorq	%rax, %rax
                	retq

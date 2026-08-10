@@ -35,21 +35,6 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	cmpq	$0x64, %rax
-               	seta	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x26, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-               	cmpq	$0x64, %rax
-               	jae	<addr>
-               	movl	$0x27, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
                	cmpq	$-0x1, %rax
                	setbe	%cl
                	movzbq	%cl, %rcx

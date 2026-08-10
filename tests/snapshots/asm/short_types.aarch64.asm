@@ -33,15 +33,14 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	bl	<addr>
-               	mov	x1, x0
-               	sxth	x0, w20
-               	cmp	x0, #0x4d2
+               	sxth	x1, w20
+               	cmp	x1, #0x4d2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	sxth	x2, w1
+               	sxth	x2, w0
                	mov	x17, #0xffd6            // =65494
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
@@ -53,31 +52,31 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	mov	x17, #0x3               // =3
-               	mul	x1, x2, x17
-               	sxtw	x1, w1
-               	sxth	x1, w1
+               	mul	x0, x2, x17
+               	sxtw	x0, w0
+               	sxth	x0, w0
                	mov	x17, #0xff82            // =65410
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x1, x17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x1, #0x7                // =7
-               	sdiv	x1, x0, x1
-               	sxth	x1, w1
-               	cmp	x1, #0xb0
+               	mov	x0, #0x7                // =7
+               	sdiv	x0, x1, x0
+               	sxth	x0, w0
+               	cmp	x0, #0xb0
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x1, #0x7                // =7
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
+               	mov	x0, #0x7                // =7
+               	sdiv	x17, x1, x0
+               	msub	x0, x17, x0, x1
                	sxth	x0, w0
                	cmp	x0, #0x2
                	b.eq	<addr>

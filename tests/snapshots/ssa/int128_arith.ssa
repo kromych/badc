@@ -95,7 +95,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=93
     terminator Bz { cond=v643, target=b8, fall=b7 }   (exit_acc=v643)
   block 7  start_pc=0
     v51  Extend { value=v643, kind=I32 }                  -> x0
-    v52  BinopI { op=shl, lhs=v51, rhs_imm=32 }           -> x1
+    v52  Imm(4294967296)                                  -> x1
     v53  Extend { value=v51, kind=I32 }                   -> x1
     terminator Return(v51)   (exit_acc=v51)
   block 8  start_pc=0

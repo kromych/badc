@@ -33,9 +33,5 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	lsr	x0, x0, #1
                	cbnz	x0, <addr>
-               	cmp	x1, #0x0
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ret
                	mov	x0, #0x0                // =0
                	ret

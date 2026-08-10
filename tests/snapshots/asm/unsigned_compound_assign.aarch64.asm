@@ -61,27 +61,6 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x60
                	ret
-               	mov	w0, w0
-               	sub	x0, x0, #0x3
-               	mov	w1, w0
-               	mov	x17, #0x66              // =102
-               	eor	x1, x1, x17
-               	mov	w1, w1
-               	cmp	x1, #0x0
-               	b.eq	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	w0, w0
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
-               	bl	<addr>
-               	sxtw	x0, w0
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp, #0x10]
-               	ldr	x20, [sp], #0x60
-               	ret
                	mov	x0, #0x3e8              // =1000
                	bl	<addr>
                	add	x1, x0, #0x19f

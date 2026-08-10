@@ -31,9 +31,8 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	movabsq	$-0x2a, %rdi
                	callq	<addr>
-               	movq	%rax, %rcx
-               	movswq	%bx, %rax
-               	cmpq	$0x4d2, %rax            # imm = 0x4D2
+               	movswq	%bx, %rcx
+               	cmpq	$0x4d2, %rcx            # imm = 0x4D2
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -41,7 +40,7 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movswq	%cx, %rdx
+               	movswq	%ax, %rdx
                	cmpq	$-0x2a, %rdx
                	je	<addr>
                	movl	$0x2, %eax
@@ -50,10 +49,10 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	(%rdx,%rdx,2), %rcx
-               	movslq	%ecx, %rcx
-               	movswq	%cx, %rcx
-               	cmpq	$-0x7e, %rcx
+               	leaq	(%rdx,%rdx,2), %rax
+               	movslq	%eax, %rax
+               	movswq	%ax, %rax
+               	cmpq	$-0x7e, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	movq	(%rsp), %rbx
@@ -61,16 +60,15 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x7, %ecx
-               	pushq	%rax
+               	movl	$0x7, %eax
+               	movq	%rax, %r10
                	pushq	%rdx
+               	movq	%rcx, %rax
                	cqto
-               	idivq	%rcx
-               	movq	%rax, %rcx
+               	idivq	%r10
                	popq	%rdx
-               	popq	%rax
-               	movswq	%cx, %rcx
-               	cmpq	$0xb0, %rcx
+               	movswq	%ax, %rax
+               	cmpq	$0xb0, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	movq	(%rsp), %rbx
@@ -78,10 +76,12 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x7, %ecx
+               	movl	$0x7, %eax
+               	movq	%rax, %r10
                	pushq	%rdx
+               	movq	%rcx, %rax
                	cqto
-               	idivq	%rcx
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
                	movswq	%ax, %rax

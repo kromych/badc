@@ -42,20 +42,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	x0, #0x64
-               	cset	x1, hi
-               	cmp	x1, #0x0
-               	b.ne	<addr>
-               	mov	x0, #0x26               // =38
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	cmp	x0, #0x64
-               	b.hs	<addr>
-               	mov	x0, #0x27               // =39
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32

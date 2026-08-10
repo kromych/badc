@@ -59,19 +59,15 @@ Disassembly of section .text:
                	add	x1, x1, #0x9
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
-               	add	x6, x0, x1
+               	add	x5, x0, x1
                	mov	x3, #0x0                // =0
                	mov	x0, #0x1                // =1
                	mov	x1, #0x5                // =5
                	b	<addr>
                	add	x3, x3, x1
-               	mov	w4, w0
-               	cmp	x4, #0x2
+               	mov	w0, w0
+               	cmp	x0, #0x2
                	b.lo	<addr>
-               	cmp	x4, #0x2
-               	b.eq	<addr>
-               	mov	x4, #0x0                // =0
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	mov	x4, x0
                	b	<addr>
@@ -84,7 +80,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x17, #0x5               // =5
                	mul	x0, x3, x17
-               	add	x6, x6, x0
+               	add	x5, x5, x0
                	mov	x17, #0x5               // =5
                	mul	x0, x2, x17
                	add	x1, x2, #0x1
@@ -97,7 +93,7 @@ Disassembly of section .text:
                	mov	x17, #0x7a              // =122
                	eor	x0, x0, x17
                	mov	x17, #0xff              // =255
-               	and	x5, x0, x17
+               	and	x6, x0, x17
                	add	x0, x2, #0x1
                	add	x1, x1, x0
                	lsl	x7, x0, #1
@@ -105,10 +101,10 @@ Disassembly of section .text:
                	add	x3, x3, x0
                	sxth	x3, w3
                	mov	x17, #0xff              // =255
-               	and	x5, x5, x17
+               	and	x6, x6, x17
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	eor	x0, x5, x0
+               	eor	x0, x6, x0
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
                	sxtw	x1, w1
@@ -142,13 +138,9 @@ Disassembly of section .text:
                	mov	x1, #0x5                // =5
                	b	<addr>
                	add	x3, x3, x1
-               	mov	w4, w0
-               	cmp	x4, #0x2
+               	mov	w0, w0
+               	cmp	x0, #0x2
                	b.lo	<addr>
-               	cmp	x4, #0x2
-               	b.eq	<addr>
-               	mov	x4, #0x0                // =0
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	mov	x4, x0
                	b	<addr>
@@ -163,7 +155,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	cmp	x6, #0x177
+               	cmp	x5, #0x177
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret

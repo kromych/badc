@@ -6,14 +6,22 @@
 //! test and the arm it selects stayed live -- including an arm holding a
 //! build-time-assert call the source expects to be unreachable.
 //!
-//! The analysis is a range per expression, carried down the dominator
-//! tree. Entering a block whose only predecessor ends in a conditional
-//! branch, the condition's comparison holds (or its negation does) on
-//! every path in, so the compared expression's range narrows for that
-//! subtree. Instructions contribute their own bounds on the way through:
-//! a mask bounds its result, an extension bounds it to the accessed
-//! width. A comparison the ranges settle is rewritten to its answer,
-//! which is what the branch folder and the unreachable-block prune in
+//! Two ranges bound each value. [`def_ranges`] is what the definition
+//! alone says, iterated over the tape to a settled table so a phi is
+//! bounded by the hull of what reaches it -- which is how a loop-carried
+//! state variable is bounded by the states it can hold. On top of that a
+//! range per expression is carried down the dominator tree: entering a
+//! block whose only predecessor ends in a conditional branch, the
+//! condition's comparison holds (or its negation does) on every path in,
+//! so the compared expression's range narrows for that subtree. Where
+//! the condition reaches the compared value through a step that
+//! preserves the comparison -- a mask that clears no bit the operand can
+//! hold, an exclusive-or or constant offset under an equality -- the
+//! comparison is rewritten onto that value and the bound recorded there
+//! too, along with the comparison's own answer and its negation. A
+//! comparison the ranges settle, or one a dominating branch already
+//! answered, is rewritten to that answer, which is what the branch
+//! folder and the unreachable-block prune in
 //! [`super::simplify_branches`] consume.
 //!
 //! Ranges are keyed by expression rather than by value id, so a
@@ -72,6 +80,25 @@ impl Range {
 
     pub(crate) fn is_universe(self) -> bool {
         self == UNIVERSE
+    }
+
+    /// Widening: an endpoint that moved outward goes to the end of the
+    /// register's range rather than to its new value. Contains both
+    /// operands, and sends each endpoint to its limit at most once, so
+    /// an iteration applying it cannot ascend forever.
+    fn widen(self, other: Range) -> Range {
+        Range {
+            lo: if other.lo < self.lo {
+                UNIVERSE.lo
+            } else {
+                self.lo
+            },
+            hi: if other.hi > self.hi {
+                UNIVERSE.hi
+            } else {
+                self.hi
+            },
+        }
     }
 
     fn contains(self, other: Range) -> bool {
@@ -263,6 +290,31 @@ fn comparison(op: BinOp) -> Option<bool> {
         BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge => true,
         _ => return None,
     })
+}
+
+/// The comparison that is false exactly where `op` is true. Both read
+/// a total order, so the negation is the complementary operator.
+fn negate(op: BinOp) -> Option<BinOp> {
+    Some(match op {
+        BinOp::Eq => BinOp::Ne,
+        BinOp::Ne => BinOp::Eq,
+        BinOp::Lt => BinOp::Ge,
+        BinOp::Ge => BinOp::Lt,
+        BinOp::Gt => BinOp::Le,
+        BinOp::Le => BinOp::Gt,
+        BinOp::Ult => BinOp::Uge,
+        BinOp::Uge => BinOp::Ult,
+        BinOp::Ugt => BinOp::Ule,
+        BinOp::Ule => BinOp::Ugt,
+        _ => return None,
+    })
+}
+
+/// Key of the expression `lhs op imm`, as [`key_of`] gives it for an
+/// instruction computing that comparison.
+fn cmp_key(canon: &[ValueId], lhs: ValueId, op: BinOp, imm: i64) -> Key {
+    let c = canon.get(lhs as usize).copied().unwrap_or(lhs);
+    (3, c, binop_code(op), imm)
 }
 
 /// Bounds an extension's result takes from the width it reads.
@@ -462,10 +514,93 @@ fn arith(a: Range, b: Range, sub: bool) -> Range {
     Range { lo, hi }
 }
 
+/// Smallest `2^k - 1` that is at least `x`, for `x` in `0 ..= i64::MAX`:
+/// the bound a bitwise combination of values below it cannot exceed,
+/// since no operand has a bit set above the mask.
+fn low_mask_above(x: i128) -> i128 {
+    let mut m: i128 = 0;
+    while m < x {
+        m = m * 2 + 1;
+    }
+    m
+}
+
+/// Whether `k` is `2^n - 1`, so `x & k` clears exactly the bits above
+/// bit `n - 1`.
+fn is_low_mask(k: i64) -> bool {
+    k > 0 && k & k.wrapping_add(1) == 0
+}
+
+/// Bounds a bitwise `or` / `xor` of two non-negative ranges: the result
+/// has no bit set above the highest either operand can hold, and `or` is
+/// at least each operand.
+fn bitwise(a: Range, b: Range, or: bool) -> Range {
+    if !(a.non_negative() && b.non_negative()) {
+        return UNIVERSE;
+    }
+    Range {
+        lo: if or { a.lo.max(b.lo) } else { 0 },
+        hi: low_mask_above(a.hi.max(b.hi)),
+    }
+}
+
+/// Bounds a shift by a constant. A shift count outside `0 ..= 63` is not
+/// defined by C99 6.5.7p3, so it carries no bounds.
+fn shift(a: Range, by: i64, op: BinOp) -> Range {
+    if !(0..64).contains(&by) {
+        return UNIVERSE;
+    }
+    let by = by as u32;
+    let r = match op {
+        BinOp::Shl => Range {
+            lo: a.lo << by,
+            hi: a.hi << by,
+        },
+        // Arithmetic right shift is monotone over the whole range.
+        BinOp::Shr => Range {
+            lo: a.lo >> by,
+            hi: a.hi >> by,
+        },
+        // The logical shift of a negative value is a large positive one,
+        // so only the width bound holds unless the operand is known
+        // non-negative.
+        _ if !a.non_negative() => Range {
+            lo: 0,
+            hi: (u64::MAX >> by) as i128,
+        },
+        _ => Range {
+            lo: a.lo >> by,
+            hi: a.hi >> by,
+        },
+    };
+    if r.lo < i64::MIN as i128 || r.hi > i64::MAX as i128 {
+        return UNIVERSE;
+    }
+    r
+}
+
+/// Bounds a remainder by a constant divisor. The C99 6.5.5p6 result has
+/// the sign of the dividend, so a dividend that may be negative reaches
+/// down to `-(|k| - 1)`. The unsigned form reads both operands as
+/// unsigned, where a negative immediate is a divisor above `2^63` and a
+/// negative dividend a huge numerator, neither of which `|k|` describes.
+fn remainder(a: Range, k: i64, unsigned: bool) -> Range {
+    if unsigned && !(a.non_negative() && k > 0) {
+        return UNIVERSE;
+    }
+    let m = match (k as i128).checked_abs() {
+        Some(m) if m > 0 => m - 1,
+        _ => return UNIVERSE,
+    };
+    Range {
+        lo: if a.non_negative() { 0 } else { -m },
+        hi: m,
+    }
+}
+
 /// Forward bounds for an instruction, given its operands' ranges and
 /// the entry range of each parameter.
-fn eval(insts: &[Inst], canon: &[ValueId], facts: &Facts, inst: &Inst, params: &[Range]) -> Range {
-    let range_of = |v: ValueId| facts.get(key_of(insts, canon, v));
+fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Range) -> Range {
     match inst {
         Inst::Imm(k) => Range::exact(*k),
         // A floating-point widening produces no integer, so it carries
@@ -503,6 +638,14 @@ fn eval(insts: &[Inst], canon: &[ValueId], facts: &Facts, inst: &Inst, params: &
             }
             BinOp::Add => arith(range_of(*lhs), Range::exact(*rhs_imm), false),
             BinOp::Sub => arith(range_of(*lhs), Range::exact(*rhs_imm), true),
+            BinOp::Or | BinOp::Xor => bitwise(
+                range_of(*lhs),
+                Range::exact(*rhs_imm),
+                matches!(op, BinOp::Or),
+            ),
+            BinOp::Shl | BinOp::Shr | BinOp::Shru => shift(range_of(*lhs), *rhs_imm, *op),
+            BinOp::Mod => remainder(range_of(*lhs), *rhs_imm, false),
+            BinOp::Modu => remainder(range_of(*lhs), *rhs_imm, true),
             _ => UNIVERSE,
         },
         Inst::Binop { op, lhs, rhs } => match op {
@@ -521,6 +664,9 @@ fn eval(insts: &[Inst], canon: &[ValueId], facts: &Facts, inst: &Inst, params: &
             }
             BinOp::Add => arith(range_of(*lhs), range_of(*rhs), false),
             BinOp::Sub => arith(range_of(*lhs), range_of(*rhs), true),
+            BinOp::Or | BinOp::Xor => {
+                bitwise(range_of(*lhs), range_of(*rhs), matches!(op, BinOp::Or))
+            }
             _ => UNIVERSE,
         },
         // A width-limited read cannot produce a value outside the width
@@ -552,31 +698,144 @@ fn eval(insts: &[Inst], canon: &[ValueId], facts: &Facts, inst: &Inst, params: &
 }
 
 /// Bounds an argument expression carries with no dominating facts in
-/// scope: the instruction's own shape only. Operand ranges read as
-/// [`UNIVERSE`], so nothing here depends on another function's
-/// parameter ranges and the interprocedural join needs no fixed point.
+/// scope: the instruction's own shape only, over unbounded operands.
 pub(crate) fn arg_range(insts: &[Inst], v: ValueId) -> Range {
     match insts.get(v as usize) {
-        // No facts are in scope, so operand keys are never looked up
-        // and the canonical map is irrelevant; the empty slice keys
-        // every operand on its own id.
-        Some(inst) => eval(insts, &[], &Facts::default(), inst, &[]),
+        Some(inst) => eval(inst, &[], |_| UNIVERSE),
         None => UNIVERSE,
     }
 }
 
+/// Rounds of the definition-range iteration, and the round from which a
+/// value that is still moving is widened so the ascending chain
+/// terminates.
+const WIDEN_ROUND: u32 = 3;
+const MAX_ROUNDS: u32 = 16;
+
+/// Bounds a value's definition carries wherever it is live: the
+/// instruction's own rule over its operands' bounds, with a phi taking
+/// the hull of what reaches it. Iterating from the empty range makes
+/// each round's table an under-approximation, so only a settled table
+/// is returned; a run still moving after [`MAX_ROUNDS`] yields no
+/// bounds at all. Settled means every value already contains what its
+/// rule produces from the table, and a table with that property
+/// over-approximates every value a definition can produce, whatever
+/// order the iteration reached it in.
+fn def_ranges(func: &FunctionSsa, params: &[Range]) -> Vec<Range> {
+    let n = func.insts.len();
+    let mut cur: Vec<Option<Range>> = alloc::vec![None; n];
+    let mut settled = false;
+    for round in 0..MAX_ROUNDS {
+        let mut changed = false;
+        for v in 0..n {
+            let next = match &func.insts[v] {
+                // A floating phi merges no integers.
+                Inst::Phi {
+                    kind: LoadKind::F32 | LoadKind::F64,
+                    ..
+                } => Some(UNIVERSE),
+                Inst::Phi { incoming, .. } => incoming
+                    .iter()
+                    .filter_map(|&(_, s)| cur.get(s as usize).copied().flatten())
+                    .reduce(Range::hull),
+                inst => {
+                    let mut unreached = false;
+                    let r = eval(inst, params, |o| {
+                        match cur.get(o as usize).copied().flatten() {
+                            Some(r) => r,
+                            None => {
+                                unreached = true;
+                                UNIVERSE
+                            }
+                        }
+                    });
+                    if unreached { None } else { Some(r) }
+                }
+            };
+            let next = match (round >= WIDEN_ROUND, cur[v], next) {
+                (true, Some(old), Some(new)) => Some(old.widen(new)),
+                (_, _, next) => next,
+            };
+            if next != cur[v] {
+                changed = true;
+                cur[v] = next;
+            }
+        }
+        if !changed {
+            settled = true;
+            break;
+        }
+    }
+    // A value no definition reached stays unbounded rather than empty:
+    // the iteration's own reach is not a statement about the program.
+    match settled {
+        true => cur.into_iter().map(|r| r.unwrap_or(UNIVERSE)).collect(),
+        false => alloc::vec![UNIVERSE; n],
+    }
+}
+
+/// Rewrite `lhs op k` into an equivalent comparison on the value `lhs`
+/// was built from, so a branch on a masked or offset expression also
+/// bounds that value. Each step preserves the comparison's truth for
+/// every operand value; `None` where it would not.
+fn peel(insts: &[Inst], def: &[Range], op: BinOp, lhs: ValueId, k: i64) -> Option<(ValueId, i64)> {
+    let (inner, step, c) = match insts.get(lhs as usize)? {
+        Inst::BinopI { op, lhs, rhs_imm } => (*lhs, *op, *rhs_imm),
+        _ => return None,
+    };
+    let equality = matches!(op, BinOp::Eq | BinOp::Ne);
+    match step {
+        // A mask that clears no bit the operand can hold is the
+        // identity, so every comparison on the mask is one on the
+        // operand.
+        BinOp::And
+            if is_low_mask(c)
+                && Range {
+                    lo: 0,
+                    hi: c as i128,
+                }
+                .contains(*def.get(inner as usize).unwrap_or(&UNIVERSE)) =>
+        {
+            Some((inner, k))
+        }
+        // Exclusive-or and a constant offset are bijections on the
+        // register, so an equality against the result is an equality
+        // against the unique operand producing it. Neither preserves
+        // order, so only equalities peel; both wrap, and so does the
+        // preimage.
+        BinOp::Xor if equality => Some((inner, k ^ c)),
+        BinOp::Add if equality => Some((inner, k.wrapping_sub(c))),
+        BinOp::Sub if equality => Some((inner, k.wrapping_add(c))),
+        _ => None,
+    }
+}
+
+/// Tables the walk consults but does not change while an edge's facts
+/// are applied.
+#[derive(Clone, Copy)]
+struct Tables<'a> {
+    canon: &'a [ValueId],
+    def: &'a [Range],
+    load_epoch: &'a [u64],
+}
+
 /// Facts the edge from `pred` into its single successor carries: the
 /// branch condition's own value, and the range its comparison implies
-/// for the compared expression.
+/// for the compared expression and for what that expression was built
+/// from.
 fn apply_edge(
     func: &FunctionSsa,
-    canon: &[ValueId],
+    tables: &Tables<'_>,
     facts: &mut Facts,
-    load_epoch: &[u64],
     epoch: u64,
     pred: BlockId,
     holds: bool,
 ) {
+    let Tables {
+        canon,
+        def,
+        load_epoch,
+    } = *tables;
     let cond = match func.blocks[pred as usize].terminator {
         Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => cond,
         _ => return,
@@ -586,7 +845,7 @@ fn apply_edge(
     // says only that it is not zero -- `if (x & 4)` reaches its body
     // with the value 4, not 1.
     let key = key_of(insts, canon, cond);
-    let current = facts.get(key);
+    let current = held(facts, def, key, cond);
     let cond_range = if holds {
         implied(BinOp::Ne, 0, true, current)
     } else {
@@ -599,7 +858,7 @@ fn apply_edge(
     let (op, lhs, rhs_range) = match insts.get(cond as usize) {
         Some(Inst::BinopI { op, lhs, rhs_imm }) => (*op, *lhs, Range::exact(*rhs_imm)),
         Some(Inst::Binop { op, lhs, rhs }) => {
-            let r = facts.get(key_of(insts, canon, *rhs));
+            let r = held(facts, def, key_of(insts, canon, *rhs), *rhs);
             if r.lo != r.hi {
                 return;
             }
@@ -607,19 +866,49 @@ fn apply_edge(
         }
         _ => return,
     };
-    let key = key_of(insts, canon, lhs);
-    let current = facts.get(key);
-    if let Some(r) = implied(op, rhs_range.lo, holds, current) {
-        facts.narrow(key, r);
-        // The compared value is what memory held when the load ran, so
-        // the bound describes a later load of the same expression only
-        // while nothing can have written in between.
-        if load_epoch.get(lhs as usize) == Some(&epoch)
-            && let Some(ek) = load_expr_key(insts, canon, lhs)
-        {
-            facts.narrow(ek, r);
+    let Ok(mut k) = i64::try_from(rhs_range.lo) else {
+        return;
+    };
+    let mut lhs = lhs;
+    // Walk down the expression the comparison was built from, recording
+    // the bound each rewriting implies. The chain is finite (each step
+    // moves to an operand) and bounded here against a cyclic tape.
+    for _ in 0..insts.len().min(8) {
+        // The comparison itself is settled on this edge, and so is its
+        // negation. An expression recomputing either in the dominated
+        // subtree reads the answer, which is what decides a test the
+        // operands' bounds leave open -- a disequality against a value
+        // with no bound on either side of it.
+        for (op, v) in [(Some(op), holds), (negate(op), !holds)] {
+            if let Some(op) = op.filter(|op| comparison(*op).is_some()) {
+                facts.narrow(cmp_key(canon, lhs, op, k), Range::exact(v as i64));
+            }
+        }
+        let key = key_of(insts, canon, lhs);
+        if let Some(r) = implied(op, k as i128, holds, held(facts, def, key, lhs)) {
+            facts.narrow(key, r);
+            // The compared value is what memory held when the load ran,
+            // so the bound describes a later load of the same expression
+            // only while nothing can have written in between.
+            if load_epoch.get(lhs as usize) == Some(&epoch)
+                && let Some(ek) = load_expr_key(insts, canon, lhs)
+            {
+                facts.narrow(ek, r);
+            }
+        }
+        match peel(insts, def, op, lhs, k) {
+            Some((inner, next)) => (lhs, k) = (inner, next),
+            None => break,
         }
     }
+}
+
+/// What is known about `v` at this walk position: the dominating facts
+/// recorded for its expression, met with what its definition alone says.
+fn held(facts: &Facts, def: &[Range], key: Key, v: ValueId) -> Range {
+    facts
+        .get(key)
+        .meet(*def.get(v as usize).unwrap_or(&UNIVERSE))
 }
 
 /// Rewrite every comparison the dominating conditions settle. `params`
@@ -634,6 +923,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
     let idom = crate::c5::codegen::ssa::mem2reg::dominators(func);
     let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
     let canon = value_numbers(func.insts.as_slice());
+    let def = def_ranges(func, params);
     // Dominator-tree children, so the walk visits each block once with
     // its dominators' facts in scope.
     let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
@@ -690,7 +980,12 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
                 _ => None,
             };
             if let Some(holds) = holds {
-                apply_edge(func, &canon, &mut facts, &load_epoch, epoch, p, holds);
+                let tables = Tables {
+                    canon: &canon,
+                    def: &def,
+                    load_epoch: &load_epoch,
+                };
+                apply_edge(func, &tables, &mut facts, epoch, p, holds);
             }
         } else {
             facts.wipe_loads();
@@ -703,10 +998,11 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
                 facts.wipe_loads();
                 epoch += 1;
             }
-            let key = key_of(func.insts.as_slice(), &canon, pc);
-            let ekey = load_expr_key(func.insts.as_slice(), &canon, pc);
-            let mut r =
-                eval(func.insts.as_slice(), &canon, &facts, inst, params).meet(facts.get(key));
+            let insts = func.insts.as_slice();
+            let at = |v: ValueId| held(&facts, &def, key_of(insts, &canon, v), v);
+            let key = key_of(insts, &canon, pc);
+            let ekey = load_expr_key(insts, &canon, pc);
+            let mut r = eval(inst, params, at).meet(held(&facts, &def, key, pc));
             // At the load itself the positional fact is current, so the
             // value it produces meets it, and the value read here is
             // what the expression produces until the next write.
@@ -715,22 +1011,28 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
                 load_epoch[pc as usize] = epoch;
             }
             let decided = match inst {
-                Inst::BinopI { op, lhs, rhs_imm } => decide(
-                    *op,
-                    facts.get(key_of(func.insts.as_slice(), &canon, *lhs)),
-                    Range::exact(*rhs_imm),
-                ),
-                Inst::Binop { op, lhs, rhs } => decide(
-                    *op,
-                    facts.get(key_of(func.insts.as_slice(), &canon, *lhs)),
-                    facts.get(key_of(func.insts.as_slice(), &canon, *rhs)),
-                ),
+                Inst::BinopI { op, lhs, rhs_imm } => decide(*op, at(*lhs), Range::exact(*rhs_imm)),
+                Inst::Binop { op, lhs, rhs } => decide(*op, at(*lhs), at(*rhs)),
                 _ => None,
             };
-            let r = match decided {
+            // Either the operands' bounds answer the comparison, or the
+            // bounds on the expression itself have closed to one value
+            // -- which is how a dominating branch's own answer reaches a
+            // repetition of it. Only a pure integer operation is
+            // rewritten: its result is a function of its operands, so
+            // replacing it with that value drops nothing else.
+            let point = || match r.lo == r.hi
+                && matches!(
+                    inst,
+                    Inst::BinopI { op, .. } | Inst::Binop { op, .. } if is_pure_int(*op)
+                ) {
+                true => i64::try_from(r.lo).ok(),
+                false => None,
+            };
+            let r = match decided.map(|v| v as i64).or_else(point) {
                 Some(v) => {
-                    folded.push((pc, v as i64));
-                    Range::exact(v as i64)
+                    folded.push((pc, v));
+                    Range::exact(v)
                 }
                 None => r,
             };
@@ -989,5 +1291,437 @@ mod tests {
             1,
         );
         assert!(!run_one(&mut f, &[Range { lo: 0, hi: 1000 }]));
+    }
+
+    /// A loop-carried state variable takes the hull of what reaches its
+    /// phi, so the loop's own exit test excludes the state the body's
+    /// dispatch has an arm for. Without the merged bounds the exit test
+    /// is a disequality against an unbounded value and settles nothing.
+    ///
+    /// b0: v0 = 2                                  -> b1
+    /// b1: v1 = phi(b0: v0, b3: v4); v2 = v1 != 0  Bnz v2 -> b2 else b4
+    /// b2: v3 = (v1 == 0)   -- the arm to decide   -> b3
+    /// b3: v4 = 1                                  -> b1
+    #[test]
+    fn loop_state_phi_bounds_the_dispatch() {
+        let insts = alloc::vec![
+            Inst::Imm(2), // v0
+            Inst::Phi {
+                incoming: alloc::vec![(0, 0), (3, 4)],
+                kind: LoadKind::I64,
+            }, // v1
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: 1,
+                rhs_imm: 0,
+            }, // v2
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 1,
+                rhs_imm: 0,
+            }, // v3
+            Inst::Imm(1), // v4
+        ];
+        let block = |range: core::ops::Range<u32>, t: Terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator: t,
+            exit_acc: 0,
+        };
+        let mut f = FunctionSsa {
+            inst_src: vec![(0, 0); 5],
+            f32_values: vec![false; 5],
+            insts,
+            blocks: vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(
+                    1..3,
+                    Terminator::Bnz {
+                        cond: 2,
+                        target: 2,
+                        fall_through: 4,
+                    },
+                ),
+                block(3..4, Terminator::Jmp(3)),
+                block(4..5, Terminator::Jmp(1)),
+                block(5..5, Terminator::Return(crate::c5::ir::NO_VALUE)),
+            ],
+            ..FunctionSsa::default()
+        };
+        assert!(run_one(&mut f, &[]), "the state's bounds must decide it");
+        assert!(
+            matches!(f.insts[3], Inst::Imm(0)),
+            "the state is in [1, 2] on the body edge, so `== 0` is 0: {:?}",
+            f.insts[3]
+        );
+    }
+
+    /// A loop-carried value whose rule does not reproduce the widened
+    /// bounds must still settle. `v = phi(0, (v + 1) & 0xff)` is that
+    /// shape: sending a moved endpoint to the end of the register keeps
+    /// the other, and the mask's own bound is inside the result, so the
+    /// next round changes nothing. Sending it to the whole register
+    /// instead would alternate with what the mask recomputes and the
+    /// iteration would never settle, discarding every bound in the
+    /// function. The lower endpoint survives, so the value is still
+    /// known non-negative.
+    ///
+    /// b0: v0 = 0                -> b1
+    /// b1: v1 = phi(v0, v3)
+    ///     v2 = v1 + 1
+    ///     v3 = v2 & 0xff
+    ///     v4 = (v1 >= 0)        -> b1
+    #[test]
+    fn a_widened_loop_value_settles_and_keeps_its_lower_bound() {
+        let insts = alloc::vec![
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: alloc::vec![(0, 0), (1, 3)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 1,
+                rhs_imm: 1,
+            },
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs: 2,
+                rhs_imm: 0xff,
+            },
+            Inst::BinopI {
+                op: BinOp::Ge,
+                lhs: 1,
+                rhs_imm: 0,
+            },
+        ];
+        let block = |range: core::ops::Range<u32>, t: Terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator: t,
+            exit_acc: 0,
+        };
+        let mut f = FunctionSsa {
+            inst_src: vec![(0, 0); 5],
+            f32_values: vec![false; 5],
+            insts,
+            blocks: vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..5, Terminator::Jmp(1)),
+            ],
+            ..FunctionSsa::default()
+        };
+        assert!(
+            run_one(&mut f, &[]),
+            "the iteration must settle with bounds"
+        );
+        assert!(
+            matches!(f.insts[4], Inst::Imm(1)),
+            "the widened lower endpoint still proves it non-negative: {:?}",
+            f.insts[4]
+        );
+    }
+
+    /// The bounds a definition carries must not depend on the order the
+    /// iteration reached it: a phi whose incoming values are all
+    /// unbounded stays unbounded, and its consumers decide nothing.
+    #[test]
+    fn phi_of_unbounded_values_decides_nothing() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64,
+                },
+                Inst::Phi {
+                    incoming: alloc::vec![(0, 0), (0, 1)],
+                    kind: LoadKind::I64,
+                },
+                Inst::BinopI {
+                    op: BinOp::Ge,
+                    lhs: 2,
+                    rhs_imm: 0,
+                },
+            ],
+            2,
+        );
+        assert!(!run_one(&mut f, &[]));
+    }
+
+    /// Bitwise and shift bounds. Each is checked through a comparison
+    /// the bounds settle and one they must leave open.
+    #[test]
+    fn bitwise_and_shift_bounds() {
+        let decides = |inst: Inst, cmp: BinOp, k: i64| {
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::U8,
+                    },
+                    inst,
+                    Inst::BinopI {
+                        op: cmp,
+                        lhs: 1,
+                        rhs_imm: k,
+                    },
+                ],
+                1,
+            );
+            run_one(&mut f, &[]).then(|| match f.insts[2] {
+                Inst::Imm(v) => v,
+                _ => -1,
+            })
+        };
+        // A U8 parameter is in [0, 255]; xor by 3 stays under the next
+        // mask up, and or by 3 is at least 3.
+        let xor = |k| Inst::BinopI {
+            op: BinOp::Xor,
+            lhs: 0,
+            rhs_imm: k,
+        };
+        assert_eq!(decides(xor(3), BinOp::Le, 255), Some(1));
+        assert_eq!(decides(xor(3), BinOp::Le, 100), None);
+        assert_eq!(
+            decides(
+                Inst::BinopI {
+                    op: BinOp::Or,
+                    lhs: 0,
+                    rhs_imm: 3,
+                },
+                BinOp::Ge,
+                3
+            ),
+            Some(1)
+        );
+        // Shifts move both endpoints; a shift left out of the register
+        // is not modelled and settles nothing.
+        let shl = |k| Inst::BinopI {
+            op: BinOp::Shl,
+            lhs: 0,
+            rhs_imm: k,
+        };
+        assert_eq!(decides(shl(4), BinOp::Le, 255 * 16), Some(1));
+        assert_eq!(decides(shl(62), BinOp::Ge, 0), None);
+        assert_eq!(
+            decides(
+                Inst::BinopI {
+                    op: BinOp::Shru,
+                    lhs: 0,
+                    rhs_imm: 4,
+                },
+                BinOp::Le,
+                15
+            ),
+            Some(1)
+        );
+        // A remainder by a constant is bounded by it, with the dividend's
+        // sign; an I8 parameter reaches below zero, so the signed form
+        // does not prove the result non-negative.
+        assert_eq!(
+            decides(
+                Inst::BinopI {
+                    op: BinOp::Mod,
+                    lhs: 0,
+                    rhs_imm: 10,
+                },
+                BinOp::Le,
+                9
+            ),
+            Some(1)
+        );
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I8,
+                },
+                Inst::BinopI {
+                    op: BinOp::Mod,
+                    lhs: 0,
+                    rhs_imm: 10,
+                },
+                Inst::BinopI {
+                    op: BinOp::Ge,
+                    lhs: 1,
+                    rhs_imm: 0,
+                },
+            ],
+            1,
+        );
+        assert!(!run_one(&mut f, &[]), "a negative dividend is not excluded");
+        // An unsigned remainder reads a negative immediate as a divisor
+        // above 2^63, which `|k|` does not describe: `x %u 2^63` on a
+        // dividend up to 2^63 - 1 is the dividend itself, above the
+        // `|k| - 1` the signed reading would give.
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::BinopI {
+                    op: BinOp::Ge,
+                    lhs: 0,
+                    rhs_imm: 0,
+                },
+                Inst::BinopI {
+                    op: BinOp::Modu,
+                    lhs: 0,
+                    rhs_imm: i64::MIN,
+                },
+                Inst::BinopI {
+                    op: BinOp::Le,
+                    lhs: 2,
+                    rhs_imm: i64::MAX - 1,
+                },
+            ],
+            1,
+        );
+        run_one(&mut f, &[]);
+        assert!(
+            matches!(f.insts[3], Inst::BinopI { .. }),
+            "a divisor above 2^63 bounds nothing: {:?}",
+            f.insts[3]
+        );
+    }
+
+    /// A branch on a masked or offset expression bounds the value it was
+    /// built from, and only where the rewriting preserves the
+    /// comparison: a mask that can clear a bit the operand holds, and an
+    /// ordering through a non-monotone step, do not peel.
+    #[test]
+    fn branch_facts_reach_through_invertible_steps() {
+        // b0: x = param & 0xff; y = x ^ 2; c = (y != 0); Bnz c -> b1
+        // b1: eq = (x == 2)   -- decided false by the dominating branch
+        let build = |mask: i64, cmp: BinOp| {
+            let insts = alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::U8,
+                },
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: 0,
+                    rhs_imm: mask,
+                },
+                Inst::BinopI {
+                    op: BinOp::Xor,
+                    lhs: 1,
+                    rhs_imm: 2,
+                },
+                Inst::BinopI {
+                    op: BinOp::Ne,
+                    lhs: 2,
+                    rhs_imm: 0,
+                },
+                Inst::BinopI {
+                    op: cmp,
+                    lhs: 1,
+                    rhs_imm: 2,
+                },
+            ];
+            let block = |range: core::ops::Range<u32>, t: Terminator| Block {
+                start_pc: 0,
+                inst_range: range,
+                terminator: t,
+                exit_acc: 0,
+            };
+            FunctionSsa {
+                n_params: 1,
+                inst_src: vec![(0, 0); 5],
+                f32_values: vec![false; 5],
+                insts,
+                blocks: vec![
+                    block(
+                        0..4,
+                        Terminator::Bnz {
+                            cond: 3,
+                            target: 1,
+                            fall_through: 2,
+                        },
+                    ),
+                    block(4..5, Terminator::Return(4)),
+                    block(4..4, Terminator::Return(crate::c5::ir::NO_VALUE)),
+                ],
+                ..FunctionSsa::default()
+            }
+        };
+        let mut f = build(0xff, BinOp::Eq);
+        assert!(run_one(&mut f, &[]));
+        assert!(
+            matches!(f.insts[4], Inst::Imm(0)),
+            "(x ^ 2) != 0 is x != 2: {:?}",
+            f.insts[4]
+        );
+        // The same chain compared for order: the exclusive-or does not
+        // preserve it, so nothing peels through and x <= 2 stays open.
+        let mut f = build(0xff, BinOp::Le);
+        run_one(&mut f, &[]);
+        assert!(
+            matches!(f.insts[4], Inst::BinopI { .. }),
+            "an ordering must not peel through a non-monotone step"
+        );
+    }
+
+    /// A mask peels only where it clears no bit its operand can hold.
+    /// The operand here is unbounded, so `x & 0xff` is not `x`: the
+    /// masked value being zero says nothing about `x`.
+    ///
+    /// b0: y = x & 0xff; Bnz y -> b1 else b2
+    /// b2: eq = (x == 0)   -- must stay a runtime test
+    #[test]
+    fn a_mask_that_is_not_the_identity_does_not_peel() {
+        let insts = alloc::vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs: 0,
+                rhs_imm: 0xff,
+            },
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ];
+        let block = |range: core::ops::Range<u32>, t: Terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator: t,
+            exit_acc: 0,
+        };
+        let mut f = FunctionSsa {
+            n_params: 1,
+            inst_src: vec![(0, 0); 3],
+            f32_values: vec![false; 3],
+            insts,
+            blocks: vec![
+                block(
+                    0..2,
+                    Terminator::Bnz {
+                        cond: 1,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                ),
+                block(2..2, Terminator::Return(crate::c5::ir::NO_VALUE)),
+                block(2..3, Terminator::Return(2)),
+            ],
+            ..FunctionSsa::default()
+        };
+        run_one(&mut f, &[]);
+        assert!(
+            matches!(f.insts[2], Inst::BinopI { .. }),
+            "x & 0xff == 0 does not decide x == 0: {:?}",
+            f.insts[2]
+        );
     }
 }

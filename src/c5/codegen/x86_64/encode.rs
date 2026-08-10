@@ -2473,9 +2473,11 @@ pub(crate) fn lower(
         off
     };
 
+    let (asm_section_list, asm_sym_decls) = asm_sections.into_parts();
     Ok(Build {
         emitted_relocs: Vec::new(),
-        asm_sections: asm_sections.into_sections(),
+        asm_sections: asm_section_list,
+        asm_sym_decls,
         asm_section_text_refs,
         asm_text_abs_refs,
         asm_text_labels,

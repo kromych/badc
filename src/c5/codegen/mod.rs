@@ -1674,6 +1674,11 @@ pub(crate) struct Build {
     /// Each is a definition the unit owns, so the writers emit a local
     /// `.text` symbol and bind a C reference to the same name against it.
     pub asm_text_labels: Vec<AsmTextLabel>,
+    /// Symbol directives inline-asm templates carried outside any section
+    /// (`.globl` / `.local` / `.weak` / `.type` / `.size`). GNU as scopes
+    /// them to the unit; the writers apply each to the definition the unit
+    /// holds, or emit an undefined symbol when it holds none.
+    pub asm_sym_decls: Vec<ssa::emit_common::AsmSymDecl>,
 }
 
 /// A named label an inline-asm template defines in the emitted code stream

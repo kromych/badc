@@ -7552,11 +7552,17 @@ fn emit_inline_asm(
             return false;
         }
     };
-    if let Some((_, blocks)) = &extracted
-        && let Err(m) = super::ssa::emit_common::reject_unit_symbol_items(blocks)
-    {
-        bail_msg(&m);
-        return false;
+    if let Some(ex) = &extracted {
+        if let Err(m) = super::ssa::emit_common::reject_unit_symbol_items(&ex.blocks) {
+            bail_msg(&m);
+            return false;
+        }
+        // The template's symbol directives declare names of the unit; the
+        // object writer applies them, where every definition is known.
+        if let Err(m) = asm_sections.push_sym_decls(&ex.sym_items) {
+            bail_msg(&m);
+            return false;
+        }
     }
     // Encode any replacement instructions in an executable section
     // (`.altinstr_replacement,"ax"`) to bytes and relocations before layout. A
@@ -7565,9 +7571,9 @@ fn emit_inline_asm(
     // row slice carries its own lifetime, so this holds no borrow of `goto_ctx`.
     let goto_row: Option<&[super::super::ir::BlockId]> = goto_ctx.as_ref().map(|c| c.row);
     let goto_block = |k: u8| -> Option<u32> { goto_row?.get(1 + k as usize).copied() };
-    if let Some((_, blocks)) = extracted.as_mut()
+    if let Some(ex) = extracted.as_mut()
         && let Err(m) = encode_x86_asm_section_code(
-            blocks,
+            &mut ex.blocks,
             func,
             args,
             name2entpc,
@@ -7582,7 +7588,7 @@ fn emit_inline_asm(
         return false;
     }
     let (code_text, section_blocks) = match &extracted {
-        Some((c, b)) => (c.as_str(), b.as_slice()),
+        Some(ex) => (ex.code.as_str(), ex.blocks.as_slice()),
         None => (text, &[][..]),
     };
     let insns = match super::asm::parse_template(code_text.as_bytes()) {

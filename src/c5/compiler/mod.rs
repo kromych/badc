@@ -1458,6 +1458,11 @@ pub struct Compiler {
     /// `.set name, target` symbol aliases from file-scope asm, merged
     /// onto `Program::function_aliases`.
     pub(super) asm_sym_sets: Vec<(String, String)>,
+    /// Sink the parse-time validation materializes every file-scope asm
+    /// template into, in source order. Per unit, as the codegen sink is:
+    /// a location expression may reach a label an earlier template
+    /// defined (`.size name, .-name` split across two `asm()`).
+    pub(super) asm_validate_sink: crate::c5::codegen::ssa::emit_common::AsmSectionSink,
 
     /// Include resolutions recorded by the preprocessor when
     /// [`CompileOptions::track_includes`] was set. Empty otherwise.
@@ -2124,6 +2129,7 @@ impl Compiler {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             asm_sym_sets: Vec::new(),
+            asm_validate_sink: Default::default(),
             include_records: pp_include_records,
             pp_entrypoint,
             pp_subsystem,

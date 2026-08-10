@@ -1548,6 +1548,30 @@ pub(crate) enum AsmSymType {
     Object,
 }
 
+/// Binding a symbol directive requests; `Default` leaves the symbol's own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum AsmSymBind {
+    #[default]
+    Default,
+    Global,
+    Local,
+    Weak,
+}
+
+/// A symbol directive an asm template carried outside any section. GNU as
+/// scopes `.globl` / `.local` / `.weak` / `.type` / `.size` to the unit, so
+/// the name may be defined by this template's code stream, by another
+/// statement's section, by C, or by nothing in the unit. TODO `.globl` on a
+/// C symbol of the unit: the linkage split is decided from the parse, which
+/// a function-scope template runs after. The file-scope parse applies it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct AsmSymDecl {
+    pub name: alloc::string::String,
+    pub bind: AsmSymBind,
+    pub sym_type: AsmSymType,
+    pub size: Option<u64>,
+}
+
 /// A label defined inside a named section.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct AsmSectionLabel {
@@ -1574,6 +1598,9 @@ pub(crate) struct AsmSectionLabel {
 /// leave the appended bytes / relocs / labels in a pre-existing section.
 pub(crate) struct AsmSectionsSnapshot {
     len: usize,
+    /// The declarations verbatim: a merge onto an entry that predates the
+    /// snapshot is not undone by a length truncation.
+    decls: alloc::vec::Vec<AsmSymDecl>,
     per_section: alloc::vec::Vec<(usize, usize, usize, u32, bool)>,
 }
 
@@ -1595,6 +1622,10 @@ pub(crate) struct AsmSectionSink {
     /// measurement. Keyed by identity rather than index so a lookup stays
     /// disjoint from a mutable borrow of the section being laid out.
     labels: AsmSinkLabels,
+    /// Unit-level symbol declarations the unit's templates made outside any
+    /// section, merged by name. Applied by the object writer, which is where
+    /// every definition the unit holds is known.
+    sym_decls: alloc::vec::Vec<AsmSymDecl>,
 }
 
 /// Label name -> (owning section's identity key, offset within it).
@@ -1617,10 +1648,75 @@ impl AsmSectionSink {
         &mut self.sections
     }
 
-    /// The accumulated sections, for the object writers. The indexes serve
-    /// materialization only and are dropped with the sink.
-    pub(crate) fn into_sections(self) -> alloc::vec::Vec<AsmSection> {
-        self.sections
+    /// The accumulated sections and unit-level symbol declarations, for the
+    /// object writers. The indexes serve materialization only and are
+    /// dropped with the sink.
+    pub(crate) fn into_parts(self) -> (alloc::vec::Vec<AsmSection>, alloc::vec::Vec<AsmSymDecl>) {
+        (self.sections, self.sym_decls)
+    }
+
+    /// Merge the symbol directives a template carried outside any section
+    /// into the unit's declarations, later directives on a name winning.
+    /// A `.size` needs a section's layout to value `.`, so one here must
+    /// fold to a constant. TODO `.size` over code-stream labels.
+    pub(crate) fn push_sym_decls(
+        &mut self,
+        items: &[AsmSectionItem],
+    ) -> Result<(), alloc::string::String> {
+        for item in items {
+            let (name, bind, sym_type, size) = match item {
+                AsmSectionItem::Global(n) => (n, AsmSymBind::Global, AsmSymType::NoType, None),
+                AsmSectionItem::Local(n) => (n, AsmSymBind::Local, AsmSymType::NoType, None),
+                AsmSectionItem::Weak(n) => (n, AsmSymBind::Weak, AsmSymType::NoType, None),
+                AsmSectionItem::Type { name, sym_type } => {
+                    (name, AsmSymBind::Default, *sym_type, None)
+                }
+                AsmSectionItem::Size { name, expr } => {
+                    let ctx = AsmExprCtx {
+                        resolve: &|_| None,
+                        const_of: &|_| None,
+                        lax_div: false,
+                    };
+                    let v = eval_asm_value(expr, &ctx)
+                        .ok()
+                        .and_then(|v| v.to_abs())
+                        .filter(|v| *v >= 0)
+                        .ok_or_else(|| {
+                            alloc::format!(
+                                "inline asm: `.size {name}, {expr}` outside a section needs a \
+                                 constant size"
+                            )
+                        })?;
+                    (
+                        name,
+                        AsmSymBind::Default,
+                        AsmSymType::NoType,
+                        Some(v as u64),
+                    )
+                }
+                _ => continue,
+            };
+            let d = match self.sym_decls.iter().position(|d| d.name == *name) {
+                Some(i) => &mut self.sym_decls[i],
+                None => {
+                    self.sym_decls.push(AsmSymDecl {
+                        name: name.clone(),
+                        ..Default::default()
+                    });
+                    self.sym_decls.last_mut().expect("just pushed")
+                }
+            };
+            if bind != AsmSymBind::Default {
+                d.bind = bind;
+            }
+            if sym_type != AsmSymType::NoType {
+                d.sym_type = sym_type;
+            }
+            if size.is_some() {
+                d.size = size;
+            }
+        }
+        Ok(())
     }
 
     /// Index of the section carrying `b`'s identity, if the sink has one.
@@ -1666,6 +1762,7 @@ impl AsmSectionSink {
     pub(crate) fn snapshot(&self) -> AsmSectionsSnapshot {
         AsmSectionsSnapshot {
             len: self.sections.len(),
+            decls: self.sym_decls.clone(),
             per_section: self
                 .sections
                 .iter()
@@ -1688,6 +1785,9 @@ impl AsmSectionSink {
     /// snapshot the sink has already shrunk past restores nothing, so a
     /// caller may restore the same one more than once.
     pub(crate) fn restore(&mut self, snap: &AsmSectionsSnapshot) {
+        if self.sym_decls.len() >= snap.decls.len() {
+            self.sym_decls.clone_from(&snap.decls);
+        }
         for s in self.sections.drain(snap.len.min(self.sections.len())..) {
             self.by_key.remove(&section_key_of(&s));
             for l in &s.labels {
@@ -2883,9 +2983,42 @@ pub(crate) fn split_asm_subsections(text: &str) -> (alloc::string::String, alloc
 pub(crate) fn extract_asm_sections(
     text: &str,
     is_aarch64: bool,
-) -> Result<Option<(alloc::string::String, alloc::vec::Vec<AsmSectionBlock>)>, alloc::string::String>
-{
+) -> Result<Option<AsmExtract>, alloc::string::String> {
     extract_asm_sections_impl(text, is_aarch64, false)
+}
+
+/// What a function-scope template splits into: the code stream the arch
+/// backend encodes, the named-section blocks, and the symbol directives the
+/// code stream carried, which GNU as scopes to the unit rather than to a
+/// section.
+#[derive(Debug)]
+pub(crate) struct AsmExtract {
+    pub code: alloc::string::String,
+    pub blocks: alloc::vec::Vec<AsmSectionBlock>,
+    pub sym_items: alloc::vec::Vec<AsmSectionItem>,
+}
+
+impl AsmExtract {
+    /// The linkage-only form of a file-scope template: outside its sections
+    /// it declares external names and defines nothing, so there is no
+    /// trampoline body to assemble as `.text`. `.globl` is the only such
+    /// declaration a C symbol of the unit takes; the others bind a symbol the
+    /// file-scope parse records on its own channels.
+    pub(crate) fn is_linkage_only(&self) -> bool {
+        self.code.trim().is_empty()
+            && self
+                .sym_items
+                .iter()
+                .all(|i| matches!(i, AsmSectionItem::Global(_)))
+    }
+
+    /// The names its `.globl` / `.global` statements declare.
+    pub(crate) fn globl_names(&self) -> impl Iterator<Item = &str> {
+        self.sym_items.iter().filter_map(|i| match i {
+            AsmSectionItem::Global(n) => Some(n.as_str()),
+            _ => None,
+        })
+    }
 }
 
 /// File-scope variant: the whole template is section-scoped, starting in
@@ -2898,37 +3031,55 @@ pub(crate) fn extract_file_scope_asm_sections(
 ) -> Result<alloc::vec::Vec<AsmSectionBlock>, alloc::string::String> {
     Ok(extract_asm_sections_impl(text, is_aarch64, true)?
         .expect("file-scope extraction always yields sections")
-        .1)
+        .blocks)
 }
 
-/// True when a file-scope asm stream (outside pushed sections) is nothing but
-/// `.globl` / `.global` directives -- the linkage-only form, which names a C
-/// symbol rather than defining a trampoline body that must be assembled.
-pub(crate) fn asm_stream_is_globl_only(text: &str) -> bool {
-    split_asm_statements(text)
-        .into_iter()
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .all(|piece| {
-            let (tok, rest) = match piece.find(char::is_whitespace) {
-                Some(p) => (&piece[..p], piece[p..].trim()),
-                None => (piece, ""),
-            };
-            matches!(tok, ".globl" | ".global") && !rest.is_empty()
-        })
+/// Directives GNU as resolves against the unit's symbol table rather than
+/// against the section they sit in.
+fn is_asm_sym_directive(tok: &str) -> bool {
+    matches!(
+        tok,
+        ".globl" | ".global" | ".weak" | ".local" | ".type" | ".size"
+    )
 }
 
-/// The names a `.globl`-only statement stream declares, one per operand.
-pub(crate) fn gas_globl_operands(text: &str) -> alloc::vec::Vec<alloc::string::String> {
-    split_asm_statements(text)
-        .into_iter()
-        .filter_map(|p| p.trim().split_once(char::is_whitespace))
-        .filter(|(tok, _)| matches!(*tok, ".globl" | ".global"))
-        .flat_map(|(_, rest)| rest.split(','))
-        .map(str::trim)
-        .filter(|n| is_asm_symbol_name(n))
-        .map(alloc::string::String::from)
-        .collect()
+/// Whether a template's statements hold one. A spelling test gates the
+/// statement scan: a template with none keeps its text verbatim, since
+/// extraction reconstructs the code stream it returns.
+fn asm_text_has_sym_directive(text: &str) -> bool {
+    if !(text.contains(".glob")
+        || text.contains(".weak")
+        || text.contains(".local")
+        || text.contains(".type")
+        || text.contains(".size"))
+    {
+        return false;
+    }
+    split_asm_statements(text).into_iter().any(|stmt| {
+        let mut s = stmt.trim();
+        while let Some((_, rest)) = peel_leading_label(s) {
+            s = rest;
+        }
+        is_asm_sym_directive(split_first_token(s).0)
+    })
+}
+
+/// Parse one symbol directive into items. `.globl a, b` declares each name;
+/// the rest take a name plus their own arguments.
+fn push_sym_directive_items(
+    tok: &str,
+    rest: &str,
+    is_aarch64: bool,
+    out: &mut alloc::vec::Vec<AsmSectionItem>,
+) -> Result<(), alloc::string::String> {
+    if matches!(tok, ".globl" | ".global" | ".weak" | ".local") && rest.contains(',') {
+        for name in rest.split(',') {
+            out.push(parse_section_item(tok, name.trim(), is_aarch64)?);
+        }
+        return Ok(());
+    }
+    out.push(parse_section_item(tok, rest, is_aarch64)?);
+    Ok(())
 }
 
 /// A bare section directive naming a well-known section (`.text` == `.section
@@ -3029,16 +3180,17 @@ fn extract_asm_sections_impl(
     text: &str,
     is_aarch64: bool,
     file_scope: bool,
-) -> Result<Option<(alloc::string::String, alloc::vec::Vec<AsmSectionBlock>)>, alloc::string::String>
-{
+) -> Result<Option<AsmExtract>, alloc::string::String> {
     if !file_scope
         && !text.contains(".pushsection")
         && !text.contains(".section")
         && !text.contains(".subsection")
+        && !asm_text_has_sym_directive(text)
     {
         return Ok(None);
     }
     let mut code = alloc::string::String::with_capacity(text.len());
+    let mut sym_items: alloc::vec::Vec<AsmSectionItem> = alloc::vec::Vec::new();
     let mut blocks: alloc::vec::Vec<AsmSectionBlock> = alloc::vec::Vec::new();
     // Stack of indices into `blocks`; `None` is the code stream. File-scope asm
     // has no code stream: the base is a `.text` section from the start.
@@ -3278,6 +3430,12 @@ fn extract_asm_sections_impl(
             _ => {}
         }
         match *stack.last().unwrap() {
+            // A symbol directive names a symbol of the unit, not a location in
+            // the stream it sits in, so it leaves the code stream here as it
+            // leaves the instruction stream of a section.
+            None if is_asm_sym_directive(tok) => {
+                push_sym_directive_items(tok, rest, is_aarch64, &mut sym_items)?;
+            }
             // The remaining statement is an instruction, kept verbatim for the
             // arch backend to encode.
             None => {
@@ -3289,18 +3447,7 @@ fn extract_asm_sections_impl(
             // `.rodata`); the section flags set the object section's
             // attributes, not whether code is admitted.
             Some(idx) => {
-                // `.globl a, b`: one linkage item per name.
-                if matches!(tok, ".globl" | ".global") && rest.contains(',') {
-                    for name in rest.split(',') {
-                        blocks[idx]
-                            .items
-                            .push(parse_section_item(tok, name.trim(), is_aarch64)?);
-                    }
-                    continue;
-                }
-                blocks[idx]
-                    .items
-                    .push(parse_section_item(tok, rest, is_aarch64)?);
+                push_sym_directive_items(tok, rest, is_aarch64, &mut blocks[idx].items)?;
             }
         }
     }
@@ -3309,7 +3456,11 @@ fn extract_asm_sections_impl(
             "inline asm: `.rept` without `.endr`",
         ));
     }
-    Ok(Some((code, blocks)))
+    Ok(Some(AsmExtract {
+        code,
+        blocks,
+        sym_items,
+    }))
 }
 
 /// Parse the argument list of `.pushsection` / `.section`:
@@ -6204,10 +6355,12 @@ pub(crate) fn for_each_section_item_mut(
     Ok(())
 }
 
-/// Reject unit-level symbol directives in an operand statement's sections.
-/// `.weak` and `.set name, sym` change the unit's symbol table; the
-/// file-scope parse records them, the operand emit paths do not.
-/// TODO accept them in function-scope asm.
+/// Reject the unit-level symbol directives an operand statement's sections
+/// carry that no channel of the emit path takes. `.set name, sym` is an
+/// object-level alias the file-scope parse records; `.weak` inside a section
+/// binds a label the section defines but has no carrier for a name it does
+/// not, which the code stream's declarations provide.
+/// TODO accept both in a function-scope statement's sections.
 pub(crate) fn reject_unit_symbol_items(
     blocks: &[AsmSectionBlock],
 ) -> Result<(), alloc::string::String> {
@@ -6266,29 +6419,20 @@ pub(crate) fn materialize_file_asm(
         // no bytes to emit here) or a trampoline body assembled as `.text`.
         // The probe runs the function-scope extractor, which rejects forms
         // only the file-scope one accepts; its error falls through.
-        let extracted = extract_asm_sections(text, align_is_p2);
-        let globl_only = match &extracted {
-            Ok(None) => asm_stream_is_globl_only(text),
-            Ok(Some((code, _))) => asm_stream_is_globl_only(code),
-            Err(_) => false,
-        };
-        let mut blocks = if globl_only {
-            match extracted.expect("globl_only implies extraction succeeded") {
-                Some((code, mut blocks)) => {
-                    // `.globl` is unit-level, so it binds a label this
-                    // template defines in one of its sections as well as the
-                    // C symbol the parse already applied it to.
-                    if let Some(first) = blocks.first_mut() {
-                        for name in gas_globl_operands(&code) {
-                            first.items.push(AsmSectionItem::Global(name));
-                        }
+        let mut blocks = match extract_asm_sections(text, align_is_p2) {
+            Ok(Some(ex)) if ex.is_linkage_only() => {
+                let mut blocks = ex.blocks;
+                // `.globl` is unit-level, so it binds a label this template
+                // defines in one of its sections as well as the C symbol the
+                // parse already applied it to.
+                if let Some(first) = blocks.first_mut() {
+                    for name in ex.sym_items {
+                        first.items.push(name);
                     }
-                    blocks
                 }
-                None => continue,
+                blocks
             }
-        } else {
-            extract_file_scope_asm_sections(text, align_is_p2)?
+            _ => extract_file_scope_asm_sections(text, align_is_p2)?,
         };
         // Assemble the section's instructions to bytes before layout; the
         // file-scope path has no operand context to resolve against.
@@ -7503,7 +7647,7 @@ mod asm_section_tests {
     #[test]
     fn extract_and_materialize() {
         let text = "1: nop\n.pushsection .discard.t,\"aw\",@progbits\n.balign 8\n.quad 1b\n.long 1b - .\n.long %c0, 7\n.asciz \"hi\"\n.popsection\nnop\n";
-        let (code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { code, blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         // The `1:` label is peeled onto its own line ahead of the `nop`.
         assert_eq!(code, "1:\nnop\nnop\n");
         assert_eq!(blocks.len(), 1);
@@ -7565,7 +7709,7 @@ mod asm_section_tests {
         // other than the one-byte NOP wins for either. A max skip drops the
         // alignment when the gap is larger. Matches GNU as byte-for-byte.
         let mat = |text: &str, aarch64: bool| -> alloc::vec::Vec<u8> {
-            let (_code, blocks) = extract_asm_sections(text, aarch64).unwrap().unwrap();
+            let AsmExtract { blocks, .. } = extract_asm_sections(text, aarch64).unwrap().unwrap();
             let mut sink = AsmSectionSink::default();
             materialize_asm_sections(
                 &blocks,
@@ -7918,7 +8062,7 @@ mod asm_section_tests {
                     .octa 0x5BE0CD191F83D9AB9B05688C510E527F, 0xA54FF53A3C6EF372BB67AE856A09E667\n\
                     .cfi_endproc\n\
                     .popsection\n";
-        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -7962,7 +8106,7 @@ mod asm_section_tests {
                     .long (b - a) / 4\n\
                     .quad .\n\
                     .popsection\n";
-        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -8042,7 +8186,7 @@ mod asm_section_tests {
         let t2 = ".pushsection .t,\"ax\"\n.balign 4\ng:\n.byte 9\n.size f, g - f\n.popsection\n";
         let mut sink = AsmSectionSink::default();
         for t in [t1, t2] {
-            let (_code, blocks) = extract_asm_sections(t, false).unwrap().unwrap();
+            let AsmExtract { blocks, .. } = extract_asm_sections(t, false).unwrap().unwrap();
             materialize_asm_sections(
                 &blocks,
                 &|_| None,
@@ -8165,7 +8309,7 @@ mod asm_section_tests {
             AsmSectionValue::Expr(alloc::string::String::from("(1 << 15) | (%0)")),
         );
         let text = ".pushsection .altinstructions,\"a\"\n.hword (1 << 15) | (%0)\n.popsection\n";
-        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -8216,7 +8360,7 @@ mod asm_section_tests {
         // The materialized field is a PC-relative reloc to the label's text
         // offset, as for the unparenthesised reference.
         let text = "1: nop\n.pushsection __ex_table,\"a\"\n.long (1b) - .\n.popsection\n";
-        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -8275,7 +8419,7 @@ mod asm_section_tests {
         // metadata stores a label reference with `.word`, which needs a 4- or
         // 8-byte field, so it resolves only under the AArch64 width.
         let width = |is_a64: bool| -> u8 {
-            let (_c, blocks) =
+            let AsmExtract { blocks, .. } =
                 extract_asm_sections(".pushsection .x,\"a\"\n.word 0x1234\n.popsection\n", is_a64)
                     .unwrap()
                     .unwrap();
@@ -8287,7 +8431,7 @@ mod asm_section_tests {
         assert_eq!(width(false), 2);
         assert_eq!(width(true), 4);
         // On AArch64 `.word 1b - .` fits its PC-relative reloc.
-        let (_c, blocks) =
+        let AsmExtract { blocks, .. } =
             extract_asm_sections(".pushsection .x,\"a\"\n.word 1b - .\n.popsection\n", true)
                 .unwrap()
                 .unwrap();
@@ -8314,7 +8458,7 @@ mod asm_section_tests {
         let text = "1: nop\n2: nop\n.pushsection .x,\"a\"\n\
                     .byte 2b - 1b\n.short 2b - 1b\n.long 2b - 1b\n.byte 1b - 2b\n\
                     .popsection\n";
-        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -8347,7 +8491,7 @@ mod asm_section_tests {
         let text = ".pushsection .altinstructions,\"a\"\n.byte 775f - 774f\n.popsection\n\
                     .pushsection .altinstr_replacement,\"ax\"\n\
                     774:\n.byte 0x0f,0x01,0xca\n775:\n.popsection\n";
-        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -8377,7 +8521,7 @@ mod asm_section_tests {
         // a constant; it is rejected rather than folded to a bogus byte.
         let text = "1: nop\n.pushsection .a,\"a\"\n.byte 774f - 1b\n.popsection\n\
                     .pushsection .b,\"ax\"\n774:\n.byte 0\n.popsection\n";
-        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         let err = materialize_asm_sections(
             &blocks,
@@ -8423,7 +8567,7 @@ mod asm_section_tests {
         // out: `774` at 0, `775` after the 3 replacement bytes.
         let text = ".pushsection .altinstr_replacement,\"ax\"\n\
                     774:\n.byte 0x0f,0x01,0xca\n775:\n.popsection\n";
-        let (_code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let m = measure_asm_section_offsets(&blocks, &|_| None, false, &AsmSectionSink::default())
             .unwrap();
         assert_eq!(m.offset("774f"), Some(0));
@@ -8435,7 +8579,9 @@ mod asm_section_tests {
     fn section_label_difference_overflow_rejected() {
         // A distance outside the field width is rejected, not truncated.
         let text = "1: nop\n2: nop\n.pushsection .x,\"a\"\n.byte 2b - 1b\n.popsection\n";
-        let (_c, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract {
+            code: _c, blocks, ..
+        } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         let err = materialize_asm_sections(
             &blocks,
@@ -8538,7 +8684,7 @@ mod asm_section_tests {
         // linker test `x86_alternative_call_replacement_encodes_and_relocates`).
         let exec = "771: nop\n.pushsection .altinstr_replacement,\"ax\"\n\
                     774: call foo\n775:\n.popsection\n";
-        let (_code, blocks) = extract_asm_sections(exec, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(exec, false).unwrap().unwrap();
         let repl = blocks
             .iter()
             .find(|b| b.name == ".altinstr_replacement")
@@ -8556,7 +8702,7 @@ mod asm_section_tests {
         // kept as a `Code` item for the backend to encode.
         let data = "771: nop\n.pushsection .data.tramp,\"a\"\n\
                     774: wrmsr\n775:\n.popsection\n";
-        let (_code, blocks) = extract_asm_sections(data, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(data, false).unwrap().unwrap();
         let sec = blocks.iter().find(|b| b.name == ".data.tramp").unwrap();
         assert!(
             sec.items
@@ -8578,7 +8724,7 @@ mod asm_section_tests {
                    wrapper:push %rcx\n\
                    pop %rcx\n\
                    .popsection\n";
-        let (_code, blocks) = extract_asm_sections(src, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(src, false).unwrap().unwrap();
         let sec = blocks.iter().find(|b| b.name == ".spinlock.text").unwrap();
         assert!(
             sec.items
@@ -8619,7 +8765,7 @@ mod asm_section_tests {
         // `.section` + `.previous` return to the code stream; an unknown
         // name resolves as a symbol target.
         let text = "nop\n.section .fixup,\"ax\"\n.quad handler\n.previous\nnop\n";
-        let (code, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { code, blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(code, "nop\nnop\n");
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
@@ -8639,7 +8785,7 @@ mod asm_section_tests {
         // Two blocks naming one section merge; a `.popsection` without a
         // push is rejected.
         let text = ".pushsection .a,\"a\"\n.long 1\n.popsection\n.pushsection .a,\"a\"\n.long 2\n.popsection\n";
-        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -8665,7 +8811,7 @@ mod asm_section_tests {
         // `.align 3` is 2^3 = 8 bytes under the AArch64 convention and a
         // (rejected, non-power-of-two) byte count under the x86 one.
         let text = ".pushsection .t,\"a\"\n.align 3\n.byte 1\n.popsection";
-        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -8693,7 +8839,7 @@ mod asm_section_tests {
         );
         // `.align 8` under the x86 convention is 8 bytes.
         let text = ".pushsection .t,\"a\"\n.align 8\n.byte 1\n.popsection";
-        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -8714,7 +8860,7 @@ mod asm_section_tests {
         // binding whether it precedes or follows the definition, and a
         // quoted section name is unquoted.
         let text = ".section \".export\",\"a\"\n                    first:\n                    .asciz \"GPL\"\n                    .balign 8\n                    .globl second\n                    second: .quad 0\n                    .globl nowhere\n                    .previous\n";
-        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(blocks[0].name, ".export");
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
@@ -8769,7 +8915,7 @@ mod asm_section_tests {
                     .type tramp, @function\n\
                     .size tramp, . - tramp\n\
                     .popsection\n";
-        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         materialize_asm_sections(
             &blocks,
@@ -8791,7 +8937,7 @@ mod asm_section_tests {
     #[test]
     fn section_type_object_and_bad_forms_rejected() {
         let materialize = |text: &str| {
-            let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+            let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
             let mut sink = AsmSectionSink::default();
             materialize_asm_sections(
                 &blocks,
@@ -8827,7 +8973,7 @@ mod asm_section_tests {
     #[test]
     fn duplicate_section_label_is_rejected() {
         let text = ".pushsection .t,\"a\"\ndup:\n.quad 0\ndup:\n.popsection\n";
-        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         let mut sink = AsmSectionSink::default();
         let err = materialize_asm_sections(
             &blocks,
@@ -8847,7 +8993,7 @@ mod asm_section_tests {
         // Preprocessed templates separate the directive from its arguments
         // with tabs and leave trailing whitespace after a label.
         let text = ".section\t\".initcall7.init\", \"a\"\t\t\n                    __initcall_probe7:\t\t\t\n                    .long\tprobe - .\t\n                    .previous\t\t\t\n";
-        let (_, blocks) = extract_asm_sections(text, false).unwrap().unwrap();
+        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
         assert_eq!(blocks[0].name, ".initcall7.init");
         assert_eq!(blocks[0].flags, "a");
         let mut sink = AsmSectionSink::default();

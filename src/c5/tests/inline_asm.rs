@@ -904,6 +904,187 @@ fn two_inputs_on_one_fixed_register_are_accepted() {
     }
 }
 
+/// Compile one source to a relocatable object and parse it, so a test can
+/// assert on the symbol table the writers emit.
+#[cfg(feature = "native-emit")]
+fn asm_obj(src: &str, target: crate::Target) -> crate::c5::linker::relocatable::EtRel {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = crate::Compiler::with_options(src.to_string(), target, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+    crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse")
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_global_directive_declares_an_undefined_symbol() {
+    use crate::c5::linker::relocatable::EtSymRef;
+    const STB_GLOBAL: u8 = 1;
+    const STT_NOTYPE: u8 = 0;
+    // `arch/x86/include/asm/xen/hypercall.h` puts `.global` in the
+    // instruction stream of an ordinary extended asm, naming a symbol the
+    // unit does not define. GNU as 2.46.1 for
+    //     .global __SCK__xen_hypercall
+    // emits one undefined STB_GLOBAL STT_NOTYPE entry, value 0, size 0.
+    let src = "int f(int x) { __asm__ volatile(\".global __SCK__xen_hypercall\\n\\t\" \
+               \"nop\" : \"+r\"(x) :: \"memory\"); return x; } \
+               int main(void) { return f(0); }";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let o = asm_obj(src, target);
+        let s = o
+            .symbols
+            .iter()
+            .find(|s| s.name == "__SCK__xen_hypercall")
+            .unwrap_or_else(|| panic!("{target:?}: `.global` declared no symbol"));
+        assert_eq!(s.binding, STB_GLOBAL, "{target:?}");
+        assert_eq!(s.kind, STT_NOTYPE, "{target:?}");
+        assert!(matches!(s.sec, EtSymRef::Undef), "{target:?}");
+        assert_eq!((s.value, s.size), (0, 0), "{target:?}");
+    }
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_global_directive_binds_a_code_stream_label() {
+    use crate::c5::linker::relocatable::EtSymRef;
+    const STB_GLOBAL: u8 = 1;
+    const STT_NOTYPE: u8 = 0;
+    // `.global` naming a label the same template defines. GNU as 2.46.1 for
+    //     .global my_alias
+    //     my_alias:
+    //     nop
+    // gives `my_alias` STB_GLOBAL STT_NOTYPE in `.text`; without the
+    // directive the label is STB_LOCAL. TODO named code-stream labels on
+    // AArch64, whose template parser admits numeric labels only.
+    let src = |dir: &str| {
+        alloc::format!(
+            "void f(void) {{ __asm__ volatile(\"{dir}my_alias:\\n\\tnop\"); }} \
+             int main(void) {{ f(); return 0; }}"
+        )
+    };
+    let o = asm_obj(&src(".global my_alias\\n\\t"), crate::Target::LinuxX64);
+    let s = o
+        .symbols
+        .iter()
+        .find(|s| s.name == "my_alias")
+        .expect("`my_alias` missing");
+    assert_eq!(s.binding, STB_GLOBAL);
+    assert_eq!(s.kind, STT_NOTYPE);
+    assert!(matches!(s.sec, EtSymRef::Section(_)));
+    let plain = asm_obj(&src(""), crate::Target::LinuxX64);
+    assert_eq!(
+        plain
+            .symbols
+            .iter()
+            .find(|s| s.name == "my_alias")
+            .expect("`my_alias` missing")
+            .binding,
+        0,
+        "an undeclared label stays STB_LOCAL"
+    );
+    // `.type` and `.size` reach the same label. GNU as 2.46.1 for
+    //     .global my_fn / .type my_fn, @function / .size my_fn, 3 / my_fn:
+    // gives STT_FUNC STB_GLOBAL, value 0 in `.text`, size 3.
+    const STT_FUNC: u8 = 2;
+    let typed = asm_obj(
+        "void f(void) { __asm__ volatile(\".global my_fn\\n\\t\" \
+         \".type my_fn, @function\\n\\t.size my_fn, 3\\n\\t\" \
+         \"my_fn:\\n\\tnop\\n\\tnop\\n\\tnop\"); } \
+         int main(void) { f(); return 0; }",
+        crate::Target::LinuxX64,
+    );
+    let t = typed
+        .symbols
+        .iter()
+        .find(|s| s.name == "my_fn")
+        .expect("`my_fn` missing");
+    assert_eq!((t.binding, t.kind, t.size), (STB_GLOBAL, STT_FUNC, 3));
+    // A `.size` over the location counter needs a section's layout, which
+    // the code stream does not have; the diagnostic says so.
+    let program = crate::Compiler::with_options(
+        "void f(void) { __asm__ volatile(\".size my_fn, .-my_fn\\n\\tmy_fn:\\n\\tnop\"); } \
+         int main(void) { f(); return 0; }"
+            .to_string(),
+        crate::Target::LinuxX64,
+        crate::CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let e = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        crate::Target::LinuxX64,
+        crate::NativeOptions::default(),
+    )
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(
+        e.contains("outside a section needs a constant size"),
+        "expected the location-counter diagnostic, got {e:?}"
+    );
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn file_scope_size_reaches_a_label_of_an_earlier_statement() {
+    use crate::c5::linker::relocatable::EtSymRef;
+    const STB_LOCAL: u8 = 0;
+    const STT_OBJECT: u8 = 1;
+    // `include/linux/btf_ids.h` defines the set label in one `asm()` and
+    // sizes it with `. - name` in another. GNU as 2.46.1 for the same three
+    // statements emits `.BTF_ids` = 00 00 00 00 00 00 00 00 d2 04 00 00 and
+    // one STB_LOCAL STT_OBJECT symbol of size 12 at offset 0 of it.
+    let src = "asm(\".pushsection .BTF_ids,\\\"a\\\"\\n\"\
+                   \".local __BTF_ID__set8__my_ids\\n\"\
+                   \".type  __BTF_ID__set8__my_ids, @object\\n\"\
+                   \"__BTF_ID__set8__my_ids:\\n\"\
+                   \".zero 8\\n\"\
+                   \".popsection\\n\");\
+               asm(\".pushsection .BTF_ids,\\\"a\\\"\\n\"\
+                   \".long 1234\\n\"\
+                   \".popsection\\n\");\
+               asm(\".pushsection .BTF_ids,\\\"a\\\"\\n\"\
+                   \".size __BTF_ID__set8__my_ids, .-__BTF_ID__set8__my_ids\\n\"\
+                   \".popsection\\n\");\
+               int main(void) { return 0; }";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let o = asm_obj(src, target);
+        let sec = o
+            .sections
+            .iter()
+            .position(|s| s.name == ".BTF_ids")
+            .unwrap_or_else(|| panic!("{target:?}: no `.BTF_ids`"));
+        assert_eq!(
+            o.sections[sec].bytes,
+            [0, 0, 0, 0, 0, 0, 0, 0, 0xd2, 0x04, 0, 0],
+            "{target:?}"
+        );
+        let s = o
+            .symbols
+            .iter()
+            .find(|s| s.name == "__BTF_ID__set8__my_ids")
+            .unwrap_or_else(|| panic!("{target:?}: set label missing"));
+        assert_eq!((s.binding, s.kind), (STB_LOCAL, STT_OBJECT), "{target:?}");
+        assert_eq!((s.value, s.size), (0, 12), "{target:?}");
+        assert!(
+            matches!(s.sec, EtSymRef::Section(i) if i == sec),
+            "{target:?}"
+        );
+    }
+}
+
 #[test]
 fn two_outputs_on_one_fixed_register_are_rejected() {
     // Two outputs cannot both leave a value in one register; gcc

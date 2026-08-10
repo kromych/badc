@@ -84,6 +84,7 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
 /// fixtures compile everywhere.)
 const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("file_scope_asm_a64_relocs.c", "linux-x64"), // aarch64 stp/adrp file-scope section
+    ("file_scope_asm_a64_label_diff_operand.c", "linux-x64"), // aarch64 prfm/adr file-scope section
     ("cacheflush_asm.c", "linux-x64"),            // aarch64 cache-ops / barriers
     ("atomic128_ldaxp_stlxp.c", "linux-x64"),     // aarch64 128-bit ldaxp/stlxp
     ("atomic128_ldst.c", "linux-x64"),            // aarch64 128-bit ldp/stp, ldxp/stxp

@@ -419,8 +419,12 @@ fn prefetch() {
         shift: None,
     };
     assert_eq!(enc("prfm", &[Opnd::Imm(2), mr]), 0xF8A2_6822); // pldl2keep, [x1, x2]
-    // The immediate offset must be a multiple of the access size.
-    assert!(encode("prfm", &[Opnd::Imm(0), mem(1, 4)]).is_err());
+    // An offset the scaled field cannot hold -- not a multiple of the access
+    // size, or negative -- takes the unscaled `prfum` sibling, as GNU as
+    // encodes it. Words from `as`.
+    assert_eq!(enc("prfm", &[Opnd::Imm(0), mem(1, 4)]), 0xF880_4020);
+    assert_eq!(enc("prfum", &[Opnd::Imm(0), mem(1, 4)]), 0xF880_4020);
+    assert_eq!(enc("prfm", &[Opnd::Imm(9), mem(30, -8)]), 0xF89F_83C9); // plil1strm
 }
 
 #[test]

@@ -3430,6 +3430,13 @@ fn emit_inline_asm_aarch64(
                     "aarch64 inline asm: symbol operand needs a relocation",
                 ));
             }
+            // TODO operand expressions over labels in function-body asm; a
+            // function body has no section layout to fold one against.
+            AsmOpndA64::ImmExpr(ref e) | AsmOpndA64::MemExpr { expr: ref e, .. } => {
+                return Err(alloc::format!(
+                    "aarch64 inline asm: operand expression `{e}` needs a section layout"
+                ));
+            }
             // TODO literal pools in function-body asm; a function body has no
             // section of its own to flush one into.
             AsmOpndA64::LitPool(_) => {
@@ -9379,13 +9386,24 @@ pub(crate) fn encode_a64_file_asm_section_code(
         })
     };
     assign_a64_literal_pools(blocks)?;
-    super::ssa::emit_common::for_each_section_item_mut(blocks, &mut |item| {
+    // An operand expression over labels is folded before its instruction is
+    // encoded: on A64 the value selects the form -- a scaled or unscaled
+    // offset, `movz` or `movn` -- which a relocation applied to a finished
+    // word cannot.
+    let measured = a64_section_operand_layout(blocks)?;
+    a64_for_each_section_item_mut(blocks, &mut |key, item| {
         {
             let AsmSectionItem::Code(text) = item else {
                 return Ok(());
             };
-            let insns = super::asm::parse_template(text.as_bytes())
+            let mut insns = super::asm::parse_template(text.as_bytes())
                 .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+            if let Some(measured) = &measured {
+                for insn in &mut insns {
+                    fold_a64_layout_operands(insn, key, measured)
+                        .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+                }
+            }
             let mut bytes: Vec<u8> = Vec::new();
             let mut relocs: Vec<super::ssa::emit_common::AsmSectionReloc> = Vec::new();
             for insn in &insns {
@@ -9436,6 +9454,114 @@ pub(crate) fn encode_a64_file_asm_section_code(
         }
         Ok(())
     })
+}
+
+/// Apply `f` to every item of the blocks with the identity key of the section
+/// it lands in, descending into `.rept` bodies as the shared walk does. The
+/// key is the section an operand expression folds against.
+fn a64_for_each_section_item_mut(
+    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    f: &mut dyn FnMut(
+        &str,
+        &mut super::ssa::emit_common::AsmSectionItem,
+    ) -> Result<(), alloc::string::String>,
+) -> Result<(), alloc::string::String> {
+    fn walk(
+        key: &str,
+        items: &mut [super::ssa::emit_common::AsmSectionItem],
+        f: &mut dyn FnMut(
+            &str,
+            &mut super::ssa::emit_common::AsmSectionItem,
+        ) -> Result<(), alloc::string::String>,
+    ) -> Result<(), alloc::string::String> {
+        for it in items {
+            if let super::ssa::emit_common::AsmSectionItem::Rept { items, .. } = it {
+                walk(key, items, f)?;
+            } else {
+                f(key, it)?;
+            }
+        }
+        Ok(())
+    }
+    for b in blocks {
+        let key = super::ssa::emit_common::section_key(b);
+        walk(&key, &mut b.items, f)?;
+    }
+    Ok(())
+}
+
+/// The label layout an operand expression folds against, or `None` when no
+/// operand in the blocks needs one. Each code statement measures as
+/// placeholder bytes of its assembled length, which the parse gives: an A64
+/// instruction is one word whatever its operands hold. Sections start at zero
+/// rather than at the sink's current length, which the values this serves do
+/// not depend on.
+fn a64_section_operand_layout(
+    blocks: &[super::ssa::emit_common::AsmSectionBlock],
+) -> Result<Option<super::ssa::emit_common::SectionLabelOffsets>, alloc::string::String> {
+    use super::asm::AsmOpndA64;
+    use super::ssa::emit_common::AsmSectionItem;
+    let mut sized = blocks.to_vec();
+    let mut needs = false;
+    a64_for_each_section_item_mut(&mut sized, &mut |_, item| {
+        let AsmSectionItem::Code(text) = item else {
+            return Ok(());
+        };
+        let insns = super::asm::parse_template(text.as_bytes())
+            .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+        needs |= insns
+            .iter()
+            .flat_map(|i| &i.operands)
+            .any(|o| matches!(o, AsmOpndA64::ImmExpr(_) | AsmOpndA64::MemExpr { .. }));
+        let len = insns
+            .iter()
+            .map(|i| match i {
+                i if i.label_def.is_some() => 0,
+                i if i.bytes.is_empty() => 4,
+                i => i.bytes.len(),
+            })
+            .sum();
+        *item = AsmSectionItem::CodeBytes {
+            bytes: alloc::vec![0u8; len],
+            relocs: Vec::new(),
+            short: None,
+        };
+        Ok(())
+    })?;
+    if !needs {
+        return Ok(None);
+    }
+    super::ssa::emit_common::measure_asm_section_offsets(
+        &sized,
+        &|_| None,
+        true,
+        &super::ssa::emit_common::AsmSectionSink::default(),
+    )
+    .map(Some)
+}
+
+/// Replace each operand the section layout values with the constant it folds
+/// to, so the encoder selects the form from the value as GNU as does.
+fn fold_a64_layout_operands(
+    insn: &mut super::asm::AsmInsnA64,
+    key: &str,
+    measured: &super::ssa::emit_common::SectionLabelOffsets,
+) -> Result<(), alloc::string::String> {
+    use super::asm::AsmOpndA64;
+    let fold = |e: &str| super::ssa::emit_common::fold_asm_operand_expr(e, key, measured);
+    for o in &mut insn.operands {
+        let folded = match o {
+            AsmOpndA64::ImmExpr(expr) => AsmOpndA64::Imm(fold(expr)?),
+            AsmOpndA64::MemExpr { base, expr, pre } => AsmOpndA64::Mem {
+                base: *base,
+                off: fold(expr)?,
+                pre: *pre,
+            },
+            _ => continue,
+        };
+        *o = folded;
+    }
+    Ok(())
 }
 
 /// The `movz` / `movk` word an `:abs_gN:` operand relocates, with a zero
@@ -10337,6 +10463,85 @@ mod tests {
             );
         }
         assert!(one("add x5, x5, :abs_g0:sym").contains("outside `movz` or `movk`"));
+    }
+
+    /// An immediate or a memory offset written as a label difference is an
+    /// absolute value the section layout supplies, and on A64 the value
+    /// selects the encoding: `prfm` takes the scaled form only for a
+    /// multiple of the access size and `prfum` otherwise, `ldr` likewise
+    /// becomes `ldur`, and `mov` of a negative value becomes `movn`. Words
+    /// from `as`, which emits no relocation for any of them. This is the
+    /// kernel's vector-entry sequence in `arch/arm64/kernel/entry.S`.
+    #[test]
+    fn file_scope_a64_label_difference_operand_matches_gnu_as() {
+        let text = ".pushsection .t,\"ax\"\n\
+                    vs:\n\
+                    nop\n\
+                    1:\n\
+                    prfm plil1strm, [x30, #(1b - vs)]\n\
+                    add x30, x30, #(1b - vs + 4)\n\
+                    ldr x0, [x30, #(1b - vs)]\n\
+                    mov x0, #(2f - 1b)\n\
+                    mov x1, #(vs - 2f)\n\
+                    prfm plil1strm, [x30, #(2f - vs)]\n\
+                    prfum plil1strm, [x30, #4]\n\
+                    sub sp, sp, #(2f - vs)\n\
+                    prfm plil1strm, [x30, #(2f - vs + 4)]\n\
+                    2:\n\
+                    nop\n\
+                    .popsection\n";
+        let sink = materialize_one_section(text).unwrap();
+        let want_words: [u32; 11] = [
+            0xd503201f, // nop
+            0xf88043c9, // prfum plil1strm, [x30, #4]
+            0x910023de, // add   x30, x30, #0x8
+            0xf84043c0, // ldur  x0, [x30, #4]
+            0xd2800480, // mov   x0, #0x24
+            0x928004e1, // mov   x1, #-0x28
+            0xf98017c9, // prfm  plil1strm, [x30, #40]
+            0xf88043c9, // prfum plil1strm, [x30, #4]
+            0xd100a3ff, // sub   sp, sp, #0x28
+            0xf882c3c9, // prfum plil1strm, [x30, #44]
+            0xd503201f, // nop
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
+        assert!(
+            sec.relocs.is_empty(),
+            "a folded operand keeps no relocation: {:?}",
+            sec.relocs
+        );
+    }
+
+    /// An operand expression must reduce to an absolute value, as GNU as
+    /// requires: an undefined symbol or a difference across sections has no
+    /// relocation to carry it, and the location counter has no place before
+    /// the instruction is laid out.
+    #[test]
+    fn file_scope_a64_operand_expression_rejects_what_gnu_as_rejects() {
+        let one = |body: &str| {
+            materialize_one_section(&alloc::format!(
+                ".pushsection .t,\"ax\"\nvs:\nnop\n{body}\n.popsection\n"
+            ))
+            .err()
+            .unwrap_or_default()
+        };
+        for bad in [
+            "add x0, x0, #(ext_sym - vs)",
+            "ldr x0, [x1, #(ext_sym - vs)]",
+        ] {
+            assert!(
+                one(bad).contains("is not an absolute value in an instruction operand"),
+                "{bad}: {}",
+                one(bad)
+            );
+        }
+        assert!(
+            one("add x0, x0, #(. - vs)").contains("location counter `.` is not available here"),
+            "{}",
+            one("add x0, x0, #(. - vs)")
+        );
     }
 
     /// The add/sub immediate field is unsigned, so GNU as encodes a negative

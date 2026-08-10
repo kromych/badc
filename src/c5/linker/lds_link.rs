@@ -4430,13 +4430,32 @@ impl<'a> LdsLinker<'a> {
             }
             // PT_NOTE per run of NOTE sections.
             let mut note_members: Vec<usize> = Vec::new();
+            let mut note_runs: Vec<Vec<usize>> = Vec::new();
             for &oi in emit_order {
                 let o = &self.outs[oi];
+                let contiguous = note_members
+                    .last()
+                    .map(|&p: &usize| self.outs[p].addr + self.outs[p].size == o.addr)
+                    .unwrap_or(true);
+                if o.alloc && o.shtype == SHT_NOTE && contiguous {
+                    note_members.push(oi);
+                    continue;
+                }
+                // A segment covers a range, so a note section separated
+                // from the previous one by anything else starts a new
+                // PT_NOTE rather than pulling what lies between into
+                // the walk a consumer makes over the segment.
+                if !note_members.is_empty() {
+                    note_runs.push(core::mem::take(&mut note_members));
+                }
                 if o.alloc && o.shtype == SHT_NOTE {
                     note_members.push(oi);
                 }
             }
             if !note_members.is_empty() {
+                note_runs.push(note_members);
+            }
+            for run in note_runs {
                 segs.push((
                     Elf64Phdr {
                         p_type: PT_NOTE,
@@ -4444,7 +4463,7 @@ impl<'a> LdsLinker<'a> {
                         p_align: 4,
                         ..Default::default()
                     },
-                    note_members,
+                    run,
                 ));
             }
             // PT_DYNAMIC over `.dynamic`, so a loader finds the tables
@@ -6365,8 +6384,12 @@ SECTIONS {
         };
         let script = parse_linker_script(&super::super::default_script::default_script(false))
             .expect("the built-in default script parses");
+        // Build-id on, so the image holds two note sections: PT_NOTE
+        // covers a range, and a second note is the first thing that
+        // can put a non-note inside it.
         let opts = LdsOptions {
             max_page_size: 0x1000,
+            build_id_sha1: true,
             ..Default::default()
         };
         let res = link_with_script(
@@ -6396,12 +6419,99 @@ SECTIONS {
             .find(|p| p.p_type == PT_GNU_PROPERTY)
             .expect("PT_GNU_PROPERTY covers the merged note");
         assert_eq!((prop.p_vaddr, prop.p_filesz), (notes[0].2, notes[0].3));
-        assert!(
-            phdrs
-                .iter()
-                .any(|p| p.p_type == PT_NOTE && p.p_vaddr <= notes[0].2),
-            "the note stays inside PT_NOTE as well"
+        // PT_NOTE spans a range, so every allocated section inside it
+        // has to be a note: a consumer walks the segment end to end.
+        let pt_note = phdrs
+            .iter()
+            .find(|p| p.p_type == PT_NOTE)
+            .expect("PT_NOTE covers the notes");
+        let covered: Vec<_> = secs
+            .iter()
+            .filter(|s| {
+                s.4 & SHF_ALLOC != 0
+                    && s.2 >= pt_note.p_vaddr
+                    && s.2 < pt_note.p_vaddr + pt_note.p_memsz
+            })
+            .collect();
+        assert_eq!(
+            covered.iter().map(|s| s.3).sum::<u64>(),
+            pt_note.p_memsz,
+            "PT_NOTE holds notes and nothing between them"
         );
+        assert!(
+            covered.iter().all(|s| s.1 == SHT_NOTE),
+            "every section under PT_NOTE is a note: {:?}",
+            covered.iter().map(|s| &s.0).collect::<Vec<_>>()
+        );
+        assert_eq!(covered.len(), 2, "the merged note and the build id");
+    }
+
+    /// A script can put something between two note sections. Each run
+    /// gets its own PT_NOTE, the way ld emits them, so what a consumer
+    /// reads end to end over a segment is notes only.
+    #[test]
+    fn separated_note_sections_get_a_segment_each() {
+        const SEP_SCRIPT: &str = r#"
+SECTIONS {
+  . = 0x400000 + SIZEOF_HEADERS;
+  .note.gnu.property : { *(.note.gnu.property) }
+  .text : { *(.text) }
+  .note.gnu.build-id : { *(.note.gnu.build-id) }
+}
+"#;
+        let body = gnu_property::encode(
+            &[gnu_property::Property {
+                ty: 0xc000_0002,
+                datasz: 4,
+                value: 0x3,
+            }],
+            8,
+        );
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            .sec(".note.gnu.property", SHT_NOTE, SHF_ALLOC, 8, &body)
+            .build(EM_X86_64);
+        let script = parse_linker_script(SEP_SCRIPT).expect("parses");
+        let opts = LdsOptions {
+            build_id_sha1: true,
+            max_page_size: 0x1000,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("the link succeeds");
+        let secs = readelf_sections(&res.image);
+        let sec = |n: &str| {
+            secs.iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{n}"))
+        };
+        let notes = image_phdrs(&res.image)
+            .into_iter()
+            .filter(|p| p.p_type == PT_NOTE)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            notes.len(),
+            2,
+            "one segment per run, not one spanning .text"
+        );
+        for (seg, name) in notes
+            .iter()
+            .zip([".note.gnu.property", ".note.gnu.build-id"])
+        {
+            assert_eq!((seg.p_vaddr, seg.p_memsz), (sec(name).2, sec(name).3));
+        }
+        // ld gives each segment the alignment of what it holds.
+        assert_eq!((notes[0].p_align, notes[1].p_align), (8, 4));
     }
 
     /// ET_DYN link: every absolute pointer becomes a load-time

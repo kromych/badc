@@ -45,6 +45,14 @@ enum BuildId {
 
 /// Binutils compatibility level reported by `--version`. Raise it only
 /// alongside the behaviour a consumer gates on that version.
+///
+/// 2.33.1 is where `arch/arm64/Kconfig` enables
+/// `ARM64_PTR_AUTH_KERNEL`, which compiles the kernel with
+/// `-mbranch-protection=pac-ret`. The property-note merging that gate
+/// is named for is implemented; the compiler flag is not, and
+/// `arch/arm64/kernel/pi/map_kernel.c` drops the shadow call stack on
+/// the strength of the claim. Reporting 2.33.1 or later waits on the
+/// flag.
 const LD_COMPAT_VERSION: &str = "2.30";
 
 struct LdArgs {

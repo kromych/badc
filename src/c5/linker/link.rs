@@ -461,11 +461,9 @@ pub struct PendingImportReloc {
     /// instructions. Per site, not per import: a function's address may
     /// be taken at one site and called at another.
     pub slot_load: bool,
-    /// Referenced symbol, kept only for a parked reference whose
-    /// materialization depends on the image's load address: those are
-    /// the entries a writer may still decline, and `import_index`
-    /// names no symbol for them. `None` elsewhere so the common
-    /// parked reference costs no allocation.
+    /// Referenced symbol for a parked section reference a writer may
+    /// still decline; `import_index` names no symbol for those.
+    /// `None` for an import and for the aarch64 page pair.
     pub sym_name: Option<Box<str>>,
 }
 
@@ -2744,7 +2742,13 @@ fn park_section_ref(
         addend: target_offset,
         target_section,
         slot_load: false,
-        sym_name: needs_image_base(site.machine, reloc.rtype).then(|| site.symbol.into()),
+        // Every writer materializes the page pair and its low-12
+        // halves, so a failure there means a badc invariant broke and
+        // the writer's own diagnostic says so. The rest a writer may
+        // still decline, and `import_index` names no symbol for a
+        // section reference, so those keep the name. They are the rare
+        // forms, so the common parked reference costs no allocation.
+        sym_name: (!is_aarch64_text_pageref(site.machine, reloc.rtype)).then(|| site.symbol.into()),
     });
     Ok(())
 }

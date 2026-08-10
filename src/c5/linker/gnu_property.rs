@@ -70,7 +70,12 @@ pub fn merge(notes: &[&[u8]], n_inputs: usize, align: usize) -> Vec<Property> {
     let mut accs: BTreeMap<u32, Acc> = BTreeMap::new();
     for note in notes {
         for (ty, data) in properties(note, align) {
-            let Some(rule) = rule_for(ty) else { continue };
+            // Every rule here combines a value of at most eight bytes.
+            // A wider payload is malformed for the type, and merging it
+            // would emit a `pr_datasz` past what the value holds.
+            let Some(rule) = rule_for(ty).filter(|_| data.len() <= 8) else {
+                continue;
+            };
             let value = match rule {
                 Rule::Present => 0,
                 _ => read_le(data),
@@ -267,6 +272,21 @@ mod tests {
         let a = note(&[(0x10, 4, 0xaabb_ccdd), (X86_FEATURE_1_AND, 4, 0x3)]);
         let b = note(&[(0x10, 4, 0xaabb_ccdd), (X86_FEATURE_1_AND, 4, 0x3)]);
         assert_eq!(merged(&[a, b], 2), [(X86_FEATURE_1_AND, 0x3)]);
+    }
+
+    #[test]
+    fn a_payload_wider_than_the_type_allows_is_dropped() {
+        // Emitting it would claim a `pr_datasz` the merged value
+        // cannot fill. The property behind it still merges.
+        let wide = Property {
+            ty: X86_FEATURE_1_AND,
+            datasz: 16,
+            value: 0x3,
+        };
+        let mut a = encode(&[wide], 8);
+        a.extend_from_slice(&note(&[(X86_ISA_1_USED, 4, 0x1)]));
+        let b = note(&[(X86_FEATURE_1_AND, 4, 0x3), (X86_ISA_1_USED, 4, 0x1)]);
+        assert_eq!(merged(&[a, b], 2), [(X86_ISA_1_USED, 0x1)]);
     }
 
     #[test]

@@ -2970,6 +2970,83 @@ fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
     );
 }
 
+#[test]
+fn alternative_padding_sizes_against_the_branch_form_the_section_takes() {
+    // The ALTERNATIVE shape: a replacement holding a relaxable branch goes
+    // to a pushed section, and the old site in the main stream pads itself
+    // to the replacement's length with `.skip`. The count is measured
+    // before the section is laid out, so it has to see the branch form the
+    // layout settles on and the offsets the layout starts each block at.
+    // Two statements with an alignment inside the replacement, so the
+    // second block's length depends on where the first left the section.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+#define ALT(n) \
+    ".pushsection .alt.repl, \"ax\"\n" \
+    "771" n ":\n\t" "jmp 772" n "f\n\t" ".balign 4\n\t" "nop\n" "772" n ":\n" \
+    ".popsection\n" \
+    "770" n ":\n\t" "nop\n\t" "nop\n\t" \
+    ".skip -(((772" n "b-771" n "b)-2) > 0) * ((772" n "b-771" n "b)-2), 0x90\n"
+int f(int x) {
+    __asm__ volatile(ALT("1") : "+r"(x)::"cc");
+    __asm__ volatile(ALT("2") : "+r"(x)::"cc");
+    return x;
+}
+int main(void) { return f(0); }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    // The first replacement starts the section: `eb` over a two-byte
+    // alignment gap and the `nop`, five bytes. The second starts at five,
+    // so its gap is one byte and it is four. Both are `eb`; the long form
+    // would put each four bytes over.
+    let repl = elf_section_bytes(&bytes, b".alt.repl");
+    assert_eq!(repl.len(), 9, "replacement lengths: {repl:02x?}");
+    assert_eq!((repl[0], repl[5]), (0xeb, 0xeb), "both take the short form");
+    // Each old site is two `nop`s plus its `.skip` pad, all `0x90`, so it
+    // shows up as one run. The runs have to be the replacement lengths:
+    // a pad sized against a layout the section did not take would leave
+    // the old site longer or shorter than what patches over it.
+    let mut runs = alloc::vec::Vec::new();
+    let mut n = 0usize;
+    for &b in obj.text.iter().chain(&[0u8]) {
+        if b == 0x90 {
+            n += 1;
+        } else {
+            if n >= 4 {
+                runs.push(n);
+            }
+            n = 0;
+        }
+    }
+    assert_eq!(runs, [5, 4], "old-site lengths: {:02x?}", obj.text);
+}
+
+/// The bytes of the first section named `want` in an ELF64 object.
+fn elf_section_bytes(bytes: &[u8], want: &[u8]) -> alloc::vec::Vec<u8> {
+    let u16a = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32a = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64a = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let (shoff, shentsize, shnum, shstrndx) = (u64a(0x28), u16a(0x3a), u16a(0x3c), u16a(0x3e));
+    let stroff = u64a(shoff + shstrndx * shentsize + 0x18);
+    (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| {
+            let n = stroff + u32a(sh);
+            bytes[n..].starts_with(want) && bytes[n + want.len()] == 0
+        })
+        .map(|sh| bytes[u64a(sh + 0x18)..u64a(sh + 0x18) + u64a(sh + 0x20)].to_vec())
+        .unwrap_or_default()
+}
+
 /// `sh_flags` of the first section named `want` in an ELF64 object, or 0.
 fn elf_section_flags(bytes: &[u8], want: &[u8]) -> u64 {
     let u16a = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;

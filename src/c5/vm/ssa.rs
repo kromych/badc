@@ -2190,6 +2190,8 @@ fn run_inline_asm(
             // registers (marked with register numbers >= 16) read as zero.
             AsmOpnd::Reg { reg, size } if (reg as usize) < 16 => (xregs[reg as usize], size),
             AsmOpnd::Reg { size, .. } => (0, size),
+            // The high byte of one of the first four GPRs.
+            AsmOpnd::HighReg(n) => ((xregs[n as usize - 4] >> 8) & 0xff, AsmRegSize::Byte),
             AsmOpnd::Ref { idx, size } => {
                 let sz = size.unwrap_or(AsmRegSize::from_width(asm.operands[idx as usize].width));
                 match op_reg[idx as usize] {
@@ -2225,7 +2227,10 @@ fn run_inline_asm(
             // segment, marked >= 16) has no modelled slot: no-op.
             AsmOpnd::Reg { reg, .. } => (reg < 16).then_some(reg as usize),
             AsmOpnd::Ref { idx, .. } => op_reg[idx as usize].map(|r| r as usize),
-            AsmOpnd::Imm(_)
+            // A high-byte write updates bits 8..16 of its GPR, which the
+            // model's whole-register slots do not express: no-op.
+            AsmOpnd::HighReg(_)
+            | AsmOpnd::Imm(_)
             | AsmOpnd::RefConst { .. }
             | AsmOpnd::Label { .. }
             | AsmOpnd::LabelAddr { .. }
@@ -2265,6 +2270,7 @@ fn run_inline_asm(
             | Mnemonic::SseShiftImm { .. }
             | Mnemonic::Vex { .. }
             | Mnemonic::VexMov { .. }
+            | Mnemonic::VexMovd { .. }
             | Mnemonic::Vex2 { .. }
             | Mnemonic::VexImm3 { .. }
             | Mnemonic::VexImm2 { .. }

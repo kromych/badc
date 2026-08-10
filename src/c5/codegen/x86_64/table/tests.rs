@@ -737,6 +737,10 @@ mod differential {
         for o in ops {
             parts.push(match *o {
                 Opnd::Reg { num, width } => String::from(rname(num, width)),
+                // ModRM field value 4..8, the legacy high-byte registers.
+                Opnd::HighByteReg(num) => {
+                    String::from(crate::c5::codegen::x86_64::asm::GPR_HB[num as usize - 4])
+                }
                 Opnd::Mem {
                     base,
                     index,

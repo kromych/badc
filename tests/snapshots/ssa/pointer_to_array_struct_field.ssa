@@ -7,7 +7,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v1   LocalAddr(-1)                                    -> x0
     v2   Imm(64)                                          -> x7
     v3   Imm(274877906944)                                -> x0
-    v4   CallExt { binding_idx=61, args=[v2], fp_arg_mask=0x0 } -> x7
+    v4   CallExt { binding_idx=62, args=[v2], fp_arg_mask=0x0 } -> x7
     v5   Imm(0)                                           -> x0
     v6   LocalAddr(-1)                                    -> x0
     v7   Load { addr=v6, disp=0, kind=I64 }               -> x0
@@ -280,7 +280,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
   block 16  start_pc=0
     v257 LocalAddr(-1)                                    -> x0
     v258 Load { addr=v257, disp=0, kind=I64 }             -> x0
-    v259 CallExt { binding_idx=64, args=[v4], fp_arg_mask=0x0 } -> x0
+    v259 CallExt { binding_idx=65, args=[v4], fp_arg_mask=0x0 } -> x0
     v260 ImmData(20)                                      -> x7
     v261 CallExt { binding_idx=0, args=[v260], fp_arg_mask=0x0 } -> x0
     v262 Imm(0)                                           -> x0

@@ -7,7 +7,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=13
     v1   LocalAddr(-12)                                   -> x3
     v2   ImmData(304)                                     -> x12
     v3   CallExt { binding_idx=49, args=[], fp_arg_mask=0x0 } -> x2
-    v4   CallExt { binding_idx=204, args=[v1, v2, v3], fp_arg_mask=0x0 } -> x0
+    v4   CallExt { binding_idx=205, args=[v1, v2, v3], fp_arg_mask=0x0 } -> x0
     v5   LocalAddr(-12)                                   -> x7
     v6   Imm(66)                                          -> x0
     v7   Imm(578)                                         -> x6

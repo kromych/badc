@@ -232,7 +232,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=7
     v187 LocalAddr(-3)                                    -> x7
     v188 LocalAddr(-4)                                    -> x6
     v189 Imm(4)                                           -> x2
-    v190 CallExt { binding_idx=68, args=[v187, v188, v189], fp_arg_mask=0x0 } -> x0
+    v190 CallExt { binding_idx=69, args=[v187, v188, v189], fp_arg_mask=0x0 } -> x0
     v191 LoadLocal { off=-3, kind=U32 }                   -> x0
     v192 BinopI { op=xor, lhs=v191, rhs_imm=1065353216 }  -> x0
     v193 BinopI { op=and, lhs=v192, rhs_imm=4294967295 }  -> x0

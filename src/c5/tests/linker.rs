@@ -2667,6 +2667,38 @@ fn file_scope_asm_assembles_instructions_in_rodata() {
 }
 
 #[test]
+fn file_scope_asm_ignores_debug_line_directives() {
+    // `.file` / `.loc` name a source location for the debug line table and
+    // deposit no bytes; the kernel's hand-written crypto units lead with
+    // `.file`. Written case-folded, as GNU as matches directives and mnemonics.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"asm(
+        ".file \"twofish-x86_64-asm.S\"\n"
+        ".text\n"
+        "tf:\n"
+        "\t.loc 1 42 0\n"
+        "\tRET\n");
+    "#;
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(1).any(|w| w == [0xc3]),
+        "the body must assemble past the debug-line directives"
+    );
+}
+
+#[test]
 fn file_scope_asm_assembles_a_trampoline_body() {
     // A file-scope asm that defines a whole function in the default section --
     // `.global`/`.type` (a forward reference, before the label) then a label,

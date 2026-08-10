@@ -12,11 +12,15 @@ use Mnem::*;
 /// token to one via `Mnem::from_name`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Mnem {
+    Aadd,
+    Aand,
     Adc,
     Adcx,
     Add,
     Adox,
     And,
+    Aor,
+    Axor,
     Bsf,
     Bsr,
     Bswap,
@@ -87,6 +91,9 @@ pub(crate) enum Mnem {
     Cwtl,
     Dec,
     Div,
+    Encls,
+    Enclu,
+    Enclv,
     Endbr32,
     Endbr64,
     Fxrstor,
@@ -166,6 +173,7 @@ pub(crate) enum Mnem {
     Movbe,
     Movdiri,
     Movnti,
+    Movrs,
     Movsx,
     Movsxd,
     Movzx,
@@ -188,6 +196,7 @@ pub(crate) enum Mnem {
     Prefetchit0,
     Prefetchit1,
     Prefetchnta,
+    Prefetchrst2,
     Prefetcht0,
     Prefetcht1,
     Prefetcht2,
@@ -301,6 +310,8 @@ pub(crate) enum Mnem {
     Ud2,
     Uiret,
     Umwait,
+    Urdmsr,
+    Uwrmsr,
     Verr,
     Verw,
     Vmcall,
@@ -326,6 +337,10 @@ pub(crate) enum Mnem {
     Wrmsr,
     Wrmsrlist,
     Wrmsrns,
+    Wrssd,
+    Wrssq,
+    Wrussd,
+    Wrussq,
     Xadd,
     Xchg,
     Xend,
@@ -352,6 +367,8 @@ pub(crate) enum Mnem {
 
 #[rustfmt::skip]
 pub(crate) static FORMS: &[Form] = &[
+    Form { mnem: Aadd, mnemonic: "aadd", ops: &[Mem(W::Y), Reg(W::Y)], pp: &[], map: Map::Op0F38, opcode: &[0xFC], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // aadd my ry
+    Form { mnem: Aand, mnemonic: "aand", ops: &[Mem(W::Y), Reg(W::Y)], pp: &[0x66], map: Map::Op0F38, opcode: &[0xFC], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // aand my ry
     Form { mnem: Adc, mnemonic: "adc", ops: &[Fixed(0, W::B), Imm(ImmC::Ib)], pp: &[], map: Map::Legacy, opcode: &[0x14], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: Some(ImmC::Ib), imm_op: 1 },  // adc al imm8
     Form { mnem: Adc, mnemonic: "adc", ops: &[Fixed(0, W::V), Imm(ImmC::Iv)], pp: &[], map: Map::Legacy, opcode: &[0x15], plus_r: false, rexw: ByWidth, reg: NoReg, rm: 255, imm: Some(ImmC::Iv), imm_op: 1 },  // adc axv immv
     Form { mnem: Adc, mnemonic: "adc", ops: &[Rm(W::B), Reg(W::B)], pp: &[], map: Map::Legacy, opcode: &[0x10], plus_r: false, rexw: W0, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // adc r8/m8 r8
@@ -386,6 +403,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: And, mnemonic: "and", ops: &[Rm(W::V), Reg(W::V)], pp: &[], map: Map::Legacy, opcode: &[0x21], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // and rv/mv rv
     Form { mnem: And, mnemonic: "and", ops: &[Reg(W::B), Rm(W::B)], pp: &[], map: Map::Legacy, opcode: &[0x22], plus_r: false, rexw: W0, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // and r8 r8/m8
     Form { mnem: And, mnemonic: "and", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Legacy, opcode: &[0x23], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // and rv rv/mv
+    Form { mnem: Aor, mnemonic: "aor", ops: &[Mem(W::Y), Reg(W::Y)], pp: &[0xF2], map: Map::Op0F38, opcode: &[0xFC], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // aor my ry
+    Form { mnem: Axor, mnemonic: "axor", ops: &[Mem(W::Y), Reg(W::Y)], pp: &[0xF3], map: Map::Op0F38, opcode: &[0xFC], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // axor my ry
     Form { mnem: Bsf, mnemonic: "bsf", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0xBC], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // bsf rv rv/mv
     Form { mnem: Bsr, mnemonic: "bsr", ops: &[Reg(W::V), Rm(W::V)], pp: &[], map: Map::Op0F, opcode: &[0xBD], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // bsr rv rv/mv
     Form { mnem: Bswap, mnemonic: "bswap", ops: &[Reg(W::V)], pp: &[], map: Map::Op0F, opcode: &[0xC8], plus_r: true, rexw: ByWidth, reg: NoReg, rm: 0, imm: None, imm_op: 255 },  // bswap rv
@@ -472,6 +491,9 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: Dec, mnemonic: "dec", ops: &[Rm(W::V)], pp: &[], map: Map::Legacy, opcode: &[0xFF], plus_r: false, rexw: ByWidth, reg: Ext(1), rm: 0, imm: None, imm_op: 255 },  // dec rv/mv
     Form { mnem: Div, mnemonic: "div", ops: &[Rm(W::B)], pp: &[], map: Map::Legacy, opcode: &[0xF6], plus_r: false, rexw: W0, reg: Ext(6), rm: 0, imm: None, imm_op: 255 },  // div ax r8/m8
     Form { mnem: Div, mnemonic: "div", ops: &[Rm(W::V)], pp: &[], map: Map::Legacy, opcode: &[0xF7], plus_r: false, rexw: ByWidth, reg: Ext(6), rm: 0, imm: None, imm_op: 255 },  // div dxv axv rv/mv
+    Form { mnem: Encls, mnemonic: "encls", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xCF], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // encls
+    Form { mnem: Enclu, mnemonic: "enclu", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xD7], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // enclu
+    Form { mnem: Enclv, mnemonic: "enclv", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xC0], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // enclv
     Form { mnem: Endbr32, mnemonic: "endbr32", ops: &[], pp: &[0xF3], map: Map::Op0F, opcode: &[0x1E, 0xFB], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // endbr32
     Form { mnem: Endbr64, mnemonic: "endbr64", ops: &[], pp: &[0xF3], map: Map::Op0F, opcode: &[0x1E, 0xFA], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // endbr64
     Form { mnem: Fxrstor, mnemonic: "fxrstor", ops: &[MemAny], pp: &[], map: Map::Op0F, opcode: &[0xAE], plus_r: false, rexw: W0, reg: Ext(1), rm: 0, imm: None, imm_op: 255 },  // fxrstor mem
@@ -605,6 +627,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: Movbe, mnemonic: "movbe", ops: &[Mem(W::V), Reg(W::V)], pp: &[], map: Map::Op0F38, opcode: &[0xF1], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // movbe mv rv
     Form { mnem: Movdiri, mnemonic: "movdiri", ops: &[Mem(W::Y), Reg(W::Y)], pp: &[], map: Map::Op0F38, opcode: &[0xF9], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // movdiri my ry
     Form { mnem: Movnti, mnemonic: "movnti", ops: &[Mem(W::Y), Reg(W::Y)], pp: &[], map: Map::Op0F, opcode: &[0xC3], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // movnti my ry
+    Form { mnem: Movrs, mnemonic: "movrs", ops: &[Reg(W::B), Mem(W::B)], pp: &[], map: Map::Op0F38, opcode: &[0x8A], plus_r: false, rexw: W0, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // movrs r8 m8
+    Form { mnem: Movrs, mnemonic: "movrs", ops: &[Reg(W::V), Mem(W::V)], pp: &[], map: Map::Op0F38, opcode: &[0x8B], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // movrs rv mv
     Form { mnem: Movsx, mnemonic: "movsx", ops: &[Reg(W::V), Rm(W::B)], pp: &[], map: Map::Op0F, opcode: &[0xBE], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // movsx rv r8/m8
     Form { mnem: Movsx, mnemonic: "movsx", ops: &[Reg(W::Y), Rm(W::Wd)], pp: &[], map: Map::Op0F, opcode: &[0xBF], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // movsx ry r16/m16
     Form { mnem: Movsxd, mnemonic: "movsxd", ops: &[Reg(W::Wd), Rm(W::Wd)], pp: &[0x66], map: Map::Legacy, opcode: &[0x63], plus_r: false, rexw: W0, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // movsxd r16 r16/m16
@@ -653,6 +677,7 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: Prefetchit0, mnemonic: "prefetchit0", ops: &[MemAny], pp: &[], map: Map::Op0F, opcode: &[0x18], plus_r: false, rexw: W0, reg: Ext(7), rm: 0, imm: None, imm_op: 255 },  // prefetchit0 mem
     Form { mnem: Prefetchit1, mnemonic: "prefetchit1", ops: &[MemAny], pp: &[], map: Map::Op0F, opcode: &[0x18], plus_r: false, rexw: W0, reg: Ext(6), rm: 0, imm: None, imm_op: 255 },  // prefetchit1 mem
     Form { mnem: Prefetchnta, mnemonic: "prefetchnta", ops: &[MemAny], pp: &[], map: Map::Op0F, opcode: &[0x18], plus_r: false, rexw: W0, reg: Ext(0), rm: 0, imm: None, imm_op: 255 },  // prefetchnta mem
+    Form { mnem: Prefetchrst2, mnemonic: "prefetchrst2", ops: &[MemAny], pp: &[], map: Map::Op0F, opcode: &[0x18], plus_r: false, rexw: W0, reg: Ext(4), rm: 0, imm: None, imm_op: 255 },  // prefetchrst2 mem
     Form { mnem: Prefetcht0, mnemonic: "prefetcht0", ops: &[MemAny], pp: &[], map: Map::Op0F, opcode: &[0x18], plus_r: false, rexw: W0, reg: Ext(1), rm: 0, imm: None, imm_op: 255 },  // prefetcht0 mem
     Form { mnem: Prefetcht1, mnemonic: "prefetcht1", ops: &[MemAny], pp: &[], map: Map::Op0F, opcode: &[0x18], plus_r: false, rexw: W0, reg: Ext(2), rm: 0, imm: None, imm_op: 255 },  // prefetcht1 mem
     Form { mnem: Prefetcht2, mnemonic: "prefetcht2", ops: &[MemAny], pp: &[], map: Map::Op0F, opcode: &[0x18], plus_r: false, rexw: W0, reg: Ext(3), rm: 0, imm: None, imm_op: 255 },  // prefetcht2 mem
@@ -834,6 +859,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: Ud2, mnemonic: "ud2", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x0B], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // ud2
     Form { mnem: Uiret, mnemonic: "uiret", ops: &[], pp: &[0xF3], map: Map::Op0F, opcode: &[0x01, 0xEC], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // uiret
     Form { mnem: Umwait, mnemonic: "umwait", ops: &[Reg(W::L)], pp: &[0xF2], map: Map::Op0F, opcode: &[0xAE], plus_r: false, rexw: W0, reg: Ext(6), rm: 0, imm: None, imm_op: 255 },  // umwait r32 edx eax
+    Form { mnem: Urdmsr, mnemonic: "urdmsr", ops: &[Reg(W::Q), Reg(W::Q)], pp: &[0xF2], map: Map::Op0F38, opcode: &[0xF8], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // urdmsr r64 r64
+    Form { mnem: Uwrmsr, mnemonic: "uwrmsr", ops: &[Reg(W::Q), Reg(W::Q)], pp: &[0xF3], map: Map::Op0F38, opcode: &[0xF8], plus_r: false, rexw: ByWidth, reg: FromOp(0), rm: 1, imm: None, imm_op: 255 },  // uwrmsr r64 r64
     Form { mnem: Verr, mnemonic: "verr", ops: &[Rm(W::Wd)], pp: &[], map: Map::Op0F, opcode: &[0x00], plus_r: false, rexw: W0, reg: Ext(4), rm: 0, imm: None, imm_op: 255 },  // verr r16/m16
     Form { mnem: Verw, mnemonic: "verw", ops: &[Rm(W::Wd)], pp: &[], map: Map::Op0F, opcode: &[0x00], plus_r: false, rexw: W0, reg: Ext(5), rm: 0, imm: None, imm_op: 255 },  // verw r16/m16
     Form { mnem: Vmcall, mnemonic: "vmcall", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xC1], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // vmcall
@@ -859,6 +886,10 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnem: Wrmsr, mnemonic: "wrmsr", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x30], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // wrmsr edx eax ecx
     Form { mnem: Wrmsrlist, mnemonic: "wrmsrlist", ops: &[], pp: &[0xF3], map: Map::Op0F, opcode: &[0x01, 0xC6], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // wrmsrlist mem(ds:rsi) mem(ds:rdi) rcx
     Form { mnem: Wrmsrns, mnemonic: "wrmsrns", ops: &[], pp: &[], map: Map::Op0F, opcode: &[0x01, 0xC6], plus_r: false, rexw: W0, reg: NoReg, rm: 255, imm: None, imm_op: 255 },  // wrmsrns edx eax ecx
+    Form { mnem: Wrssd, mnemonic: "wrssd", ops: &[Mem(W::L), Reg(W::L)], pp: &[], map: Map::Op0F38, opcode: &[0xF6], plus_r: false, rexw: W0, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // wrssd m32 r32
+    Form { mnem: Wrssq, mnemonic: "wrssq", ops: &[Mem(W::Q), Reg(W::Q)], pp: &[], map: Map::Op0F38, opcode: &[0xF6], plus_r: false, rexw: W1, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // wrssq m64 r64
+    Form { mnem: Wrussd, mnemonic: "wrussd", ops: &[Mem(W::L), Reg(W::L)], pp: &[0x66], map: Map::Op0F38, opcode: &[0xF5], plus_r: false, rexw: W0, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // wrussd m32 r32
+    Form { mnem: Wrussq, mnemonic: "wrussq", ops: &[Mem(W::Q), Reg(W::Q)], pp: &[0x66], map: Map::Op0F38, opcode: &[0xF5], plus_r: false, rexw: W1, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // wrussq m64 r64
     Form { mnem: Xadd, mnemonic: "xadd", ops: &[Rm(W::B), Reg(W::B)], pp: &[], map: Map::Op0F, opcode: &[0xC0], plus_r: false, rexw: W0, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // xadd r8/m8 r8
     Form { mnem: Xadd, mnemonic: "xadd", ops: &[Rm(W::V), Reg(W::V)], pp: &[], map: Map::Op0F, opcode: &[0xC1], plus_r: false, rexw: ByWidth, reg: FromOp(1), rm: 0, imm: None, imm_op: 255 },  // xadd rv/mv rv
     Form { mnem: Xchg, mnemonic: "xchg", ops: &[Fixed(0, W::Wd), Reg(W::Wd)], pp: &[0x66], map: Map::Legacy, opcode: &[0x90], plus_r: true, rexw: W0, reg: NoReg, rm: 1, imm: None, imm_op: 255 },  // xchg ax r16

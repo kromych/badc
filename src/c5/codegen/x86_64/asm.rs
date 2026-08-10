@@ -1096,6 +1096,7 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("pminsb", 0x66, 0x38), ("pminsd", 0x66, 0x39), ("pminuw", 0x66, 0x3A),
         ("pminud", 0x66, 0x3B), ("pmaxsb", 0x66, 0x3C), ("pmaxsd", 0x66, 0x3D),
         ("pmaxuw", 0x66, 0x3E), ("pmaxud", 0x66, 0x3F), ("pmulld", 0x66, 0x40),
+        ("ptest", 0x66, 0x17),
         ("aesimc", 0x66, 0xDB), ("aesenc", 0x66, 0xDC), ("aesenclast", 0x66, 0xDD),
         ("aesdec", 0x66, 0xDE), ("aesdeclast", 0x66, 0xDF),
         ("sha1nexte", 0, 0xC8), ("sha1msg1", 0, 0xC9), ("sha1msg2", 0, 0xCA),
@@ -1115,7 +1116,8 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("paddb", 0x66, 0xFC), ("paddw", 0x66, 0xFD), ("paddd", 0x66, 0xFE), ("paddq", 0x66, 0xD4),
         ("psubb", 0x66, 0xF8), ("psubw", 0x66, 0xF9), ("psubd", 0x66, 0xFA), ("psubq", 0x66, 0xFB),
         ("pmullw", 0x66, 0xD5), ("pmuludq", 0x66, 0xF4), ("pmaddwd", 0x66, 0xF5), ("pmulhw", 0x66, 0xE5),
-        ("pcmpeqb", 0x66, 0x74), ("pcmpeqw", 0x66, 0x75), ("pcmpeqd", 0x66, 0x76), ("pcmpgtd", 0x66, 0x66),
+        ("pcmpeqb", 0x66, 0x74), ("pcmpeqw", 0x66, 0x75), ("pcmpeqd", 0x66, 0x76),
+        ("pcmpgtb", 0x66, 0x64), ("pcmpgtw", 0x66, 0x65), ("pcmpgtd", 0x66, 0x66),
         ("pminub", 0x66, 0xDA), ("pmaxub", 0x66, 0xDE),
         ("packsswb", 0x66, 0x63), ("packssdw", 0x66, 0x6B), ("packuswb", 0x66, 0x67),
         ("punpcklbw", 0x66, 0x60), ("punpcklwd", 0x66, 0x61), ("punpckldq", 0x66, 0x62),
@@ -1221,6 +1223,9 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
         ("pinsrq", 0x66, 3, 0x22, true, false),
         ("pextrb", 0x66, 3, 0x14, false, true), ("pextrd", 0x66, 3, 0x16, false, true),
         ("pextrq", 0x66, 3, 0x16, true, true), ("extractps", 0x66, 3, 0x17, false, true),
+        // The word element pair takes the 0F map: the general register is
+        // ModRM.reg for the extract and ModRM.r/m for the insert.
+        ("pextrw", 0x66, 1, 0xC5, false, false), ("pinsrw", 0x66, 1, 0xC4, false, false),
     ];
     if let Some(&(_, prefix, map, opcode, w, store)) = IMMS.iter().find(|r| r.0 == name) {
         return Some(Mnemonic::SseRmImm {
@@ -1329,6 +1334,9 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vpbroadcastw" => Some((1, 2, 0x79)),
         "vpbroadcastd" => Some((1, 2, 0x58)),
         "vpbroadcastq" => Some((1, 2, 0x59)),
+        // Both operands are sources; the second AT&T one is ModRM.reg and
+        // fixes VEX.L, as for the single-source ops above.
+        "vptest" => Some((1, 2, 0x17)),
         _ => None,
     };
     if let Some((pp, map, opcode)) = two {
@@ -1358,10 +1366,12 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
             mem_only: false,
         });
     }
-    // The 128-bit lane broadcasts (0F38, 66).
+    // The 128-bit lane broadcasts and the non-temporal load (0F38, 66), all
+    // memory-source only.
     if let Some(opcode) = match name {
         "vbroadcastf128" => Some(0x1Au8),
         "vbroadcasti128" => Some(0x5A),
+        "vmovntdqa" => Some(0x2A),
         _ => None,
     } {
         return Some(Mnemonic::Vex2 {
@@ -1387,10 +1397,12 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         ("vpaddb", 1, 0xFC), ("vpaddw", 1, 0xFD), ("vpaddd", 1, 0xFE), ("vpaddq", 1, 0xD4),
         ("vpsubb", 1, 0xF8), ("vpsubw", 1, 0xF9), ("vpsubd", 1, 0xFA), ("vpsubq", 1, 0xFB),
         ("vpand", 1, 0xDB), ("vpandn", 1, 0xDF), ("vpor", 1, 0xEB), ("vpxor", 1, 0xEF),
-        ("vpcmpeqd", 1, 0x76), ("vpcmpgtd", 1, 0x66),
+        ("vpcmpeqb", 1, 0x74), ("vpcmpeqw", 1, 0x75), ("vpcmpeqd", 1, 0x76),
+        ("vpcmpgtb", 1, 0x64), ("vpcmpgtw", 1, 0x65), ("vpcmpgtd", 1, 0x66),
         ("vpunpckldq", 1, 0x62), ("vpunpckhdq", 1, 0x6A),
         ("vpunpcklqdq", 1, 0x6C), ("vpunpckhqdq", 1, 0x6D),
-        ("vpmullw", 1, 0xD5), ("vpmaddwd", 1, 0xF5),
+        ("vpmullw", 1, 0xD5), ("vpmaddwd", 1, 0xF5), ("vpmulhw", 1, 0xE5),
+        ("vpmuludq", 1, 0xF4),
         // Scalar single (0xF3) / double (0xF2).
         ("vaddss", 2, 0x58), ("vsubss", 2, 0x5C), ("vmulss", 2, 0x59), ("vdivss", 2, 0x5E),
         ("vaddsd", 3, 0x58), ("vsubsd", 3, 0x5C), ("vmulsd", 3, 0x59), ("vdivsd", 3, 0x5E),
@@ -1648,12 +1660,33 @@ fn table_mnemonic(name: &str) -> Option<&'static str> {
     forms.get(start).map(|f| f.mnemonic).filter(|&m| m == name)
 }
 
+/// The lower-case spelling of a mnemonic token, or `None` when the token is
+/// already the spelling to resolve. GNU as matches mnemonics without regard to
+/// case; symbol names are case-sensitive, so a token is folded only when it is
+/// not a mnemonic as written and the folded spelling is one.
+pub(crate) fn fold_mnemonic_case(tok: &str) -> Option<alloc::string::String> {
+    if !tok.bytes().any(|c| c.is_ascii_uppercase()) || split_mnemonic_exact(tok).is_some() {
+        return None;
+    }
+    let lower = tok.to_ascii_lowercase();
+    split_mnemonic_exact(&lower).is_some().then_some(lower)
+}
+
+/// Resolve a mnemonic token to its base form plus any AT&T size suffix,
+/// folding case as GNU as does.
+fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
+    match split_mnemonic_exact(tok) {
+        Some(m) => Some(m),
+        None => split_mnemonic_exact(&fold_mnemonic_case(tok)?),
+    }
+}
+
 /// Resolve a mnemonic token to its base form plus any AT&T size suffix.
 /// A trailing `b`/`w`/`l`/`q` is a suffix only when the token is not a
 /// mnemonic as written (so `shl` stays `shl`, but `bswapl` is
 /// `bswap` + long). A token that is not a bespoke mnemonic but names a
 /// catalogue instruction resolves to [`Mnemonic::Table`].
-fn split_mnemonic(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
+fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     if let Some(m) = mnemonic_by_name(tok) {
         return Some((m, None));
     }
@@ -2471,6 +2504,10 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 None => (rest, ""),
             };
         }
+        // The rest of the statement reads the mnemonic as text (the direct
+        // branches below), so resolve its case once here.
+        let folded = fold_mnemonic_case(mnem_tok);
+        let mnem_tok = folded.as_deref().unwrap_or(mnem_tok);
         let (mnemonic, suffix) = split_mnemonic(mnem_tok)
             .ok_or_else(|| format!("inline asm: unsupported instruction `{mnem_tok}`"))?;
         // A direct `call` / `jmp` / `jcc` to a symbol name is a symbol
@@ -3767,7 +3804,12 @@ fn encode_bespoke(
                 return Err(String::from("inline asm: SSE immediate expected"));
             };
             let (vector, other) = if store { (src, dst) } else { (dst, src) };
-            let Some(v) = xmm(vector) else {
+            // ModRM.reg holds the vector operand, or a general register for
+            // the `0F C5` word extract, whose r/m holds the vector.
+            let Some(v) = xmm(vector).or(match vector {
+                Concrete::Reg { reg, .. } if *reg < 16 => Some(*reg),
+                _ => None,
+            }) else {
                 return Err(String::from(
                     "inline asm: this SSE op's vector operand must be an XMM register",
                 ));
@@ -6497,6 +6539,100 @@ mod tests {
             e("vpmovzxwd", &[mem(12, 32), ymm(11)]),
             [0xC4, 0x42, 0x7D, 0x33, 0x5C, 0x24, 0x20]
         );
+    }
+
+    /// The SSE / AVX rows the distribution-configuration kernel names:
+    /// `lib/raid6/{sse2,avx2,avx512}.c`, `arch/x86/crypto/camellia-aesni-avx*`,
+    /// `arch/x86/crypto/aes-gcm-{aesni,vaes-avx2}-x86_64.S`,
+    /// `lib/crypto/x86/{nh-avx2,poly1305-x86_64-cryptogams}.S`,
+    /// `lib/crc/x86/crc16-msb-pclmul.S` and
+    /// `net/netfilter/nft_set_pipapo_avx2.c`. Bytes measured with GNU as
+    /// 2.46.1.
+    #[test]
+    fn kernel_simd_rows() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"pcmpgtb %%xmm1, %%xmm0", &[0x66, 0x0F, 0x64, 0xC1]),
+            (b"pcmpgtb 16(%%rsi), %%xmm9", &[0x66, 0x44, 0x0F, 0x64, 0x4E, 0x10]),
+            (b"pcmpgtw %%xmm3, %%xmm12", &[0x66, 0x44, 0x0F, 0x65, 0xE3]),
+            (b"ptest %%xmm0, %%xmm4", &[0x66, 0x0F, 0x38, 0x17, 0xE0]),
+            (b"ptest (%%rdi), %%xmm11", &[0x66, 0x44, 0x0F, 0x38, 0x17, 0x1F]),
+            (b"vpcmpgtb %%xmm11, %%xmm12, %%xmm13", &[0xC4, 0x41, 0x19, 0x64, 0xEB]),
+            (b"vpcmpgtb %%ymm11, %%ymm12, %%ymm13", &[0xC4, 0x41, 0x1D, 0x64, 0xEB]),
+            (b"vpcmpgtw %%xmm1, %%xmm2, %%xmm3", &[0xC5, 0xE9, 0x65, 0xD9]),
+            (b"vpcmpeqb %%ymm0, %%ymm1, %%ymm2", &[0xC5, 0xF5, 0x74, 0xD0]),
+            (b"vpcmpeqw %%xmm0, %%xmm1, %%xmm2", &[0xC5, 0xF1, 0x75, 0xD0]),
+            (b"vpmuludq %%ymm12, %%ymm8, %%ymm8", &[0xC4, 0x41, 0x3D, 0xF4, 0xC4]),
+            (b"vpmuludq %%xmm5, %%xmm14, %%xmm10", &[0xC5, 0x09, 0xF4, 0xD5]),
+            (b"vpmulhw %%xmm5, %%xmm14, %%xmm10", &[0xC5, 0x09, 0xE5, 0xD5]),
+            (b"vptest %%xmm1, %%xmm0", &[0xC4, 0xE2, 0x79, 0x17, 0xC1]),
+            (b"vptest %%ymm1, %%ymm0", &[0xC4, 0xE2, 0x7D, 0x17, 0xC1]),
+            (b"vptest (%%rax), %%ymm3", &[0xC4, 0xE2, 0x7D, 0x17, 0x18]),
+            (b"vmovntdqa (%%rsi), %%ymm0", &[0xC4, 0xE2, 0x7D, 0x2A, 0x06]),
+            (b"vmovntdqa 32(%%rdi), %%xmm3", &[0xC4, 0xE2, 0x79, 0x2A, 0x5F, 0x20]),
+            (b"vmovntdqa (%%r11), %%ymm12", &[0xC4, 0x42, 0x7D, 0x2A, 0x23]),
+            // The word element pair takes the 0F map, with the general
+            // register in ModRM.reg for the extract and in r/m for the insert.
+            (b"pextrw $3, %%xmm0, %%eax", &[0x66, 0x0F, 0xC5, 0xC0, 0x03]),
+            (b"pextrw $7, %%xmm9, %%r10d", &[0x66, 0x45, 0x0F, 0xC5, 0xD1, 0x07]),
+            (b"pinsrw $2, %%eax, %%xmm3", &[0x66, 0x0F, 0xC4, 0xD8, 0x02]),
+            (b"pinsrw $5, %%r11d, %%xmm12", &[0x66, 0x45, 0x0F, 0xC4, 0xE3, 0x05]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// The rows the instruction-set database omits or spells with an explicit
+    /// ModRM byte: SGX's leaf dispatch (`arch/x86/kernel/cpu/sgx/*.c`,
+    /// `arch/x86/entry/vdso/vdso64/vsgx.S`) and the shadow-stack stores
+    /// (`arch/x86/kernel/shstk.c`). Bytes measured with GNU as 2.46.1.
+    #[test]
+    fn sgx_and_shadow_stack_rows() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"encls", &[0x0F, 0x01, 0xCF]),
+            (b"enclu", &[0x0F, 0x01, 0xD7]),
+            (b"enclv", &[0x0F, 0x01, 0xC0]),
+            (b"wrssd %%eax, (%%rdi)", &[0x0F, 0x38, 0xF6, 0x07]),
+            (b"wrssq %%rax, 8(%%rdi)", &[0x48, 0x0F, 0x38, 0xF6, 0x47, 0x08]),
+            (b"wrussd %%r10d, (%%rbx)", &[0x66, 0x44, 0x0F, 0x38, 0xF5, 0x13]),
+            (b"aadd %%eax, (%%rdi)", &[0x0F, 0x38, 0xFC, 0x07]),
+            (b"aand %%rax, (%%rdi)", &[0x66, 0x48, 0x0F, 0x38, 0xFC, 0x07]),
+            (b"movrs (%%rsi), %%rax", &[0x48, 0x0F, 0x38, 0x8B, 0x06]),
+        ];
+        for (tmpl, want) in cases {
+            assert_eq!(
+                asm_bytes(tmpl),
+                *want,
+                "{}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+    }
+
+    /// GNU as matches mnemonics without regard to case;
+    /// `arch/x86/kernel/ftrace_64.S` writes `CALL`. A token that is not a
+    /// mnemonic in either case stays unresolved.
+    #[test]
+    fn mnemonic_case_is_folded() {
+        assert_eq!(asm_bytes(b"NOP"), [0x90]);
+        assert_eq!(asm_bytes(b"RET"), [0xC3]);
+        assert_eq!(asm_bytes(b"MOVQ %%rax, %%rbx"), [0x48, 0x89, 0xC3]);
+        assert_eq!(
+            asm_bytes(b"PTEST %%xmm1, %%xmm0"),
+            [0x66, 0x0F, 0x38, 0x17, 0xC1]
+        );
+        // A direct branch to a symbol keeps that shape through the fold.
+        let insns = parse_template(b"CALL .Ldo_rebalance").unwrap();
+        assert_eq!(insns.len(), 1);
+        assert_eq!(insns[0].sym_exprs, [String::from(".Ldo_rebalance")]);
+        assert!(parse_template(b"ANNOTATE type=2").is_err());
     }
 
     /// `mov %seg, r/m16` (8C) and `mov r/m16, %seg` (8E). A memory operand is

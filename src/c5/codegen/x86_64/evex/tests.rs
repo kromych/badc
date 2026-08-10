@@ -139,6 +139,59 @@ fn kernel_units() {
     );
 }
 
+/// The AVX-512 forms the distribution-configuration crypto units name:
+/// `arch/x86/crypto/aes-{ctr,xts}-avx-x86_64.S` (VAES on zmm) and
+/// `arch/x86/crypto/aes-gcm-vaes-avx512.S` (the 128-bit lane shuffles).
+#[test]
+fn vaes_and_lane_shuffles() {
+    gas(
+        "vaesenc %zmm14,%zmm0,%zmm0",
+        &[0x62, 0xD2, 0x7D, 0x48, 0xDC, 0xC6],
+    );
+    gas(
+        "vaesenc %zmm16,%zmm0,%zmm0",
+        &[0x62, 0xB2, 0x7D, 0x48, 0xDC, 0xC0],
+    );
+    gas(
+        "vaesenclast %zmm9,%zmm8,%zmm7",
+        &[0x62, 0xD2, 0x3D, 0x48, 0xDD, 0xF9],
+    );
+    gas(
+        "vaesdec %zmm1,%zmm2,%zmm3",
+        &[0x62, 0xF2, 0x6D, 0x48, 0xDE, 0xD9],
+    );
+    gas(
+        "vaesdeclast (%rdi),%zmm2,%zmm3",
+        &[0x62, 0xF2, 0x6D, 0x48, 0xDF, 0x1F],
+    );
+    // Below 512 bits and with no high register the same op stays on VEX.
+    gas("vaesenc %ymm3,%ymm2,%ymm1", &[0xC4, 0xE2, 0x6D, 0xDC, 0xCB]);
+    gas(
+        "vshufi64x2 $0,%zmm4,%zmm4,%zmm4",
+        &[0x62, 0xF3, 0xDD, 0x48, 0x43, 0xE4, 0x00],
+    );
+    gas(
+        "vshufi64x2 $0x11,%zmm20,%zmm5,%zmm6",
+        &[0x62, 0xB3, 0xD5, 0x48, 0x43, 0xF4, 0x11],
+    );
+    gas(
+        "vshufi64x2 $2,%ymm4,%ymm5,%ymm6",
+        &[0x62, 0xF3, 0xD5, 0x28, 0x43, 0xF4, 0x02],
+    );
+    gas(
+        "vshufi32x4 $1,%zmm4,%zmm5,%zmm6",
+        &[0x62, 0xF3, 0x55, 0x48, 0x43, 0xF4, 0x01],
+    );
+    gas(
+        "vshuff64x2 $3,%zmm4,%zmm5,%zmm6",
+        &[0x62, 0xF3, 0xD5, 0x48, 0x23, 0xF4, 0x03],
+    );
+    gas(
+        "vshuff32x4 $4,%zmm4,%zmm5,%zmm6",
+        &[0x62, 0xF3, 0x55, 0x48, 0x23, 0xF4, 0x04],
+    );
+}
+
 /// `disp8*N` per tuple type: the scale factor the tuple fixes, the largest and
 /// smallest quotients a signed byte holds, and the displacements just past them
 /// or off the multiple, which take disp32.

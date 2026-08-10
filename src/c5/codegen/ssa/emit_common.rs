@@ -4131,8 +4131,10 @@ fn parse_section_item(
         ".ltorg" if is_aarch64 => Ok(AsmSectionItem::LiteralPool(alloc::vec::Vec::new())),
         // Assembler-state directives with no effect on the emitted object:
         // `.extern` declares what an unresolved name already is; the arch
-        // selectors admit no more than the encoder's table does.
-        ".extern" | ".arch" | ".arch_extension" | ".cpu" | ".ltorg" => {
+        // selectors admit no more than the encoder's table does. `.file` and
+        // `.loc` name a source location for the debug line table, which badc
+        // does not emit for asm bodies.
+        ".extern" | ".arch" | ".arch_extension" | ".cpu" | ".ltorg" | ".file" | ".loc" => {
             Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new()))
         }
         // `.cfi_*` describes unwind state to a DWARF consumer and deposits no

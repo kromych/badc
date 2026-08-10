@@ -264,6 +264,11 @@ const TABLE: &[(&str, Form)] = {
     ("vpsubb",  rvm(1, 1, false, 0xF8, FullMem)), ("vpsubw",  rvm(1, 1, false, 0xF9, FullMem)),
     ("vpshufb", rvm(1, 2, false, 0x00, FullMem)),
     ("vpmullw", rvm(1, 1, false, 0xD5, FullMem)), ("vpmaddwd", rvm(1, 1, false, 0xF5, FullMem)),
+    // The vector AES rounds (VAES): a whole vector of memory, no broadcast.
+    ("vaesenc",     rvm(1, 2, false, 0xDC, FullMem)),
+    ("vaesenclast", rvm(1, 2, false, 0xDD, FullMem)),
+    ("vaesdec",     rvm(1, 2, false, 0xDE, FullMem)),
+    ("vaesdeclast", rvm(1, 2, false, 0xDF, FullMem)),
     // Scalar single / double: one element, its width from EVEX.W.
     ("vaddss", rvm(2, 1, false, 0x58, ElemW)), ("vaddsd", rvm(3, 1, true,  0x58, ElemW)),
     ("vsubss", rvm(2, 1, false, 0x5C, ElemW)), ("vsubsd", rvm(3, 1, true,  0x5C, ElemW)),
@@ -274,6 +279,9 @@ const TABLE: &[(&str, Form)] = {
     ("vpclmulqdq", rvmi(1, 3, false, 0x44, FullMem)),
     ("vshufps",    rvmi(0, 1, false, 0xC6, Full)), ("vshufpd", rvmi(1, 1, true, 0xC6, Full)),
     ("vpalignr",   rvmi(1, 3, false, 0x0F, FullMem)),
+    // The 128-bit lane shuffles, which have no VEX form.
+    ("vshufi32x4", rvmi(1, 3, false, 0x43, Full)), ("vshufi64x2", rvmi(1, 3, true, 0x43, Full)),
+    ("vshuff32x4", rvmi(1, 3, false, 0x23, Full)), ("vshuff64x2", rvmi(1, 3, true, 0x23, Full)),
     ("vinserti32x4", rvmi(1, 3, false, 0x38, Group(4))),
     ("vinsertf32x4", rvmi(1, 3, false, 0x18, Group(4))),
     ("vinserti64x2", rvmi(1, 3, true,  0x38, Group(2))),

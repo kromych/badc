@@ -41,6 +41,16 @@ RENAME = {
     ('iret', '66 CF'): 'iretw',
 }
 
+# Rows absent from the database, written in its schema so they take the same
+# parse. The SGX leaf-dispatch instructions are not catalogued by it at all;
+# they are operandless members of the 0F 01 group, like the SVM ones beside
+# them.
+EXTRA = (
+    ('encls', '0F 01 CF'),
+    ('enclu', '0F 01 D7'),
+    ('enclv', '0F 01 C0'),
+)
+
 ACCESS = re.compile(r'^[a-zA-Z]:')
 DEFAULT64 = {'push', 'pop', 'call', 'jmp', 'leave', 'ret', 'retf', 'enter',
              'pushf', 'popf', 'pushfq', 'popfq', 'int3'}
@@ -112,6 +122,17 @@ def parse_op(op):
                 enc['modrm_r'] = True
             else:
                 enc['ext'] = int(mo.group(1))
+            continue
+        # A spelt-out ModRM byte: `[!](11):<reg>:bbb` states the mod
+        # constraint, the reg field (`rrr` from an operand, otherwise the
+        # three bits of an opcode extension) and the r/m field. The mod
+        # constraint restates what the row's operand patterns already carry.
+        mo = re.match(r'^(?:!\(11\)|11):(rrr|[01]{3}):bbb$', p)
+        if mo:
+            if mo.group(1) == 'rrr':
+                enc['modrm_r'] = True
+            else:
+                enc['ext'] = int(mo.group(1), 2)
             continue
         if p in ('ib', 'iw', 'id', 'iq', 'iv', 'if'):
             enc['imm'] = p; continue
@@ -271,33 +292,33 @@ def main():
                    'cdqe': ['cltq'], 'cdq': ['cltd'], 'cqo': ['cqto']}
     forms = []
     seen = set()
-    for g in d['instructions']:
-        if g['category'] not in CATS:
+    rows = [it for g in d['instructions'] if g['category'] in CATS
+            for it in g['instructions']]
+    rows += [{'any': sig, 'op': op} for sig, op in EXTRA]
+    for it in rows:
+        sig = it.get('any') or it.get('x64')
+        if not sig:
             continue
-        for it in g['instructions']:
-            sig = it.get('any') or it.get('x64')
-            if not sig:
+        mnem, ops = sig_ops(sig)
+        if mnem in DENY:
+            continue
+        enc = parse_op(it['op'])
+        if enc is None:
+            continue
+        opbytes = ' '.join(f'{b:02X}' for b in enc['pp'] + enc['opbytes'])
+        mnem = RENAME.get((mnem, opbytes), mnem)
+        # Emit the canonical mnemonic and every alias spelling of it (the
+        # condition-code aliases: sete == setz, and so on).
+        alias_names = aliases.get(mnem, {}).get('aliases', []) + att_aliases.get(mnem, [])
+        for name in [mnem] + alias_names:
+            f = build_form(name, ops, enc)
+            if f is None:
                 continue
-            mnem, ops = sig_ops(sig)
-            if mnem in DENY:
+            key = (f['mnem'], f['ops'], f['opcode'], f['imm'])
+            if key in seen:
                 continue
-            enc = parse_op(it['op'])
-            if enc is None:
-                continue
-            opbytes = ' '.join(f'{b:02X}' for b in enc['pp'] + enc['opbytes'])
-            mnem = RENAME.get((mnem, opbytes), mnem)
-            # Emit the canonical mnemonic and every alias spelling of it (the
-            # condition-code aliases: sete == setz, and so on).
-            alias_names = aliases.get(mnem, {}).get('aliases', []) + att_aliases.get(mnem, [])
-            for name in [mnem] + alias_names:
-                f = build_form(name, ops, enc)
-                if f is None:
-                    continue
-                key = (f['mnem'], f['ops'], f['opcode'], f['imm'])
-                if key in seen:
-                    continue
-                seen.add(key)
-                forms.append(f)
+            seen.add(key)
+            forms.append(f)
     # Sort by mnemonic so the consumer can binary-search the catalogue; the sort
     # is stable, preserving database (preference) order among a mnemonic's forms
     # for the shortest-encoding tie-break.

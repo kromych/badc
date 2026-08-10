@@ -361,64 +361,23 @@ Disassembly of section .text:
                	retq
 
 <check_member_range>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	<rip>, %rdx
-               	xorq	%rcx, %rcx
-               	movl	%ecx, (%rdx)
-               	leaq	-0x18(%rbp), %rax
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, 0x10(%rax)
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
+               	xorq	%rcx, %rcx
                	movl	%ecx, (%rax)
-               	movl	$0x11, %ecx
-               	leaq	-0x18(%rbp), %rax
-               	movl	%ecx, 0x4(%rax)
-               	leaq	-0x18(%rbp), %rax
-               	movl	$0x11, %ecx
-               	movl	%ecx, 0x8(%rax)
-               	leaq	-0x18(%rbp), %rax
-               	movl	$0x11, %ecx
-               	movl	%ecx, 0xc(%rax)
-               	movl	$0x8, %ecx
-               	leaq	-0x18(%rbp), %rax
-               	movl	%ecx, 0x14(%rax)
-               	movslq	(%rdx), %rax
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rdx
+               	incq	%rdx
+               	movl	%edx, (%rcx)
+               	movslq	(%rax), %rax
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x69, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	-0x18(%rbp), %rax
-               	movslq	(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	leaq	-0x18(%rbp), %rax
-               	movslq	0x10(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x8, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
 
 <check_row_range>:
                	pushq	%rbp

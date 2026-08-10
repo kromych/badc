@@ -49,6 +49,7 @@ use alloc::vec::Vec;
 use super::super::program::Program;
 use super::super::token::Ty;
 use super::Build;
+use super::elf_class::ElfClass;
 use crate::c5::compiler::{StructDef, StructField};
 use crate::c5::layout::write_struct;
 
@@ -85,6 +86,30 @@ pub(crate) enum DwarfRelocTarget {
 pub(crate) enum DwarfRelocWidth {
     W4,
     W8,
+}
+
+impl DwarfRelocWidth {
+    /// Width of a `DW_FORM_addr` slot, which the CU header's
+    /// `address_size` states and every address slot follows.
+    fn addr(class: ElfClass) -> DwarfRelocWidth {
+        if class.is32() {
+            DwarfRelocWidth::W4
+        } else {
+            DwarfRelocWidth::W8
+        }
+    }
+    pub(crate) fn bytes(self) -> usize {
+        match self {
+            DwarfRelocWidth::W4 => 4,
+            DwarfRelocWidth::W8 => 8,
+        }
+    }
+}
+
+/// Append a zeroed `DW_FORM_addr` slot of `width` bytes. The value is
+/// the relocation's to supply.
+fn push_addr_slot(out: &mut Vec<u8>, width: DwarfRelocWidth) {
+    out.extend_from_slice(&[0u8; 8][..width.bytes()]);
 }
 
 /// One placeholder slot the linker has to patch once the merged
@@ -747,6 +772,7 @@ fn build_debug_info(
 ) -> (Vec<u8>, Vec<DwarfReloc>, Vec<String>) {
     let mut body: Vec<u8> = Vec::new();
     let mut relocs: Vec<DwarfReloc> = Vec::new();
+    let addr_width = DwarfRelocWidth::addr(build.elf_class);
 
     // Body content first; the unit header's `unit_length` field
     // covers everything after itself, which the prefix below
@@ -757,11 +783,11 @@ fn build_debug_info(
     push_string(&mut body, source_path);
     push_string(&mut body, ""); // DW_AT_comp_dir
     let low_pc_off_in_body = body.len() as u64;
-    body.extend_from_slice(&[0u8; 8]);
+    push_addr_slot(&mut body, addr_width);
     relocs.push(DwarfReloc {
         section: DwarfSectionKind::Info,
         offset: DEBUG_INFO_UNIT_HEADER_SIZE + low_pc_off_in_body,
-        width: DwarfRelocWidth::W8,
+        width: addr_width,
         target: DwarfRelocTarget::Text,
         addend: 0,
     });
@@ -884,19 +910,26 @@ fn build_debug_info(
         push_string(&mut body, &sym.name);
         body.extend_from_slice(&type_offsets[type_id].to_le_bytes());
         if located {
-            // DW_AT_location: exprloc holding the address form plus an
-            // 8-byte slot the reloc below fills in. A thread-local
-            // pushes its thread-block offset and lets the consumer add
-            // the thread pointer (DWARF 4 2.5.1 vendor extension
-            // DW_OP_GNU_push_tls_address).
-            write_uleb128(&mut body, if tls_location { 10 } else { 9 });
+            // DW_AT_location: exprloc holding the address form plus the
+            // slot the reloc below fills in. A thread-local pushes its
+            // thread-block offset and lets the consumer add the thread
+            // pointer (DWARF 4 2.5.1 vendor extension
+            // DW_OP_GNU_push_tls_address); its slot is ELFCLASS64's,
+            // which is the only class `tls_location` admits.
+            let slot = if tls_location {
+                DwarfRelocWidth::W8
+            } else {
+                addr_width
+            };
+            let push_tls = u64::from(tls_location);
+            write_uleb128(&mut body, 1 + slot.bytes() as u64 + push_tls);
             body.push(if tls_location {
                 DW_OP_CONST8U
             } else {
                 DW_OP_ADDR
             });
             let addr_off = body.len() as u64;
-            body.extend_from_slice(&[0u8; 8]);
+            push_addr_slot(&mut body, slot);
             if tls_location {
                 body.push(DW_OP_GNU_PUSH_TLS_ADDRESS);
             }
@@ -905,7 +938,7 @@ fn build_debug_info(
             relocs.push(DwarfReloc {
                 section: DwarfSectionKind::Info,
                 offset: DEBUG_INFO_UNIT_HEADER_SIZE + addr_off,
-                width: DwarfRelocWidth::W8,
+                width: slot,
                 target: if tls_location {
                     DwarfRelocTarget::ThreadLocalSymbol(sym_idx)
                 } else {
@@ -981,11 +1014,11 @@ fn build_debug_info(
         );
         push_string(&mut body, name);
         let low_pc_off = body.len() as u64;
-        body.extend_from_slice(&[0u8; 8]);
+        push_addr_slot(&mut body, addr_width);
         relocs.push(DwarfReloc {
             section: DwarfSectionKind::Info,
             offset: DEBUG_INFO_UNIT_HEADER_SIZE + low_pc_off,
-            width: DwarfRelocWidth::W8,
+            width: addr_width,
             target: DwarfRelocTarget::Text,
             addend: lo as i64,
         });
@@ -1073,7 +1106,7 @@ fn build_debug_info(
         unit_length,
         version: 4,
         debug_abbrev_offset: 0,
-        address_size: 8,
+        address_size: addr_width.bytes() as u8,
     };
     let mut out: Vec<u8> = Vec::with_capacity(DEBUG_INFO_UNIT_HEADER_SIZE as usize + body.len());
     write_struct(&mut out, &header);
@@ -1174,7 +1207,13 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
 
     // Anchor address at 0 (codegen-relative); the linker rebases
     // through the recorded reloc.
-    write_set_address_reloc(&mut prog, &mut relocs, prefix_size, 0);
+    write_set_address_reloc(
+        &mut prog,
+        &mut relocs,
+        prefix_size,
+        0,
+        DwarfRelocWidth::addr(build.elf_class),
+    );
 
     let mut state_addr: u64 = 0;
     let mut state_line: i64 = 1;
@@ -1283,20 +1322,22 @@ fn write_set_address_reloc(
     relocs: &mut Vec<DwarfReloc>,
     prefix_size: u64,
     addend: i64,
+    addr_width: DwarfRelocWidth,
 ) {
-    // Extended opcode: 0x00, ULEB128 length (1 + addr_size = 9), opcode (DW_LNE_SET_ADDRESS), addr.
+    // Extended opcode: 0x00, ULEB128 length (opcode + addr_size),
+    // opcode (DW_LNE_SET_ADDRESS), addr.
     prog.push(0);
-    write_uleb128(prog, 9);
+    write_uleb128(prog, 1 + addr_width.bytes() as u64);
     prog.push(DW_LNE_SET_ADDRESS);
     let addr_pos_in_prog = prog.len() as u64;
-    prog.extend_from_slice(&[0u8; 8]);
+    push_addr_slot(prog, addr_width);
     relocs.push(DwarfReloc {
         section: DwarfSectionKind::Line,
         // The body starts at `prefix_size` bytes from the section
         // start; the addr field sits at `addr_pos_in_prog` within
         // the body.
         offset: prefix_size + addr_pos_in_prog,
-        width: DwarfRelocWidth::W8,
+        width: addr_width,
         target: DwarfRelocTarget::Text,
         addend,
     });

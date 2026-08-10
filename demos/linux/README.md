@@ -96,6 +96,55 @@ without touching the tree:
   measurable. Overlays hold copied kernel code, so they are built on the
   measurement box, not vendored here.
 
+## Replaying one unit (`replay.py`)
+
+The sweep rewrites each recorded command, which answers whether badc can
+compile a unit at all. `replay.py` runs the recorded command *as recorded*
+-- same shim, same flags, same working directory -- and asks a different
+question: does the object the build would have produced hold what it
+should. Whether a defect appears can turn on any flag in the recorded set,
+so the rewrite is the wrong instrument for it.
+
+Its subject is the object's undefined symbols, `--forbid` and `--require`
+naming any symbol:
+
+```sh
+python3 demos/linux/replay.py --kernel-dir <built tree> \
+    --unit fs/proc/array.o --forbid __scoped_seqlock_bug
+```
+
+The kernel spells a build-time assertion as a call to a declared-but-never-
+defined function (`__compiletime_assert_*`, `__scoped_seqlock_bug`,
+`__bad_udelay`) in a branch the compiler is expected to delete. When a fold
+stops firing, the symbol reaches the object and nothing reports it until
+the final vmlinux link -- a whole kernel build later. Stated as a `--forbid`
+against the unit, the same claim takes seconds.
+
+Repeat `--badc` to put several compilers over the same units, which is what
+bisecting an emitted-code regression needs; each is a row:
+
+```sh
+python3 demos/linux/replay.py --kernel-dir <built tree> \
+    --match generic_pt --forbid __compiletime_assert_73 \
+    --badc old/badc --badc new/badc
+```
+
+`--require` guards a vacuous pass: a unit that failed to compile satisfies
+`--forbid` too. With neither, the run reports each object's undefined
+symbols and asserts nothing. Selection is `--unit <object>` or `--match
+<substring>`, both repeatable.
+
+The tree is never written: the recorded command names its object and its
+dependency file inside it, and both are redirected into `--workdir` (a
+temporary directory by default, and refused if it sits inside the tree).
+That is not housekeeping. Compiling into a tree while a build is using it
+swaps one object under that build, and the symptom is a plausible wrong
+number rather than an error -- a link reporting failures that belong to the
+compiler under test rather than the one being measured.
+
+Prerequisite, as for the sweep: a completed build. A `.cmd` file exists
+only for an object the tree has already built.
+
 ## badc-probed configuration (opt-in)
 
 The kernel decides what its code may use by probing the compiler at configure

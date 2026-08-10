@@ -161,29 +161,30 @@ fn ent_pc=6 n_params=0 variadic=false locals=11
     v14  Imm(3)                                           -> x0
     terminator Return(v14)   (exit_acc=v14)
   block 9  start_pc=0
-    v212 LocalAddr(-2)                                    -> x0
-    v213 Imm(0)                                           -> x1
-    v214 Store { addr=v212, disp=0, value=v213, kind=I64 } -> -
-    v215 BinopI { op=add, lhs=v212, rhs_imm=8 }           -> x2
-    v216 Store { addr=v212, disp=8, value=v213, kind=I64 } -> -
-    v217 LocalAddr(-2)                                    -> x0
-    v218 BinopI { op=add, lhs=v217, rhs_imm=8 }           -> x1
-    v219 Imm(1311768464867721225)                         -> x1
-    v220 Store { addr=v217, disp=8, value=v219, kind=I64 } -> -
-    v221 LocalAddr(-2)                                    -> x0
-    v222 BinopI { op=add, lhs=v221, rhs_imm=8 }           -> x2
-    v223 Load { addr=v221, disp=8, kind=I64 }             -> x0
-    v224 LocalAddr(-2)                                    -> x0
-    v225 Imm(0)                                           -> x2
-    v226 ImmData(24)                                      -> x2
-    v227 Load { addr=v1, disp=0, kind=I32 }               -> x2
-    v228 BinopI { op=add, lhs=v227, rhs_imm=1 }           -> x2
-    v229 Store { addr=v1, disp=0, value=v228, kind=I32 }  -> -
-    v230 ImmData(32)                                      -> x2
-    v231 Load { addr=v224, disp=0, kind=I32 }             -> x0
-    v232 Store { addr=v230, disp=0, value=v231, kind=I32 } -> -
-    v233 Imm(0)                                           -> x0
-    terminator Jmp(b10)   (exit_acc=v219)
+    v212 Imm(0)                                           -> x0
+    v213 Imm(0)                                           -> x0
+    v214 Imm(0)                                           -> x0
+    v215 Imm(0)                                           -> x1
+    v216 Imm(0)                                           -> x1
+    v217 Imm(0)                                           -> x1
+    v218 Imm(0)                                           -> x1
+    v219 Imm(0)                                           -> x1
+    v220 Imm(1311768464867721225)                         -> x2
+    v221 Imm(0)                                           -> x1
+    v222 Imm(0)                                           -> x1
+    v223 Imm(0)                                           -> x1
+    v224 LoadLocal { off=-1, kind=I64 }                   -> x1
+    v225 Imm(0)                                           -> x1
+    v226 Imm(0)                                           -> x1
+    v227 ImmData(24)                                      -> x1
+    v228 Load { addr=v1, disp=0, kind=I32 }               -> x1
+    v229 BinopI { op=add, lhs=v228, rhs_imm=1 }           -> x1
+    v230 Store { addr=v1, disp=0, value=v229, kind=I32 }  -> -
+    v231 ImmData(32)                                      -> x1
+    v232 LoadLocal { off=-2, kind=I32 }                   -> x6
+    v233 Store { addr=v231, disp=0, value=v214, kind=I32 } -> -
+    v234 Imm(0)                                           -> x0
+    terminator Jmp(b10)   (exit_acc=v220)
   block 10  start_pc=0
     v15  Imm(0)                                           -> x0
     terminator Jmp(b11)   (exit_acc=v15)

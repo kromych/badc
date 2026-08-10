@@ -41,7 +41,7 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::program::Program;
-use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
+use super::{AddrPart, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
 
 /// AArch64 register name. Wraps the 5-bit register field that nearly
 /// every instruction needs in some position; using a newtype prevents
@@ -2206,7 +2206,7 @@ pub(crate) fn lower(
     // fixups also land on the body, which keeps that contract
     // intact.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
-    for (adrp_offset, target_ent_pc) in pending_func_fixups {
+    for (instr_offset, target_ent_pc) in pending_func_fixups {
         // Cross-TU target: the placeholder ent_pc has no entry
         // in `pc_to_native`. Route to the same named-
         // symbol channel that data extern refs use; the linker
@@ -2214,7 +2214,7 @@ pub(crate) fn lower(
         // via the data_abs_relocs Text-section path.
         if let Some(&name) = extern_pc_lookup.get(&target_ent_pc) {
             user_extern_data_refs.push(super::UserExternDataRef {
-                instr_offset: adrp_offset,
+                instr_offset,
                 symbol_name: (*name).into(),
                 direct_pcrel: None,
             });
@@ -2236,8 +2236,9 @@ pub(crate) fn lower(
             )));
         }
         func_fixups.push(FuncFixup {
-            adrp_offset,
+            instr_offset,
             target_native_offset: target,
+            part: AddrPart::Whole,
         });
     }
 
@@ -2252,8 +2253,9 @@ pub(crate) fn lower(
         for fx in &plt_call_fixups {
             if fx.is_addr {
                 func_fixups.push(FuncFixup {
-                    adrp_offset: fx.instr_offset,
+                    instr_offset: fx.instr_offset,
                     target_native_offset: plt_trampoline_offsets[fx.import_index],
+                    part: AddrPart::Whole,
                 });
             }
         }
@@ -2470,7 +2472,8 @@ fn emit_plt_trampolines(
         let tramp_off = code.len();
         offsets.push(tramp_off);
         got_fixups.push(GotFixup {
-            adrp_offset: tramp_off,
+            instr_offset: tramp_off,
+            part: AddrPart::Whole,
             import_index,
             is_data_load: false,
         });

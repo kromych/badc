@@ -73,7 +73,7 @@ use super::super::error::C5Error;
 use super::aarch64;
 use super::dwarf;
 use super::x86_64;
-use super::{Build, Machine};
+use super::{AddrPart, Build, Machine};
 use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
@@ -961,7 +961,7 @@ pub(super) fn write(
     // mprotect resolves at all (POSIX targets bind it, Windows
     // doesn't, sources gate the call on `__BADC_WINDOWS__`).
     for f in &build.got_fixups {
-        let instr_off = (f.adrp_offset as u32) + text_prologue_len;
+        let instr_off = (f.instr_offset as u32) + text_prologue_len;
         let target_rva = idata_layout.iat_rva_for_import[f.import_index];
         // A data import has no call thunk: its reference reads the
         // IAT slot's value. On x86_64 that is a distinct instruction
@@ -970,28 +970,44 @@ pub(super) fn write(
         // `patch_aarch64_adrp_ldr` already loads the slot for both
         // call thunks and data references.
         if f.is_data_load && machine == Machine::X86_64 {
+            crate::c5::codegen::require_whole_addr(f.part, "PE: IAT data load")?;
             patch_iat_data_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
         } else {
-            patch_iat_lookup(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
+            patch_iat_lookup(
+                machine,
+                &mut text_bytes,
+                instr_off,
+                text_rva,
+                target_rva,
+                f.part,
+            )?;
         }
     }
     for f in &build.data_fixups {
-        let instr_off = (f.adrp_offset as u32) + text_prologue_len;
+        let instr_off = (f.instr_offset as u32) + text_prologue_len;
         patch_addr_load(
             machine,
             &mut text_bytes,
             instr_off,
             text_rva,
             data_off_to_rva(f.data_offset as u32),
+            f.part,
         )?;
     }
     for f in &build.func_fixups {
-        let instr_off = (f.adrp_offset as u32) + text_prologue_len;
+        let instr_off = (f.instr_offset as u32) + text_prologue_len;
         // Function-pointer literals point at offsets within
         // build.text -- shift by text_prologue_len to land in the
         // combined .text past the entry stub.
         let target_rva = text_rva + text_prologue_len + f.target_native_offset as u32;
-        patch_addr_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
+        patch_addr_load(
+            machine,
+            &mut text_bytes,
+            instr_off,
+            text_rva,
+            target_rva,
+            f.part,
+        )?;
     }
 
     // Read-only blob references (switch dispatch): the site
@@ -999,7 +1015,14 @@ pub(super) fn write(
     for f in &build.rodata.addr_fixups {
         let instr_off = (f.code_offset as u32) + text_prologue_len;
         let target_rva = text_rva + rodata_base_in_text + f.rodata_offset as u32;
-        patch_addr_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
+        patch_addr_load(
+            machine,
+            &mut text_bytes,
+            instr_off,
+            text_rva,
+            target_rva,
+            AddrPart::Whole,
+        )?;
     }
     // Table entries: `target - table_base`, both inside `.text`, so
     // the value is a pure offset difference (ASLR-invariant, no
@@ -2774,12 +2797,14 @@ fn patch_iat_lookup(
     instr_offset_in_text: u32,
     text_section_rva: u32,
     target_rva: u32,
+    part: AddrPart,
 ) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
             // `call qword [rip+disp32]`: 6 bytes. disp32 at +2;
             // RIP at the after-byte (+6).
+            crate::c5::codegen::require_whole_addr(part, "PE: IAT lookup")?;
             let after_rva = instr_rva + 6;
             patch_x86_64_disp32(
                 text,
@@ -2789,7 +2814,7 @@ fn patch_iat_lookup(
             )
         }
         Machine::Aarch64 => {
-            patch_aarch64_adrp_ldr(text, instr_offset_in_text, instr_rva, target_rva)
+            patch_aarch64_adrp_ldr(text, instr_offset_in_text, instr_rva, target_rva, part)
         }
     }
 }
@@ -2855,12 +2880,14 @@ fn patch_addr_load(
     instr_offset_in_text: u32,
     text_section_rva: u32,
     target_rva: u32,
+    part: AddrPart,
 ) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
             // `lea r13, [rip+disp32]`: 7 bytes. disp32 at +3, RIP
             // at +7 (LEA_RIP32_LEN).
+            crate::c5::codegen::require_whole_addr(part, "PE: address load")?;
             let after_rva = instr_rva + (x86_64::LEA_RIP32_LEN as u32);
             patch_x86_64_disp32(
                 text,
@@ -2870,7 +2897,7 @@ fn patch_addr_load(
             )
         }
         Machine::Aarch64 => {
-            patch_aarch64_adrp_add(text, instr_offset_in_text, instr_rva, target_rva)
+            patch_aarch64_adrp_add(text, instr_offset_in_text, instr_rva, target_rva, part)
         }
     }
 }
@@ -2943,23 +2970,25 @@ fn patch_x86_64_disp32(
     Ok(())
 }
 
-/// Patch an aarch64 pair to load the 64-bit value at `target_rva`
-/// into `xd`. `target_rva` names an IAT slot, so the second
+/// Patch an aarch64 reference to load the 64-bit value at `target_rva`
+/// into `xd`. `target_rva` names an IAT slot, so the in-page
 /// instruction ends up `ldr xd, [xd, #_]` whether the input carried
 /// a load (a call thunk) or the `add` an object spells for the
 /// address of an extern data symbol.
 fn patch_aarch64_adrp_ldr(
     text: &mut [u8],
-    adrp_offset_in_text: u32,
-    adrp_rva: u32,
+    instr_offset_in_text: u32,
+    instr_rva: u32,
     target_rva: u32,
+    part: AddrPart,
 ) -> Result<(), C5Error> {
-    aarch64::patch::patch_slot_load(
+    aarch64::patch::patch_slot(
         text,
-        adrp_offset_in_text as usize,
-        adrp_rva as i64,
+        instr_offset_in_text as usize,
+        instr_rva as i64,
         target_rva as i64,
         aarch64::patch::SlotWidth::W64,
+        part,
     )
     .map_err(|e| {
         C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -2968,22 +2997,24 @@ fn patch_aarch64_adrp_ldr(
     })
 }
 
-/// Patch an aarch64 `adrp xd, _; add xd, xd, #_` pair to point at
-/// `target_rva`. The encoding is PC-relative: `adrp` takes the signed
-/// 4 KiB page delta from its own page and `add` the 12-bit in-page
-/// offset, so an ASLR slide moves the instruction and its target by
-/// the same delta and the pair needs no base relocation.
+/// Patch an aarch64 `adrp xd, _` / `add xd, xd, #_` reference to point
+/// at `target_rva`. The encoding is PC-relative: `adrp` takes the
+/// signed 4 KiB page delta from its own page and `add` the 12-bit
+/// in-page offset, so an ASLR slide moves the instruction and its
+/// target by the same delta and neither needs a base relocation.
 fn patch_aarch64_adrp_add(
     text: &mut [u8],
-    adrp_offset_in_text: u32,
-    adrp_rva: u32,
+    instr_offset_in_text: u32,
+    instr_rva: u32,
     target_rva: u32,
+    part: AddrPart,
 ) -> Result<(), C5Error> {
-    aarch64::patch::patch_pair(
+    aarch64::patch::patch_addr(
         text,
-        adrp_offset_in_text as usize,
-        adrp_rva as i64,
+        instr_offset_in_text as usize,
+        instr_rva as i64,
         target_rva as i64,
+        part,
     )
     .map_err(|e| {
         C5Error::Compile(crate::c5::error::fmt_internal_err(

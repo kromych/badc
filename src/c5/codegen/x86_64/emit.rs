@@ -43,7 +43,6 @@ use alloc::vec::Vec;
 use super::super::ir::{
     AsmSeg, BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator,
 };
-use super::DataFixup;
 use super::GotFixup;
 use super::Target;
 use super::encode::{
@@ -66,6 +65,7 @@ use super::ssa::emit_common::{
 };
 use super::ssa::reg_alloc::{Allocation, Place};
 use super::table::Mnem;
+use super::{AddrPart, DataFixup};
 
 /// Per-function frame layout. Bytes are 16-aligned at every
 /// region boundary so SysV / Win64's sp-at-call invariant holds.
@@ -2047,7 +2047,7 @@ pub(crate) fn emit_function(
                 {
                     let popped = data_fixups.pop().unwrap();
                     user_extern_data_refs.push(super::UserExternDataRef {
-                        instr_offset: popped.adrp_offset,
+                        instr_offset: popped.instr_offset,
                         symbol_name: name.clone(),
                         direct_pcrel: None,
                     });
@@ -8528,8 +8528,9 @@ fn emit_inline_asm(
                 }
                 AsmRipSym::Local { data_offset } => {
                     data_fixups.push(DataFixup {
-                        adrp_offset: instr_offset,
+                        instr_offset,
                         data_offset: (data_offset + disp) as u64,
+                        part: AddrPart::Whole,
                     });
                 }
             }
@@ -9617,8 +9618,9 @@ fn emit_imm_data(
     };
     let instr_offset = code.len();
     data_fixups.push(DataFixup {
-        adrp_offset: instr_offset,
+        instr_offset,
         data_offset: offset as u64,
+        part: AddrPart::Whole,
     });
     // `lea rd, [rip + 0]` placeholder; the writer patches the
     // disp32 once the data segment's runtime address is known.

@@ -54,7 +54,7 @@ use super::elf_reloc_types::{
     R_AARCH64_COPY, R_AARCH64_GLOB_DAT, R_AARCH64_RELATIVE, R_X86_64_COPY, R_X86_64_GLOB_DAT,
     R_X86_64_RELATIVE,
 };
-use super::{Abi, Build, Machine};
+use super::{Abi, AddrPart, Build, Machine};
 use super::{aarch64, dwarf, x86_64};
 use crate::c5::layout::{round_up, write_struct};
 
@@ -606,9 +606,9 @@ fn emit_start_stub_aarch64(
 
     let result = if use_libc_exit {
         // Placeholder adrp + ldr + blr through the libc exit GOT
-        // slot. The caller appends a GotFixup with adrp_offset =
-        // current code length so the writer fills in imm21/imm12
-        // once the GOT vmaddr is known.
+        // slot. The caller patches it at the current code length so
+        // the writer fills in imm21/imm12 once the GOT vmaddr is
+        // known.
         let exit_adrp_offset = code.len();
         aarch64::emit(code, aarch64::enc_adrp(Reg::X16, 0));
         aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
@@ -1240,6 +1240,25 @@ struct VersionInfo {
     verneed_num: u64,
 }
 
+/// Where the written code blob sits: its byte offset in the image and
+/// the runtime address of that same byte. Every fixup patcher indexes
+/// the image with the first and computes displacements with the second.
+#[derive(Clone, Copy)]
+struct CodePlacement {
+    file_off: u64,
+    vmaddr: u64,
+}
+
+impl CodePlacement {
+    fn file_at(self, offset_in_code: u64) -> usize {
+        (self.file_off + offset_in_code) as usize
+    }
+
+    fn vmaddr_at(self, offset_in_code: u64) -> u64 {
+        self.vmaddr + offset_in_code
+    }
+}
+
 // ------------------------------------------------------------------
 // Adrp/ldr/add fixup patching. The codegen records GotFixup,
 // DataFixup, and FuncFixup entries against `Build::text` byte offsets;
@@ -1253,18 +1272,19 @@ struct VersionInfo {
 /// that the loader has written into .got.
 fn patch_adrp_ldr(
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
-    adrp_offset_in_code: u64,
+    code: CodePlacement,
+    instr_offset_in_code: u64,
     target_vmaddr: u64,
+    part: AddrPart,
     label: &str,
 ) -> Result<(), C5Error> {
-    aarch64::patch::patch_slot_load(
+    aarch64::patch::patch_slot(
         out,
-        (code_base_in_file + adrp_offset_in_code) as usize,
-        (code_vmaddr_base + adrp_offset_in_code) as i64,
+        code.file_at(instr_offset_in_code),
+        code.vmaddr_at(instr_offset_in_code) as i64,
         target_vmaddr as i64,
         aarch64::patch::SlotWidth::W64,
+        part,
     )
     .map_err(|e| {
         C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1281,29 +1301,20 @@ fn patch_adrp_ldr(
 fn patch_addr_load(
     machine: Machine,
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
+    code: CodePlacement,
     instr_offset_in_code: u64,
     target_vmaddr: u64,
+    part: AddrPart,
     label: &str,
 ) -> Result<(), C5Error> {
     match machine {
-        Machine::Aarch64 => patch_adrp_add(
-            out,
-            code_base_in_file,
-            code_vmaddr_base,
-            instr_offset_in_code,
-            target_vmaddr,
-            label,
-        ),
-        Machine::X86_64 => patch_lea_rip32(
-            out,
-            code_base_in_file,
-            code_vmaddr_base,
-            instr_offset_in_code,
-            target_vmaddr,
-            label,
-        ),
+        Machine::Aarch64 => {
+            patch_adrp_add(out, code, instr_offset_in_code, target_vmaddr, part, label)
+        }
+        Machine::X86_64 => {
+            crate::c5::codegen::require_whole_addr(part, label)?;
+            patch_lea_rip32(out, code, instr_offset_in_code, target_vmaddr, label)
+        }
     }
 }
 
@@ -1314,29 +1325,20 @@ fn patch_addr_load(
 fn patch_got_call(
     machine: Machine,
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
+    code: CodePlacement,
     instr_offset_in_code: u64,
     target_vmaddr: u64,
+    part: AddrPart,
     label: &str,
 ) -> Result<(), C5Error> {
     match machine {
-        Machine::Aarch64 => patch_adrp_ldr(
-            out,
-            code_base_in_file,
-            code_vmaddr_base,
-            instr_offset_in_code,
-            target_vmaddr,
-            label,
-        ),
-        Machine::X86_64 => patch_call_qword_rip32(
-            out,
-            code_base_in_file,
-            code_vmaddr_base,
-            instr_offset_in_code,
-            target_vmaddr,
-            label,
-        ),
+        Machine::Aarch64 => {
+            patch_adrp_ldr(out, code, instr_offset_in_code, target_vmaddr, part, label)
+        }
+        Machine::X86_64 => {
+            crate::c5::codegen::require_whole_addr(part, label)?;
+            patch_call_qword_rip32(out, code, instr_offset_in_code, target_vmaddr, label)
+        }
     }
 }
 
@@ -1346,14 +1348,13 @@ fn patch_got_call(
 /// `instr_vmaddr + CALL_QWORD_RIP32_LEN`).
 fn patch_call_qword_rip32(
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
+    code: CodePlacement,
     instr_offset_in_code: u64,
     target_vmaddr: u64,
     label: &str,
 ) -> Result<(), C5Error> {
     let call_len = x86_64::CALL_QWORD_RIP32_LEN as u64;
-    let instr_vmaddr = code_vmaddr_base + instr_offset_in_code;
+    let instr_vmaddr = code.vmaddr_at(instr_offset_in_code);
     let after = instr_vmaddr + call_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
@@ -1363,7 +1364,7 @@ fn patch_call_qword_rip32(
     }
     let disp32 = delta as i32;
     // disp32 is the last 4 bytes of `FF 15 dd dd dd dd`.
-    let disp_file_off = (code_base_in_file + instr_offset_in_code + call_len - 4) as usize;
+    let disp_file_off = code.file_at(instr_offset_in_code + call_len - 4);
     out[disp_file_off..disp_file_off + 4].copy_from_slice(&disp32.to_le_bytes());
     Ok(())
 }
@@ -1374,14 +1375,13 @@ fn patch_call_qword_rip32(
 /// `instr_vmaddr + LEA_RIP32_LEN`). 32-bit signed range, ~+/-2 GiB.
 fn patch_lea_rip32(
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
+    code: CodePlacement,
     instr_offset_in_code: u64,
     target_vmaddr: u64,
     label: &str,
 ) -> Result<(), C5Error> {
     let lea_len = x86_64::LEA_RIP32_LEN as u64;
-    let instr_vmaddr = code_vmaddr_base + instr_offset_in_code;
+    let instr_vmaddr = code.vmaddr_at(instr_offset_in_code);
     let after = instr_vmaddr + lea_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
@@ -1392,7 +1392,7 @@ fn patch_lea_rip32(
     let disp32 = delta as i32;
     // disp32 is the last 4 bytes of a 7-byte LEA encoding:
     //   REX.W + 0x8D + ModR/M + 4*disp
-    let disp_file_off = (code_base_in_file + instr_offset_in_code + lea_len - 4) as usize;
+    let disp_file_off = code.file_at(instr_offset_in_code + lea_len - 4);
     out[disp_file_off..disp_file_off + 4].copy_from_slice(&disp32.to_le_bytes());
     Ok(())
 }
@@ -1407,13 +1407,12 @@ fn patch_lea_rip32(
 /// `patch_lea_rip32` math.
 fn patch_got_data_load(
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
+    code: CodePlacement,
     instr_offset_in_code: u64,
     slot_vmaddr: u64,
     label: &str,
 ) -> Result<(), C5Error> {
-    let opcode_off = (code_base_in_file + instr_offset_in_code + 1) as usize;
+    let opcode_off = code.file_at(instr_offset_in_code + 1);
     if out[opcode_off] != 0x8D && out[opcode_off] != 0x8B {
         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
             &format!(
@@ -1423,32 +1422,26 @@ fn patch_got_data_load(
         )));
     }
     out[opcode_off] = 0x8B;
-    patch_lea_rip32(
-        out,
-        code_base_in_file,
-        code_vmaddr_base,
-        instr_offset_in_code,
-        slot_vmaddr,
-        label,
-    )
+    patch_lea_rip32(out, code, instr_offset_in_code, slot_vmaddr, label)
 }
 
-/// Patch an `adrp Xd, page; add Xd, Xd, #imm12` pair so the result
-/// equals `target_vmaddr`. Used for data-segment references and
+/// Patch the fields `part` names so the reference computes
+/// `target_vmaddr`. Used for data-segment references and
 /// function-pointer literals; both are absolute-address materializations.
 fn patch_adrp_add(
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
-    adrp_offset_in_code: u64,
+    code: CodePlacement,
+    instr_offset_in_code: u64,
     target_vmaddr: u64,
+    part: AddrPart,
     label: &str,
 ) -> Result<(), C5Error> {
-    aarch64::patch::patch_pair(
+    aarch64::patch::patch_addr(
         out,
-        (code_base_in_file + adrp_offset_in_code) as usize,
-        (code_vmaddr_base + adrp_offset_in_code) as i64,
+        code.file_at(instr_offset_in_code),
+        code.vmaddr_at(instr_offset_in_code) as i64,
         target_vmaddr as i64,
+        part,
     )
     .map_err(|e| {
         C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -3479,8 +3472,12 @@ pub(super) fn write(
     debug_assert_eq!(out.len() as u64, total_filesize);
 
     // ---- Patch fixups. ----
-    // The code blob layout is [_start stub][build.text]. The codegen's
-    // adrp_offset is relative to build.text, so we shift by stub len.
+    // The code blob layout is [_start stub][build.text]. A fixup's
+    // instr_offset is relative to build.text, so we shift by stub len.
+    let code_place = CodePlacement {
+        file_off: code_file_offset,
+        vmaddr: code_vmaddr,
+    };
     // Shared libraries have no `_start` and skip this patch
     // entirely; the stub-len shift below collapses to zero
     // and the libc-exit GOT lookup never gets emitted in
@@ -3501,10 +3498,10 @@ pub(super) fn write(
         patch_got_call(
             machine,
             &mut out,
-            code_file_offset,
-            code_vmaddr,
+            code_place,
             exit_off as u64,
             got_vmaddr + (exit_idx as u64) * 8,
+            AddrPart::Whole,
             "_start exit fixup",
         )?;
     }
@@ -3519,13 +3516,13 @@ pub(super) fn write(
     // call the lookup helper emits), so it routes to a data-load patch.
     // aarch64's adrp + ldr already loads the slot for both.
     for fx in &build.got_fixups {
-        let instr_off = stub_len + fx.adrp_offset as u64;
+        let instr_off = stub_len + fx.instr_offset as u64;
         let slot_vmaddr = got_vmaddr + (fx.import_index as u64) * 8;
         if fx.is_data_load && machine == Machine::X86_64 {
+            crate::c5::codegen::require_whole_addr(fx.part, "GOT data-load fixup")?;
             patch_got_data_load(
                 &mut out,
-                code_file_offset,
-                code_vmaddr,
+                code_place,
                 instr_off,
                 slot_vmaddr,
                 "GOT data-load fixup",
@@ -3534,10 +3531,10 @@ pub(super) fn write(
             patch_got_call(
                 machine,
                 &mut out,
-                code_file_offset,
-                code_vmaddr,
+                code_place,
                 instr_off,
                 slot_vmaddr,
+                fx.part,
                 "GOT fixup",
             )?;
         }
@@ -3549,10 +3546,10 @@ pub(super) fn write(
         patch_addr_load(
             machine,
             &mut out,
-            code_file_offset,
-            code_vmaddr,
-            stub_len + fx.adrp_offset as u64,
+            code_place,
+            stub_len + fx.instr_offset as u64,
             data_off_to_vaddr(fx.data_offset),
+            fx.part,
             "data fixup",
         )?;
     }
@@ -3564,10 +3561,10 @@ pub(super) fn write(
         patch_addr_load(
             machine,
             &mut out,
-            code_file_offset,
-            code_vmaddr,
-            stub_len + fx.adrp_offset as u64,
+            code_place,
+            stub_len + fx.instr_offset as u64,
             code_vmaddr + stub_len + fx.target_native_offset as u64,
+            fx.part,
             "func fixup",
         )?;
     }
@@ -3578,10 +3575,10 @@ pub(super) fn write(
         patch_addr_load(
             machine,
             &mut out,
-            code_file_offset,
-            code_vmaddr,
+            code_place,
             stub_len + fx.code_offset as u64,
             jt_vmaddr + fx.rodata_offset,
+            AddrPart::Whole,
             "table fixup",
         )?;
     }
@@ -3621,6 +3618,12 @@ fn write_phdr(
 mod tests {
     use super::*;
 
+    /// Code blob at file offset 0, loaded at 0x1000.
+    const PLACE_1000: CodePlacement = CodePlacement {
+        file_off: 0,
+        vmaddr: 0x1000,
+    };
+
     #[test]
     fn patch_adrp_add_scales_load_store_imm12() {
         // `adrp x0, page ; ldrh w0, [x0, #:lo12:sym]`: the ldrh keeps its
@@ -3630,7 +3633,7 @@ mod tests {
         let mut out = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
         out.extend_from_slice(&ldrh.to_le_bytes());
         // code at file offset 0, vmaddr 0x1000; target 0x2008 (in-page 8).
-        patch_adrp_add(&mut out, 0, 0x1000, 0, 0x2008, "test").unwrap();
+        patch_adrp_add(&mut out, PLACE_1000, 0, 0x2008, AddrPart::Whole, "test").unwrap();
         let ldst = u32::from_le_bytes([out[4], out[5], out[6], out[7]]);
         assert_eq!(
             ldst & !(0xFFF << 10),
@@ -3642,7 +3645,7 @@ mod tests {
         let addi = aarch64::enc_add_imm(aarch64::Reg(0), aarch64::Reg(0), 0);
         let mut out2 = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
         out2.extend_from_slice(&addi.to_le_bytes());
-        patch_adrp_add(&mut out2, 0, 0x1000, 0, 0x2008, "test").unwrap();
+        patch_adrp_add(&mut out2, PLACE_1000, 0, 0x2008, AddrPart::Whole, "test").unwrap();
         let add = u32::from_le_bytes([out2[4], out2[5], out2[6], out2[7]]);
         assert_eq!((add >> 10) & 0xFFF, 8, "add imm12 unscaled");
     }
@@ -4037,7 +4040,7 @@ mod tests {
             );
             // Code at vmaddr 0x1000, GOT slot at 0x5008: page diff 0x4000
             // (4 KiB aligned), in-page offset 8 (8-aligned).
-            patch_adrp_ldr(&mut out, 0, 0x1000, 0, 0x5008, "test").unwrap();
+            patch_adrp_ldr(&mut out, PLACE_1000, 0, 0x5008, AddrPart::Whole, "test").unwrap();
             let adrp = u32::from_le_bytes(out[0..4].try_into().unwrap());
             let ldr = u32::from_le_bytes(out[4..8].try_into().unwrap());
             assert_eq!(adrp & 0x1f, rd as u32, "adrp Rd preserved (rd={rd})");
@@ -4071,7 +4074,7 @@ mod tests {
         let mut out = vec![0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00, 0xC3];
         // code at file offset 0, code vmaddr base 0x1000, instr at code
         // offset 0, GOT slot at vmaddr 0x2000.
-        patch_got_data_load(&mut out, 0, 0x1000, 0, 0x2000, "test").unwrap();
+        patch_got_data_load(&mut out, PLACE_1000, 0, 0x2000, "test").unwrap();
         assert_eq!(out[0], 0x48, "REX.W preserved");
         assert_eq!(out[1], 0x8B, "lea (0x8D) flipped to mov (0x8B)");
         assert_eq!(out[2], 0x05, "ModRM preserved (rax, RIP-relative)");

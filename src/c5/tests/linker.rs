@@ -4879,6 +4879,21 @@ fn aarch64_data_ref_object(
     words: &[u32],
     relocs: &[(u64, u32)],
 ) -> crate::c5::linker::NativeObject {
+    use crate::c5::linker::NativeSymSection;
+    let relocs: alloc::vec::Vec<(u64, u32, u32)> =
+        relocs.iter().map(|(o, t)| (*o, *t, 1)).collect();
+    aarch64_data_ref_object_ex(words, &relocs, &[("blob", NativeSymSection::Data, 16)], 64)
+}
+
+/// As [`aarch64_data_ref_object`], with each relocation naming its own
+/// symbol index. `syms` lists the referenced symbols starting at index
+/// 1 (index 0 is the null entry), `data_len` sizes `.data`.
+fn aarch64_data_ref_object_ex(
+    words: &[u32],
+    relocs: &[(u64, u32, u32)],
+    syms: &[(&str, crate::c5::linker::NativeSymSection, u64)],
+    data_len: usize,
+) -> crate::c5::linker::NativeObject {
     use crate::c5::linker::object::{NativeReloc, NativeSymbol};
     use crate::c5::linker::{NativeMachine, NativeSymSection};
 
@@ -4891,9 +4906,9 @@ fn aarch64_data_ref_object(
     text.extend_from_slice(TEXT_MARKER);
     let text_relocs = relocs
         .iter()
-        .map(|(offset, rtype)| NativeReloc {
+        .map(|(offset, rtype, sym_idx)| NativeReloc {
             offset: *offset,
-            sym_idx: 1,
+            sym_idx: *sym_idx as usize,
             rtype: *rtype,
             addend: 0,
         })
@@ -4917,26 +4932,29 @@ fn aarch64_data_ref_object(
         text_align: 16,
         rodata: alloc::vec::Vec::new(),
         rodata_align: 8,
-        data: alloc::vec![0u8; 64],
+        data: alloc::vec![0u8; data_len],
         data_align: 0x1000,
         bss_size: 0,
         bss_align: 1,
         tls_data: alloc::vec::Vec::new(),
         tls_bss_size: 0,
         prologue_ends: alloc::vec::Vec::new(),
-        symbols: alloc::vec![
-            NativeSymbol {
-                name: String::new(),
-                section: NativeSymSection::Undef,
-                value: 0,
-                size: 0,
-                binding: 0,
-                kind: 0,
-                visibility: 0,
-            },
-            sym("blob", NativeSymSection::Data, 16),
-            sym("_start", NativeSymSection::Text, 0),
-        ],
+        symbols: alloc::vec![NativeSymbol {
+            name: String::new(),
+            section: NativeSymSection::Undef,
+            value: 0,
+            size: 0,
+            binding: 0,
+            kind: 0,
+            visibility: 0,
+        },]
+        .into_iter()
+        .chain(
+            syms.iter()
+                .map(|(name, section, value)| sym(name, *section, *value)),
+        )
+        .chain(core::iter::once(sym("_start", NativeSymSection::Text, 0)))
+        .collect(),
         text_relocs,
         data_relocs: alloc::vec::Vec::new(),
         init_funcs: alloc::vec::Vec::new(),
@@ -5360,6 +5378,285 @@ fn aarch64_absolute_text_relocations_take_the_image_base() {
         abs64 > 0x400000,
         "the value must be a runtime address, not a section offset: {abs64:#x}"
     );
+}
+
+// ------------------------------------------------------------------
+// One `adrp` serving several low-12 sites.
+//
+// The AArch64 ELF ABI relocates the page and in-page halves of an
+// address reference separately, so one `adrp` may serve any number of
+// in-page references and an in-page reference may precede its `adrp`.
+// The expected words below are the ones GNU as 2.46.1 emitted and GNU
+// ld 2.46.1 patched for the same sequences, with the target symbol at
+// in-page offset 0xd0.
+// ------------------------------------------------------------------
+
+/// `.data` offset the shared-`adrp` objects place `blob` at, chosen so
+/// its runtime in-page offset matches the GNU ld reference link.
+const SHARED_ADRP_BLOB_OFFSET: u64 = 0xd0;
+
+/// Link `words` + `relocs` against a `blob` at
+/// [`SHARED_ADRP_BLOB_OFFSET`] through the synthesizer path and return
+/// the patched instruction words.
+fn aarch64_shared_adrp_link(words: &[u32], relocs: &[(u64, u32)]) -> alloc::vec::Vec<u32> {
+    use crate::c5::linker::{
+        NativeSymSection, emit_aarch64_plt, link_native_objects, write_native_image_from_merged,
+    };
+    use crate::c5::{OutputKind, Target};
+    let relocs: alloc::vec::Vec<(u64, u32, u32)> =
+        relocs.iter().map(|(o, t)| (*o, *t, 1)).collect();
+    let obj = aarch64_data_ref_object_ex(
+        words,
+        &relocs,
+        &[("blob", NativeSymSection::Data, SHARED_ADRP_BLOB_OFFSET)],
+        0x100,
+    );
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "_start",
+        None,
+        OutputKind::Executable,
+        Target::LinuxAarch64,
+        None,
+    )
+    .expect("an object sharing one adrp across low-12 sites must link");
+    let (text_off, _) = elf64_text_placement(&exe, words.len() * 4);
+    (0..words.len())
+        .map(|i| {
+            let at = text_off + i * 4;
+            u32::from_le_bytes(exe[at..at + 4].try_into().unwrap())
+        })
+        .collect()
+}
+
+/// `blob`'s runtime in-page offset in an [`aarch64_shared_adrp_link`]
+/// image, recovered from the patched `add`. The reference words hold
+/// only while it equals [`SHARED_ADRP_BLOB_OFFSET`].
+fn assert_reference_in_page(add_word: u32) {
+    let in_page = u64::from((add_word >> 10) & 0xfff);
+    assert_eq!(
+        in_page, SHARED_ADRP_BLOB_OFFSET,
+        "the reference words come from a link with `blob` at in-page offset \
+         {SHARED_ADRP_BLOB_OFFSET:#x}; this image placed it at {in_page:#x}"
+    );
+}
+
+#[test]
+fn aarch64_low12_sites_past_the_adrp_are_all_patched() {
+    // `adrp x1, gdata; ldr x2, [x1, #:lo12:gdata];
+    //  ldr q3, [x1, #:lo12:gdata]; add x4, x1, #:lo12:gdata; ret`.
+    // Keying the low-12 fixup on `adrp_offset + 4` reached only the
+    // first of the three; the other two kept their unrelocated
+    // immediate and no diagnostic named them.
+    const R_ADR_PREL_PG_HI21: u32 = 275;
+    const R_ADD_ABS_LO12_NC: u32 = 277;
+    const R_LDST64_ABS_LO12_NC: u32 = 286;
+    const R_LDST128_ABS_LO12_NC: u32 = 299;
+    let words = aarch64_shared_adrp_link(
+        &[
+            0x9000_0001,
+            0xf940_0022,
+            0x3dc0_0023,
+            0x9100_0024,
+            0xd65f_03c0,
+        ],
+        &[
+            (0, R_ADR_PREL_PG_HI21),
+            (4, R_LDST64_ABS_LO12_NC),
+            (8, R_LDST128_ABS_LO12_NC),
+            (12, R_ADD_ABS_LO12_NC),
+        ],
+    );
+    assert_reference_in_page(words[3]);
+    assert_eq!(words[1], 0xf940_6822, "ldr x2, [x1, #208]");
+    assert_eq!(words[2], 0x3dc0_3423, "ldr q3, [x1, #208]");
+    assert_eq!(words[3], 0x9103_4024, "add x4, x1, #0xd0");
+    assert_eq!(
+        words[4], 0xd65f_03c0,
+        "the `ret` past the pair is untouched"
+    );
+}
+
+#[test]
+fn aarch64_every_low12_form_shares_one_adrp() {
+    // Six in-page references to one `adrp`, one per addressing form the
+    // ABI defines. Each carries its own scale, so a fixup deriving the
+    // site from the `adrp` cannot reach past the first.
+    const R_ADR_PREL_PG_HI21: u32 = 275;
+    let words = aarch64_shared_adrp_link(
+        &[
+            0x9000_0001,
+            0x3940_0022,
+            0x7940_0023,
+            0xb940_0024,
+            0xf940_0025,
+            0x3dc0_0026,
+            0x9100_0027,
+        ],
+        &[
+            (0, R_ADR_PREL_PG_HI21),
+            (4, 278),
+            (8, 284),
+            (12, 285),
+            (16, 286),
+            (20, 299),
+            (24, 277),
+        ],
+    );
+    assert_reference_in_page(words[6]);
+    assert_eq!(words[1], 0x3943_4022, "ldrb w2, [x1, #208]");
+    assert_eq!(words[2], 0x7941_a023, "ldrh w3, [x1, #208]");
+    assert_eq!(words[3], 0xb940_d024, "ldr w4, [x1, #208]");
+    assert_eq!(words[4], 0xf940_6825, "ldr x5, [x1, #208]");
+    assert_eq!(words[5], 0x3dc0_3426, "ldr q6, [x1, #208]");
+    assert_eq!(words[6], 0x9103_4027, "add x7, x1, #0xd0");
+}
+
+#[test]
+fn aarch64_low12_site_before_its_adrp_is_patched() {
+    // `b 1f; 2: add x4, x1, #:lo12:gdata; ret; 1: adrp x1, gdata; b 2b`
+    // -- the in-page site sits at a lower offset than its `adrp`. The
+    // offset arithmetic reached the `b` following the `adrp` instead,
+    // which is neither an `add` nor a load/store.
+    const R_ADR_PREL_PG_HI21: u32 = 275;
+    const R_ADD_ABS_LO12_NC: u32 = 277;
+    let words = aarch64_shared_adrp_link(
+        &[
+            0x1400_0003,
+            0x9100_0024,
+            0xd65f_03c0,
+            0x9000_0001,
+            0x17ff_fffd,
+        ],
+        &[(4, R_ADD_ABS_LO12_NC), (12, R_ADR_PREL_PG_HI21)],
+    );
+    assert_reference_in_page(words[1]);
+    assert_eq!(words[0], 0x1400_0003, "the leading `b` is untouched");
+    assert_eq!(words[1], 0x9103_4024, "add x4, x1, #0xd0");
+    assert_eq!(words[2], 0xd65f_03c0, "the `ret` is untouched");
+    assert_eq!(words[4], 0x17ff_fffd, "the `b` past the adrp is untouched");
+}
+
+#[test]
+fn aarch64_pairs_for_symbols_on_distinct_pages_stay_independent() {
+    // Two references sharing neither page nor `adrp`. Patching each
+    // site on its own must not couple them: the GNU ld link of the
+    // same object resolves one pair at 0x30 and the other at 0x58.
+    use crate::c5::linker::{
+        NativeSymSection, emit_aarch64_plt, link_native_objects, write_native_image_from_merged,
+    };
+    use crate::c5::{OutputKind, Target};
+    const R_ADR_PREL_PG_HI21: u32 = 275;
+    const R_ADD_ABS_LO12_NC: u32 = 277;
+    let words = [
+        0x9000_0001,
+        0x9100_0022,
+        0x9000_0003,
+        0x9100_0064,
+        0xd65f_03c0,
+    ];
+    let obj = aarch64_data_ref_object_ex(
+        &words,
+        &[
+            (0, R_ADR_PREL_PG_HI21, 1),
+            (4, R_ADD_ABS_LO12_NC, 1),
+            (8, R_ADR_PREL_PG_HI21, 2),
+            (12, R_ADD_ABS_LO12_NC, 2),
+        ],
+        &[
+            ("blob", NativeSymSection::Data, 0x30),
+            ("other", NativeSymSection::Data, 0x1058),
+        ],
+        0x2000,
+    );
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "_start",
+        None,
+        OutputKind::Executable,
+        Target::LinuxAarch64,
+        None,
+    )
+    .expect("two independent references must link");
+    let (text_off, text_vaddr) = elf64_text_placement(&exe, words.len() * 4);
+    let word = |i: usize| {
+        let at = text_off + i * 4;
+        u32::from_le_bytes(exe[at..at + 4].try_into().unwrap())
+    };
+    assert_eq!(word(1), 0x9100_c022, "add x2, x1, #0x30");
+    assert_eq!(word(3), 0x9101_6064, "add x4, x3, #0x58");
+    // The symbols are 0x1028 bytes apart, so the two `adrp`s cannot
+    // reach the same 4 KiB page.
+    let page = |i: usize| {
+        let adrp = word(i);
+        let pages = i64::from((((adrp >> 3) & 0x1f_fffc) | ((adrp >> 29) & 0x3)) << 11) >> 11;
+        ((text_vaddr + (i as u64) * 4) & !0xfff).wrapping_add((pages << 12) as u64)
+    };
+    assert_ne!(page(0), page(2), "the two references must reach two pages");
+    assert_eq!(page(0) + 0x30 + 0x1028, page(2) + 0x58);
+}
+
+#[test]
+fn aarch64_got_low12_sites_sharing_one_adrp_all_load_the_slot() {
+    // Two GOT loads of one imported symbol behind a single
+    // `adrp x1, :got:sym`. The slot fixup keyed on the `adrp` reached
+    // only the first `ldr`; the second kept offset 0 and read whatever
+    // the GOT page starts with.
+    use crate::c5::linker::{
+        NativeSymSection, emit_aarch64_plt, link_native_objects_with_options,
+        write_native_image_from_merged,
+    };
+    use crate::c5::{OutputKind, Target};
+    const R_ADR_GOT_PAGE: u32 = 311;
+    const R_LD64_GOT_LO12_NC: u32 = 312;
+    let words = [0x9000_0001, 0xf940_0022, 0xf940_0023, 0xd65f_03c0];
+    let obj = aarch64_data_ref_object_ex(
+        &words,
+        &[
+            (0, R_ADR_GOT_PAGE, 1),
+            (4, R_LD64_GOT_LO12_NC, 1),
+            (8, R_LD64_GOT_LO12_NC, 1),
+        ],
+        &[("imported", NativeSymSection::Undef, 0)],
+        0x100,
+    );
+    let mut merged =
+        link_native_objects_with_options(&[obj], true).expect("an undefined global is an import");
+    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "_start",
+        None,
+        OutputKind::Executable,
+        Target::LinuxAarch64,
+        None,
+    )
+    .expect("two GOT loads behind one adrp must link");
+    let (text_off, _) = elf64_text_placement(&exe, words.len() * 4);
+    let word = |i: usize| {
+        let at = text_off + i * 4;
+        u32::from_le_bytes(exe[at..at + 4].try_into().unwrap())
+    };
+    // Both loads address the same slot: same scaled imm12, each
+    // keeping its own destination register.
+    let imm = |w: u32| (w >> 10) & 0xfff;
+    assert_ne!(imm(word(1)), 0, "the first load must be patched");
+    assert_eq!(
+        imm(word(1)),
+        imm(word(2)),
+        "both loads must reach the same GOT slot: {:#010x} vs {:#010x}",
+        word(1),
+        word(2)
+    );
+    assert_eq!(word(1) & 0x3ff, 0x0022, "ldr x2, [x1, #_]");
+    assert_eq!(word(2) & 0x3ff, 0x0023, "ldr x3, [x1, #_]");
 }
 
 #[test]

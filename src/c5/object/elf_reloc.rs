@@ -32,12 +32,12 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::program::{ExportedFunction, Program};
-use super::Build;
 use super::Machine;
 use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget};
 use super::elf_class::{
     Elf64Ehdr, Elf64Rela, Elf64Shdr, Elf64Sym, ElfClass, write_ehdr, write_shdr, write_sym,
 };
+use super::{AddrPart, Build};
 use crate::c5::CodeModel;
 use crate::c5::layout::{round_up, write_struct};
 // Relocation types this writer emits. `R_X86_64_TPOFF32` and the
@@ -2674,10 +2674,11 @@ pub(super) fn write_relocatable(
         emit_addr_fixup_relocs(
             machine_for_rela,
             &mut rela_bytes,
-            fx.adrp_offset as u64,
+            fx.instr_offset as u64,
             sym,
             addend,
-        );
+            fx.part,
+        )?;
     }
 
     // Switch-table base materializations: same shape as a data
@@ -2694,7 +2695,8 @@ pub(super) fn write_relocatable(
             fx.code_offset as u64,
             carve.sym_idx[e],
             base as i64 + fx.rodata_offset as i64,
-        );
+            AddrPart::Whole,
+        )?;
     }
 
     // Switch-table entry slots, one relocation per slot against the
@@ -2817,7 +2819,8 @@ pub(super) fn write_relocatable(
                 r.instr_offset as u64,
                 sym_idx,
                 base,
-            ),
+                AddrPart::Whole,
+            )?,
         }
     }
 
@@ -2829,10 +2832,11 @@ pub(super) fn write_relocatable(
         emit_addr_fixup_relocs(
             machine_for_rela,
             &mut rela_bytes,
-            fx.adrp_offset as u64,
+            fx.instr_offset as u64,
             text_sym_idx,
             fx.target_native_offset as i64,
-        );
+            fx.part,
+        )?;
     }
 
     // Inline-asm main-stream references to labels placed in the template's
@@ -4307,21 +4311,36 @@ fn emit_addr_fixup_relocs(
     instr_offset: u64,
     sym_idx: u64,
     addend: i64,
-) {
+    part: AddrPart,
+) -> Result<(), C5Error> {
     match machine {
         Machine::Aarch64 => {
-            let hi21 = Elf64Rela {
-                r_offset: instr_offset,
-                r_info: (sym_idx << 32) | R_AARCH64_ADR_PREL_PG_HI21 as u64,
+            let rela = |off: u64, rtype: u32| Elf64Rela {
+                r_offset: off,
+                r_info: (sym_idx << 32) | rtype as u64,
                 r_addend: addend,
             };
-            let lo12 = Elf64Rela {
-                r_offset: instr_offset + 4,
-                r_info: (sym_idx << 32) | R_AARCH64_ADD_ABS_LO12_NC as u64,
-                r_addend: addend,
-            };
-            write_struct(out, &hi21);
-            write_struct(out, &lo12);
+            match part {
+                AddrPart::Whole => {
+                    write_struct(out, &rela(instr_offset, R_AARCH64_ADR_PREL_PG_HI21));
+                    write_struct(out, &rela(instr_offset + 4, R_AARCH64_ADD_ABS_LO12_NC));
+                }
+                AddrPart::Page => {
+                    write_struct(out, &rela(instr_offset, R_AARCH64_ADR_PREL_PG_HI21))
+                }
+                // The record names a site but not which of the low-12
+                // forms it holds, and the type decides how the linker
+                // scales the immediate. The codegen emits only whole
+                // references, so no caller reaches this.
+                AddrPart::InPage => {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "elf_reloc: in-page-only fixup at text+{instr_offset:#x} has no \
+                             relocation type"
+                        ),
+                    )));
+                }
+            }
         }
         Machine::X86_64 => {
             // The x86_64 codegen emits `lea reg, [rip + 0]`
@@ -4332,6 +4351,7 @@ fn emit_addr_fixup_relocs(
             // currently positions the disp32 slot at
             // `instr_offset + 3` for both LEA shapes used by
             // data refs.
+            crate::c5::codegen::require_whole_addr(part, "elf_reloc: address fixup")?;
             let rela = Elf64Rela {
                 r_offset: instr_offset + 3,
                 r_info: (sym_idx << 32) | R_X86_64_PC32 as u64,
@@ -4340,6 +4360,7 @@ fn emit_addr_fixup_relocs(
             write_struct(out, &rela);
         }
     }
+    Ok(())
 }
 
 /// Addressing form of a cross-TU address materialization in a
@@ -4425,8 +4446,10 @@ fn rewrite_extern_addr_loads_to_got(
     let mut body = text.to_vec();
     match machine {
         Machine::Aarch64 => {
-            for &adrp_offset in instr_offsets {
-                let off = adrp_offset + 4; // the `add` following the `adrp`
+            // The codegen emits both halves in one lowering, so the
+            // in-page word of its own reference sits at +4.
+            for &instr_offset in instr_offsets {
+                let off = instr_offset + 4;
                 if off + 4 > body.len() {
                     continue;
                 }

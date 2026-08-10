@@ -45,7 +45,6 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
-use super::DataFixup;
 use super::Target;
 use super::encode::{
     BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,
@@ -68,6 +67,7 @@ use super::ssa::emit_common::{
     place_same_loc,
 };
 use super::ssa::reg_alloc::{Allocation, Place};
+use super::{AddrPart, DataFixup};
 
 /// Compute the aarch64 stack-frame layout for `func`. Fills the shared
 /// [`Frame`]'s aarch64 fields; the x86_64-only fields stay at their defaults.
@@ -1181,7 +1181,7 @@ pub(crate) fn emit_function(
             {
                 let popped = data_fixups.pop().unwrap();
                 user_extern_data_refs.push(super::UserExternDataRef {
-                    instr_offset: popped.adrp_offset,
+                    instr_offset: popped.instr_offset,
                     symbol_name: name.clone(),
                     direct_pcrel: None,
                 });
@@ -4032,12 +4032,13 @@ fn emit_inst(
             // `patch_adrp_add` reads rd back from the placeholder, so
             // the materialised address lands directly in the
             // allocator's chosen register.
-            let adrp_offset = code.len();
+            let instr_offset = code.len();
             emit(code, enc_adrp(rd, 0));
             emit(code, enc_add_imm(rd, rd, 0));
             data_fixups.push(DataFixup {
-                adrp_offset,
+                instr_offset,
                 data_offset: *offset as u64,
+                part: AddrPart::Whole,
             });
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
@@ -4050,10 +4051,10 @@ fn emit_inst(
                 Some(r) => r,
                 None => return false,
             };
-            let adrp_offset = code.len();
+            let instr_offset = code.len();
             emit(code, enc_adrp(rd, 0));
             emit(code, enc_add_imm(rd, rd, 0));
-            pending_func_fixups.push((adrp_offset, *target_ent_pc));
+            pending_func_fixups.push((instr_offset, *target_ent_pc));
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
                 emit_spill_str_x_auto(code, frame, rd, sp_off);

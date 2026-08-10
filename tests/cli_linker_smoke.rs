@@ -3924,6 +3924,92 @@ fn map_file_reports_sections_and_archive_members() {
 }
 
 #[test]
+fn aarch64_low12_references_sharing_one_adrp_are_all_patched() {
+    // The AArch64 ELF ABI relocates the page and in-page halves of an
+    // address reference separately, and gcc/clang emit one `adrp`
+    // serving several in-page references at -O2. Assembling and linking
+    // the sequence through the driver must patch every in-page site.
+    //
+    // The expected words are GNU ld 2.46.1's for the same two objects
+    // from GNU as 2.46.1, whose `.o` bytes badc's assembler reproduces;
+    // `gdata` lands at in-page offset 0xd0 in both links.
+    let dir = tempdir("a64-shared-adrp");
+    // The image writer prepends its own entry stub, so the sequence is
+    // located by the unrelocated trailer parked behind it.
+    const MARKER: u64 = 0x6c6f_3132_6d61_726b;
+    let refs = write_source(
+        &dir,
+        "ref.s",
+        "\t.text\n\t.globl _start\n_start:\n\
+         \tadrp\tx1, gdata\n\
+         \tldr\tx2, [x1, #:lo12:gdata]\n\
+         \tldr\tq3, [x1, #:lo12:gdata]\n\
+         \tadd\tx4, x1, #:lo12:gdata\n\
+         \tret\n\
+         \t.quad\t0x6c6f31326d61726b\n",
+    );
+    let def = write_source(
+        &dir,
+        "def.s",
+        "\t.data\n\t.balign 16\n\t.globl gdata\ngdata:\n\t.quad 0x1122334455667788\n\t.quad 0\n",
+    );
+    for src in [&refs, &def] {
+        run(
+            Command::new(badc())
+                .arg("--target=linux-aarch64")
+                .arg("-c")
+                .arg(src)
+                .current_dir(&dir),
+            "assemble",
+        );
+    }
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-aarch64")
+            .arg("--freestanding")
+            .arg("--entry=_start")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("ref.o"))
+            .arg(dir.join("def.o"))
+            .arg("-q")
+            .current_dir(&dir),
+        "link the shared-adrp objects",
+    );
+    let image = std::fs::read(&exe).expect("read the linked image");
+    let words = words_before_marker(&image, MARKER, 5);
+    assert_eq!(
+        words[3] >> 10 & 0xfff,
+        0xd0,
+        "the reference words assume `gdata` at in-page offset 0xd0; \
+         this link placed it at {:#x}",
+        words[3] >> 10 & 0xfff
+    );
+    assert_eq!(words[1], 0xf940_6822, "ldr x2, [x1, #208]");
+    assert_eq!(words[2], 0x3dc0_3423, "ldr q3, [x1, #208]");
+    assert_eq!(words[3], 0x9103_4024, "add x4, x1, #0xd0");
+    assert_eq!(words[4], 0xd65f_03c0, "ret");
+}
+
+/// The `count` 4-byte words immediately preceding the sole occurrence
+/// of `marker` in `image`.
+fn words_before_marker(image: &[u8], marker: u64, count: usize) -> Vec<u32> {
+    let pattern = marker.to_le_bytes();
+    let hits: Vec<usize> = image
+        .windows(8)
+        .enumerate()
+        .filter(|(_, w)| *w == pattern)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(hits.len(), 1, "marker must occur once: {hits:?}");
+    let start = hits[0] - count * 4;
+    (0..count)
+        .map(|i| u32::from_le_bytes(image[start + i * 4..start + i * 4 + 4].try_into().unwrap()))
+        .collect()
+}
+
+#[test]
 fn map_option_requires_a_link() {
     let dir = tempdir("map-requires-link");
     let src = write_source(&dir, "one.c", "int main() { return 0; }\n");

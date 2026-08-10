@@ -34,10 +34,10 @@ use crate::c5::program::Program;
 pub(crate) use crate::c5::codegen::lower_for;
 #[cfg(feature = "native-emit")]
 pub(crate) use crate::c5::codegen::{
-    Abi, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection, ElfTpoffFixup,
-    ElfTpoffTarget, FnUnwind, FuncFixup, GotFixup, Machine, MachoTlvDescriptor, MachoTlvFixup,
-    NativeOptions, OutputKind, ResolvedImport, ResolvedImports, Target, TlsIndexFixup, aarch64,
-    x86_64,
+    Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
+    ElfTpoffFixup, ElfTpoffTarget, FnUnwind, FuncFixup, GotFixup, Machine, MachoTlvDescriptor,
+    MachoTlvFixup, NativeOptions, OutputKind, ResolvedImport, ResolvedImports, Target,
+    TlsIndexFixup, aarch64, x86_64,
 };
 
 /// Write the runtime address of a text-targeting DWARF
@@ -177,7 +177,8 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
             i
         });
         build.got_fixups.push(GotFixup {
-            adrp_offset: r.instr_offset,
+            instr_offset: r.instr_offset,
+            part: AddrPart::Whole,
             import_index: idx,
             is_data_load: false,
         });
@@ -523,14 +524,16 @@ fn resolve_single_tu_extern_refs(
             match placement {
                 AsmLabelPlacement::Text(off) => {
                     build.func_fixups.push(crate::c5::codegen::FuncFixup {
-                        adrp_offset: r.instr_offset,
+                        instr_offset: r.instr_offset,
                         target_native_offset: (off as i64 + delta) as usize,
+                        part: AddrPart::Whole,
                     })
                 }
                 AsmLabelPlacement::Data(off) => {
                     build.data_fixups.push(crate::c5::codegen::DataFixup {
-                        adrp_offset: r.instr_offset,
+                        instr_offset: r.instr_offset,
                         data_offset: (off as i64 + delta) as u64,
+                        part: AddrPart::Whole,
                     })
                 }
             }
@@ -545,8 +548,9 @@ fn resolve_single_tu_extern_refs(
             r.direct_pcrel,
         ) {
             build.data_fixups.push(crate::c5::codegen::DataFixup {
-                adrp_offset: r.instr_offset,
+                instr_offset: r.instr_offset,
                 data_offset: (off + addend + 4) as u64,
+                part: AddrPart::Whole,
             });
             continue;
         }

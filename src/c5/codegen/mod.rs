@@ -53,6 +53,22 @@ pub(crate) mod x86_64;
 #[cfg(feature = "full")]
 pub(crate) use x86_64::decode_x86_64_prologue_unwind;
 
+/// Which fields of a page-relative reference a fixup record covers;
+/// carried by [`DataFixup`], [`FuncFixup`] and [`GotFixup`].
+pub(crate) use aarch64::patch::AddrPart;
+
+/// Reject a split record on a machine whose references occupy a single
+/// field. x86_64 relocates a reference through one displacement, so
+/// only [`AddrPart::Whole`] has an encoding there.
+pub(crate) fn require_whole_addr(part: AddrPart, label: &str) -> Result<(), error::C5Error> {
+    if part == AddrPart::Whole {
+        return Ok(());
+    }
+    Err(error::C5Error::Compile(error::fmt_internal_err(
+        &alloc::format!("{label}: x86_64 reference recorded as {part:?}"),
+    )))
+}
+
 pub use jit::{jit_run, jit_run_with_options};
 
 pub use crate::c5::object::elf_class::ElfClass;
@@ -1419,11 +1435,10 @@ pub(crate) struct Build {
     /// Offset (within `text`) of the program's entry point. Becomes
     /// the entry address of `LC_MAIN`.
     pub entry_offset: usize,
-    /// Each `(adrp_offset, import_index)` records a pair of
-    /// placeholder instructions (adrp + ldr) the codegen left for the
-    /// image writer to patch with the resolved page address of the
-    /// matching __got slot. See [`aarch64::IMPORTS`] for the symbol
-    /// order; the writer relies on the same indexing.
+    /// Each entry records a placeholder reference (adrp + ldr) the
+    /// codegen left for the image writer to patch with the resolved
+    /// address of the matching __got slot. See [`aarch64::IMPORTS`] for
+    /// the symbol order; the writer relies on the same indexing.
     pub got_fixups: Vec<GotFixup>,
     /// Each entry records an `adrp + add` placeholder pair the codegen
     /// left for a load-of-data-address sequence. The writer patches it
@@ -1830,9 +1845,10 @@ pub(crate) struct PltCallFixup {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct GotFixup {
-    /// Byte offset within `Build::text` of the adrp instruction.
-    /// `adrp_offset + 4` is the matching ldr.
-    pub adrp_offset: usize,
+    /// Byte offset within `Build::text` of the relocated instruction.
+    pub instr_offset: usize,
+    /// Fields of the reference this record covers.
+    pub part: AddrPart,
     /// Index into [`aarch64::IMPORTS`].
     pub import_index: usize,
     /// True when the site is a data-import reference that must read
@@ -1846,15 +1862,16 @@ pub(crate) struct GotFixup {
 
 /// Relocation for `Inst::ImmData`: the codegen emits an
 /// `adrp + add` placeholder pair to materialize the address into
-/// the VM accumulator, and the writer patches both halves once
-/// it knows where `__data` lands in vmaddr space.
+/// the VM accumulator, and the writer patches it once it knows where
+/// `__data` lands in vmaddr space.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct DataFixup {
-    /// Byte offset within `Build::text` of the adrp instruction.
-    /// `adrp_offset + 4` is the matching add.
-    pub adrp_offset: usize,
+    /// Byte offset within `Build::text` of the relocated instruction.
+    pub instr_offset: usize,
     /// Offset into `Build::data`.
     pub data_offset: u64,
+    /// Fields of the reference this record covers.
+    pub part: AddrPart,
 }
 
 /// Relocation for an inline-asm main-stream instruction that references a
@@ -2190,16 +2207,18 @@ pub(crate) struct UserExternDataRef {
 }
 
 /// Relocation for a function-pointer literal (`Inst::ImmCode`).
-/// Same `adrp + add` shape as [`DataFixup`], but the target is
-/// another position inside `Build::text` rather than `Build::data`.
+/// Same shape as [`DataFixup`], but the target is another position
+/// inside `Build::text` rather than `Build::data`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FuncFixup {
-    /// Byte offset within `Build::text` of the adrp instruction.
-    pub adrp_offset: usize,
+    /// Byte offset within `Build::text` of the relocated instruction.
+    pub instr_offset: usize,
     /// Byte offset within `Build::text` of the target function's first
     /// instruction. Resolved by the codegen during `lower()` so the
     /// writer doesn't need to consult `pc_to_native` for this entry.
     pub target_native_offset: usize,
+    /// Fields of the reference this record covers.
+    pub part: AddrPart,
 }
 
 /// Compiler-side speculative-execution mitigations, selected by the

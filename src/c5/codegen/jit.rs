@@ -125,7 +125,7 @@ mod jit_impl {
     use super::super::super::error::C5Error;
     use super::super::super::program::Program;
     use super::super::Target;
-    use super::super::{Build, GotFixup, NativeOptions, ResolvedImport, ResolvedImports};
+    use super::super::{AddrPart, Build, GotFixup, NativeOptions, ResolvedImport, ResolvedImports};
     use super::super::{aarch64, x86_64};
     use super::host_target;
     use alloc::format;
@@ -408,6 +408,7 @@ mod jit_impl {
                     code_vmaddr,
                     fx.code_offset as u64,
                     code_vmaddr + rodata_blob_off as u64 + fx.rodata_offset,
+                    AddrPart::Whole,
                     "rodata fixup",
                 )?;
             }
@@ -835,7 +836,8 @@ mod jit_impl {
                 i
             });
             build.got_fixups.push(GotFixup {
-                adrp_offset: r.instr_offset,
+                instr_offset: r.instr_offset,
+                part: AddrPart::Whole,
                 import_index: idx,
                 is_data_load: true,
             });
@@ -1646,8 +1648,9 @@ mod jit_impl {
                     target,
                     code,
                     code_vmaddr,
-                    fx.adrp_offset as u64,
+                    fx.instr_offset as u64,
                     slot_vmaddr,
+                    fx.part,
                     "GOT data fixup",
                 )?;
             } else {
@@ -1655,8 +1658,9 @@ mod jit_impl {
                     target,
                     code,
                     code_vmaddr,
-                    fx.adrp_offset as u64,
+                    fx.instr_offset as u64,
                     slot_vmaddr,
+                    fx.part,
                     "GOT fixup",
                 )?;
             }
@@ -1666,8 +1670,9 @@ mod jit_impl {
                 target,
                 code,
                 code_vmaddr,
-                fx.adrp_offset as u64,
+                fx.instr_offset as u64,
                 data_vmaddr + fx.data_offset,
+                fx.part,
                 "data fixup",
             )?;
         }
@@ -1676,8 +1681,9 @@ mod jit_impl {
                 target,
                 code,
                 code_vmaddr,
-                fx.adrp_offset as u64,
+                fx.instr_offset as u64,
                 code_vmaddr + fx.target_native_offset as u64,
+                fx.part,
                 "func fixup",
             )?;
         }
@@ -1694,13 +1700,15 @@ mod jit_impl {
         code_vmaddr: u64,
         instr_offset: u64,
         target_vmaddr: u64,
+        part: AddrPart,
         label: &str,
     ) -> Result<(), C5Error> {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, label)
+                patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, part, label)
             }
             Target::LinuxX64 | Target::WindowsX64 => {
+                super::super::require_whole_addr(part, label)?;
                 patch_call_qword_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
         }
@@ -1717,14 +1725,16 @@ mod jit_impl {
         code_vmaddr: u64,
         instr_offset: u64,
         target_vmaddr: u64,
+        part: AddrPart,
         label: &str,
     ) -> Result<(), C5Error> {
-        super::super::aarch64::patch::patch_slot_load(
+        super::super::aarch64::patch::patch_slot(
             code,
             instr_offset as usize,
             (code_vmaddr + instr_offset) as i64,
             target_vmaddr as i64,
             super::super::aarch64::patch::SlotWidth::W64,
+            part,
         )
         .map_err(|e| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1745,13 +1755,15 @@ mod jit_impl {
         code_vmaddr: u64,
         instr_offset: u64,
         target_vmaddr: u64,
+        part: AddrPart,
         label: &str,
     ) -> Result<(), C5Error> {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, label)
+                patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, part, label)
             }
             Target::LinuxX64 | Target::WindowsX64 => {
+                super::super::require_whole_addr(part, label)?;
                 let op_off = instr_offset as usize + 1;
                 if code[op_off] != 0x8D {
                     return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1803,13 +1815,15 @@ mod jit_impl {
         code_vmaddr: u64,
         instr_offset: u64,
         target_vmaddr: u64,
+        part: AddrPart,
         label: &str,
     ) -> Result<(), C5Error> {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                patch_adrp_add(code, code_vmaddr, instr_offset, target_vmaddr, label)
+                patch_adrp_add(code, code_vmaddr, instr_offset, target_vmaddr, part, label)
             }
             Target::LinuxX64 | Target::WindowsX64 => {
+                super::super::require_whole_addr(part, label)?;
                 patch_lea_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
         }
@@ -1820,13 +1834,15 @@ mod jit_impl {
         code_vmaddr: u64,
         instr_offset: u64,
         target_vmaddr: u64,
+        part: AddrPart,
         label: &str,
     ) -> Result<(), C5Error> {
-        super::super::aarch64::patch::patch_pair(
+        super::super::aarch64::patch::patch_addr(
             code,
             instr_offset as usize,
             (code_vmaddr + instr_offset) as i64,
             target_vmaddr as i64,
+            part,
         )
         .map_err(|e| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(

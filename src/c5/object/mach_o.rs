@@ -70,8 +70,8 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::program::Program;
-use super::Build;
 use super::dwarf;
+use super::{AddrPart, Build};
 use crate::c5::layout::{pad_to_align as pad_to, round_up, write_struct};
 
 // ------------------------------------------------------------------
@@ -1392,12 +1392,13 @@ fn apply_got_fixups(
 ) -> Result<(), C5Error> {
     for fx in fixups {
         let slot_vmaddr = got_base_vmaddr + (fx.import_index as u64) * 8;
-        super::aarch64::patch::patch_slot_load(
+        super::aarch64::patch::patch_slot(
             out,
-            code_base_in_file + fx.adrp_offset,
-            (code_vmaddr_base + fx.adrp_offset as u64) as i64,
+            code_base_in_file + fx.instr_offset,
+            (code_vmaddr_base + fx.instr_offset as u64) as i64,
             slot_vmaddr as i64,
             super::aarch64::patch::SlotWidth::W64,
+            fx.part,
         )
         .map_err(|e| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1408,24 +1409,25 @@ fn apply_got_fixups(
     Ok(())
 }
 
-/// Patch the `adrp + add` pair the codegen emitted for an absolute-
-/// address materialization. `target_vmaddr` is the runtime address
-/// the pair should compute into x19. The codegen uses the same shape
-/// for both data-segment references and function-pointer literals;
-/// the only difference between callers is how they compute the target.
+/// Patch the fields `part` names so the reference computes
+/// `target_vmaddr`. The codegen uses the same shape for both
+/// data-segment references and function-pointer literals; the only
+/// difference between callers is how they compute the target.
 fn patch_adrp_add(
     out: &mut [u8],
     code_base_in_file: usize,
     code_vmaddr_base: u64,
-    adrp_offset: usize,
+    instr_offset: usize,
     target_vmaddr: u64,
+    part: AddrPart,
     label: &str,
 ) -> Result<(), C5Error> {
-    super::aarch64::patch::patch_pair(
+    super::aarch64::patch::patch_addr(
         out,
-        code_base_in_file + adrp_offset,
-        (code_vmaddr_base + adrp_offset as u64) as i64,
+        code_base_in_file + instr_offset,
+        (code_vmaddr_base + instr_offset as u64) as i64,
         target_vmaddr as i64,
+        part,
     )
     .map_err(|e| {
         C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1449,8 +1451,9 @@ fn apply_data_fixups(
             out,
             code_base_in_file,
             code_vmaddr_base,
-            fx.adrp_offset,
+            fx.instr_offset,
             target,
+            fx.part,
             "data fixup",
         )?;
     }
@@ -1478,6 +1481,7 @@ fn apply_macho_tlv_fixups(
             code_vmaddr_base,
             fx.adrp_offset,
             descriptor_vmaddr,
+            AddrPart::Whole,
             "TLV descriptor",
         )?;
     }
@@ -1498,8 +1502,9 @@ fn apply_func_fixups(
             out,
             code_base_in_file,
             code_vmaddr_base,
-            fx.adrp_offset,
+            fx.instr_offset,
             target,
+            fx.part,
             "func fixup",
         )?;
     }

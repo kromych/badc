@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::program::Program;
 use super::table::Mnem;
-use super::{Abi, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
+use super::{Abi, AddrPart, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
 
 // ------------------------------------------------------------------
 // Register encoding.
@@ -2423,8 +2423,9 @@ pub(crate) fn lower(
             )));
         }
         func_fixups.push(FuncFixup {
-            adrp_offset: instr_offset,
+            instr_offset,
             target_native_offset: target,
+            part: AddrPart::Whole,
         });
     }
 
@@ -2440,8 +2441,9 @@ pub(crate) fn lower(
         for fx in &plt_call_fixups {
             if fx.is_addr {
                 func_fixups.push(FuncFixup {
-                    adrp_offset: fx.instr_offset,
+                    instr_offset: fx.instr_offset,
                     target_native_offset: plt_trampoline_offsets[fx.import_index],
+                    part: AddrPart::Whole,
                 });
             }
         }
@@ -2604,12 +2606,13 @@ fn emit_plt_trampolines(
     for import_index in 0..n_imports {
         let tramp_off = code.len();
         offsets.push(tramp_off);
-        // Same `GotFixup` shape the inline indirect-call site used
-        // pre-#61. The writer reads `adrp_offset` as the byte
-        // position of the instruction whose disp32 needs the
-        // GOT-slot RVA; the JMP's encoding puts disp32 at byte 2.
+        // Same `GotFixup` shape the inline indirect-call site used.
+        // The writer reads `instr_offset` as the byte position of the
+        // instruction whose disp32 needs the GOT-slot RVA; the JMP's
+        // encoding puts disp32 at byte 2.
         got_fixups.push(GotFixup {
-            adrp_offset: tramp_off,
+            instr_offset: tramp_off,
+            part: AddrPart::Whole,
             import_index,
             is_data_load: false,
         });

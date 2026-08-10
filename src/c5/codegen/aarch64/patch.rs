@@ -1,23 +1,46 @@
-//! `adrp`-pair relocation patching.
+//! Page-relative relocation patching.
 //!
 //! Every consumer that resolves an AArch64 page-relative address
 //! materialisation -- the three image writers, the linker, and the JIT --
-//! rewrites the same two instructions: an `adrp` carrying the signed page
-//! delta and a second instruction carrying the in-page offset. The field
+//! rewrites the same two fields: an `adrp` carrying the signed page delta
+//! and a second instruction carrying the in-page offset. The field
 //! layouts come from [`super::encode`], which is byte-verified against a
 //! reference assembler, so a fix there reaches every consumer.
 //!
-//! Two kinds of pair, and a consumer must pick the one matching its
-//! reference. [`patch_pair`] materialises an address and keeps the second
-//! instruction's form. [`patch_slot_load`] resolves a reference that
-//! reaches its target through a GOT / IAT slot the loader fills, so the
-//! second instruction becomes a load whatever form the input carried.
+//! The two fields are relocated independently: the ABI lets one `adrp`
+//! serve any number of in-page references, and lets an in-page reference
+//! precede its `adrp`. [`AddrPart`] selects which fields a call covers,
+//! so a caller holding one relocation patches one site.
+//!
+//! Two kinds of reference, and a consumer must pick the one matching its
+//! site. [`patch_addr`] materialises an address and keeps the in-page
+//! instruction's form. [`patch_slot`] resolves a reference that reaches
+//! its target through a GOT / IAT slot the loader fills, so the in-page
+//! instruction becomes a load whatever form the input carried.
 
 use super::encode::{Reg, enc_adrp, enc_ldr_imm, enc_ldr32_imm};
 use alloc::format;
 use alloc::string::String;
 
-/// Why an `adrp` pair could not be patched.
+/// Which fields of a page-relative reference a fixup record covers.
+///
+/// A record built from one relocation covers one field. badc's own
+/// codegen emits the two halves as one adjacent pair and records
+/// [`AddrPart::Whole`], which is also the only shape on x86_64, where a
+/// reference is a single rip-relative displacement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum AddrPart {
+    /// The whole reference: an `adrp` at the site with its in-page half
+    /// at `+4` on aarch64, the displacement field on x86_64.
+    #[default]
+    Whole,
+    /// The `adrp` page half alone.
+    Page,
+    /// The in-page half alone.
+    InPage,
+}
+
+/// Why a page-relative reference could not be patched.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PairError {
     /// The page delta does not fit `adrp`'s signed 21-bit page field,
@@ -130,11 +153,10 @@ impl SlotWidth {
     }
 }
 
-/// Second word of an `adrp` pair rebuilt as a load of `in_page` bytes
-/// past the register the `adrp` wrote. The destination comes from the
-/// word being replaced, so the following code still reads the register
-/// it expects.
-fn slot_load_word(adrp: u32, word: u32, in_page: u32, width: SlotWidth) -> Result<u32, PairError> {
+/// In-page word of a slot reference rebuilt as a load of `in_page` bytes
+/// past `rn`. The destination comes from the word being replaced, so the
+/// following code still reads the register it expects.
+fn slot_load_word(rn: Reg, word: u32, in_page: u32, width: SlotWidth) -> Result<u32, PairError> {
     if !is_add_imm(word) && !is_ldst_unsigned(word) {
         return Err(PairError::NotLo12(word));
     }
@@ -143,11 +165,16 @@ fn slot_load_word(adrp: u32, word: u32, in_page: u32, width: SlotWidth) -> Resul
         return Err(PairError::Lo12Unscalable { in_page, scale });
     }
     let rt = Reg((word & 0x1F) as u8);
-    let rn = Reg((adrp & 0x1F) as u8);
     Ok(match width {
         SlotWidth::W32 => enc_ldr32_imm(rt, rn, in_page),
         SlotWidth::W64 => enc_ldr_imm(rt, rn, in_page),
     })
+}
+
+/// Base register an in-page word already addresses through: `Rn` for
+/// both the `add` immediate and the unsigned-offset load/store forms.
+fn lo12_base_reg(word: u32) -> Reg {
+    Reg(((word >> 5) & 0x1F) as u8)
 }
 
 fn read_word(code: &[u8], at: usize) -> u32 {
@@ -210,10 +237,60 @@ pub(crate) fn patch_slot_load(
     let (pages, in_page) = page_fields(adrp_addr, slot_addr)?;
     let adrp_raw = read_word(code, at);
     let first = adrp_word(adrp_raw, pages)?;
-    let second = slot_load_word(adrp_raw, read_word(code, at + 4), in_page, width)?;
+    let rn = Reg((adrp_raw & 0x1F) as u8);
+    let second = slot_load_word(rn, read_word(code, at + 4), in_page, width)?;
     write_word(code, at, first);
     write_word(code, at + 4, second);
     Ok(())
+}
+
+/// Patch the in-page half of a slot reference on its own site. The base
+/// register comes from the word itself, so a site that is not adjacent
+/// to its `adrp` needs nothing from it.
+pub(crate) fn patch_lo12_slot_load(
+    code: &mut [u8],
+    at: usize,
+    slot_addr: i64,
+    width: SlotWidth,
+) -> Result<(), PairError> {
+    let word = read_word(code, at);
+    let patched = slot_load_word(lo12_base_reg(word), word, (slot_addr & 0xFFF) as u32, width)?;
+    write_word(code, at, patched);
+    Ok(())
+}
+
+/// Patch the fields `part` names at `at` so the reference computes
+/// `target_addr`. `site_addr` is the runtime address of `at`; it is
+/// unused for [`AddrPart::InPage`], whose field is page-independent.
+pub(crate) fn patch_addr(
+    code: &mut [u8],
+    at: usize,
+    site_addr: i64,
+    target_addr: i64,
+    part: AddrPart,
+) -> Result<(), PairError> {
+    match part {
+        AddrPart::Whole => patch_pair(code, at, site_addr, target_addr),
+        AddrPart::Page => patch_adrp(code, at, site_addr, target_addr),
+        AddrPart::InPage => patch_lo12(code, at, target_addr),
+    }
+}
+
+/// [`patch_addr`] for a reference reaching its target through
+/// `slot_addr`: the in-page instruction ends up a load of `width` bytes.
+pub(crate) fn patch_slot(
+    code: &mut [u8],
+    at: usize,
+    site_addr: i64,
+    slot_addr: i64,
+    width: SlotWidth,
+    part: AddrPart,
+) -> Result<(), PairError> {
+    match part {
+        AddrPart::Whole => patch_slot_load(code, at, site_addr, slot_addr, width),
+        AddrPart::Page => patch_adrp(code, at, site_addr, slot_addr),
+        AddrPart::InPage => patch_lo12_slot_load(code, at, slot_addr, width),
+    }
 }
 
 #[cfg(test)]
@@ -366,6 +443,36 @@ mod tests {
         assert_eq!(
             u32::from_le_bytes(pair32[4..8].try_into().unwrap()),
             enc_ldr32_imm(Reg(17), Reg(17), 0x44)
+        );
+    }
+
+    /// One `adrp` serving several in-page sites: patching each site on
+    /// its own reaches every one, and reproduces byte for byte what
+    /// patching the halves as adjacent pairs produces.
+    #[test]
+    fn split_parts_reproduce_the_pair_patch() {
+        let (site, target) = (0x1000i64, 0x5abci64);
+        let mut pair = Vec::new();
+        pair.extend_from_slice(&enc_adrp(Reg(1), 0).to_le_bytes());
+        pair.extend_from_slice(&enc_add_imm(Reg(2), Reg(1), 0).to_le_bytes());
+        let mut split = pair.clone();
+        patch_addr(&mut pair, 0, site, target, AddrPart::Whole).unwrap();
+        patch_addr(&mut split, 0, site, target, AddrPart::Page).unwrap();
+        patch_addr(&mut split, 4, site + 4, target, AddrPart::InPage).unwrap();
+        assert_eq!(pair, split);
+    }
+
+    /// The in-page half of a slot reference resolves on its own site,
+    /// taking the base register from the word rather than from an
+    /// `adrp` that need not be adjacent.
+    #[test]
+    fn split_slot_in_page_keeps_its_own_base_register() {
+        let mut code = Vec::new();
+        code.extend_from_slice(&enc_add_imm(Reg(7), Reg(3), 0).to_le_bytes());
+        patch_slot(&mut code, 0, 0, 0x9040, SlotWidth::W64, AddrPart::InPage).unwrap();
+        assert_eq!(
+            u32::from_le_bytes(code[0..4].try_into().unwrap()),
+            enc_ldr_imm(Reg(7), Reg(3), 0x40)
         );
     }
 

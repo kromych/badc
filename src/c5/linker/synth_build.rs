@@ -36,7 +36,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::c5::codegen::{
-    Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, EmitStream,
+    AddrPart, Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, EmitStream,
     EmittedFinalReloc, FuncFixup, GotFixup, OutputKind, ResolvedDylib, ResolvedImport,
     ResolvedImports, Target,
 };
@@ -761,11 +761,11 @@ fn linux_libc_path(target: Target) -> String {
 /// trampoline list into the per-arch fixup streams the writer
 /// consumes.
 ///
-/// aarch64 address-of-symbol sequences are two relocations on
-/// consecutive instructions: R_AARCH64_ADR_PREL_PG_HI21 at
-/// `text_offset` and R_AARCH64_ADD_ABS_LO12_NC at `text_offset + 4`.
-/// `patch_adrp_add` patches both halves from a single fixup, so the
-/// synthesizer keys on the ADRP entry and drops the ADD entry.
+/// One input relocation becomes one fixup record naming its own site.
+/// The AArch64 ELF ABI relocates the page and in-page halves of an
+/// address reference independently -- one `adrp` may serve any number
+/// of in-page references, and an in-page reference may precede its
+/// `adrp` -- so neither half's site can be derived from the other's.
 ///
 /// PLT trampolines emit_*_plt produced are at the tail of
 /// `merged.text`. Each is `adrp x16, 0; ldr x16, [x16]; br x16`
@@ -790,7 +790,8 @@ fn synth_fixups(
 
     for tramp in plt {
         got_fixups.push(GotFixup {
-            adrp_offset: tramp.text_offset,
+            instr_offset: tramp.text_offset,
+            part: AddrPart::Whole,
             import_index: tramp.import_index,
             // Trampolines are branched to via the IAT, not read as
             // data; the writer patches them with an IAT lookup.
@@ -838,68 +839,62 @@ fn project_aarch64_pending(
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
-    if aarch64_ldst_lo12_scale(reloc.rtype).is_some()
-        || matches!(
-            reloc.rtype,
-            R_AARCH64_ADD_ABS_LO12_NC | R_AARCH64_LD64_GOT_LO12_NC
-        )
-    {
-        // The matching ADRP entry owns the fixup; the writer's pair patch
-        // writes both halves -- the `add` or the scaled load/store low-12 --
-        // from one DataFixup / FuncFixup / GotFixup record.
-        return Ok(());
-    }
-    match reloc.rtype {
+    // Which field of the reference the relocation names, and whether it
+    // addresses the GOT slot rather than the symbol itself.
+    let (part, got_slot) = match reloc.rtype {
+        R_AARCH64_ADR_PREL_PG_HI21 => (AddrPart::Page, false),
+        R_AARCH64_ADR_GOT_PAGE => (AddrPart::Page, true),
+        R_AARCH64_ADD_ABS_LO12_NC => (AddrPart::InPage, false),
+        R_AARCH64_LD64_GOT_LO12_NC => (AddrPart::InPage, true),
         // The PLT pass drains every import call; one still here is a
         // broken invariant. A parked *section* reference is not: it
         // reached a target whose runtime address only the writer
-        // knows, and this writer has no fixup that carries it.
-        R_AARCH64_CALL26 if reloc.target_section == NativeSymSection::Undef => Err(synth_err(
-            "synthesizer: R_AARCH64_CALL26 still pending after PLT pass \
-             -- emit_aarch64_plt should have drained it",
-        )),
-        R_AARCH64_ADR_PREL_PG_HI21 => match reloc.target_section {
-            NativeSymSection::Data | NativeSymSection::Bss => {
-                data_fixups.push(DataFixup {
-                    adrp_offset: reloc.text_offset as usize,
-                    data_offset: reloc.addend as u64,
-                });
-                Ok(())
-            }
-            NativeSymSection::Text => {
-                func_fixups.push(FuncFixup {
-                    adrp_offset: reloc.text_offset as usize,
-                    target_native_offset: reloc.addend as usize,
-                });
-                Ok(())
-            }
-            NativeSymSection::Undef => {
-                // aarch64 loads the slot via adrp + ldr for both
-                // call thunks and data references, so the data-load
-                // flag is irrelevant here.
-                got_fixups.push(GotFixup {
-                    adrp_offset: reloc.text_offset as usize,
-                    import_index: reloc.import_index,
-                    is_data_load: false,
-                });
-                Ok(())
-            }
-            other => Err(synth_err(&alloc::format!(
-                "synthesizer: aarch64 ADR_PREL_PG_HI21 targeting {other:?} not supported"
-            ))),
-        },
-        // An unrelaxed GOT page reference: the site loads the slot the
-        // loader fills. The pair is already `adrp` + `ldr`, the shape
-        // the writer's slot patch produces either way.
-        R_AARCH64_ADR_GOT_PAGE if reloc.target_section == NativeSymSection::Undef => {
+        // knows, and this writer has no fixup that carries it, so it
+        // falls through to the declined arm.
+        R_AARCH64_CALL26 if reloc.target_section == NativeSymSection::Undef => {
+            return Err(synth_err(
+                "synthesizer: R_AARCH64_CALL26 still pending after PLT pass \
+                 -- emit_aarch64_plt should have drained it",
+            ));
+        }
+        rtype if aarch64_ldst_lo12_scale(rtype).is_some() => (AddrPart::InPage, false),
+        rtype => return Err(declined_reloc(merged, reloc, rtype, text_abs)),
+    };
+    // A GOT-slot relocation describes a reference resolved through a
+    // slot; against a defined symbol there is no slot to name.
+    if got_slot && reloc.target_section != NativeSymSection::Undef {
+        return Err(declined_reloc(merged, reloc, reloc.rtype, text_abs));
+    }
+    match reloc.target_section {
+        NativeSymSection::Data | NativeSymSection::Bss => {
+            data_fixups.push(DataFixup {
+                instr_offset: reloc.text_offset as usize,
+                data_offset: reloc.addend as u64,
+                part,
+            });
+            Ok(())
+        }
+        NativeSymSection::Text => {
+            func_fixups.push(FuncFixup {
+                instr_offset: reloc.text_offset as usize,
+                target_native_offset: reloc.addend as usize,
+                part,
+            });
+            Ok(())
+        }
+        NativeSymSection::Undef => {
+            // aarch64 loads the slot via adrp + ldr for both call
+            // thunks and data references, so the data-load flag is
+            // irrelevant here.
             got_fixups.push(GotFixup {
-                adrp_offset: reloc.text_offset as usize,
+                instr_offset: reloc.text_offset as usize,
+                part,
                 import_index: reloc.import_index,
                 is_data_load: false,
             });
             Ok(())
         }
-        rtype => Err(declined_reloc(merged, reloc, rtype, text_abs)),
+        _ => Err(declined_reloc(merged, reloc, reloc.rtype, text_abs)),
     }
 }
 
@@ -973,9 +968,8 @@ fn project_x86_64_pending(
     // and R_X86_64_PLT32 names the byte location of the 32-bit
     // displacement field, not the instruction start. The writer's
     // `patch_addr_load` / `patch_iat_lookup` / function-pointer
-    // patchers take the instruction start (`adrp_offset` is the
-    // aarch64 ADRP analogue) so each x86_64 form steps back from
-    // the displacement to the instruction's first byte:
+    // patchers take the instruction start, so each x86_64 form steps
+    // back from the displacement to the instruction's first byte:
     //   * `lea reg, [rip + disp32]`  -- 7-byte REX form, disp32 at +3
     //   * `mov reg, [rip + disp32]`  -- same shape, unrelaxed GOT load
     //   * `call rel32`                -- 5-byte form,    disp32 at +1
@@ -1003,15 +997,17 @@ fn project_x86_64_pending(
     match reloc.target_section {
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {
-                adrp_offset: instr_offset,
+                instr_offset,
                 data_offset: target_byte_offset as u64,
+                part: AddrPart::Whole,
             });
             Ok(())
         }
         NativeSymSection::Text => {
             func_fixups.push(FuncFixup {
-                adrp_offset: instr_offset,
+                instr_offset,
                 target_native_offset: target_byte_offset as usize,
+                part: AddrPart::Whole,
             });
             Ok(())
         }
@@ -1022,7 +1018,8 @@ fn project_x86_64_pending(
             // branch flows through its trampoline GotFixup instead and
             // takes the IAT-lookup form.
             got_fixups.push(GotFixup {
-                adrp_offset: instr_offset,
+                instr_offset,
+                part: AddrPart::Whole,
                 import_index: reloc.import_index,
                 is_data_load: reloc.slot_load,
             });

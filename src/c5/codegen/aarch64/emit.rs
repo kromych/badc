@@ -9384,7 +9384,11 @@ pub(crate) fn encode_a64_file_asm_section_code(
                     .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
                 bytes.extend_from_slice(&word.to_le_bytes());
             }
-            *item = AsmSectionItem::CodeBytes { bytes, relocs };
+            *item = AsmSectionItem::CodeBytes {
+                bytes,
+                relocs,
+                short: None,
+            };
         }
         Ok(())
     })

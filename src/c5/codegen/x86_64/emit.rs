@@ -6518,6 +6518,31 @@ pub(crate) fn short_branch_opcode(mnem: &str) -> Option<u8> {
     })
 }
 
+/// The `rel8` encoding of a direct branch: `EB` for `jmp`, `70+cc` for a
+/// `jcc`. GNU as takes it whenever the target is a label of the branch's own
+/// section within a signed-byte displacement, in every code-size mode; the
+/// layout makes that choice, so both forms are handed to it. A `call` has no
+/// short form.
+fn short_branch_form(
+    opcode: u8,
+    target: &super::ssa::emit_common::AsmSectionTarget,
+) -> super::ssa::emit_common::AsmShortBranch {
+    use super::ssa::emit_common::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
+    AsmShortBranch {
+        bytes: alloc::vec![opcode, 0],
+        reloc: AsmSectionReloc {
+            offset: 1,
+            width: 1,
+            kind: AsmRelocKind::JumpRel,
+            pcrel: true,
+            branch: false,
+            signed: false,
+            target: target.clone(),
+            addend: -1,
+        },
+    }
+}
+
 /// Address size of an instruction's memory operand in bytes: the width of the
 /// base or index register it names, or the mode default when the operand names
 /// no register or the register comes from a template operand (always 64-bit).
@@ -6606,6 +6631,7 @@ fn encode_one_x86_section_insn(
         return Ok(AsmSectionItem::CodeBytes {
             bytes: alloc::vec::Vec::new(),
             relocs: alloc::vec::Vec::new(),
+            short: None,
         });
     }
     let mode = *mode;
@@ -6683,6 +6709,7 @@ fn encode_one_x86_section_insn(
         return Ok(AsmSectionItem::CodeBytes {
             bytes,
             relocs: alloc::vec![reloc],
+            short: None,
         });
     }
     // The count- and rcx-conditional branches take a rel8 field only, so a
@@ -6710,6 +6737,7 @@ fn encode_one_x86_section_insn(
                     target: AsmSectionTarget::Symbol(name),
                     addend: -1,
                 }],
+                short: None,
             });
         }
     }
@@ -6766,9 +6794,11 @@ fn encode_one_x86_section_insn(
                 target,
                 addend: -(rel as i64),
             };
+            let short = (!is_call && !prefixed).then(|| short_branch_form(0xEB, &reloc.target));
             return Ok(AsmSectionItem::CodeBytes {
                 bytes,
                 relocs: alloc::vec![reloc],
+                short,
             });
         }
     }
@@ -6810,9 +6840,11 @@ fn encode_one_x86_section_insn(
                 target: AsmSectionTarget::Symbol(name),
                 addend: -(rel as i64),
             };
+            let short = (!prefixed).then(|| short_branch_form(0x70 | (cc as u8), &reloc.target));
             return Ok(AsmSectionItem::CodeBytes {
                 bytes,
                 relocs: alloc::vec![reloc],
+                short,
             });
         }
     }
@@ -7344,7 +7376,11 @@ fn encode_one_x86_section_insn(
         });
     }
     bytes.extend_from_slice(&body[sizes..]);
-    Ok(AsmSectionItem::CodeBytes { bytes, relocs })
+    Ok(AsmSectionItem::CodeBytes {
+        bytes,
+        relocs,
+        short: None,
+    })
 }
 
 /// Where a `$symbol` immediate lands in an instruction's encoding.
@@ -7778,11 +7814,14 @@ fn emit_inline_asm(
     // Section-label offsets, so a `.skip` in the main stream can size its
     // padding against the replacement length (`775f - 774f`, both in a
     // `.pushsection`) before the sections are materialized below.
+    // Measured against the sink the sections merge into below, so this and
+    // the materialization settle every branch form the same way and a
+    // replacement length means the same to both.
     let section_measure = match super::ssa::emit_common::measure_asm_section_offsets(
         section_blocks,
         &const_of,
         false,
-        &super::ssa::emit_common::AsmSectionSink::default(),
+        asm_sections,
     ) {
         Ok(m) => m,
         Err(m) => {

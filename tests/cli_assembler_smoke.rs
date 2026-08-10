@@ -634,7 +634,8 @@ fn direct_far_branches_assemble_to_an_i386_object() {
 }
 
 /// A `.code16` branch to a label in the same section resolves at
-/// assembly time at the 2-byte field's width, leaving no relocation.
+/// assembly time, leaving no relocation, and takes the `rel8` form its
+/// displacement fits, as GNU as does in every code-size mode.
 #[test]
 fn code16_same_section_branches_resolve_in_place() {
     let d = dir("code16-br");
@@ -659,10 +660,8 @@ fn code16_same_section_branches_resolve_in_place() {
         .expect(".text");
     assert_eq!(
         &b[t.2..t.2 + t.3],
-        [
-            0x90, 0xe9, 0xfc, 0xff, 0x90, 0xe9, 0x01, 0x00, 0x90, 0x90, 0x0f, 0x84, 0xf2, 0xff
-        ],
-        "16-bit near-branch displacements"
+        [0x90, 0xeb, 0xfd, 0x90, 0xeb, 0x01, 0x90, 0x90, 0x74, 0xf6],
+        "16-bit short-branch displacements"
     );
 }
 
@@ -793,4 +792,124 @@ fn symbol(bytes: &[u8], want: &str) -> Option<(u16, u64)> {
         }
     }
     None
+}
+
+/// The contents of a named section of an ELF64 object.
+fn section64(bytes: &[u8], want: &str) -> Vec<u8> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let shoff = u64at(0x28);
+    let (shentsize, shnum, shstrndx) = (u16at(0x3a), u16at(0x3c), u16at(0x3e));
+    let strtab = u64at(shoff + shstrndx * shentsize + 0x18);
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let n = strtab + u32at(sh);
+        let end = bytes[n..].iter().position(|&c| c == 0).unwrap();
+        let size = u64at(sh + 0x20);
+        if &bytes[n..n + end] == want.as_bytes() && size != 0 {
+            let off = u64at(sh + 0x18);
+            return bytes[off..off + size].to_vec();
+        }
+    }
+    Vec::new()
+}
+
+/// Assemble `src` for x86_64 and return its `.text`.
+fn text_of(name: &str, src: &str) -> Vec<u8> {
+    let d = dir(name);
+    write(&d, "b.s", src);
+    run_ok(&d, &["-q", "-c", "--target=linux-x64", "b.s", "-o", "b.o"]);
+    section64(&std::fs::read(d.join("b.o")).expect("object"), ".text")
+}
+
+/// `rel8` reaches a displacement in `-128..=127` measured from the end of
+/// the short form, and nothing wider. Each expectation is GNU as 2.46.1's
+/// encoding of the same source.
+#[test]
+fn short_branches_take_the_gnu_as_displacement_range() {
+    // Backward: 126 bytes of filler puts the target 128 back from the end
+    // of a two-byte branch; 127 puts it 129 back, which needs the long form.
+    let t = text_of("relax-b128", "\t.text\nt:\n\t.fill 126,1,0x90\n\tjne t\n");
+    assert_eq!(&t[126..], [0x75, 0x80], "jne at -128");
+    let t = text_of("relax-b129", "\t.text\nt:\n\t.fill 127,1,0x90\n\tjne t\n");
+    assert_eq!(
+        &t[127..],
+        [0x0f, 0x85, 0x7b, 0xff, 0xff, 0xff],
+        "jne at -129"
+    );
+    let t = text_of("relax-jb128", "\t.text\nt:\n\t.fill 126,1,0x90\n\tjmp t\n");
+    assert_eq!(&t[126..], [0xeb, 0x80], "jmp at -128");
+    let t = text_of("relax-jb129", "\t.text\nt:\n\t.fill 127,1,0x90\n\tjmp t\n");
+    assert_eq!(&t[127..], [0xe9, 0x7c, 0xff, 0xff, 0xff], "jmp at -129");
+    // Forward: the filler count is the displacement itself.
+    let t = text_of("relax-f127", "\t.text\n\tjne t\n\t.fill 127,1,0x90\nt:\n");
+    assert_eq!(&t[..2], [0x75, 0x7f], "jne at +127");
+    let t = text_of("relax-f128", "\t.text\n\tjne t\n\t.fill 128,1,0x90\nt:\n");
+    assert_eq!(&t[..6], [0x0f, 0x85, 0x80, 0, 0, 0], "jne at +128");
+    let t = text_of("relax-j127", "\t.text\n\tjmp t\n\t.fill 127,1,0x90\nt:\n");
+    assert_eq!(&t[..2], [0xeb, 0x7f], "jmp at +127");
+    let t = text_of("relax-j128", "\t.text\n\tjmp t\n\t.fill 128,1,0x90\nt:\n");
+    assert_eq!(&t[..5], [0xe9, 0x80, 0, 0, 0], "jmp at +128");
+}
+
+/// Shortening one branch brings another into range, so each form is settled
+/// against a layout that already accounts for the other: the outer `jmp`
+/// reaches +127 only once the inner one is two bytes rather than five.
+#[test]
+fn branch_forms_settle_against_each_other() {
+    let t = text_of(
+        "relax-iter",
+        "\t.text\na:\n\tjmp e\n\t.fill 124,1,0x90\nb:\n\tjmp b\n\t.fill 1,1,0x90\ne:\n\tnop\n",
+    );
+    assert_eq!(&t[..2], [0xeb, 0x7f], "outer jmp at +127");
+    assert_eq!(&t[126..128], [0xeb, 0xfe], "inner jmp to itself");
+    assert_eq!(t.len(), 130, "2 + 124 + 2 + 1 + 1 with both short");
+}
+
+/// A `.org` between a branch and its target absorbs what the branch saves,
+/// so the short form does not reach even though it does in the layout the
+/// long form produces. GNU as settles on the long form, and so does badc: a
+/// form is taken only when it reaches in the layout that choice produces.
+#[test]
+fn a_branch_an_org_pushes_out_of_range_keeps_the_long_form() {
+    let t = text_of(
+        "relax-org",
+        "\t.text\nf:\n\tjmp 1f\n\t.org 0x84\n1:\n\tnop\n",
+    );
+    assert_eq!(&t[..5], [0xe9, 0x7f, 0, 0, 0], "long form across `.org`");
+    assert_eq!(t.len(), 0x85, "the `.org` target is unmoved");
+}
+
+/// Only a reference the assembler resolves in place may take the short
+/// form: a weak name, a name in another section, and an undefined name all
+/// keep a relocation, which the link fills at the long form's width.
+#[test]
+fn a_relocated_branch_keeps_the_long_form() {
+    let t = text_of(
+        "relax-weak",
+        "\t.text\n\t.weak w\nf:\n\tjmp w\n\tnop\nw:\n\tnop\n",
+    );
+    assert_eq!(&t[..5], [0xe9, 0, 0, 0, 0], "weak target");
+    let t = text_of("relax-ext", "\t.text\nf:\n\tjmp undef\n");
+    assert_eq!(&t[..5], [0xe9, 0, 0, 0, 0], "undefined target");
+    let t = text_of(
+        "relax-xsec",
+        "\t.text\nf:\n\tjmp o\n\t.section .other,\"ax\"\no:\n\tnop\n",
+    );
+    assert_eq!(&t[..5], [0xe9, 0, 0, 0, 0], "target in another section");
+    // A global definition in the same section is resolved in place, as GNU
+    // as resolves it, so it does relax.
+    let t = text_of(
+        "relax-glob",
+        "\t.text\n\t.globl g\nf:\n\tjmp g\n\tnop\ng:\n\tnop\n",
+    );
+    assert_eq!(&t[..2], [0xeb, 0x01], "global target in this section");
+}
+
+/// `call` has no `rel8` form, so it keeps `e8 rel32` at any distance.
+#[test]
+fn a_near_call_is_not_shortened() {
+    let t = text_of("relax-call", "\t.text\nf:\n\tcall 1f\n1:\n\tnop\n");
+    assert_eq!(&t[..5], [0xe8, 0, 0, 0, 0], "call keeps rel32");
 }

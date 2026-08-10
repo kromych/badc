@@ -2927,9 +2927,9 @@ fn asm_data_directive_quoted_symbol_matches_bare() {
 #[test]
 fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
     // `jne .slowpath` inside a pushed section branches to a label defined
-    // later in the same section: the rel32 `0f 85` form resolved at
-    // assembly with no relocation, exactly as GNU as folds a same-section
-    // fixup. The `lock cmpxchg` line encodes with the `f0` prefix in front.
+    // later in the same section: resolved at assembly with no relocation,
+    // and at the `75` rel8 width the two-byte displacement fits, exactly
+    // as GNU as encodes it. The `lock cmpxchg` line keeps the `f0` prefix.
     use crate::c5::linker::parse_native_elf;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = super::load_fixture("file_scope_asm_local_label_branch.c");
@@ -2951,20 +2951,21 @@ fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
         .iter()
         .find(|s| s.name == ".slowpath")
         .expect("the section-local label keeps a symbol");
-    // The rel32 lands on the label with no relocation left on the field.
+    // The rel8 lands on the label with no relocation left on the field.
     let jne = obj
         .text
-        .windows(2)
-        .position(|w| w == [0x0f, 0x85])
-        .expect("`jne .slowpath` must encode as `0f 85 <rel32>`");
-    let disp = i32::from_le_bytes(obj.text[jne + 2..jne + 6].try_into().expect("rel32")) as i64;
+        .windows(4)
+        .position(|w| w[..3] == [0xb0, 0x17, 0x75])
+        .map(|p| p + 2)
+        .expect("`jne .slowpath` must encode as `75 <rel8>`");
+    let disp = obj.text[jne + 1] as i8 as i64;
     assert_eq!(
-        jne as i64 + 6 + disp,
+        jne as i64 + 2 + disp,
         label.value as i64,
         "the same-section branch resolves at assembly"
     );
     assert!(
-        !obj.text_relocs.iter().any(|r| r.offset == (jne + 2) as u64),
+        !obj.text_relocs.iter().any(|r| r.offset == (jne + 1) as u64),
         "a resolved same-section branch carries no relocation"
     );
 }

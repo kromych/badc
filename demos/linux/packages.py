@@ -121,6 +121,8 @@ ARCHES = {
 AARCH64_FIRMWARE = [
     ("/usr/share/AAVMF/AAVMF_CODE.fd", "/usr/share/AAVMF/AAVMF_VARS.fd"),
     ("/usr/share/edk2/aarch64/QEMU_EFI.fd", None),
+    ("/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+     "/opt/homebrew/share/qemu/edk2-arm-vars.fd"),
 ]
 
 DEB_TOOL_RPMS = ["dpkg", "dpkg-dev", "dpkg-perl", "debhelper", "libmd"]
@@ -477,6 +479,58 @@ def deb_tool_env(prefix: Path, env: dict) -> None:
     env["DPKG_ADMINDIR"] = str(admindir)
 
 
+def posix_echo_shell() -> str:
+    """A shell whose `echo -n` suppresses the newline instead of printing the
+    flag. `/bin/sh` on macOS is bash in xpg_echo mode, where
+    `scripts/package/builddeb` writes `INITRD=-n Yes` into the maintainer
+    scripts. Every Linux `/bin/sh` passes the probe, so this returns
+    `/bin/sh` there."""
+    for sh in ("/bin/sh", shutil.which("bash"), shutil.which("dash")):
+        if not sh:
+            continue
+        r = run([sh, "-c", "echo -n x"], timeout=30)
+        if r.returncode == 0 and r.stdout == "x":
+            return sh
+    die("no shell whose `echo -n` omits the newline")
+
+
+def build_deb_without_debhelper(args, arch, tree) -> list[Path]:
+    """The deb the kernel's `bindeb-pkg` would build, on a host with no
+    debhelper. `debian/rules` reaches the packaging through `dh_*`, but the
+    staging itself is `scripts/package/builddeb`, which is plain shell: run
+    the tree's own script, then let dpkg write the control file and the
+    archive. `--root-owner-group` is what removes the need for fakeroot."""
+    pkg = f"linux-image-{args.release}"
+    pdir = tree / "debian" / pkg
+    shutil.rmtree(pdir, ignore_errors=True)
+    kbuild(args, arch, tree, ["debian"], log_name="package")
+    # `debian/rules build-arch` builds `all`; builddeb only copies what that
+    # produced, so the image and modules have to exist first.
+    kbuild(args, arch, tree, ["all"], log_name="package")
+    sh = posix_echo_shell()
+    kbuild(args, arch, tree, ["run-command"],
+           extra=[f"KERNELRELEASE={args.release}",
+                  f"KBUILD_RUN_COMMAND={sh} $(srctree)/scripts/package/builddeb "
+                  f"{pkg}"],
+           log_name="package")
+    if not (pdir / "DEBIAN").is_dir():
+        die(f"builddeb staged no {pdir}/DEBIAN")
+    # dpkg-gencontrol resolves the package's architecture against the build
+    # host's, which is not a Debian architecture here; the tree already
+    # recorded the one it is building for.
+    env = dict(os.environ, DEB_HOST_ARCH=(tree / "debian/arch").read_text().strip())
+    run(["dpkg-gencontrol", f"-p{pkg}", f"-P{pdir}", "-fdebian/files-nodh"],
+        cwd=tree, env=env, check=True)
+    # A directory destination makes dpkg-deb name the file
+    # <package>_<version>_<arch>.deb, which is what the install step globs for.
+    run(["dpkg-deb", "--root-owner-group", "--build", str(pdir),
+         str(args.workdir)], check=True)
+    debs = sorted(args.workdir.glob(f"{pkg}_*.deb"))
+    if not debs:
+        die(f"dpkg-deb produced no {pkg} deb in {args.workdir}")
+    return debs
+
+
 def build_deb(args, arch, tree) -> list[Path]:
     # Products of a previous run in this workdir would satisfy the install
     # globs; a fresh package phase replaces them.
@@ -484,6 +538,12 @@ def build_deb(args, arch, tree) -> list[Path]:
         stale.unlink()
     if args.deb_tools:
         ensure_deb_tools(args.deb_tools)
+    elif shutil.which("dh_listpackages") is None:
+        # `debian/rules` enumerates and assembles packages with debhelper.
+        # Without it the kernel's own target cannot run at all, so the deb is
+        # built from the same staging by hand.
+        log("no debhelper: building the linux-image deb without it")
+        return build_deb_without_debhelper(args, arch, tree)
     admindir = (args.deb_tools / "var/lib/dpkg") if args.deb_tools else None
     # -d: build-dependency data lives in a dpkg database this host does
     # not have; the tools themselves are the real prerequisite.
@@ -660,12 +720,11 @@ ssh_pwauth: true
     return seed
 
 
-def probe_kvm(args, arch) -> bool:
-    if not os.access("/dev/kvm", os.R_OK | os.W_OK):
-        return False
-    pidfile = args.workdir / "kvmprobe.pid"
-    machine = (["-M", "virt,accel=kvm"] if args.arch == "aarch64"
-               else ["-machine", "accel=kvm"])
+def probe_accel(args, arch, name: str) -> bool:
+    """True when qemu starts a guest under `name`."""
+    pidfile = args.workdir / f"{name}probe.pid"
+    machine = (["-M", f"virt,accel={name}"] if args.arch == "aarch64"
+               else ["-machine", f"accel={name}"])
     r = run([arch["qemu"], *machine, "-cpu", "host", "-S", "-display",
              "none", "-nodefaults", "-pidfile", str(pidfile), "-daemonize"],
             timeout=30)
@@ -678,19 +737,40 @@ def probe_kvm(args, arch) -> bool:
     return True
 
 
+def probe_kvm(args, arch) -> bool:
+    if not os.access("/dev/kvm", os.R_OK | os.W_OK):
+        return False
+    return probe_accel(args, arch, "kvm")
+
+
+def probe_hvf(args, arch) -> bool:
+    """macOS's hypervisor framework, the host-virtualization accelerator
+    where /dev/kvm does not exist."""
+    if platform.system() != "Darwin":
+        return False
+    return probe_accel(args, arch, "hvf")
+
+
 def resolve_accel(args, arch) -> str:
     """The accelerator the vm phase will use.
 
-    `--accel kvm` fails when /dev/kvm is unusable rather than running the
-    same validation an order of magnitude slower under a different
-    execution engine; `auto` reports the substitution it makes.
+    `--accel kvm` / `--accel hvf` fail when that accelerator is unusable
+    rather than running the same validation an order of magnitude slower
+    under a different execution engine; `auto` reports the substitution it
+    makes. kvm is probed first, so a Linux host resolves exactly as before.
     """
     if args.accel == "tcg":
         return "tcg"
+    if args.accel == "hvf":
+        if probe_hvf(args, arch):
+            return "hvf"
+        die("--accel hvf: no usable hypervisor framework on this host")
     if probe_kvm(args, arch):
         return "kvm"
     if args.accel == "kvm":
         die("--accel kvm: no usable /dev/kvm on this host")
+    if probe_hvf(args, arch):
+        return "hvf"
     log("no usable /dev/kvm: running under tcg (--accel kvm to require kvm)")
     return "tcg"
 
@@ -706,7 +786,7 @@ class VM:
         self.accel = accel
         # `host` passes the machine's own features through; under tcg there is
         # no host to pass through, so the model is the emulator's maximum.
-        self.cpu = args.vm_cpu or ("host" if accel == "kvm" else "max")
+        self.cpu = args.vm_cpu or ("host" if accel in ("kvm", "hvf") else "max")
         self.console = args.workdir / f"console-{args.arch}.log"
         self.pidfile = args.workdir / f"vm-{args.arch}.pid"
         self.key = args.workdir / "vm-key"
@@ -1190,9 +1270,10 @@ def main() -> int:
     ap.add_argument("--image-cache", type=Path,
                     default=LINUX_DIR / ".cache" / "images",
                     help="where the pinned image is kept between runs")
-    ap.add_argument("--accel", choices=("auto", "kvm", "tcg"), default="auto",
-                    help="qemu accelerator; kvm fails when /dev/kvm is "
-                         "unusable instead of substituting tcg")
+    ap.add_argument("--accel", choices=("auto", "kvm", "hvf", "tcg"),
+                    default="auto",
+                    help="qemu accelerator; kvm and hvf fail when that "
+                         "accelerator is unusable instead of substituting tcg")
     ap.add_argument("--ssh-port", type=int, default=0,
                     help="host port forwarded to the vm's ssh (default: a "
                          "free port, so runs do not collide)")

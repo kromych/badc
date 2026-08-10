@@ -2520,6 +2520,30 @@ fn gas_ifc_taken(tok: &str, rest: &str) -> bool {
     (a == b) == (tok == ".ifc")
 }
 
+/// Replace each character constant in a macro argument with its numeric
+/// value, as GNU as does when it binds one (`m 'r'` binds `114`).
+fn fold_char_consts(a: &str) -> alloc::string::String {
+    if !a.contains('\'') {
+        return alloc::string::String::from(a);
+    }
+    let b = a.as_bytes();
+    let mut out = alloc::string::String::with_capacity(a.len());
+    let mut i = 0usize;
+    while i < b.len() {
+        match parse_asm_char_const(b, i) {
+            Some((v, next)) => {
+                out.push_str(&alloc::format!("{v}"));
+                i = next;
+            }
+            None => {
+                out.push(b[i] as char);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
 /// Strip one level of enclosing double quotes from a macro / `.irp`
 /// argument, as GNU as does when binding it.
 fn unquote_gas_arg(a: &str) -> &str {
@@ -2548,7 +2572,7 @@ fn bind_gas_macro_args(
             Some(v) => alloc::format!("{v}"),
             None => alloc::string::String::from(unquote_gas_arg(a)),
         },
-        None => alloc::string::String::from(unquote_gas_arg(a)),
+        None => fold_char_consts(unquote_gas_arg(a)),
     };
     let is_keyword = |a: &str| {
         a.split_once('=')
@@ -2872,7 +2896,19 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
     // this one is its separator rather than an empty argument.
     let mut ws_terminated = false;
     let mut last_comma = false;
-    for (i, &c) in b.iter().enumerate() {
+    let mut i = 0usize;
+    while i < b.len() {
+        let c = b[i];
+        // A character constant is one token, separators included: GNU as
+        // binds `m 'r', ' ', ':'` as three arguments.
+        if !quoted
+            && c == b'\''
+            && let Some((_, next)) = parse_asm_char_const(b, i)
+        {
+            in_arg = true;
+            i = next;
+            continue;
+        }
         if !in_arg && !c.is_ascii_whitespace() {
             in_arg = true;
             paren_led = c == b'(';
@@ -2915,6 +2951,7 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
             start = i + 1;
             in_arg = false;
         }
+        i += 1;
     }
     let p = s[start..].trim();
     if !p.is_empty() || last_comma {
@@ -9612,6 +9649,9 @@ mod asm_section_tests {
         assert_eq!(go("SHOW 1 % 2"), ".ascii \"[1][%][2]\"\n");
         assert_eq!(go("SHOW p q, r"), ".ascii \"[p][q][r]\"\n");
         assert_eq!(go("SHOW sym + 24"), ".ascii \"[sym + 24][][]\"\n");
+        // A character constant is one argument, separators included, and
+        // binds as its value: `SHOW 'r', ' ', ':'` measures `[114][32][58]`.
+        assert_eq!(go("SHOW 'r', ' ', ':'"), ".ascii \"[114][32][58]\"\n");
     }
 
     /// A macro body is re-scanned after substitution, so a `;` that arrives

@@ -1781,8 +1781,22 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
 fn split_asm_operands(rest: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let (mut depth, mut start) = (0i32, 0usize);
+    // A character constant is opaque: `movb $',', %al` has one comma
+    // separator, not two.
+    let mut quoted = false;
+    let mut esc = false;
     for (i, c) in rest.char_indices() {
+        if quoted {
+            match c {
+                _ if esc => esc = false,
+                '\\' => esc = true,
+                '\'' => quoted = false,
+                _ => {}
+            }
+            continue;
+        }
         match c {
+            '\'' => quoted = true,
             '(' => depth += 1,
             ')' => depth -= 1,
             ',' if depth == 0 => {

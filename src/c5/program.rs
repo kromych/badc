@@ -414,6 +414,24 @@ impl Program {
             .iter()
             .flat_map(|f| f.label_data_slots.iter().map(|s| (s.data_offset, f.ent_pc)))
     }
+
+    /// Every `data` byte offset a slot value is written into after the
+    /// initializer bytes are staged: link-time addresses within this
+    /// unit, extern symbol addresses, function addresses, and `&&label`
+    /// slots. The staged bytes under one are a placeholder, so a reader
+    /// of `data` must not take them for the object's value.
+    pub(crate) fn data_reloc_offsets(&self) -> alloc::vec::Vec<i64> {
+        let mut offsets: alloc::vec::Vec<i64> = self
+            .data_relocs
+            .iter()
+            .map(|r| r.data_offset as i64)
+            .chain(self.code_relocs.iter().map(|r| r.data_offset as i64))
+            .chain(self.extern_data_relocs.iter().map(|r| r.data_offset as i64))
+            .chain(self.label_data_slots().map(|(off, _)| off as i64))
+            .collect();
+        offsets.sort_unstable();
+        offsets
+    }
 }
 
 /// A single local variable or formal parameter belonging to a

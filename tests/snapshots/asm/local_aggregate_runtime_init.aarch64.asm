@@ -25,35 +25,28 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x50]!
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
-               	sub	x0, x29, #0x28
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [x1, #0x10]
-               	str	x10, [x0, #0x10]
-               	ldr	x10, [sp], #0x10
+               	sub	x1, x29, #0x28
+               	mov	x0, #0x0                // =0
+               	str	x0, [x1]
+               	str	x0, [x1, #0x8]
+               	str	x0, [x1, #0x10]
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
-               	ldrsw	x0, [x20]
+               	ldrsw	x1, [x20]
+               	sub	x2, x29, #0x28
+               	str	w1, [x2]
+               	mov	x2, #0x68               // =104
                	sub	x1, x29, #0x28
-               	str	w0, [x1]
-               	mov	x1, #0x68               // =104
-               	sub	x0, x29, #0x28
-               	strb	w1, [x0, #0x4]
-               	mov	x1, #0x6f               // =111
-               	sub	x0, x29, #0x28
-               	strb	w1, [x0, #0x5]
-               	mov	x1, #0x6c               // =108
-               	sub	x0, x29, #0x28
-               	strb	w1, [x0, #0x6]
-               	mov	x1, #0x61               // =97
-               	sub	x0, x29, #0x28
-               	strb	w1, [x0, #0x7]
-               	mov	x0, #0x0                // =0
+               	strb	w2, [x1, #0x4]
+               	mov	x2, #0x6f               // =111
+               	sub	x1, x29, #0x28
+               	strb	w2, [x1, #0x5]
+               	mov	x2, #0x6c               // =108
+               	sub	x1, x29, #0x28
+               	strb	w2, [x1, #0x6]
+               	mov	x2, #0x61               // =97
+               	sub	x1, x29, #0x28
+               	strb	w2, [x1, #0x7]
                	sub	x1, x29, #0x28
                	strb	w0, [x1, #0x8]
                	sub	x1, x29, #0x28
@@ -135,20 +128,9 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x50
                	ret
                	sub	x0, x29, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldrb	w10, [x1, #0x8]
-               	strb	w10, [x0, #0x8]
-               	ldrb	w10, [x1, #0x9]
-               	strb	w10, [x0, #0x9]
-               	ldrb	w10, [x1, #0xa]
-               	strb	w10, [x0, #0xa]
-               	ldrb	w10, [x1, #0xb]
-               	strb	w10, [x0, #0xb]
-               	ldr	x10, [sp], #0x10
+               	mov	x1, #0x0                // =0
+               	str	x1, [x0]
+               	str	w1, [x0, #0x8]
                	ldrsw	x0, [x20]
                	sub	x1, x29, #0x10
                	str	w0, [x1]

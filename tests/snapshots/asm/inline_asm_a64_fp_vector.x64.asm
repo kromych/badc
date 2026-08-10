@@ -29,17 +29,8 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movl	$0x41a80000, %eax       # imm = 0x41A80000
                	leaq	-0x8(%rbp), %rdx
-               	leaq	<rip>, %rsi
-               	pushq	%rax
-               	movzbq	(%rsi), %rax
-               	movb	%al, (%rdx)
-               	movzbq	0x1(%rsi), %rax
-               	movb	%al, 0x1(%rdx)
-               	movzbq	0x2(%rsi), %rax
-               	movb	%al, 0x2(%rdx)
-               	movzbq	0x3(%rsi), %rax
-               	movb	%al, 0x3(%rdx)
-               	popq	%rax
+               	xorq	%rsi, %rsi
+               	movl	%esi, (%rdx)
                	leaq	-0x8(%rbp), %rdx
                	movl	%eax, (%rdx)
                	leaq	-0x8(%rbp), %rax

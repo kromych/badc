@@ -100,6 +100,13 @@ pub(crate) enum MemTransferOp {
     Fill,
 }
 
+/// Alignment guaranteed for a frame slot address and for the `.data`
+/// staging area a brace-list initializer is laid into: both are
+/// 8-byte slotted. An `Inst::Mcpy` between two such addresses may be
+/// transferred 8 bytes at a time whatever the copied type's own
+/// alignment is.
+pub(crate) const SLOT_ALIGN: u32 = 8;
+
 /// Widest access the inline expansion of a memory transfer may use at
 /// `align`-byte endpoint alignment.
 pub(crate) fn mem_transfer_unit(align: u32) -> u32 {
@@ -113,6 +120,30 @@ pub(crate) fn mem_transfer_accesses(size: i64, align: u32) -> i64 {
     let unit = i64::from(mem_transfer_unit(align));
     size / unit + i64::from((size % unit).count_ones())
 }
+
+/// The `(byte offset, access width)` sequence that expansion emits.
+/// Width is never raised past the endpoint alignment, so the sequence
+/// holds on a target that faults on a misaligned access.
+pub(crate) fn mem_transfer_chunks(size: i64, align: u32) -> Vec<(i64, u32)> {
+    let unit = mem_transfer_unit(align);
+    let mut chunks = Vec::new();
+    let mut off = 0i64;
+    while off < size {
+        let left = size - off;
+        let w = [8u32, 4, 2, 1]
+            .into_iter()
+            .find(|w| *w <= unit && i64::from(*w) <= left)
+            .unwrap_or(1);
+        chunks.push((off, w));
+        off += i64::from(w);
+    }
+    chunks
+}
+
+/// Largest number of stores a zero fill is expanded to inline, in place
+/// of copying an all-zero staged template. Matches the bound the
+/// `__builtin_memset` expansion uses; past it the copy is kept.
+pub(crate) const MAX_MEM_FILL_ACCESSES: i64 = 32;
 
 /// C11 7.17 generic atomic operation. The operand width is the
 /// pointee type of the first argument; the walker lowers each kind
@@ -598,11 +629,16 @@ pub(crate) struct RuntimeInitElement {
 ///   constant. The parser stages the bytes at `src_data_off`
 ///   inside `Program.data`; the walker emits `Inst::Mcpy` to
 ///   copy them into the local's slot.
+/// * `Zero { size_bytes }` -- the same, for a template that is
+///   wholly zero and short enough to store inline. The parser
+///   stages no bytes and the walker emits the stores, so no data
+///   object is emitted for it.
 /// * `Runtime { zero_init, elements }` -- a brace-list
 ///   initializer with at least one non-constant element. C99
-///   6.7.8p13. `zero_init` is the optional Mcpy-from-staged-zero
-///   prelude that implements the "omitted entries are zero" rule
-///   (6.7.8p19); `elements` is the per-position store sequence.
+///   6.7.8p13. `zero_init` is the optional prelude that implements
+///   the "omitted entries are zero" rule (6.7.8p19), in either of
+///   the two shapes above; `elements` is the per-position store
+///   sequence.
 #[derive(Debug, Clone)]
 pub(crate) enum LocalInit {
     None,
@@ -611,10 +647,21 @@ pub(crate) enum LocalInit {
         src_data_off: i64,
         size_bytes: i64,
     },
+    Zero {
+        size_bytes: i64,
+    },
     Runtime {
-        zero_init: Option<(i64, i64)>,
+        zero_init: Option<LocalInitPrelude>,
         elements: Vec<RuntimeInitElement>,
     },
+}
+
+/// The zero prelude of a `Runtime` initializer: either a copy from a
+/// staged template or the inline stores that replace it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LocalInitPrelude {
+    Template { src_data_off: i64, size_bytes: i64 },
+    Zero { size_bytes: i64 },
 }
 
 /// Declaration node. Captures variable / function declarations
@@ -1169,12 +1216,14 @@ fn local_init_offsets(init: &mut LocalInit, f: &mut impl FnMut(&mut i64)) {
     match init {
         LocalInit::Aggregate { src_data_off, .. } => f(src_data_off),
         LocalInit::Runtime {
-            zero_init: Some((off, _)),
+            zero_init: Some(LocalInitPrelude::Template { src_data_off, .. }),
             ..
-        } => f(off),
+        } => f(src_data_off),
         LocalInit::Runtime {
-            zero_init: None, ..
+            zero_init: Some(LocalInitPrelude::Zero { .. }) | None,
+            ..
         }
+        | LocalInit::Zero { .. }
         | LocalInit::None
         | LocalInit::Scalar(..) => {}
     }

@@ -92,18 +92,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	sub	x0, x29, #0x40
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x1]
-               	strb	w10, [x0]
-               	ldrb	w10, [x1, #0x1]
-               	strb	w10, [x0, #0x1]
-               	ldrb	w10, [x1, #0x2]
-               	strb	w10, [x0, #0x2]
-               	ldrb	w10, [x1, #0x3]
-               	strb	w10, [x0, #0x3]
-               	ldr	x10, [sp], #0x10
+               	mov	x1, #0x0                // =0
+               	str	w1, [x0]
                	sub	x0, x29, #0x40
                	sub	x1, x29, #0x18
                	str	x10, [sp, #-0x10]!
@@ -117,15 +107,6 @@ Disassembly of section .text:
                	strb	w10, [x1, #0x3]
                	ldr	x10, [sp], #0x10
                	mov	x0, x1
-               	sub	x0, x29, #0x18
-               	ldr	w0, [x0]
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	sub	x0, x29, #0x40
                	mov	x1, #0xbeef             // =48879
                	movk	x1, #0xdead, lsl #16
@@ -146,18 +127,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sub	x1, x29, #0x38
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x2]
-               	strb	w10, [x1]
-               	ldrb	w10, [x2, #0x1]
-               	strb	w10, [x1, #0x1]
-               	ldrb	w10, [x2, #0x2]
-               	strb	w10, [x1, #0x2]
-               	ldrb	w10, [x2, #0x3]
-               	strb	w10, [x1, #0x3]
-               	ldr	x10, [sp], #0x10
+               	mov	x2, #0x0                // =0
+               	str	w2, [x1]
                	mov	w1, w0
                	sub	x2, x29, #0x38
                	str	w1, [x2]

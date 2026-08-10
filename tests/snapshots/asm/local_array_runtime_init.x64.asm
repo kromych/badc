@@ -15,29 +15,20 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movzbq	(%rcx), %rdx
-               	movb	%dl, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	movb	%dl, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	movb	%dl, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	movb	%dl, 0x3(%rax)
-               	popq	%rdx
+               	xorq	%rcx, %rcx
+               	movl	%ecx, (%rax)
                	movl	$0x63, %eax
-               	leaq	-0x8(%rbp), %rcx
-               	movb	%al, (%rcx)
-               	movl	$0x62, %ecx
+               	leaq	-0x8(%rbp), %rdx
+               	movb	%al, (%rdx)
+               	movl	$0x62, %edx
                	leaq	-0x8(%rbp), %rax
-               	movb	%cl, 0x1(%rax)
-               	movl	$0x3, %ecx
+               	movb	%dl, 0x1(%rax)
+               	movl	$0x3, %edx
                	leaq	-0x8(%rbp), %rax
-               	movb	%cl, 0x2(%rax)
-               	movl	$0x64, %ecx
+               	movb	%dl, 0x2(%rax)
+               	movl	$0x64, %edx
                	leaq	-0x8(%rbp), %rax
-               	movb	%cl, 0x3(%rax)
+               	movb	%dl, 0x3(%rax)
                	leaq	-0x8(%rbp), %rax
                	addq	$0x0, %rax
                	movsbq	(%rax), %rax

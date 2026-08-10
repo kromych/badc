@@ -100,13 +100,20 @@ impl Compiler {
                 zero_init: aggregate,
                 elements: runtime_elements,
             }
-        } else if let Some((src, size)) = aggregate {
-            super::super::ast::LocalInit::Aggregate {
-                src_data_off: src,
-                size_bytes: size,
-            }
         } else {
-            super::super::ast::LocalInit::None
+            match aggregate {
+                Some(super::super::ast::LocalInitPrelude::Template {
+                    src_data_off,
+                    size_bytes,
+                }) => super::super::ast::LocalInit::Aggregate {
+                    src_data_off,
+                    size_bytes,
+                },
+                Some(super::super::ast::LocalInitPrelude::Zero { size_bytes }) => {
+                    super::super::ast::LocalInit::Zero { size_bytes }
+                }
+                None => super::super::ast::LocalInit::None,
+            }
         }
     }
 
@@ -122,7 +129,7 @@ impl Compiler {
         &mut self,
     ) -> (
         Option<super::super::ast::ExprId>,
-        Option<(i64, i64)>,
+        Option<super::super::ast::LocalInitPrelude>,
         alloc::vec::Vec<super::super::ast::RuntimeInitElement>,
     ) {
         (
@@ -136,7 +143,7 @@ impl Compiler {
         &mut self,
         saved: (
             Option<super::super::ast::ExprId>,
-            Option<(i64, i64)>,
+            Option<super::super::ast::LocalInitPrelude>,
             alloc::vec::Vec<super::super::ast::RuntimeInitElement>,
         ),
     ) {

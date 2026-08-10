@@ -693,18 +693,24 @@ fn carve_anonymous_const_data(
             .map(|o| (o.val, o.val + o.extent))
             .collect(),
     );
-    for (lo, hi) in merge(spans) {
-        // `taken` is disjoint and sorted, so the only candidate is the
-        // last span starting before `hi`.
-        let overlaps_named = taken[..taken.partition_point(|&(start, _)| start < hi)]
-            .last()
-            .is_some_and(|&(_, end)| end > lo);
-        // A relocated slot inside the span would need the span's
-        // section to take the relocation; literals carry none, so an
-        // overlap means the span is not the immutable image it claims.
-        if overlaps_named || reloc_slots.range(lo..hi).next().is_some() {
-            continue;
-        }
+    // Disqualify per recorded span, before merging: merging first would
+    // let one span's relocation or named overlap withdraw its neighbours,
+    // which are separate objects.
+    let carvable: Vec<(u64, u64)> = spans
+        .into_iter()
+        .filter(|&(lo, hi)| {
+            // `taken` is disjoint and sorted, so the only candidate is the
+            // last span starting before `hi`.
+            let overlaps_named = taken[..taken.partition_point(|&(start, _)| start < hi)]
+                .last()
+                .is_some_and(|&(_, end)| end > lo);
+            // A relocated slot inside the span would need the span's
+            // section to take the relocation; literals carry none, so an
+            // overlap means the span is not the immutable image it claims.
+            !overlaps_named && reloc_slots.range(lo..hi).next().is_none()
+        })
+        .collect();
+    for (lo, hi) in merge(carvable) {
         let align = 1u64 << lo.trailing_zeros().min(3);
         let e = carve
             .table

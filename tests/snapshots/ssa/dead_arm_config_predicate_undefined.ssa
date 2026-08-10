@@ -1534,10 +1534,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     terminator Return(v200)   (exit_acc=v200)
   block 244  start_pc=0
     v201 LocalAddr(-2)                                    -> x0
-    v202 ImmData(40)                                      -> x1
-    v203 Mcpy { dst=v201, src=v202, size=8, align=8 }     -> x0
+    v202 Imm(0)                                           -> x1
+    v203 Store { addr=v201, disp=0, value=v202, kind=I64 } -> -
     v204 LocalAddr(-1)                                    -> x0
-    v205 ImmData(16)                                      -> x1
+    v205 ImmData(8)                                       -> x1
     v206 Mcpy { dst=v204, src=v205, size=8, align=8 }     -> x0
     v207 LocalAddr(-2)                                    -> x1
     terminator Jmp(b245)

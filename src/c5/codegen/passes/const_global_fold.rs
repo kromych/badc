@@ -254,15 +254,46 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
     }
 }
 
-/// Fold loads of template-initialized locals. A local whose covering
-/// write is an `Mcpy` from resolvable data still holds those bytes when
-/// the load runs, so the load reads the source image under the same
-/// const rules as [`fold_loads`] -- which admits the staged initializer
-/// templates a compound literal or aggregate local is filled from, the
-/// shape a byte-level layout assertion probes. State is per block,
-/// keyed by frame byte ranges, inherited over an unconditional
-/// single-predecessor edge; a tracked write kills what it overlaps and
-/// any instruction that can write memory unpredictably clears it.
+/// What fills a tracked frame range.
+#[derive(Clone, Copy)]
+enum Filled {
+    /// The data-segment image at this offset, byte for byte.
+    Template(i64),
+    /// Zero: the inline fill a wholly-zero initializer lowers to,
+    /// which stages no template to read.
+    Zero,
+}
+
+impl Filled {
+    /// The `w` bytes at `off` within the range, zero-extended to eight.
+    fn read(self, cd: &ConstData<'_>, off: i64, w: i64) -> Option<[u8; 8]> {
+        match self {
+            Filled::Template(base) => cd.read(base + off, w),
+            Filled::Zero => Some([0u8; 8]),
+        }
+    }
+
+    /// The same fill seen from `off` bytes into the range, for a range
+    /// a partial write splits.
+    fn advanced(self, off: i64) -> Self {
+        match self {
+            Filled::Template(base) => Filled::Template(base + off),
+            Filled::Zero => Filled::Zero,
+        }
+    }
+}
+
+/// Fold loads of a local whose covering write is known. An `Mcpy` from
+/// resolvable data leaves those bytes in the slot, so the load reads the
+/// source image under the same const rules as [`fold_loads`] -- which
+/// admits the staged initializer templates a compound literal or
+/// aggregate local is filled from, the shape a byte-level layout
+/// assertion probes. A store of zero leaves zero, which is the same
+/// initializer once the all-zero template is stored rather than copied.
+/// State is per block, keyed by frame byte ranges, inherited over an
+/// unconditional single-predecessor edge; a tracked write kills what it
+/// overlaps and any instruction that can write memory unpredictably
+/// clears it.
 pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
     use alloc::collections::BTreeMap;
     use alloc::vec;
@@ -308,8 +339,8 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
             Terminator::Return(_) | Terminator::TailExt(_) | Terminator::Unreachable => {}
         }
     }
-    // Frame range lo -> (hi, source data offset).
-    type State = BTreeMap<i64, (i64, i64)>;
+    // Frame range lo -> (hi, what fills it).
+    type State = BTreeMap<i64, (i64, Filled)>;
     let mut exit_states: Vec<Option<State>> = vec![None; nblocks];
     let ext = extern_imm_data(func);
     let mut changed = false;
@@ -325,8 +356,23 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
             }
             _ => State::new(),
         };
+        // A write covers part of a tracked range; what it does not reach
+        // still holds what the range says, so the remainder is kept.
         let kill = |state: &mut State, lo: i64, hi: i64| {
-            state.retain(|&s_lo, &mut (s_hi, _)| s_hi <= lo || s_lo >= hi);
+            let hit: Vec<(i64, (i64, Filled))> = state
+                .range(..hi)
+                .filter(|entry| entry.1.0 > lo)
+                .map(|(&s_lo, &v)| (s_lo, v))
+                .collect();
+            for (s_lo, (s_hi, src)) in hit {
+                state.remove(&s_lo);
+                if s_lo < lo {
+                    state.insert(s_lo, (lo, src));
+                }
+                if s_hi > hi {
+                    state.insert(hi, (s_hi, src.advanced(hi - s_lo)));
+                }
+            }
         };
         for i in func.blocks[b].inst_range.clone() {
             let idx = i as usize;
@@ -337,18 +383,35 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
                         Some(lo) => {
                             kill(&mut state, lo, lo + size);
                             if let Some(s) = data_addr(func, &ext, *src, 0) {
-                                state.insert(lo, (lo + size, s));
+                                state.insert(lo, (lo + size, Filled::Template(s)));
                             }
                         }
                         None => state.clear(),
                     }
                 }
                 Inst::Store {
-                    addr, disp, kind, ..
-                } => match frame_addr(func, *addr, *disp as i64) {
-                    Some(a) => kill(&mut state, a, a + store_width(*kind)),
-                    None => state.clear(),
-                },
+                    addr,
+                    disp,
+                    value,
+                    kind,
+                    volatile,
+                } => {
+                    let (zero, w) = (
+                        !*volatile && matches!(func.insts.get(*value as usize), Some(Inst::Imm(0))),
+                        store_width(*kind),
+                    );
+                    match frame_addr(func, *addr, *disp as i64) {
+                        Some(a) => {
+                            kill(&mut state, a, a + w);
+                            // The zero fill that replaces an all-zero
+                            // template writes the same bytes the copy did.
+                            if zero {
+                                state.insert(a, (a + w, Filled::Zero));
+                            }
+                        }
+                        None => state.clear(),
+                    }
+                }
                 Inst::StoreLocal { off, kind, .. } => {
                     let a = off.wrapping_mul(8);
                     kill(&mut state, a, a + store_width(*kind));
@@ -369,7 +432,7 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
                     if a + w > hi {
                         continue;
                     }
-                    let Some(raw) = cd.read(src + (a - lo), w) else {
+                    let Some(raw) = src.read(cd, a - lo, w) else {
                         continue;
                     };
                     let u = u64::from_le_bytes(raw);
@@ -395,7 +458,7 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
                     if a + w > hi {
                         continue;
                     }
-                    let Some(raw) = cd.read(src + (a - lo), w) else {
+                    let Some(raw) = src.read(cd, a - lo, w) else {
                         continue;
                     };
                     let u = u64::from_le_bytes(raw);

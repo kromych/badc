@@ -857,11 +857,11 @@ pub(crate) fn apply_data_liveness(
             Err(i) => i.saturating_sub(1),
         }
     };
-    // `const`-qualified storage is read-only for the whole execution
-    // (C99 6.7.3p5), so it belongs on a read-only page. Only file-backed
-    // objects reach the writer's `.rodata` carve, so a wholly-zero one
-    // has to stay out of the zero-fill region and pay its file bytes.
-    let mut is_const_storage = alloc::vec![false; n];
+    // Storage nothing writes belongs on a read-only page: `const`-qualified
+    // objects (C99 6.7.3p5) and the anonymous immutable spans below. Only
+    // file-backed objects reach the writer's `.rodata` carve, so a wholly-zero
+    // one has to stay out of the zero-fill region and pay its file bytes.
+    let mut is_readonly = alloc::vec![false; n];
     {
         use crate::c5::token::Token;
         for sym in &program.symbols {
@@ -874,24 +874,25 @@ pub(crate) fn apply_data_liveness(
                 && !sym.runtime_initialized
                 && (0..data_len).contains(&sym.val)
             {
-                is_const_storage[interval_of(sym.val)] = true;
+                is_readonly[interval_of(sym.val)] = true;
+            }
+        }
+        // The anonymous immutable spans -- string literals, `__func__`
+        // arrays, staged initializer templates. No symbol names them, so
+        // the loop above cannot see them.
+        for &(lo, hi) in &program.const_data_ranges {
+            if hi <= lo || !(0..data_len).contains(&lo) {
+                continue;
+            }
+            let mut i = interval_of(lo);
+            while i < n && starts[i] < hi {
+                is_readonly[i] = true;
+                i += 1;
             }
         }
     }
     let mut has_reloc_slot = alloc::vec![false; n];
-    for off in program
-        .data_relocs
-        .iter()
-        .map(|r| r.data_offset as i64)
-        .chain(program.code_relocs.iter().map(|r| r.data_offset as i64))
-        .chain(
-            program
-                .extern_data_relocs
-                .iter()
-                .map(|r| r.data_offset as i64),
-        )
-        .chain(program.label_data_slots().map(|(off, _)| off as i64))
-    {
+    for off in program.data_reloc_offsets() {
         if (0..data_len).contains(&off) {
             has_reloc_slot[interval_of(off)] = true;
         }
@@ -917,7 +918,7 @@ pub(crate) fn apply_data_liveness(
             && i != 0
             && live[i]
             && !has_reloc_slot[i]
-            && !is_const_storage[i]
+            && !is_readonly[i]
             && program.data[starts[i] as usize..obj_end(i) as usize]
                 .iter()
                 .all(|&b| b == 0)

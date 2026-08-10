@@ -67,28 +67,22 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldr	x10, [sp], #0x10
-               	mov	x1, #0x77               // =119
-               	sub	x0, x29, #0x10
-               	strb	w1, [x0, #0x4]
-               	mov	x1, #0x78               // =120
-               	sub	x0, x29, #0x10
-               	strb	w1, [x0, #0x5]
-               	mov	x1, #0x79               // =121
-               	sub	x0, x29, #0x10
-               	strb	w1, [x0, #0x6]
-               	mov	x1, #0x7a               // =122
-               	sub	x0, x29, #0x10
-               	strb	w1, [x0, #0x7]
+               	sub	x1, x29, #0x10
                	mov	x0, #0x0                // =0
+               	str	x0, [x1]
+               	str	x0, [x1, #0x8]
+               	mov	x2, #0x77               // =119
+               	sub	x1, x29, #0x10
+               	strb	w2, [x1, #0x4]
+               	mov	x2, #0x78               // =120
+               	sub	x1, x29, #0x10
+               	strb	w2, [x1, #0x5]
+               	mov	x2, #0x79               // =121
+               	sub	x1, x29, #0x10
+               	strb	w2, [x1, #0x6]
+               	mov	x2, #0x7a               // =122
+               	sub	x1, x29, #0x10
+               	strb	w2, [x1, #0x7]
                	sub	x1, x29, #0x10
                	strb	w0, [x1, #0x8]
                	sub	x1, x29, #0x10

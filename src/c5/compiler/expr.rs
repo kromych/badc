@@ -44,7 +44,7 @@ use super::Compiler;
 /// which streams, so the bound is on bytes rather than accesses.
 const MAX_MEM_TRANSFER_BYTES: i64 = 256;
 /// Largest number of stores the `__builtin_memset` expansion emits.
-const MAX_MEM_FILL_ACCESSES: i64 = 32;
+const MAX_MEM_FILL_ACCESSES: i64 = super::super::ast::MAX_MEM_FILL_ACCESSES;
 /// Same for `__builtin_memmove`, whose expansion holds every loaded
 /// unit live at once so the objects may overlap; the bound is on
 /// simultaneously live values.

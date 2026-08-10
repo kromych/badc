@@ -3069,6 +3069,15 @@ fn anon_union_init() {
 }
 
 #[test]
+fn packed_anon_struct_layout() {
+    // `packed` removes the padding between an aggregate's own members, not
+    // the padding inside a member's type. A member promoted from an
+    // anonymous struct/union has to lay out exactly like the same-typed
+    // named member, on every data model.
+    assert_eq!(run_fixture("packed_anon_struct_layout.c"), 0);
+}
+
+#[test]
 fn packed_anon_union_layout() {
     // A trailing `__attribute__((packed))` repacks the fields; the promoted
     // members of an anonymous union must keep overlapping (and a nested

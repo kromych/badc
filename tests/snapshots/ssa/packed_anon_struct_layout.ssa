@@ -1,0 +1,1782 @@
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=main
+fn ent_pc=0 n_params=0 variadic=false locals=3
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> x1
+    terminator Jmp(b1)   (exit_acc=v1)
+  block 1  start_pc=0
+    v3   LoadLocal { off=-3, kind=I32 }                   -> x0
+    v4   Imm(1)                                           -> x0
+    v5   Imm(0)                                           -> x0
+    v6   Imm(1)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v6)
+  block 2  start_pc=0
+    v7   Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v7)
+  block 3  start_pc=0
+    v8   Imm(1)                                           -> x0
+    v9   Imm(2)                                           -> x0
+    v10  Imm(0)                                           -> x0
+    v11  Imm(2)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v11)
+  block 4  start_pc=0
+    v12  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v12)
+  block 5  start_pc=0
+    v13  Imm(0)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v13)
+  block 6  start_pc=0
+    v14  Imm(2)                                           -> x0
+    v15  Imm(3)                                           -> x0
+    v16  Imm(0)                                           -> x0
+    v17  Imm(3)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  Imm(1)                                           -> x1
+    terminator Jmp(b7)   (exit_acc=v18)
+  block 7  start_pc=0
+    v23  Imm(0)                                           -> x0
+    terminator Jmp(b8)   (exit_acc=v23)
+  block 8  start_pc=0
+    v24  Imm(3)                                           -> x0
+    v25  Imm(4)                                           -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(4)                                           -> x0
+    v28  Imm(0)                                           -> x0
+    v29  Imm(1)                                           -> x1
+    terminator Jmp(b9)   (exit_acc=v28)
+  block 9  start_pc=0
+    v33  Imm(0)                                           -> x0
+    terminator Jmp(b10)   (exit_acc=v33)
+  block 10  start_pc=0
+    v34  Imm(4)                                           -> x0
+    v35  Imm(5)                                           -> x0
+    v36  Imm(0)                                           -> x0
+    v37  Imm(5)                                           -> x0
+    v38  Imm(0)                                           -> x0
+    v39  Imm(5)                                           -> x1
+    v40  Imm(1)                                           -> x1
+    terminator Jmp(b11)   (exit_acc=v38)
+  block 11  start_pc=0
+    v44  Imm(0)                                           -> x0
+    terminator Jmp(b12)   (exit_acc=v44)
+  block 12  start_pc=0
+    v45  Imm(5)                                           -> x0
+    v46  Imm(6)                                           -> x0
+    v47  Imm(0)                                           -> x0
+    v48  Imm(6)                                           -> x0
+    v49  Imm(0)                                           -> x0
+    v50  Imm(9)                                           -> x1
+    v51  Imm(1)                                           -> x1
+    terminator Jmp(b13)   (exit_acc=v49)
+  block 13  start_pc=0
+    v55  Imm(0)                                           -> x0
+    terminator Jmp(b14)   (exit_acc=v55)
+  block 14  start_pc=0
+    v56  Imm(6)                                           -> x0
+    v57  Imm(7)                                           -> x0
+    v58  Imm(0)                                           -> x0
+    v59  Imm(7)                                           -> x0
+    terminator Jmp(b15)   (exit_acc=v59)
+  block 15  start_pc=0
+    v60  Imm(0)                                           -> x0
+    terminator Jmp(b16)   (exit_acc=v60)
+  block 16  start_pc=0
+    v61  Imm(7)                                           -> x0
+    v62  Imm(8)                                           -> x0
+    v63  Imm(0)                                           -> x0
+    v64  Imm(8)                                           -> x0
+    terminator Jmp(b17)   (exit_acc=v64)
+  block 17  start_pc=0
+    v65  Imm(0)                                           -> x0
+    terminator Jmp(b18)   (exit_acc=v65)
+  block 18  start_pc=0
+    v66  Imm(8)                                           -> x0
+    v67  Imm(9)                                           -> x0
+    v68  Imm(0)                                           -> x0
+    v69  Imm(9)                                           -> x0
+    v70  Imm(0)                                           -> x0
+    v71  Imm(1)                                           -> x1
+    terminator Jmp(b19)   (exit_acc=v70)
+  block 19  start_pc=0
+    v75  Imm(0)                                           -> x0
+    terminator Jmp(b20)   (exit_acc=v75)
+  block 20  start_pc=0
+    v76  Imm(9)                                           -> x0
+    v77  Imm(10)                                          -> x0
+    v78  Imm(0)                                           -> x0
+    v79  Imm(10)                                          -> x0
+    v80  Imm(0)                                           -> x0
+    v81  Imm(1)                                           -> x1
+    terminator Jmp(b21)   (exit_acc=v80)
+  block 21  start_pc=0
+    v85  Imm(0)                                           -> x0
+    terminator Jmp(b22)   (exit_acc=v85)
+  block 22  start_pc=0
+    v86  Imm(10)                                          -> x0
+    v87  Imm(11)                                          -> x0
+    v88  Imm(0)                                           -> x0
+    v89  Imm(11)                                          -> x0
+    v90  Imm(0)                                           -> x0
+    v91  Imm(5)                                           -> x1
+    v92  Imm(1)                                           -> x1
+    terminator Jmp(b23)   (exit_acc=v90)
+  block 23  start_pc=0
+    v96  Imm(0)                                           -> x0
+    terminator Jmp(b24)   (exit_acc=v96)
+  block 24  start_pc=0
+    v97  Imm(11)                                          -> x0
+    v98  Imm(12)                                          -> x0
+    v99  Imm(0)                                           -> x0
+    v100 Imm(12)                                          -> x0
+    v101 Imm(0)                                           -> x0
+    v102 Imm(9)                                           -> x1
+    v103 Imm(1)                                           -> x1
+    terminator Jmp(b25)   (exit_acc=v101)
+  block 25  start_pc=0
+    v107 Imm(0)                                           -> x0
+    terminator Jmp(b26)   (exit_acc=v107)
+  block 26  start_pc=0
+    v108 Imm(12)                                          -> x0
+    v109 Imm(13)                                          -> x0
+    v110 Imm(0)                                           -> x0
+    v111 Imm(13)                                          -> x0
+    terminator Jmp(b27)   (exit_acc=v111)
+  block 27  start_pc=0
+    v112 Imm(0)                                           -> x0
+    terminator Jmp(b28)   (exit_acc=v112)
+  block 28  start_pc=0
+    v113 Imm(13)                                          -> x0
+    v114 Imm(14)                                          -> x0
+    v115 Imm(0)                                           -> x0
+    v116 Imm(14)                                          -> x0
+    terminator Jmp(b29)   (exit_acc=v116)
+  block 29  start_pc=0
+    v117 Imm(0)                                           -> x0
+    terminator Jmp(b30)   (exit_acc=v117)
+  block 30  start_pc=0
+    v118 Imm(0)                                           -> x0
+    terminator Jmp(b31)   (exit_acc=v118)
+  block 31  start_pc=0
+    v119 Imm(14)                                          -> x0
+    v120 Imm(15)                                          -> x0
+    v121 Imm(0)                                           -> x0
+    v122 Imm(15)                                          -> x0
+    v123 Imm(0)                                           -> x0
+    v124 Imm(1)                                           -> x1
+    terminator Jmp(b32)   (exit_acc=v123)
+  block 32  start_pc=0
+    v128 Imm(0)                                           -> x0
+    terminator Jmp(b33)   (exit_acc=v128)
+  block 33  start_pc=0
+    v129 Imm(15)                                          -> x0
+    v130 Imm(16)                                          -> x0
+    v131 Imm(0)                                           -> x0
+    v132 Imm(16)                                          -> x0
+    v133 Imm(0)                                           -> x0
+    v134 Imm(5)                                           -> x1
+    v135 Imm(1)                                           -> x1
+    terminator Jmp(b34)   (exit_acc=v133)
+  block 34  start_pc=0
+    v139 Imm(0)                                           -> x0
+    terminator Jmp(b35)   (exit_acc=v139)
+  block 35  start_pc=0
+    v140 Imm(16)                                          -> x0
+    v141 Imm(17)                                          -> x0
+    v142 Imm(0)                                           -> x0
+    v143 Imm(17)                                          -> x0
+    v144 Imm(0)                                           -> x0
+    v145 Imm(9)                                           -> x1
+    v146 Imm(1)                                           -> x1
+    terminator Jmp(b36)   (exit_acc=v144)
+  block 36  start_pc=0
+    v150 Imm(0)                                           -> x0
+    terminator Jmp(b37)   (exit_acc=v150)
+  block 37  start_pc=0
+    v151 Imm(17)                                          -> x0
+    v152 Imm(18)                                          -> x0
+    v153 Imm(0)                                           -> x0
+    v154 Imm(18)                                          -> x0
+    terminator Jmp(b38)   (exit_acc=v154)
+  block 38  start_pc=0
+    v155 Imm(0)                                           -> x0
+    terminator Jmp(b39)   (exit_acc=v155)
+  block 39  start_pc=0
+    v156 Imm(18)                                          -> x0
+    v157 Imm(19)                                          -> x0
+    v158 Imm(0)                                           -> x0
+    v159 Imm(19)                                          -> x0
+    terminator Jmp(b40)   (exit_acc=v159)
+  block 40  start_pc=0
+    v160 Imm(0)                                           -> x0
+    terminator Jmp(b41)   (exit_acc=v160)
+  block 41  start_pc=0
+    v161 Imm(0)                                           -> x0
+    terminator Jmp(b42)   (exit_acc=v161)
+  block 42  start_pc=0
+    v162 Imm(19)                                          -> x0
+    v163 Imm(20)                                          -> x0
+    v164 Imm(0)                                           -> x0
+    v165 Imm(20)                                          -> x0
+    v166 Imm(0)                                           -> x0
+    v167 Imm(1)                                           -> x1
+    terminator Jmp(b43)   (exit_acc=v166)
+  block 43  start_pc=0
+    v171 Imm(0)                                           -> x0
+    terminator Jmp(b44)   (exit_acc=v171)
+  block 44  start_pc=0
+    v172 Imm(20)                                          -> x0
+    v173 Imm(21)                                          -> x0
+    v174 Imm(0)                                           -> x0
+    v175 Imm(21)                                          -> x0
+    v176 Imm(0)                                           -> x0
+    v177 Imm(5)                                           -> x1
+    v178 Imm(1)                                           -> x1
+    terminator Jmp(b45)   (exit_acc=v176)
+  block 45  start_pc=0
+    v182 Imm(0)                                           -> x0
+    terminator Jmp(b46)   (exit_acc=v182)
+  block 46  start_pc=0
+    v183 Imm(21)                                          -> x0
+    v184 Imm(22)                                          -> x0
+    v185 Imm(0)                                           -> x0
+    v186 Imm(22)                                          -> x0
+    v187 Imm(0)                                           -> x0
+    v188 Imm(9)                                           -> x1
+    v189 Imm(1)                                           -> x1
+    terminator Jmp(b47)   (exit_acc=v187)
+  block 47  start_pc=0
+    v193 Imm(0)                                           -> x0
+    terminator Jmp(b48)   (exit_acc=v193)
+  block 48  start_pc=0
+    v194 Imm(22)                                          -> x0
+    v195 Imm(23)                                          -> x0
+    v196 Imm(0)                                           -> x0
+    v197 Imm(23)                                          -> x0
+    v198 Imm(0)                                           -> x0
+    v199 Imm(13)                                          -> x1
+    v200 Imm(1)                                           -> x1
+    terminator Jmp(b49)   (exit_acc=v198)
+  block 49  start_pc=0
+    v204 Imm(0)                                           -> x0
+    terminator Jmp(b50)   (exit_acc=v204)
+  block 50  start_pc=0
+    v205 Imm(23)                                          -> x0
+    v206 Imm(24)                                          -> x0
+    v207 Imm(0)                                           -> x0
+    v208 Imm(24)                                          -> x0
+    terminator Jmp(b51)   (exit_acc=v208)
+  block 51  start_pc=0
+    v209 Imm(0)                                           -> x0
+    terminator Jmp(b52)   (exit_acc=v209)
+  block 52  start_pc=0
+    v210 Imm(24)                                          -> x0
+    v211 Imm(25)                                          -> x0
+    v212 Imm(0)                                           -> x0
+    v213 Imm(25)                                          -> x0
+    v214 Imm(0)                                           -> x0
+    v215 Imm(1)                                           -> x1
+    terminator Jmp(b53)   (exit_acc=v214)
+  block 53  start_pc=0
+    v219 Imm(0)                                           -> x0
+    terminator Jmp(b54)   (exit_acc=v219)
+  block 54  start_pc=0
+    v220 Imm(25)                                          -> x0
+    v221 Imm(26)                                          -> x0
+    v222 Imm(0)                                           -> x0
+    v223 Imm(26)                                          -> x0
+    v224 Imm(0)                                           -> x0
+    v225 Imm(5)                                           -> x1
+    v226 Imm(1)                                           -> x1
+    terminator Jmp(b55)   (exit_acc=v224)
+  block 55  start_pc=0
+    v230 Imm(0)                                           -> x0
+    terminator Jmp(b56)   (exit_acc=v230)
+  block 56  start_pc=0
+    v231 Imm(26)                                          -> x0
+    v232 Imm(27)                                          -> x0
+    v233 Imm(0)                                           -> x0
+    v234 Imm(27)                                          -> x0
+    v235 Imm(0)                                           -> x0
+    v236 Imm(9)                                           -> x1
+    v237 Imm(1)                                           -> x1
+    terminator Jmp(b57)   (exit_acc=v235)
+  block 57  start_pc=0
+    v241 Imm(0)                                           -> x0
+    terminator Jmp(b58)   (exit_acc=v241)
+  block 58  start_pc=0
+    v242 Imm(27)                                          -> x0
+    v243 Imm(28)                                          -> x0
+    v244 Imm(0)                                           -> x0
+    v245 Imm(28)                                          -> x0
+    v246 Imm(0)                                           -> x0
+    v247 Imm(13)                                          -> x1
+    v248 Imm(1)                                           -> x1
+    terminator Jmp(b59)   (exit_acc=v246)
+  block 59  start_pc=0
+    v252 Imm(0)                                           -> x0
+    terminator Jmp(b60)   (exit_acc=v252)
+  block 60  start_pc=0
+    v253 Imm(28)                                          -> x0
+    v254 Imm(29)                                          -> x0
+    v255 Imm(0)                                           -> x0
+    v256 Imm(29)                                          -> x0
+    terminator Jmp(b61)   (exit_acc=v256)
+  block 61  start_pc=0
+    v257 Imm(0)                                           -> x0
+    terminator Jmp(b62)   (exit_acc=v257)
+  block 62  start_pc=0
+    v258 Imm(29)                                          -> x0
+    v259 Imm(30)                                          -> x0
+    v260 Imm(0)                                           -> x0
+    v261 Imm(30)                                          -> x0
+    terminator Jmp(b63)   (exit_acc=v261)
+  block 63  start_pc=0
+    v262 Imm(0)                                           -> x0
+    terminator Jmp(b64)   (exit_acc=v262)
+  block 64  start_pc=0
+    v263 Imm(0)                                           -> x0
+    terminator Jmp(b65)   (exit_acc=v263)
+  block 65  start_pc=0
+    v264 Imm(30)                                          -> x0
+    v265 Imm(31)                                          -> x0
+    v266 Imm(0)                                           -> x0
+    v267 Imm(31)                                          -> x0
+    v268 Imm(0)                                           -> x0
+    v269 Imm(1)                                           -> x1
+    terminator Jmp(b66)   (exit_acc=v268)
+  block 66  start_pc=0
+    v273 Imm(0)                                           -> x0
+    terminator Jmp(b67)   (exit_acc=v273)
+  block 67  start_pc=0
+    v274 Imm(31)                                          -> x0
+    v275 Imm(32)                                          -> x0
+    v276 Imm(0)                                           -> x0
+    v277 Imm(32)                                          -> x0
+    v278 Imm(0)                                           -> x0
+    v279 Imm(1)                                           -> x1
+    terminator Jmp(b68)   (exit_acc=v278)
+  block 68  start_pc=0
+    v283 Imm(0)                                           -> x0
+    terminator Jmp(b69)   (exit_acc=v283)
+  block 69  start_pc=0
+    v284 Imm(32)                                          -> x0
+    v285 Imm(33)                                          -> x0
+    v286 Imm(0)                                           -> x0
+    v287 Imm(33)                                          -> x0
+    v288 Imm(0)                                           -> x0
+    v289 Imm(5)                                           -> x1
+    v290 Imm(1)                                           -> x1
+    terminator Jmp(b70)   (exit_acc=v288)
+  block 70  start_pc=0
+    v294 Imm(0)                                           -> x0
+    terminator Jmp(b71)   (exit_acc=v294)
+  block 71  start_pc=0
+    v295 Imm(33)                                          -> x0
+    v296 Imm(34)                                          -> x0
+    v297 Imm(0)                                           -> x0
+    v298 Imm(34)                                          -> x0
+    terminator Jmp(b72)   (exit_acc=v298)
+  block 72  start_pc=0
+    v299 Imm(0)                                           -> x0
+    terminator Jmp(b73)   (exit_acc=v299)
+  block 73  start_pc=0
+    v300 Imm(34)                                          -> x0
+    v301 Imm(35)                                          -> x0
+    v302 Imm(0)                                           -> x0
+    v303 Imm(35)                                          -> x0
+    v304 Imm(0)                                           -> x0
+    v305 Imm(1)                                           -> x1
+    terminator Jmp(b74)   (exit_acc=v304)
+  block 74  start_pc=0
+    v309 Imm(0)                                           -> x0
+    terminator Jmp(b75)   (exit_acc=v309)
+  block 75  start_pc=0
+    v310 Imm(35)                                          -> x0
+    v311 Imm(36)                                          -> x0
+    v312 Imm(0)                                           -> x0
+    v313 Imm(36)                                          -> x0
+    v314 Imm(0)                                           -> x0
+    v315 Imm(1)                                           -> x1
+    terminator Jmp(b76)   (exit_acc=v314)
+  block 76  start_pc=0
+    v319 Imm(0)                                           -> x0
+    terminator Jmp(b77)   (exit_acc=v319)
+  block 77  start_pc=0
+    v320 Imm(36)                                          -> x0
+    v321 Imm(37)                                          -> x0
+    v322 Imm(0)                                           -> x0
+    v323 Imm(37)                                          -> x0
+    v324 Imm(0)                                           -> x0
+    v325 Imm(5)                                           -> x1
+    v326 Imm(1)                                           -> x1
+    terminator Jmp(b78)   (exit_acc=v324)
+  block 78  start_pc=0
+    v330 Imm(0)                                           -> x0
+    terminator Jmp(b79)   (exit_acc=v330)
+  block 79  start_pc=0
+    v331 Imm(37)                                          -> x0
+    v332 Imm(38)                                          -> x0
+    v333 Imm(0)                                           -> x0
+    v334 Imm(38)                                          -> x0
+    terminator Jmp(b80)   (exit_acc=v334)
+  block 80  start_pc=0
+    v335 Imm(0)                                           -> x0
+    terminator Jmp(b81)   (exit_acc=v335)
+  block 81  start_pc=0
+    v336 Imm(38)                                          -> x0
+    v337 Imm(39)                                          -> x0
+    v338 Imm(0)                                           -> x0
+    v339 Imm(39)                                          -> x0
+    terminator Jmp(b82)   (exit_acc=v339)
+  block 82  start_pc=0
+    v340 Imm(0)                                           -> x0
+    terminator Jmp(b83)   (exit_acc=v340)
+  block 83  start_pc=0
+    v341 Imm(0)                                           -> x0
+    terminator Jmp(b84)   (exit_acc=v341)
+  block 84  start_pc=0
+    v342 Imm(39)                                          -> x0
+    v343 Imm(40)                                          -> x0
+    v344 Imm(0)                                           -> x0
+    v345 Imm(40)                                          -> x0
+    v346 Imm(0)                                           -> x0
+    v347 Imm(1)                                           -> x1
+    terminator Jmp(b85)   (exit_acc=v346)
+  block 85  start_pc=0
+    v351 Imm(0)                                           -> x0
+    terminator Jmp(b86)   (exit_acc=v351)
+  block 86  start_pc=0
+    v352 Imm(40)                                          -> x0
+    v353 Imm(41)                                          -> x0
+    v354 Imm(0)                                           -> x0
+    v355 Imm(41)                                          -> x0
+    v356 Imm(0)                                           -> x0
+    v357 Imm(5)                                           -> x1
+    v358 Imm(1)                                           -> x1
+    terminator Jmp(b87)   (exit_acc=v356)
+  block 87  start_pc=0
+    v362 Imm(0)                                           -> x0
+    terminator Jmp(b88)   (exit_acc=v362)
+  block 88  start_pc=0
+    v363 Imm(41)                                          -> x0
+    v364 Imm(42)                                          -> x0
+    v365 Imm(0)                                           -> x0
+    v366 Imm(42)                                          -> x0
+    v367 Imm(0)                                           -> x0
+    v368 Imm(5)                                           -> x1
+    v369 Imm(1)                                           -> x1
+    terminator Jmp(b89)   (exit_acc=v367)
+  block 89  start_pc=0
+    v373 Imm(0)                                           -> x0
+    terminator Jmp(b90)   (exit_acc=v373)
+  block 90  start_pc=0
+    v374 Imm(42)                                          -> x0
+    v375 Imm(43)                                          -> x0
+    v376 Imm(0)                                           -> x0
+    v377 Imm(43)                                          -> x0
+    v378 Imm(0)                                           -> x0
+    v379 Imm(9)                                           -> x1
+    v380 Imm(1)                                           -> x1
+    terminator Jmp(b91)   (exit_acc=v378)
+  block 91  start_pc=0
+    v384 Imm(0)                                           -> x0
+    terminator Jmp(b92)   (exit_acc=v384)
+  block 92  start_pc=0
+    v385 Imm(43)                                          -> x0
+    v386 Imm(44)                                          -> x0
+    v387 Imm(0)                                           -> x0
+    v388 Imm(44)                                          -> x0
+    terminator Jmp(b93)   (exit_acc=v388)
+  block 93  start_pc=0
+    v389 Imm(0)                                           -> x0
+    terminator Jmp(b94)   (exit_acc=v389)
+  block 94  start_pc=0
+    v390 Imm(44)                                          -> x0
+    v391 Imm(45)                                          -> x0
+    v392 Imm(0)                                           -> x0
+    v393 Imm(45)                                          -> x0
+    v394 Imm(0)                                           -> x0
+    v395 Imm(1)                                           -> x1
+    terminator Jmp(b95)   (exit_acc=v394)
+  block 95  start_pc=0
+    v399 Imm(0)                                           -> x0
+    terminator Jmp(b96)   (exit_acc=v399)
+  block 96  start_pc=0
+    v400 Imm(45)                                          -> x0
+    v401 Imm(46)                                          -> x0
+    v402 Imm(0)                                           -> x0
+    v403 Imm(46)                                          -> x0
+    v404 Imm(0)                                           -> x0
+    v405 Imm(5)                                           -> x1
+    v406 Imm(1)                                           -> x1
+    terminator Jmp(b97)   (exit_acc=v404)
+  block 97  start_pc=0
+    v410 Imm(0)                                           -> x0
+    terminator Jmp(b98)   (exit_acc=v410)
+  block 98  start_pc=0
+    v411 Imm(46)                                          -> x0
+    v412 Imm(47)                                          -> x0
+    v413 Imm(0)                                           -> x0
+    v414 Imm(47)                                          -> x0
+    v415 Imm(0)                                           -> x0
+    v416 Imm(5)                                           -> x1
+    v417 Imm(1)                                           -> x1
+    terminator Jmp(b99)   (exit_acc=v415)
+  block 99  start_pc=0
+    v421 Imm(0)                                           -> x0
+    terminator Jmp(b100)   (exit_acc=v421)
+  block 100  start_pc=0
+    v422 Imm(47)                                          -> x0
+    v423 Imm(48)                                          -> x0
+    v424 Imm(0)                                           -> x0
+    v425 Imm(48)                                          -> x0
+    terminator Jmp(b101)   (exit_acc=v425)
+  block 101  start_pc=0
+    v426 Imm(0)                                           -> x0
+    terminator Jmp(b102)   (exit_acc=v426)
+  block 102  start_pc=0
+    v427 Imm(48)                                          -> x0
+    v428 Imm(49)                                          -> x0
+    v429 Imm(0)                                           -> x0
+    v430 Imm(49)                                          -> x0
+    terminator Jmp(b103)   (exit_acc=v430)
+  block 103  start_pc=0
+    v431 Imm(0)                                           -> x0
+    terminator Jmp(b104)   (exit_acc=v431)
+  block 104  start_pc=0
+    v432 Imm(0)                                           -> x0
+    terminator Jmp(b105)   (exit_acc=v432)
+  block 105  start_pc=0
+    v433 Imm(49)                                          -> x0
+    v434 Imm(50)                                          -> x0
+    v435 Imm(0)                                           -> x0
+    v436 Imm(50)                                          -> x0
+    v437 Imm(0)                                           -> x0
+    v438 Imm(1)                                           -> x1
+    terminator Jmp(b106)   (exit_acc=v437)
+  block 106  start_pc=0
+    v442 Imm(0)                                           -> x0
+    terminator Jmp(b107)   (exit_acc=v442)
+  block 107  start_pc=0
+    v443 Imm(50)                                          -> x0
+    v444 Imm(51)                                          -> x0
+    v445 Imm(0)                                           -> x0
+    v446 Imm(51)                                          -> x0
+    v447 Imm(0)                                           -> x0
+    v448 Imm(1)                                           -> x1
+    terminator Jmp(b108)   (exit_acc=v447)
+  block 108  start_pc=0
+    v452 Imm(0)                                           -> x0
+    terminator Jmp(b109)   (exit_acc=v452)
+  block 109  start_pc=0
+    v453 Imm(51)                                          -> x0
+    v454 Imm(52)                                          -> x0
+    v455 Imm(0)                                           -> x0
+    v456 Imm(52)                                          -> x0
+    v457 Imm(0)                                           -> x0
+    v458 Imm(5)                                           -> x1
+    v459 Imm(1)                                           -> x1
+    terminator Jmp(b110)   (exit_acc=v457)
+  block 110  start_pc=0
+    v463 Imm(0)                                           -> x0
+    terminator Jmp(b111)   (exit_acc=v463)
+  block 111  start_pc=0
+    v464 Imm(52)                                          -> x0
+    v465 Imm(53)                                          -> x0
+    v466 Imm(0)                                           -> x0
+    v467 Imm(53)                                          -> x0
+    v468 Imm(0)                                           -> x0
+    v469 Imm(9)                                           -> x1
+    v470 Imm(1)                                           -> x1
+    terminator Jmp(b112)   (exit_acc=v468)
+  block 112  start_pc=0
+    v474 Imm(0)                                           -> x0
+    terminator Jmp(b113)   (exit_acc=v474)
+  block 113  start_pc=0
+    v475 Imm(53)                                          -> x0
+    v476 Imm(54)                                          -> x0
+    v477 Imm(0)                                           -> x0
+    v478 Imm(54)                                          -> x0
+    terminator Jmp(b114)   (exit_acc=v478)
+  block 114  start_pc=0
+    v479 Imm(0)                                           -> x0
+    terminator Jmp(b115)   (exit_acc=v479)
+  block 115  start_pc=0
+    v480 Imm(54)                                          -> x0
+    v481 Imm(55)                                          -> x0
+    v482 Imm(0)                                           -> x0
+    v483 Imm(55)                                          -> x0
+    v484 Imm(0)                                           -> x0
+    v485 Imm(1)                                           -> x1
+    terminator Jmp(b116)   (exit_acc=v484)
+  block 116  start_pc=0
+    v489 Imm(0)                                           -> x0
+    terminator Jmp(b117)   (exit_acc=v489)
+  block 117  start_pc=0
+    v490 Imm(55)                                          -> x0
+    v491 Imm(56)                                          -> x0
+    v492 Imm(0)                                           -> x0
+    v493 Imm(56)                                          -> x0
+    v494 Imm(0)                                           -> x0
+    v495 Imm(5)                                           -> x1
+    v496 Imm(1)                                           -> x1
+    terminator Jmp(b118)   (exit_acc=v494)
+  block 118  start_pc=0
+    v500 Imm(0)                                           -> x0
+    terminator Jmp(b119)   (exit_acc=v500)
+  block 119  start_pc=0
+    v501 Imm(56)                                          -> x0
+    v502 Imm(57)                                          -> x0
+    v503 Imm(0)                                           -> x0
+    v504 Imm(57)                                          -> x0
+    terminator Jmp(b120)   (exit_acc=v504)
+  block 120  start_pc=0
+    v505 Imm(0)                                           -> x0
+    terminator Jmp(b121)   (exit_acc=v505)
+  block 121  start_pc=0
+    v506 Imm(57)                                          -> x0
+    v507 Imm(58)                                          -> x0
+    v508 Imm(0)                                           -> x0
+    v509 Imm(58)                                          -> x0
+    terminator Jmp(b122)   (exit_acc=v509)
+  block 122  start_pc=0
+    v510 Imm(0)                                           -> x0
+    terminator Jmp(b123)   (exit_acc=v510)
+  block 123  start_pc=0
+    v511 Imm(0)                                           -> x0
+    terminator Jmp(b124)   (exit_acc=v511)
+  block 124  start_pc=0
+    v512 Imm(58)                                          -> x0
+    v513 Imm(59)                                          -> x0
+    v514 Imm(0)                                           -> x0
+    v515 Imm(59)                                          -> x0
+    v516 Imm(0)                                           -> x0
+    v517 Imm(1)                                           -> x1
+    terminator Jmp(b125)   (exit_acc=v516)
+  block 125  start_pc=0
+    v521 Imm(0)                                           -> x0
+    terminator Jmp(b126)   (exit_acc=v521)
+  block 126  start_pc=0
+    v522 Imm(59)                                          -> x0
+    v523 Imm(60)                                          -> x0
+    v524 Imm(0)                                           -> x0
+    v525 Imm(60)                                          -> x0
+    v526 Imm(0)                                           -> x0
+    v527 Imm(2)                                           -> x1
+    v528 Imm(1)                                           -> x1
+    terminator Jmp(b127)   (exit_acc=v526)
+  block 127  start_pc=0
+    v532 Imm(0)                                           -> x0
+    terminator Jmp(b128)   (exit_acc=v532)
+  block 128  start_pc=0
+    v533 Imm(60)                                          -> x0
+    v534 Imm(61)                                          -> x0
+    v535 Imm(0)                                           -> x0
+    v536 Imm(61)                                          -> x0
+    v537 Imm(0)                                           -> x0
+    v538 Imm(6)                                           -> x1
+    v539 Imm(1)                                           -> x1
+    terminator Jmp(b129)   (exit_acc=v537)
+  block 129  start_pc=0
+    v543 Imm(0)                                           -> x0
+    terminator Jmp(b130)   (exit_acc=v543)
+  block 130  start_pc=0
+    v544 Imm(61)                                          -> x0
+    v545 Imm(62)                                          -> x0
+    v546 Imm(0)                                           -> x0
+    v547 Imm(62)                                          -> x0
+    terminator Jmp(b131)   (exit_acc=v547)
+  block 131  start_pc=0
+    v548 Imm(0)                                           -> x0
+    terminator Jmp(b132)   (exit_acc=v548)
+  block 132  start_pc=0
+    v549 Imm(62)                                          -> x0
+    v550 Imm(63)                                          -> x0
+    v551 Imm(0)                                           -> x0
+    v552 Imm(63)                                          -> x0
+    v553 Imm(0)                                           -> x0
+    v554 Imm(2)                                           -> x1
+    v555 Imm(1)                                           -> x1
+    terminator Jmp(b133)   (exit_acc=v553)
+  block 133  start_pc=0
+    v559 Imm(0)                                           -> x0
+    terminator Jmp(b134)   (exit_acc=v559)
+  block 134  start_pc=0
+    v560 Imm(63)                                          -> x0
+    v561 Imm(64)                                          -> x0
+    v562 Imm(0)                                           -> x0
+    v563 Imm(64)                                          -> x0
+    v564 Imm(0)                                           -> x0
+    v565 Imm(6)                                           -> x1
+    v566 Imm(1)                                           -> x1
+    terminator Jmp(b135)   (exit_acc=v564)
+  block 135  start_pc=0
+    v570 Imm(0)                                           -> x0
+    terminator Jmp(b136)   (exit_acc=v570)
+  block 136  start_pc=0
+    v571 Imm(64)                                          -> x0
+    v572 Imm(65)                                          -> x0
+    v573 Imm(0)                                           -> x0
+    v574 Imm(65)                                          -> x0
+    terminator Jmp(b137)   (exit_acc=v574)
+  block 137  start_pc=0
+    v575 Imm(0)                                           -> x0
+    terminator Jmp(b138)   (exit_acc=v575)
+  block 138  start_pc=0
+    v576 Imm(65)                                          -> x0
+    v577 Imm(66)                                          -> x0
+    v578 Imm(0)                                           -> x0
+    v579 Imm(66)                                          -> x0
+    terminator Jmp(b139)   (exit_acc=v579)
+  block 139  start_pc=0
+    v580 Imm(0)                                           -> x0
+    terminator Jmp(b140)   (exit_acc=v580)
+  block 140  start_pc=0
+    v581 Imm(0)                                           -> x0
+    terminator Jmp(b141)   (exit_acc=v581)
+  block 141  start_pc=0
+    v582 Imm(66)                                          -> x0
+    v583 Imm(67)                                          -> x0
+    v584 Imm(0)                                           -> x0
+    v585 Imm(67)                                          -> x0
+    v586 Imm(0)                                           -> x0
+    v587 Imm(5)                                           -> x1
+    v588 Imm(1)                                           -> x1
+    terminator Jmp(b142)   (exit_acc=v586)
+  block 142  start_pc=0
+    v592 Imm(0)                                           -> x0
+    terminator Jmp(b143)   (exit_acc=v592)
+  block 143  start_pc=0
+    v593 Imm(67)                                          -> x0
+    v594 Imm(68)                                          -> x0
+    v595 Imm(0)                                           -> x0
+    v596 Imm(68)                                          -> x0
+    terminator Jmp(b144)   (exit_acc=v596)
+  block 144  start_pc=0
+    v597 Imm(0)                                           -> x0
+    terminator Jmp(b145)   (exit_acc=v597)
+  block 145  start_pc=0
+    v598 Imm(68)                                          -> x0
+    v599 Imm(69)                                          -> x0
+    v600 Imm(0)                                           -> x0
+    v601 Imm(69)                                          -> x0
+    v602 Imm(0)                                           -> x0
+    v603 Imm(5)                                           -> x1
+    v604 Imm(1)                                           -> x1
+    terminator Jmp(b146)   (exit_acc=v602)
+  block 146  start_pc=0
+    v608 Imm(0)                                           -> x0
+    terminator Jmp(b147)   (exit_acc=v608)
+  block 147  start_pc=0
+    v609 Imm(69)                                          -> x0
+    v610 Imm(70)                                          -> x0
+    v611 Imm(0)                                           -> x0
+    v612 Imm(70)                                          -> x0
+    terminator Jmp(b148)   (exit_acc=v612)
+  block 148  start_pc=0
+    v613 Imm(0)                                           -> x0
+    terminator Jmp(b149)   (exit_acc=v613)
+  block 149  start_pc=0
+    v614 Imm(70)                                          -> x0
+    v615 Imm(71)                                          -> x0
+    v616 Imm(0)                                           -> x0
+    v617 Imm(71)                                          -> x0
+    terminator Jmp(b150)   (exit_acc=v617)
+  block 150  start_pc=0
+    v618 Imm(0)                                           -> x0
+    terminator Jmp(b151)   (exit_acc=v618)
+  block 151  start_pc=0
+    v619 Imm(0)                                           -> x0
+    terminator Jmp(b152)   (exit_acc=v619)
+  block 152  start_pc=0
+    v620 Imm(71)                                          -> x0
+    v621 Imm(72)                                          -> x0
+    v622 Imm(0)                                           -> x0
+    v623 Imm(72)                                          -> x0
+    v624 Imm(0)                                           -> x0
+    v625 Imm(1)                                           -> x1
+    terminator Jmp(b153)   (exit_acc=v624)
+  block 153  start_pc=0
+    v629 Imm(0)                                           -> x0
+    terminator Jmp(b154)   (exit_acc=v629)
+  block 154  start_pc=0
+    v630 Imm(72)                                          -> x0
+    v631 Imm(73)                                          -> x0
+    v632 Imm(0)                                           -> x0
+    v633 Imm(73)                                          -> x0
+    v634 Imm(0)                                           -> x0
+    v635 Imm(5)                                           -> x1
+    v636 Imm(1)                                           -> x1
+    terminator Jmp(b155)   (exit_acc=v634)
+  block 155  start_pc=0
+    v640 Imm(0)                                           -> x0
+    terminator Jmp(b156)   (exit_acc=v640)
+  block 156  start_pc=0
+    v641 Imm(73)                                          -> x0
+    v642 Imm(74)                                          -> x0
+    v643 Imm(0)                                           -> x0
+    v644 Imm(74)                                          -> x0
+    v645 Imm(0)                                           -> x0
+    v646 Imm(10)                                          -> x1
+    v647 Imm(1)                                           -> x1
+    terminator Jmp(b157)   (exit_acc=v645)
+  block 157  start_pc=0
+    v651 Imm(0)                                           -> x0
+    terminator Jmp(b158)   (exit_acc=v651)
+  block 158  start_pc=0
+    v652 Imm(74)                                          -> x0
+    v653 Imm(75)                                          -> x0
+    v654 Imm(0)                                           -> x0
+    v655 Imm(75)                                          -> x0
+    terminator Jmp(b159)   (exit_acc=v655)
+  block 159  start_pc=0
+    v656 Imm(0)                                           -> x0
+    terminator Jmp(b160)   (exit_acc=v656)
+  block 160  start_pc=0
+    v657 Imm(75)                                          -> x0
+    v658 Imm(76)                                          -> x0
+    v659 Imm(0)                                           -> x0
+    v660 Imm(76)                                          -> x0
+    v661 Imm(0)                                           -> x0
+    v662 Imm(5)                                           -> x1
+    v663 Imm(1)                                           -> x1
+    terminator Jmp(b161)   (exit_acc=v661)
+  block 161  start_pc=0
+    v667 Imm(0)                                           -> x0
+    terminator Jmp(b162)   (exit_acc=v667)
+  block 162  start_pc=0
+    v668 Imm(76)                                          -> x0
+    v669 Imm(77)                                          -> x0
+    v670 Imm(0)                                           -> x0
+    v671 Imm(77)                                          -> x0
+    v672 Imm(0)                                           -> x0
+    v673 Imm(10)                                          -> x1
+    v674 Imm(1)                                           -> x1
+    terminator Jmp(b163)   (exit_acc=v672)
+  block 163  start_pc=0
+    v678 Imm(0)                                           -> x0
+    terminator Jmp(b164)   (exit_acc=v678)
+  block 164  start_pc=0
+    v679 Imm(77)                                          -> x0
+    v680 Imm(78)                                          -> x0
+    v681 Imm(0)                                           -> x0
+    v682 Imm(78)                                          -> x0
+    terminator Jmp(b165)   (exit_acc=v682)
+  block 165  start_pc=0
+    v683 Imm(0)                                           -> x0
+    terminator Jmp(b166)   (exit_acc=v683)
+  block 166  start_pc=0
+    v684 Imm(78)                                          -> x0
+    v685 Imm(79)                                          -> x0
+    v686 Imm(0)                                           -> x0
+    v687 Imm(79)                                          -> x0
+    terminator Jmp(b167)   (exit_acc=v687)
+  block 167  start_pc=0
+    v688 Imm(0)                                           -> x0
+    terminator Jmp(b168)   (exit_acc=v688)
+  block 168  start_pc=0
+    v689 Imm(0)                                           -> x0
+    terminator Jmp(b169)   (exit_acc=v689)
+  block 169  start_pc=0
+    v690 Imm(79)                                          -> x0
+    v691 Imm(80)                                          -> x0
+    v692 Imm(0)                                           -> x0
+    v693 Imm(80)                                          -> x0
+    v694 Imm(0)                                           -> x0
+    v695 Imm(2)                                           -> x1
+    v696 Imm(1)                                           -> x1
+    terminator Jmp(b170)   (exit_acc=v694)
+  block 170  start_pc=0
+    v700 Imm(0)                                           -> x0
+    terminator Jmp(b171)   (exit_acc=v700)
+  block 171  start_pc=0
+    v701 Imm(80)                                          -> x0
+    v702 Imm(81)                                          -> x0
+    v703 Imm(0)                                           -> x0
+    v704 Imm(81)                                          -> x0
+    v705 Imm(0)                                           -> x0
+    v706 Imm(3)                                           -> x1
+    v707 Imm(1)                                           -> x1
+    terminator Jmp(b172)   (exit_acc=v705)
+  block 172  start_pc=0
+    v711 Imm(0)                                           -> x0
+    terminator Jmp(b173)   (exit_acc=v711)
+  block 173  start_pc=0
+    v712 Imm(81)                                          -> x0
+    v713 Imm(82)                                          -> x0
+    v714 Imm(0)                                           -> x0
+    v715 Imm(82)                                          -> x0
+    v716 Imm(0)                                           -> x0
+    v717 Imm(2)                                           -> x1
+    v718 Imm(1)                                           -> x1
+    terminator Jmp(b174)   (exit_acc=v716)
+  block 174  start_pc=0
+    v722 Imm(0)                                           -> x0
+    terminator Jmp(b175)   (exit_acc=v722)
+  block 175  start_pc=0
+    v723 Imm(82)                                          -> x0
+    v724 Imm(83)                                          -> x0
+    v725 Imm(0)                                           -> x0
+    v726 Imm(83)                                          -> x0
+    terminator Jmp(b176)   (exit_acc=v726)
+  block 176  start_pc=0
+    v727 Imm(0)                                           -> x0
+    terminator Jmp(b177)   (exit_acc=v727)
+  block 177  start_pc=0
+    v728 Imm(83)                                          -> x0
+    v729 Imm(84)                                          -> x0
+    v730 Imm(0)                                           -> x0
+    v731 Imm(84)                                          -> x0
+    terminator Jmp(b178)   (exit_acc=v731)
+  block 178  start_pc=0
+    v732 Imm(0)                                           -> x0
+    terminator Jmp(b179)   (exit_acc=v732)
+  block 179  start_pc=0
+    v733 Imm(0)                                           -> x0
+    terminator Jmp(b180)   (exit_acc=v733)
+  block 180  start_pc=0
+    v734 Imm(84)                                          -> x0
+    v735 Imm(85)                                          -> x0
+    v736 Imm(0)                                           -> x0
+    v737 Imm(85)                                          -> x0
+    v738 Imm(0)                                           -> x0
+    v739 Imm(2)                                           -> x1
+    v740 Imm(1)                                           -> x1
+    terminator Jmp(b181)   (exit_acc=v738)
+  block 181  start_pc=0
+    v744 Imm(0)                                           -> x0
+    terminator Jmp(b182)   (exit_acc=v744)
+  block 182  start_pc=0
+    v745 Imm(85)                                          -> x0
+    v746 Imm(86)                                          -> x0
+    v747 Imm(0)                                           -> x0
+    v748 Imm(86)                                          -> x0
+    terminator Jmp(b183)   (exit_acc=v748)
+  block 183  start_pc=0
+    v749 Imm(0)                                           -> x0
+    terminator Jmp(b184)   (exit_acc=v749)
+  block 184  start_pc=0
+    v750 Imm(86)                                          -> x0
+    v751 Imm(87)                                          -> x0
+    v752 Imm(0)                                           -> x0
+    v753 Imm(87)                                          -> x0
+    terminator Jmp(b185)   (exit_acc=v753)
+  block 185  start_pc=0
+    v754 Imm(0)                                           -> x0
+    terminator Jmp(b186)   (exit_acc=v754)
+  block 186  start_pc=0
+    v755 Imm(0)                                           -> x0
+    terminator Jmp(b187)   (exit_acc=v755)
+  block 187  start_pc=0
+    v756 Imm(87)                                          -> x0
+    v757 Imm(88)                                          -> x0
+    v758 Imm(0)                                           -> x0
+    v759 Imm(88)                                          -> x0
+    v760 Imm(0)                                           -> x0
+    v761 Imm(1)                                           -> x1
+    terminator Jmp(b188)   (exit_acc=v760)
+  block 188  start_pc=0
+    v765 Imm(0)                                           -> x0
+    terminator Jmp(b189)   (exit_acc=v765)
+  block 189  start_pc=0
+    v766 Imm(88)                                          -> x0
+    v767 Imm(89)                                          -> x0
+    v768 Imm(0)                                           -> x0
+    v769 Imm(89)                                          -> x0
+    v770 Imm(0)                                           -> x0
+    v771 Imm(9)                                           -> x1
+    v772 Imm(1)                                           -> x1
+    terminator Jmp(b190)   (exit_acc=v770)
+  block 190  start_pc=0
+    v776 Imm(0)                                           -> x0
+    terminator Jmp(b191)   (exit_acc=v776)
+  block 191  start_pc=0
+    v777 Imm(89)                                          -> x0
+    v778 Imm(90)                                          -> x0
+    v779 Imm(0)                                           -> x0
+    v780 Imm(90)                                          -> x0
+    terminator Jmp(b192)   (exit_acc=v780)
+  block 192  start_pc=0
+    v781 Imm(0)                                           -> x0
+    terminator Jmp(b193)   (exit_acc=v781)
+  block 193  start_pc=0
+    v782 Imm(90)                                          -> x0
+    v783 Imm(91)                                          -> x0
+    v784 Imm(0)                                           -> x0
+    v785 Imm(91)                                          -> x0
+    terminator Jmp(b194)   (exit_acc=v785)
+  block 194  start_pc=0
+    v786 Imm(0)                                           -> x0
+    terminator Jmp(b195)   (exit_acc=v786)
+  block 195  start_pc=0
+    v787 Imm(91)                                          -> x0
+    v788 Imm(92)                                          -> x0
+    v789 Imm(0)                                           -> x0
+    v790 Imm(92)                                          -> x0
+    v791 Imm(0)                                           -> x0
+    v792 Imm(1)                                           -> x1
+    terminator Jmp(b196)   (exit_acc=v791)
+  block 196  start_pc=0
+    v796 Imm(0)                                           -> x0
+    terminator Jmp(b197)   (exit_acc=v796)
+  block 197  start_pc=0
+    v797 Imm(92)                                          -> x0
+    v798 Imm(93)                                          -> x0
+    v799 Imm(0)                                           -> x0
+    v800 Imm(93)                                          -> x0
+    terminator Jmp(b198)   (exit_acc=v800)
+  block 198  start_pc=0
+    v801 Imm(0)                                           -> x0
+    terminator Jmp(b199)   (exit_acc=v801)
+  block 199  start_pc=0
+    v802 Imm(93)                                          -> x0
+    v803 Imm(94)                                          -> x0
+    v804 Imm(0)                                           -> x0
+    v805 Imm(94)                                          -> x0
+    terminator Jmp(b200)   (exit_acc=v805)
+  block 200  start_pc=0
+    v806 Imm(0)                                           -> x0
+    terminator Jmp(b201)   (exit_acc=v806)
+  block 201  start_pc=0
+    v807 Imm(0)                                           -> x0
+    terminator Jmp(b202)   (exit_acc=v807)
+  block 202  start_pc=0
+    v808 Imm(94)                                          -> x0
+    v809 Imm(95)                                          -> x0
+    v810 Imm(0)                                           -> x0
+    v811 Imm(95)                                          -> x0
+    v812 Imm(0)                                           -> x0
+    v813 Imm(1)                                           -> x1
+    terminator Jmp(b203)   (exit_acc=v812)
+  block 203  start_pc=0
+    v817 Imm(0)                                           -> x0
+    terminator Jmp(b204)   (exit_acc=v817)
+  block 204  start_pc=0
+    v818 Imm(95)                                          -> x0
+    v819 Imm(96)                                          -> x0
+    v820 Imm(0)                                           -> x0
+    v821 Imm(96)                                          -> x0
+    v822 Imm(0)                                           -> x0
+    v823 Imm(17)                                          -> x1
+    v824 Imm(1)                                           -> x1
+    terminator Jmp(b205)   (exit_acc=v822)
+  block 205  start_pc=0
+    v828 Imm(0)                                           -> x0
+    terminator Jmp(b206)   (exit_acc=v828)
+  block 206  start_pc=0
+    v829 Imm(96)                                          -> x0
+    v830 Imm(97)                                          -> x0
+    v831 Imm(0)                                           -> x0
+    v832 Imm(97)                                          -> x0
+    v833 Imm(0)                                           -> x0
+    v834 Imm(33)                                          -> x1
+    v835 Imm(1)                                           -> x1
+    terminator Jmp(b207)   (exit_acc=v833)
+  block 207  start_pc=0
+    v839 Imm(0)                                           -> x0
+    terminator Jmp(b208)   (exit_acc=v839)
+  block 208  start_pc=0
+    v840 Imm(97)                                          -> x0
+    v841 Imm(98)                                          -> x0
+    v842 Imm(0)                                           -> x0
+    v843 Imm(98)                                          -> x0
+    terminator Jmp(b209)   (exit_acc=v843)
+  block 209  start_pc=0
+    v844 Imm(0)                                           -> x0
+    terminator Jmp(b210)   (exit_acc=v844)
+  block 210  start_pc=0
+    v845 Imm(98)                                          -> x0
+    v846 Imm(99)                                          -> x0
+    v847 Imm(0)                                           -> x0
+    v848 Imm(99)                                          -> x0
+    terminator Jmp(b211)   (exit_acc=v848)
+  block 211  start_pc=0
+    v849 Imm(0)                                           -> x0
+    terminator Jmp(b212)   (exit_acc=v849)
+  block 212  start_pc=0
+    v850 Imm(99)                                          -> x0
+    v851 Imm(100)                                         -> x0
+    v852 Imm(0)                                           -> x0
+    v853 Imm(100)                                         -> x0
+    v854 Imm(0)                                           -> x0
+    v855 Imm(17)                                          -> x1
+    v856 Imm(1)                                           -> x1
+    terminator Jmp(b213)   (exit_acc=v854)
+  block 213  start_pc=0
+    v860 Imm(0)                                           -> x0
+    terminator Jmp(b214)   (exit_acc=v860)
+  block 214  start_pc=0
+    v861 Imm(100)                                         -> x0
+    v862 Imm(101)                                         -> x0
+    v863 Imm(0)                                           -> x0
+    v864 Imm(101)                                         -> x0
+    terminator Jmp(b215)   (exit_acc=v864)
+  block 215  start_pc=0
+    v865 Imm(0)                                           -> x0
+    terminator Jmp(b216)   (exit_acc=v865)
+  block 216  start_pc=0
+    v866 Imm(101)                                         -> x0
+    v867 Imm(102)                                         -> x0
+    v868 Imm(0)                                           -> x0
+    v869 Imm(102)                                         -> x0
+    terminator Jmp(b217)   (exit_acc=v869)
+  block 217  start_pc=0
+    v870 Imm(0)                                           -> x0
+    terminator Jmp(b218)   (exit_acc=v870)
+  block 218  start_pc=0
+    v871 Imm(0)                                           -> x0
+    terminator Jmp(b219)   (exit_acc=v871)
+  block 219  start_pc=0
+    v872 Imm(102)                                         -> x0
+    v873 Imm(103)                                         -> x0
+    v874 Imm(0)                                           -> x0
+    v875 Imm(103)                                         -> x0
+    v876 Imm(0)                                           -> x0
+    v877 Imm(1)                                           -> x1
+    terminator Jmp(b220)   (exit_acc=v876)
+  block 220  start_pc=0
+    v881 Imm(0)                                           -> x0
+    terminator Jmp(b221)   (exit_acc=v881)
+  block 221  start_pc=0
+    v882 Imm(103)                                         -> x0
+    v883 Imm(104)                                         -> x0
+    v884 Imm(0)                                           -> x0
+    v885 Imm(104)                                         -> x0
+    v886 Imm(0)                                           -> x0
+    v887 Imm(4)                                           -> x1
+    v888 Imm(1)                                           -> x1
+    terminator Jmp(b222)   (exit_acc=v886)
+  block 222  start_pc=0
+    v892 Imm(0)                                           -> x0
+    terminator Jmp(b223)   (exit_acc=v892)
+  block 223  start_pc=0
+    v893 Imm(104)                                         -> x0
+    v894 Imm(105)                                         -> x0
+    v895 Imm(0)                                           -> x0
+    v896 Imm(105)                                         -> x0
+    terminator Jmp(b224)   (exit_acc=v896)
+  block 224  start_pc=0
+    v897 Imm(0)                                           -> x0
+    terminator Jmp(b225)   (exit_acc=v897)
+  block 225  start_pc=0
+    v898 Imm(105)                                         -> x0
+    v899 Imm(106)                                         -> x0
+    v900 Imm(0)                                           -> x0
+    v901 Imm(106)                                         -> x0
+    terminator Jmp(b226)   (exit_acc=v901)
+  block 226  start_pc=0
+    v902 Imm(0)                                           -> x0
+    terminator Jmp(b227)   (exit_acc=v902)
+  block 227  start_pc=0
+    v903 Imm(106)                                         -> x0
+    v904 Imm(107)                                         -> x0
+    v905 Imm(0)                                           -> x0
+    v906 Imm(107)                                         -> x0
+    terminator Jmp(b228)   (exit_acc=v906)
+  block 228  start_pc=0
+    v907 Imm(0)                                           -> x0
+    terminator Jmp(b229)   (exit_acc=v907)
+  block 229  start_pc=0
+    v908 Imm(0)                                           -> x0
+    terminator Jmp(b230)   (exit_acc=v908)
+  block 230  start_pc=0
+    v909 Imm(107)                                         -> x0
+    v910 Imm(108)                                         -> x0
+    v911 Imm(0)                                           -> x0
+    v912 Imm(108)                                         -> x0
+    v913 Imm(0)                                           -> x0
+    v914 Imm(1)                                           -> x1
+    terminator Jmp(b231)   (exit_acc=v913)
+  block 231  start_pc=0
+    v918 Imm(0)                                           -> x0
+    terminator Jmp(b232)   (exit_acc=v918)
+  block 232  start_pc=0
+    v919 Imm(108)                                         -> x0
+    v920 Imm(109)                                         -> x0
+    v921 Imm(0)                                           -> x0
+    v922 Imm(109)                                         -> x0
+    terminator Jmp(b233)   (exit_acc=v922)
+  block 233  start_pc=0
+    v923 Imm(0)                                           -> x0
+    terminator Jmp(b234)   (exit_acc=v923)
+  block 234  start_pc=0
+    v924 Imm(109)                                         -> x0
+    v925 Imm(110)                                         -> x0
+    v926 Imm(0)                                           -> x0
+    v927 Imm(110)                                         -> x0
+    terminator Jmp(b235)   (exit_acc=v927)
+  block 235  start_pc=0
+    v928 Imm(0)                                           -> x0
+    terminator Jmp(b236)   (exit_acc=v928)
+  block 236  start_pc=0
+    v929 Imm(110)                                         -> x0
+    v930 Imm(111)                                         -> x0
+    v931 Imm(0)                                           -> x0
+    v932 Imm(111)                                         -> x0
+    terminator Jmp(b237)   (exit_acc=v932)
+  block 237  start_pc=0
+    v933 Imm(0)                                           -> x0
+    terminator Jmp(b238)   (exit_acc=v933)
+  block 238  start_pc=0
+    v934 Imm(0)                                           -> x0
+    terminator Jmp(b239)   (exit_acc=v934)
+  block 239  start_pc=0
+    v935 Imm(111)                                         -> x0
+    v936 Imm(112)                                         -> x0
+    v937 Imm(0)                                           -> x0
+    v938 Imm(112)                                         -> x0
+    v939 Imm(0)                                           -> x0
+    v940 Imm(5)                                           -> x1
+    v941 Imm(1)                                           -> x1
+    terminator Jmp(b240)   (exit_acc=v939)
+  block 240  start_pc=0
+    v945 Imm(0)                                           -> x0
+    terminator Jmp(b241)   (exit_acc=v945)
+  block 241  start_pc=0
+    v946 Imm(112)                                         -> x0
+    v947 Imm(113)                                         -> x0
+    v948 Imm(0)                                           -> x0
+    v949 Imm(113)                                         -> x0
+    v950 Imm(0)                                           -> x0
+    v951 Imm(13)                                          -> x1
+    v952 Imm(1)                                           -> x1
+    terminator Jmp(b242)   (exit_acc=v950)
+  block 242  start_pc=0
+    v956 Imm(0)                                           -> x0
+    terminator Jmp(b243)   (exit_acc=v956)
+  block 243  start_pc=0
+    v957 Imm(113)                                         -> x0
+    v958 Imm(114)                                         -> x0
+    v959 Imm(0)                                           -> x0
+    v960 Imm(114)                                         -> x0
+    terminator Jmp(b244)   (exit_acc=v960)
+  block 244  start_pc=0
+    v961 Imm(0)                                           -> x0
+    terminator Jmp(b245)   (exit_acc=v961)
+  block 245  start_pc=0
+    v962 Imm(114)                                         -> x0
+    v963 Imm(115)                                         -> x0
+    v964 Imm(0)                                           -> x0
+    v965 Imm(115)                                         -> x0
+    v966 Imm(0)                                           -> x0
+    v967 Imm(5)                                           -> x1
+    v968 Imm(1)                                           -> x1
+    terminator Jmp(b246)   (exit_acc=v966)
+  block 246  start_pc=0
+    v972 Imm(0)                                           -> x0
+    terminator Jmp(b247)   (exit_acc=v972)
+  block 247  start_pc=0
+    v973 Imm(115)                                         -> x0
+    v974 Imm(116)                                         -> x0
+    v975 Imm(0)                                           -> x0
+    v976 Imm(116)                                         -> x0
+    terminator Jmp(b248)   (exit_acc=v976)
+  block 248  start_pc=0
+    v977 Imm(0)                                           -> x0
+    terminator Jmp(b249)   (exit_acc=v977)
+  block 249  start_pc=0
+    v978 Imm(116)                                         -> x0
+    v979 Imm(117)                                         -> x0
+    v980 Imm(0)                                           -> x0
+    v981 Imm(117)                                         -> x0
+    terminator Jmp(b250)   (exit_acc=v981)
+  block 250  start_pc=0
+    v982 Imm(0)                                           -> x0
+    terminator Jmp(b251)   (exit_acc=v982)
+  block 251  start_pc=0
+    v983 Imm(0)                                           -> x0
+    terminator Jmp(b252)   (exit_acc=v983)
+  block 252  start_pc=0
+    v984 Imm(117)                                         -> x0
+    v985 Imm(118)                                         -> x0
+    v986 Imm(0)                                           -> x0
+    v987 Imm(118)                                         -> x0
+    v988 Imm(0)                                           -> x0
+    v989 Imm(1)                                           -> x1
+    terminator Jmp(b253)   (exit_acc=v988)
+  block 253  start_pc=0
+    v993 Imm(0)                                           -> x0
+    terminator Jmp(b254)   (exit_acc=v993)
+  block 254  start_pc=0
+    v994 Imm(118)                                         -> x0
+    v995 Imm(119)                                         -> x0
+    v996 Imm(0)                                           -> x0
+    v997 Imm(119)                                         -> x0
+    v998 Imm(0)                                           -> x0
+    v999 Imm(9)                                           -> x1
+    v1000 Imm(1)                                           -> x1
+    terminator Jmp(b255)   (exit_acc=v998)
+  block 255  start_pc=0
+    v1004 Imm(0)                                           -> x0
+    terminator Jmp(b256)   (exit_acc=v1004)
+  block 256  start_pc=0
+    v1005 Imm(119)                                         -> x0
+    v1006 Imm(120)                                         -> x0
+    v1007 Imm(0)                                           -> x0
+    v1008 Imm(120)                                         -> x0
+    v1009 Imm(0)                                           -> x0
+    v1010 Imm(17)                                          -> x1
+    v1011 Imm(1)                                           -> x1
+    terminator Jmp(b257)   (exit_acc=v1009)
+  block 257  start_pc=0
+    v1015 Imm(0)                                           -> x0
+    terminator Jmp(b258)   (exit_acc=v1015)
+  block 258  start_pc=0
+    v1016 Imm(120)                                         -> x0
+    v1017 Imm(121)                                         -> x0
+    v1018 Imm(0)                                           -> x0
+    v1019 Imm(121)                                         -> x0
+    v1020 Imm(0)                                           -> x0
+    v1021 Imm(9)                                           -> x1
+    v1022 Imm(1)                                           -> x1
+    terminator Jmp(b259)   (exit_acc=v1020)
+  block 259  start_pc=0
+    v1026 Imm(0)                                           -> x0
+    terminator Jmp(b260)   (exit_acc=v1026)
+  block 260  start_pc=0
+    v1027 Imm(121)                                         -> x0
+    v1028 Imm(122)                                         -> x0
+    v1029 Imm(0)                                           -> x0
+    v1030 Imm(122)                                         -> x0
+    terminator Jmp(b261)   (exit_acc=v1030)
+  block 261  start_pc=0
+    v1031 Imm(0)                                           -> x0
+    terminator Jmp(b262)   (exit_acc=v1031)
+  block 262  start_pc=0
+    v1032 Imm(122)                                         -> x0
+    v1033 Imm(123)                                         -> x0
+    v1034 Imm(0)                                           -> x0
+    v1035 Imm(123)                                         -> x0
+    terminator Jmp(b263)   (exit_acc=v1035)
+  block 263  start_pc=0
+    v1036 Imm(0)                                           -> x0
+    terminator Jmp(b264)   (exit_acc=v1036)
+  block 264  start_pc=0
+    v1037 Imm(123)                                         -> x0
+    v1038 Imm(124)                                         -> x0
+    v1039 Imm(0)                                           -> x0
+    v1040 Imm(124)                                         -> x0
+    terminator Jmp(b265)   (exit_acc=v1040)
+  block 265  start_pc=0
+    v1041 Imm(0)                                           -> x0
+    terminator Jmp(b266)   (exit_acc=v1041)
+  block 266  start_pc=0
+    v1042 Imm(0)                                           -> x0
+    terminator Jmp(b267)   (exit_acc=v1042)
+  block 267  start_pc=0
+    v1043 Imm(124)                                         -> x0
+    v1044 Imm(125)                                         -> x0
+    v1045 Imm(0)                                           -> x0
+    v1046 Imm(125)                                         -> x0
+    v1047 Imm(0)                                           -> x0
+    v1048 Imm(4)                                           -> x1
+    v1049 Imm(1)                                           -> x1
+    terminator Jmp(b268)   (exit_acc=v1047)
+  block 268  start_pc=0
+    v1053 Imm(0)                                           -> x0
+    terminator Jmp(b269)   (exit_acc=v1053)
+  block 269  start_pc=0
+    v1054 Imm(125)                                         -> x0
+    v1055 Imm(126)                                         -> x0
+    v1056 Imm(0)                                           -> x0
+    v1057 Imm(126)                                         -> x0
+    v1058 Imm(0)                                           -> x0
+    v1059 Imm(8)                                           -> x1
+    v1060 Imm(1)                                           -> x1
+    terminator Jmp(b270)   (exit_acc=v1058)
+  block 270  start_pc=0
+    v1064 Imm(0)                                           -> x0
+    terminator Jmp(b271)   (exit_acc=v1064)
+  block 271  start_pc=0
+    v1065 Imm(126)                                         -> x0
+    v1066 Imm(127)                                         -> x0
+    v1067 Imm(0)                                           -> x0
+    v1068 Imm(127)                                         -> x0
+    v1069 Imm(0)                                           -> x0
+    v1070 Imm(12)                                          -> x1
+    v1071 Imm(1)                                           -> x1
+    terminator Jmp(b272)   (exit_acc=v1069)
+  block 272  start_pc=0
+    v1075 Imm(0)                                           -> x0
+    terminator Jmp(b273)   (exit_acc=v1075)
+  block 273  start_pc=0
+    v1076 Imm(127)                                         -> x0
+    v1077 Imm(128)                                         -> x0
+    v1078 Imm(0)                                           -> x0
+    v1079 Imm(128)                                         -> x0
+    terminator Jmp(b274)   (exit_acc=v1079)
+  block 274  start_pc=0
+    v1080 Imm(0)                                           -> x0
+    terminator Jmp(b275)   (exit_acc=v1080)
+  block 275  start_pc=0
+    v1081 Imm(128)                                         -> x0
+    v1082 Imm(129)                                         -> x0
+    v1083 Imm(0)                                           -> x0
+    v1084 Imm(129)                                         -> x0
+    terminator Jmp(b276)   (exit_acc=v1084)
+  block 276  start_pc=0
+    v1085 Imm(0)                                           -> x0
+    terminator Jmp(b277)   (exit_acc=v1085)
+  block 277  start_pc=0
+    v1086 Imm(129)                                         -> x0
+    v1087 Imm(130)                                         -> x0
+    v1088 Imm(0)                                           -> x0
+    v1089 Imm(130)                                         -> x0
+    terminator Jmp(b278)   (exit_acc=v1089)
+  block 278  start_pc=0
+    v1090 Imm(0)                                           -> x0
+    terminator Jmp(b279)   (exit_acc=v1090)
+  block 279  start_pc=0
+    v1091 Imm(130)                                         -> x0
+    v1092 Imm(131)                                         -> x0
+    v1093 Imm(0)                                           -> x0
+    v1094 Imm(131)                                         -> x0
+    terminator Jmp(b280)   (exit_acc=v1094)
+  block 280  start_pc=0
+    v1095 Imm(0)                                           -> x0
+    terminator Jmp(b281)   (exit_acc=v1095)
+  block 281  start_pc=0
+    v1096 Imm(0)                                           -> x0
+    terminator Jmp(b282)   (exit_acc=v1096)
+  block 282  start_pc=0
+    v1097 Imm(131)                                         -> x0
+    v1098 Imm(132)                                         -> x0
+    v1099 Imm(0)                                           -> x0
+    v1100 Imm(132)                                         -> x0
+    v1101 Imm(0)                                           -> x0
+    v1102 Imm(8)                                           -> x1
+    v1103 Imm(1)                                           -> x1
+    terminator Jmp(b283)   (exit_acc=v1101)
+  block 283  start_pc=0
+    v1107 Imm(0)                                           -> x0
+    terminator Jmp(b284)   (exit_acc=v1107)
+  block 284  start_pc=0
+    v1108 Imm(132)                                         -> x0
+    v1109 Imm(133)                                         -> x0
+    v1110 Imm(0)                                           -> x0
+    v1111 Imm(133)                                         -> x0
+    v1112 Imm(0)                                           -> x0
+    v1113 Imm(12)                                          -> x1
+    v1114 Imm(1)                                           -> x1
+    terminator Jmp(b285)   (exit_acc=v1112)
+  block 285  start_pc=0
+    v1118 Imm(0)                                           -> x0
+    terminator Jmp(b286)   (exit_acc=v1118)
+  block 286  start_pc=0
+    v1119 Imm(133)                                         -> x0
+    v1120 Imm(134)                                         -> x0
+    v1121 Imm(0)                                           -> x0
+    v1122 Imm(134)                                         -> x0
+    terminator Jmp(b287)   (exit_acc=v1122)
+  block 287  start_pc=0
+    v1123 Imm(0)                                           -> x0
+    terminator Jmp(b288)   (exit_acc=v1123)
+  block 288  start_pc=0
+    v1124 LocalAddr(-2)                                    -> x0
+    v1125 Imm(0)                                           -> x1
+    v1126 LocalAddr(-2)                                    -> x1
+    v1127 Imm(1)                                           -> x1
+    v1128 Imm(0)                                           -> x1
+    v1129 Imm(72057594037927936)                           -> x1
+    v1130 LocalAddr(-2)                                    -> x1
+    v1131 BinopI { op=add, lhs=v1130, rhs_imm=1 }          -> x1
+    v1132 Imm(2)                                           -> x1
+    v1133 Imm(0)                                           -> x1
+    v1134 Imm(144115188075855872)                          -> x1
+    v1135 LocalAddr(-2)                                    -> x1
+    v1136 BinopI { op=add, lhs=v1135, rhs_imm=5 }          -> x1
+    v1137 Imm(50595078)                                    -> x1
+    v1138 Imm(0)                                           -> x1
+    v1139 LocalAddr(-2)                                    -> x1
+    v1140 BinopI { op=add, lhs=v1139, rhs_imm=9 }          -> x1
+    v1141 Imm(7)                                           -> x1
+    v1142 Imm(0)                                           -> x1
+    v1143 Imm(504403158265495552)                          -> x1
+    terminator Jmp(b289)   (exit_acc=v1143)
+  block 289  start_pc=0
+    v1144 Imm(134)                                         -> x1
+    v1145 Imm(135)                                         -> x1
+    v1146 Imm(0)                                           -> x1
+    v1147 Imm(135)                                         -> x1
+    v1148 LoadLocal { off=-3, kind=I64 }                   -> x1
+    v1149 Imm(0)                                           -> x1
+    v1150 Imm(1)                                           -> x1
+    v1151 Imm(1)                                           -> x1
+    v1152 Imm(0)                                           -> x1
+    terminator Jmp(b290)   (exit_acc=v1152)
+  block 290  start_pc=0
+    v1156 Imm(0)                                           -> x1
+    terminator Jmp(b291)   (exit_acc=v1156)
+  block 291  start_pc=0
+    v1157 Imm(135)                                         -> x1
+    v1158 Imm(136)                                         -> x1
+    v1159 Imm(0)                                           -> x1
+    v1160 Imm(136)                                         -> x1
+    v1161 LoadLocal { off=-3, kind=I64 }                   -> x1
+    v1162 Imm(1)                                           -> x1
+    v1163 BinopI { op=add, lhs=v1124, rhs_imm=1 }          -> x1
+    v1164 Imm(2)                                           -> x1
+    v1165 Imm(1)                                           -> x1
+    v1166 Imm(0)                                           -> x1
+    terminator Jmp(b292)   (exit_acc=v1166)
+  block 292  start_pc=0
+    v1170 Imm(0)                                           -> x1
+    terminator Jmp(b293)   (exit_acc=v1170)
+  block 293  start_pc=0
+    v1171 Imm(136)                                         -> x1
+    v1172 Imm(137)                                         -> x1
+    v1173 Imm(0)                                           -> x1
+    v1174 Imm(137)                                         -> x1
+    v1175 LoadLocal { off=-3, kind=I64 }                   -> x1
+    v1176 Imm(9)                                           -> x1
+    v1177 BinopI { op=add, lhs=v1124, rhs_imm=9 }          -> x0
+    v1178 Imm(7)                                           -> x0
+    v1179 Imm(1)                                           -> x0
+    v1180 Imm(0)                                           -> x0
+    terminator Jmp(b294)   (exit_acc=v1180)
+  block 294  start_pc=0
+    v1184 Imm(0)                                           -> x0
+    terminator Jmp(b295)   (exit_acc=v1184)
+  block 295  start_pc=0
+    v1185 Imm(137)                                         -> x0
+    v1186 Imm(138)                                         -> x0
+    v1187 Imm(0)                                           -> x0
+    v1188 Imm(138)                                         -> x0
+    v1189 LocalAddr(-2)                                    -> x0
+    v1190 BinopI { op=add, lhs=v1189, rhs_imm=5 }          -> x0
+    v1191 Imm(50595078)                                    -> x0
+    v1192 Imm(1)                                           -> x0
+    v1193 Imm(0)                                           -> x0
+    terminator Jmp(b296)   (exit_acc=v1193)
+  block 296  start_pc=0
+    v1197 Imm(0)                                           -> x0
+    terminator Jmp(b297)   (exit_acc=v1197)
+  block 297  start_pc=0
+    v1198 Imm(0)                                           -> x0
+    terminator Return(v1198)   (exit_acc=v1198)
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=__c5_exit
+fn ent_pc=0 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)
+; --- SSA dump (ok=true) ent_pc=2 ---
+; name=__c5_fini_trampoline
+fn ent_pc=2 n_params=1 variadic=false locals=2
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I64 }                    -> x0
+    v4   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
+    terminator Jmp(b1)
+  block 1  start_pc=0
+    v6   ImmData(0)                                       -> x3
+    v7   Imm(0)                                           -> x0
+    terminator Jmp(b3)   (exit_acc=v6)
+  block 2  start_pc=0
+    v12  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v13  BinopI { op=add, lhs=v8, rhs_imm=-8 }            -> x3
+    v14  Imm(0)                                           -> x0
+    v15  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v16  Load { addr=v13, disp=0, kind=I64 }              -> x0
+    v17  CallIndirect { target=v16, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v18  BinopI { op=and, lhs=v17, rhs_imm=255 }          -> x0
+    terminator Jmp(b3)   (exit_acc=v18)
+  block 3  start_pc=0
+    v8   Phi { incoming=[b1:v6, b2:v13], kind=I64 }       -> x3
+    v9   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v10  ImmData(0)                                       -> x0
+    v11  Binop { op=ne, lhs=v8, rhs=v10 }                 -> x0
+    terminator Bnz { cond=v11, target=b2, fall=b4 }   (exit_acc=v11)
+  block 4  start_pc=0
+    v19  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v19)
+  block 5  start_pc=0
+    v5   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)
+; --- SSA dump (ok=true) ent_pc=3 ---
+; name=__c5_register_fini
+fn ent_pc=3 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmCode(ent_pc=2)                                -> x7
+    v2   Imm(0)                                           -> x3
+    v3   CallExt { binding_idx=1, args=[v1, v2, v2], fp_arg_mask=0x0 } -> x0
+    terminator Return(v2)   (exit_acc=v2)
+; --- SSA dump (ok=true) ent_pc=4 ---
+; name=__c5_run_init_array
+fn ent_pc=4 n_params=0 variadic=false locals=1
+  spill_count=0 gpr_used=[3] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmData(0)                                       -> x0
+    v2   ImmData(0)                                       -> x1
+    v3   Binop { op=ne, lhs=v1, rhs=v2 }                  -> x0
+    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
+  block 1  start_pc=0
+    v4   Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Jmp(b2)   (exit_acc=v4)
+  block 2  start_pc=0
+    v5   ImmData(0)                                       -> x3
+    v6   Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v5)
+  block 3  start_pc=0
+    v14  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v15  Load { addr=v7, disp=0, kind=I64 }               -> x0
+    v16  CallIndirect { target=v15, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  BinopI { op=and, lhs=v16, rhs_imm=255 }          -> x0
+    terminator Jmp(b4)   (exit_acc=v17)
+  block 4  start_pc=0
+    v11  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v12  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x3
+    v13  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v12)
+  block 5  start_pc=0
+    v7   Phi { incoming=[b2:v5, b4:v12], kind=I64 }       -> x3
+    v8   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v9   ImmData(0)                                       -> x0
+    v10  Binop { op=ne, lhs=v7, rhs=v9 }                  -> x0
+    terminator Bnz { cond=v10, target=b3, fall=b6 }   (exit_acc=v10)
+  block 6  start_pc=0
+    v18  Imm(0)                                           -> x0
+    terminator Return(v18)   (exit_acc=v18)
+; --- SSA dump (ok=true) ent_pc=5 ---
+; name=__c5_entry
+fn ent_pc=5 n_params=2 variadic=false locals=1
+  spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I64)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   LoadLocal { off=3, kind=I64 }                    -> x0
+    v6   BinopI { op=and, lhs=v3, rhs_imm=255 }           -> x0
+    v7   LoadLocal { off=2, kind=I64 }                    -> x0
+    v8   Imm(0)                                           -> x0
+    v9   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v10  Imm(0)                                           -> x14
+    v11  Load { addr=v1, disp=0, kind=I64 }               -> x0
+    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
+    v13  Extend { value=v11, kind=I32 }                   -> x12
+    v14  Imm(0)                                           -> x0
+    v15  Imm(8)                                           -> x0
+    v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
+    v17  Imm(0)                                           -> x0
+    v18  ImmData(24)                                      -> x0
+    v19  LoadLocal { off=-1, kind=I64 }                   -> x1
+    v20  LoadLocal { off=-1, kind=I32 }                   -> x1
+    v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1
+    v22  Binop { op=add, lhs=v16, rhs=v21 }               -> x1
+    v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x1
+    v24  Store { addr=v18, disp=0, value=v23, kind=I64 }  -> -
+    terminator Jmp(b1)
+  block 1  start_pc=0
+    v31  ImmData(0)                                       -> x0
+    v32  ImmData(0)                                       -> x1
+    v33  Binop { op=ne, lhs=v31, rhs=v32 }                -> x0
+    terminator Bz { cond=v33, target=b3, fall=b2 }   (exit_acc=v33)
+  block 2  start_pc=0
+    v34  Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Jmp(b3)   (exit_acc=v34)
+  block 3  start_pc=0
+    v35  ImmData(0)                                       -> x3
+    v36  Imm(0)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v35)
+  block 4  start_pc=0
+    v44  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v45  Load { addr=v37, disp=0, kind=I64 }              -> x0
+    v46  CallIndirect { target=v45, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v47  BinopI { op=and, lhs=v46, rhs_imm=255 }          -> x0
+    terminator Jmp(b5)   (exit_acc=v47)
+  block 5  start_pc=0
+    v41  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v42  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x3
+    v43  Imm(0)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v42)
+  block 6  start_pc=0
+    v37  Phi { incoming=[b3:v35, b5:v42], kind=I64 }      -> x3
+    v38  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v39  ImmData(0)                                       -> x0
+    v40  Binop { op=ne, lhs=v37, rhs=v39 }                -> x0
+    terminator Bnz { cond=v40, target=b4, fall=b7 }   (exit_acc=v40)
+  block 7  start_pc=0
+    v48  Imm(0)                                           -> x0
+    terminator Jmp(b8)   (exit_acc=v48)
+  block 8  start_pc=0
+    v25  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v26  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v27  Call { target_pc=7, args=[v13, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
+    v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x0
+    v29  Extend { value=v27, kind=I32 }                   -> x0
+    v30  Call { target_pc=0, args=[v27], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    terminator Return(v10)   (exit_acc=v10)
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=atexit
+fn ent_pc=0 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I64 }                    -> x0
+    v4   Imm(0)                                           -> x6
+    v5   CallExt { binding_idx=0, args=[v1, v4, v4], fp_arg_mask=0x0 } -> x0
+    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
+    v7   Extend { value=v5, kind=I32 }                    -> x0
+    terminator Return(v7)   (exit_acc=v7)
+; --- SSA dump (ok=true) ent_pc=1 ---
+; name=at_quick_exit
+fn ent_pc=1 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I64 }                    -> x0
+    v4   Imm(0)                                           -> x6
+    v5   CallExt { binding_idx=1, args=[v1, v4], fp_arg_mask=0x0 } -> x0
+    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
+    v7   Extend { value=v5, kind=I32 }                    -> x0
+    terminator Return(v7)   (exit_acc=v7)
+; --- SSA dump (ok=true) ent_pc=2 ---
+; name=pthread_atfork
+fn ent_pc=2 n_params=3 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I64)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   ParamRef(2, kind=I64)                            -> x2
+    v6   Imm(0)                                           -> x0
+    v7   LoadLocal { off=2, kind=I64 }                    -> x0
+    v8   LoadLocal { off=3, kind=I64 }                    -> x0
+    v9   LoadLocal { off=4, kind=I64 }                    -> x0
+    v10  Imm(0)                                           -> x1
+    v11  CallExt { binding_idx=2, args=[v1, v3, v5, v10], fp_arg_mask=0x0 } -> x0
+    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
+    v13  Extend { value=v11, kind=I32 }                   -> x0
+    terminator Return(v13)   (exit_acc=v13)
+; --- SSA dump (ok=true) ent_pc=3 ---
+; name=__stack_chk_fail_local
+fn ent_pc=3 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   CallExt { binding_idx=3, args=[], fp_arg_mask=0x0 } -> x0
+    v2   Imm(0)                                           -> x0
+    terminator Return(v2)   (exit_acc=v2)

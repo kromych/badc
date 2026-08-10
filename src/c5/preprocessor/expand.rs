@@ -1363,11 +1363,13 @@ impl JoinScan {
                 while i < bytes.len() {
                     let c = bytes[i];
                     if self.quote != 0 {
-                        if c == b'\\' && i + 1 < bytes.len() {
+                        // A literal is bounded by its line, as in `skip_literal`,
+                        // so an unterminated quote cannot swallow the `)`.
+                        if c == b'\\' && i + 1 < bytes.len() && bytes[i + 1] != b'\n' {
                             i += 2;
                             continue;
                         }
-                        if c == self.quote {
+                        if c == self.quote || c == b'\n' {
                             self.quote = 0;
                         }
                         i += 1;

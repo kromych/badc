@@ -401,12 +401,25 @@ fn strip_widen2(mnem: &str) -> Option<(&str, bool)> {
     })
 }
 
-/// For an FP/SIMD `ldr`/`str` whose transfer register is `rt`, resolve the
-/// register number, the access-size log2 (2 for s, 3 for d, 4 for q), and the
-/// immediate- and register-offset base words. Returns None for a non-FP operand.
+/// For an FP/SIMD `ldr`/`ldur`/`str`/`stur` whose transfer register is `rt`,
+/// resolve the register number, the access-size log2 (0 for b, 1 for h, 2 for
+/// s, 3 for d, 4 for q), and the immediate- and register-offset base words.
+/// Returns None for a non-FP operand.
 fn fp_ldst_reg(mnem: &str, rt: &Opnd) -> Option<(u8, u32, u32, u32)> {
-    let is_ld = mnem == "ldr";
+    let is_ld = matches!(mnem, "ldr" | "ldur");
     Some(match *rt {
+        Opnd::VScalar { num, size: 0 } => (
+            num,
+            0,
+            if is_ld { 0x3D40_0000 } else { 0x3D00_0000 },
+            if is_ld { 0x3C60_0800 } else { 0x3C20_0800 },
+        ),
+        Opnd::VScalar { num, size: 1 } => (
+            num,
+            1,
+            if is_ld { 0x7D40_0000 } else { 0x7D00_0000 },
+            if is_ld { 0x7C60_0800 } else { 0x7C20_0800 },
+        ),
         Opnd::VReg { num, is_d: false } => (
             num,
             2,
@@ -800,6 +813,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         "mul" => Some((0x0E20_9C00, 0, 0, 2)),
         "pmul" => Some((0x0E20_9C00, 1, 0, 0)),
         "cmeq" => Some((0x0E20_8C00, 1, 0, 3)),
+        "cmtst" => Some((0x0E20_8C00, 0, 0, 3)),
         "cmgt" => Some((0x0E20_3400, 0, 0, 3)),
         "cmge" => Some((0x0E20_3C00, 0, 0, 3)),
         "cmhi" => Some((0x0E20_3400, 1, 0, 3)),
@@ -1230,12 +1244,15 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
-    // SIMD modified immediate `movi|mvni Vd.T, #imm{, lsl #s}`. The 8-bit value
-    // splits abc:defgh across bits 18..16 and 9..5; cmode selects the element
-    // size and shift. Byte and .2d use cmode 1110 (the .2d form, op=1,
+    // SIMD modified immediate `<movi|mvni|orr|bic> Vd.T, #imm{, lsl #s}`. The
+    // 8-bit value splits abc:defgh across bits 18..16 and 9..5; cmode selects
+    // the element size and shift, op (bit 29) the inverting variant (mvni,
+    // bic). movi/mvni byte and .2d use cmode 1110 (the .2d form, op=1,
     // replicates each immediate bit to a byte); half/word use the shifted-
-    // immediate cmodes. mvni sets op and is not defined for byte or .2d.
-    if let "movi" | "mvni" = mnemonic
+    // immediate cmodes. mvni is not defined for byte or .2d. The logical
+    // immediates orr/bic take the odd cmodes and only the half/word
+    // arrangements.
+    if let "movi" | "mvni" | "orr" | "bic" = mnemonic
         && let Some((rd, size, q, imm, shift)) = match *ops {
             [Opnd::VecReg { num, size, q }, Opnd::Imm(v)] => Some((num, size, q, v, 0i64)),
             [Opnd::VecReg { num, size, q }, Opnd::Imm(v), Opnd::Lsl(s)] => {
@@ -1244,9 +1261,15 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => None,
         }
     {
+        let logical = matches!(mnemonic, "orr" | "bic");
         let is_mvni = mnemonic == "mvni";
         let qbit = if q { 1u32 << 30 } else { 0 };
-        if size == 3 {
+        let opbit = if is_mvni || mnemonic == "bic" {
+            1u32 << 29
+        } else {
+            0
+        };
+        if size == 3 && !logical {
             if is_mvni || shift != 0 {
                 return Err(String::from(
                     "inline asm: movi .2d takes no shift; mvni .2d is not defined",
@@ -1273,20 +1296,22 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         }
         if !(0..=0xFF).contains(&imm) {
             return Err(String::from(
-                "inline asm: movi/mvni immediate must be 0..255",
+                "inline asm: SIMD modified immediate must be 0..255",
             ));
         }
-        let cmode = match (size, shift) {
-            (0, 0) => 0b1110u32,
-            (1, 0) => 0b1000,
-            (1, 8) => 0b1010,
-            (2, 0) => 0b0000,
-            (2, 8) => 0b0010,
-            (2, 16) => 0b0100,
-            (2, 24) => 0b0110,
+        let cmode = match (logical, size, shift) {
+            (false, 0, 0) => 0b1110u32,
+            (false, 1, 0) => 0b1000,
+            (false, 1, 8) => 0b1010,
+            (false, 2, 0) => 0b0000,
+            (false, 2, 8) => 0b0010,
+            (false, 2, 16) => 0b0100,
+            (false, 2, 24) => 0b0110,
+            (true, 1, 0 | 8) => 0b1001 | (((shift as u32) / 8) << 1),
+            (true, 2, 0 | 8 | 16 | 24) => 0b0001 | (((shift as u32) / 8) << 1),
             _ => {
                 return Err(String::from(
-                    "inline asm: invalid movi/mvni shift for this arrangement",
+                    "inline asm: invalid shift or arrangement for this SIMD immediate",
                 ));
             }
         };
@@ -1298,7 +1323,7 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         let v = imm as u32;
         return Ok(0x0F00_0400
             | qbit
-            | (if is_mvni { 1u32 << 29 } else { 0 })
+            | opbit
             | ((v >> 5) << 16)
             | (cmode << 12)
             | ((v & 0x1F) << 5)
@@ -1438,6 +1463,29 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     } && let [
         Opnd::QReg(rd),
         Opnd::QReg(rn),
+        Opnd::VecReg {
+            num: rm,
+            size: 2,
+            q: true,
+        },
+    ] = *ops
+    {
+        return Ok(base | ((rm as u32) << 16) | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SHA1 hash update `<sha1c|sha1p|sha1m> Qd, Sn, Vm.4s`: the state is a
+    // 128-bit Q register, the round value a single-word scalar. The base word
+    // selects the round function.
+    if let Some(base) = match mnemonic {
+        "sha1c" => Some(0x5E00_0000u32),
+        "sha1p" => Some(0x5E00_1000),
+        "sha1m" => Some(0x5E00_2000),
+        _ => None,
+    } && let [
+        Opnd::QReg(rd),
+        Opnd::VReg {
+            num: rn,
+            is_d: false,
+        },
         Opnd::VecReg {
             num: rm,
             size: 2,
@@ -1780,40 +1828,60 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
         let base = 0x1300_0000u32 | (opc << 29) | if is64 { 0x8040_0000 } else { 0 };
         return Ok(base | (immr << 16) | (imms << 10) | ((rn as u32) << 5) | (rd as u32));
     }
-    // FP/SIMD load/store: `ldr|str St|Dt|Qt, [Xn{, #off | , Rm}]`. These use the
-    // FP register file; the immediate offset scales by the access size (4 for s,
-    // 8 for d, 16 for q), a register offset feeds Rm with the size-scaled shift.
-    if let ("ldr" | "str", [rt_opnd, mem]) = (mnemonic, ops)
+    // FP/SIMD load/store: `ldr|str Bt|Ht|St|Dt|Qt, [Xn{, #off | , Rm}]` and the
+    // writeback forms `[Xn], #off` / `[Xn, #off]!`. These use the FP register
+    // file; the offset form scales the immediate by the access size (1 for b, 2
+    // for h, 4 for s, 8 for d, 16 for q), a register offset feeds Rm with the
+    // size-scaled shift. An offset the scaled uimm12 field cannot hold --
+    // negative, not a multiple of the access size, or too large -- takes the
+    // unscaled signed imm9 group instead, which `ldur`/`stur` name directly.
+    // That group is the offset form's base word with bit 24 clear and the mode
+    // at bit 10 (00 unscaled, 01 post-index, 11 pre-index).
+    if let ("ldr" | "ldur" | "str" | "stur", [rt_opnd, mem, rest @ ..]) = (mnemonic, ops)
         && let Some((rt, log2, imm_base, reg_base)) = fp_ldst_reg(mnemonic, rt_opnd)
     {
-        return match mem {
-            Opnd::Mem {
-                base,
-                off,
-                pre: false,
-            } => {
-                let scale = 1i64 << log2;
-                if *off < 0 || off % scale != 0 {
-                    return Err(String::from(
-                        "inline asm: FP load/store offset must be a non-negative multiple of the access size",
-                    ));
-                }
-                let imm = (off / scale) as u32;
-                if imm > 0xFFF {
-                    return Err(String::from(
-                        "inline asm: FP load/store offset out of range",
-                    ));
-                }
-                Ok(imm_base | (imm << 10) | ((*base as u32) << 5) | (rt as u32))
+        let unscaled = |rn: u8, off: i64, mode: u32| {
+            if !(-256..=255).contains(&off) {
+                return Err(String::from(
+                    "inline asm: FP load/store offset out of the unscaled range -256 to 255",
+                ));
             }
-            Opnd::MemReg {
-                base,
-                index,
-                option,
-                shift,
-            } => {
+            Ok((imm_base & !(1 << 24))
+                | (((off as u32) & 0x1FF) << 12)
+                | (mode << 10)
+                | ((rn as u32) << 5)
+                | (rt as u32))
+        };
+        let unscaled_only = matches!(mnemonic, "ldur" | "stur");
+        return match (mem, rest) {
+            (
+                Opnd::Mem {
+                    base,
+                    off,
+                    pre: false,
+                },
+                [],
+            ) => {
+                if unscaled_only || *off < 0 || off % (1i64 << log2) != 0 || (off >> log2) > 0xFFF {
+                    return unscaled(*base, *off, 0b00);
+                }
+                Ok(imm_base | (((off >> log2) as u32) << 10) | ((*base as u32) << 5) | (rt as u32))
+            }
+            _ if unscaled_only => Err(String::from(
+                "inline asm: `ldur`/`stur` take an immediate offset only",
+            )),
+            (
+                Opnd::MemReg {
+                    base,
+                    index,
+                    option,
+                    shift,
+                },
+                [],
+            ) => {
                 let s = match shift {
-                    None | Some(0) => 0u32,
+                    None => 0u32,
+                    Some(0) if log2 > 0 => 0,
                     Some(a) if *a as u32 == log2 => 1,
                     Some(_) => {
                         return Err(String::from(
@@ -1828,6 +1896,22 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
                     | ((*base as u32) << 5)
                     | (rt as u32))
             }
+            (
+                Opnd::Mem {
+                    base,
+                    off,
+                    pre: true,
+                },
+                [],
+            ) => unscaled(*base, *off, 0b11),
+            (
+                Opnd::Mem {
+                    base,
+                    off: 0,
+                    pre: false,
+                },
+                [Opnd::Imm(n)],
+            ) => unscaled(*base, *n, 0b01),
             _ => Err(String::from("inline asm: bad FP load/store operands")),
         };
     }

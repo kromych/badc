@@ -2075,9 +2075,9 @@ struct GasExpandState {
     /// defines the absolute symbol the declaration promises; folding it
     /// away would leave the declaration naming nothing.
     exported: alloc::collections::BTreeSet<alloc::string::String>,
-    /// Names a `.set` assigns after an earlier statement already used them.
-    /// Folding such an assignment away would leave the earlier use naming
-    /// nothing, so it stays in the stream for the section layer to define.
+    /// Names an earlier statement read before any `.set` assigned them.
+    /// Folding such an assignment away would leave that read naming nothing,
+    /// so it stays in the stream for the section layer to define.
     forward_set: alloc::collections::BTreeSet<alloc::string::String>,
 }
 

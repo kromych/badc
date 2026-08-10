@@ -73,7 +73,7 @@ pub use linker::{is_ld_invocation, run_ld};
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]
-pub use runtime::{embedded_compiler_rt, embedded_runtime};
+pub use runtime::{embedded_compiler_rt, embedded_libc, embedded_runtime};
 #[cfg(feature = "full")]
 pub use symbol::Linkage;
 

@@ -2306,15 +2306,23 @@ fn run() {
         // pool on demand, after the user's archives so a real libgcc on the
         // link line wins. Source-level target gating leaves the object empty
         // for a target that references none of them, so it is never pulled.
-        for (name, body) in badc::embedded_compiler_rt().iter() {
-            let bytes = compile_in_memory(&format!("<compiler-rt/{name}>"), body.to_string(), &[]);
+        // The bundled C-library sources join on the same terms: a header
+        // that declares an entry point the platform library does not
+        // define resolves it here.
+        let on_demand = badc::embedded_compiler_rt()
+            .iter()
+            .map(|e| ("compiler-rt", e))
+            .chain(badc::embedded_libc().iter().map(|e| ("libc", e)));
+        for (dir, (name, body)) in on_demand {
+            let label = format!("<{dir}/{name}>");
+            let bytes = compile_in_memory(&label, body.to_string(), &[]);
             match badc::parse_native_elf(&bytes) {
                 Ok(mut o) => {
-                    o.source = format!("<compiler-rt/{name}>");
+                    o.source = label;
                     pending.push(Some(o));
                 }
                 Err(e) => {
-                    eprint_diagnostic(format!("badc: <compiler-rt/{name}>: {e}"));
+                    eprint_diagnostic(format!("badc: {label}: {e}"));
                     std::process::exit(1);
                 }
             }

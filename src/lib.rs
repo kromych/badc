@@ -130,8 +130,8 @@ pub use c5::StdHost;
 
 #[cfg(feature = "full")]
 pub use c5::{
-    ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, embedded_compiler_rt, embedded_runtime,
-    read_archive, write_archive,
+    ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, embedded_compiler_rt, embedded_libc,
+    embedded_runtime, read_archive, write_archive,
 };
 
 #[cfg(all(feature = "full", feature = "std"))]

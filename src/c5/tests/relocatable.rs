@@ -463,6 +463,66 @@ fn object_attributes_are_kept_once_not_concatenated() {
     assert_eq!(sec.bytes, attrs, "one attribute set, not two");
 }
 
+/// `ld -r` merges the inputs' property notes into one, the same way a
+/// final link does: intersecting the feature bits and dropping what an
+/// input withholds, rather than concatenating the notes.
+#[test]
+fn property_notes_merge_across_a_relocatable_link() {
+    use crate::c5::linker::gnu_property::{self, Property};
+    const AARCH64_FEATURE_1_AND: u32 = 0xc000_0000;
+    const STACK_SIZE: u32 = 1;
+    let note = |props: &[(u32, usize, u64)]| {
+        gnu_property::encode(
+            &props
+                .iter()
+                .map(|&(ty, datasz, value)| Property { ty, datasz, value })
+                .collect::<Vec<_>>(),
+            8,
+        )
+    };
+    let obj = |fname: &str, src: &str, body: Vec<u8>| -> EtRel {
+        let mut o = compile_obj(&alloc::format!("int {fname}(void) {{ return 1; }}\n"), src);
+        o.sections.push(EtSection {
+            name: ".note.gnu.property".to_string(),
+            sh_type: 7,
+            flags: 2,
+            addralign: 8,
+            entsize: 0,
+            bytes: body,
+            nobits_size: 0,
+            link_target: None,
+            relocs: Vec::new(),
+            group: None,
+        });
+        o
+    };
+    // BTI|PAC against BTI, and a stack size the larger of which wins.
+    // The unrecognized type leads, so a walk that stopped at it would
+    // lose both properties behind it.
+    let a = note(&[
+        (0x10, 4, 0xaabb_ccdd),
+        (STACK_SIZE, 8, 0x1000),
+        (AARCH64_FEATURE_1_AND, 4, 0x3),
+    ]);
+    let b = note(&[(STACK_SIZE, 8, 0x2000), (AARCH64_FEATURE_1_AND, 4, 0x1)]);
+    let bytes = link_relocatable(
+        &[obj("f", "a.o", a), obj("g", "b.o", b)],
+        &RelinkOptions::default(),
+    )
+    .expect("link");
+    let merged = parse_et_rel(&bytes, "merged").expect("parse merged");
+    let sec = merged
+        .sections
+        .iter()
+        .find(|s| s.name == ".note.gnu.property")
+        .expect("the merged note is emitted");
+    assert_eq!(
+        sec.bytes,
+        note(&[(STACK_SIZE, 8, 0x2000), (AARCH64_FEATURE_1_AND, 4, 0x1)]),
+        "one note holding the merge, not the inputs' concatenation"
+    );
+}
+
 #[test]
 fn build_id_note_is_emitted_and_stable() {
     let a = compile_obj("int v(void) { return 2; }\n", "a.o");

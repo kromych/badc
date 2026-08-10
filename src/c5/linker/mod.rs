@@ -39,6 +39,8 @@ pub(crate) mod dynamic;
 #[cfg(feature = "std")]
 pub(crate) mod eh_frame;
 #[cfg(feature = "std")]
+pub(crate) mod gnu_property;
+#[cfg(feature = "std")]
 mod image;
 pub(crate) mod ld_driver;
 #[cfg(feature = "std")]

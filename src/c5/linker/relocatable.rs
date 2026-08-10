@@ -16,7 +16,6 @@
 #![cfg(feature = "std")]
 
 use alloc::borrow::ToOwned;
-use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -24,6 +23,7 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::c5::error::C5Error;
 
+use super::gnu_property;
 use super::lds::{
     BinOp, DataWidth, Expr, LinkerScript, SectionContent, SectionsItem, SortKind, UnOp,
 };
@@ -831,12 +831,6 @@ impl OutSec {
     }
 }
 
-/// GNU-property note merge per the psABI. Presence rule per class:
-/// `UINT32_AND` (feature_1_and) survives only when every input
-/// carries it, values ANDed; `UINT32_OR` (ISA_1_NEEDED) survives on
-/// any input, values ORed; `UINT32_OR_AND` (ISA_1_USED /
-/// FEATURE_2_USED) needs every input, values ORed. An input without
-/// a property note drops the all-input classes, matching GNU ld.
 /// ELF object-attribute sections carry one attribute set, not a
 /// concatenation of the inputs': BFD reads the first subsection length
 /// and rejects anything past it. Only the first copy is kept, and the
@@ -851,91 +845,15 @@ fn is_attributes_section(sh_type: u32) -> bool {
 }
 
 fn merge_property_notes(notes: &[Vec<u8>], n_inputs: usize, align: u64) -> Option<EtSection> {
-    // Generic ranges (0xb000....) plus the processor-specific ranges
-    // shared by x86_64 and aarch64 (0xc000....).
-    let is_and = |ty: u32| {
-        (0xb0000000..=0xb0007fff).contains(&ty) || (0xc0000000..=0xc0007fff).contains(&ty)
-    };
-    let is_or = |ty: u32| {
-        (0xb0008000..=0xb000ffff).contains(&ty) || (0xc0008000..=0xc000ffff).contains(&ty)
-    };
-    let is_or_and = |ty: u32| (0xc0010000..=0xc0017fff).contains(&ty);
-    let mut and_props: BTreeMap<u32, (u32, usize)> = BTreeMap::new();
-    let mut or_and_props: BTreeMap<u32, (u32, usize)> = BTreeMap::new();
-    let mut or_props: BTreeMap<u32, u32> = BTreeMap::new();
-    for note in notes {
-        // Note payload: nhdr(12) + "GNU\0" + properties, each
-        // (pr_type u32, pr_datasz u32, data, pad to 8).
-        let mut off = 0usize;
-        while off + 12 <= note.len() {
-            let namesz = u32::from_le_bytes(note[off..off + 4].try_into().unwrap()) as usize;
-            let descsz = u32::from_le_bytes(note[off + 4..off + 8].try_into().unwrap()) as usize;
-            let ntype = u32::from_le_bytes(note[off + 8..off + 12].try_into().unwrap());
-            let name_end = off + 12 + namesz.next_multiple_of(4);
-            let desc_end = name_end + descsz;
-            if desc_end > note.len() {
-                break;
-            }
-            // NT_GNU_PROPERTY_TYPE_0 = 5, name "GNU".
-            if ntype == 5 && namesz >= 4 && &note[off + 12..off + 15] == b"GNU" {
-                let mut d = name_end;
-                while d + 8 <= desc_end {
-                    let pty = u32::from_le_bytes(note[d..d + 4].try_into().unwrap());
-                    let dsz = u32::from_le_bytes(note[d + 4..d + 8].try_into().unwrap()) as usize;
-                    if d + 8 + dsz > desc_end || dsz != 4 {
-                        break; // only u32 payloads participate
-                    }
-                    let v = u32::from_le_bytes(note[d + 8..d + 12].try_into().unwrap());
-                    if is_and(pty) {
-                        let e = and_props.entry(pty).or_insert((u32::MAX, 0));
-                        e.0 &= v;
-                        e.1 += 1;
-                    } else if is_or_and(pty) {
-                        let e = or_and_props.entry(pty).or_insert((0, 0));
-                        e.0 |= v;
-                        e.1 += 1;
-                    } else if is_or(pty) {
-                        *or_props.entry(pty).or_insert(0) |= v;
-                    }
-                    d += 8 + dsz.next_multiple_of(8);
-                }
-            }
-            off = desc_end.next_multiple_of(4);
-        }
-    }
-    let mut props: Vec<(u32, u32)> = Vec::new();
-    for (ty, (v, seen)) in and_props.into_iter().chain(or_and_props) {
-        if seen == n_inputs && v != 0 {
-            props.push((ty, v));
-        }
-    }
-    for (ty, v) in or_props {
-        if v != 0 {
-            props.push((ty, v));
-        }
-    }
-    if props.is_empty() {
-        return None;
-    }
-    props.sort_by_key(|&(ty, _)| ty);
-    let mut body: Vec<u8> = Vec::new();
-    body.extend_from_slice(&4u32.to_le_bytes());
-    body.extend_from_slice(&((props.len() * 16) as u32).to_le_bytes());
-    body.extend_from_slice(&5u32.to_le_bytes());
-    body.extend_from_slice(b"GNU\0");
-    for (ty, v) in props {
-        body.extend_from_slice(&ty.to_le_bytes());
-        body.extend_from_slice(&4u32.to_le_bytes());
-        body.extend_from_slice(&v.to_le_bytes());
-        body.extend_from_slice(&0u32.to_le_bytes());
-    }
+    let refs: Vec<&[u8]> = notes.iter().map(|n| n.as_slice()).collect();
+    let bytes = gnu_property::merge_section(&refs, n_inputs, align as usize)?;
     Some(EtSection {
         name: ".note.gnu.property".to_string(),
         sh_type: SHT_NOTE,
         flags: SHF_ALLOC,
         addralign: align,
         entsize: 0,
-        bytes: body,
+        bytes,
         nobits_size: 0,
         link_target: None,
         relocs: Vec::new(),

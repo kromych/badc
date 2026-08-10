@@ -1,23 +1,30 @@
-//! Static-library archive (`.a`) reader / writer in the SysV
-//! ar(5) flavour. Each archive starts with the global magic
-//! `"!<arch>\n"`, then a sequence of members; each member is a
-//! 60-byte ASCII header followed by its content padded to an
-//! even byte boundary.
+//! Static-library archive (`.a`) reader / writer. Each archive starts
+//! with the global magic `"!<arch>\n"`, then a sequence of members;
+//! each member is a 60-byte ASCII header followed by its content
+//! padded to an even byte boundary.
 //!
-//! The very first member -- if present -- is the SysV-style
-//! "symbol index" (name `"/"`). Its body is `u32 big-endian
-//! count` + `count u32 big-endian offsets` (offset of the
-//! containing member's body, measured from start of file) + the
-//! NUL-terminated symbol name strings, concatenated. The linker
-//! consults this index to decide which archive members to pull
-//! in to satisfy unresolved references.
+//! The 16-byte name field cannot hold every name, and the two ar
+//! lineages resolve that differently. An archive's variant follows its
+//! producer, not the target it is linked for, so the reader accepts
+//! both whatever is being linked.
 //!
-//! Names longer than 15 bytes spill through the GNU `"//"`
-//! string-table member: their header carries `/<offset>` and the
-//! `//` member's body holds the actual names, each terminated by
-//! `\n`. We write all our generated names short enough to skip
-//! the spill table, but the reader honours both shapes so a
-//! user-built archive from another producer still loads.
+//! SysV / GNU. The first member, if present, is the symbol index
+//! (name `"/"`): `u32 big-endian count` + `count u32 big-endian
+//! offsets` (of the containing member's body, from start of file) +
+//! the concatenated NUL-terminated symbol names. Names longer than 15
+//! bytes spill through the `"//"` string-table member: the header
+//! carries `/<offset>` and the table's body holds the names, each
+//! terminated by `\n`.
+//!
+//! BSD. The symbol index is a regular member named `__.SYMDEF` or
+//! `__.SYMDEF SORTED` (`_64` forms for 64-bit offsets). A name that
+//! does not fit, or needs padding for member alignment, is stored as
+//! `#1/<len>` in the header with the name occupying the first `<len>`
+//! bytes of the member body, NUL-padded; the header's size field
+//! covers name and content together.
+//!
+//! We write the GNU shape, with generated names short enough to skip
+//! the spill table.
 
 use alloc::format;
 use alloc::string::String;
@@ -121,7 +128,7 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
         // metadata members so a thin archive still skips their bodies.
         let is_meta = raw_name == "/" || raw_name == "/SYM64/" || raw_name == "//";
         let inline = !thin || is_meta;
-        let body: &[u8] = if inline {
+        let mut body: &[u8] = if inline {
             if cursor + size > blob.len() {
                 return Err(err("ar member body truncated"));
             }
@@ -137,8 +144,9 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
         //   "/SYM64/"      -- 64-bit symbol index. Skip.
         //   "//"           -- GNU long-name string table. Save.
         //   "/<digits>"    -- GNU long-name reference into "//".
-        //   "name/"        -- regular short name (trailing `/` is the SysV terminator).
-        //   "name"         -- BSD-style; less common but tolerated.
+        //   "#1/<digits>"  -- BSD name inline at the head of the body.
+        //   "name/"        -- SysV short name (trailing `/` is the terminator).
+        //   "name"         -- BSD short name.
         if raw_name == "/" || raw_name == "/SYM64/" {
             continue;
         }
@@ -146,7 +154,11 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
             long_names = body.to_vec();
             continue;
         }
-        let name = if let Some(rest) = raw_name.strip_prefix('/') {
+        let name = if let Some(rest) = raw_name.strip_prefix("#1/") {
+            let (n, rest_body) = split_bsd_name(rest, body)?;
+            body = rest_body;
+            n
+        } else if let Some(rest) = raw_name.strip_prefix('/') {
             // GNU long-name reference `/<decimal offset>` into the `//`
             // table. Some archivers pad the 16-byte field with spaces
             // and a trailing `/`, so read the leading digit run and
@@ -161,6 +173,11 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
         } else {
             raw_name
         };
+        // The BSD symbol index is a named member, so it is only
+        // recognisable once the name is decoded.
+        if is_bsd_symbol_index(&name) {
+            continue;
+        }
         if thin {
             // A thin member's `name` is its path relative to the
             // archive's directory (or absolute); the caller resolves it.
@@ -384,6 +401,39 @@ fn parse_dec(s: &str, what: &str) -> Result<usize, C5Error> {
         .map_err(|_| err(&format!("bad ar {what} field `{s}`")))
 }
 
+/// Split a BSD `#1/<len>` member: `field` is the header text after the
+/// `#1/` prefix, `body` the member's bytes. Returns the name (trailing
+/// NUL padding removed) and the content that follows it.
+fn split_bsd_name<'a>(field: &str, body: &'a [u8]) -> Result<(String, &'a [u8]), C5Error> {
+    let len: usize = field
+        .trim()
+        .parse()
+        .map_err(|_| err(&format!("bad BSD inline-name length in `#1/{field}`")))?;
+    if len > body.len() {
+        return Err(err(&format!(
+            "BSD inline name of {len} bytes exceeds the {}-byte member body",
+            body.len()
+        )));
+    }
+    let (name, rest) = body.split_at(len);
+    let name = &name[..name.iter().position(|&b| b == 0).unwrap_or(len)];
+    Ok((
+        core::str::from_utf8(name)
+            .map_err(|_| err("BSD inline name is not valid UTF-8"))?
+            .to_string(),
+        rest,
+    ))
+}
+
+/// Whether a decoded member name is the BSD symbol index, the
+/// counterpart of the SysV `/` member.
+fn is_bsd_symbol_index(name: &str) -> bool {
+    matches!(
+        name,
+        "__.SYMDEF" | "__.SYMDEF SORTED" | "__.SYMDEF_64" | "__.SYMDEF_64 SORTED"
+    )
+}
+
 fn extract_long_name(table: &[u8], off: usize) -> Result<String, C5Error> {
     if off >= table.len() {
         return Err(err("GNU long-name offset out of range"));
@@ -433,6 +483,105 @@ mod tests {
         assert_eq!(back[0].bytes, alloc::vec![1, 2, 3]);
         assert_eq!(back[1].name, "b.o");
         assert_eq!(back[1].bytes, alloc::vec![4, 5, 6, 7]);
+    }
+
+    /// Append a member with a BSD `#1/<len>` inline name NUL-padded to
+    /// `pad_to`; the size field covers name and content together.
+    fn push_bsd_member(out: &mut Vec<u8>, name: &str, content: &[u8], pad_to: usize) {
+        let field = pad_to.max(name.len());
+        write_ar_header(out, &format!("#1/{field}"), field + content.len());
+        out.extend_from_slice(name.as_bytes());
+        out.extend(core::iter::repeat_n(0u8, field - name.len()));
+        out.extend_from_slice(content);
+        if !(field + content.len()).is_multiple_of(2) {
+            out.push(b'\n');
+        }
+    }
+
+    /// A BSD archive stores a name at the head of the member body and
+    /// records `#1/<len>` in the header. Its symbol index is a named
+    /// member, not the SysV `/`, and is skipped like one. The paddings
+    /// below are the ones `/usr/bin/ar` writes.
+    #[test]
+    fn bsd_archive_inline_names_resolve() {
+        let mut blob: Vec<u8> = Vec::new();
+        blob.extend_from_slice(b"!<arch>\n");
+        push_bsd_member(&mut blob, "__.SYMDEF SORTED", &[0u8; 8], 20);
+        push_bsd_member(
+            &mut blob,
+            "a_very_long_member_name_over_sixteen.o",
+            b"LONG-BODY",
+            44,
+        );
+        push_bsd_member(&mut blob, "short.o", b"SHORT", 12);
+
+        let members = read_archive(&blob).expect("read bsd");
+        assert_eq!(members.len(), 2, "the symbol index is not a member");
+        assert_eq!(members[0].name, "a_very_long_member_name_over_sixteen.o");
+        assert_eq!(members[0].bytes, b"LONG-BODY");
+        assert_eq!(members[1].name, "short.o");
+        assert_eq!(members[1].bytes, b"SHORT");
+    }
+
+    /// A BSD short name fits the 16-byte field with no `#1/` prefix and
+    /// no SysV trailing `/`; every symbol-index spelling is skipped in
+    /// that form too.
+    #[test]
+    fn bsd_archive_short_names_and_symbol_index() {
+        let mut blob: Vec<u8> = Vec::new();
+        blob.extend_from_slice(b"!<arch>\n");
+        for index in ["__.SYMDEF", "__.SYMDEF SORTED", "__.SYMDEF_64"] {
+            write_ar_header(&mut blob, index, 2);
+            blob.extend_from_slice(&[0u8, 0u8]);
+        }
+        write_ar_header(&mut blob, "plain.o", 4);
+        blob.extend_from_slice(b"BODY");
+
+        let members = read_archive(&blob).expect("read bsd short");
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].name, "plain.o");
+        assert_eq!(members[0].bytes, b"BODY");
+    }
+
+    /// A member body shorter than its `#1/<len>` name is malformed;
+    /// the reader reports it instead of slicing out of range.
+    #[test]
+    fn bsd_inline_name_longer_than_body_is_rejected() {
+        let mut blob: Vec<u8> = Vec::new();
+        blob.extend_from_slice(b"!<arch>\n");
+        write_ar_header(&mut blob, "#1/40", 4);
+        blob.extend_from_slice(b"tiny");
+        assert!(read_archive(&blob).is_err(), "short body must be rejected");
+    }
+
+    /// A GNU archive spills names over 15 bytes into a `//` table and
+    /// references them as `/<offset>`, with the bodies stored inline.
+    #[test]
+    fn gnu_archive_long_names_resolve() {
+        let long = "a_very_long_member_name_over_sixteen.o";
+        let names = format!("{long}/\nshort.o/\n");
+        let short_off = long.len() + 2;
+        let mut blob: Vec<u8> = Vec::new();
+        blob.extend_from_slice(b"!<arch>\n");
+        write_ar_header(&mut blob, "/", 4);
+        blob.extend_from_slice(&[0u8; 4]);
+        write_ar_header(&mut blob, "//", names.len());
+        blob.extend_from_slice(names.as_bytes());
+        if !names.len().is_multiple_of(2) {
+            blob.push(b'\n');
+        }
+        write_ar_header(&mut blob, "/0", 9);
+        blob.extend_from_slice(b"LONG-BODY");
+        blob.push(b'\n');
+        write_ar_header(&mut blob, &format!("/{short_off}"), 5);
+        blob.extend_from_slice(b"SHORT");
+
+        let members = read_archive(&blob).expect("read gnu");
+        assert_eq!(members.len(), 2, "the symbol index is not a member");
+        assert_eq!(members[0].name, long);
+        assert_eq!(members[0].bytes, b"LONG-BODY");
+        assert_eq!(members[1].name, "short.o");
+        assert_eq!(members[1].bytes, b"SHORT");
     }
 
     /// A GNU thin archive (`!<thin>`) stores member paths in the `//`

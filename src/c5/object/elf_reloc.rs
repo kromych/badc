@@ -2964,7 +2964,7 @@ pub(super) fn write_relocatable(
                 };
                 use crate::c5::codegen::ssa::emit_common::AsmRelocKind as RK;
                 let rtype = match r.kind {
-                    RK::Data => match (abi, r.pcrel, r.width) {
+                    RK::Data | RK::JumpRel => match (abi, r.pcrel, r.width) {
                         // A replacement instruction's direct `call` / `jmp` to a
                         // symbol reaches it through the PLT slot, like a compiler-
                         // emitted call: `R_X86_64_PLT32`, not a data `PC32`.

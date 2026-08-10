@@ -1125,6 +1125,11 @@ pub(crate) enum AsmRelocKind {
     A64LdstLo12(u8),
     /// `ldr Rt, label` 19-bit literal load displacement.
     A64LdrLit19,
+    /// A relaxable x86 jump displacement (`jmp` / `jcc`). GNU as computes it
+    /// while relaxing the branch, which resolves a target defined in the same
+    /// section whatever its binding, unless the symbol is weak; every other
+    /// field keeps the relocation for a symbol that is not local.
+    JumpRel,
     /// `.reloc`: the ELF relocation type is named in the source, and the
     /// section deposits no field for it.
     Explicit(u32),
@@ -1254,6 +1259,26 @@ pub(crate) struct AsmExprValue {
     add: i64,
     pos: Option<AsmExprTerm>,
     neg: Option<AsmExprTerm>,
+}
+
+impl AsmExprValue {
+    /// The symbol this value names when it is a single term with nothing
+    /// subtracted from it -- the shape whose PC-relativity comes from the
+    /// encoding rather than from a difference written in the source.
+    fn lone_symbol(&self) -> Option<&str> {
+        match (&self.pos, &self.neg) {
+            (Some(t), None) => match &t.target {
+                AsmSectionTarget::Symbol(n) => Some(n.as_str()),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// The constant part of the value.
+    fn constant(&self) -> i64 {
+        self.add
+    }
 }
 
 /// A resolved leaf of an expression: an absolute value (a literal, an
@@ -1458,7 +1483,7 @@ pub(crate) fn patch_asm_insn_field(
         // width the field is: 2 bytes for a `.code16` near branch, 1 for a
         // short one. Leaving it to a relocation would work but would put
         // one in the object for a distance the assembler already knows.
-        AsmRelocKind::Data if pcrel && matches!(width, 1 | 2 | 4) => {
+        AsmRelocKind::Data | AsmRelocKind::JumpRel if pcrel && matches!(width, 1 | 2 | 4) => {
             let w = width as usize;
             let lim = 1i64 << (8 * w - 1);
             if !(-lim..lim).contains(&disp) {
@@ -1469,7 +1494,7 @@ pub(crate) fn patch_asm_insn_field(
             buf[at..at + w].copy_from_slice(&disp.to_le_bytes()[..w]);
             Ok(true)
         }
-        AsmRelocKind::Data => Ok(false),
+        AsmRelocKind::Data | AsmRelocKind::JumpRel => Ok(false),
         AsmRelocKind::A64Branch26 { .. } => {
             or_word(buf, words(26)?);
             Ok(true)
@@ -5690,6 +5715,53 @@ pub(crate) fn materialize_asm_sections(
     // sink lengths so the offsets are the materialized ones.
     let measured = measure_asm_section_offsets(blocks, const_of, align_is_p2, sink)?;
     let mut defined: alloc::vec::Vec<MaterializedLabel> = alloc::vec::Vec::new();
+    // Names the unit gives external or weak binding, taken from the whole
+    // stream (a `.globl` may follow the reference) and from the directives
+    // earlier statements recorded. A same-section reference to one keeps its
+    // relocation so the link binds the definition that wins; only a local
+    // name resolves in place, as GNU as resolves it.
+    let weak_bound: alloc::collections::BTreeSet<alloc::string::String> = blocks
+        .iter()
+        .flat_map(|b| &b.items)
+        .filter_map(|it| match it {
+            AsmSectionItem::Weak(n) => Some(n.clone()),
+            _ => None,
+        })
+        .chain(
+            sink.sym_decls
+                .iter()
+                .filter(|d| d.bind == AsmSymBind::Weak)
+                .map(|d| d.name.clone()),
+        )
+        .chain(
+            sink.sections
+                .iter()
+                .flat_map(|s| &s.labels)
+                .filter(|l| l.weak)
+                .map(|l| l.name.clone()),
+        )
+        .collect();
+    let non_local: alloc::collections::BTreeSet<alloc::string::String> = blocks
+        .iter()
+        .flat_map(|b| &b.items)
+        .filter_map(|it| match it {
+            AsmSectionItem::Global(n) | AsmSectionItem::Weak(n) => Some(n.clone()),
+            _ => None,
+        })
+        .chain(
+            sink.sym_decls
+                .iter()
+                .filter(|d| matches!(d.bind, AsmSymBind::Global | AsmSymBind::Weak))
+                .map(|d| d.name.clone()),
+        )
+        .chain(
+            sink.sections
+                .iter()
+                .flat_map(|s| &s.labels)
+                .filter(|l| l.global || l.weak)
+                .map(|l| l.name.clone()),
+        )
+        .collect();
     let mut weak_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
     // `.globl` is a unit-level declaration in GNU as: the name it binds
     // external may be defined in any section of the unit, before or after.
@@ -6435,50 +6507,73 @@ pub(crate) fn materialize_asm_sections(
                             let mut v = eval_asm_value(text, &ctx)
                                 .and_then(|v| v.combine(AsmExprValue::abs(r.addend), false))
                                 .map_err(named)?;
-                            if r.pcrel || r.kind.self_relative() {
-                                v = v
-                                    .combine(
-                                        AsmExprValue::from_term(AsmExprTerm {
-                                            space: Some((space.clone(), place)),
-                                            target: AsmSectionTarget::OwnSection(place as u32),
-                                        }),
-                                        true,
-                                    )
-                                    .map_err(named)?;
-                            }
-                            match resolve_asm_value(v, Some((&space, place))).map_err(named)? {
-                                AsmResolved::Abs(c) => {
-                                    store_asm_insn_const(&mut buf, r.offset as usize, &r, c)
+                            // GNU as folds a difference of symbols whatever
+                            // their binding, but a PC-relativity the encoding
+                            // supplies keeps the relocation unless the symbol
+                            // is local. Naming the symbol hands the reference
+                            // to the shared path below.
+                            let external = v
+                                .lone_symbol()
+                                .filter(|n| non_local.contains(*n))
+                                .map(|n| (alloc::string::String::from(n), v.constant()));
+                            if let Some((n, add)) = external {
+                                r.target = AsmSectionTarget::Symbol(n);
+                                r.addend = add;
+                            } else {
+                                if r.pcrel || r.kind.self_relative() {
+                                    v = v
+                                        .combine(
+                                            AsmExprValue::from_term(AsmExprTerm {
+                                                space: Some((space.clone(), place)),
+                                                target: AsmSectionTarget::OwnSection(place as u32),
+                                            }),
+                                            true,
+                                        )
                                         .map_err(named)?;
-                                    continue;
                                 }
-                                AsmResolved::Reloc {
-                                    target,
-                                    addend,
-                                    pcrel,
-                                } => {
-                                    r.target = target;
-                                    r.addend = addend;
-                                    // A data field's PC-relativity rides the
-                                    // relocation; an instruction field's is
-                                    // its kind's and stays as encoded.
-                                    if r.kind == AsmRelocKind::Data {
-                                        r.pcrel = pcrel;
+                                match resolve_asm_value(v, Some((&space, place))).map_err(named)? {
+                                    AsmResolved::Abs(c) => {
+                                        store_asm_insn_const(&mut buf, r.offset as usize, &r, c)
+                                            .map_err(named)?;
+                                        continue;
+                                    }
+                                    AsmResolved::Reloc {
+                                        target,
+                                        addend,
+                                        pcrel,
+                                    } => {
+                                        r.target = target;
+                                        r.addend = addend;
+                                        // A data field's PC-relativity rides
+                                        // the relocation; an instruction
+                                        // field's is its kind's and stays as
+                                        // encoded.
+                                        if matches!(
+                                            r.kind,
+                                            AsmRelocKind::Data | AsmRelocKind::JumpRel
+                                        ) {
+                                            r.pcrel = pcrel;
+                                        }
                                     }
                                 }
                             }
                         }
-                        let leaf = match &r.target {
-                            AsmSectionTarget::Symbol(n) => section_expr_leaf(
-                                n,
-                                &key,
-                                0,
-                                &measured,
-                                sink_labels,
-                                &num_unique,
-                                label_off,
+                        let (leaf, local) = match &r.target {
+                            AsmSectionTarget::Symbol(n) => (
+                                section_expr_leaf(
+                                    n,
+                                    &key,
+                                    0,
+                                    &measured,
+                                    sink_labels,
+                                    &num_unique,
+                                    label_off,
+                                ),
+                                !non_local.contains(n.as_str())
+                                    || (r.kind == AsmRelocKind::JumpRel
+                                        && !weak_bound.contains(n.as_str())),
                             ),
-                            _ => None,
+                            _ => (None, true),
                         };
                         match leaf {
                             Some(AsmExprLeaf::Loc(t)) => {
@@ -6492,6 +6587,7 @@ pub(crate) fn materialize_asm_sections(
                                 };
                                 let place = base as i64 + r.offset as i64;
                                 if same
+                                    && local
                                     && patch_asm_insn_field(
                                         &mut buf,
                                         r.offset as usize,

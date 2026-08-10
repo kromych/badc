@@ -6703,7 +6703,7 @@ fn encode_one_x86_section_insn(
                 relocs: alloc::vec![AsmSectionReloc {
                     offset: 1,
                     width: 1,
-                    kind: AsmRelocKind::Data,
+                    kind: AsmRelocKind::JumpRel,
                     pcrel: true,
                     branch: false,
                     signed: false,
@@ -6754,7 +6754,11 @@ fn encode_one_x86_section_insn(
             let reloc = AsmSectionReloc {
                 offset,
                 width: rel,
-                kind: AsmRelocKind::Data,
+                kind: if is_call {
+                    AsmRelocKind::Data
+                } else {
+                    AsmRelocKind::JumpRel
+                },
                 pcrel: true,
                 // Only long mode reaches a call target through a PLT slot.
                 branch: mode == super::table::Mode::Bits64,
@@ -6799,7 +6803,7 @@ fn encode_one_x86_section_insn(
             let reloc = AsmSectionReloc {
                 offset,
                 width: rel,
-                kind: AsmRelocKind::Data,
+                kind: AsmRelocKind::JumpRel,
                 pcrel: true,
                 branch: mode == super::table::Mode::Bits64,
                 signed: false,

@@ -60,11 +60,11 @@ use super::elf_reloc_types::{
     R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_CONDBR19, R_AARCH64_JUMP26,
     R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_LDST8_ABS_LO12_NC,
     R_AARCH64_LDST16_ABS_LO12_NC, R_AARCH64_LDST32_ABS_LO12_NC, R_AARCH64_LDST64_ABS_LO12_NC,
-    R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
+    R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64,
     R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_AARCH64_TSTBR14,
-    R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_PC16, R_X86_64_PC32,
-    R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, i386_field_width,
-    i386_reloc_desc,
+    R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF64,
+    R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
+    R_X86_64_TPOFF32, i386_field_width, i386_reloc_desc,
 };
 
 // ELF64 constants (Elf.h subset).
@@ -2293,7 +2293,9 @@ pub(super) fn write_relocatable(
     // block. The unit's block is `.tdata` bytes then `.tbss` zero
     // fill; an offset past the initialized bytes is `.tbss`-relative.
     let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
-    for (i, (_, off, size)) in defined_tls_globals
+    let mut defined_tls_symidx: alloc::collections::BTreeMap<&str, u64> =
+        alloc::collections::BTreeMap::new();
+    for (i, (name, off, size)) in defined_tls_globals
         .iter()
         .enumerate()
         .take_while(|_| elf_tls_interop)
@@ -2303,6 +2305,7 @@ pub(super) fn write_relocatable(
         } else {
             (SHIDX_TDATA, *off)
         };
+        defined_tls_symidx.insert(name, symbols.len() as u64);
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_tls_globals_start + i],
             st_info: pack_sym_info(STB_GLOBAL, STT_TLS),
@@ -3021,13 +3024,15 @@ pub(super) fn write_relocatable(
     };
     // `DW_OP_addr` in a variable's location names the object by its
     // link name; both linkage classes carry a symbol-table entry, and an
-    // inline-asm label may have claimed the name first.
+    // inline-asm label may have claimed the name first. A thread-local
+    // resolves against the unit's own STT_TLS entry.
     let dwarf_obj_sym_idx = |name: &str| -> Option<u64> {
         defined_data_symidx
             .get(name)
             .copied()
             .or_else(|| defined_data_local_symidx.get(name).copied())
             .or_else(|| asm_label_symidx.get(name).map(|&i| i as u64))
+            .or_else(|| defined_tls_symidx.get(name).copied())
     };
     let mut rela_debug_info_bytes: Vec<u8> =
         Vec::with_capacity(dwarf.info_relocs.len() * ELF64_RELA_SIZE);
@@ -4049,7 +4054,9 @@ fn build_badc_note(
 /// caller pre-resolved when laying out the symbol table; a
 /// `DW_OP_addr` slot resolves through `obj_sym_idx` instead, and
 /// yields no entry when the name reached no symbol, leaving the
-/// address null rather than pointing it somewhere else.
+/// address null rather than pointing it somewhere else. A
+/// thread-local's slot takes a thread-block offset, so it uses the
+/// module-relative TLS reloc rather than an absolute one.
 fn dwarf_reloc_to_elf_rela(
     r: &DwarfReloc,
     machine: Machine,
@@ -4059,19 +4066,20 @@ fn dwarf_reloc_to_elf_rela(
     reloc_symbols: &[String],
     obj_sym_idx: &dyn Fn(&str) -> Option<u64>,
 ) -> Option<Elf64Rela> {
+    let named = |i: u32| obj_sym_idx(reloc_symbols.get(i as usize).map(|s| s.as_str())?);
     let sym_idx = match r.target {
         DwarfRelocTarget::Text => text_sym_idx,
         DwarfRelocTarget::DebugLine => debug_line_sym_idx,
         DwarfRelocTarget::DebugAbbrev => debug_abbrev_sym_idx,
-        DwarfRelocTarget::Symbol(i) => {
-            obj_sym_idx(reloc_symbols.get(i as usize).map(|s| s.as_str())?)?
-        }
+        DwarfRelocTarget::Symbol(i) | DwarfRelocTarget::ThreadLocalSymbol(i) => named(i)?,
     };
-    let rtype = match (r.width, machine) {
-        (DwarfRelocWidth::W8, Machine::X86_64) => R_X86_64_64,
-        (DwarfRelocWidth::W4, Machine::X86_64) => R_X86_64_32,
-        (DwarfRelocWidth::W8, Machine::Aarch64) => R_AARCH64_ABS64,
-        (DwarfRelocWidth::W4, Machine::Aarch64) => R_AARCH64_ABS32,
+    let rtype = match (r.target, r.width, machine) {
+        (DwarfRelocTarget::ThreadLocalSymbol(_), _, Machine::X86_64) => R_X86_64_DTPOFF64,
+        (DwarfRelocTarget::ThreadLocalSymbol(_), _, Machine::Aarch64) => R_AARCH64_TLS_DTPREL64,
+        (_, DwarfRelocWidth::W8, Machine::X86_64) => R_X86_64_64,
+        (_, DwarfRelocWidth::W4, Machine::X86_64) => R_X86_64_32,
+        (_, DwarfRelocWidth::W8, Machine::Aarch64) => R_AARCH64_ABS64,
+        (_, DwarfRelocWidth::W4, Machine::Aarch64) => R_AARCH64_ABS32,
     };
     Some(Elf64Rela {
         r_offset: r.offset,

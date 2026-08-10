@@ -38,10 +38,10 @@ use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
     R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC,
-    R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12,
-    R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_GOTPCREL,
-    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
-    aarch64_ldst_lo12_scale,
+    R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12,
+    R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF64,
+    R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
+    R_X86_64_TPOFF32, aarch64_ldst_lo12_scale,
 };
 
 /// A relocation whose site reads a GOT slot: the value it wants is the
@@ -1831,6 +1831,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             &debug_abbrev_bases,
             &debug_line_bases,
             &debug_str_bases,
+            &tls_symbol_offsets,
             &defined,
         )?;
     }
@@ -1859,6 +1860,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             &debug_abbrev_bases,
             &debug_line_bases,
             &debug_str_bases,
+            &tls_symbol_offsets,
             &defined,
         )?;
     }
@@ -1980,9 +1982,34 @@ fn resolve_debug_reloc(
     debug_abbrev_bases: &[usize],
     debug_line_bases: &[usize],
     debug_str_bases: &[usize],
+    tls_symbol_offsets: &HashMap<&str, u64>,
     defined: &HashMap<&str, MergedSymbol>,
 ) -> Result<(), C5Error> {
     let patch_off = reloc.offset as usize;
+    // A thread-local's debug location holds its offset within the
+    // module's thread block, which the merged TLS layout gives
+    // directly; it is not an address, so no writer has to defer it.
+    if matches!(
+        (machine, reloc.rtype),
+        (NativeMachine::X86_64, R_X86_64_DTPOFF64)
+            | (NativeMachine::Aarch64, R_AARCH64_TLS_DTPREL64)
+    ) {
+        let end = patch_off + 8;
+        if end > section_bytes.len() {
+            return Err(err(&format!(
+                "link_native_objects: DWARF reloc patch at 0x{patch_off:x}+8 past section end \
+                 ({} bytes)",
+                section_bytes.len(),
+            )));
+        }
+        let value = tls_symbol_offsets
+            .get(sym.name.as_str())
+            .copied()
+            .unwrap_or(0)
+            .wrapping_add(reloc.addend as u64);
+        section_bytes[patch_off..end].copy_from_slice(&value.to_le_bytes());
+        return Ok(());
+    }
     // Resolve the reloc's symbol to a merged offset, noting which image it
     // lands in and whether it is resolvable at all. A same-unit symbol uses
     // this unit's merged section base. `.text` and the data image both defer:

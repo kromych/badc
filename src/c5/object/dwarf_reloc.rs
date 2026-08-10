@@ -73,6 +73,10 @@ pub(crate) enum DwarfRelocTarget {
     /// [`DwarfRelocatable::reloc_symbols`]. The object writer resolves
     /// the name to its own symbol-table entry.
     Symbol(u32),
+    /// A defined `_Thread_local` object, named the same way. The slot
+    /// takes the object's offset within the module's thread block, not
+    /// an address.
+    ThreadLocalSymbol(u32),
 }
 
 /// Width of the reloc's value field. Maps to R_*_64 / R_*_32 in
@@ -178,6 +182,8 @@ const DW_OP_REG29: u8 = 0x6d; // aarch64 frame pointer x29
 const DW_OP_REG6: u8 = 0x56; // x86_64 frame pointer rbp
 const DW_OP_FBREG: u8 = 0x91; // fbreg N (SLEB128 N)
 const DW_OP_ADDR: u8 = 0x03; // addr <target address size>
+const DW_OP_CONST8U: u8 = 0x0e; // const8u <8-byte operand>
+const DW_OP_GNU_PUSH_TLS_ADDRESS: u8 = 0xe0;
 
 const DW_CHILDREN_NO: u8 = 0x00;
 const DW_CHILDREN_YES: u8 = 0x01;
@@ -224,6 +230,11 @@ const ABBREV_POINTER_TYPE_VOID: u64 = 25;
 const ABBREV_UNSPECIFIED_TYPE: u64 = 26;
 const ABBREV_STATIC_VARIABLE: u64 = 27;
 const ABBREV_STATIC_VARIABLE_INTERNAL: u64 = 28;
+const ABBREV_MEMBER_ANON: u64 = 29;
+const ABBREV_SUBPROGRAM_LEAF_INTERNAL: u64 = 30;
+const ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL: u64 = 31;
+const ABBREV_TLS_VARIABLE: u64 = 32;
+const ABBREV_TLS_VARIABLE_INTERNAL: u64 = 33;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -333,8 +344,10 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         ],
     },
     // subprogram leaf -- name + extent only, for a function with no
-    // variables. DW_AT_external (DW_FORM_flag_present) marks it
-    // cross-CU-visible. DW_AT_prototyped is always set: c5 rejects
+    // variables. DW_AT_external (DW_FORM_flag_present) marks the name
+    // visible outside the compilation unit (DWARF 4 3.3.1), which
+    // C99 6.2.2p3 denies a `static` definition; the internal-linkage
+    // form drops it. DW_AT_prototyped is always set: c5 rejects
     // K&R identifier-list declarators per C99 6.7.6.3p14.
     // DW_AT_calling_convention pins DW_CC_normal -- SysV / Win64 /
     // AAPCS64 are the C standard convention per DWARF 4 3.3.1.1.
@@ -362,6 +375,31 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+            (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
+        ],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBPROGRAM_LEAF_INTERNAL,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+        ],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
@@ -446,6 +484,18 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         has_children: false,
         attrs: &[
             (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_UDATA),
+        ],
+    },
+    // The unnamed member C11 6.7.2.1p13 gives an anonymous struct or
+    // union. DWARF 4 5.5.3: no DW_AT_name, and the type names the
+    // anonymous aggregate whose members the enclosing scope sees.
+    AbbrevDecl {
+        code: ABBREV_MEMBER_ANON,
+        tag: DW_TAG_MEMBER,
+        has_children: false,
+        attrs: &[
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_UDATA),
         ],
@@ -630,6 +680,33 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DECL_LINE, DW_FORM_UDATA),
         ],
     },
+    // `_Thread_local` object whose address the unit cannot spell: the
+    // name and type resolve, and the location is left out rather than
+    // given an expression that names the wrong storage. Same shape
+    // gcc and clang emit for a thread-local on aarch64.
+    AbbrevDecl {
+        code: ABBREV_TLS_VARIABLE,
+        tag: DW_TAG_VARIABLE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
+            (DW_AT_DECL_FILE, DW_FORM_UDATA),
+            (DW_AT_DECL_LINE, DW_FORM_UDATA),
+        ],
+    },
+    AbbrevDecl {
+        code: ABBREV_TLS_VARIABLE_INTERNAL,
+        tag: DW_TAG_VARIABLE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_DECL_FILE, DW_FORM_UDATA),
+            (DW_AT_DECL_LINE, DW_FORM_UDATA),
+        ],
+    },
 ];
 
 fn build_debug_abbrev() -> Vec<u8> {
@@ -786,31 +863,55 @@ fn build_debug_info(
     for (&idx, &type_id) in statics.iter().zip(static_types.iter()) {
         let sym = &program.symbols[idx];
         let external = sym.linkage == crate::c5::symbol::Linkage::External;
+        // A thread-local's location is its offset in the thread block,
+        // which needs a module-relative TLS relocation. Only the ELF
+        // x86_64 surface has one both linkers resolve, matching what
+        // gcc and clang describe per target; elsewhere the object gets
+        // its name and type and no location.
+        let tls_location = sym.is_thread_local && target == super::Target::LinuxX64;
+        let located = !sym.is_thread_local || tls_location;
         write_uleb128(
             &mut body,
-            if external {
-                ABBREV_STATIC_VARIABLE
-            } else {
-                ABBREV_STATIC_VARIABLE_INTERNAL
+            match (located, external) {
+                (true, true) => ABBREV_STATIC_VARIABLE,
+                (true, false) => ABBREV_STATIC_VARIABLE_INTERNAL,
+                (false, true) => ABBREV_TLS_VARIABLE,
+                (false, false) => ABBREV_TLS_VARIABLE_INTERNAL,
             },
         );
         push_string(&mut body, &sym.name);
         body.extend_from_slice(&type_offsets[type_id].to_le_bytes());
-        // DW_AT_location: exprloc holding DW_OP_addr + an 8-byte
-        // address slot the reloc below fills in.
-        write_uleb128(&mut body, 9);
-        body.push(DW_OP_ADDR);
-        let addr_off = body.len() as u64;
-        body.extend_from_slice(&[0u8; 8]);
-        let sym_idx = reloc_symbols.len() as u32;
-        reloc_symbols.push(sym.link_name().to_string());
-        relocs.push(DwarfReloc {
-            section: DwarfSectionKind::Info,
-            offset: DEBUG_INFO_UNIT_HEADER_SIZE + addr_off,
-            width: DwarfRelocWidth::W8,
-            target: DwarfRelocTarget::Symbol(sym_idx),
-            addend: 0,
-        });
+        if located {
+            // DW_AT_location: exprloc holding the address form plus an
+            // 8-byte slot the reloc below fills in. A thread-local
+            // pushes its thread-block offset and lets the consumer add
+            // the thread pointer (DWARF 4 2.5.1 vendor extension
+            // DW_OP_GNU_push_tls_address).
+            write_uleb128(&mut body, if tls_location { 10 } else { 9 });
+            body.push(if tls_location {
+                DW_OP_CONST8U
+            } else {
+                DW_OP_ADDR
+            });
+            let addr_off = body.len() as u64;
+            body.extend_from_slice(&[0u8; 8]);
+            if tls_location {
+                body.push(DW_OP_GNU_PUSH_TLS_ADDRESS);
+            }
+            let sym_idx = reloc_symbols.len() as u32;
+            reloc_symbols.push(sym.link_name().to_string());
+            relocs.push(DwarfReloc {
+                section: DwarfSectionKind::Info,
+                offset: DEBUG_INFO_UNIT_HEADER_SIZE + addr_off,
+                width: DwarfRelocWidth::W8,
+                target: if tls_location {
+                    DwarfRelocTarget::ThreadLocalSymbol(sym_idx)
+                } else {
+                    DwarfRelocTarget::Symbol(sym_idx)
+                },
+                addend: 0,
+            });
+        }
         // `source_files` is 0-indexed with the primary unit at 0; the
         // DWARF file table is 1-indexed with it at slot 1.
         write_uleb128(&mut body, sym.decl_file as u64 + 1);
@@ -842,15 +943,17 @@ fn build_debug_info(
             .map(|s| s.as_str())
             .filter(|s| !s.is_empty())
             .unwrap_or("<unknown>");
-        // Variadic flag is looked up by name in `program.symbols`;
-        // a missing entry means non-variadic (safe default --
-        // `printf` and similar always have a matching Token::Fun
-        // symbol in the defining TU).
-        let is_variadic = program.symbols.iter().any(|s| {
-            s.class == super::super::token::Token::Fun as i64
-                && s.link_name() == name
-                && s.is_variadic
-        });
+        // Prototype and linkage come from the matching `Token::Fun`
+        // entry. A missing entry means non-variadic and external: a
+        // function this unit defines always has one, and only a
+        // `static` definition denies the name to other units
+        // (C99 6.2.2p3).
+        let fn_sym = program
+            .symbols
+            .iter()
+            .find(|s| s.class == super::super::token::Token::Fun as i64 && s.link_name() == name);
+        let is_variadic = fn_sym.is_some_and(|s| s.is_variadic);
+        let external = fn_sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal);
         // Group this function's parameters and locals out of the
         // flat program.variables list. `function_bc_pc` keys by
         // the function's ent_pc, matching what the amalg path's
@@ -865,11 +968,15 @@ fn build_debug_info(
         // abbrev so the trailing DW_TAG_unspecified_parameters DIE
         // has somewhere to live.
         let has_children = !vars.is_empty() || is_variadic;
-        if has_children {
-            write_uleb128(&mut body, ABBREV_SUBPROGRAM_WITH_CHILDREN);
-        } else {
-            write_uleb128(&mut body, ABBREV_SUBPROGRAM_LEAF);
-        }
+        write_uleb128(
+            &mut body,
+            match (has_children, external) {
+                (true, true) => ABBREV_SUBPROGRAM_WITH_CHILDREN,
+                (true, false) => ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL,
+                (false, true) => ABBREV_SUBPROGRAM_LEAF,
+                (false, false) => ABBREV_SUBPROGRAM_LEAF_INTERNAL,
+            },
+        );
         push_string(&mut body, name);
         let low_pc_off = body.len() as u64;
         body.extend_from_slice(&[0u8; 8]);
@@ -988,9 +1095,10 @@ fn build_debug_info(
 /// Indices in `program.symbols` of the objects with static storage
 /// duration this unit defines, in declaration order. Mirrors the
 /// relocatable writer's own selection so every DIE emitted here has a
-/// symbol-table entry to relocate against: thread-local objects have
-/// no `DW_OP_addr` address, an alias names another object's storage,
-/// and one link name reaches the writer only once.
+/// symbol-table entry to relocate against: an alias names another
+/// object's storage, and one link name reaches the writer only once.
+/// A `_Thread_local` object (C11 6.2.4p4) is included; its location is
+/// a thread-block offset rather than a `DW_OP_addr` address.
 fn static_storage_objects(program: &Program) -> Vec<usize> {
     use crate::c5::symbol::Linkage;
     use crate::c5::token::Token;
@@ -1000,7 +1108,6 @@ fn static_storage_objects(program: &Program) -> Vec<usize> {
         if sym.class != Token::Glo as i64
             || !sym.defined_here
             || sym.name.is_empty()
-            || sym.is_thread_local
             || sym.is_alias
             || !matches!(sym.linkage, Linkage::External | Linkage::Internal)
         {
@@ -1382,8 +1489,15 @@ impl<'a> TypeCatalog<'a> {
         while let Some(id) = self.pending.pop() {
             let structs = self.structs;
             let Some(sd) = structs.get(id) else { continue };
-            for f in &sd.fields {
-                self.of_field(f);
+            for m in member_plan(structs, sd) {
+                match m {
+                    MemberPlan::Field(i) => {
+                        self.of_field(&sd.fields[i]);
+                    }
+                    MemberPlan::Anonymous { id, .. } => {
+                        self.of_aggregate(id);
+                    }
+                }
             }
         }
     }
@@ -1490,14 +1604,19 @@ impl<'a> TypeCatalog<'a> {
     /// parameter array to a pointer, so only a true local contributes
     /// an array type.
     fn of_variable(&mut self, v: &super::super::program::VariableInfo) -> TypeId {
-        let base = self.of_tag(v.type_tag);
-        if v.array_size > 0 && !v.is_parameter {
-            self.intern(TypeNode::Array {
-                elem: base,
-                dims: alloc::vec![v.array_size as i64],
-            })
+        let base = if v.fn_ptr_indirection >= 1 {
+            self.of_function_pointer(v.type_tag, v.fn_ptr_indirection, &v.params, v.is_variadic)
         } else {
+            self.of_tag(v.type_tag)
+        };
+        if v.is_parameter {
+            return base;
+        }
+        let dims = array_dims(v.array_size as i64, &v.array_dims);
+        if dims.is_empty() {
             base
+        } else {
+            self.intern(TypeNode::Array { elem: base, dims })
         }
     }
 
@@ -1538,6 +1657,84 @@ impl<'a> TypeCatalog<'a> {
         });
         self.pointer_chain(fn_ty, depth)
     }
+}
+
+/// One child of an aggregate's DIE. C11 6.7.2.1p13 promotes an
+/// anonymous struct's or union's members into the enclosing
+/// aggregate's namespace; the registry keeps them flattened, and the
+/// description restores the unnamed member whose type is the
+/// anonymous aggregate.
+enum MemberPlan {
+    /// Index into `StructDef::fields`.
+    Field(usize),
+    /// Registry id of the anonymous aggregate and its byte offset in
+    /// the enclosing one.
+    Anonymous { id: usize, offset: usize },
+}
+
+/// The anonymous aggregate whose promotion produced `f`, or `None` for
+/// a field the source declared directly. A field promoted through
+/// nested anonymous aggregates carries one group id per tag kind; the
+/// enclosing one is then the aggregate whose own field list carries
+/// the other, since the inner one cannot contain its own ancestor.
+fn anon_group_of(structs: &[StructDef], f: &StructField) -> Option<usize> {
+    match (f.anon_union_group as usize, f.anon_struct_group as usize) {
+        (0, 0) => None,
+        (0, s) => Some(s - 1),
+        (u, 0) => Some(u - 1),
+        (u, s) => {
+            let union_within_struct = structs
+                .get(s - 1)
+                .is_some_and(|sd| sd.fields.iter().any(|g| g.anon_union_group as usize == u));
+            Some(if union_within_struct { s - 1 } else { u - 1 })
+        }
+    }
+}
+
+/// The children of `sd`'s DIE in declaration order. A run of fields
+/// promoted from one anonymous aggregate collapses into a single
+/// unnamed member when the run reproduces that aggregate's own field
+/// list at a constant displacement. It does not when the enclosing
+/// aggregate re-laid the promoted members (`packed` over an anonymous
+/// struct); the fields stay flat there, because nesting them would
+/// describe offsets the layout does not have.
+fn member_plan(structs: &[StructDef], sd: &StructDef) -> Vec<MemberPlan> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < sd.fields.len() {
+        if let Some(id) = anon_group_of(structs, &sd.fields[i])
+            && let Some(inner) = structs.get(id)
+            && let Some(offset) = anon_run_offset(sd, i, inner)
+        {
+            out.push(MemberPlan::Anonymous { id, offset });
+            i += inner.fields.len();
+            continue;
+        }
+        out.push(MemberPlan::Field(i));
+        i += 1;
+    }
+    out
+}
+
+/// The offset `inner`'s promoted members sit at in `sd`, when
+/// `sd.fields[at..]` reproduces `inner.fields` member for member at a
+/// constant displacement.
+fn anon_run_offset(sd: &StructDef, at: usize, inner: &StructDef) -> Option<usize> {
+    let n = inner.fields.len();
+    if n == 0 || at + n > sd.fields.len() {
+        return None;
+    }
+    let base = sd.fields[at].offset.checked_sub(inner.fields[0].offset)?;
+    let placed = sd.fields[at..at + n]
+        .iter()
+        .zip(inner.fields.iter())
+        .all(|(o, i)| {
+            o.name == i.name
+                && o.offset == base + i.offset
+                && o.bit_offset == i.bit_offset
+                && o.bit_width == i.bit_width
+        });
+    placed.then_some(base)
 }
 
 /// The dimension list of an array declarator, outermost first, empty
@@ -1613,7 +1810,18 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
                 push_string(&mut die.bytes, &sd.name);
             }
             write_uleb128(&mut die.bytes, sd.size as u64);
-            for f in &sd.fields {
+            for m in member_plan(structs, sd) {
+                let i = match m {
+                    MemberPlan::Field(i) => i,
+                    MemberPlan::Anonymous { id, offset } => {
+                        let anon_type = catalog.of_aggregate(id);
+                        write_uleb128(&mut die.bytes, ABBREV_MEMBER_ANON);
+                        die.push_ref(anon_type);
+                        write_uleb128(&mut die.bytes, offset as u64);
+                        continue;
+                    }
+                };
+                let f = &sd.fields[i];
                 let field_type = catalog.of_field(f);
                 if f.bit_width > 0 {
                     // DWARF 4 5.6.6: DW_AT_data_bit_offset is the
@@ -1928,14 +2136,16 @@ mod abbrev_golden {
         assert_eq!(
             hex,
             "0111012508130b03081b081101120710170000022e000308110112073f192719360b\
-             0000032e010308110112073f192719360b401800000405000308021849133a0f3b0f\
-             00000534000308021849133a0f3b0f000006240003080b0b3e0b0000070f000b0b49\
-             13000008130103080b0f000009170103080b0f00000a0d0003084913380f00000b0d\
-             00030849136b0f0d0f00000c180000000d0101491300000e21002f0f00000f040103\
-             080b0b000010280003081c0d00001113010b0f00001217010b0f000013130003083c\
-             19000014170003083c19000015150127194913000016150127190000170500491300\
-             001821000000190f000b0b00001a3b0000001b3400030849133f1902183a0f3b0f00\
-             001c34000308491302183a0f3b0f000000"
+             0000032e010308110112073f192719360b401800001e2e000308110112072719360b\
+             00001f2e010308110112072719360b401800000405000308021849133a0f3b0f0000\
+             0534000308021849133a0f3b0f000006240003080b0b3e0b0000070f000b0b491300\
+             0008130103080b0f000009170103080b0f00000a0d0003084913380f00001d0d0049\
+             13380f00000b0d00030849136b0f0d0f00000c180000000d0101491300000e21002f\
+             0f00000f040103080b0b000010280003081c0d00001113010b0f00001217010b0f00\
+             0013130003083c19000014170003083c190000151501271949130000161501271900\
+             00170500491300001821000000190f000b0b00001a3b0000001b3400030849133f19\
+             02183a0f3b0f00001c34000308491302183a0f3b0f0000203400030849133f193a0f\
+             3b0f0000213400030849133a0f3b0f000000"
         );
     }
 }

@@ -10,37 +10,39 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<clamp_low>:
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
+               	subq	$0x10, %rsp
+               	movl	$0x7, %eax
+               	movl	%eax, -0x8(%rbp)
+               	movslq	-0x8(%rbp), %rax
+               	testq	%rax, %rax
                	jl	<addr>
-               	movslq	%edi, %rax
+               	cmpq	$0x7, %rax
+               	je	<addr>
+               	movl	$0x1, %eax
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	xorq	%rax, %rax
+               	movl	%eax, -0x8(%rbp)
+               	movslq	-0x8(%rbp), %rax
+               	testq	%rax, %rax
+               	jl	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x2, %eax
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	xorq	%rax, %rax
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	ud2
                	xorq	%rax, %rax
-               	popq	%rbp
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x7, %edi
-               	callq	<addr>
-               	cmpq	$0x7, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	xorq	%rdi, %rdi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
+               	ud2
                	xorq	%rax, %rax
-               	popq	%rbp
-               	retq
+               	jmp	<addr>

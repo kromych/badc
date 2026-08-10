@@ -58,6 +58,35 @@ static int nested(int q) {
     return 0;
 }
 
+// A shadowing inner declaration rebinds the outer name. The cleanup
+// registered for the outer binding must receive the outer variable at an
+// exit taken inside the inner scope, not the shadowing one -- the
+// scope-guard macro idiom declares every guard with one fixed name, so a
+// wrong binding here releases the wrong lock.
+static int shadow_block(int q) {
+    int s __attribute__((cleanup(rc))) = 40;
+    (void)s;
+    {
+        int s __attribute__((cleanup(rc))) = 41;
+        (void)s;
+        if (q) return 42;   // clean 41, then 40 -- not 41 twice
+    }
+    return 43;              // inner cleaned at block end, outer here
+}
+
+// The same through for-init declarations, the shape scope-guard macros
+// expand to (`for (guard_t scope = acquire(...); ...)`).
+static int shadow_for(int q) {
+    for (int scope __attribute__((cleanup(rc))) = 20; ; ) {
+        for (int scope __attribute__((cleanup(rc))) = 21; ; ) {
+            if (q) return 30;   // clean 21, then 20
+            break;              // clean 21
+        }
+        break;                  // clean 20
+    }
+    return 31;
+}
+
 int main(void) {
     ne = 0;
     order3();
@@ -79,6 +108,22 @@ int main(void) {
     ne = 0;
     if (nested(0) != 0) return 8;
     if (ne != 3 || events[0] != 12 || events[1] != 11 || events[2] != 10) return 9;
+
+    ne = 0;
+    if (shadow_block(1) != 42) return 10;
+    if (ne != 2 || events[0] != 41 || events[1] != 40) return 11;
+
+    ne = 0;
+    if (shadow_block(0) != 43) return 12;
+    if (ne != 2 || events[0] != 41 || events[1] != 40) return 13;
+
+    ne = 0;
+    if (shadow_for(1) != 30) return 14;
+    if (ne != 2 || events[0] != 21 || events[1] != 20) return 15;
+
+    ne = 0;
+    if (shadow_for(0) != 31) return 16;
+    if (ne != 2 || events[0] != 21 || events[1] != 20) return 17;
 
     return 0;
 }

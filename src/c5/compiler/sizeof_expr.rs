@@ -24,6 +24,7 @@
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::types::{is_struct_value_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     /// Parse the operand of a `sizeof` and return its byte
@@ -45,7 +46,7 @@ impl Compiler {
                 && self.lex.tk != Token::Dot
                 && self.lex.tk != Token::Arrow;
         }
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         Ok(ok)
     }
 
@@ -119,8 +120,12 @@ impl Compiler {
             let mut array_count: i64 = 1;
             while self.lex.tk == Token::Brak {
                 self.next()?;
-                let n = self.parse_constant_int()?;
-                if n <= 0 {
+                // A type dimension: the const-object fold stays masked so
+                // `sizeof(int[h])` with a const local `h` stays
+                // non-constant, as in gcc.
+                let n = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
+                // n == 0 is a GCC zero-length array: `sizeof(T[0])` is 0.
+                if n < 0 {
                     return Err(self.compile_err("array dimension in sizeof must be positive"));
                 }
                 if self.lex.tk != ']' {
@@ -130,8 +135,12 @@ impl Compiler {
                 array_count *= n;
             }
             let elem_size = self.size_of_type(self.ty) as i64;
+            let zero_len = core::mem::take(&mut self.pending.typedef_base_zero_len);
             let base = if typedef_dim > 0 && !decayed_to_ptr {
                 typedef_dim * elem_size
+            } else if typedef_dim < 0 && zero_len && !decayed_to_ptr {
+                // `typedef T A[0]`: a complete type of size 0.
+                0
             } else {
                 elem_size
             };
@@ -205,7 +214,7 @@ impl Compiler {
             // does not consume a paren that was never sizeof's
             // to begin with.
             if had_paren {
-                self.lex.restore(pre_paren_snap);
+                self.restore_lex(pre_paren_snap);
                 had_paren = false;
             }
             let lev = Token::Inc as i64;
@@ -363,16 +372,130 @@ impl Compiler {
     }
 
     /// GCC `__builtin_constant_p(x)`: an `int`, 1 when the unevaluated
-    /// operand folds to a constant expression, else 0. The operand is
-    /// not evaluated (no emission), so this yields a plain integer
-    /// constant like the `__builtin_types_compatible_p` result.
+    /// operand folds to a constant expression. A parse-time constant
+    /// answers 1, which no later phase revises. A non-constant operand
+    /// can still become one after inlining and constant propagation, so
+    /// where deferring is sound it becomes an `Intrinsic::ConstantP` for
+    /// the SSA folds; otherwise the conservative 0 stands.
+    /// GCC `__builtin_has_attribute(operand, attribute)`: an `int`
+    /// constant. badc does not model the queried attributes on objects or
+    /// types, so under its own semantics no operand carries one -- the
+    /// answer is 0. Both operands are consumed unevaluated.
+    pub(super) fn parse_has_attribute_builtin(&mut self) -> Result<(), C5Error> {
+        // The call dispatch consumed `__builtin_has_attribute (`.
+        self.skip_balanced_to_comma()?;
+        if self.lex.tk != ',' {
+            return Err(self.compile_err("`,` expected in `__builtin_has_attribute`"));
+        }
+        self.next()?;
+        self.skip_balanced_to_close_paren()?;
+        self.ty = Ty::Int as i64;
+        self.emit_imm(0);
+        self.ast_emit_int_lit(0, self.ty);
+        Ok(())
+    }
+
     pub(super) fn parse_constant_p_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_constant_p (`.
-        let v = self.eval_constant_p_operand()?;
-        self.emit_imm(v);
+        let snap = self.lex.snapshot();
+        if self.eval_constant_p_operand()? == 1 {
+            self.emit_imm(1);
+            self.ty = Ty::Int as i64;
+            self.ast_emit_int_lit(1, self.ty);
+            return Ok(());
+        }
+        self.restore_lex(snap);
+        self.expr(Token::Assign as i64)?;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected to close `__builtin_constant_p`"));
+        }
+        self.next()?;
+        let operand = self.ast_acc.take();
         self.ty = Ty::Int as i64;
-        self.ast_emit_int_lit(v, self.ty);
+        match operand {
+            Some(id) if self.constant_p_operand_defers(id) => {
+                let pos = self.ast_src_pos();
+                let node = self.ast.push_expr(
+                    super::super::ast::Expr::Intrinsic {
+                        kind: crate::c5::op::Intrinsic::ConstantP as i64,
+                        args: alloc::vec![id],
+                        ty: self.ty,
+                    },
+                    pos,
+                );
+                self.ast_acc = Some(node);
+                self.mark_emit_other();
+            }
+            _ => {
+                // The parsed operand is dropped unreferenced: its side
+                // effects are never walked, matching GCC's unevaluated
+                // operand.
+                self.emit_imm(0);
+                self.ast_emit_int_lit(0, self.ty);
+            }
+        }
         Ok(())
+    }
+
+    /// Whether a non-constant `__builtin_constant_p` operand may defer to
+    /// the SSA folds. Deferring lowers the operand so the inliner's
+    /// argument substitution can reach it, which is sound only when that
+    /// lowering neither has side effects nor traps: scalar locals and
+    /// parameters qualify; calls, pointer loads, volatile and
+    /// address-space-qualified accesses, and division do not.
+    fn constant_p_operand_defers(&self, id: super::super::ast::ExprId) -> bool {
+        use super::super::ast::{Expr, UnOp};
+        use super::super::ir::BinOp;
+        use super::types::{is_struct_value_ty, is_volatile_ty, segment_of_ty};
+        match self.ast.expr(id) {
+            Expr::IntLit { .. } | Expr::FloatLit { .. } | Expr::Sizeof(_) => true,
+            Expr::Ident {
+                sym,
+                ty,
+                class,
+                array_size,
+                is_thread_local,
+                ..
+            } => {
+                *class == Token::Loc as i64
+                    && *array_size == 0
+                    && !*is_thread_local
+                    && !is_volatile_ty(*ty)
+                    && segment_of_ty(*ty).is_none()
+                    && !is_struct_value_ty(*ty)
+                    && !self
+                        .symbols
+                        .get(*sym as usize)
+                        .is_some_and(|s| s.is_global_register)
+            }
+            Expr::Unary {
+                op: UnOp::Neg | UnOp::BitNot | UnOp::LogNot,
+                child,
+                ..
+            } => self.constant_p_operand_defers(*child),
+            Expr::Binary { op, lhs, rhs, .. } => {
+                !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
+                    && self.constant_p_operand_defers(*lhs)
+                    && self.constant_p_operand_defers(*rhs)
+            }
+            Expr::ShortCircuit { lhs, rhs, .. } => {
+                self.constant_p_operand_defers(*lhs) && self.constant_p_operand_defers(*rhs)
+            }
+            Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+                ..
+            } => {
+                self.constant_p_operand_defers(*cond)
+                    && self.constant_p_operand_defers(*then_e)
+                    && self.constant_p_operand_defers(*else_e)
+            }
+            Expr::Cast { child, to_ty } => {
+                !is_struct_value_ty(*to_ty) && self.constant_p_operand_defers(*child)
+            }
+            _ => false,
+        }
     }
 
     /// C11 6.5.3.4: `_Alignof ( type-name )`. The operand is always a
@@ -384,8 +507,25 @@ impl Compiler {
     /// declarator suffixes are consumed but do not change the result
     /// beyond the pointer decoration.
     pub(super) fn alignof_operand_bytes(&mut self) -> Result<i64, C5Error> {
+        // C11 6.5.3.4 requires `_Alignof ( type-name )`; GCC's `__alignof__`
+        // (both spellings share the token) also accepts an unparenthesized
+        // expression operand, whose alignment is that of its type. Parse it
+        // unevaluated at unary precedence, like `sizeof`, and discard the
+        // emit.
         if self.lex.tk != '(' {
-            return Err(self.compile_err("`(` expected after `_Alignof`"));
+            if let Some(align) = self.alignof_object_walk(false)? {
+                return Ok(align);
+            }
+            let saved_ty = self.ty;
+            let saved_text_len = self.next_ent_pc;
+            let saved_reloc = self.code_reloc_sym_idx.len();
+            self.expr(Token::Inc as i64)?;
+            let expr_ty = self.ty;
+            self.next_ent_pc = saved_text_len;
+            self.clear_recent_emits();
+            self.code_reloc_sym_idx.truncate(saved_reloc);
+            self.ty = saved_ty;
+            return Ok(self.align_of_type(expr_ty) as i64);
         }
         self.next()?;
         // C11 6.5.3.4 takes a type-name; GCC's `__alignof__` also accepts a
@@ -393,6 +533,10 @@ impl Compiler {
         // operand is unevaluated, so parse it, read the type, and discard
         // everything the parse pushed (mirroring `sizeof`'s expression path).
         if !self.lex_is_type_start() {
+            if let Some(align) = self.alignof_object_walk(true)? {
+                self.next()?; // consume `)`
+                return Ok(align);
+            }
             let saved_ty = self.ty;
             let saved_text_len = self.next_ent_pc;
             let saved_reloc = self.code_reloc_sym_idx.len();
@@ -410,10 +554,17 @@ impl Compiler {
         }
         let saved_ty = self.ty;
         self.ty = self.parse_decl_base_type()?;
+        // A typedef base may carry an explicit type alignment (GNU
+        // `aligned(N)`). It applies to the type and to an array of it
+        // (C11 6.2.8: an array's alignment is its element's), but a
+        // pointer to it has pointer alignment.
+        let type_align_override = core::mem::take(&mut self.pending.type_align);
         let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
+        let mut had_ptr = false;
         while self.lex.tk == Token::MulOp {
             self.next()?;
             self.ty += Ty::Ptr as i64;
+            had_ptr = true;
             while self.lex.tk == Token::TypeQual {
                 self.next()?;
             }
@@ -422,11 +573,13 @@ impl Compiler {
             let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
             if nested_ptrs > 0 {
                 self.ty += nested_ptrs * (Ty::Ptr as i64);
+                had_ptr = true;
             }
         }
         while self.lex.tk == Token::Brak {
             self.next()?;
-            let _ = self.parse_constant_int()?;
+            // A type dimension (see above).
+            let _ = self.with_const_object_fold_masked(|c| c.parse_constant_int())?;
             if self.lex.tk != ']' {
                 return Err(self.compile_err("close bracket expected in `_Alignof` array type"));
             }
@@ -436,8 +589,116 @@ impl Compiler {
             return Err(self.compile_err("`)` expected to close `_Alignof`"));
         }
         self.next()?;
-        let align = self.align_of_type(self.ty) as i64;
+        let align = if type_align_override > 0 && !had_ptr {
+            type_align_override
+        } else {
+            self.align_of_type(self.ty) as i64
+        };
         self.ty = saved_ty;
         Ok(align)
+    }
+
+    /// `__alignof__` on an object or a member chain (`name`, `name.f`,
+    /// `name->f.g`): the declared alignment of the designated object,
+    /// which the flat type tag cannot carry -- a typedef-carried
+    /// `aligned(N)` on the object or an explicit / typedef-carried
+    /// alignment on the final member. Consumes the chain and returns its
+    /// alignment, or rewinds and returns `None` for any other operand
+    /// shape (subscripts, calls, bitfield members, non-object names),
+    /// which the general-expression path then reports at the type's
+    /// natural alignment. `parenthesized` requires the chain to end at
+    /// `)`, left for the caller to consume.
+    fn alignof_object_walk(&mut self, parenthesized: bool) -> Result<Option<i64>, C5Error> {
+        let snap = self.lex.snapshot();
+        // Leading parentheses around the chain (`((name))`, `(name.f)`).
+        let mut inner_parens = 0usize;
+        while self.lex.tk == '(' {
+            inner_parens += 1;
+            self.next()?;
+        }
+        if self.lex.tk != Token::Id {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        let idx = self.lex.curr_id_idx;
+        let class = self.symbols[idx].class;
+        if class != Token::Loc as i64 && class != Token::Glo as i64 {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        let mut align = if self.symbols[idx].type_align > 0 {
+            self.symbols[idx].type_align
+        } else {
+            self.align_of_type(self.symbols[idx].type_) as i64
+        };
+        let mut cur_ty = self.symbols[idx].type_;
+        self.next()?;
+        loop {
+            let arrow = self.lex.tk == Token::Arrow;
+            if arrow || self.lex.tk == Token::Dot {
+                // `.` selects from a struct value, `->` from a pointer to
+                // one; anything else is not a plain member chain.
+                let depth = struct_ptr_depth(cur_ty);
+                let sel_ok = if arrow {
+                    depth == 1
+                } else {
+                    is_struct_value_ty(cur_ty)
+                };
+                self.next()?;
+                if !sel_ok || self.lex.tk != Token::Id {
+                    self.restore_lex(snap);
+                    return Ok(None);
+                }
+                let sid = struct_id_of(cur_ty);
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                let found = self.structs[sid]
+                    .fields
+                    .iter()
+                    .find(|f| f.name == name)
+                    .map(|f| (f.ty, f.align, f.bit_width));
+                let Some((fty, falign, bit_width)) = found else {
+                    self.restore_lex(snap);
+                    return Ok(None);
+                };
+                if bit_width > 0 {
+                    self.restore_lex(snap);
+                    return Ok(None);
+                }
+                align = if falign > 0 {
+                    falign as i64
+                } else {
+                    self.align_of_type(fty) as i64
+                };
+                cur_ty = fty;
+                self.next()?;
+                continue;
+            }
+            break;
+        }
+        // Close any leading parentheses.
+        while inner_parens > 0 && self.lex.tk == ')' {
+            inner_parens -= 1;
+            self.next()?;
+        }
+        if inner_parens != 0 {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        // The operand must be exactly the chain: a continuing postfix
+        // (subscript, call, `++`/`--`) or, in the parenthesized form,
+        // anything but `)` rewinds to the generic path.
+        let ends_operand = if parenthesized {
+            self.lex.tk == ')'
+        } else {
+            self.lex.tk != Token::Brak
+                && self.lex.tk != '('
+                && self.lex.tk != Token::Inc
+                && self.lex.tk != Token::Dec
+        };
+        if !ends_operand {
+            self.restore_lex(snap);
+            return Ok(None);
+        }
+        Ok(Some(align))
     }
 }

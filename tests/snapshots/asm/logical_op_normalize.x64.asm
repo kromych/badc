@@ -13,7 +13,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
+               	subq	$0x10, %rsp
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	movl	$0x1, %ecx
@@ -24,7 +24,7 @@ Disassembly of section .text:
                	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rcx, %rcx
@@ -35,18 +35,18 @@ Disassembly of section .text:
                	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movl	$0x1, %ecx
                	xorq	%rcx, %rcx
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x8(%rbp), %rcx
                	leaq	<rip>, %rdx
                	pushq	%rax
                	movq	(%rdx), %rax
                	movq	%rax, (%rcx)
                	popq	%rax
-               	leaq	-0x10(%rbp), %rdx
+               	leaq	-0x8(%rbp), %rdx
                	movl	$0x1, %ecx
                	testq	%rax, %rax
                	jne	<addr>
@@ -56,17 +56,17 @@ Disassembly of section .text:
                	cmpq	$0x14, %rcx
                	je	<addr>
                	movl	$0x6, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x8(%rbp), %rcx
                	xorq	%rdx, %rdx
                	addq	$0x0, %rcx
                	movslq	(%rcx), %rcx
                	cmpq	$0xa, %rcx
                	je	<addr>
                	movl	$0x7, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movl	$0x1, %ecx
@@ -80,11 +80,11 @@ Disassembly of section .text:
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x8, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	jmp	<addr>

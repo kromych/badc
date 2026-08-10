@@ -31,48 +31,21 @@ Disassembly of section .text:
                	popq	%rax
                	imulq	$0x64, %rax, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	leaq	-0x8(%rbp), %rcx
-               	movq	(%rcx), %rdx
-               	movl	$0x18, %eax
-               	movq	%rax, %r10
-               	pushq	%rdx
-               	movq	%rdx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	popq	%rdx
-               	movl	$0x7, %ecx
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rdx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%rcx
-               	movq	%rdx, %rcx
-               	popq	%rdx
-               	popq	%rax
-               	imulq	$0x64, %rax, %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	cmpq	$0x3ea, %rax            # imm = 0x3EA
-               	jne	<addr>
                	xorq	%rax, %rax
-               	movslq	%eax, %rax
-               	addq	$0x20, %rsp
+               	xorq	%rax, %rax
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	jmp	<addr>

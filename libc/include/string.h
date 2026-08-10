@@ -17,6 +17,14 @@
 // matching the Linux C library / clang / MSVC.
 #include <stddef.h>
 
+/* The C library makes the obsolescent <strings.h> routines (bcmp,
+** bcopy, bzero, strcasecmp) visible through <string.h> as well; source
+** that calls them includes only <string.h>. Windows has no <strings.h>
+** surface. */
+#ifndef _WIN32
+#include <strings.h>
+#endif
+
 #ifndef NULL
 #define NULL 0
 #endif
@@ -49,6 +57,9 @@
 #pragma binding(libc::strpbrk,  "_strpbrk")
 #pragma binding(libc::strtok,   "_strtok")
 #pragma binding(libc::strtok_r, "_strtok_r")
+// libSystem exports only the XSI `strerror_r`; there is no GNU form.
+#pragma binding(libc::strerror_r, "_strerror_r")
+#pragma binding(libc::strcasestr, "_strcasestr")
 #endif
 
 #ifdef __linux__
@@ -87,6 +98,18 @@
 #pragma binding(libc::memrchr, "memrchr")
 // BSD/glibc: zero a buffer; the write is not elided by the optimizer.
 #pragma binding(libc::explicit_bzero, "explicit_bzero")
+// GNU extension: `strstr` ignoring case under the current locale.
+#pragma binding(libc::strcasestr, "strcasestr")
+// Two incompatible `strerror_r` return types share the name. The C
+// library exports the XSI form (POSIX.1-2001, `int`) as
+// `__xpg_strerror_r` and the GNU form (`char *`) as `strerror_r`; the
+// declaration below selects between them the same way, so the call
+// reaches the entry point matching the prototype in scope.
+#ifdef _GNU_SOURCE
+#pragma binding(libc::strerror_r, "strerror_r")
+#else
+#pragma binding(libc::strerror_r, "__xpg_strerror_r")
+#endif
 #endif
 
 #ifdef _WIN32
@@ -112,9 +135,7 @@
 // MSVC marks `strdup` as deprecated and exports the underscored form;
 // it's the universally available spelling on every modern msvcrt.
 #pragma binding(msvcrt::strdup,   "_strdup")
-// msvcrt has no `strndup` (POSIX.1-2008 7.24.1.4); programs
-// that need the bounded copy on Windows emulate via
-// `strnlen` + `malloc` + `memcpy`.
+// msvcrt has no `strndup`; `libc/lib/string_ext.c` supplies it.
 #pragma binding(msvcrt::strspn,   "strspn")
 #pragma binding(msvcrt::strcspn,  "strcspn")
 #pragma binding(msvcrt::strpbrk,  "strpbrk")
@@ -161,11 +182,11 @@ char *strcat(char *dst, char *src);
 char *strncat(char *dst, char *src, int n);
 char *strerror(int errnum);
 char *strdup(char *s);
-#ifndef _WIN32
 // POSIX.1-2008 7.24.1.4 `strndup` -- C2x but not in C99
-// `<string.h>`. Bound on macOS / Linux; msvcrt has no
-// equivalent so the prototype is gated out on Windows.
+// `<string.h>`. Bound on macOS / Linux; on Windows
+// `libc/lib/string_ext.c` defines it and joins the link on demand.
 char *strndup(char *s, int n);
+#ifndef _WIN32
 // POSIX descriptive name for a signal number. macOS / Linux only.
 char *strsignal(int sig);
 #endif
@@ -175,12 +196,24 @@ char *strpbrk(char *s, char *accept);
 char *strtok(char *s, char *delim);
 // POSIX.1-2001 reentrant strtok; `saveptr` holds the scan state.
 char *strtok_r(char *s, char *delim, char **saveptr);
-#ifdef __linux__
-// GNU extensions, declared only where they are bound.
+#ifndef _WIN32
+// POSIX.1-2001 `strerror_r`, in the two return types that share the
+// name: the GNU form returns the message (which need not be `buf`),
+// the XSI form returns 0 or an errno value. Both are bound above.
+#if defined(__linux__) && defined(_GNU_SOURCE)
+char *strerror_r(int errnum, char *buf, size_t buflen);
+#else
+int strerror_r(int errnum, char *buf, size_t buflen);
+#endif
+// BSD/GNU case-insensitive `strstr`. msvcrt has no equivalent.
+char *strcasestr(const char *haystack, const char *needle);
+#endif
+// GNU/BSD extensions. Bound to the C library on Linux; elsewhere
+// `libc/lib/string_ext.c` defines them and joins the link on demand,
+// so the declarations are portable.
 char *strchrnul(const char *s, int c);
 char *memrchr(char *s, int c, int n);
 void explicit_bzero(void *s, size_t n);
-#endif
 // C11 K.3.7.4.1, visible on the Annex-K opt-in like the platform
 // header; libSystem exports it, glibc does not.
 #if defined(__APPLE__) && defined(__STDC_WANT_LIB_EXT1__) && __STDC_WANT_LIB_EXT1__ >= 1

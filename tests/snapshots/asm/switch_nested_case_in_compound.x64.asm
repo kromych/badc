@@ -11,12 +11,9 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	xorq	%rax, %rax
                	movl	$0x7, %eax
                	movl	$0x1064, %eax           # imm = 0x1064
                	movl	$0x106b, %eax           # imm = 0x106B
                	xorq	%rax, %rax
-               	popq	%rbp
                	retq

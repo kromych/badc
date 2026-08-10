@@ -52,7 +52,8 @@ fn unsupported_inline_asm_reports_the_specific_form() {
 fn output_marker_is_version_only_and_present_in_every_target() {
     use crate::{NativeOptions, Target};
     let program = super::compile_str("int main() { return 0; }");
-    // `OUTPUT_MARKER` is `BADC\n\tv<version>` (see `src/lib.rs`).
+    // `OUTPUT_MARKER` is the one-line identification `badc
+    // <version> (...)` (see `src/lib.rs`).
     let needle = crate::OUTPUT_MARKER.as_bytes();
     // The git tail only ever appears in `BUILD_INFO`; its label
     // `\n\tcommit ` must not reach the output.
@@ -81,6 +82,33 @@ fn output_marker_is_version_only_and_present_in_every_target() {
             "{target:?}: git provenance leaked into output -- breaks reproducibility"
         );
     }
+}
+
+/// The first line of `--version` (`BUILD_INFO`) is the complete
+/// identification consumers record: the Linux kernel captures
+/// `$(CC) --version | head -n1` as `CONFIG_CC_VERSION_TEXT`,
+/// which reaches the boot banner and `/proc/version`. It must
+/// name the compiler, its release version, and the
+/// gcc-compatibility claim, and it must equal the marker emitted
+/// into output (`OUTPUT_MARKER`) so on-disk identification and
+/// reported identification cannot diverge.
+#[test]
+fn version_line_is_a_complete_single_line_identification() {
+    assert_eq!(crate::VERSION_LINE, crate::OUTPUT_MARKER);
+    assert_eq!(crate::BUILD_INFO.lines().next(), Some(crate::VERSION_LINE));
+    assert!(!crate::VERSION_LINE.contains('\n'));
+    let expect = format!("badc {} (", env!("CARGO_PKG_VERSION"));
+    assert!(
+        crate::VERSION_LINE.starts_with(&expect),
+        "version line {:?} does not start with {expect:?}",
+        crate::VERSION_LINE
+    );
+    assert!(
+        crate::VERSION_LINE.contains("gcc-compatible")
+            && crate::VERSION_LINE.contains(crate::GNU_COMPAT_VERSION),
+        "version line {:?} lacks the gcc-compatibility statement",
+        crate::VERSION_LINE
+    );
 }
 
 /// `-g` / `with_debug_info(true)` carries DWARF into the emitted
@@ -828,6 +856,234 @@ fn pe_iat_slot_rva(image: &[u8], want: &str) -> Option<u32> {
     None
 }
 
+/// `(sh_addr, contents)` of the named section of a linked ELF image.
+#[cfg(feature = "full")]
+fn elf_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::Vec<u8>)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap()) as usize;
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap()) as usize;
+    let shoff = u64a(0x28);
+    let shentsize = u16a(0x3a);
+    let shnum = u16a(0x3c);
+    let stroff = u64a(shoff + u16a(0x3e) * shentsize + 0x18);
+    (0..shnum).map(|i| shoff + i * shentsize).find_map(|sh| {
+        let name = stroff + u32a(sh);
+        let end = name + b[name..].iter().position(|&c| c == 0)?;
+        if &b[name..end] != want {
+            return None;
+        }
+        let off = u64a(sh + 0x18);
+        let size = u64a(sh + 0x20);
+        Some((u64a(sh + 0x10) as u64, b[off..off + size].to_vec()))
+    })
+}
+
+/// `(addr, contents)` of the named section of a linked Mach-O image.
+#[cfg(feature = "full")]
+fn macho_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::Vec<u8>)> {
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let ncmds = u32a(16);
+    let mut lc = 32;
+    for _ in 0..ncmds {
+        // LC_SEGMENT_64 = 0x19; sections follow the 72-byte command.
+        if u32a(lc) == 0x19 {
+            let nsects = u32a(lc + 64);
+            for s in 0..nsects {
+                let sh = lc + 72 + s * 80;
+                let end = sh + b[sh..sh + 16].iter().position(|&c| c == 0).unwrap_or(16);
+                if &b[sh..end] == want {
+                    let off = u32a(sh + 48);
+                    let size = u64a(sh + 40) as usize;
+                    return Some((u64a(sh + 32), b[off..off + size].to_vec()));
+                }
+            }
+        }
+        lc += u32a(lc + 4);
+    }
+    None
+}
+
+/// `(code address, code bytes, address range of the import slots)` of a
+/// linked image: the IAT entry named by `pe_import` for a PE, the `.got`
+/// / `__got` region for the other two formats.
+#[cfg(feature = "full")]
+fn import_slot_layout(
+    image: &[u8],
+    target: crate::Target,
+    pe_import: &str,
+) -> Option<(u64, alloc::vec::Vec<u8>, core::ops::Range<u64>)> {
+    use crate::Target;
+    match target {
+        Target::WindowsX64 | Target::WindowsAarch64 => {
+            let (text_rva, text) = pe_text_section(image)?;
+            let slot = pe_iat_slot_rva(image, pe_import)? as u64;
+            Some((text_rva as u64, text.to_vec(), slot..slot + 8))
+        }
+        Target::LinuxX64 | Target::LinuxAarch64 => {
+            let (text_addr, text) = elf_section_addr_bytes(image, b".text")?;
+            let (got_addr, got) = elf_section_addr_bytes(image, b".got")?;
+            Some((text_addr, text, got_addr..got_addr + got.len() as u64))
+        }
+        Target::MacOSAarch64 => {
+            let (text_addr, text) = macho_section_addr_bytes(image, b"__text")?;
+            let (got_addr, got) = macho_section_addr_bytes(image, b"__got")?;
+            Some((text_addr, text, got_addr..got_addr + got.len() as u64))
+        }
+    }
+}
+
+/// Count the references into `slots` that read through a slot and the
+/// ones that materialise a slot's own address. Scans `code` for the
+/// two page-relative forms each machine uses; the resolved target has
+/// to land in `slots`, so an unaligned scan start cannot contribute.
+#[cfg(feature = "full")]
+fn count_slot_references(
+    target: crate::Target,
+    code_va: u64,
+    code: &[u8],
+    slots: &core::ops::Range<u64>,
+) -> (usize, usize) {
+    use crate::Target;
+    let (mut through, mut addressed) = (0usize, 0usize);
+    match target {
+        Target::LinuxX64 | Target::WindowsX64 => {
+            // `REX.W 8B /r` loads and `REX.W 8D /r` takes the address;
+            // both are 7 bytes with a RIP-relative modrm (mod 00, rm 101).
+            for i in 0..code.len().saturating_sub(7) {
+                if code[i] & 0xF8 != 0x48 || code[i + 2] & 0xC7 != 0x05 {
+                    continue;
+                }
+                let disp = i32::from_le_bytes(code[i + 3..i + 7].try_into().unwrap()) as i64;
+                let hit = slots.contains(&((code_va + i as u64 + 7).wrapping_add(disp as u64)));
+                match code[i + 1] {
+                    0x8B if hit => through += 1,
+                    0x8D if hit => addressed += 1,
+                    _ => {}
+                }
+            }
+        }
+        Target::LinuxAarch64 | Target::WindowsAarch64 | Target::MacOSAarch64 => {
+            let word = |i: usize| u32::from_le_bytes(code[i..i + 4].try_into().unwrap());
+            for i in (0..code.len().saturating_sub(7)).step_by(4) {
+                let adrp = word(i);
+                if adrp & 0x9F00_0000 != 0x9000_0000 {
+                    continue;
+                }
+                let imm21 = ((adrp >> 29) & 3) | (((adrp >> 5) & 0x7_FFFF) << 2);
+                let pages = (((imm21 << 11) as i32) >> 11) as i64;
+                let page = (((code_va + i as u64) & !0xFFF) as i64 + (pages << 12)) as u64;
+                let next = word(i + 4);
+                if (next >> 5) & 0x1F != adrp & 0x1F {
+                    continue;
+                }
+                let imm12 = ((next >> 10) & 0xFFF) as u64;
+                if next & 0x7F80_0000 == 0x1100_0000 {
+                    addressed += slots.contains(&page.wrapping_add(imm12)) as usize;
+                } else if next & 0x3B00_0000 == 0x3900_0000 {
+                    let scale = 1u64 << (next >> 30);
+                    through += slots.contains(&page.wrapping_add(imm12 * scale)) as usize;
+                }
+            }
+        }
+    }
+    (through, addressed)
+}
+
+/// A reference to an imported data object reaches the object through the
+/// slot the loader fills, so the emitted sequence has to read that slot.
+/// Materialising the slot's address instead hands the object's address
+/// to code expecting its value, and every later dereference is off by
+/// one indirection. Each of the three image writers patches the site
+/// with its own helper, so the property is checked on every target.
+#[cfg(feature = "full")]
+#[test]
+fn an_import_slot_reference_reads_the_slot_on_every_target() {
+    use crate::{Compiler, NativeOptions, Target};
+    const SRC: &str = "#include <stdio.h>\n#include <time.h>\n\
+                       void *fp(void) { return (void *)&puts; }\n\
+                       long tz(void) { return timezone; }\n\
+                       int main(void) { return fp() != 0 && tz() == 0; }\n";
+    let targets = [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ];
+    // An ELF x86_64 image resolves the bound data object by copy
+    // relocation, so `timezone` reads no slot there; `&puts` still does,
+    // so every target ends up reading one.
+    let mut reading = 0usize;
+    for target in targets {
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: compile: {e:?}"));
+        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: link: {e}"));
+        let (code_va, code, slots) = import_slot_layout(&image, target, "_timezone")
+            .unwrap_or_else(|| panic!("{target:?}: image carries no import-slot region"));
+        let (through, addressed) = count_slot_references(target, code_va, &code, &slots);
+        assert_eq!(
+            addressed, 0,
+            "{target:?}: {addressed} reference(s) materialise an import slot's address \
+             instead of reading it"
+        );
+        reading += usize::from(through > 0);
+    }
+    assert_eq!(
+        reading,
+        targets.len(),
+        "the scan proves nothing unless the images actually read their import slots"
+    );
+}
+
+/// A shared library's reference to an undefined data symbol reaches the
+/// object through the import slot the loader fills. Routing it to a call
+/// stub instead leaves the reference pointing at code, so every read
+/// returns instruction bytes -- with no diagnostic at link or load. The
+/// source materialises no other in-code address, so a page-relative
+/// address landing inside the code section is that misrouting.
+#[cfg(feature = "full")]
+#[test]
+fn a_shared_library_data_import_reads_its_slot_on_every_target() {
+    use crate::{Compiler, NativeOptions, Target};
+    const SRC: &str = "extern int host_var;\nextern int host_fn(void);\n\
+                       #pragma export(read_var)\nint read_var(void) { return host_var; }\n\
+                       #pragma export(call_fn)\nint call_fn(void) { return host_fn(); }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: compile: {e:?}"));
+        let image = super::link_shared_library(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: link: {e}"));
+        let (code_va, code, slots) = import_slot_layout(&image, target, "host_var")
+            .unwrap_or_else(|| panic!("{target:?}: image carries no import-slot region"));
+        let (through, addressed) = count_slot_references(target, code_va, &code, &slots);
+        assert_eq!(
+            addressed, 0,
+            "{target:?}: a data import's slot is read, never addressed"
+        );
+        assert!(
+            through > 0,
+            "{target:?}: the data reference must read the import slot"
+        );
+        let text = code_va..code_va + code.len() as u64;
+        let (_, into_text) = count_slot_references(target, code_va, &code, &text);
+        assert_eq!(
+            into_text, 0,
+            "{target:?}: {into_text} reference(s) materialise an address inside the code \
+             section -- a data import bound to a call stub"
+        );
+    }
+}
+
 /// Walk an emitted ELF64 `.symtab` and return `(name, st_size)` for
 /// every `STT_FUNC` entry. Minimal fixed-offset parse for the symbol-
 /// size regression above.
@@ -968,7 +1224,7 @@ fn dense_switch_lowers_to_jump_table_sparse_keeps_tree() {
              case 18: return 7; case 21: return 8; default: return 0; } } \
          int main(void) { return dense8(3) + dense7(0) + half8(0) + sparse8(0); }",
     );
-    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host())
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false)
         .expect("produce_ssa_funcs");
     let table_of = |name: &str| -> Option<(u32, u32)> {
         let f: &FunctionSsa = funcs.iter().find(|f| f.name == name).unwrap();
@@ -1475,6 +1731,24 @@ fn user_defined_c5_entry_links_freestanding() {
     );
 }
 
+/// The PE entry stub direct-calls `__c5_entry`, which a bare single-TU
+/// image has no runtime to supply. The resulting failure is a problem
+/// with the link inputs, so it must be reported in the `error: <message>`
+/// form every diagnostic reader keys on rather than as a bare sentence a
+/// log scraper cannot find.
+#[test]
+fn pe_entry_stub_without_runtime_reports_a_link_error() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare("int main(void) { return 0; }");
+    let err = emit_native_with_options(&program, Target::WindowsX64, NativeOptions::default())
+        .expect_err("a PE image with no linked runtime has no `__c5_entry` to call");
+    let msg = format!("{err}");
+    assert!(
+        msg.starts_with("error: ") && msg.contains("__c5_entry"),
+        "the missing-runtime failure is not a well-formed diagnostic: {msg:?}"
+    );
+}
+
 /// C11 7.17.7.2 + Intel SDM Vol.2: `atomic_fetch_add` must lower to a
 /// genuine `LOCK XADD`, not a plain load-op-store. Confirm the emitted
 /// x86_64 image carries the `F0` LOCK prefix immediately followed by
@@ -1519,47 +1793,59 @@ fn atomic_compare_exchange_emits_cmpxchg_x86_64() {
     );
 }
 
-/// A 128-bit `__int128` atomic compare-exchange has no single-instruction
-/// lock form in the current emit. The SSA walk must reject it, not lower
-/// the zero-width access `type_size_bytes` yields for the struct-backed
-/// __int128 (which faults / miscompiles at run time; clang gets it right).
-/// TODO: lower 16-byte objects via cmpxchg16b / ldxp-stxp.
+/// No atomic form on a 16-byte object lowers: the paired
+/// compare-exchange (x86-64 `cmpxchg16b`, aarch64 `casp` / `ldxp`-`stxp`)
+/// is not emitted, and two 8-byte accesses would tear. Every form must
+/// be rejected with that diagnostic rather than lowered through the
+/// zero-width access `type_size_bytes` yields for the struct-backed
+/// __int128. `__atomic_is_lock_free` reports the same limit, so a
+/// caller can test for it (`atomic_lock_free_widths.c`).
+/// TODO: lower 16-byte objects via the paired compare-exchange.
 #[test]
-fn atomic128_compare_exchange_is_rejected_not_miscompiled() {
+fn atomic128_is_rejected_not_miscompiled() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    let program = super::compile_str_bare(
-        "int f(unsigned __int128 *p, unsigned __int128 *e, unsigned __int128 n){ \
-             return __atomic_compare_exchange_n(p, e, n, 0, 5, 5); } \
-         int main(){ return 0; }",
-    );
-    let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
-        .expect_err("128-bit atomic compare-exchange must be rejected, not miscompiled");
-    assert!(
-        err.to_string().contains("1/2/4/8-byte scalar object"),
-        "expected the wide-atomic rejection, got: {err}",
-    );
+    let bodies = [
+        "return __atomic_compare_exchange_n(p, e, n, 0, 5, 5);",
+        "__atomic_store_n(p, n, 5); return 0;",
+        "return (int)__atomic_load_n(p, 5);",
+        "return (int)__atomic_fetch_add(p, n, 5);",
+        "__atomic_load(p, e, 5); return 0;",
+        "__atomic_store(p, e, 5); return 0;",
+    ];
+    for body in bodies {
+        let src = alloc::format!(
+            "int f(unsigned __int128 *p, unsigned __int128 *e, unsigned __int128 n){{ {body} }} \
+             int main(){{ return 0; }}"
+        );
+        let program = super::compile_str_bare(&src);
+        let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("16-byte atomic object"),
+            "expected the wide-atomic rejection for `{body}`, got: {err}",
+        );
+    }
 }
 
-/// A 128-bit `__int128` `__builtin_*_overflow` has no wrapped-value /
-/// overflow-flag form in the current emit -- the formulas assume a
-/// 1/2/4/8-byte scalar in a 64-bit register. The SSA walk must reject it,
-/// not lower the narrow-path formulas that yield a wrong flag / value for
-/// the struct-backed __int128 (which `type_size_bytes` sizes 0; clang
-/// compiles it correctly). TODO: 128-bit overflow.
+/// `__builtin_*_overflow` with a 128-bit operand or result lowers over
+/// the two halves on every target: the walk must produce the wrapped
+/// value and the flag inline, with no call to a runtime helper. The
+/// values are checked against gcc / clang by
+/// `int128_overflow_builtin.c`.
 #[test]
-fn builtin_overflow_on_128bit_operand_is_rejected() {
+fn builtin_overflow_on_128bit_operand_lowers_inline() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     let program = super::compile_str_bare(
         "int f(unsigned __int128 a, unsigned __int128 b, unsigned __int128 *r){ \
              return __builtin_add_overflow(a, b, r); } \
+         int g(__int128 a, long long b, int *r){ \
+             return __builtin_mul_overflow(a, b, r); } \
          int main(){ return 0; }",
     );
-    let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
-        .expect_err("128-bit __builtin_add_overflow must be rejected, not miscompiled");
-    assert!(
-        err.to_string().contains("1/2/4/8-byte scalar type"),
-        "expected the wide-overflow rejection, got: {err}",
-    );
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        emit_native_with_options(&program, target, NativeOptions::default())
+            .expect("128-bit __builtin_*_overflow must lower");
+    }
 }
 
 /// The x86 `x` (xmm) inline-asm operand path moves a full 128-bit value
@@ -1824,6 +2110,133 @@ fn atomic128_store_insert_aarch64() {
     assert!(any_bic, "store-insert must emit a BIC (mask clear)");
 }
 
+/// 128-bit compare-and-swap through the pre-LSE `ldxp`/`stxp` exclusive pair,
+/// the kernel `__ll_sc__cmpxchg128` shape. Unlike the recognized load/store
+/// idioms this is not lowered to an intrinsic: `prfm`, `ldxp`, `cmp`, `ccmp`,
+/// `b.ne`, `stxp`/`stlxp` and `cbnz` each go through the per-instruction
+/// inline-asm encoder. Before `ldxp` gained a catalogue row this failed to
+/// encode; the test locks the generic encoding and the plain / release forms.
+#[test]
+fn atomic128_cmpxchg_llsc_generic_encoder_aarch64() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str_bare_for(
+        "typedef unsigned long long u64;\n\
+         typedef unsigned __int128 u128;\n\
+         int cx(volatile u128 *p, u64 ol, u64 oh, u64 nl, u64 nh){\n\
+           u64 rl, rh; unsigned t;\n\
+           __asm__ volatile(\"prfm pstl1strm, %[v]\\n\\t\"\n\
+             \"1: ldxp %[rl], %[rh], %[v]\\n\\t\"\n\
+             \"cmp %[rl], %[ol]\\n\\t\"\n\
+             \"ccmp %[rh], %[oh], 0, eq\\n\\t\"\n\
+             \"b.ne 2f\\n\\t\"\n\
+             \"stxp %w[t], %[nl], %[nh], %[v]\\n\\t\"\n\
+             \"cbnz %w[t], 1b\\n2:\"\n\
+             : [v]\"+Q\"(*p), [rl]\"=&r\"(rl), [rh]\"=&r\"(rh), [t]\"=&r\"(t)\n\
+             : [ol]\"r\"(ol), [oh]\"r\"(oh), [nl]\"r\"(nl), [nh]\"r\"(nh)\n\
+             : \"cc\", \"memory\"); return rl==ol && rh==oh; }\n\
+         int cxm(volatile u128 *p, u64 ol, u64 oh, u64 nl, u64 nh){\n\
+           u64 rl, rh; unsigned t;\n\
+           __asm__ volatile(\"prfm pstl1strm, %[v]\\n\\t\"\n\
+             \"1: ldxp %[rl], %[rh], %[v]\\n\\t\"\n\
+             \"cmp %[rl], %[ol]\\n\\t\"\n\
+             \"ccmp %[rh], %[oh], 0, eq\\n\\t\"\n\
+             \"b.ne 2f\\n\\t\"\n\
+             \"stlxp %w[t], %[nl], %[nh], %[v]\\n\\t\"\n\
+             \"cbnz %w[t], 1b\\n\\tdmb ish\\n2:\"\n\
+             : [v]\"+Q\"(*p), [rl]\"=&r\"(rl), [rh]\"=&r\"(rh), [t]\"=&r\"(t)\n\
+             : [ol]\"r\"(ol), [oh]\"r\"(oh), [nl]\"r\"(nl), [nh]\"r\"(nh)\n\
+             : \"cc\", \"memory\"); return rl==ol && rh==oh; }\n\
+         int main(void){ return 0; }",
+        Target::LinuxAarch64,
+    );
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+        .expect("emit MacOSAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    // LDXP Xt1, Xt2, [Xn] (acquire bit 15 clear), verified against clang.
+    let any_ldxp = words().any(|w| (w & 0xFFFF_8000) == 0xC87F_0000);
+    // STXP Ws, Xt1, Xt2, [Xn] and its release sibling STLXP (bit 15 set).
+    let any_stxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_0000);
+    let any_stlxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_8000);
+    // PRFM (immediate), unsigned-offset form.
+    let any_prfm = words().any(|w| (w & 0xFFC0_0000) == 0xF980_0000);
+    assert!(any_ldxp, "cmpxchg128 must emit a generic-path LDXP");
+    assert!(any_stxp, "cmpxchg128 must emit an STXP");
+    assert!(any_stlxp, "cmpxchg128 (release) must emit an STLXP");
+    assert!(any_prfm, "cmpxchg128 must emit the PRFM prefetch");
+}
+
+/// The AArch64 `Q` constraint: a memory operand whose address is a single
+/// base register, substituted as `[xN]`. Operand registers assign in pool
+/// order (x0, x1, ...), so the expected words are exact; each is verified
+/// against `clang -target aarch64-linux-gnu`.
+#[test]
+fn q_constraint_acquire_release_aarch64() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "long la(long *p){ long v;\n\
+           __asm__ volatile(\"ldar %0, %1\" : \"=r\"(v) : \"Q\"(*p) : \"memory\");\n\
+           return v; }\n\
+         void sr(long *p, long v){\n\
+           __asm__ volatile(\"stlr %1, %0\" : \"=Q\"(*p) : \"r\"(v) : \"memory\"); }\n\
+         int main(){ return 0; }"
+            .to_string(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, NativeOptions::default())
+        .expect("emit LinuxAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    // `=r` -> x0, `Q` -> x1; `=Q` -> x0, `r` -> x1.
+    assert!(words().any(|w| w == 0xC8DF_FC20), "ldar x0, [x1]");
+    assert!(words().any(|w| w == 0xC89F_FC01), "stlr x1, [x0]");
+}
+
+/// The `+Q` read-write form in an LL/SC retry loop: one `%2` reference
+/// feeds both exclusive instructions, and the `%w` modifiers on the other
+/// operands are unaffected. The four words must be contiguous; each is
+/// verified against `clang -target aarch64-linux-gnu`.
+#[test]
+fn q_constraint_llsc_loop_aarch64() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "unsigned fa(unsigned *p, unsigned inc){ unsigned res, tmp;\n\
+           __asm__ volatile(\"1: ldxr %w0, %2\\n\\t\"\n\
+                            \"add %w0, %w0, %w3\\n\\t\"\n\
+                            \"stxr %w1, %w0, %2\\n\\t\"\n\
+                            \"cbnz %w1, 1b\"\n\
+                            : \"=&r\"(res), \"=&r\"(tmp), \"+Q\"(*p)\n\
+                            : \"r\"(inc) : \"memory\");\n\
+           return res; }\n\
+         int main(){ return 0; }"
+            .to_string(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, NativeOptions::default())
+        .expect("emit LinuxAarch64");
+    // res -> x0, tmp -> x1, `+Q` -> x2 (address), inc -> x3.
+    let expected: [u32; 4] = [
+        0x885F_7C40, // ldxr w0, [x2]
+        0x0B03_0000, // add w0, w0, w3
+        0x8801_7C40, // stxr w1, w0, [x2]
+        0x35FF_FFA1, // cbnz w1, 1b (-12)
+    ];
+    let found = bytes.windows(16).any(|w| {
+        (0..4).all(|i| u32::from_le_bytes(w[i * 4..i * 4 + 4].try_into().unwrap()) == expected[i])
+    });
+    assert!(found, "expected the contiguous ldxr/add/stxr/cbnz loop");
+}
+
 /// Bytes of the section named `name` in an ELF64 little-endian
 /// object, or `None` when absent. Reads only the section header
 /// table and the section-name string table.
@@ -1910,6 +2323,54 @@ fn bss_segregation_resolves_data_pointer_into_bss() {
         ".data must hold a pointer into .bss [{bss_addr:#x}, {:#x})",
         bss_addr + bss_size
     );
+}
+
+/// A unit whose only aggregate initializers are zero must allocate no
+/// `.bss` and no `.data` beyond the leading guard: the zero image is
+/// stored, not copied from a template. A vDSO link script discards both
+/// sections, so a `.text` relocation into one fails the link. A template
+/// that does survive -- non-zero, or past the inline fill bound -- is
+/// never written, so it belongs in `.rodata`.
+#[test]
+fn zero_local_aggregate_emits_no_writable_template() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "\
+        extern void sink(void *);\n\
+        void zero(void) { unsigned counter[2] = { 0 }; sink(counter); }\n\
+        void big(void) { char buf[512] = { 0 }; sink(buf); }\n\
+        void nonzero(void) { unsigned a[4] = { 1, 2, 3, 4 }; sink(a); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let copts = crate::CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(String::from(src), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let bss = elf64_section_addr_size(&bytes, ".bss").map_or(0, |(_, size)| size);
+        assert_eq!(
+            bss, 0,
+            "{target:?}: no initializer template belongs in .bss"
+        );
+        // Both surviving templates are read-only; `.data` keeps only the
+        // 8-byte leading guard.
+        let data = elf64_section(&bytes, ".data").map_or(0, <[u8]>::len);
+        assert!(
+            data <= 8,
+            "{target:?}: .data is {data} bytes, expected <= 8"
+        );
+        let rodata = elf64_section(&bytes, ".rodata").expect(".rodata");
+        assert_eq!(
+            rodata.len(),
+            512 + 16,
+            "{target:?}: .rodata must hold the two surviving templates"
+        );
+    }
 }
 
 /// `-g` must not change emitted machine code: DWARF tables are
@@ -2196,9 +2657,10 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
         0xaf,
     ];
     let foreign = parse_native_elf(&foreign_et_rel_with_cst16(&mask)).expect("parse foreign");
-    assert_eq!(foreign.data_align, 16, "sh_addralign must be recorded");
+    // Both sections are read-only, so they join the rodata stream.
+    assert_eq!(foreign.rodata_align, 16, "sh_addralign must be recorded");
     // Intra-object: the 4-byte `.rodata` ahead forces 12 bytes of pad.
-    assert_eq!(&foreign.data[16..32], &mask);
+    assert_eq!(&foreign.rodata[16..32], &mask);
 
     // A badc unit with an import so the image carries `.dynamic` and a
     // non-empty `.got` ahead of `.data` (the placement the alignment
@@ -2234,13 +2696,16 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
         None,
     )
     .expect("write executable");
-    let (data_addr, data_off) = elf64_shdr_addr_off(&exe, ".data").expect(".data section header");
+    // The constant is read-only, so the image places it in `.rodata`;
+    // `sym_value` is its offset in the merged data-byte space, whose
+    // read-only prefix starts at that section.
+    let (ro_addr, ro_off) = elf64_shdr_addr_off(&exe, ".rodata").expect(".rodata section header");
     assert_eq!(
-        (data_addr + sym_value) % 16,
+        (ro_addr + sym_value) % 16,
         0,
         "the 16-byte constant's runtime address must be 16-aligned"
     );
-    let at = (data_off + sym_value) as usize;
+    let at = (ro_off + sym_value) as usize;
     assert_eq!(
         &exe[at..at + 16],
         &mask,
@@ -2274,7 +2739,8 @@ fn constant_condition_drops_dead_branch_call() {
     )
     .compile()
     .expect("compile");
-    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
+    let funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false).expect("ssa");
     let has_call = |name: &str| -> bool {
         let f = funcs
             .iter()
@@ -2330,7 +2796,7 @@ fn aarch64_fp_access_folds_constant_displacement() {
     .compile()
     .expect("compile");
     let mut funcs =
-        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false).expect("ssa");
     crate::c5::codegen::passes::index_fold::run(&mut funcs);
     let mut f32_load = false;
     let mut f64_load = false;
@@ -2471,11 +2937,43 @@ fn ssa_func_named(src: &str, name: &str) -> crate::c5::ir::FunctionSsa {
     let program = crate::Compiler::new(super::with_prelude(&src))
         .compile()
         .expect("compile");
-    let funcs = produce_ssa_funcs(&program, Target::host()).expect("produce_ssa_funcs");
+    let funcs = produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
     funcs
         .into_iter()
         .find(|f| f.name == name)
         .unwrap_or_else(|| panic!("function `{name}` not found"))
+}
+
+/// A by-value aggregate argument is the address of the caller's copy
+/// while the callee's parameter list is in scope; with no list the walker
+/// falls back to loading the object's single eightbyte into a machine
+/// word. A redeclaration through the function's own type keeps the list
+/// (C99 6.2.7p4), so the site stays in address form.
+#[test]
+fn redeclared_callee_keeps_aggregate_argument_in_address_form() {
+    use crate::c5::ir::Inst;
+    let f = ssa_func_named(
+        "typedef struct { unsigned val; } wrap;\n\
+         unsigned take(wrap w);\n\
+         unsigned take(wrap w) { return w.val; }\n\
+         extern typeof(take) take;\n\
+         unsigned caller(wrap w) { return take(w); }\n",
+        "caller",
+    );
+    let args = f
+        .insts
+        .iter()
+        .find_map(|i| match i {
+            Inst::Call { args, .. } => Some(args.clone()),
+            _ => None,
+        })
+        .expect("a call in `caller`");
+    assert_eq!(args.len(), 1, "one argument: {args:?}");
+    let operand = &f.insts[args[0] as usize];
+    assert!(
+        matches!(operand, Inst::LocalAddr(_)),
+        "aggregate argument must be the copy's address, got {operand:?}"
+    );
 }
 
 /// C99 6.3.1.4: `(float)n` converts the integer directly to single
@@ -2631,8 +3129,9 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
         (Target::LinuxX64, &[23u32][..]),
     ] {
         let src = "_Thread_local long counter = 7;\n\
+                   static _Thread_local long private_counter = 9;\n\
                    extern _Thread_local long other;\n\
-                   long bump(void) { counter += other; return counter; }\n\
+                   long bump(void) { counter += other + private_counter; return counter; }\n\
                    int main(void) { return (int)bump(); }\n";
         let program = Compiler::with_target(src.to_string(), target)
             .compile()
@@ -2664,7 +3163,7 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
             let end = strtab[off..].iter().position(|b| *b == 0).unwrap() + off;
             core::str::from_utf8(&strtab[off..end]).unwrap()
         };
-        let (mut saw_counter, mut saw_other_undef) = (false, false);
+        let (mut saw_counter, mut saw_other_undef, mut saw_private) = (false, false, false);
         for e in symtab.chunks_exact(24) {
             let st_name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;
             let st_info = e[4];
@@ -2675,7 +3174,17 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
             match name_at(st_name) {
                 "counter" => {
                     assert_ne!(st_shndx, 0, "{target:?}: `counter` must be defined STT_TLS");
+                    assert_eq!(st_info >> 4, 1, "{target:?}: `counter` binds STB_GLOBAL");
                     saw_counter = true;
+                }
+                "private_counter" => {
+                    assert_ne!(st_shndx, 0, "{target:?}: `private_counter` is defined");
+                    assert_eq!(
+                        st_info >> 4,
+                        0,
+                        "{target:?}: a `static` thread-local binds STB_LOCAL"
+                    );
+                    saw_private = true;
                 }
                 "other" => {
                     assert_eq!(st_shndx, 0, "{target:?}: `other` must be UNDEF STT_TLS");
@@ -2685,8 +3194,16 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
             }
         }
         assert!(
-            saw_counter && saw_other_undef,
-            "{target:?}: missing STT_TLS symtab entries (counter={saw_counter}, other={saw_other_undef})"
+            saw_counter && saw_other_undef && saw_private,
+            "{target:?}: missing STT_TLS symtab entries (counter={saw_counter}, \
+             other={saw_other_undef}, private_counter={saw_private})"
+        );
+        // ELF requires every STB_LOCAL entry to precede the first
+        // non-local one, which `.symtab`'s sh_info points at.
+        let bindings: Vec<u8> = symtab.chunks_exact(24).map(|e| e[4] >> 4).collect();
+        assert!(
+            bindings.windows(2).all(|w| !(w[0] != 0 && w[1] == 0)),
+            "{target:?}: an STB_LOCAL symbol follows a non-local one"
         );
     }
 }
@@ -3138,6 +3655,58 @@ fn register_asm_variable_pins_the_named_register() {
     );
 }
 
+/// The registers the emitters would otherwise reserve as asm-staging
+/// scratch are still bindable where honoring the pin is guaranteed:
+/// x86-64 r11 (r10 stays the scratch) and AArch64 r0 via GCC's `rN`
+/// spelling. A `+r` output round-trips through the named register, and
+/// the staging never uses it as scratch, so the template bytes fix it.
+#[test]
+fn register_asm_variable_binds_scratch_neighbor_and_r_spelling() {
+    use crate::{Compiler, NativeOptions, Target};
+    // x86-64: `addq %rax, %r11` (49 01 C3) -- %0 = r11 (the bound `+r`
+    // output), %1 = rax (first pool register for the input).
+    let src_x64 = "int main(void) { \
+        register long v asm(\"r11\") = 30; \
+        long b = 12; \
+        __asm__(\"addq %1, %0\" : \"+r\"(v) : \"r\"(b) : \"cc\"); \
+        return (int)v - 42; }";
+    let program = Compiler::with_target(src_x64.to_string(), Target::LinuxX64)
+        .compile()
+        .expect("register-asm r11 source compiles");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .expect("emit_native(LinuxX64)");
+    assert!(
+        bytes.windows(3).any(|w| w == [0x49, 0x01, 0xC3]),
+        "expected `addq %rax, %r11`"
+    );
+
+    // AArch64: `add x2, x0, x1` = 0x8B010002 -- %1 = r0 (=x0), %2 = r1
+    // (=x1), both via the `rN` spelling; %0 = out (next free pool reg).
+    let src_a64 = "int main(void) { \
+        register long a asm(\"r0\") = 30; \
+        register long b asm(\"r1\") = 10; \
+        long out; \
+        __asm__(\"add %0, %1, %2\" : \"=r\"(out) : \"r\"(a), \"r\"(b)); \
+        return (int)out - 40; }";
+    let program = Compiler::with_target(src_a64.to_string(), Target::LinuxAarch64)
+        .compile()
+        .expect("register-asm r0 source compiles");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("emit_native(LinuxAarch64)");
+    assert!(
+        bytes.windows(4).any(|w| w == 0x8B010002u32.to_le_bytes()),
+        "expected `add x2, x0, x1`"
+    );
+}
+
 /// `asm goto` lowers on both targets at -O0 and -O: the label branch
 /// leaves through a restore trampoline patched to the label's block.
 #[test]
@@ -3173,4 +3742,2448 @@ fn asm_goto_emits_for_both_targets() {
                 .unwrap_or_else(|e| panic!("emit_native({target:?}, -O={optimize}): {e}"));
         }
     }
+}
+
+/// Every symbol name in an ELF64 `.symtab`, paired with `st_shndx`
+/// (`0` == SHN_UNDEF). Complements [`elf_func_symbols`], which reports
+/// only defined `STT_FUNC` entries.
+fn elf_symbol_shndx(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u16)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let Some(sh) = (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| u32a(sh + 4) == 2)
+    else {
+        return alloc::vec::Vec::new();
+    };
+    let sym_off = u64a(sh + 0x18) as usize;
+    let sym_len = u64a(sh + 0x20) as usize;
+    let strsh = shoff + (u32a(sh + 0x28) as usize) * shentsize;
+    let str_off = u64a(strsh + 0x18) as usize;
+    let mut out = alloc::vec::Vec::new();
+    let mut p = sym_off;
+    while p + 24 <= sym_off + sym_len {
+        let s = str_off + u32a(p) as usize;
+        let e = b[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+        out.push((
+            alloc::string::String::from_utf8_lossy(&b[s..e]).into_owned(),
+            u16a(p + 6),
+        ));
+        p += 24;
+    }
+    out
+}
+
+/// C99 6.2.2: a static object nothing reachable references is
+/// unobservable. `.data` is packed before lowering, from the pre-inline
+/// call graph, so an object whose last reference the inliner removes --
+/// here the table passed to a stub that ignores its parameter -- is only
+/// dead once the -O pipeline has run. Without the post-inline re-run it
+/// stays in the image and its relocations pull in the functions it names,
+/// leaving those functions' undefined references in the object.
+///
+/// Locks: the orphaned table and its `.rela.data` entries are gone, so is
+/// every function reachable only through them and the extern they alone
+/// called, while the sibling global that is still referenced survives at
+/// an offset its `.text` relocation follows.
+#[test]
+fn post_inline_orphaned_static_and_its_relocations_drop() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        struct dev; \
+        struct dev_ops { long long (*read)(struct dev *); long long (*write)(struct dev *); }; \
+        extern long long dev_private(struct dev *d); \
+        static long long ops_read(struct dev *d) { return dev_private(d); } \
+        static long long ops_write(struct dev *d) { return dev_private(d) + 1; } \
+        static const struct dev_ops dead_ops = { ops_read, ops_write }; \
+        const char kept_tag[8] = \"kept\"; \
+        static struct dev *alloc_dev(void *priv, const struct dev_ops *ops) \
+            { (void)ops; return (struct dev *)priv; } \
+        struct dev *make_dev(void *p) { return alloc_dev(p, &dead_ops); } \
+        const char *tag(void) { return kept_tag; }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+
+        let syms = elf_symbol_shndx(&obj);
+        let named = |n: &str| syms.iter().any(|(s, _)| s == n);
+        for gone in ["dev_private", "ops_read", "ops_write"] {
+            assert!(
+                !named(gone),
+                "{target:?}: `{gone}` survives after the orphaned ops table is dropped \
+                 (symbols: {syms:?})"
+            );
+        }
+        assert!(
+            named("kept_tag") && named("make_dev") && named("tag"),
+            "{target:?}: a still-referenced definition was dropped (symbols: {syms:?})"
+        );
+        let rela_data = elf64_section(&obj, ".rela.data").unwrap_or(&[]);
+        assert!(
+            rela_data.is_empty(),
+            "{target:?}: the dropped table's function-pointer relocations survive \
+             ({} bytes of .rela.data)",
+            rela_data.len()
+        );
+
+        // The survivor kept its bytes, and the code that names it points
+        // at where the repack put it. `kept_tag` is `const` and holds no
+        // relocated slot, so it is carved into `.rodata` and `.data`
+        // keeps only the 8-byte NULL guard.
+        let data = elf64_section(&obj, ".data").expect("no .data section");
+        let rodata = elf64_section(&obj, ".rodata").expect("no .rodata section");
+        let (value, size) =
+            elf_data_symbol_value_size(&obj, "kept_tag").expect("kept_tag symtab entry");
+        assert_eq!(
+            size, 8,
+            "{target:?}: `kept_tag` lost its st_size across the repack"
+        );
+        assert_eq!(
+            data.len(),
+            8,
+            "{target:?}: .data should hold only the NULL guard"
+        );
+        assert_eq!(
+            value, 0,
+            "{target:?}: `kept_tag` moved to an unexpected offset"
+        );
+        assert_eq!(
+            &rodata[value as usize..value as usize + 5],
+            b"kept\0",
+            "{target:?}: `kept_tag` bytes did not move with its symbol"
+        );
+        let text_target = elf_first_data_reloc_target(&obj, target);
+        assert_eq!(
+            text_target,
+            Some(value),
+            "{target:?}: the `.text` reference to `kept_tag` does not follow the repack"
+        );
+    }
+}
+
+/// Section header table of an ELF64 object as
+/// `(name, sh_type, sh_size, sh_link, sh_info)`.
+/// `sh_flags` of a named section.
+fn elf64_section_flags(obj: &[u8], name: &str) -> Option<u64> {
+    let u16a = |o: usize| u16::from_le_bytes(obj[o..o + 2].try_into().unwrap()) as usize;
+    let u32a = |o: usize| u32::from_le_bytes(obj[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(obj[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a);
+    let str_off = u64a(shoff + u16a(0x3e) * shentsize + 0x18) as usize;
+    (0..u16a(0x3c)).find_map(|i| {
+        let h = shoff + i * shentsize;
+        let s = str_off + u32a(h) as usize;
+        let e = obj[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+        (&obj[s..e] == name.as_bytes()).then(|| u64a(h + 8))
+    })
+}
+
+/// C99 6.4.5p6 leaves modifying a string literal undefined, and the
+/// placement is what enforces it. Consumers also classify a pointer by
+/// where it landed rather than by its declared type: the Linux kernel's
+/// `kfree_const` frees anything outside `[__start_rodata, __end_rodata)`,
+/// so a literal left in the writable image reaches `kfree` as though it
+/// were heap and corrupts the allocator.
+///
+/// Locks both directions: anonymous literals -- including the template a
+/// local aggregate is copied from -- land in a `.rodata` carrying no
+/// `SHF_WRITE`, while every form in which a literal becomes an object's
+/// writable storage stays in `.data`.
+#[test]
+fn string_literals_are_placed_in_read_only_data() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SHF_WRITE: u64 = 0x1;
+    const SRC: &str = "\
+        char mut_g[] = \"mutable-global\"; \
+        static char mut_s[] = \"mutable-static\"; \
+        char mut_pad[10] = \"padded-ab\"; \
+        const char c_named[] = \"const-named\"; \
+        const char *anon(void) { return \"anon-literal\"; } \
+        const char *tab[] = { \"tab-entry\" }; \
+        char local_copy(void) { char t[] = \"local-template\"; t[0] = 'Z'; return t[1]; } \
+        char *touch(int i) { return i ? mut_g : (i > 1 ? mut_s : mut_pad); }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+
+        let rodata = elf64_section(&obj, ".rodata").expect("no .rodata section");
+        let data = elf64_section(&obj, ".data").unwrap_or(&[]);
+        let holds =
+            |hay: &[u8], needle: &str| hay.windows(needle.len()).any(|w| w == needle.as_bytes());
+
+        let flags = elf64_section_flags(&obj, ".rodata").expect("no .rodata header");
+        assert_eq!(
+            flags & SHF_WRITE,
+            0,
+            "{target:?}: .rodata is writable (sh_flags {flags:#x})"
+        );
+        // Anonymous immutable data: the literal an expression yields, the
+        // one a pointer table names, and a local aggregate's template.
+        for lit in ["anon-literal", "tab-entry", "local-template", "const-named"] {
+            assert!(holds(rodata, lit), "{target:?}: `{lit}` is not in .rodata");
+            assert!(
+                !holds(data, lit),
+                "{target:?}: `{lit}` is still in the writable .data"
+            );
+        }
+        // A literal that initializes writable storage is that object's
+        // image and must stay writable.
+        for mutable in ["mutable-global", "mutable-static", "padded-ab"] {
+            assert!(
+                holds(data, mutable),
+                "{target:?}: `{mutable}` left the writable .data"
+            );
+            assert!(
+                !holds(rodata, mutable),
+                "{target:?}: `{mutable}` was made read-only"
+            );
+        }
+    }
+}
+
+fn elf64_section_table(obj: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u32, u64, u32, u32)> {
+    let u16a = |o: usize| u16::from_le_bytes(obj[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(obj[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(obj[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let hdr = |i: usize| shoff + i * shentsize;
+    let str_off = u64a(hdr(u16a(0x3e) as usize) + 0x18) as usize;
+    (0..shnum)
+        .map(|i| {
+            let h = hdr(i);
+            let s = str_off + u32a(h) as usize;
+            let e = obj[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+            (
+                alloc::string::String::from_utf8_lossy(&obj[s..e]).into_owned(),
+                u32a(h + 4),
+                u64a(h + 0x20),
+                u32a(h + 0x28),
+                u32a(h + 0x2c),
+            )
+        })
+        .collect()
+}
+
+/// A relocation section with no entries describes nothing, and a
+/// consumer that reaches one through its target's `sh_info` link has no
+/// entry to read. Emitting one is also outside what any other producer
+/// does, so the writer drops it and compacts the section numbering; the
+/// checks below cover both halves.
+#[test]
+fn relocatable_objects_carry_no_empty_relocation_sections() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SHT_RELA: u32 = 4;
+    const SHT_SYMTAB: u32 = 2;
+    const SHN_LORESERVE: u16 = 0xff00;
+    // Each source leaves a different subset of the fixed relocation
+    // tables empty: no relocations at all, code-only, data-only, and
+    // both.
+    const CASES: &[&str] = &[
+        "int f(int x){return x+1;}",
+        "int g=3; int f(void){return g;}",
+        "extern int e; int *p=&e;",
+        "extern int e; int *p=&e; int f(void){return *p;}",
+        "_Thread_local int t; int f(void){return t;}",
+        "__attribute__((section(\"placed\"))) int s=7; int f(void){return s;}",
+    ];
+    for src in CASES {
+        for debug in [false, true] {
+            for target in [Target::LinuxX64, Target::LinuxAarch64] {
+                let program = Compiler::with_options(
+                    src.to_string(),
+                    target,
+                    CompileOptions::default().with_no_entry_point(true),
+                )
+                .compile()
+                .unwrap_or_else(|e| panic!("compile ({src}, {target:?}): {e}"));
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_debug_info(debug)
+                };
+                let obj = crate::emit_native_with_options(&program, target, opts)
+                    .unwrap_or_else(|e| panic!("emit ({src}, {target:?}): {e}"));
+                let secs = elf64_section_table(&obj);
+                let ctx = alloc::format!("{src} [{target:?}, debug={debug}]");
+                for (name, ty, size, link, info) in &secs {
+                    if *ty != SHT_RELA {
+                        continue;
+                    }
+                    assert!(*size != 0, "{ctx}: `{name}` has no entries");
+                    assert_eq!(
+                        secs.get(*link as usize).map(|s| s.1),
+                        Some(SHT_SYMTAB),
+                        "{ctx}: `{name}` sh_link does not name the symbol table"
+                    );
+                    let base = name.strip_prefix(".rela").expect("relocation section name");
+                    assert_eq!(
+                        secs.get(*info as usize).map(|s| s.0.as_str()),
+                        Some(base),
+                        "{ctx}: `{name}` sh_info does not name `{base}`"
+                    );
+                }
+                // Every section index recorded in the symbol table still
+                // names a section after the numbering was compacted.
+                for (sym, shndx) in elf_symbol_shndx(&obj) {
+                    assert!(
+                        shndx >= SHN_LORESERVE || (shndx as usize) < secs.len(),
+                        "{ctx}: symbol `{sym}` names section {shndx} of {}",
+                        secs.len()
+                    );
+                }
+                // A defined data object lands in a content section, not
+                // in a relocation or string table.
+                for (sym, shndx) in elf_symbol_shndx(&obj) {
+                    if sym != "g" && sym != "p" && sym != "s" {
+                        continue;
+                    }
+                    let sec = &secs[shndx as usize];
+                    assert_ne!(sec.1, SHT_RELA, "{ctx}: `{sym}` resolves to `{}`", sec.0);
+                }
+            }
+        }
+    }
+}
+
+/// Section headers of an ELF64 object as
+/// `(name, sh_type, sh_offset, sh_size, sh_info)`.
+fn elf64_section_headers(
+    obj: &[u8],
+) -> alloc::vec::Vec<(alloc::string::String, u32, u64, u64, u32)> {
+    let u16a = |o: usize| u16::from_le_bytes(obj[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(obj[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(obj[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let hdr = |i: usize| shoff + i * shentsize;
+    let str_off = u64a(hdr(u16a(0x3e) as usize) + 0x18) as usize;
+    (0..shnum)
+        .map(|i| {
+            let h = hdr(i);
+            let s = str_off + u32a(h) as usize;
+            let e = obj[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+            (
+                alloc::string::String::from_utf8_lossy(&obj[s..e]).into_owned(),
+                u32a(h + 4),
+                u64a(h + 0x18),
+                u64a(h + 0x20),
+                u32a(h + 0x2c),
+            )
+        })
+        .collect()
+}
+
+/// Full `.symtab` records of an ELF64 object as
+/// `(name, st_info, st_shndx, st_value, st_size)`.
+fn elf64_symbol_records(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u8, u16, u64, u64)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let Some(sh) = (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| u32a(sh + 4) == 2)
+    else {
+        return alloc::vec::Vec::new();
+    };
+    let sym_off = u64a(sh + 0x18) as usize;
+    let sym_len = u64a(sh + 0x20) as usize;
+    let strsh = shoff + (u32a(sh + 0x28) as usize) * shentsize;
+    let str_off = u64a(strsh + 0x18) as usize;
+    let mut out = alloc::vec::Vec::new();
+    let mut p = sym_off;
+    while p + 24 <= sym_off + sym_len {
+        let s = str_off + u32a(p) as usize;
+        let e = b[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+        out.push((
+            alloc::string::String::from_utf8_lossy(&b[s..e]).into_owned(),
+            b[p + 4],
+            u16a(p + 6),
+            u64a(p + 8),
+            u64a(p + 16),
+        ));
+        p += 24;
+    }
+    out
+}
+
+/// For a RELA relocation the addend lives in `r_addend`; the target
+/// field in the section image carries no information and gas leaves it
+/// zero. The x86_64 kernel module loader enforces exactly that before
+/// applying a module's relocations. Pointer slots in static data used
+/// to leak the VM's baked values (the target's data offset for data
+/// pointers, the function's `ent_pc` for function pointers).
+#[test]
+fn relocated_slots_are_zero_in_relocatable_objects() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SHT_RELA: u32 = 4;
+    const SHT_NOBITS: u32 = 8;
+    // Data pointers to a static object, function pointers to static
+    // functions (several, so a leaked consecutive index is caught), a
+    // pointer to an extern object, a string-literal pointer, and a
+    // function pointer the section attribute moves into a named
+    // section.
+    const SRC: &str = "\
+        static int inc(int x) { return x + 1; } \
+        static int dec(int x) { return x - 1; } \
+        static int gv = 7; \
+        extern int ev; \
+        typedef int (*fnp)(int); \
+        static fnp table[4] = { inc, dec, inc, dec }; \
+        static int *pg = &gv; \
+        static int *pe = &ev; \
+        static const char *msg = \"m\"; \
+        __attribute__((section(\"placed\"))) fnp placed_fn = inc; \
+        int use(int i) { return table[i](*pg + *pe) + (int)*msg; }";
+    // Slot width of a relocation type whose target field is a whole
+    // little-endian integer. Instruction-field relocations (aarch64
+    // ADRP/ADD/CALL26, TLS immediates) encode into opcode bits and are
+    // not slot-shaped.
+    fn slot_width(machine: u16, rtype: u32) -> Option<usize> {
+        match (machine, rtype) {
+            // R_X86_64_64 / PC64, then PC32 / PLT32 / 32 / 32S.
+            (62, 1) | (62, 24) => Some(8),
+            (62, 2) | (62, 4) | (62, 10) | (62, 11) => Some(4),
+            // R_AARCH64_ABS64 / PREL64, then ABS32 / PREL32.
+            (183, 257) | (183, 260) => Some(8),
+            (183, 258) | (183, 261) => Some(4),
+            _ => None,
+        }
+    }
+    for debug in [false, true] {
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let program = Compiler::with_options(
+                SRC.to_string(),
+                target,
+                CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_debug_info(debug)
+            };
+            let obj = crate::emit_native_with_options(&program, target, opts)
+                .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+            let machine = u16::from_le_bytes(obj[0x12..0x14].try_into().unwrap());
+            let secs = elf64_section_headers(&obj);
+            let ctx = alloc::format!("{target:?}, debug={debug}");
+            let mut abs_slots = 0usize;
+            for (name, ty, off, size, info) in &secs {
+                if *ty != SHT_RELA {
+                    continue;
+                }
+                let (tname, tty, toff, _tsize, _) = &secs[*info as usize];
+                assert_ne!(
+                    *tty, SHT_NOBITS,
+                    "{ctx}: `{name}` relocates the no-bits section `{tname}`"
+                );
+                for r in obj[*off as usize..(*off + *size) as usize].chunks_exact(24) {
+                    let r_offset = u64::from_le_bytes(r[0..8].try_into().unwrap());
+                    let rtype = u32::from_le_bytes(r[8..12].try_into().unwrap());
+                    let Some(w) = slot_width(machine, rtype) else {
+                        continue;
+                    };
+                    if w == 8 {
+                        abs_slots += 1;
+                    }
+                    let lo = (*toff + r_offset) as usize;
+                    let slot = &obj[lo..lo + w];
+                    assert!(
+                        slot.iter().all(|&b| b == 0),
+                        "{ctx}: `{name}` entry at {r_offset:#x} (type {rtype}) leaves \
+                         {slot:02x?} in `{tname}`"
+                    );
+                }
+            }
+            // 4 table entries + pg + pe + msg + placed_fn.
+            assert!(
+                abs_slots >= 8,
+                "{ctx}: only {abs_slots} absolute pointer slots seen -- the sweep \
+                 no longer covers the initializers it was written for"
+            );
+        }
+    }
+}
+
+/// An `extern` declaration carrying `alias("target")` defines the
+/// symbol, and a name referenced from file-scope asm binds to that
+/// definition -- one symbol table entry, no undefined duplicate, with
+/// the definition at the target's storage. A later `extern typeof(x) x;`
+/// redeclaration denotes the same definition and must not detach it.
+#[test]
+fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SHN_LORESERVE: u16 = 0xff00;
+    const SRC: &str = "\
+        static const unsigned fk[4] __attribute__((__aligned__(1 << 6))) = { 1, 2, 3, 4 }; \
+        extern const unsigned pub_fk[4] __attribute__((alias(\"fk\"))); \
+        static const unsigned priv_fk[4] __attribute__((alias(\"fk\"))); \
+        extern typeof(pub_fk) pub_fk; \
+        asm(\".section \\\".export_symbol\\\",\\\"a\\\"\\n\" \
+            \"__export_symbol_pub_fk:\\n\" \
+            \".asciz \\\"\\\"\\n\" \
+            \".balign 8\\n\" \
+            \".quad pub_fk\\n\" \
+            \".quad priv_fk\\n\" \
+            \".previous\\n\"); \
+        int probe(void) { return (int)(pub_fk[0] + priv_fk[1]); }";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let syms = elf64_symbol_records(&obj);
+        let pubs: alloc::vec::Vec<_> = syms.iter().filter(|s| s.0 == "pub_fk").collect();
+        assert_eq!(
+            pubs.len(),
+            1,
+            "{target:?}: `pub_fk` must have one entry, got {pubs:?}"
+        );
+        let &(_, info, shndx, value, size) = pubs[0];
+        assert_eq!(info >> 4, 1, "{target:?}: `pub_fk` binding is not GLOBAL");
+        assert_eq!(info & 0xf, 1, "{target:?}: `pub_fk` type is not OBJECT");
+        assert!(
+            shndx != 0 && shndx < SHN_LORESERVE,
+            "{target:?}: `pub_fk` is not defined (st_shndx {shndx})"
+        );
+        assert_eq!(size, 16, "{target:?}: `pub_fk` lost the target's size");
+        // The definition names the target's storage: the section bytes
+        // at `st_value` are `fk`'s initializer.
+        let secs = elf64_section_headers(&obj);
+        let (_, _, sec_off, _, _) = secs[shndx as usize];
+        let lo = (sec_off + value) as usize;
+        let mut want = [0u8; 16];
+        for (i, v) in [1u32, 2, 3, 4].iter().enumerate() {
+            want[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        assert_eq!(
+            &obj[lo..lo + 16],
+            &want,
+            "{target:?}: `pub_fk` does not point at `fk`'s bytes"
+        );
+        // The internal-linkage alias resolved section-relative; no
+        // undefined entry may carry either alias name.
+        for (name, _, shndx, _, _) in &syms {
+            assert!(
+                !((name == "pub_fk" || name == "priv_fk") && *shndx == 0),
+                "{target:?}: `{name}` gained an undefined entry"
+            );
+        }
+        // Both asm references landed, each against a defined target.
+        let rela = elf64_section(&obj, ".rela.export_symbol").expect("asm section relocations");
+        assert_eq!(rela.len(), 48, "{target:?}: expected two RELA entries");
+        for r in rela.chunks_exact(24) {
+            let sym_idx = u32::from_le_bytes(r[12..16].try_into().unwrap()) as usize;
+            let (name, _, shndx, _, _) = &syms[sym_idx];
+            assert!(
+                *shndx != 0,
+                "{target:?}: asm reference to `{name}` binds to an undefined symbol"
+            );
+        }
+    }
+}
+
+/// The post-inline recompaction lowers prebuilt bodies, so the import
+/// table has to come from those bodies rather than from the ASTs. An
+/// import whose only source reference is a static helper the inliner
+/// consumed survives only in the caller's inlined copy: resolving from
+/// the (now function-pruned) ASTs left the binding unresolved and the
+/// `Inst::ImmExtCode` emit with no import to relocate against.
+#[test]
+fn post_inline_recompaction_keeps_inlined_import() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        #include <string.h> \n\
+        struct dev; struct dev_ops { long long (*read)(struct dev *); }; \
+        extern long long dev_private(struct dev *d); \
+        static long long ops_read(struct dev *d) { return dev_private(d); } \
+        static const struct dev_ops dead_ops = { ops_read }; \
+        static unsigned long apply(const char *s, unsigned long (*fn)(const char *)) \
+            { return fn(s); } \
+        static unsigned long measure(const char *s) { return apply(s, strlen); } \
+        static struct dev *alloc_dev(void *p, const struct dev_ops *o) \
+            { (void)o; return (struct dev *)p; } \
+        unsigned long span(const char *s, void *p) \
+            { return measure(s) + (alloc_dev(p, &dead_ops) != 0); }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        assert!(
+            syms.iter().any(|(n, _)| n == "strlen"),
+            "{target:?}: the inlined import lost its symbol (symbols: {syms:?})"
+        );
+        assert!(
+            !syms
+                .iter()
+                .any(|(n, _)| n == "ops_read" || n == "dev_private"),
+            "{target:?}: the orphaned table's function survived (symbols: {syms:?})"
+        );
+    }
+}
+
+/// A data-liveness probe stops as soon as it has a report, so its
+/// `Build` carries no image -- not even the `output_kind` the writer
+/// routes on. Stopping only pays off when the caller holds a compaction
+/// plan to replay the report against. A unit with no function to walk
+/// gets no plan, yet the -O pipeline still reports its unreferenced
+/// objects, so the probe must run to completion instead of handing the
+/// writer an empty `Build`: PE routed that to the executable writer and
+/// failed on the entry stub, ELF wrote a linked image where an object
+/// was asked for.
+///
+/// Locks: `-O` relocatable output for a data-only unit is an `ET_REL`
+/// object that still defines its externally visible data.
+#[test]
+fn data_only_unit_at_o_emits_relocatable_object() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "static const char dead_tag[8] = \"dead\"; \
+                       const char kept_tag[8] = \"kept\";";
+
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        assert_eq!(
+            u16::from_le_bytes(obj[16..18].try_into().unwrap()),
+            1,
+            "{target:?}: relocatable output is not ET_REL"
+        );
+        let syms = elf_symbol_shndx(&obj);
+        assert!(
+            syms.iter().any(|(n, _)| n == "kept_tag"),
+            "{target:?}: the unit's data symbol is missing (symbols: {syms:?})"
+        );
+    }
+}
+
+/// `(st_value, st_size)` of the named `STT_OBJECT` symbol.
+fn elf_data_symbol_value_size(b: &[u8], name: &str) -> Option<(u64, u64)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let sh = (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| u32a(sh + 4) == 2)?;
+    let sym_off = u64a(sh + 0x18) as usize;
+    let sym_len = u64a(sh + 0x20) as usize;
+    let strsh = shoff + (u32a(sh + 0x28) as usize) * shentsize;
+    let str_off = u64a(strsh + 0x18) as usize;
+    let mut p = sym_off;
+    while p + 24 <= sym_off + sym_len {
+        let s = str_off + u32a(p) as usize;
+        let e = b[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+        if b[s..e] == *name.as_bytes() && b[p + 4] & 0xf == 1 {
+            return Some((u64a(p + 8), u64a(p + 16)));
+        }
+        p += 24;
+    }
+    None
+}
+
+/// `.data`-relative byte the object's single `.rela.text` entry names.
+/// x86-64 uses a PC-relative `lea` whose addend carries the -4 the
+/// instruction end contributes; aarch64's `adrp` / `add` pair addends
+/// are the target offset itself.
+fn elf_first_data_reloc_target(b: &[u8], target: crate::Target) -> Option<u64> {
+    let rela = elf64_section(b, ".rela.text")?;
+    if rela.len() < 24 {
+        return None;
+    }
+    let addend = i64::from_le_bytes(rela[16..24].try_into().unwrap());
+    Some(match target {
+        crate::Target::LinuxX64 => (addend + 4) as u64,
+        _ => addend as u64,
+    })
+}
+
+/// `-mstrict-align` (`NativeOptions::strict_align`): an aggregate copy
+/// must not transfer in units wider than the copied type's alignment.
+/// Code that runs with the MMU off sees Device-typed memory, where an
+/// unaligned access raises an alignment fault rather than being fixed
+/// up, so an 8-byte load against a 4-aligned `struct { int x, y; }`
+/// faults there.
+#[test]
+fn strict_align_narrows_the_aggregate_copy_transfer_width() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    const SRC: &str = "struct T { int x, y; };\n\
+         void copy_t(struct T *d, struct T *s) { *d = *s; }\n";
+    let emit = |target: Target, strict_align: bool| -> Vec<u8> {
+        let prog = crate::Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile struct copy: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            strict_align,
+            ..NativeOptions::default()
+        };
+        emit_native_with_options(&prog, target, opts)
+            .unwrap_or_else(|e| panic!("emit object (strict_align={strict_align}): {e}"))
+    };
+
+    // aarch64: count LDR/STR <Xt>, [<Xn>, #imm] (unsigned offset,
+    // size=11) off a base that is neither `sp` nor `fp`. The frame is
+    // 16-aligned by construction; every other base in this fixture is
+    // one of the two 4-aligned struct pointers.
+    let a64_wide = |obj: &[u8]| -> usize {
+        elf_text(obj)
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .filter(|insn| {
+                let ldst64 = insn & 0xFFC0_0000 == 0xF940_0000 || insn & 0xFFC0_0000 == 0xF900_0000;
+                let base = (insn >> 5) & 31;
+                ldst64 && base != 29 && base != 31
+            })
+            .count()
+    };
+    assert_eq!(
+        a64_wide(&emit(Target::LinuxAarch64, false)),
+        2,
+        "aarch64 default should copy the 8-byte struct with one ldr/str pair"
+    );
+    assert_eq!(
+        a64_wide(&emit(Target::LinuxAarch64, true)),
+        0,
+        "aarch64 strict_align still copies through 64-bit accesses"
+    );
+
+    // x86_64: the copy's 8-byte `mov` carries a REX.W prefix; the
+    // narrowed form drops it. Count `REX.W 8B /r` (load) and
+    // `REX.W 89 /r` (store) with a register base and no SIB.
+    let x64_wide = |obj: &[u8]| -> usize {
+        elf_text(obj)
+            .windows(3)
+            .filter(|w| w[0] & 0xF8 == 0x48 && (w[1] == 0x8B || w[1] == 0x89) && w[2] >> 6 != 3)
+            .count()
+    };
+    let x64_before = x64_wide(&emit(Target::LinuxX64, false));
+    assert!(
+        x64_before >= 2,
+        "x86_64 default should copy the 8-byte struct through 64-bit movs, saw {x64_before}"
+    );
+    assert!(
+        x64_wide(&emit(Target::LinuxX64, true)) < x64_before,
+        "x86_64 strict_align did not narrow the copy"
+    );
+}
+
+/// Minimal ELF64 section walk returning the `.text` bytes.
+fn elf_text(bytes: &[u8]) -> alloc::vec::Vec<u8> {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let shoff = u64le(0x28);
+    let shentsize = u16le(0x3A);
+    let shnum = u16le(0x3C);
+    let shstrndx = u16le(0x3E);
+    let stroff = u64le(shoff + shstrndx * shentsize + 0x18);
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let name_off = stroff + u32le(sh);
+        let end = bytes[name_off..].iter().position(|&c| c == 0).unwrap();
+        if &bytes[name_off..name_off + end] == b".text" {
+            let off = u64le(sh + 0x18);
+            let size = u64le(sh + 0x20);
+            return bytes[off..off + size].to_vec();
+        }
+    }
+    alloc::vec::Vec::new()
+}
+
+/// The staged brace-list template an `Inst::Mcpy` copies into a frame
+/// local is 8-aligned, so that copy keeps its 8-byte transfer unit even
+/// under `-mstrict-align`. A template landing 1- or 2-aligned made the
+/// copy read 8 bytes from an under-aligned address.
+#[test]
+fn staged_aggregate_template_is_eight_aligned() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    // The odd-sized array ahead of the compound literals leaves the data
+    // cursor unaligned unless the staging site realigns it.
+    const SRC: &str = "typedef struct { unsigned long v; } w_t;\n\
+         void take(w_t);\n\
+         char msg[5] = \"abcd\";\n\
+         void f(void) { take((w_t){ 0x1122334455667788UL }); }\n\
+         void g(void) { take((w_t){ 0x99aabbccddeeff00UL }); }\n";
+    let prog = crate::Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile staged aggregate");
+    let obj = emit_native_with_options(
+        &prog,
+        Target::LinuxAarch64,
+        NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            strict_align: true,
+            ..NativeOptions::default()
+        },
+    )
+    .expect("emit object");
+    // One `ldr x` / `str x` pair per staged copy. A narrowed copy shows
+    // `ldrb` / `strb` (0x39400000 / 0x39000000) or `ldrh` / `strh`
+    // (0x79400000 / 0x79000000); the fixture emits no other subword
+    // access, so any is a narrowed template copy.
+    let count = |want: u32| -> usize {
+        elf_text(&obj)
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .filter(|insn| insn & 0xFFC0_0000 == want)
+            .count()
+    };
+    let narrow: usize = [0x3940_0000, 0x3900_0000, 0x7940_0000, 0x7900_0000]
+        .into_iter()
+        .map(count)
+        .sum();
+    assert_eq!(
+        narrow, 0,
+        "a staged template copy narrowed, so its data offset was under-aligned"
+    );
+    assert!(
+        count(0xF940_0000) >= 2,
+        "expected one 8-byte load per staged aggregate copy"
+    );
+}
+
+/// A speculative initializer parse may stage a C99 6.5.2.5 compound
+/// literal and then be rolled back. The data segment is truncated, so
+/// those offsets go back to later objects; the synthetic symbol
+/// anchoring the literal has to go with them. The data-object model
+/// identifies an object by its start offset -- static DCE intervals,
+/// the section carve, and the object symbol table all read it -- so a
+/// symbol left behind claims storage another object owns.
+#[test]
+fn rolled_back_compound_literal_leaves_no_symbol_behind() {
+    use crate::{CompileOptions, Compiler, Target};
+
+    // The scalar's initializer folds to an integer, so the address path
+    // stages both literals and then restores its checkpoint; the table
+    // that follows is allocated over the reclaimed bytes.
+    const SRC: &str = "struct s { int a; int b; };\n\
+         struct e { const char *n; const struct s *p; };\n\
+         static const long delta =\n\
+         (long)&((struct s){ 1, 2 }).b - (long)&((struct s){ 1, 2 }).a;\n\
+         static const struct e tab[] = {\n\
+         { \"a\", &(struct s){ .a = 1 } },\n\
+         { \"b\", &(struct s){ .a = 2 } },\n\
+         };\n\
+         const struct e *get(void) { return tab; }\n\
+         long get_delta(void) { return delta; }\n";
+    let prog = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+
+    // Every defined data object starts at an offset of its own: one
+    // symbol per anchor, and no compound literal on top of a named
+    // object's storage.
+    let defined: alloc::vec::Vec<(i64, &str)> = prog
+        .symbols
+        .iter()
+        .filter(|s| {
+            s.class == crate::c5::token::Token::Glo as i64
+                && s.defined_here
+                && !s.is_alias
+                && !s.is_thread_local
+                && (0..prog.data.len() as i64).contains(&s.val)
+        })
+        .map(|s| (s.val, s.name.as_str()))
+        .collect();
+    let mut anchors: alloc::vec::Vec<i64> = defined.iter().map(|&(v, _)| v).collect();
+    anchors.sort_unstable();
+    anchors.dedup();
+    assert_eq!(
+        anchors.len(),
+        defined.len(),
+        "two data objects anchor one offset: {defined:?}"
+    );
+    assert!(
+        prog.symbols
+            .iter()
+            .filter(|s| s.is_compound_literal)
+            .all(|s| (0..prog.data.len() as i64).contains(&s.val)),
+        "a compound-literal symbol anchors reclaimed storage"
+    );
+    // Every pointer member of the table keeps its relocation: two
+    // strings and two literal addresses.
+    let tab = prog
+        .symbols
+        .iter()
+        .find(|s| s.name == "tab")
+        .expect("tab defined");
+    let slots = prog
+        .data_relocs
+        .iter()
+        .filter(|r| {
+            let off = r.data_offset as i64;
+            off >= tab.val && off < tab.val + 32
+        })
+        .count();
+    assert_eq!(slots, 4, "a table pointer slot lost its relocation");
+}
+
+/// C99 6.5.2.5p3: a compound literal is an unnamed object with storage of
+/// its own. An empty element list (`(T[]){ }`, accepted as an extension)
+/// still needs a slot -- without one its symbol anchors the next
+/// definition's start, and the data-object model identifies an object by
+/// that start.
+#[test]
+fn empty_array_compound_literal_owns_its_storage() {
+    use crate::{CompileOptions, Compiler, Target};
+
+    const SRC: &str = "struct list { const int *p; unsigned char n; };\n\
+         struct desc { const struct list *l; int v; };\n\
+         static const struct list empty = { .p = (const int[]){ }, .n = 0 };\n\
+         static const struct desc table[] = { { &empty, 1 } };\n\
+         const struct desc *get(void) { return table; }\n";
+    let prog = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+
+    let anchor = |name: &str| -> i64 {
+        prog.symbols
+            .iter()
+            .find(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name} defined"))
+            .val
+    };
+    let literal = prog
+        .symbols
+        .iter()
+        .find(|s| s.is_compound_literal)
+        .expect("compound literal symbol")
+        .val;
+    for named in ["empty", "table"] {
+        assert_ne!(
+            literal,
+            anchor(named),
+            "the empty array literal shares `{named}`'s storage"
+        );
+    }
+}
+
+/// Every function's name is looked for in the inline-asm templates, to
+/// decide which bodies escape the call graph. The search reads the
+/// distinct identifier runs rather than the templates themselves, which
+/// is the same test over far fewer bytes.
+///
+/// Both sizes below are measured in bytes read, against the bytes a
+/// rescan of every template per name would read, so the bound holds
+/// whatever the machine is doing. The search is still names x haystack
+/// bytes -- the runs shrink the haystack by a constant, they do not
+/// change the shape -- so the ratio, not its growth, is what is bounded,
+/// and it is checked at both sizes to catch a narrowing that decays as
+/// the unit grows.
+#[test]
+fn escape_analysis_reads_identifier_runs_not_whole_templates() {
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    fn unit(n: usize) -> alloc::string::String {
+        let mut s = alloc::string::String::new();
+        for i in 0..n {
+            s.push_str(&alloc::format!(
+                "static int h{i}(int a) {{ return a + {i}; }}\n\
+                 static int u{i}(int a) {{\n\
+                   int r;\n\
+                   __asm__ volatile (\"nop /* pad{i} aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+                    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb cccccccccccccccccccccccccccccccc */\"\n\
+                     : \"=r\"(r) : : \"memory\");\n\
+                   return r + h{i}(a);\n\
+                 }}\n"
+            ));
+        }
+        s.push_str("int main(void) { int t = 0;\n");
+        for i in 0..n {
+            s.push_str(&alloc::format!("t += u{i}(1);\n"));
+        }
+        s.push_str("return t; }\n");
+        s
+    }
+    let once = |src: &str| -> (usize, usize) {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..NativeOptions::default()
+        };
+        crate::c5::codegen::passes::ipa_const_param::ASM_NAME_SEARCH.with(|c| c.set((0, 0)));
+        emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        crate::c5::codegen::passes::ipa_const_param::ASM_NAME_SEARCH.with(|c| c.get())
+    };
+    for n in [150usize, 600] {
+        let (read, rescan) = once(&unit(n));
+        assert!(read > 0, "n={n}: the asm-name search did not run");
+        assert!(
+            read * 8 <= rescan,
+            "n={n}: the search read {read} bytes against the {rescan} a \
+             per-name template rescan would read, under the 8x narrowing \
+             the identifier runs give",
+        );
+    }
+}
+
+/// A unit that uses a library builtin and has the library name declared
+/// compiles in one front-end pass with nothing recovered.
+#[test]
+fn builtin_thunks_need_no_auto_include_retry() {
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "
+        int memcmp(const void *a, const void *b, unsigned long n);
+        int strcmp(const char *a, const char *b);
+        int probe(const void *a, const void *b, unsigned long n)
+        {
+            return __builtin_memcmp(a, b, n) + __builtin_strcmp(a, b);
+        }
+        int main(void) { return 0; }
+    ";
+    let prog = Compiler::with_options(src.into(), Target::LinuxX64, CompileOptions::default())
+        .compile()
+        .expect("the thunks resolve without a retry");
+    assert!(
+        prog.auto_includes.is_empty(),
+        "no retry should be needed, got {:?}",
+        prog.auto_includes
+    );
+}
+
+/// The absolute-value builtins fold in a constant expression alongside
+/// the other library builtins.
+#[test]
+fn absolute_value_builtins_fold_alongside_the_thunks() {
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "
+        int memcmp(const void *a, const void *b, unsigned long n);
+        static const int ai = __builtin_abs(-6);
+        enum { EA = __builtin_labs(-3L) };
+        static int arr[__builtin_llabs(-4LL)];
+        int probe(const void *a, const void *b) { return __builtin_memcmp(a, b, 2); }
+        int main(void) { return ai + EA + (int) (sizeof(arr) / sizeof(arr[0])); }
+    ";
+    Compiler::with_options(src.into(), Target::LinuxX64, CompileOptions::default())
+        .compile()
+        .expect("the absolute-value builtins still fold");
+}
+
+/// A driver `-include` file may hold a translation unit's body rather than
+/// declarations, so the `__builtin_*` thunk header has to precede the whole
+/// forced-include list, not follow it. gcc and clang make the builtins visible
+/// before any input is read.
+#[test]
+#[cfg(feature = "full")]
+fn builtin_thunks_precede_the_forced_include_list() {
+    use crate::{CompileOptions, Compiler, Target};
+    let dir = std::env::temp_dir().join(format!("badc-force-include-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    let body = dir.join("forced_body.c");
+    std::fs::write(
+        &body,
+        "unsigned long forced_probe(const unsigned long *p)\n\
+         {\n\
+         \tunsigned long v;\n\
+         \t__builtin_memcpy(&v, p, sizeof(v));\n\
+         \treturn v;\n\
+         }\n",
+    )
+    .expect("write forced body");
+    let opts = CompileOptions::default()
+        .with_include_paths(alloc::vec![dir.display().to_string()])
+        .with_force_includes(alloc::vec!["forced_body.c".to_string()]);
+    let prog = Compiler::with_options(
+        "int main(void) { return 42; }".to_string(),
+        Target::LinuxX64,
+        opts,
+    )
+    .compile();
+    std::fs::remove_file(&body).ok();
+    std::fs::remove_dir(&dir).ok();
+    prog.expect("the thunk header is visible to a forced-include body");
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn auto_include_retry_emits_what_the_force_include_would() {
+    // C99 7.1.4p2: a standard library function may be used without a
+    // visible declaration. The driver recovers by re-running the compile
+    // with the declaring header force-included, so the retry's object
+    // must equal the one a caller gets by naming that header up front.
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    let src = "
+        int probe(const void *a, const void *b, unsigned long n)
+        {
+            return __builtin_memcmp(a, b, n);
+        }
+        int main(void)
+        {
+            char x[2];
+            x[0] = 1;
+            x[1] = 2;
+            return probe(x, x, 2);
+        }
+    ";
+    let target = Target::LinuxX64;
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+
+    let retried = Compiler::with_options(src.to_string(), target, CompileOptions::default())
+        .compile()
+        .expect("auto-include retry recovers the undeclared builtin");
+    // `__builtin_memcmp` is supplied by the compiler, so what the retry
+    // recovers is the library name the builtin binds to.
+    assert!(
+        retried.auto_includes.iter().any(|n| n == "memcmp"),
+        "expected the retry to record the recovered name, got {:?}",
+        retried.auto_includes
+    );
+
+    let headers: Vec<String> = retried
+        .auto_includes
+        .iter()
+        .map(|n| {
+            crate::c5::headers::header_declaring(n)
+                .expect("the recovered name names a header")
+                .to_string()
+        })
+        .collect();
+    let forced = CompileOptions::default().with_force_includes(headers);
+    let direct = Compiler::with_options(src.to_string(), target, forced)
+        .compile()
+        .expect("the same unit compiles with the header named up front");
+    assert!(direct.auto_includes.is_empty(), "no retry was needed");
+
+    let a = emit_native_with_options(&retried, target, opts).expect("emit retried object");
+    let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
+    assert_eq!(
+        a, b,
+        "the retry's object differs from the force-included one"
+    );
+}
+
+/// A dense case set lowers to a table dispatch whose table must stay
+/// out of the code section: unwind-metadata generators decode `.text`
+/// as a pure instruction stream and reject embedded data. The
+/// relocatable object places the tables in an anonymous read-only
+/// section under the `.rodata` name prefix, one `R_*_64` relocation
+/// per 8-byte entry against the `.text` section symbol with the
+/// target's offset as the addend -- the shape jump-table discovery in
+/// unwind tooling keys on -- and relocates the dispatch's base
+/// materialization against that section's STT_SECTION symbol.
+#[test]
+fn switch_table_lands_in_rodata_section_of_object() {
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+
+    const SRC: &str = "int pick(int x) {\n\
+         \tswitch (x) {\n\
+         \tcase 0: return 10;\n\
+         \tcase 1: return 11;\n\
+         \tcase 2: return 12;\n\
+         \tcase 3: return 13;\n\
+         \tcase 4: return 14;\n\
+         \tcase 5: return 15;\n\
+         \tcase 6: return 16;\n\
+         \tcase 7: return 17;\n\
+         \tcase 8: return 18;\n\
+         \tcase 9: return 19;\n\
+         \tdefault: return -1;\n\
+         \t}\n\
+         }\n";
+    let prog = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile dense switch: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
+    let bytes = emit_native_with_options(&prog, Target::LinuxX64, opts)
+        .unwrap_or_else(|e| panic!("emit object: {e}"));
+
+    let rd_u16 = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let rd_u32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd_u64(0x28) as usize;
+    let e_shnum = rd_u16(0x3C) as usize;
+    let e_shstrndx = rd_u16(0x3E) as usize;
+    let shdr = |i: usize| e_shoff + i * 64;
+    let sh_name = |i: usize| rd_u32(shdr(i));
+    let sh_type = |i: usize| rd_u32(shdr(i) + 4);
+    let sh_flags = |i: usize| rd_u64(shdr(i) + 8);
+    let sh_offset = |i: usize| rd_u64(shdr(i) + 24) as usize;
+    let sh_size = |i: usize| rd_u64(shdr(i) + 32) as usize;
+    let sh_info = |i: usize| rd_u32(shdr(i) + 44) as usize;
+    let shstr_off = sh_offset(e_shstrndx);
+    let name_at = |noff: u32| -> String {
+        let start = shstr_off + noff as usize;
+        let len = bytes[start..].iter().position(|&b| b == 0).unwrap();
+        String::from_utf8_lossy(&bytes[start..start + len]).into_owned()
+    };
+    let find = |name: &str| (0..e_shnum).find(|&i| name_at(sh_name(i)) == name);
+
+    // The table section: allocated, read-only, non-executable, and a
+    // whole number of 8-byte entries covering the 10-case span.
+    let tbl = find(".rodata.jump_tables").expect("object lacks the table section");
+    const SHF_ALLOC: u64 = 0x2;
+    assert_eq!(sh_type(tbl), 1, "table section must be SHT_PROGBITS");
+    assert_eq!(sh_flags(tbl), SHF_ALLOC, "table must be alloc, read-only");
+    let tbl_size = sh_size(tbl);
+    assert!(
+        tbl_size >= 10 * 8 && tbl_size % 8 == 0,
+        "table size {tbl_size} does not cover 10 dense cases in 8-byte entries"
+    );
+
+    // Its relocation companion: one R_X86_64_64 per entry, 8-byte
+    // stride, every one against the `.text` section symbol with an
+    // in-bounds target offset as the addend.
+    let rela = find(".rela.rodata.jump_tables").expect("object lacks the table relocations");
+    assert_eq!(sh_type(rela), 4, "table relocations must be SHT_RELA");
+    assert_eq!(sh_info(rela), tbl, "sh_info must name the table section");
+    let (roff, rsize) = (sh_offset(rela), sh_size(rela));
+    assert_eq!(rsize % 24, 0);
+    assert_eq!(rsize / 24, tbl_size / 8, "one relocation per table entry");
+    let symtab = find(".symtab").expect("object lacks .symtab");
+    let (sym_off, sym_size) = (sh_offset(symtab), sh_size(symtab));
+    let text = find(".text").expect("object lacks .text");
+    let text_size = sh_size(text) as u64;
+    let sym_shndx = |s: usize| rd_u16(sym_off + s * 24 + 6) as usize;
+    let sym_info = |s: usize| bytes[sym_off + s * 24 + 4];
+    const R_X86_64_64: u32 = 1;
+    for k in 0..rsize / 24 {
+        let p = roff + k * 24;
+        assert_eq!(rd_u64(p), (k * 8) as u64, "entry {k} offset stride");
+        let info = rd_u64(p + 8);
+        assert_eq!((info & 0xffff_ffff) as u32, R_X86_64_64);
+        let s = (info >> 32) as usize;
+        assert_eq!(
+            sym_info(s) & 0xf,
+            3,
+            "entry {k} must target a section symbol"
+        );
+        assert_eq!(sym_shndx(s), text, "entry {k} must target `.text`");
+        let addend = rd_u64(p + 16);
+        assert!(
+            addend < text_size,
+            "entry {k} addend {addend:#x} must name a `.text` byte"
+        );
+    }
+
+    // The dispatch's base materialization: a pc-relative text
+    // relocation against the table section's own STT_SECTION symbol.
+    const R_X86_64_PC32: u32 = 2;
+    let rela_text = find(".rela.text").expect("object lacks .rela.text");
+    let (toff, tsize) = (sh_offset(rela_text), sh_size(rela_text));
+    let lea_rows = (0..tsize / 24)
+        .filter(|k| {
+            let info = rd_u64(toff + k * 24 + 8);
+            let s = (info >> 32) as usize;
+            (info & 0xffff_ffff) as u32 == R_X86_64_PC32
+                && sym_info(s) & 0xf == 3
+                && sym_shndx(s) == tbl
+        })
+        .count();
+    assert_eq!(lea_rows, 1, "one base materialization for one table");
+
+    // Anonymity: no named symbol covers the tables, only the section
+    // symbol addresses them (consumers that discover compiler jump
+    // tables require the region symbol-free).
+    for s in 0..sym_size / 24 {
+        assert!(
+            sym_shndx(s) != tbl || sym_info(s) & 0xf == 3,
+            "symbol {s} covers the table section"
+        );
+    }
+}
+
+/// `-fPIC` (`NativeOptions::pic`): the relocatable object's switch
+/// tables take the label-difference form -- 4-byte pc-relative slots
+/// -- so no absolute relocation reaches the object and a consumer
+/// that forbids absolute references (a wholesale-relocated
+/// position-independent island) can take it.
+#[test]
+fn switch_table_pic_object_uses_pcrel_entries() {
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+
+    const SRC: &str = "int pick(int x) {\n\
+         \tswitch (x) {\n\
+         \tcase 0: return 10;\n\
+         \tcase 1: return 11;\n\
+         \tcase 2: return 12;\n\
+         \tcase 3: return 13;\n\
+         \tcase 4: return 14;\n\
+         \tcase 5: return 15;\n\
+         \tcase 6: return 16;\n\
+         \tcase 7: return 17;\n\
+         \tcase 8: return 18;\n\
+         \tcase 9: return 19;\n\
+         \tdefault: return -1;\n\
+         \t}\n\
+         }\n";
+    let prog = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile dense switch: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        pic: true,
+        ..NativeOptions::default()
+    };
+    let bytes = emit_native_with_options(&prog, Target::LinuxX64, opts)
+        .unwrap_or_else(|e| panic!("emit pic object: {e}"));
+
+    let rd_u16 = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+    let rd_u32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd_u64(0x28) as usize;
+    let e_shnum = rd_u16(0x3C) as usize;
+    let e_shstrndx = rd_u16(0x3E) as usize;
+    let shdr = |i: usize| e_shoff + i * 64;
+    let sh_name = |i: usize| rd_u32(shdr(i));
+    let sh_type = |i: usize| rd_u32(shdr(i) + 4);
+    let sh_offset = |i: usize| rd_u64(shdr(i) + 24) as usize;
+    let sh_size = |i: usize| rd_u64(shdr(i) + 32) as usize;
+    let shstr_off = sh_offset(e_shstrndx);
+    let name_at = |noff: u32| -> String {
+        let start = shstr_off + noff as usize;
+        let len = bytes[start..].iter().position(|&b| b == 0).unwrap();
+        String::from_utf8_lossy(&bytes[start..start + len]).into_owned()
+    };
+
+    // No absolute relocation anywhere in the object.
+    const R_X86_64_64: u32 = 1;
+    const R_X86_64_PC32: u32 = 2;
+    const SHT_RELA: u32 = 4;
+    for i in 0..e_shnum {
+        if sh_type(i) != SHT_RELA {
+            continue;
+        }
+        let (off, size) = (sh_offset(i), sh_size(i));
+        for k in 0..size / 24 {
+            let rtype = (rd_u64(off + k * 24 + 8) & 0xffff_ffff) as u32;
+            assert_ne!(
+                rtype,
+                R_X86_64_64,
+                "absolute relocation in {} row {k}",
+                name_at(sh_name(i))
+            );
+        }
+    }
+
+    // The table's rows are 4-byte-stride pc-relative entries.
+    let rela = (0..e_shnum)
+        .find(|&i| name_at(sh_name(i)) == ".rela.rodata.jump_tables")
+        .expect("pic object lacks the table relocations");
+    let (roff, rsize) = (sh_offset(rela), sh_size(rela));
+    assert!(rsize / 24 >= 10, "table must cover the 10 dense cases");
+    for k in 0..rsize / 24 {
+        let p = roff + k * 24;
+        assert_eq!(rd_u64(p), (k * 4) as u64, "entry {k} offset stride");
+        let rtype = (rd_u64(p + 8) & 0xffff_ffff) as u32;
+        assert_eq!(rtype, R_X86_64_PC32, "entry {k} relocation kind");
+    }
+}
+
+/// A declaration in a `for` initializer has the whole for statement as
+/// its scope (C99 6.8.5.3), so it is a function local like any other:
+/// it belongs in the DWARF variable list, and an aggregate among them
+/// belongs in `FinishedFunction::multi_cell_slots`, which is what
+/// reserves the interior cells against slot coalescing and what the
+/// scalar promotion reads as its candidate set. The for-statement
+/// parser restored its bindings without recording them, so both lists
+/// missed it while the equivalent nested-block declaration was kept.
+#[test]
+fn for_init_declaration_is_recorded_as_a_function_local() {
+    let program = crate::Compiler::with_options(
+        "struct pair { long a; long b; }; \
+         extern void sink(struct pair *); \
+         long f(long n) { \
+             long r = 0; \
+             for (struct pair p = { 1, 2 }; p.a < n; p.a++) { sink(&p); r += p.b; } \
+             { struct pair q = { 3, 4 }; sink(&q); r += q.a; } \
+             return r; \
+         }"
+        .to_string(),
+        crate::Target::LinuxX64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let names: alloc::vec::Vec<&str> = program.variables.iter().map(|v| v.name.as_str()).collect();
+    for name in ["p", "q", "r"] {
+        assert!(
+            names.contains(&name),
+            "local `{name}` missing from the variable list ({names:?})"
+        );
+    }
+    let cells = |name: &str| -> i64 {
+        let slot = program
+            .variables
+            .iter()
+            .find(|v| v.name == name)
+            .expect("declared local")
+            .fp_slot;
+        program
+            .finished_functions
+            .iter()
+            .flat_map(|f| f.multi_cell_slots.iter())
+            .find(|&&(base, _)| base == slot)
+            .map(|&(_, cells)| cells)
+            .unwrap_or(0)
+    };
+    assert_eq!(cells("p"), 2, "the for-init aggregate reserves two cells");
+    assert_eq!(
+        cells("q"),
+        2,
+        "the block-scope aggregate reserves two cells"
+    );
+}
+
+/// A state machine over an address-taken automatic aggregate. The loop
+/// condition already excludes the state the stepper's first case
+/// handles, so that case is unreachable and the build-time-assert call
+/// in it must not reach the object. The exclusion is visible only once
+/// `passes::sroa` lifts the state member out of memory: in the memory
+/// form the stepper's own store to the member runs between the header's
+/// read and the next iteration's, so no dominator-scoped fact survives;
+/// once the member is a phi, the header's branch narrows the same
+/// expression the stepper compares. The second canary is guarded by a
+/// runtime load and must survive, or the check proves nothing.
+#[test]
+fn address_taken_aggregate_state_fold_drops_unreachable_call() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        enum st { st_done = 0, st_run, st_wait }; \
+        struct walk { enum st state; unsigned long data; long *back; }; \
+        extern void assert_canary(void); \
+        extern void runtime_canary(void); \
+        extern long gate; \
+        static __attribute__((always_inline)) void step(struct walk *w, long n) { \
+            switch (w->state) { \
+            case st_done: assert_canary(); return; \
+            case st_run: w->data += (unsigned long)n; w->state = st_wait; return; \
+            case st_wait: w->state = st_done; return; \
+            } \
+        } \
+        long walk_all(long n) { \
+            long acc = 0; \
+            for (struct walk w = { .state = st_run, .data = 5 }; \
+                 w.state != st_done; step(&w, n)) \
+                acc += (long)w.data; \
+            if (gate == 77) runtime_canary(); \
+            return acc; \
+        }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        let named = |n: &str| syms.iter().any(|(s, _)| s == n);
+        assert!(
+            !named("assert_canary"),
+            "{target:?}: the unreachable state's call survives (symbols: {syms:?})"
+        );
+        assert!(
+            named("runtime_canary"),
+            "{target:?}: the runtime-guarded call was dropped, so the check is vacuous \
+             (symbols: {syms:?})"
+        );
+    }
+}
+
+/// `(rela section, r_offset, symbol name, addend)` for every relocation
+/// the object carries.
+fn elf_relocations(
+    b: &[u8],
+) -> alloc::vec::Vec<(alloc::string::String, u64, alloc::string::String, i64)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    let shstrndx = u16a(0x3e) as usize;
+    let sh = |i: usize| shoff + i * shentsize;
+    let name_at = |base: usize, n: usize| {
+        let s = base + n;
+        let e = s + b[s..].iter().position(|&c| c == 0).unwrap();
+        alloc::string::String::from_utf8_lossy(&b[s..e]).into_owned()
+    };
+    let shstr = u64a(sh(shstrndx) + 0x18) as usize;
+    let mut out = alloc::vec::Vec::new();
+    for i in 0..shnum {
+        let h = sh(i);
+        if u32a(h + 4) != 4 {
+            continue; // SHT_RELA
+        }
+        let symsh = sh(u32a(h + 0x28) as usize);
+        let symoff = u64a(symsh + 0x18) as usize;
+        let strbase = u64a(sh(u32a(symsh + 0x28) as usize) + 0x18) as usize;
+        let off = u64a(h + 0x18) as usize;
+        let size = u64a(h + 0x20) as usize;
+        let sec = name_at(shstr, u32a(h) as usize);
+        for e in (0..size / 24).map(|k| off + k * 24) {
+            let sym = (u64a(e + 8) >> 32) as usize;
+            out.push((
+                sec.clone(),
+                u64a(e),
+                name_at(strbase, u32a(symoff + sym * 24) as usize),
+                u64a(e + 16) as i64,
+            ));
+        }
+    }
+    out
+}
+
+/// C99 6.7.8p19: when an initializer list names one subobject twice, the
+/// later initializer overrides the earlier one. The overridden bytes are
+/// replaced, so the relocation the overridden initializer recorded for
+/// that slot has to be retired with them. Leaving it in place gives the
+/// slot two relocations, whose application order then decides the linked
+/// value, or -- when the override is a constant -- one relocation with no
+/// initializer behind it, writing an address into a slot the source sets
+/// to zero.
+///
+/// Locks each override shape the walker handles: a repeated member
+/// designator, a constant overriding a pointer, two union members sharing
+/// one slot, a brace group replacing a subobject a nested designator
+/// already wrote, and an override of an element that held the address of
+/// a compound literal -- that one appends the literal and writes the
+/// pointer back into the slot below it, so the write offset retreats
+/// below every slot the literal just recorded.
+#[test]
+fn duplicate_initializer_retires_the_overridden_relocation() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        extern void f1(void); extern void f2(void); \
+        extern void f3(void); extern void f4(void); \
+        extern void g1(void); extern void g2(void); extern void g3(void); \
+        struct s { void (*p)(void); int x; }; \
+        struct outer { struct s in; int y; }; \
+        union u { void (*a)(void); void (*b)(void); }; \
+        const struct s member_override = { .p = f1, .p = g1 }; \
+        const struct s const_override = { .p = f2, .p = 0 }; \
+        const union u union_override = { .a = f3, .b = g2 }; \
+        const struct outer nested_override = { .in.p = f4, .in = { g3 } }; \
+        typedef struct E E; \
+        struct V { int type; union { const char *s; E *d; } u; }; \
+        struct E { const char *k; struct V v; }; \
+        extern E ext_e; \
+        const struct V literal_override = \
+            { .type = 1, \
+              .u.d = ((E[]) { { \"a\", { 2, { .s = \"x\" } } }, { 0 } }), \
+              .u.d = &ext_e }; \
+        const void *keep(int i) { \
+            switch (i) { \
+            case 0: return &member_override; \
+            case 1: return &const_override; \
+            case 2: return &union_override; \
+            case 3: return &literal_override; \
+            } \
+            return &nested_override; \
+        }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+
+        let relocs = elf_relocations(&obj);
+        let count = |n: &str| relocs.iter().filter(|(_, _, s, _)| s == n).count();
+        for overridden in ["f1", "f2", "f3", "f4"] {
+            assert_eq!(
+                count(overridden),
+                0,
+                "{target:?}: the overridden initializer's relocation to `{overridden}` \
+                 survives (relocations: {relocs:?})"
+            );
+        }
+        for kept in ["g1", "g2", "g3", "ext_e"] {
+            assert_eq!(
+                count(kept),
+                1,
+                "{target:?}: the surviving initializer needs exactly one relocation to \
+                 `{kept}` (relocations: {relocs:?})"
+            );
+        }
+        let mut slots: alloc::vec::Vec<(alloc::string::String, u64)> = relocs
+            .iter()
+            .map(|(sec, off, _, _)| (sec.clone(), *off))
+            .collect();
+        slots.sort();
+        let dups = slots.windows(2).filter(|w| w[0] == w[1]).count();
+        assert_eq!(
+            dups, 0,
+            "{target:?}: a data slot carries two relocations (relocations: {relocs:?})"
+        );
+    }
+}
+
+/// `always_inline` is a mandatory request: gcc and clang report an error
+/// when they cannot honour one rather than silently leaving the call out
+/// of line, so the inliner's size and frame budgets do not apply to it and
+/// a chain of such callees is admitted whatever the caller's frame costs.
+/// Every relocated callee slot must still address correctly.
+#[test]
+fn always_inline_is_admitted_regardless_of_caller_frame() {
+    use crate::{Compiler, NativeOptions, Target};
+    let mut src = alloc::string::String::from(
+        "static __attribute__((always_inline)) inline long helper(long n) {\n\
+             char buf[1000000];\n\
+             long i = n & 0xffff;\n\
+             buf[i] = (char)n;\n\
+             if (n > 0) { buf[i + 1] = (char)(n + 1); } else { buf[i + 1] = 0; }\n\
+             return (long)buf[i] + (long)buf[i + 1];\n\
+         }\n\
+         long caller(long n) {\n\
+             long s = 0;\n",
+    );
+    for i in 0..20 {
+        src.push_str(&alloc::format!("    s += helper(n + {i});\n"));
+    }
+    src.push_str("    return s;\n}\nint main(void) { return (int)caller(1); }\n");
+
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let program = Compiler::with_target(src.clone(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::new().with_optimize(),
+        )
+        .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        assert!(!bytes.is_empty());
+    }
+}
+
+/// A frame past the 24-bit reach of the immediate `ADD`/`SUB` must still
+/// emit: the aarch64 teardown materialises the byte count and applies it
+/// with the extended-register form, and the body addresses its slots the
+/// same way. Before that this aborted the compiler in the epilogue.
+#[test]
+fn frame_past_the_immediate_reach_emits_register_form() {
+    use crate::{Compiler, NativeOptions, Target};
+    let src = "long f(long n) { char buf[20000000]; long i = n & 0xffff; \
+               buf[i] = (char)n; return (long)buf[i]; } \
+               int main(void) { return (int)f(1); }";
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        if target == Target::LinuxAarch64 {
+            // `add sp, sp, x16` -- the immediate forms top out at 16 MiB.
+            let want = 0x8B30_63FFu32.to_le_bytes();
+            assert!(
+                bytes.windows(4).any(|w| w == want),
+                "expected the register-form stack teardown in the aarch64 image",
+            );
+        }
+    }
+}
+
+/// A frame larger than the backends' frame addressing can represent is a
+/// compile diagnostic on every target, not a panic and not a truncated
+/// stack adjustment. The frame byte count is carried as `u32`, so past
+/// 4 GiB an unchecked one wrapped: a 4295000008-byte frame allocated
+/// 32720 bytes and the program ran on top of its own caller.
+#[test]
+fn frame_past_the_addressable_maximum_is_a_diagnostic() {
+    use crate::{Compiler, NativeOptions, Target};
+    for (size, bytes) in [
+        (2_500_000_000u64, 2_500_000_008u64),
+        (4_295_000_000, 4_295_000_008),
+    ] {
+        let src = alloc::format!(
+            "long f(long n) {{ long a; char buf[{size}]; a = n + 1; (void)buf; return a; }} \
+             int main(void) {{ return (int)f(1); }}"
+        );
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let program = Compiler::with_target(src.clone(), target)
+                .compile()
+                .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+            let err = crate::c5::object::emit_native_single_tu_for_test(
+                &program,
+                target,
+                NativeOptions::default(),
+            )
+            .expect_err("an over-maximum frame has no representation");
+            let msg = alloc::format!("{err}");
+            assert!(
+                msg.contains(&alloc::format!("stack frame of {bytes} bytes exceeds")),
+                "{target:?}: expected the frame-size diagnostic, got: {msg}",
+            );
+        }
+    }
+}
+
+/// Section bodies of a relocatable ELF object, keyed by name.
+fn elf_section_bodies(
+    bytes: &[u8],
+) -> alloc::vec::Vec<(alloc::string::String, alloc::vec::Vec<u8>)> {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let shoff = u64le(0x28);
+    let shentsize = u16le(0x3A);
+    let shnum = u16le(0x3C);
+    let shstrndx = u16le(0x3E);
+    let stroff = u64le(shoff + shstrndx * shentsize + 0x18);
+    let mut out = alloc::vec::Vec::new();
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let name_off = stroff + u32le(sh);
+        let end = bytes[name_off..].iter().position(|&c| c == 0).unwrap();
+        let name =
+            alloc::string::String::from_utf8_lossy(&bytes[name_off..name_off + end]).into_owned();
+        let off = u64le(sh + 0x18);
+        let size = u64le(sh + 0x20);
+        // SHT_NOBITS (8) occupies no file bytes.
+        let body = if u32le(sh + 4) == 8 {
+            alloc::vec::Vec::new()
+        } else {
+            bytes[off..off + size].to_vec()
+        };
+        out.push((name, body));
+    }
+    out
+}
+
+/// A `typeof(<string literal>)` member with `aligned(sizeof(T))` is an
+/// array of char stored in place: the attribute argument's `sizeof`
+/// parse must not reset the member's declared-type carriers. The
+/// regression emitted an 8-byte relocation to a pooled copy in `.bss`
+/// instead of the literal's characters.
+#[test]
+fn typeof_literal_member_with_sizeof_aligned_attr_stores_in_place() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        typedef unsigned int Word;\n\
+        struct hdr { Word a, b, c; };\n\
+        static const struct {\n\
+            struct hdr _hdr;\n\
+            unsigned char _name[sizeof(\"Linux\")] __attribute__((aligned(4)));\n\
+            typeof(\"\") _desc __attribute__((aligned(sizeof(Word))));\n\
+        } n __attribute__((__used__, section(\".note.T\"), aligned(4))) = {\n\
+            { sizeof(\"Linux\"), sizeof(\"\"), 0x100, }, \"Linux\", \"\"\n\
+        };\n";
+    const EXPECTED: [u8; 24] = [
+        6, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, b'L', b'i', b'n', b'u', b'x', 0, 0, 0, 0, 0, 0, 0,
+    ];
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default()
+        };
+        let obj = emit_native_with_options(&prog, target, opts)
+            .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+        let sections = elf_section_bodies(&obj);
+        let note = sections
+            .iter()
+            .find(|(name, _)| name == ".note.T")
+            .unwrap_or_else(|| panic!("{target:?}: no .note.T section"));
+        assert_eq!(note.1, EXPECTED, "{target:?}: .note.T bytes");
+        assert!(
+            !sections.iter().any(|(name, _)| name == ".rela.note.T"),
+            "{target:?}: the literal member must not be relocated"
+        );
+    }
+}
+
+/// A compile-time assertion guarded by a constant-index read of a
+/// string literal must fold away at `-O`: the load folds to the
+/// literal's byte (C99 6.4.5p6 makes the storage immutable), the guard
+/// becomes constant, and no reference to the assert helper survives.
+/// The kernel's newline check (`fmt[sizeof(fmt) - 2] != '\n'`) is this
+/// shape. A guard that holds must keep its call.
+#[test]
+fn literal_index_guarded_assert_call_folds_away() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        extern void __compiletime_assert_1(void) __attribute__((__error__(\"newline\")));\n\
+        extern void __compiletime_assert_2(void) __attribute__((__error__(\"held\")));\n\
+        void f(void) {\n\
+            do {\n\
+                if (!(!(\"HW step 0x%0x\\n\"[sizeof(\"HW step 0x%0x\\n\") - 2] != '\\n')))\n\
+                    __compiletime_assert_1();\n\
+            } while (0);\n\
+        }\n\
+        void g(void) {\n\
+            if (!(\"A\\n\"[0] != 'A'))\n\
+                __compiletime_assert_2();\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let obj = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        assert!(
+            !syms.iter().any(|(n, _)| n == "__compiletime_assert_1"),
+            "{target:?}: the folded guard must leave no assert reference"
+        );
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_2"),
+            "{target:?}: a guard that holds must keep its call"
+        );
+    }
+}
+
+/// `(offset, symbol name, addend)` for every `.rela.text` entry whose
+/// type is `R_X86_64_PLT32` (4): the branches this unit leaves for the
+/// linker to resolve by name.
+fn x64_branch_relocs(obj: &[u8]) -> alloc::vec::Vec<(u64, alloc::string::String, i64)> {
+    let sections = elf_section_bodies(obj);
+    let body = |n: &str| {
+        sections
+            .iter()
+            .find(|(name, _)| name == n)
+            .map(|(_, b)| b.clone())
+            .unwrap_or_default()
+    };
+    let (rela, symtab, strtab) = (body(".rela.text"), body(".symtab"), body(".strtab"));
+    let mut out = alloc::vec::Vec::new();
+    for e in rela.chunks_exact(24) {
+        let r_offset = u64::from_le_bytes(e[0..8].try_into().unwrap());
+        let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+        let r_addend = i64::from_le_bytes(e[16..24].try_into().unwrap());
+        if r_info & 0xffff_ffff != 4 {
+            continue;
+        }
+        let sym = (r_info >> 32) as usize;
+        let name_off =
+            u32::from_le_bytes(symtab[sym * 24..sym * 24 + 4].try_into().unwrap()) as usize;
+        let end = strtab[name_off..].iter().position(|&b| b == 0).unwrap() + name_off;
+        out.push((
+            r_offset,
+            alloc::string::String::from_utf8_lossy(&strtab[name_off..end]).into_owned(),
+            r_addend,
+        ));
+    }
+    out
+}
+
+/// Compile `src` to a relocatable object for `target` under `hardening`.
+fn emit_hardened(
+    src: &str,
+    target: crate::Target,
+    hardening: crate::Hardening,
+) -> alloc::vec::Vec<u8> {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    let prog = crate::Compiler::with_options(
+        alloc::string::String::from(src),
+        target,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        hardening,
+        ..NativeOptions::default()
+    };
+    emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit: {e}"))
+}
+
+/// One unit reaching every site the mitigations touch: a return, an
+/// indirect call, a switch-table dispatch and a computed goto.
+const HARDENING_SRC: &str = "\
+    typedef int (*fp)(int);\n\
+    int viaptr(fp f, int x) { int a = f(x); return a + 1; }\n\
+    int sw(int x) {\n\
+      switch (x) {\n\
+      case 0: return 10; case 1: return 21; case 2: return 32; case 3: return 43;\n\
+      case 4: return 54; case 5: return 65; case 6: return 76; case 7: return 87;\n\
+      case 8: return 98; default: return -1;\n\
+      }\n\
+    }\n\
+    int cgoto(int x) {\n\
+      static void *tab[] = { &&a, &&b };\n\
+      goto *tab[x & 1];\n\
+      a: return 1;\n\
+      b: return 2;\n\
+    }\n";
+
+/// Every `FF /2` (indirect call) and `FF /4` (indirect jump) in ModRM
+/// register mode: `0xFF` followed by `D0..D7` or `E0..E7`.
+fn x64_register_indirect_forms(text: &[u8]) -> usize {
+    text.windows(2)
+        .filter(|w| {
+            w[0] == 0xFF && ((0xD0..=0xD7).contains(&w[1]) || (0xE0..=0xE7).contains(&w[1]))
+        })
+        .count()
+}
+
+#[test]
+fn x64_function_return_thunk_replaces_every_ret() {
+    // `-mfunction-return=thunk-extern`: each return becomes a `jmp rel32`
+    // (0xE9) with a zero displacement and a PLT32 relocation naming the
+    // externally provided return thunk, addend -4 -- the form gcc emits
+    // for the same flag.
+    let plain = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening::NONE,
+    );
+    let hardened = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            function_return_thunk: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    assert!(
+        elf_text(&plain).contains(&0xC3),
+        "the unhardened object returns by `ret`"
+    );
+
+    let text = elf_text(&hardened);
+    let thunk: alloc::vec::Vec<_> = x64_branch_relocs(&hardened)
+        .into_iter()
+        .filter(|(_, n, _)| n == "__x86_return_thunk")
+        .collect();
+    assert!(
+        !thunk.is_empty(),
+        "the hardened object branches to the return thunk"
+    );
+    for (off, _, addend) in &thunk {
+        assert_eq!(*addend, -4, "branch relocation addend");
+        // The relocation lands on the rel32 field, so the byte before it
+        // is the `jmp rel32` opcode and the displacement stays zero.
+        assert_eq!(text[*off as usize - 1], 0xE9, "jmp rel32 opcode");
+        assert_eq!(&text[*off as usize..*off as usize + 4], [0, 0, 0, 0]);
+    }
+}
+
+#[test]
+fn x64_indirect_branch_thunk_covers_call_switch_and_computed_goto() {
+    // `-mindirect-branch=thunk-extern`: the indirect call, the
+    // switch-table dispatch and the computed goto each become a direct
+    // branch to the thunk named for the register holding the target.
+    let plain = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening::NONE,
+    );
+    let hardened = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            indirect_branch: crate::IndirectBranch::ThunkExtern,
+            ..crate::Hardening::NONE
+        },
+    );
+    let names: alloc::vec::Vec<alloc::string::String> = x64_branch_relocs(&hardened)
+        .into_iter()
+        .map(|(_, n, _)| n)
+        .filter(|n| n.starts_with("__x86_indirect_thunk_"))
+        .collect();
+    assert!(
+        names.len() >= 3,
+        "call, switch dispatch and computed goto all thunked, got {names:?}"
+    );
+    assert!(
+        x64_register_indirect_forms(&elf_text(&plain)) > 0,
+        "the unhardened object branches through registers"
+    );
+    assert_eq!(
+        x64_register_indirect_forms(&elf_text(&hardened)),
+        0,
+        "no register-indirect transfer survives"
+    );
+}
+
+#[test]
+fn x64_indirect_branch_thunk_inline_embeds_the_retpoline() {
+    // `-mindirect-branch=thunk-inline` (the vDSO's form: no external
+    // symbol may be named): every indirect transfer embeds the
+    // retpoline. The capture loop is `pause; lfence; jmp .-7` and the
+    // slot overwrite follows; a call site hops over the body first so
+    // the continuation stays after the site (gcc's shape).
+    const CAPTURE: &[u8] = &[0xF3, 0x90, 0x0F, 0xAE, 0xE8, 0xEB, 0xF9];
+    const CALL_HEAD: &[u8] = &[0xEB, 0x11, 0xE8, 0x07, 0x00, 0x00, 0x00];
+    const JMP_HEAD: &[u8] = &[0xE8, 0x07, 0x00, 0x00, 0x00, 0xF3, 0x90];
+    let hardened = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            indirect_branch: crate::IndirectBranch::ThunkInline,
+            ..crate::Hardening::NONE
+        },
+    );
+    assert!(
+        x64_branch_relocs(&hardened)
+            .iter()
+            .all(|(_, n, _)| !n.starts_with("__x86_indirect_thunk_")),
+        "inline form names no thunk symbol"
+    );
+    let text = elf_text(&hardened);
+    let count = |pat: &[u8]| text.windows(pat.len()).filter(|w| *w == pat).count();
+    assert!(
+        count(CAPTURE) >= 3,
+        "call, switch dispatch and computed goto each embed the capture"
+    );
+    assert!(count(CALL_HEAD) >= 1, "call form hops over the body");
+    assert!(
+        count(JMP_HEAD) >= 1,
+        "jump form enters the capture directly"
+    );
+    assert_eq!(
+        x64_register_indirect_forms(&text),
+        0,
+        "no register-indirect transfer survives"
+    );
+}
+
+#[test]
+fn x64_direct_tail_call_is_not_routed_through_a_thunk() {
+    // A call in tail position becomes a direct `jmp` to the callee: it is
+    // neither a return nor an indirect branch. The callee's own epilogue
+    // carries the return thunk, so converting this site would enter the
+    // thunk instead of the callee. gcc likewise leaves it a plain `jmp`.
+    const SRC: &str = "static int leaf(int x) { return x + 1; }\n\
+                       int tail(int x) { return leaf(x); }\n";
+    let hardened = emit_hardened(
+        SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            function_return_thunk: true,
+            indirect_branch: crate::IndirectBranch::ThunkExtern,
+            ..crate::Hardening::NONE
+        },
+    );
+    // `leaf` is defined here, so the tail branch resolves inside the unit
+    // and names no thunk; only the two returns reach the return thunk.
+    let relocs = x64_branch_relocs(&hardened);
+    assert!(
+        !relocs.is_empty() && relocs.iter().all(|(_, n, _)| n == "__x86_return_thunk"),
+        "the tail branch stays a direct jump: {relocs:?}"
+    );
+}
+
+#[test]
+fn x64_harden_sls_traps_after_ret_and_indirect_jmp() {
+    // `-mharden-sls=return` puts an int3 after each `ret`;
+    // `=indirect-jmp` after each indirect jump. gcc emits `C3 CC` and
+    // `FF E0 CC` for the two. A byte scan alone cannot tell an opcode
+    // from a displacement or SIB byte holding the same value, so each
+    // case uses a fixture with exactly one guarded transfer and checks
+    // the one-byte growth as well as the pattern.
+    const ONE_RET: &str = "int f(int x) { return x + 1; }\n";
+    const ONE_INDIRECT: &str = "int g(int x) {\n\
+          static void *tab[] = { &&a, &&b };\n\
+          goto *tab[x & 1];\n\
+          a: return 1;\n\
+          b: return 2;\n\
+        }\n";
+    let text =
+        |src: &str, h: crate::Hardening| elf_text(&emit_hardened(src, crate::Target::LinuxX64, h));
+
+    let sls_return = crate::Hardening {
+        sls_return: true,
+        ..crate::Hardening::NONE
+    };
+    let sls_jmp = crate::Hardening {
+        sls_indirect_jmp: true,
+        ..crate::Hardening::NONE
+    };
+
+    // One function, one return: the trap adds exactly one byte, and the
+    // text ends `C3 CC`.
+    let plain = text(ONE_RET, crate::Hardening::NONE);
+    let trapped = text(ONE_RET, sls_return);
+    assert_eq!(*plain.last().unwrap(), 0xC3, "the fixture ends in `ret`");
+    assert_eq!(trapped.len(), plain.len() + 1, "one trap, one byte");
+    assert_eq!(trapped[trapped.len() - 2..], [0xC3, 0xCC]);
+
+    // Two returns and one indirect jump. `return` traps the two returns
+    // and leaves the jump bare; `indirect-jmp` does the reverse, so the
+    // selectors are independent rather than one combined switch.
+    let plain = text(ONE_INDIRECT, crate::Hardening::NONE);
+    assert_eq!(
+        text(ONE_INDIRECT, sls_return).len(),
+        plain.len() + 2,
+        "`return` traps both returns and not the jump"
+    );
+    let trapped = text(ONE_INDIRECT, sls_jmp);
+    assert_eq!(
+        trapped.len(),
+        plain.len() + 1,
+        "`indirect-jmp` traps the jump and neither return"
+    );
+    assert!(
+        trapped
+            .windows(3)
+            .any(|w| w[0] == 0xFF && (0xE0..=0xE7).contains(&w[1]) && w[2] == 0xCC),
+        "the trap follows the indirect jump"
+    );
+}
+
+#[test]
+fn x64_return_thunk_suppresses_the_sls_return_trap() {
+    // A thunked return leaves no `ret` for the trap to guard, and the
+    // branch into the thunk is not an indirect jump. gcc emits no int3
+    // there under `-mharden-sls=all -mfunction-return=thunk-extern`.
+    let obj = emit_hardened(
+        "int f(int x) { return x + 1; }\n",
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            function_return_thunk: true,
+            sls_return: true,
+            sls_indirect_jmp: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    let text = elf_text(&obj);
+    assert!(!text.contains(&0xC3), "no `ret` at a thunked return");
+    assert!(!text.contains(&0xCC), "no trap at a thunked return");
+}
+
+#[test]
+fn x64_naked_function_gets_no_return_thunk() {
+    // A naked function's inline-asm body is the whole function and
+    // supplies its own transfer (`iretq`, `sysretq`, a bare `ret`). The
+    // compiler emits no epilogue for it, so no return thunk either.
+    const SRC: &str = "__attribute__((naked)) void n(void) { __asm__ volatile(\"ret\"); }\n";
+    let obj = emit_hardened(
+        SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            function_return_thunk: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    assert!(
+        x64_branch_relocs(&obj).is_empty(),
+        "a naked body keeps its own return"
+    );
+    assert!(
+        elf_text(&obj).contains(&0xC3),
+        "the asm-supplied `ret` survives"
+    );
+}
+
+#[test]
+fn a64_branch_protection_lands_pads_at_entries_and_indirect_targets() {
+    // `-mbranch-protection=bti`: `BTI C` opens every function, since an
+    // entry is reachable by `BLR` and by a `BR` through x16/x17; `BTI J`
+    // opens every block a `BR` can enter (switch-table successors,
+    // computed-goto labels).
+    const BTI_C: u32 = 0xD503_245F;
+    const BTI_J: u32 = 0xD503_249F;
+    let words = |o: &[u8]| -> alloc::vec::Vec<u32> {
+        elf_text(o)
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .collect()
+    };
+    let plain = words(&emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxAarch64,
+        crate::Hardening::NONE,
+    ));
+    let hardened = words(&emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxAarch64,
+        crate::Hardening {
+            bti: true,
+            ..crate::Hardening::NONE
+        },
+    ));
+    assert_eq!(
+        plain.iter().filter(|&&w| w == BTI_C || w == BTI_J).count(),
+        0,
+        "no landing pad without the flag"
+    );
+    assert_eq!(
+        hardened.iter().filter(|&&w| w == BTI_C).count(),
+        3,
+        "one entry pad per function in the fixture"
+    );
+    assert!(
+        hardened.iter().filter(|&&w| w == BTI_J).count() >= 3,
+        "switch and computed-goto targets take a jump pad"
+    );
+}
+
+#[test]
+fn a64_branch_protection_skips_a_naked_body() {
+    // Same admission rule as the x86 return thunk: a naked function's
+    // body is the entire function, so nothing is prefixed to it.
+    const SRC: &str = "__attribute__((naked)) void n(void) { __asm__ volatile(\"ret\"); }\n";
+    let obj = emit_hardened(
+        SRC,
+        crate::Target::LinuxAarch64,
+        crate::Hardening {
+            bti: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    let first = u32::from_le_bytes(elf_text(&obj)[0..4].try_into().unwrap());
+    assert_ne!(first, 0xD503_245F, "no pad ahead of a naked body");
+}
+
+#[test]
+fn hardening_absent_leaves_the_object_unchanged() {
+    // The mitigations are opt-in: an object emitted with every field off
+    // is byte-identical to one emitted with the option left at its
+    // default, on both architectures.
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(HARDENING_SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let baseline = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::default()
+            },
+        )
+        .expect("emit");
+        let explicit = emit_hardened(HARDENING_SRC, target, crate::Hardening::NONE);
+        assert_eq!(
+            baseline, explicit,
+            "{target:?}: no drift with mitigations off"
+        );
+    }
+}
+
+#[test]
+fn x64_inline_asm_ret_is_left_verbatim() {
+    // The mitigations apply to compiler-generated transfers. A `ret`
+    // written in inline asm is the author's instruction and stays a bare
+    // `ret`, while the same function's epilogue still takes the thunk.
+    // gcc likewise rewrites neither the text nor the operands of an asm
+    // statement.
+    const SRC: &str = "int f(int x) { __asm__ volatile(\"ret\"); return x + 1; }\n";
+    let obj = emit_hardened(
+        SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            function_return_thunk: true,
+            sls_return: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    assert!(
+        elf_text(&obj).contains(&0xC3),
+        "the asm-supplied `ret` survives untouched"
+    );
+    assert!(
+        x64_branch_relocs(&obj)
+            .iter()
+            .any(|(_, n, _)| n == "__x86_return_thunk"),
+        "the epilogue still takes the thunk"
+    );
+}
+
+#[test]
+fn x64_cf_protection_branch_lands_endbr_at_entries_and_indirect_targets() {
+    // `-fcf-protection=branch`: `endbr64` (F3 0F 1E FA) opens every
+    // function, since an entry is reachable by an indirect call, and
+    // every block an indirect branch can enter (switch-table
+    // successors, computed-goto labels). It is the only instruction CET
+    // indirect-branch tracking permits such a transfer to land on.
+    const ENDBR: [u8; 4] = [0xF3, 0x0F, 0x1E, 0xFA];
+    let count = |o: &[u8]| elf_text(o).windows(4).filter(|w| *w == ENDBR).count();
+    let plain = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening::NONE,
+    );
+    let hardened = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            cf_protection_branch: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    assert_eq!(count(&plain), 0, "no landing pad without the flag");
+    // Three function entries plus the switch and computed-goto targets.
+    assert!(
+        count(&hardened) >= 3 + 3,
+        "entries and indirect targets both padded, got {}",
+        count(&hardened)
+    );
+    // The first bytes of the unit are a function entry.
+    assert_eq!(elf_text(&hardened)[..4], ENDBR);
+}
+
+#[test]
+fn x64_cf_protection_skips_a_naked_body() {
+    // Same admission rule as the return thunk and the aarch64 pad: a
+    // naked function's body is the entire function.
+    const SRC: &str = "__attribute__((naked)) void n(void) { __asm__ volatile(\"ret\"); }\n";
+    let obj = emit_hardened(
+        SRC,
+        crate::Target::LinuxX64,
+        crate::Hardening {
+            cf_protection_branch: true,
+            ..crate::Hardening::NONE
+        },
+    );
+    // The body is the one-byte `ret` the asm supplied and nothing else.
+    assert_eq!(elf_text(&obj), [0xC3], "no pad ahead of a naked body");
 }

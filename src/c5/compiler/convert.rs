@@ -23,8 +23,7 @@
 
 use super::Compiler;
 use super::types::{
-    is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_unsigned_ty,
-    usual_arith_common_ty,
+    is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty,
 };
 
 impl Compiler {
@@ -53,6 +52,19 @@ impl Compiler {
         }
         let dest_is_fp = is_floating_scalar(dest_ty);
         let src_is_fp = is_floating_scalar(self.ty);
+        // The GCC 128-bit integer against any other scalar in either
+        // direction is a value conversion (C99 6.3.1.3 / 6.3.1.4), not
+        // an aggregate copy: the walker's cast arm widens or narrows
+        // the scalar, or converts the 128-bit value, including to and
+        // from a floating type. A plain struct on the other side stays
+        // a type mismatch and is diagnosed by the caller.
+        if self.is_int128_ty(dest_ty) != self.is_int128_ty(self.ty)
+            && !(is_struct_ty(dest_ty) && is_struct_ty(self.ty))
+        {
+            self.ast_apply_assign_conv(dest_ty);
+            self.ty = dest_ty;
+            return;
+        }
         if dest_is_fp && !src_is_fp && !is_pointer_ty(self.ty) {
             self.ast_fpcast();
             // Dual-emit: wrap the accumulator in an
@@ -87,7 +99,7 @@ impl Compiler {
     /// Layout going in: stack-top = LHS, accumulator = RHS.
     /// Layout going out: same shape, but each masked to `common`.
     pub(super) fn maybe_mask_operands_to_unsigned_common(&mut self, lhs_ty: i64, rhs_ty: i64) {
-        let common = usual_arith_common_ty(lhs_ty, rhs_ty, self.target);
+        let common = self.arith_common_ty(lhs_ty, rhs_ty);
         if !is_unsigned_ty(common) {
             return;
         }
@@ -129,7 +141,7 @@ impl Compiler {
         if is_floating_scalar(lhs_ty) || is_floating_scalar(rhs_ty) {
             return;
         }
-        let common = usual_arith_common_ty(lhs_ty, rhs_ty, self.target);
+        let common = self.arith_common_ty(lhs_ty, rhs_ty);
         self.renormalize_to_width(common);
     }
 
@@ -209,7 +221,7 @@ impl Compiler {
             self.ast_binop(plain_op);
             return;
         }
-        let common = usual_arith_common_ty(lhs_ty, self.ty, self.target);
+        let common = self.arith_common_ty(lhs_ty, self.ty);
         let common_size = self.size_of_type(common);
         if common_size >= 8 {
             self.ast_binop(plain_op);

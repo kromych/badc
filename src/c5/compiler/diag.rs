@@ -8,13 +8,35 @@
 //! Warnings are accumulated on `Compiler::warnings` and never fail
 //! the compile.
 
-use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId};
+use super::super::ast::walk::{fold_int_binop, imm_safe_binop};
+use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId, UnOp};
 use super::super::error::C5Error;
+use super::super::ir::BinOp;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, is_floating_scalar, is_pointer_ty, is_struct_ty, struct_ptr_depth,
+    VOLATILE_MASK, is_floating_scalar, is_pointer_ty, is_struct_ty, is_struct_value_ty,
+    strip_unsigned, struct_ptr_depth,
 };
+
+/// A target-vs-source type mismatch reported by
+/// [`Compiler::type_warning_with_flags`]. `no_conversion` marks the
+/// mismatches C99 defines no conversion for: those are constraint
+/// violations the call site rejects, the rest stay warnings.
+#[derive(Clone, Copy)]
+pub(super) struct TypeMismatch {
+    pub reason: &'static str,
+    pub no_conversion: bool,
+}
+
+impl TypeMismatch {
+    fn warn(reason: &'static str) -> Option<Self> {
+        Some(Self {
+            reason,
+            no_conversion: false,
+        })
+    }
+}
 
 impl Compiler {
     /// C99 6.9.1p12: reaching the closing brace of a value-returning
@@ -143,6 +165,66 @@ impl Compiler {
             Expr::IntLit { val, .. } => *val != 0,
             Expr::Cast { child, .. } => self.expr_is_nonzero_const(*child),
             _ => false,
+        }
+    }
+
+    /// C99 6.3.2.3p3: an integer constant expression with the value 0,
+    /// or such an expression cast to `void *`, is a null pointer
+    /// constant. Only literal-rooted operands fold, so an operand
+    /// naming an object -- `(void *)((long)x * 0l)` -- is correctly not
+    /// a null pointer constant even though it evaluates to zero.
+    pub(super) fn expr_is_null_pointer_constant(&self, e: ExprId) -> bool {
+        self.expr_const_int(e) == Some(0)
+    }
+
+    /// Fold a literal-rooted integer constant expression. Casts are
+    /// looked through without applying their conversion: the callers
+    /// only compare against zero, and a cast that truncates a non-zero
+    /// constant to zero is not a null pointer constant in practice.
+    pub(super) fn expr_const_int(&self, e: ExprId) -> Option<i64> {
+        match self.ast.expr(e) {
+            Expr::IntLit { val, .. } => Some(*val),
+            Expr::Sizeof(s) => Some(s.size_bytes),
+            Expr::Cast { child, .. } => self.expr_const_int(*child),
+            Expr::Unary { op, child, .. } => {
+                let v = self.expr_const_int(*child)?;
+                match op {
+                    UnOp::Neg => Some(v.wrapping_neg()),
+                    UnOp::BitNot => Some(!v),
+                    UnOp::LogNot => Some((v == 0) as i64),
+                    UnOp::AddrOf | UnOp::Deref => None,
+                }
+            }
+            Expr::Binary { op, lhs, rhs, .. } => {
+                // `/` and `%` are integer constant expressions (C99 6.6)
+                // but are not immediate-foldable, so they are admitted
+                // alongside the imm-safe set. A zero divisor is undefined
+                // and thus not a constant.
+                let divmod = matches!(*op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu);
+                if !imm_safe_binop(*op) && !divmod {
+                    return None;
+                }
+                let l = self.expr_const_int(*lhs)?;
+                let r = self.expr_const_int(*rhs)?;
+                if divmod && r == 0 {
+                    return None;
+                }
+                Some(fold_int_binop(*op, l, r))
+            }
+            // A conditional with a constant condition folds to its selected
+            // arm (C99 6.6p3 exempts the unevaluated arm), so the
+            // `__builtin_choose_expr`-style constant max/min idioms remain
+            // null-pointer-constant material.
+            Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+                ..
+            } => {
+                let c = self.expr_const_int(*cond)?;
+                self.expr_const_int(if c != 0 { *then_e } else { *else_e })
+            }
+            _ => None,
         }
     }
 
@@ -361,7 +443,7 @@ impl Compiler {
         declared: i64,
         actual: i64,
         actual_is_zero_literal: bool,
-    ) -> Option<&'static str> {
+    ) -> Option<TypeMismatch> {
         Self::type_warning_with_flags(structs, declared, actual, actual_is_zero_literal, false)
     }
 
@@ -377,11 +459,11 @@ impl Compiler {
         actual: i64,
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
-    ) -> Option<&'static str> {
+    ) -> Option<TypeMismatch> {
         // C99 6.5.16.1p1: the target may add qualifiers; volatility
         // never affects assignment compatibility.
-        let declared = declared & !VOLATILE_BIT;
-        let actual = actual & !VOLATILE_BIT;
+        let declared = declared & !VOLATILE_MASK;
+        let actual = actual & !VOLATILE_MASK;
         if declared == actual {
             return None;
         }
@@ -419,9 +501,8 @@ impl Compiler {
         // are all interchangeable here -- the compatibility rule
         // is "is this any kind of byte pointer?", not "do the
         // signedness tags line up".
-        let decl_is_char_ptr =
-            decl_is_ptr && (declared & !(UNSIGNED_BIT | VOLATILE_BIT)) == char_ptr;
-        let act_is_char_ptr = act_is_ptr && (actual & !(UNSIGNED_BIT | VOLATILE_BIT)) == char_ptr;
+        let decl_is_char_ptr = decl_is_ptr && strip_unsigned(declared) == char_ptr;
+        let act_is_char_ptr = act_is_ptr && strip_unsigned(actual) == char_ptr;
         if decl_is_char_ptr && act_is_ptr {
             return None;
         }
@@ -448,6 +529,23 @@ impl Compiler {
             return None;
         }
 
+        // The GCC 128-bit integer against an integer or pointer is a
+        // value conversion (C99 6.3.1.3), not a struct mismatch.
+        let is_int128 = |ty: i64| {
+            is_struct_value_ty(ty)
+                && structs
+                    .get(super::types::struct_id_of(ty))
+                    .is_some_and(|s| s.name == "__int128")
+        };
+        // Both sides 128-bit: the tags differ only in signedness, which is
+        // an integer conversion, so this is not a mismatch at all.
+        if is_int128(declared) && is_int128(actual) {
+            return None;
+        }
+        if is_int128(declared) != is_int128(actual) && !(decl_is_struct && act_is_struct) {
+            return None;
+        }
+
         // Struct types must match exactly (when one side is a struct).
         if decl_is_struct || act_is_struct {
             // Already returned None above when declared == actual; if we
@@ -456,7 +554,23 @@ impl Compiler {
             if (decl_is_ptr && actual_is_zero_literal) || (act_is_ptr && declared == 0) {
                 return None;
             }
-            return Some("incompatible struct types");
+            // C99 6.5.16.1p1 offers no conversion involving a structure or
+            // union *object*: that is a constraint violation, while the
+            // pointer-shaped mismatches do convert and stay warnings. Two
+            // aggregate spellings are excluded because the mismatch would
+            // not be the source's fault: a value-form array reflects a
+            // missed 6.3.2.1p3 decay, and a union target may carry
+            // `transparent_union`, under which it accepts any member type.
+            let def_of = |ty: i64| structs.get(super::types::struct_id_of(ty));
+            let is_array_agg = |ty: i64| def_of(ty).is_some_and(|s| s.is_array);
+            let object_mismatch = (is_struct_value_ty(declared) || is_struct_value_ty(actual))
+                && !is_array_agg(declared)
+                && !is_array_agg(actual)
+                && !def_of(declared).is_some_and(|s| s.is_union);
+            return Some(TypeMismatch {
+                reason: "incompatible struct types",
+                no_conversion: object_mismatch,
+            });
         }
 
         match (decl_is_ptr, act_is_ptr) {
@@ -465,8 +579,8 @@ impl Compiler {
             // Pointer <-> literal 0: NULL idiom.
             (true, false) if actual_is_zero_literal => None,
             // Pointer <-> non-zero integer: warn.
-            (true, false) => Some("integer assigned to pointer"),
-            (false, true) => Some("pointer assigned to integer"),
+            (true, false) => TypeMismatch::warn("integer assigned to pointer"),
+            (false, true) => TypeMismatch::warn("pointer assigned to integer"),
             // Both numeric (char vs int) -- c convention, silent.
             (false, false) => None,
         }

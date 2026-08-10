@@ -20,8 +20,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rdi, %rax
                	subq	%rsi, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	decq	%rdx

@@ -25,7 +25,7 @@ Disassembly of section .text:
                	orq	$0x1, %rcx
                	movb	%cl, 0x1(%rax)
                	leaq	-0x8(%rbp), %rax
-               	movzbq	0x1(%rax), %rcx
+               	andq	$0xff, %rcx
                	andq	$-0x3, %rcx
                	orq	$0x0, %rcx
                	movb	%cl, 0x1(%rax)
@@ -35,7 +35,7 @@ Disassembly of section .text:
                	orq	$0x400, %rcx            # imm = 0x400
                	movl	%ecx, (%rax)
                	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %ecx
+               	movl	%ecx, %ecx
                	andq	$-0x801, %rcx           # imm = 0xF7FF
                	orq	$0x800, %rcx            # imm = 0x800
                	movl	%ecx, (%rax)
@@ -58,13 +58,13 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x40, %ecx
+               	movl	$0x40, %edx
                	leaq	-0x8(%rbp), %rax
                	movzbq	0x1(%rax), %rax
                	andq	$0x1, %rax
                	shlq	$0x3, %rax
                	movq	%rax, %r10
-               	movq	%rcx, %rax
+               	movq	%rdx, %rax
                	subq	%r10, %rax
                	movslq	%eax, %rax
                	cmpq	$0x38, %rax
@@ -87,8 +87,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %eax
+               	movl	%ecx, %eax
                	sarq	$0xb, %rax
                	andq	$0x1, %rax
                	cmpq	$0x1, %rax
@@ -97,8 +96,7 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %eax
+               	movl	%ecx, %eax
                	sarq	$0xa, %rax
                	andq	$0x1, %rax
                	shlq	$0x3f, %rax
@@ -117,5 +115,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	jmp	<addr>

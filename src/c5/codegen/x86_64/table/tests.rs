@@ -115,6 +115,86 @@ fn double_precision_and_ext_moves() {
     // movzx / movsx keep the source and destination widths distinct.
     assert_eq!(enc("movzx", &[r(1, 8), m(2, 1)]), [0x48, 0x0f, 0xb6, 0x0a]); // movzx rcx, byte [rdx]
     assert_eq!(enc("movsxd", &[r(0, 8), r(1, 4)]), [0x48, 0x63, 0xc1]); // movsxd rax, ecx
+    // A byte source of spl/bpl/sil/dil takes a REX even though the operation
+    // width is that of the wider destination; without it the encoding names
+    // ah/ch/dh/bh instead.
+    assert_eq!(enc("movsx", &[r(4, 4), r(7, 1)]), [0x40, 0x0f, 0xbe, 0xe7]); // movsx esp, dil
+    assert_eq!(
+        enc("movzx", &[r(3, 2), r(5, 1)]),
+        [0x66, 0x40, 0x0f, 0xb6, 0xdd]
+    ); // movzx bx, bpl
+    assert_eq!(enc("movsx", &[r(4, 4), r(3, 1)]), [0x0f, 0xbe, 0xe3]); // movsx esp, bl: no REX
+}
+
+#[test]
+fn immediate_reduced_to_operation_width() {
+    // An immediate wider than the operation is reduced to the operation
+    // width, as both reference assemblers do (GNU as warns "shortened to";
+    // clang is silent). Form selection still sees the value as written, so a
+    // short imm8 form is chosen only when the untruncated value fits it.
+    // Every expected encoding below was taken from the reference assemblers.
+    let imm = |v: i64| Opnd::Imm(v);
+    // mov: no imm8 form, so the imm32/imm16/imm8 field truncates.
+    assert_eq!(
+        enc("mov", &[r(0, 4), imm(!0xfa1e_0ff3i64)]),
+        [0xb8, 0x0c, 0xf0, 0xe1, 0x05]
+    );
+    assert_eq!(
+        enc("mov", &[r(0, 2), imm(0x12345)]),
+        [0x66, 0xb8, 0x45, 0x23]
+    );
+    assert_eq!(enc("mov", &[r(0, 1), imm(0x1234)]), [0xb0, 0x34]);
+    // A 64-bit mov of a value beyond imm32 takes the imm64 (movabs) form.
+    assert_eq!(
+        enc("mov", &[r(0, 8), imm(0x1_ffff_ffff)]),
+        [0x48, 0xb8, 0xff, 0xff, 0xff, 0xff, 0x01, 0x00, 0x00, 0x00]
+    );
+    // The accumulator imm32 forms, truncated.
+    assert_eq!(
+        enc("add", &[r(0, 4), imm(0x1_ffff_ffff)]),
+        [0x05, 0xff, 0xff, 0xff, 0xff]
+    );
+    assert_eq!(
+        enc("and", &[r(0, 4), imm(!0xffi64)]),
+        [0x25, 0x00, 0xff, 0xff, 0xff]
+    );
+    // -256 fits imm32 under a 64-bit operation: no truncation, no movabs.
+    assert_eq!(
+        enc("and", &[r(0, 8), imm(!0xffi64)]),
+        [0x48, 0x25, 0x00, 0xff, 0xff, 0xff]
+    );
+    // -16 fits imm8, so the short form wins over the truncating imm32 one.
+    assert_eq!(enc("or", &[r(0, 4), imm(-16)]), [0x83, 0xc8, 0xf0]);
+    // 0x100000001 does not fit imm8 as written, so the imm32 form is chosen
+    // and only then truncated -- not the 3-byte `83 f8 01`.
+    assert_eq!(
+        enc("cmp", &[r(0, 4), imm(0x1_0000_0001)]),
+        [0x3d, 0x01, 0x00, 0x00, 0x00]
+    );
+    assert_eq!(
+        enc("sub", &[r(1, 4), imm(0x1_ffff_ff01)]),
+        [0x81, 0xe9, 0x01, 0xff, 0xff, 0xff]
+    );
+    // A byte operation reduces to one byte whatever the field carries, shift
+    // counts included. GNU as takes these (warning "shortened to") and the
+    // bytes below are its output; clang's integrated assembler is stricter
+    // and rejects the shift forms.
+    assert_eq!(enc("shl", &[r(0, 1), imm(0x1234)]), [0xc0, 0xe0, 0x34]);
+    assert_eq!(enc("rol", &[r(0, 1), imm(0x1ff)]), [0xc0, 0xc0, 0xff]);
+    assert_eq!(enc("add", &[r(0, 1), imm(0x1234)]), [0x04, 0x34]);
+}
+
+#[test]
+fn immediate_narrower_than_operation_is_rejected() {
+    // A field narrower than the operation still has to hold the value as
+    // written; both reference assemblers reject these rather than truncate.
+    let m = |n: &str| Mnem::from_name(n).unwrap();
+    // add r64, imm32 (sign-extended): no imm64 form to fall back on.
+    assert!(encode(m("add"), None, &[r(0, 8), Opnd::Imm(0x1_ffff_ffff)]).is_err());
+    // shl r32, imm8: the field is a byte whatever the operation width.
+    assert!(encode(m("shl"), None, &[r(0, 4), Opnd::Imm(0x101)]).is_err());
+    // push imm32 under the 64-bit default operation width.
+    assert!(encode(m("push"), None, &[Opnd::Imm(0x1_ffff_ffff)]).is_err());
 }
 
 #[test]
@@ -368,6 +448,236 @@ fn widened_catalogue_encodings() {
     );
 }
 
+// ------------------------------------------------------------------
+// `.code16` / `.code32`. Every expectation below is the byte string GNU as
+// 2.46.1 produces for the same AT&T source under the same `.code` directive.
+// ------------------------------------------------------------------
+
+fn enc_in(mode: Mode, addr: u8, mnem: &str, w: Option<u8>, ops: &[Opnd]) -> Vec<u8> {
+    let m = Mnem::from_name(mnem).unwrap_or_else(|| panic!("no such mnemonic `{mnem}`"));
+    encode_in(mode, addr, m, w, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
+}
+
+#[test]
+fn code16_operand_size_prefix_matches_gnu_as() {
+    let e = |mnem: &str, w: Option<u8>, ops: &[Opnd]| enc_in(Mode::Bits16, 2, mnem, w, ops);
+    // 16-bit is the default operand size; 32-bit takes the 66 prefix.
+    assert_eq!(e("mov", None, &[r(3, 2), r(0, 2)]), [0x89, 0xc3]);
+    assert_eq!(e("mov", None, &[r(3, 4), r(0, 4)]), [0x66, 0x89, 0xc3]);
+    assert_eq!(e("xor", None, &[r(3, 4), r(3, 4)]), [0x66, 0x31, 0xdb]);
+    assert_eq!(
+        e("mov", None, &[r(1, 2), Opnd::Imm(11)]),
+        [0xb9, 0x0b, 0x00]
+    );
+    assert_eq!(
+        e("shl", None, &[r(3, 4), Opnd::Imm(4)]),
+        [0x66, 0xc1, 0xe3, 0x04]
+    );
+    assert_eq!(
+        e("sub", None, &[r(4, 2), Opnd::Imm(44)]),
+        [0x83, 0xec, 0x2c]
+    );
+    // The stack and near-branch group's default is the mode's, not 64-bit.
+    assert_eq!(e("push", None, &[r(6, 2)]), [0x56]);
+    assert_eq!(e("push", None, &[r(6, 4)]), [0x66, 0x56]);
+    assert_eq!(e("pop", None, &[r(7, 2)]), [0x5f]);
+    // An operandless form takes the size its AT&T suffix names.
+    assert_eq!(e("ret", None, &[]), [0xc3]);
+    assert_eq!(e("ret", Some(2), &[]), [0xc3]);
+    assert_eq!(e("ret", Some(4), &[]), [0x66, 0xc3]);
+    // An extending move's operand size is its destination's.
+    assert_eq!(
+        e("movzx", Some(4), &[r(0, 4), r(2, 1)]),
+        [0x66, 0x0f, 0xb6, 0xc2]
+    );
+    assert_eq!(e("movzx", Some(2), &[r(0, 2), r(0, 1)]), [0x0f, 0xb6, 0xc0]);
+    assert_eq!(
+        e("movzx", Some(4), &[r(4, 4), r(4, 2)]),
+        [0x66, 0x0f, 0xb7, 0xe4]
+    );
+    // `B8+rd mov` is a width class the catalogue splits by immediate width;
+    // the 32-bit member still takes the prefix outside 32-bit mode. The 8-bit
+    // member (`B0+rb`) is its own opcode and never does.
+    assert_eq!(
+        e("mov", None, &[r(0, 4), Opnd::Imm(0x1234_5678)]),
+        [0x66, 0xb8, 0x78, 0x56, 0x34, 0x12]
+    );
+    assert_eq!(
+        e("mov", None, &[r(3, 4), Opnd::Imm(0x1122_3344)]),
+        [0x66, 0xbb, 0x44, 0x33, 0x22, 0x11]
+    );
+    assert_eq!(e("mov", None, &[r(0, 2), Opnd::Imm(7)]), [0xb8, 0x07, 0x00]);
+    assert_eq!(e("mov", None, &[r(0, 1), Opnd::Imm(7)]), [0xb0, 0x07]);
+    // A form whose operand size is baked into the opcode takes no prefix.
+    assert_eq!(e("lldt", None, &[r(0, 2)]), [0x0f, 0x00, 0xd0]);
+    assert_eq!(e("in", None, &[r(0, 2), r(2, 2)]), [0xed]);
+    assert_eq!(e("in", None, &[r(0, 4), r(2, 2)]), [0x66, 0xed]);
+    // The three-operand imul the AT&T two-operand spelling folds into.
+    assert_eq!(
+        e("imul", None, &[r(0, 4), r(0, 4), Opnd::Imm(0x0101_0101)]),
+        [0x66, 0x69, 0xc0, 0x01, 0x01, 0x01, 0x01]
+    );
+    // A descriptor-table op reads `m16&16` / `m16&32` / `m16&64`; the second
+    // element's width takes the prefix. `clflush` and the save / restore area
+    // ops ignore their operand's width in every mode.
+    assert_eq!(e("lgdt", Some(4), &[m(3, 4)]), [0x66, 0x0f, 0x01, 0x17]);
+    assert_eq!(e("lgdt", Some(2), &[m(3, 2)]), [0x0f, 0x01, 0x17]);
+    assert_eq!(e("lidt", Some(4), &[m(3, 4)]), [0x66, 0x0f, 0x01, 0x1f]);
+    assert_eq!(e("clflush", None, &[m(3, 2)]), [0x0f, 0xae, 0x3f]);
+}
+
+#[test]
+fn code16_addressing_matches_gnu_as() {
+    let e = |addr: u8, mnem: &str, ops: &[Opnd]| enc_in(Mode::Bits16, addr, mnem, None, ops);
+    // The 16-bit r/m forms: base and index are limited to bx / bp with si / di,
+    // and there is no SIB byte.
+    assert_eq!(e(2, "mov", &[r(0, 2), m(3, 2)]), [0x8b, 0x07]);
+    assert_eq!(e(2, "mov", &[r(0, 2), m(6, 2)]), [0x8b, 0x04]);
+    assert_eq!(e(2, "mov", &[r(0, 2), m(7, 2)]), [0x8b, 0x05]);
+    // bp has no no-displacement form: rm=110 with mod=00 is the base-less one.
+    assert_eq!(e(2, "mov", &[r(0, 2), m(5, 2)]), [0x8b, 0x46, 0x00]);
+    assert_eq!(e(2, "mov", &[r(0, 2), msib(3, 6, 1, 0, 2)]), [0x8b, 0x00]);
+    assert_eq!(e(2, "mov", &[r(0, 2), msib(3, 7, 1, 0, 2)]), [0x8b, 0x01]);
+    assert_eq!(e(2, "mov", &[r(0, 2), msib(5, 6, 1, 0, 2)]), [0x8b, 0x02]);
+    assert_eq!(e(2, "mov", &[r(0, 2), msib(5, 7, 1, 0, 2)]), [0x8b, 0x03]);
+    assert_eq!(e(2, "mov", &[r(0, 2), md(3, 4, 2)]), [0x8b, 0x47, 0x04]);
+    assert_eq!(
+        e(2, "mov", &[r(0, 2), md(3, 0x1234, 2)]),
+        [0x8b, 0x87, 0x34, 0x12]
+    );
+    assert_eq!(
+        e(2, "mov", &[r(0, 2), msib(5, 6, 1, 4, 2)]),
+        [0x8b, 0x42, 0x04]
+    );
+    assert_eq!(
+        e(2, "mov", &[r(0, 2), md(7, 0x100, 2)]),
+        [0x8b, 0x85, 0x00, 0x01]
+    );
+    // A base-less absolute address is rm=110 plus disp16.
+    assert_eq!(
+        e(
+            2,
+            "mov",
+            &[
+                r(3, 2),
+                Opnd::AbsMem {
+                    disp: 0x1234,
+                    width: 2
+                }
+            ]
+        ),
+        [0x8b, 0x1e, 0x34, 0x12]
+    );
+    // A 32-bit address takes the 67 prefix and the 32-bit r/m forms; the 67
+    // precedes the operand-size 66.
+    assert_eq!(
+        e(4, "mov", &[r(7, 2), md(4, 0x44, 2)]),
+        [0x67, 0x8b, 0x7c, 0x24, 0x44]
+    );
+    assert_eq!(e(4, "mov", &[r(0, 4), m(3, 4)]), [0x67, 0x66, 0x8b, 0x03]);
+    assert_eq!(
+        e(4, "mov", &[r(0, 4), msib(0, 3, 4, 0, 4)]),
+        [0x67, 0x66, 0x8b, 0x04, 0x98]
+    );
+}
+
+#[test]
+fn code32_matches_gnu_as() {
+    let e = |addr: u8, mnem: &str, w: Option<u8>, ops: &[Opnd]| {
+        enc_in(Mode::Bits32, addr, mnem, w, ops)
+    };
+    // 32-bit is the default operand size; 16-bit takes the 66 prefix.
+    assert_eq!(e(4, "mov", None, &[r(3, 4), r(0, 4)]), [0x89, 0xc3]);
+    assert_eq!(e(4, "mov", None, &[r(3, 2), r(0, 2)]), [0x66, 0x89, 0xc3]);
+    assert_eq!(e(4, "push", None, &[r(6, 4)]), [0x56]);
+    assert_eq!(e(4, "push", None, &[r(6, 2)]), [0x66, 0x56]);
+    assert_eq!(e(4, "pop", None, &[r(7, 4)]), [0x5f]);
+    assert_eq!(e(4, "ret", None, &[]), [0xc3]);
+    assert_eq!(e(4, "ret", Some(2), &[]), [0x66, 0xc3]);
+    assert_eq!(
+        e(4, "movzx", Some(4), &[r(0, 4), r(0, 2)]),
+        [0x0f, 0xb7, 0xc0]
+    );
+    assert_eq!(
+        e(4, "movzx", Some(2), &[r(0, 2), r(0, 1)]),
+        [0x66, 0x0f, 0xb6, 0xc0]
+    );
+    // The `B8+rd mov` class the other way round: 32 is the default here.
+    assert_eq!(
+        e(4, "mov", None, &[r(0, 4), Opnd::Imm(0x1234_5678)]),
+        [0xb8, 0x78, 0x56, 0x34, 0x12]
+    );
+    assert_eq!(
+        e(4, "mov", None, &[r(0, 2), Opnd::Imm(0x1234)]),
+        [0x66, 0xb8, 0x34, 0x12]
+    );
+    assert_eq!(e(4, "lldt", None, &[r(0, 2)]), [0x0f, 0x00, 0xd0]);
+    assert_eq!(e(4, "lgdt", Some(4), &[m(3, 4)]), [0x0f, 0x01, 0x13]);
+    assert_eq!(e(4, "lgdt", Some(2), &[m(3, 2)]), [0x66, 0x0f, 0x01, 0x13]);
+    // A base-less absolute address is rm=101 plus disp32; only long mode reads
+    // that as RIP-relative and needs the base-less SIB.
+    assert_eq!(
+        e(
+            4,
+            "mov",
+            None,
+            &[
+                r(3, 4),
+                Opnd::AbsMem {
+                    disp: 0x1234_5678,
+                    width: 4
+                }
+            ]
+        ),
+        [0x8b, 0x1d, 0x78, 0x56, 0x34, 0x12]
+    );
+    assert_eq!(
+        encode(
+            Mnem::Mov,
+            None,
+            &[
+                r(3, 4),
+                Opnd::AbsMem {
+                    disp: 0x1234_5678,
+                    width: 4
+                }
+            ]
+        )
+        .unwrap(),
+        [0x8b, 0x1c, 0x25, 0x78, 0x56, 0x34, 0x12]
+    );
+    assert_eq!(
+        e(4, "mov", None, &[r(0, 4), md(4, 8, 4)]),
+        [0x8b, 0x44, 0x24, 0x08]
+    );
+    // A 16-bit address takes the 67 prefix and the 16-bit r/m forms.
+    assert_eq!(
+        e(2, "mov", None, &[r(0, 2), m(3, 2)]),
+        [0x67, 0x66, 0x8b, 0x07]
+    );
+}
+
+#[test]
+fn modes_without_rex_reject_long_mode_forms() {
+    let mv = Mnem::Mov;
+    for mode in [Mode::Bits16, Mode::Bits32] {
+        let addr = mode.addrsize();
+        // 64-bit operands, r8..r15 and RIP-relative addressing all need REX or
+        // long-mode ModRM, which these modes have not.
+        assert!(encode_in(mode, addr, mv, None, &[r(3, 8), r(0, 8)]).is_err());
+        assert!(encode_in(mode, addr, mv, None, &[r(8, 4), r(0, 4)]).is_err());
+        assert!(encode_in(mode, addr, mv, None, &[r(0, 4), mrip(0, 4)]).is_err());
+        // The mode's two address sizes are the only encodable ones.
+        assert!(encode_in(mode, 8, mv, None, &[r(0, 4), m(3, 4)]).is_err());
+    }
+    // 16-bit addressing has no encoding in long mode.
+    assert!(encode_in(Mode::Bits64, 2, mv, None, &[r(0, 4), m(3, 4)]).is_err());
+    // Only bx / bp with si / di form a 16-bit address.
+    assert!(encode_in(Mode::Bits16, 2, mv, None, &[r(0, 2), m(0, 2)]).is_err());
+    assert!(encode_in(Mode::Bits16, 2, mv, None, &[r(0, 2), msib(3, 5, 1, 0, 2)]).is_err());
+    assert!(encode_in(Mode::Bits16, 2, mv, None, &[r(0, 2), msib(3, 6, 2, 0, 2)]).is_err());
+}
+
 #[test]
 fn catalogue_is_sorted() {
     // encode() binary-searches the catalogue by mnemonic, which is correct only
@@ -427,6 +737,10 @@ mod differential {
         for o in ops {
             parts.push(match *o {
                 Opnd::Reg { num, width } => String::from(rname(num, width)),
+                // ModRM field value 4..8, the legacy high-byte registers.
+                Opnd::HighByteReg(num) => {
+                    String::from(crate::c5::codegen::x86_64::asm::GPR_HB[num as usize - 4])
+                }
                 Opnd::Mem {
                     base,
                     index,
@@ -452,6 +766,25 @@ mod differential {
                         alloc::format!("{sz} ptr [{b}{idx} {sign} {}]", disp.unsigned_abs())
                     }
                 }
+                Opnd::IndexMem {
+                    index,
+                    scale,
+                    disp,
+                    width,
+                } => {
+                    let sz = match width {
+                        1 => "byte",
+                        2 => "word",
+                        4 => "dword",
+                        _ => "qword",
+                    };
+                    let sign = if disp < 0 { "-" } else { "+" };
+                    alloc::format!(
+                        "{sz} ptr [{}*{scale} {sign} {}]",
+                        REG64[index as usize],
+                        disp.unsigned_abs()
+                    )
+                }
                 Opnd::RipRel { disp, width } => {
                     let sz = match width {
                         1 => "byte",
@@ -461,6 +794,15 @@ mod differential {
                     };
                     let sign = if disp < 0 { "-" } else { "+" };
                     alloc::format!("{sz} ptr [rip {sign} {}]", disp.unsigned_abs())
+                }
+                Opnd::AbsMem { disp, width } => {
+                    let sz = match width {
+                        1 => "byte",
+                        2 => "word",
+                        4 => "dword",
+                        _ => "qword",
+                    };
+                    alloc::format!("{sz} ptr [{disp}]")
                 }
                 Opnd::Imm(v) => alloc::format!("{v}"),
             });
@@ -472,13 +814,72 @@ mod differential {
         }
     }
 
-    /// Run objdump on a `.byte` blob and return the single normalized
-    /// (mnemonic, operands) it decodes to, or an error string.
-    fn disasm(bytes: &[u8]) -> Result<(String, Vec<String>), String> {
+    /// A temp stem unique to this invocation. A content-derived name collides
+    /// whenever two concurrent callers assemble the same text, which alias
+    /// mnemonics guarantee (`sal r9b, cl` and `shl r9b, cl` are one encoding);
+    /// the loser then reads a file the winner has already removed.
+    fn temp_stem(prefix: &str) -> String {
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        alloc::format!("badc-{prefix}-{}-{n}", std::process::id())
+    }
+
+    /// Assemble `src`, disassemble the result, and return the single
+    /// normalized (mnemonic, operands) it decodes to. Errors carry the tool
+    /// invocation and its output so a CI log is diagnosable on its own.
+    fn assemble_and_decode(src: &str, prefix: &str) -> Result<(String, Vec<String>), String> {
         let dir = std::env::temp_dir();
-        let stem = alloc::format!("badc-asm-{}", bytes_hash(bytes));
+        let stem = temp_stem(prefix);
         let s = dir.join(alloc::format!("{stem}.s"));
         let o = dir.join(alloc::format!("{stem}.o"));
+        let clean = |s: &std::path::Path, o: &std::path::Path| {
+            let _ = std::fs::remove_file(s);
+            let _ = std::fs::remove_file(o);
+        };
+        std::fs::write(&s, src).map_err(|e| alloc::format!("write {}: {e}", s.display()))?;
+        let asm_cmd = alloc::format!(
+            "clang --target=x86_64-linux-gnu -c {} -o {}",
+            s.display(),
+            o.display()
+        );
+        let out = Command::new("clang")
+            .args(["--target=x86_64-linux-gnu", "-c"])
+            .arg(&s)
+            .arg("-o")
+            .arg(&o)
+            .output()
+            .map_err(|e| alloc::format!("spawn `{asm_cmd}`: {e}"))?;
+        if !out.status.success() {
+            clean(&s, &o);
+            return Err(alloc::format!(
+                "assemble failed ({}) `{asm_cmd}` src={src:?} stderr={:?}",
+                out.status,
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        let dis_cmd = alloc::format!("objdump -d --no-show-raw-insn {}", o.display());
+        let dis = Command::new("objdump")
+            .args(["-d", "--no-show-raw-insn"])
+            .arg(&o)
+            .output()
+            .map_err(|e| alloc::format!("spawn `{dis_cmd}`: {e}"))?;
+        clean(&s, &o);
+        let text = String::from_utf8_lossy(&dis.stdout);
+        let mut insns: Vec<_> = text.lines().filter_map(insn_body).map(normalize).collect();
+        if dis.status.success() && insns.len() == 1 {
+            return Ok(insns.pop().unwrap());
+        }
+        Err(alloc::format!(
+            "decoded to {} instructions ({}) `{dis_cmd}` src={src:?} stdout={:?} stderr={:?}",
+            insns.len(),
+            dis.status,
+            text.trim(),
+            String::from_utf8_lossy(&dis.stderr).trim()
+        ))
+    }
+
+    /// Decode an encoder-produced byte string back to an instruction.
+    fn disasm(bytes: &[u8]) -> Result<(String, Vec<String>), String> {
         let src = alloc::format!(
             ".text\n.byte {}\n",
             bytes
@@ -487,31 +888,7 @@ mod differential {
                 .collect::<Vec<_>>()
                 .join(",")
         );
-        std::fs::write(&s, src).map_err(|e| e.to_string())?;
-        let out = Command::new("clang")
-            .args(["--target=x86_64-linux-gnu", "-c"])
-            .arg(&s)
-            .arg("-o")
-            .arg(&o)
-            .output()
-            .map_err(|e| e.to_string())?;
-        if !out.status.success() {
-            let _ = std::fs::remove_file(&s);
-            return Err(String::from("assemble failed"));
-        }
-        let dis = Command::new("objdump")
-            .args(["-d", "--no-show-raw-insn"])
-            .arg(&o)
-            .output()
-            .map_err(|e| e.to_string())?;
-        let _ = std::fs::remove_file(&s);
-        let _ = std::fs::remove_file(&o);
-        let text = String::from_utf8_lossy(&dis.stdout);
-        let mut insns: Vec<_> = text.lines().filter_map(insn_body).map(normalize).collect();
-        match insns.len() {
-            1 => Ok(insns.pop().unwrap()),
-            n => Err(alloc::format!("decoded to {n} instructions")),
-        }
+        assemble_and_decode(&src, "asm")
     }
 
     /// An objdump disassembly line begins with a whitespace-indented hex
@@ -529,15 +906,6 @@ mod differential {
             return None;
         }
         Some(&line[tab + 1..])
-    }
-
-    fn bytes_hash(b: &[u8]) -> u64 {
-        // A stable non-crypto hash so concurrent cases use distinct temp files.
-        let mut h = 0xcbf29ce484222325u64;
-        for &x in b {
-            h = (h ^ x as u64).wrapping_mul(0x100000001b3);
-        }
-        h
     }
 
     /// Normalize an AT&T disassembly to (base-mnemonic, operand tokens) with
@@ -585,43 +953,20 @@ mod differential {
         (mn, ops)
     }
 
+    /// The instruction the assembler produces for a case, i.e. the intent the
+    /// encoder must match. `None` means the assembler rejected the text, which
+    /// the caller counts as a skip.
     fn clang_intent(itxt: &str) -> Option<(String, Vec<String>)> {
-        let dir = std::env::temp_dir();
-        let stem = alloc::format!("badc-int-{:x}", bytes_hash(itxt.as_bytes()));
-        let s = dir.join(alloc::format!("{stem}.s"));
-        let o = dir.join(alloc::format!("{stem}.o"));
-        std::fs::write(
-            &s,
-            alloc::format!(".intel_syntax noprefix\n.text\n{itxt}\n"),
-        )
-        .ok()?;
-        let out = Command::new("clang")
-            .args(["--target=x86_64-linux-gnu", "-c"])
-            .arg(&s)
-            .arg("-o")
-            .arg(&o)
-            .output()
-            .ok()?;
-        if !out.status.success() {
-            if std::env::var("BADC_FUZZ_DEBUG").is_ok() {
-                std::eprintln!(
-                    "intent asm fail [{itxt}]: {}",
-                    String::from_utf8_lossy(&out.stderr)
-                );
+        let src = alloc::format!(".intel_syntax noprefix\n.text\n{itxt}\n");
+        match assemble_and_decode(&src, "int") {
+            Ok(v) => Some(v),
+            Err(e) => {
+                if std::env::var("BADC_FUZZ_DEBUG").is_ok() {
+                    std::eprintln!("intent asm fail [{itxt}]: {e}");
+                }
+                None
             }
-            let _ = std::fs::remove_file(&s);
-            return None;
         }
-        let dis = Command::new("objdump")
-            .args(["-d", "--no-show-raw-insn"])
-            .arg(&o)
-            .output()
-            .ok()?;
-        let _ = std::fs::remove_file(&s);
-        let _ = std::fs::remove_file(&o);
-        let text = String::from_utf8_lossy(&dis.stdout);
-        let mut insns: Vec<_> = text.lines().filter_map(insn_body).map(normalize).collect();
-        (insns.len() == 1).then(|| insns.pop().unwrap())
     }
 
     /// Outcome tallies of a differential run. The contract is *never wrong,
@@ -744,6 +1089,33 @@ mod differential {
         }
     }
 
+    /// Effective operation width of an instantiation: the widest register /
+    /// memory slot (what `op_width` will see). A byte-only form sits in the
+    /// fixed-width bucket, so `opw` alone is not it.
+    fn effective_width(f: &Form, opw: u8) -> u8 {
+        f.ops
+            .iter()
+            .filter_map(|&p| match p {
+                OpPat::Reg(w) | OpPat::Rm(w) | OpPat::Mem(w) | OpPat::Fixed(_, w) => wbytes(w, opw),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(opw)
+    }
+
+    /// A random immediate that the effective operand width can express. An
+    /// out-of-range value is not a catalogue gap: the encoder refuses to
+    /// truncate (the assembler silently does), so drawing one only removes the
+    /// case from coverage and inflates the gap tally.
+    fn rnd_imm(eff: u8, raw: u64) -> Opnd {
+        let span: i64 = match eff {
+            1 => 0x100,
+            2 => 0x10000,
+            _ => 0x3000,
+        };
+        Opnd::Imm((raw % span as u64) as i64 - span / 2)
+    }
+
     /// Synthesize differential cases for one form at one operation width.
     /// Each slot gets a small choice set (low / high registers, a register
     /// and a memory shape for r/m, a small and a wide immediate); the cases
@@ -752,18 +1124,7 @@ mod differential {
     /// target at the assembler level but a raw displacement here, so the
     /// golden tests lock them instead.
     fn cases_for_form(f: &Form, opw: u8, out: &mut Vec<(&'static str, Vec<Opnd>)>) {
-        // Effective operation width of this instantiation: the widest
-        // register / memory slot (what `op_width` will see). A byte-only
-        // form sits in the fixed-width bucket, so `opw` alone is not it.
-        let eff = f
-            .ops
-            .iter()
-            .filter_map(|&p| match p {
-                OpPat::Reg(w) | OpPat::Rm(w) | OpPat::Mem(w) | OpPat::Fixed(_, w) => wbytes(w, opw),
-                _ => None,
-            })
-            .max()
-            .unwrap_or(opw);
+        let eff = effective_width(f, opw);
         let mut slots: Vec<Vec<Opnd>> = Vec::new();
         for &p in f.ops {
             let choices = match p {
@@ -898,7 +1259,12 @@ mod differential {
         if !enabled() {
             return;
         }
-        let mut st = 0x0123_4567_89ab_cdefu64;
+        // `BADC_FUZZ_SEED` re-runs the same generator on a different draw; the
+        // default keeps the case set reproducible.
+        let mut st = match std::env::var("BADC_FUZZ_SEED") {
+            Ok(v) => v.parse().unwrap_or(0x0123_4567_89ab_cdefu64).max(1),
+            Err(_) => 0x0123_4567_89ab_cdefu64,
+        };
         let mut next = || {
             st ^= st << 13;
             st ^= st >> 7;
@@ -911,6 +1277,7 @@ mod differential {
             let f = &forms[(next() as usize) % forms.len()];
             let widths = form_widths(f);
             let opw = widths[(next() as usize) % widths.len()];
+            let eff = effective_width(f, opw);
             let mut ops = Vec::new();
             for &p in f.ops {
                 let rnd_mem = |wb: u8, next: &mut dyn FnMut() -> u64| -> Opnd {
@@ -956,7 +1323,7 @@ mod differential {
                         None => continue 'draw,
                     },
                     OpPat::Imm(ImmC::One) => Opnd::Imm(1),
-                    OpPat::Imm(_) => Opnd::Imm((next() as i32 % 0x3000) as i64 - 0x1000),
+                    OpPat::Imm(_) => rnd_imm(eff, next()),
                 };
                 ops.push(o);
             }
@@ -974,11 +1341,52 @@ mod differential {
             t.skip,
             t.gaps.iter().take(3).collect::<Vec<_>>()
         );
-        // Wrong bytes are the hard failure; a gap (a valid form the catalogue
-        // does not yet cover) is reported but tolerated by the fuzzer.
         assert_eq!(
             t.bad, 0,
             "fuzzed table encodings disagree with the assembler"
+        );
+        // The generator draws catalogue forms with operands each form admits,
+        // so every case must encode. A gap means the draw is unrepresentable
+        // (it once fed out-of-range immediates to byte operands) or the
+        // catalogue row is unreachable.
+        assert_eq!(t.gap, 0, "fuzzed case not encodable: {:?}", t.gaps);
+    }
+
+    /// The differential tests run concurrently and alias mnemonics make them
+    /// hand identical bytes to `disasm` (`sal r9b, cl` and `shl r9b, cl` are
+    /// one encoding), so the helper must not share temp files between calls.
+    #[test]
+    fn concurrent_disasm_is_isolated() {
+        if !enabled() {
+            return;
+        }
+        assert_eq!(
+            super::enc("sal", &[r(9, 1), r(1, 1)]),
+            super::enc("shl", &[r(9, 1), r(1, 1)])
+        );
+        let bytes = super::enc("sal", &[r(9, 1), r(1, 1)]);
+        let errs = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut threads = Vec::new();
+        for _ in 0..4 {
+            let (bytes, errs) = (bytes.clone(), errs.clone());
+            threads.push(std::thread::spawn(move || {
+                for _ in 0..100 {
+                    match disasm(&bytes) {
+                        Ok((mn, _)) => assert_eq!(mn, "shl"),
+                        Err(e) => errs.lock().unwrap().push(e),
+                    }
+                }
+            }));
+        }
+        for t in threads {
+            t.join().unwrap();
+        }
+        let errs = errs.lock().unwrap();
+        assert!(
+            errs.is_empty(),
+            "{} of 400 concurrent disasm calls failed, e.g. {:?}",
+            errs.len(),
+            errs.first()
         );
     }
 }

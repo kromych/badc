@@ -13,7 +13,7 @@ Disassembly of section .text:
 <trigger>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
+               	movl	$0x7, %esi
                	movl	%esi, 0x200(%rdi)
                	xorl	%eax, %eax
                	callq	<addr>

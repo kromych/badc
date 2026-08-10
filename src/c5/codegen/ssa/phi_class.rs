@@ -22,7 +22,7 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{FunctionSsa, Inst, NO_VALUE, ValueId};
-use super::liveness::Liveness;
+use super::liveness::Interference;
 
 /// Union-find over `ValueId`s. Two values share a class when a chain
 /// of non-interfering phi merges connects them.
@@ -36,12 +36,12 @@ pub(crate) struct PhiClasses {
 #[allow(dead_code)]
 impl PhiClasses {
     /// Build phi-congruence classes for `func` under the interference
-    /// relation in `live`. Each phi result is merged with each of its
-    /// operands when, and only when, the combined class stays
-    /// interference-free. Processing preserves the invariant that every
-    /// class is internally interference-free, so the allocator may
-    /// assign one location per class.
-    pub(crate) fn build(func: &FunctionSsa, live: &Liveness) -> Self {
+    /// relation `ig` holds over individual values. Each phi result is
+    /// merged with each of its operands when, and only when, the combined
+    /// class stays interference-free. Processing preserves the invariant
+    /// that every class is internally interference-free, so the allocator
+    /// may assign one location per class.
+    pub(crate) fn build(func: &FunctionSsa, ig: &Interference) -> Self {
         let n = func.insts.len();
         let mut classes = Self {
             parent: (0..n as ValueId).collect(),
@@ -81,9 +81,6 @@ impl PhiClasses {
                 {
                     continue;
                 }
-                if classes_interfere(func, live, &members[rr as usize], &members[rs as usize]) {
-                    continue;
-                }
                 // Attach the smaller member list to the larger to keep
                 // the union-find shallow. The retained root owns the
                 // combined member list.
@@ -92,6 +89,9 @@ impl PhiClasses {
                 } else {
                     (rs, rr)
                 };
+                if classes_interfere(ig, &mut classes, &members[drop as usize], keep) {
+                    continue;
+                }
                 let moved = core::mem::take(&mut members[drop as usize]);
                 members[keep as usize].extend(moved);
                 classes.parent[drop as usize] = keep;
@@ -124,11 +124,23 @@ impl PhiClasses {
     }
 }
 
-/// Whether any member of `a` interferes with any member of `b`.
-fn classes_interfere(func: &FunctionSsa, live: &Liveness, a: &[ValueId], b: &[ValueId]) -> bool {
+/// Whether any member of `a` interferes with any member of the class
+/// rooted at `b_root`.
+///
+/// A value's row in `ig` is the set of values it interferes with, so the
+/// test costs the adjacency of `a` rather than the product of the two
+/// classes. Callers pass the smaller class as `a`; union by size then puts
+/// each value on the scanned side O(log n) times.
+fn classes_interfere(
+    ig: &Interference,
+    classes: &mut PhiClasses,
+    a: &[ValueId],
+    b_root: ValueId,
+) -> bool {
     for &x in a {
-        for &y in b {
-            if live.interfere(func, x, y) {
+        for i in 0..ig.degree(x) {
+            let nb = ig.neighbors(x)[i];
+            if classes.find(nb) == b_root {
                 return true;
             }
         }
@@ -143,6 +155,13 @@ mod tests {
     use alloc::string::String;
     use alloc::vec;
 
+    /// Interference over individual values, what `build` consumes.
+    fn value_interference(func: &FunctionSsa) -> Interference {
+        let live = super::super::liveness::Liveness::compute(func);
+        let ids: Vec<ValueId> = (0..func.insts.len() as ValueId).collect();
+        live.interference(func, &ids)
+    }
+
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
             name: String::new(),
@@ -154,6 +173,10 @@ mod tests {
             is_inline: false,
             is_always_inline: false,
             is_naked: false,
+            section: None,
+            is_weak: false,
+            is_internal: false,
+            const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
@@ -165,11 +188,16 @@ mod tests {
             ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            label_data_relocs: Vec::new(),
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
@@ -190,8 +218,7 @@ mod tests {
             exit_acc: 1,
         }];
         let func = func_with(insts, blocks);
-        let live = Liveness::compute(&func);
-        let mut classes = PhiClasses::build(&func, &live);
+        let mut classes = PhiClasses::build(&func, &value_interference(&func));
         assert_eq!(classes.find(0), 0);
         assert_eq!(classes.find(1), 1);
     }
@@ -244,8 +271,7 @@ mod tests {
             },
         ];
         let func = func_with(insts, blocks);
-        let live = Liveness::compute(&func);
-        let mut classes = PhiClasses::build(&func, &live);
+        let mut classes = PhiClasses::build(&func, &value_interference(&func));
         let root = classes.find(3);
         assert_eq!(classes.find(1), root, "v1 operand must join the phi class");
         assert_eq!(classes.find(2), root, "v2 operand must join the phi class");
@@ -301,8 +327,7 @@ mod tests {
             },
         ];
         let func = func_with(insts, blocks);
-        let live = Liveness::compute(&func);
-        let mut classes = PhiClasses::build(&func, &live);
+        let mut classes = PhiClasses::build(&func, &value_interference(&func));
         let root = classes.find(3);
         // The FP-classed operand v1 joins the FP phi class.
         assert_eq!(
@@ -368,8 +393,7 @@ mod tests {
             },
         ];
         let func = func_with(insts, blocks);
-        let live = Liveness::compute(&func);
-        let mut classes = PhiClasses::build(&func, &live);
+        let mut classes = PhiClasses::build(&func, &value_interference(&func));
         // v1 is live past v2's definition (v3 reads both), so v1 and
         // v2 interfere and must occupy distinct classes.
         assert_ne!(
@@ -450,8 +474,8 @@ mod tests {
             },
         ];
         let func = func_with(insts, blocks);
-        let live = Liveness::compute(&func);
-        let mut classes = PhiClasses::build(&func, &live);
+        let live = super::super::liveness::Liveness::compute(&func);
+        let mut classes = PhiClasses::build(&func, &value_interference(&func));
         // Core invariant: every congruence class is interference-free.
         let n = func.insts.len();
         for a in 0..n as ValueId {

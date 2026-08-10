@@ -21,14 +21,151 @@ use super::super::ir::LoadKind;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_bool_ty, is_struct_ty, is_unsigned_ty, load_op_for, struct_ptr_depth};
+use super::types::{is_bool_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, load_op_for};
+
+#[cfg(test)]
+thread_local! {
+    /// Symbols the scope unwinds examined, and the symbol-table entries
+    /// a full-table scan per scope exit would have examined. Read by the
+    /// scaling test, which bounds the first against the second.
+    pub(crate) static SCOPE_UNWIND: core::cell::Cell<(usize, usize)> =
+        const { core::cell::Cell::new((0, 0)) };
+}
+
+#[cfg(test)]
+fn note_scope_unwind(examined: usize, table: usize) {
+    SCOPE_UNWIND.with(|c| {
+        let (a, b) = c.get();
+        c.set((a + examined, b + table));
+    });
+}
+
+#[cfg(not(test))]
+fn note_scope_unwind(_examined: usize, _table: usize) {}
 
 impl Compiler {
     // ---- Lexer plumbing ----
 
     pub(super) fn next(&mut self) -> Result<(), C5Error> {
+        let prev_tk = self.lex.tk;
+        let pre_len = self.data.len() as i64;
         self.lex
-            .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)
+            .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)?;
+        // Every string literal interns its bytes at lex time (expression
+        // operands, initializer elements, attribute payloads alike), so
+        // record the object boundary here once. An adjacent part continues
+        // the previous literal (C99 6.4.5 concatenation) -- same object,
+        // no new boundary. Static DCE needs the boundary to drop a dead
+        // literal instead of gluing it to its neighbors.
+        if self.lex.tk == '"' && prev_tk != '"' {
+            self.data_object_starts.push(self.lex.ival);
+            // A literal's storage is immutable (C99 6.4.5p6), so record
+            // its byte range for the const-data load fold. Gated on the
+            // bytes being freshly appended: a snapshot restore re-lexes
+            // a literal whose bytes are already interned, and its range
+            // (if any survived the restore) is already recorded.
+            if self.lex.ival >= pre_len && self.lex.ival < self.data.len() as i64 {
+                self.const_data_ranges
+                    .push((self.lex.ival, self.data.len() as i64));
+            }
+        } else if self.lex.tk == '"'
+            && prev_tk == '"'
+            && let Some(last) = self.const_data_ranges.last_mut()
+            && last.1 == pre_len
+        {
+            // Concatenated part: the same object grew by [pre_len, len).
+            last.1 = self.data.len() as i64;
+        }
+        Ok(())
+    }
+
+    /// Append a narrow literal's terminating NUL and extend its
+    /// recorded const range over it, when the NUL is contiguous with
+    /// that range.
+    pub(super) fn push_literal_nul(&mut self) {
+        self.data.push(0);
+        if let Some(last) = self.const_data_ranges.last_mut()
+            && last.1 + 1 == self.data.len() as i64
+        {
+            last.1 += 1;
+        }
+    }
+
+    /// Restore a lexer snapshot. A snapshot taken while the current
+    /// token was a string literal restores `ival` to the literal's data
+    /// offset without re-lexing it, so the boundary a truncation popped
+    /// must be re-recorded here; the resuming parse consumes the
+    /// literal's bytes as an object again.
+    pub(super) fn restore_lex(&mut self, snap: crate::c5::lexer::LexerSnapshot) {
+        self.lex.restore(snap);
+        if self.lex.tk == '"' {
+            self.data_object_starts.push(self.lex.ival);
+        }
+    }
+
+    /// Truncate the data segment (a speculative parse is being undone)
+    /// and drop everything recorded past the new end: later growth
+    /// reuses those offsets for unrelated bytes, so a stale literal
+    /// boundary could split a live object, a stale padding range or
+    /// alignment mark would describe live bytes as padding, and a
+    /// staged-literal symbol left anchored there would claim storage
+    /// an unrelated object owns.
+    ///
+    /// Every entry records an offset at or near the data length at its
+    /// push, so entries at or past `len` form a suffix; dropping them
+    /// from the tail costs what the undone parse appended, keeping a
+    /// checkpoint/restore-heavy initializer linear in its element count
+    /// (a full-vector sweep per restore was quadratic).
+    pub(super) fn truncate_data(&mut self, len: usize) {
+        self.data.truncate(len);
+        let end = len as i64;
+        while self.data_object_starts.last().is_some_and(|&s| s >= end) {
+            self.data_object_starts.pop();
+        }
+        while self.data_pad_ranges.last().is_some_and(|r| r.0 >= end) {
+            self.data_pad_ranges.pop();
+        }
+        if let Some(last) = self.data_pad_ranges.last_mut() {
+            last.1 = last.1.min(end);
+            if last.0 >= last.1 {
+                self.data_pad_ranges.pop();
+            }
+        }
+        while self.const_data_ranges.last().is_some_and(|r| r.0 >= end) {
+            self.const_data_ranges.pop();
+        }
+        if let Some(last) = self.const_data_ranges.last_mut() {
+            last.1 = last.1.min(end);
+            if last.0 >= last.1 {
+                self.const_data_ranges.pop();
+            }
+        }
+        while self
+            .data_align_marks
+            .last()
+            .is_some_and(|&(off, _)| off >= end)
+        {
+            self.data_align_marks.pop();
+        }
+        while let Some(&(off, idx)) = self.staged_literal_syms.last() {
+            if off < end {
+                break;
+            }
+            self.staged_literal_syms.pop();
+            let sym = &mut self.symbols[idx];
+            sym.defined_here = false;
+            sym.has_initializer = false;
+            sym.is_compound_literal = false;
+        }
+        debug_assert!(self.data_object_starts.iter().all(|&s| s < end));
+        debug_assert!(self.data_pad_ranges.iter().all(|r| r.0 < r.1 && r.1 <= end));
+        debug_assert!(
+            self.const_data_ranges
+                .iter()
+                .all(|r| r.0 < r.1 && r.1 <= end)
+        );
+        debug_assert!(self.data_align_marks.iter().all(|&(off, _)| off < end));
+        debug_assert!(self.staged_literal_syms.iter().all(|&(off, _)| off < end));
     }
 
     /// Skip tokens until the matching close paren. Caller has
@@ -152,16 +289,16 @@ impl Compiler {
     /// CU's primary file).
     pub(super) fn intern_source_file(&mut self) -> u16 {
         let name = &self.lex.file;
-        if let Some(pos) = self.source_files.iter().position(|f| f == name) {
-            // Cap at u16::MAX to keep `source_file_indices` a tight
-            // column. A translation unit with > 65k distinct
-            // headers is well past anything we've seen; clamp
-            // rather than overflow so the codegen still produces
-            // *some* attribution.
+        // Cap at u16::MAX to keep `source_file_indices` a tight column.
+        // A translation unit with > 65k distinct headers is well past
+        // anything we've seen; clamp rather than overflow so the codegen
+        // still produces *some* attribution.
+        if let Some(&pos) = self.source_file_index.get(name.as_str()) {
             return pos.min(u16::MAX as usize) as u16;
         }
         let idx = self.source_files.len();
         self.source_files.push(name.clone());
+        self.source_file_index.insert(name.clone(), idx);
         idx.min(u16::MAX as usize) as u16
     }
 
@@ -222,17 +359,41 @@ impl Compiler {
     /// otherwise start unaligned and `ldr x19, [x19]` would fault on
     /// macOS arm64.
     pub(super) fn align_data_to_8(&mut self) {
+        let start = self.data.len();
         while !self.data.len().is_multiple_of(8) {
             self.data.push(0);
         }
+        self.record_data_pad(start);
     }
 
     /// Pad `self.data` to `align` bytes -- the `_Alignas(16)` /
     /// `aligned(16)` placement for a file-scope object.
     pub(super) fn align_data_to(&mut self, align: usize) {
+        let start = self.data.len();
         while !self.data.len().is_multiple_of(align.max(8)) {
             self.data.push(0);
         }
+        self.record_data_pad(start);
+        if align > 8 {
+            self.data_align_marks
+                .push((self.data.len() as i64, align as i64));
+        }
+    }
+
+    /// Record `[start, data.len())` as alignment padding. Consecutive
+    /// pads merge so each range spans the full gap before an object.
+    fn record_data_pad(&mut self, start: usize) {
+        let end = self.data.len();
+        if end == start {
+            return;
+        }
+        if let Some(last) = self.data_pad_ranges.last_mut()
+            && last.1 == start as i64
+        {
+            last.1 = end as i64;
+            return;
+        }
+        self.data_pad_ranges.push((start as i64, end as i64));
     }
 
     /// True when the most recently emitted instruction is `Imm 0` --
@@ -290,7 +451,7 @@ impl Compiler {
             }
             _ => return None,
         };
-        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+        if is_struct_value_ty(ty) {
             return None;
         }
         Some(load_op_for(ty, self.target))
@@ -389,6 +550,35 @@ impl Compiler {
         true
     }
 
+    /// Reduce the just-parsed va_* intrinsic operand to the address of
+    /// the `va_list` storage it names (the GCC builtins take the
+    /// `va_list` by reference). The record-form `va_list` (System V
+    /// x86_64 / AAPCS64) reaches here already decayed to the record
+    /// address; the cursor-form lvalue (a plain pointer object) drops
+    /// its trailing load; anything else (an explicit `&ap`) already
+    /// carries the address and passes through.
+    pub(super) fn va_list_operand_address(&mut self) {
+        if is_struct_ty(self.ty) {
+            return;
+        }
+        self.va_operand_take_address();
+    }
+
+    /// Drop the operand's trailing scalar load so its address stays in
+    /// the accumulator, bumping the type one pointer level first so the
+    /// `AddrOf` wrap records the address type (the same ordering the
+    /// unary-`&` parse uses). An operand with no trailing load keeps its
+    /// value and type, so an explicit-address spelling passes through.
+    /// Also serves `va_start`'s second operand, which names the
+    /// rightmost fixed parameter and is passed by address (C99 7.15.1.4).
+    pub(super) fn va_operand_take_address(&mut self) {
+        let ty = self.ty;
+        self.ty += Ty::Ptr as i64;
+        if !self.pop_trailing_scalar_load() {
+            self.ty = ty;
+        }
+    }
+
     /// Emit code for accessing a bitfield. On entry `a` holds the
     /// address of the bitfield's 8-byte storage unit. The dispatch
     /// peeks at the next token: if it's `=`, an assignment follows
@@ -407,11 +597,12 @@ impl Compiler {
         bit_width: u32,
         field_ty: i64,
     ) -> Result<(), C5Error> {
-        let mask: i64 = if bit_width >= 64 {
-            -1
-        } else {
-            (1i64 << bit_width) - 1
-        };
+        let mask = super::super::ast::bitfield_slice_mask(bit_width, 0) as u64 as i64;
+        let placed = super::super::ast::bitfield_slice_mask(bit_width, bit_offset) as u64 as i64;
+        // C99 6.3.1.1p2: the access has type `int` when `int` represents
+        // every value of the field, `unsigned int` for a full-width
+        // unsigned one, and the declared type when it is wider.
+        let value_ty = bitfield_value_ty(bit_width, field_ty);
         if self.lex.tk == Token::Assign {
             // Bitfield write: `s.f = expr`. The storage address
             // must remain available for the final Si; push it now
@@ -421,7 +612,7 @@ impl Compiler {
             self.ast_psh(); // stack: [..., field_addr]; a = field_addr
             self.mark_emit_other(); // a = old_value; stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, old_value]
-            self.emit_imm(!(mask << bit_offset)); // a = ~(mask << off)
+            self.emit_imm(!placed); // a = ~(mask << off)
             self.ast_binop(crate::c5::ir::BinOp::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, cleared]
             self.expr(Token::Assign as i64)?; // a = new_value
@@ -445,7 +636,7 @@ impl Compiler {
             // field_addr as the destination.
             self.ast_binop(crate::c5::ir::BinOp::Or);
             self.ast_assign(); // pops field_addr, stores a (=combined).
-            self.ty = Ty::Int as i64;
+            self.ty = value_ty;
             Ok(())
         } else if self.lex.tk == Token::AssignOp {
             // Bitfield compound assignment: `s.f OP= expr` per C99
@@ -509,10 +700,10 @@ impl Compiler {
             // reload the cleared old_value into `a`.
             self.ast_psh(); // stack: [..., field_addr, shifted_new]
             self.mark_emit_other();
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, !(mask << bit_offset));
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, !placed);
             self.ast_binop(crate::c5::ir::BinOp::Or); // pops shifted_new; a = cleared | shifted_new
             self.ast_assign(); // pops field_addr, stores a
-            self.ty = Ty::Int as i64;
+            self.ty = value_ty;
             Ok(())
         } else {
             // Bitfield read: `s.f` in any non-assignment context.
@@ -540,7 +731,7 @@ impl Compiler {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, shift);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift); // arithmetic Shr
             }
-            self.ty = Ty::Int as i64;
+            self.ty = value_ty;
             Ok(())
         }
     }
@@ -552,6 +743,7 @@ impl Compiler {
     /// outer name; the function-exit cleanup pass restores the
     /// outer binding by reading the shadow fields back.
     pub(super) fn shadow_symbol(&mut self, idx: usize) {
+        self.scope_bound.push(idx as u32);
         let s = &mut self.symbols[idx];
         s.h_class = s.class;
         s.h_type = s.type_;
@@ -560,6 +752,7 @@ impl Compiler {
         s.h_params = s.params.clone();
         s.h_is_variadic = s.is_variadic;
         s.h_array_size = s.array_size;
+        s.h_type_align = s.type_align;
         s.h_inner_array_size = s.inner_array_size;
         // Clone rather than `mem::take`: the inner-scope binding
         // (parameter or block local) keeps using the live
@@ -570,6 +763,19 @@ impl Compiler {
         s.h_vla_ptr_slot = s.vla_ptr_slot;
         s.h_vla_size_slot = s.vla_size_slot;
         s.h_is_zero_len_array = s.is_zero_len_array;
+        // The inner binding starts unpinned; a `register ... asm("reg")`
+        // declarator sets its own binding after this shadow.
+        s.h_asm_register = s.asm_register;
+        s.asm_register = None;
+        s.h_is_global_register = s.is_global_register;
+        s.is_global_register = false;
+        // Cloned, not taken: a block-scope `extern` redeclaration names the
+        // same entity (C99 6.2.2p4) and keeps its rename. The save exists so
+        // scope exit cannot drop the outer binding's label.
+        s.h_asm_name = s.asm_name.clone();
+        // The inner binding records its own folded const value, if any.
+        s.h_const_object_value = s.const_object_value;
+        s.const_object_value = None;
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -585,17 +791,106 @@ impl Compiler {
         sym.params = core::mem::take(&mut sym.h_params);
         sym.is_variadic = sym.h_is_variadic;
         sym.array_size = sym.h_array_size;
+        sym.type_align = sym.h_type_align;
         sym.inner_array_size = sym.h_inner_array_size;
         sym.array_dims = core::mem::take(&mut sym.h_array_dims);
         sym.is_vla = sym.h_is_vla;
         sym.vla_ptr_slot = sym.h_vla_ptr_slot;
         sym.vla_size_slot = sym.h_vla_size_slot;
         sym.is_zero_len_array = sym.h_is_zero_len_array;
+        sym.asm_register = sym.h_asm_register;
+        sym.is_global_register = sym.h_is_global_register;
+        sym.asm_name = sym.h_asm_name.take();
+        sym.const_object_value = sym.h_const_object_value;
         sym.is_scope_static = false;
         sym.is_scope_typedef = false;
+        sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
         // being unbound, never to the restored outer symbol.
-        sym.asm_reg = None;
+    }
+
+    /// Whether [`Self::restore_shadowed_symbol`] would leave `sym`
+    /// unchanged, i.e. its shadow slots already mirror its live
+    /// binding. True for a symbol that binds itself (a compiler-made
+    /// unnamed temporary), which is why such a symbol needs no entry
+    /// in `scope_bound`.
+    #[cfg(debug_assertions)]
+    fn shadow_mirrors_binding(sym: &Symbol) -> bool {
+        sym.class == sym.h_class
+            && sym.type_ == sym.h_type
+            && sym.val == sym.h_val
+            && sym.fn_ptr_indirection == sym.h_fn_ptr_indirection
+            && sym.params == sym.h_params
+            && sym.is_variadic == sym.h_is_variadic
+            && sym.array_size == sym.h_array_size
+            && sym.type_align == sym.h_type_align
+            && sym.inner_array_size == sym.h_inner_array_size
+            && sym.array_dims == sym.h_array_dims
+            && sym.is_vla == sym.h_is_vla
+            && sym.vla_ptr_slot == sym.h_vla_ptr_slot
+            && sym.vla_size_slot == sym.h_vla_size_slot
+            && sym.is_zero_len_array == sym.h_is_zero_len_array
+            && sym.asm_register == sym.h_asm_register
+            && sym.is_global_register == sym.h_is_global_register
+            && sym.asm_name == sym.h_asm_name
+            && sym.const_object_value == sym.h_const_object_value
+            && !sym.is_scope_static
+            && !sym.is_scope_typedef
+            && !sym.block_extern_active
+    }
+
+    /// The scope's rebound symbol indices, ascending and deduplicated.
+    /// Callers that only unwind hand the list straight to
+    /// [`Self::unwind_scope_bound`]; the function-close path also walks
+    /// it to collect the debug-info and unused-binding reports, both of
+    /// which follow symbol-table order.
+    pub(super) fn take_scope_bound(&mut self) -> alloc::vec::Vec<u32> {
+        let mut bound = core::mem::take(&mut self.scope_bound);
+        bound.sort_unstable();
+        bound.dedup();
+        // Completeness: the list stands in for a full-table scan, so a
+        // symbol the scan would restore and this list omits is a
+        // binding that would outlive its scope.
+        #[cfg(debug_assertions)]
+        for (i, sym) in self.symbols.iter().enumerate() {
+            debug_assert!(
+                !Self::scope_binding_active(sym)
+                    || bound.binary_search(&(i as u32)).is_ok()
+                    || (sym.name.is_empty() && Self::shadow_mirrors_binding(sym)),
+                "symbol {i} (`{}`) is scope-bound but untracked",
+                sym.name
+            );
+        }
+        bound
+    }
+
+    /// Whether `sym` currently holds a binding an enclosing scope must
+    /// get back at scope exit: a local or parameter, a block-scope
+    /// `static` or `typedef` (which no longer read as `Loc`), or a
+    /// block-scope `extern` that converted a bound file-scope name.
+    pub(super) fn scope_binding_active(sym: &Symbol) -> bool {
+        sym.class == Token::Loc as i64
+            || sym.is_scope_static
+            || sym.is_scope_typedef
+            || sym.block_extern_active
+    }
+
+    /// Restore the outer binding of every symbol in `bound` that still
+    /// holds one, then keep the entries whose binding survives the
+    /// restore -- a file-scope register variable shadows itself, so it
+    /// stays bound and every later scope exit must revisit it.
+    pub(super) fn unwind_scope_bound(&mut self, mut bound: alloc::vec::Vec<u32>) {
+        note_scope_unwind(bound.len(), self.symbols.len());
+        for &i in &bound {
+            let sym = &mut self.symbols[i as usize];
+            if Self::scope_binding_active(sym) {
+                Self::restore_shadowed_symbol(sym);
+            }
+        }
+        let symbols = &self.symbols;
+        bound.retain(|&i| Self::scope_binding_active(&symbols[i as usize]));
+        bound.append(&mut self.scope_bound);
+        self.scope_bound = bound;
     }
 
     // ---- AST helpers ----
@@ -614,6 +909,14 @@ impl Compiler {
         self.ast_acc = None;
         self.ast_vstack.clear();
         self.ast_labels.clear();
+        self.pending_label_relocs.clear();
+        self.in_function_body = true;
+    }
+
+    /// True while a function body is being parsed, i.e. while labels
+    /// have a scope to resolve against.
+    pub(super) fn in_function_body(&self) -> bool {
+        self.in_function_body
     }
 
     /// Capture the just-finished function's AST + the metadata
@@ -664,7 +967,10 @@ impl Compiler {
             // `VariableInfo` list is assembled (the declared locals are
             // not yet collected at this point).
             multi_cell_slots: alloc::vec::Vec::new(),
+            over_aligned_slots: alloc::vec::Vec::new(),
+            label_data_slots: core::mem::take(&mut self.pending_label_relocs),
         };
+        self.in_function_body = false;
         self.pending_is_inline = false;
         self.pending_is_always_inline = false;
         self.pending_is_naked = false;
@@ -731,7 +1037,15 @@ impl Compiler {
         let class = s.class;
         let val = s.val;
         let is_thread_local = s.is_thread_local;
-        let array_size = s.array_size;
+        // A zero-length array (`T x[] = {}`) is array-shaped with a zero
+        // element count, which the count alone cannot express. Record it
+        // with the sentinel an incomplete `extern T x[];` already uses so
+        // the walker consumes the object as its address (C99 6.3.2.1p3).
+        let array_size = if s.array_size == 0 && s.is_zero_len_array {
+            -1
+        } else {
+            s.array_size
+        };
         // A reference to a block-scope `extern` that shadows a bound name
         // (the slot is `Glo` and marked `block_extern_active`) must resolve
         // by name / same-TU offset regardless of the class restored at
@@ -1305,6 +1619,23 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Default { body }, pos)
     }
 
+    /// Map a label name as written to the key it interns under. A name
+    /// declared `__label__` by an open block resolves to that block's
+    /// unique key, innermost first; any other name is function-scoped
+    /// and keys under itself. Every label consumer (`label:`, `goto`,
+    /// `&&label`, the `asm goto` label list) resolves through here, so
+    /// the block-scoped and function-scoped name spaces stay disjoint.
+    pub(super) fn resolve_label_name(&self, name: &str) -> alloc::string::String {
+        for scope in self.local_label_scopes.iter().rev() {
+            for (declared, key) in scope.iter().rev() {
+                if declared == name {
+                    return key.clone();
+                }
+            }
+        }
+        alloc::string::String::from(name)
+    }
+
     /// Allocate a fresh AST label slot. `self.labels` /
     /// `self.unresolved_gotos` track names for the goto-vs-label
     /// diagnostics; the AST mirror keeps a flat per-function id
@@ -1320,6 +1651,25 @@ impl Compiler {
         self.ast_labels
             .push((alloc::string::String::from(name), id));
         id
+    }
+
+    /// Consume `&& identifier` (GCC labels as values) and intern the
+    /// label. The current token must be `&&`. The label may be defined
+    /// later in the function, so a forward reference is recorded for the
+    /// function-end check gcc and clang also apply.
+    pub(super) fn parse_label_addr_operand(
+        &mut self,
+    ) -> Result<super::super::ast::LabelId, C5Error> {
+        self.next()?; // consume `&&`
+        if self.lex.tk != Token::Id {
+            return Err(self.compile_err("label name expected after `&&`"));
+        }
+        let name = self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
+        self.next()?;
+        if !self.labels.iter().any(|n| n == &name) {
+            self.unresolved_gotos.push(name.clone());
+        }
+        Ok(self.ast_label_by_name(&name))
     }
 
     /// Push a `Stmt::Return(value)` node into the per-function
@@ -1364,7 +1714,16 @@ impl Compiler {
             return;
         };
         let pos = self.ast_src_pos();
-        let ty = self.ty;
+        // C99 6.5.8p6 / 6.5.9p3: a relational or equality operator yields
+        // `int` whatever the operands are. The parser still holds an
+        // operand type here (it retags after the emit, since the flavour
+        // pick reads both operand types), so stamp the result type here
+        // rather than leaving consumers to infer it from the operands.
+        let ty = if crate::c5::ast::walk::is_comparison_op(op) {
+            super::super::token::Ty::Int as i64
+        } else {
+            self.ty
+        };
         let id = self
             .ast
             .push_expr(super::super::ast::Expr::Binary { op, lhs, rhs, ty }, pos);
@@ -1430,6 +1789,35 @@ impl Compiler {
             .ast
             .push_expr(super::super::ast::Expr::Assign { lhs, rhs, ty }, pos);
         self.ast_acc = Some(id);
+    }
+}
+
+/// Type of a bitfield access per C99 6.3.1.1p2: the integer promotions
+/// apply, so a field `int` represents every value of reads as `int`, a
+/// full-width unsigned one as `unsigned int`, and a wider field keeps
+/// its declared type.
+pub(super) fn bitfield_value_ty(bit_width: u32, field_ty: i64) -> i64 {
+    if super::super::ast::bitfield_keeps_declared_ty(bit_width) {
+        return field_ty;
+    }
+    // The promotion changes the type but not the member's qualifiers,
+    // which drive the access's volatility and address space.
+    let quals = field_ty
+        & (super::types::VOLATILE_MASK | super::types::SEG_GS_BIT | super::types::SEG_FS_BIT);
+    let unsigned = is_unsigned_ty(field_ty) && !is_bool_ty(field_ty);
+    if bit_width == 32 && unsigned {
+        return Ty::Int as i64 | super::types::UNSIGNED_BIT | quals;
+    }
+    Ty::Int as i64 | quals
+}
+
+/// Recover the name as written from a label key. Keys minted for
+/// `__label__` declarations carry a `#<seq>` suffix that must not reach
+/// a diagnostic; function-scoped keys are the name itself.
+pub(super) fn label_display_name(key: &str) -> &str {
+    match key.find('#') {
+        Some(cut) => &key[..cut],
+        None => key,
     }
 }
 

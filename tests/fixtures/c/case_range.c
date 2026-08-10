@@ -33,18 +33,24 @@ static int count(int c) {
     return n;
 }
 
+/* Opaque call targets: a volatile pointer load keeps each call real, so
+   the range's bounds comparison is emitted rather than inlined and folded
+   to the arm the constant argument selects. */
+static int (*volatile classify_p)(int) = classify;
+static int (*volatile count_p)(int) = count;
+
 int main(void) {
     // Boundaries and interior of each range.
-    if (classify('0') != 1 || classify('5') != 1 || classify('9') != 1) return 1;
-    if (classify('a') != 2 || classify('m') != 2 || classify('z') != 2) return 2;
-    if (classify('A') != 2 || classify('Z') != 2) return 3;
-    if (classify('+') != 3 || classify('-') != 3) return 4;
-    if (classify('$') != 0 || classify('/') != 0 || classify(':') != 0) return 5;
+    if (classify_p('0') != 1 || classify_p('5') != 1 || classify_p('9') != 1) return 1;
+    if (classify_p('a') != 2 || classify_p('m') != 2 || classify_p('z') != 2) return 2;
+    if (classify_p('A') != 2 || classify_p('Z') != 2) return 3;
+    if (classify_p('+') != 3 || classify_p('-') != 3) return 4;
+    if (classify_p('$') != 0 || classify_p('/') != 0 || classify_p(':') != 0) return 5;
 
     // In-range values fall through into case 4; case 4 alone does not.
-    if (count(1) != 11 || count(2) != 11 || count(3) != 11) return 6;
-    if (count(4) != 1) return 7;
-    if (count(9) != -1) return 8;
+    if (count_p(1) != 11 || count_p(2) != 11 || count_p(3) != 11) return 6;
+    if (count_p(4) != 1) return 7;
+    if (count_p(9) != -1) return 8;
 
     return 0;
 }

@@ -123,6 +123,7 @@ demos/tinycc/*
 demos/quickjs/*
 !demos/quickjs/setup.py
 !demos/quickjs/smoke.py
+!demos/quickjs/bench.py
 !demos/quickjs/repl_stub.c
 !demos/quickjs/README.md
 # lua -- Lua 5.5.0 interpreter + the upstream test suite.
@@ -220,6 +221,10 @@ tests/perf/build/
 # belong under version control.
 /tests/fixtures/c/*
 !/tests/fixtures/c/*.c
+# The `.incbin` fixture's committed payload.
+!/tests/fixtures/c/file_scope_asm_incbin.bin
+# The computed-include fixture's committed header (digit-leading name).
+!/tests/fixtures/c/ev/
 
 badc-*-rsync/
 
@@ -266,3 +271,10 @@ demos/qemu/*
 !demos/qemu/smoke.py
 !demos/qemu/README.md
 !demos/qemu/shim/
+
+# linux -- the kernel TU sweep. `setup.py` fetches and configures the pinned
+# release under `.cache/` and the sweep writes per-unit objects and reports
+# under `.work/`; only the runner scripts, the vendored minimal configs and
+# the README are committed.
+demos/linux/.cache/
+demos/linux/.work/

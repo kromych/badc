@@ -1,10 +1,12 @@
 mod ast;
 mod codegen;
 mod compiler;
+mod depfile;
 mod error;
 mod headers;
 mod host;
 mod ir;
+mod layout;
 mod lexer;
 #[cfg(feature = "full")]
 mod linker;
@@ -25,16 +27,22 @@ mod tests;
 // re-exports that aren't reached from `main.rs` (only from tests, which
 // resolve through the inner module path) -- they are still part of the
 // intended public API.
+pub use object::elf_class::ElfClass;
 #[allow(unused_imports)]
 #[cfg(feature = "native-emit")]
 pub use object::{emit_native, emit_native_with_options};
 pub use {
-    codegen::{NativeOptions, OutputKind, Target, jit_run, jit_run_with_options},
+    codegen::{
+        BinaryFormat, CodeModel, Hardening, IndirectBranch, NativeOptions, OutputKind, Target,
+        jit_run, jit_run_with_options,
+    },
     compiler::{CompileOptions, Compiler, StructDef, StructField},
+    depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},
     error::C5Error,
     headers::embedded_headers,
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
+    preprocessor::{IncludeOrigin, IncludeRecord, IncludeStatus},
     program::{Program, VariableInfo},
     vm::{Trace, Vm},
 };
@@ -45,22 +53,28 @@ pub use host::StdHost;
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::read_archive_at;
+#[cfg(all(feature = "full", feature = "std"))]
+#[allow(unused_imports)]
+pub use linker::{
+    ArchiveInclusion, LdsEmit, LdsObject, LdsOptions, LdsResult, LinkerScript, MergedNative,
+    MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
+    OrphanHandling, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
+    SharedLibrary, detect_binary_format, emit_aarch64_plt, emit_x86_64_plt, is_elf_object,
+    link_native_objects, link_native_objects_with_options, link_native_objects_with_shared_libs,
+    link_with_script, parse_lds_object, parse_linker_script, parse_native_elf,
+    parse_shared_library, render_link_map, write_executable_elf64, write_native_image_from_merged,
+    write_native_image_from_merged_ex,
+};
 #[cfg(feature = "full")]
 #[allow(unused_imports)]
 pub use linker::{ArchiveMember, read_archive, write_archive};
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
-pub use linker::{
-    MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, PendingImportReloc, PltTrampoline, SharedLibrary, emit_aarch64_plt,
-    emit_x86_64_plt, is_elf_object, link_native_objects, link_native_objects_with_options,
-    link_native_objects_with_shared_libs, parse_native_elf, parse_shared_library,
-    write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
-};
+pub use linker::{is_ld_invocation, run_ld};
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]
-pub use runtime::{embedded_compiler_rt, embedded_runtime};
+pub use runtime::{embedded_compiler_rt, embedded_libc, embedded_runtime};
 #[cfg(feature = "full")]
 pub use symbol::Linkage;
 

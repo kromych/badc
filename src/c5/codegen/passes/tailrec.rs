@@ -45,7 +45,7 @@ use alloc::collections::BTreeSet;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::inline::{map_v, remap_caller_inst, remap_terminator};
+use super::inline::{map_v, remap_inst_operands, remap_terminator};
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
 use crate::c5::ir::{
     BinOp, Block, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId,
@@ -123,6 +123,12 @@ struct Plan {
 
 /// Instructions with an observable effect or that must not be reordered
 /// past the recursive call when it becomes a loop back edge.
+///
+/// `classify` takes the last such instruction in a returning block to be
+/// the self-call, so anything effectful that this misses is not seen to
+/// follow the call and the block is transformed as if the effect were not
+/// there. An instruction absent from [`Inst::is_pure`] belongs here unless
+/// it only names a value (`Phi`, `ParamRef`, `BlockAddr`, `AllocaInit`).
 fn is_effectful(inst: &Inst) -> bool {
     matches!(
         inst,
@@ -132,13 +138,16 @@ fn is_effectful(inst: &Inst) -> bool {
             | Inst::Store { .. }
             | Inst::StoreIndexed { .. }
             | Inst::StoreLocal { .. }
+            | Inst::SegStore { .. }
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
             | Inst::Intrinsic { .. }
+            | Inst::InlineAsm { .. }
             | Inst::TailExt(_)
             | Inst::Load { volatile: true, .. }
             | Inst::LoadLocal { volatile: true, .. }
+            | Inst::SegLoad { volatile: true, .. }
     )
 }
 
@@ -550,7 +559,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
             ($pc:expr) => {{
                 let pc = $pc;
                 let mut inst = func.insts[pc as usize].clone();
-                remap_caller_inst(&mut inst, &remap);
+                remap_inst_operands(&mut inst, &remap);
                 if let Inst::Phi { incoming, .. } = &mut inst {
                     for (pred, _) in incoming.iter_mut() {
                         if *pred == 0 {

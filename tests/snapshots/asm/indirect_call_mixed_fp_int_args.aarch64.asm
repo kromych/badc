@@ -6,10 +6,12 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x270              // =624
+               	mov	x1, <entry_off>
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
+
+<mixfn>:
                	mov	x3, #0x4024000000000000 // =4621819117588971520
                	fmov	d17, x3
                	fmul	d0, d0, d17
@@ -27,8 +29,7 @@ Disassembly of section .text:
                	fcvtzs	x1, s0
                	add	x0, x0, x1
                	add	x0, x0, x2
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
 
 <main>:
@@ -88,8 +89,7 @@ Disassembly of section .text:
                	fcvtzs	x1, s0
                	add	x0, x0, x1
                	add	x0, x0, #0x7
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x2, x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

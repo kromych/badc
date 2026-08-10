@@ -24,6 +24,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::types::{add_ptr_level, apply_qual_bits};
 
 /// Bundle returned from `parse_function_params` -- keeps the per-param
 /// symbol indices (needed by the function-body binding step) together
@@ -34,13 +35,34 @@ pub(super) struct ParsedParams {
     pub(super) indices: Vec<usize>,
     pub(super) types: Vec<i64>,
     pub(super) is_variadic: bool,
+    /// False for an empty parameter list (`T ()`), which declares no
+    /// prototype. `(void)` is a prototype with no parameters, so the two
+    /// spellings are distinct types under C99 6.7.5.3.
+    pub(super) is_prototyped: bool,
 }
 
 impl Compiler {
+    /// Drain the function-pointer base carriers a parameter's type parse
+    /// seeded. Every parameter shape must consume them: a carrier that
+    /// survives the parameter list (an unnamed `fn_t` parameter has no
+    /// declarator to bind it) leaks into the next declaration -- e.g. the
+    /// first field of a following struct definition would record a phantom
+    /// function-pointer prototype.
+    fn take_param_fn_ptr_carriers(&mut self) -> (i64, Option<Vec<i64>>, bool) {
+        let indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+        let params = self.pending.fn_ptr_param_types.take();
+        let variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
+        self.pending.base_is_function_type = false;
+        (indirection, params, variadic)
+    }
+
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
         let mut args = Vec::new();
         let mut types = Vec::new();
         let mut is_variadic = false;
+        // An empty list declares no prototype; `(void)` declares one with
+        // no parameters.
+        let is_prototyped = self.lex.tk != ')';
         // `(void)` -- C's "no parameters" sigil. With `void` now
         // its own lexeme (`Token::Void`), the early-match below
         // unambiguously fires only for the void-sigil shape; an
@@ -106,10 +128,10 @@ impl Compiler {
             let mut leading_ptr_count = 0;
             while self.lex.tk == Token::MulOp {
                 self.next()?;
-                ty += Ty::Ptr as i64;
+                ty = add_ptr_level(ty);
                 leading_ptr_count += 1;
                 while self.lex.tk == Token::TypeQual {
-                    ty |= self.lex_volatile_bit();
+                    ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                     self.next()?;
                 }
             }
@@ -160,6 +182,9 @@ impl Compiler {
                 if self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0 {
                     ty += Ty::Ptr as i64;
                 }
+                // An unnamed parameter binds no symbol to receive the
+                // fn-pointer carriers its base (a fn-pointer typedef) seeded.
+                let _ = self.take_param_fn_ptr_carriers();
                 self.ty = ty;
                 types.push(ty);
                 self.accept(',')?;
@@ -210,12 +235,12 @@ impl Compiler {
                     self.symbols[param_idx].array_dims = dims;
                 }
             }
-            // Fn-pointer lineage: pick up the side-channel that
+            // Fn-pointer lineage: pick up the side-channels that
             // parse_declarator (or the typedef-of-fn-ptr base)
-            // populated. Cleared even if the declarator didn't
-            // set anything so it doesn't leak into the next
+            // populated. Drained even if the declarator didn't
+            // set anything so they don't leak into the next
             // parameter or expression.
-            let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+            let (fn_ptr_indirection, fnptr_pp, fnptr_variadic) = self.take_param_fn_ptr_carriers();
             self.ty = full_ty;
             // An unnamed parameter, or any parameter of a function-pointer
             // declarator's prototype, records its type without binding a
@@ -258,15 +283,11 @@ impl Compiler {
             // A function-pointer parameter records its pointee signature's
             // parameter types so an indirect call through it narrows each
             // argument to its declared type (the common callback shape).
-            let fnptr_pp = if fn_ptr_indirection > 0 {
-                self.pending.fn_ptr_param_types.take()
-            } else {
-                None
-            };
-            if let Some(pp_types) = fnptr_pp {
+            if fn_ptr_indirection > 0
+                && let Some(pp_types) = fnptr_pp
+            {
                 self.symbols[param_idx].params = pp_types;
-                self.symbols[param_idx].is_variadic =
-                    matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
+                self.symbols[param_idx].is_variadic = fnptr_variadic;
             }
 
             args.push(param_idx);
@@ -281,10 +302,12 @@ impl Compiler {
         // (a function / function pointer, which cannot be an array), so clear
         // it before the enclosing declarator binds.
         self.pending.typedef_base_array_size = 0;
+        self.pending.typedef_base_zero_len = false;
         Ok(ParsedParams {
             indices: args,
             types,
             is_variadic,
+            is_prototyped,
         })
     }
 }

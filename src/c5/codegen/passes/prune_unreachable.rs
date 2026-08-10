@@ -12,11 +12,10 @@
 //! Runs after `constfold_branch`. A jump table's target blocks are
 //! reachable through the indirect dispatch, not a terminator edge, so
 //! reachability seeds them from `func.jump_tables`; `remap_block_ids`
-//! renumbers those target lists after compaction. Computed-goto
-//! functions are still skipped: their reachable set is every
-//! address-taken label (`Inst::BlockAddr`), which is not tracked as a
-//! successor graph, and `constfold_branch` leaves computed goto
-//! untouched anyway.
+//! renumbers those target lists after compaction. An address-taken
+//! label (`Inst::BlockAddr`, recorded in `func.computed_goto_targets`)
+//! is likewise entered indirectly, and its address may escape the
+//! function, so every such block is a reachability root.
 
 use alloc::vec::Vec;
 
@@ -51,9 +50,6 @@ fn push_successors(t: &Terminator, out: &mut Vec<BlockId>) {
 /// Delete blocks unreachable from the entry. Returns whether any block
 /// was removed, so a driver can iterate with the branch fold.
 pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
-    if !func.computed_goto_targets.is_empty() {
-        return false;
-    }
     let n = func.blocks.len();
     if n == 0 {
         return false;
@@ -61,17 +57,26 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     // Reachability from block 0 through terminator successors, plus a
     // jump table's target blocks (reached via its indirect dispatch,
     // recorded in `func.jump_tables` rather than the terminator).
+    // An address-taken label (`computed_goto_targets`) is a root of its
+    // own: no terminator edge names it, and its address may outlive --
+    // or escape -- the `goto *` that used it.
     let mut reachable = alloc::vec![false; n];
-    reachable[0] = true;
     let mut stack = alloc::vec![0 as BlockId];
+    reachable[0] = true;
+    for &t in &func.computed_goto_targets {
+        if !reachable[t as usize] {
+            reachable[t as usize] = true;
+            stack.push(t);
+        }
+    }
     let mut succ = Vec::new();
     while let Some(b) = stack.pop() {
         succ.clear();
         push_successors(&func.blocks[b as usize].terminator, &mut succ);
         if let Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } =
-            &func.blocks[b as usize].terminator
+            func.blocks[b as usize].terminator
         {
-            succ.extend_from_slice(&func.jump_tables[*table as usize]);
+            succ.extend_from_slice(&func.jump_tables[table as usize]);
         }
         for &s in &succ {
             if !reachable[s as usize] {
@@ -105,15 +110,47 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     func.extern_imm_data_refs = keep(&func.extern_imm_data_refs);
     func.extern_tls_refs = keep(&func.extern_tls_refs);
 
+    // The doomed blocks' instructions stay behind in the flat `insts`
+    // array. Rewrite them to inert immediates: an operand list left in
+    // one counts as a use in any scan of the whole tape -- the use
+    // counts driving the emitters' dead-code skip -- and would carry a
+    // value whose every reachable reader is gone into emission, while
+    // the static DCE, which reads the blocks, has dropped its referent.
+    // This also removes stale block ids (phis, `BlockAddr`) from the
+    // remap surface.
+    for (v, dead) in dead_value.iter().enumerate() {
+        if *dead {
+            func.insts[v] = Inst::Imm(0);
+        }
+    }
+
     // Drop every phi incoming that names a doomed predecessor -- an
-    // edge from an unreachable block is never taken. This covers phis
-    // in doomed blocks too: those instructions stay in the flat `insts`
-    // array after compaction, and leaving a removed-block id in them
-    // would make the block-id remap here (and later passes') index out
-    // of range.
+    // edge from an unreachable block is never taken.
     for inst in func.insts.iter_mut() {
         if let Inst::Phi { incoming, .. } = inst {
             incoming.retain(|&(pred, _)| (pred as usize) < n && reachable[pred as usize]);
+        }
+    }
+
+    // A `jump_tables` row is live only while a surviving dispatch
+    // terminator names it: its block may be unreachable, or the block may
+    // survive with a constant-index fold having rewritten the dispatch to
+    // a plain `Jmp`. Either way the stale row lists targets that may be
+    // doomed, and a removed-block id left in it would make the block-id
+    // remap here (and later passes') index out of range -- the hazard the
+    // phi cleanup above avoids. A live dispatch keeps its row: its targets
+    // were seeded reachable above, so none is doomed.
+    let mut live_table = alloc::vec![false; func.jump_tables.len()];
+    for (b, blk) in func.blocks.iter().enumerate() {
+        if let (true, Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table }) =
+            (reachable[b], blk.terminator)
+        {
+            live_table[table as usize] = true;
+        }
+    }
+    for (t, row) in func.jump_tables.iter_mut().enumerate() {
+        if !live_table[t] {
+            row.clear();
         }
     }
 
@@ -191,6 +228,11 @@ mod tests {
             f.extern_call_refs.is_empty(),
             "the dead call's extern ref is dropped"
         );
+        assert!(
+            matches!(f.insts[2], Inst::Imm(0)),
+            "the orphaned call is rewritten inert; its operands must not \
+             count as uses in a scan of the flat array"
+        );
         assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(1)));
         assert!(matches!(f.blocks[1].terminator, Terminator::Return(_)));
     }
@@ -234,6 +276,40 @@ mod tests {
         };
         assert_eq!(incoming.len(), 1, "the b2 incoming is dropped");
         assert_eq!(incoming[0].0, 0, "b0 survives as block 0");
+    }
+
+    #[test]
+    fn clears_the_row_of_a_pruned_asm_goto_dispatch() {
+        // A folded branch (b0 -> b1) orphans an asm-goto dispatch (b2)
+        // whose row names two now-doomed targets (b3, b4). Pruning must
+        // clear the row -- leaving the doomed ids in it would make a later
+        // block-id remap index out of range (the bug an inlined asm-goto in
+        // a constant-dead branch exposes).
+        let mut f = fresh(
+            vec![
+                Inst::Imm(0), // v0 (b0)
+                Inst::Imm(0), // v1 (b1)
+                Inst::Imm(0), // v2 (b2, dead dispatch)
+                Inst::Imm(3), // v3 (b3, dead)
+                Inst::Imm(4), // v4 (b4, dead)
+            ],
+            vec![
+                block(0..1, Terminator::Jmp(1)),
+                block(1..2, Terminator::Return(1)),
+                block(2..3, Terminator::AsmGoto { table: 0 }),
+                block(3..4, Terminator::Return(3)),
+                block(4..5, Terminator::Return(4)),
+            ],
+        );
+        f.jump_tables = vec![vec![3, 4]];
+        run_one(&mut f);
+        assert_eq!(f.blocks.len(), 2, "the dead dispatch and its targets go");
+        assert!(
+            f.jump_tables[0].is_empty(),
+            "the pruned dispatch's row is cleared, not left with stale ids"
+        );
+        // Idempotent: a second prune must not index a stale row entry.
+        run_one(&mut f);
     }
 
     #[test]

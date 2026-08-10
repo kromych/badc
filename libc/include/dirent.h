@@ -86,7 +86,7 @@ DIR *opendir(char *path);
 DIR *fdopendir(int fd);
 struct dirent *readdir(DIR *dir);
 int closedir(DIR *dir);
-int rewinddir(DIR *dir);
+void rewinddir(DIR *dir);
 // POSIX: the file descriptor backing an open directory stream.
 int dirfd(DIR *dir);
 // POSIX: the current position of a directory stream, and a seek back to

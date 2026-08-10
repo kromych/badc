@@ -24,14 +24,13 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	jle	<addr>
                	addq	%r9, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rax
                	movl	$0xc, %ecx
                	movl	%ecx, (%rax)
@@ -60,9 +59,7 @@ Disassembly of section .text:
                	cmpq	$0x4, %rdx
                	jle	<addr>
                	leaq	(%rcx,%r8), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	movslq	%eax, %rax
-               	addq	$0x50, %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq

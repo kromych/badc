@@ -12,6 +12,36 @@
 #define __cpuid(level, a, b, c, d) __cpuid_count((level), 0, (a), (b), (c), (d))
 #define __get_cpuid_max(ext, sig) 0
 
+// Leaf-checked queries. Bit 31 of the leaf selects the extended range, so the
+// maximum comes from leaf 0x80000000 rather than leaf 0. A zero maximum means
+// the range is unavailable and no leaf in it can be read, which is what the
+// macros above report. The checks go through __get_cpuid_max, so they follow it
+// if it starts returning a real maximum.
+
+static inline int __get_cpuid(unsigned int __leaf, unsigned int *__eax,
+                              unsigned int *__ebx, unsigned int *__ecx,
+                              unsigned int *__edx) {
+    unsigned int __max = __get_cpuid_max(__leaf & 0x80000000, 0);
+
+    if (__max == 0 || __max < __leaf) {
+        return 0;
+    }
+    __cpuid(__leaf, *__eax, *__ebx, *__ecx, *__edx);
+    return 1;
+}
+
+static inline int __get_cpuid_count(unsigned int __leaf, unsigned int __subleaf,
+                                    unsigned int *__eax, unsigned int *__ebx,
+                                    unsigned int *__ecx, unsigned int *__edx) {
+    unsigned int __max = __get_cpuid_max(__leaf & 0x80000000, 0);
+
+    if (__max == 0 || __max < __leaf) {
+        return 0;
+    }
+    __cpuid_count(__leaf, __subleaf, *__eax, *__ebx, *__ecx, *__edx);
+    return 1;
+}
+
 // Leaf 1, %ecx.
 #define bit_SSE3        (1 << 0)
 #define bit_PCLMUL      (1 << 1)

@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Kbuild LD shim: badc performs every link in the build.
+
+Named as the kernel's LD. Routing is decided from facts of the
+invocation, not from a list of paths:
+
+- Every link is badc's: ``-r`` merges, every ``vmlinux`` pass, the vDSO
+  shared objects -- badc emits ``.dynsym``/``.dynstr``/``.hash``/
+  ``.gnu.hash``/``.dynamic`` and the symbol-version tables -- the
+  ``-m elf_i386`` boot links (``arch/x86/boot/setup.elf``,
+  ``arch/x86/realmode/rm/realmode.elf``, ``vdso32``), and scriptless
+  links such as kbuild's RELR probe, which run under badc's built-in
+  default script. A badc failure is the shim's failure: its exit status
+  and diagnostic go to make, which stops at the defect. Recorded as
+  `badc` or `fail`.
+- Version and capability probes (``-v``/``--version`` with no output
+  file): badc answers, so what the configuration records about the
+  linker is what badc actually implements. ``$(call ld-option,...)``
+  runs the option past the linker with ``-v``; badc rejects options it
+  does not implement, so an unimplemented option is dropped by kbuild
+  rather than accepted and ignored.
+
+A unit named in ``$BADC_LD_FALLBACK`` (output paths, one per line) goes
+to the real linker and is recorded as `fallback`. That list is the
+bisect tool for a suspected bad link: naming an output is explicit and
+shows up in the manifest, so a build that used it cannot be mistaken
+for a pure one. It is the only route to the real linker; an emulation
+badc has no backend for is a badc error, not a silent handover.
+
+Environment: BADC (badc binary, required), BADC_LD_REAL (default ld),
+BADC_LD_FALLBACK (file of output paths to leave to the real linker),
+BADC_LD_MANIFEST (append `badc|fallback|fail<TAB>output[<TAB>detail]`
+per link), BADC_LD_TIMEOUT (seconds per badc link, default 900).
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+
+def output_of(argv: list[str]) -> str | None:
+    for i, a in enumerate(argv):
+        if a == "-o" and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith("--output="):
+            return a[len("--output="):]
+    return None
+
+
+def manifest(status: str, output: str, detail: str = "") -> None:
+    path = os.environ.get("BADC_LD_MANIFEST")
+    if not path:
+        return
+    line = f"{status}\t{output}"
+    if detail:
+        line += "\t" + " ".join(detail.split())[:300]
+    # One O_APPEND write per line keeps parallel jobs from interleaving.
+    fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+    try:
+        os.write(fd, (line + "\n").encode())
+    finally:
+        os.close(fd)
+
+
+def fallback_listed(output: str) -> bool:
+    path = os.environ.get("BADC_LD_FALLBACK")
+    if not path:
+        return False
+    try:
+        with open(path) as f:
+            entries = [ln.strip() for ln in f
+                       if ln.strip() and not ln.startswith("#")]
+    except OSError:
+        return False
+    return any(output == e or output.endswith("/" + e) for e in entries)
+
+
+def main(argv: list[str]) -> int:
+    real = os.environ.get("BADC_LD_REAL", "ld")
+    badc = os.environ.get("BADC")
+    out = output_of(argv)
+
+    if out is None:
+        # A probe, not a link. badc answers so the recorded linker
+        # capabilities are badc's.
+        if badc:
+            os.execvp(badc, [badc, "--ld", *argv])
+        os.execvp(real, [real, *argv])
+
+    if fallback_listed(out):
+        manifest("fallback", out, "listed")
+        os.execvp(real, [real, *argv])
+    if not badc:
+        sys.exit("ldshim: $BADC is not set")
+
+    timeout = float(os.environ.get("BADC_LD_TIMEOUT", "900"))
+    cmd = [badc, "--ld", *argv]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        rc, err = r.returncode, r.stderr
+    except subprocess.TimeoutExpired:
+        rc, err = 900, f"timeout after {timeout:.0f}s"
+    if rc == 0:
+        manifest("badc", out)
+        sys.stderr.write(err)
+        return 0
+
+    # No second linker runs. Drop any partial output so a later make
+    # cannot mistake it for a linked one, put badc's diagnostic on
+    # stderr, and fail so the build stops at the defect.
+    try:
+        os.unlink(out)
+    except OSError:
+        pass
+    lines = [ln for ln in err.splitlines() if ln.strip()]
+    first = next((ln for ln in lines if "error" in ln or "panicked" in ln),
+                 lines[-1] if lines else f"exit {rc}")
+    manifest("fail", out, first)
+    sys.stderr.write(err if err.endswith("\n") else err + "\n")
+    return rc or 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

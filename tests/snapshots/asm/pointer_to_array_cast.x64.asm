@@ -13,7 +13,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	xorq	%rax, %rax
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rsi
@@ -25,37 +25,30 @@ Disassembly of section .text:
                	cmpq	$0x18, %rcx
                	jl	<addr>
                	leaq	-0x30(%rbp), %rax
-               	leaq	-0x30(%rbp), %rcx
-               	cmpq	%rcx, %rax
+               	leaq	0x10(%rax), %rcx
+               	subq	%rax, %rcx
+               	cmpq	$0x10, %rcx
                	je	<addr>
-               	movl	$0x1, %eax
-               	addq	$0x50, %rsp
+               	movl	$0x5, %eax
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	movswq	0x14(%rax), %rax
+               	cmpq	$0x1e, %rax
+               	je	<addr>
+               	movl	$0x6, %eax
+               	addq	$0x40, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x30(%rbp), %rax
                	movswq	0xc(%rax), %rax
                	cmpq	$0x12, %rax
                	je	<addr>
-               	movl	$0x2, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	-0x30(%rbp), %rax
-               	leaq	-0x30(%rbp), %rcx
-               	cmpq	%rcx, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	addq	$0x50, %rsp
-               	popq	%rbp
-               	retq
-               	leaq	-0x30(%rbp), %rax
-               	leaq	-0x30(%rbp), %rcx
-               	cmpq	%rcx, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	addq	$0x50, %rsp
+               	movl	$0x9, %eax
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq

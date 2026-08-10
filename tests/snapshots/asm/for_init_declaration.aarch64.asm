@@ -6,10 +6,12 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x2b0              // =688
+               	mov	x1, <entry_off>
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
+
+<simple_sum>:
                	mov	x0, #0x2d               // =45
                	ret
 
@@ -88,9 +90,8 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	add	x2, x2, #0xc
                	cmp	x0, x2
-               	b.lt	<addr>
+               	b.lo	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	cmp	x0, #0x7
                	b.eq	<addr>
                	adrp	x3, <page>
@@ -112,9 +113,8 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	add	x2, x2, #0xc
                	cmp	x0, x2
-               	b.lt	<addr>
+               	b.lo	<addr>
                	sxtw	x0, w1
-               	sxtw	x0, w0
                	mov	x1, x0
                	mov	x0, x3
                	bl	<addr>
@@ -129,5 +129,3 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30
                	ret
-               	b	<addr>
-               	b	<addr>

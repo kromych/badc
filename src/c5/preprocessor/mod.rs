@@ -43,6 +43,8 @@
 //!   dylib" form so reordering directives cannot rebind a function to
 //!   the wrong dylib.
 //! * `#pragma pack(push|pop|N)` -- struct field alignment.
+//! * `#pragma GCC visibility push(vis)` / `pop` -- ELF visibility for the
+//!   declarations in the pragma's extent.
 //! * `#pragma intrinsic("name")` -- mark a name (e.g. `alloca`) as a
 //!   compiler intrinsic.
 
@@ -54,7 +56,7 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 use hashbrown::HashMap;
 
-use super::codegen::Target;
+use super::codegen::{ElfClass, Target};
 use super::error::C5Error;
 
 /// One declared dylib plus the bindings that target it. Created
@@ -197,20 +199,34 @@ pub(crate) struct Preprocessor {
     /// Headers that opted in to single-inclusion via `#pragma once`.
     /// A subsequent `#include` of a name in this set is dropped.
     pragma_once_files: BTreeSet<String>,
-    /// Names of headers currently being expanded, used to break
-    /// cycles. Pushed on `#include`, popped when we finish processing
-    /// the header.
-    include_stack: Vec<String>,
+    /// Controlling macro of each processed file whose whole content sits
+    /// inside one `#ifndef X` / `#endif` pair. While `X` is defined such
+    /// a file contributes nothing, so a repeat `#include` of that path is
+    /// dropped instead of being read and scanned again (C99 6.10.2; the
+    /// same optimization gcc and clang apply).
+    include_guards: HashMap<String, String>,
+    /// Headers currently being expanded: the include spelling plus
+    /// whether the body came from the compiler's own header set (the
+    /// embedded registry or an own-header root) rather than a search
+    /// path. Pushed on `#include`, popped when the header finishes.
+    /// The flag drives the closed-set resolution rule in
+    /// `find_include`: only a file actually served from the own set
+    /// resolves its includes there first, so a foreign header whose
+    /// spelling collides with a bundled name keeps `-I` order.
+    include_stack: Vec<(String, bool)>,
     /// Filesystem search paths for `#include`. Probed in order
     /// before falling back to the bundled in-binary headers, so
-    /// a user can `cp $(badc --dump-headers) ./include/...` and
-    /// override one without rebuilding badc. Plumbed in from the
-    /// CLI's `-I path` flag and any built-in defaults
-    /// (`./include`, `./libc/include`). Filesystem reads are
+    /// an on-disk copy of a bundled header overrides it without
+    /// rebuilding badc. Plumbed in from the CLI's `-I path` flag
+    /// and the driver's overlays (the source tree's
+    /// `libc/include`, `$BADC_HOME/include`). Filesystem reads are
     /// gated behind `cfg(feature = "std")`; the no_std build
     /// keeps the field but never reads from it (the embedded
     /// headers are always available).
     search_paths: Vec<String>,
+    /// On-disk copies of the compiler's own header set, probed by name
+    /// ahead of the in-binary bodies. See `add_own_header_root`.
+    own_header_roots: Vec<String>,
     /// Directories probed for `#include "..."` only (the gcc `-iquote`
     /// scope), after the including file's directory and before
     /// `search_paths`. An angle include never reads them.
@@ -249,18 +265,16 @@ pub(crate) struct Preprocessor {
     /// gcc / clang shape so editors' jump-to-error works out of
     /// the box.
     pub warnings: Vec<String>,
-    /// Include-resolution trace. Populated only when
-    /// [`Self::set_show_includes`] is on; matches gcc `-H`'s shape:
-    /// one `". stdio.h"` / `".. stddef.h"` line per `#include`,
-    /// where the leading dots mark nesting depth. The CLI's `-H` /
-    /// `--show-includes` flag flushes this list to stderr after
-    /// preprocessing finishes.
-    pub include_trace: Vec<String>,
-    /// `true` when the build driver asked for include tracing.
-    /// Defaults to `false`; flipping it on costs one push to
-    /// `include_trace` per `#include` resolve attempt and nothing
-    /// else.
-    show_includes: bool,
+    /// Include resolutions in directive order. Populated only when
+    /// [`Self::set_track_includes`] is on. Renders the gcc `-H` trace
+    /// (via [`IncludeRecord::trace_line`]) and supplies the `-M`
+    /// family's prerequisite list, so both read one list.
+    pub include_records: Vec<IncludeRecord>,
+    /// `true` when the build driver asked for include tracking (`-H`
+    /// or a `-M`-family flag). Defaults to `false`; flipping it on
+    /// costs one push to `include_records` per `#include` resolve
+    /// attempt and nothing else.
+    track_includes: bool,
     /// Source-declared entry-point name (`#pragma entrypoint(<id>)`).
     /// `None` means the default `main` is used; set via
     /// the pragma to opt the translation unit into a non-`main`
@@ -367,6 +381,76 @@ pub enum Subsystem {
     EfiRom,
 }
 
+/// Install every predefine whose spelling or value follows the data
+/// model, replacing whatever a previous call left; sole owner of these
+/// names, so re-selecting leaves nothing from the other model behind.
+///
+/// `Elf32` on an x86 target is `-m16` / `-m32`, which gcc preprocesses
+/// as i386: `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit pointer
+/// / `long` / `size_t`, no `__int128`. `-m16` is `-m32` code generation
+/// with a 16-bit default operand size and shares its predefines. An
+/// `Elf32` AArch64 object would be AArch32, which badc neither encodes
+/// nor describes; the driver refuses the flag there and the target's own
+/// model stands.
+fn install_data_model(macros: &mut HashMap<String, String>, target: Target, class: ElfClass) {
+    let ilp32 = class.is32() && target.is_x86_64();
+    // Both reserved spellings, as gcc has them; the unreserved `i386`
+    // stays out, as bare `linux` / `unix` do.
+    const X86_64_NAMES: &[&str] = &["__x86_64__", "__x86_64", "__amd64__", "__amd64"];
+    const I386_NAMES: &[&str] = &["__i386__", "__i386"];
+    for name in X86_64_NAMES.iter().chain(I386_NAMES).chain(&[
+        "__LP64__",
+        "_LP64",
+        "__ILP32__",
+        "_ILP32",
+        "__SIZEOF_INT128__",
+    ]) {
+        macros.remove(*name);
+    }
+    if target.is_x86_64() {
+        for name in if ilp32 { I386_NAMES } else { X86_64_NAMES } {
+            macros.insert(name.to_string(), "1".to_string());
+        }
+    }
+    // Windows is LLP64 -- 32-bit `long`, 64-bit pointer -- so neither.
+    let model_macros: &[&str] = match (ilp32, target.is_windows()) {
+        (true, _) => &["__ILP32__", "_ILP32"],
+        (false, false) => &["__LP64__", "_LP64"],
+        (false, true) => &[],
+    };
+    for name in model_macros {
+        macros.insert(name.to_string(), "1".to_string());
+    }
+    // Lets a header write `typedef __SIZE_TYPE__ size_t;` blind.
+    let (size_ty, ptrdiff_ty) = match (ilp32, target.is_windows()) {
+        (true, _) => ("unsigned int", "int"),
+        (false, true) => ("unsigned long long", "long long"),
+        (false, false) => ("unsigned long", "long"),
+    };
+    macros.insert("__SIZE_TYPE__".to_string(), size_ty.to_string());
+    macros.insert("__PTRDIFF_TYPE__".to_string(), ptrdiff_ty.to_string());
+    macros.insert("__INTPTR_TYPE__".to_string(), ptrdiff_ty.to_string());
+    macros.insert("__UINTPTR_TYPE__".to_string(), size_ty.to_string());
+    let ptr_bytes = if ilp32 { "4" } else { "8" };
+    for name in [
+        "__SIZEOF_POINTER__",
+        "__SIZEOF_SIZE_T__",
+        "__SIZEOF_PTRDIFF_T__",
+    ] {
+        macros.insert(name.to_string(), ptr_bytes.to_string());
+    }
+    let long_bytes = if ilp32 || target.is_windows() {
+        "4"
+    } else {
+        "8"
+    };
+    macros.insert("__SIZEOF_LONG__".to_string(), long_bytes.to_string());
+    // gcc leaves this undefined on i386, which has no `__int128`.
+    if !ilp32 {
+        macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());
+    }
+}
+
 impl Preprocessor {
     /// Build a preprocessor with the standard predefines set.
     ///
@@ -383,7 +467,7 @@ impl Preprocessor {
     /// Comparing these string-literal predefines with `#if X == "..."`
     /// is a c5 extension over C99 6.10.1p4, which restricts a `#if`
     /// controlling expression to an integer constant expression; see
-    /// std-conformance.md.
+    /// doc/std-conformance.md.
     /// * CPU-architecture macros, all defined to `1` when active so
     ///   `#if __aarch64__` works the same way it does in gcc/clang:
     ///   * AArch64 targets get `__aarch64__` and `__arm64__` (the
@@ -401,80 +485,9 @@ impl Preprocessor {
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
         let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
-        // GCC bit-count / byte-swap builtins are available with no header
-        // (they are compiler builtins, not library functions), matching
-        // gcc/clang. The call-site lowering in the walker expands each to a
-        // portable shift / mask sequence. __builtin_unreachable marks a
-        // point control must not reach; it lowers to the trap intrinsic so
-        // a reached unreachable aborts rather than continuing.
-        let mut intrinsics: alloc::collections::BTreeMap<String, i64> =
-            alloc::collections::BTreeMap::new();
-        for (name, kind) in [
-            ("__builtin_clz", super::op::Intrinsic::Clz),
-            ("__builtin_ctz", super::op::Intrinsic::Ctz),
-            ("__builtin_popcount", super::op::Intrinsic::Popcount),
-            ("__builtin_clzll", super::op::Intrinsic::Clzll),
-            ("__builtin_ctzll", super::op::Intrinsic::Ctzll),
-            ("__builtin_popcountll", super::op::Intrinsic::Popcountll),
-            ("__builtin_bswap16", super::op::Intrinsic::Bswap16),
-            ("__builtin_bswap32", super::op::Intrinsic::Bswap32),
-            ("__builtin_bswap64", super::op::Intrinsic::Bswap64),
-            ("__builtin_clrsb", super::op::Intrinsic::Clrsb),
-            ("__builtin_clrsbll", super::op::Intrinsic::Clrsbll),
-            ("__builtin_parity", super::op::Intrinsic::Parity),
-            ("__builtin_parityll", super::op::Intrinsic::Parityll),
-            ("__builtin_ffs", super::op::Intrinsic::Ffs),
-            ("__builtin_ffsll", super::op::Intrinsic::Ffsll),
-            ("__builtin_unreachable", super::op::Intrinsic::Trap),
-            (
-                "__builtin_frame_address",
-                super::op::Intrinsic::FrameAddress,
-            ),
-            (
-                "__builtin_return_address",
-                super::op::Intrinsic::ReturnAddress,
-            ),
-        ] {
-            intrinsics.insert(name.to_string(), kind as i64);
-        }
-        // The `l` (long) bit-builtins operate on `unsigned long`, whose
-        // width is the target's: 8 bytes on LP64 (so they match the
-        // `ll` 64-bit intrinsics), 4 bytes on LLP64 (so they match the
-        // plain 32-bit intrinsics).
-        let (clzl, ctzl, popcountl) = if target.long_width_bytes() == 8 {
-            (
-                super::op::Intrinsic::Clzll,
-                super::op::Intrinsic::Ctzll,
-                super::op::Intrinsic::Popcountll,
-            )
-        } else {
-            (
-                super::op::Intrinsic::Clz,
-                super::op::Intrinsic::Ctz,
-                super::op::Intrinsic::Popcount,
-            )
-        };
-        intrinsics.insert("__builtin_clzl".to_string(), clzl as i64);
-        intrinsics.insert("__builtin_ctzl".to_string(), ctzl as i64);
-        intrinsics.insert("__builtin_popcountl".to_string(), popcountl as i64);
-        let clrsbl = if target.long_width_bytes() == 8 {
-            super::op::Intrinsic::Clrsbll
-        } else {
-            super::op::Intrinsic::Clrsb
-        };
-        intrinsics.insert("__builtin_clrsbl".to_string(), clrsbl as i64);
-        let parityl = if target.long_width_bytes() == 8 {
-            super::op::Intrinsic::Parityll
-        } else {
-            super::op::Intrinsic::Parity
-        };
-        intrinsics.insert("__builtin_parityl".to_string(), parityl as i64);
-        let ffsl = if target.long_width_bytes() == 8 {
-            super::op::Intrinsic::Ffsll
-        } else {
-            super::op::Intrinsic::Ffs
-        };
-        intrinsics.insert("__builtin_ffsl".to_string(), ffsl as i64);
+        let intrinsics: alloc::collections::BTreeMap<String, i64> = builtins::preseeded(target)
+            .map(|(name, id)| (name.to_string(), id))
+            .collect();
         // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
         // declaration decorators carrying hints the dialect does not act
         // on, except for the `packed` attribute, which changes aggregate
@@ -516,9 +529,10 @@ impl Preprocessor {
         // `__GNUC__` and the rest of the GCC identity are opt-in
         // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
         // extensions real code gates on `__GNUC__`, but not all of them
-        // (`__int128` is absent), so it does not claim the macro by
-        // default; code that gates a 128-bit path on `__GNUC__` plus a
-        // 64-bit target would otherwise fail to compile.
+        // (`<x86intrin.h>` and the x86 intrinsics are absent), so it
+        // does not claim the macro by default; code that gates an
+        // intrinsic path on `__GNUC__` plus an x86 target would
+        // otherwise fail to compile.
         // Byte-order predefines (GCC/clang form). Every supported target
         // is little-endian.
         macros.insert("__ORDER_LITTLE_ENDIAN__".to_string(), "1234".to_string());
@@ -550,6 +564,20 @@ impl Preprocessor {
                 },
             );
         }
+        // `__builtin_expect(exp, c)` is a compiler builtin in GCC,
+        // available with no header; its value is the first operand.
+        // Predefined here so code that never triggers the
+        // `<_builtins.h>` auto-include still compiles; that header's
+        // identical definition harmlessly re-registers it.
+        fn_macros.insert(
+            "__builtin_expect".to_string(),
+            FnMacro {
+                params: alloc::vec!["exp".to_string(), "c".to_string()],
+                body: "(exp)".to_string(),
+                is_variadic: false,
+                va_name: None,
+            },
+        );
         // C11 6.10.8.3 conditional-feature macros. An implementation that
         // reports `__STDC_VERSION__ == 201112L` defines each of these for an
         // optional feature it does not provide; library code gates on them
@@ -582,10 +610,7 @@ impl Preprocessor {
                 // arch-dispatch code keys its aarch64 branch on it.
                 macros.insert("__AARCH64EL__".to_string(), "1".to_string());
             }
-            Target::LinuxX64 | Target::WindowsX64 => {
-                macros.insert("__x86_64__".to_string(), "1".to_string());
-                macros.insert("__amd64__".to_string(), "1".to_string());
-            }
+            Target::LinuxX64 | Target::WindowsX64 => {}
         }
         // GCC/Clang define `__CHAR_UNSIGNED__` exactly when plain
         // `char` is unsigned (C99 6.2.5p15 leaves it
@@ -594,47 +619,23 @@ impl Preprocessor {
         if !target.plain_char_signed() {
             macros.insert("__CHAR_UNSIGNED__".to_string(), "1".to_string());
         }
-        // LP64 data model: 64-bit `long` and 64-bit pointer. GCC and
-        // Clang predefine `__LP64__` and `_LP64` on every LP64 target,
-        // and code that selects a 64-bit-wide integer type branches on
-        // them. Windows is LLP64 (32-bit `long`), so it is excluded.
-        match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::LinuxX64 => {
-                macros.insert("__LP64__".to_string(), "1".to_string());
-                macros.insert("_LP64".to_string(), "1".to_string());
-            }
-            Target::WindowsX64 | Target::WindowsAarch64 => {}
-        }
-        // GCC/Clang predefine the underlying type of size_t / ptrdiff_t /
-        // intptr_t so headers can `typedef __SIZE_TYPE__ size_t;` without
-        // knowing the data model. Spelling follows LP64 vs LLP64.
-        let (size_ty, ptrdiff_ty) = match target {
-            Target::WindowsX64 | Target::WindowsAarch64 => ("unsigned long long", "long long"),
-            _ => ("unsigned long", "long"),
-        };
-        macros.insert("__SIZE_TYPE__".to_string(), size_ty.to_string());
-        macros.insert("__PTRDIFF_TYPE__".to_string(), ptrdiff_ty.to_string());
-        macros.insert("__INTPTR_TYPE__".to_string(), ptrdiff_ty.to_string());
-        macros.insert("__UINTPTR_TYPE__".to_string(), size_ty.to_string());
         // GCC/Clang predefine each type's byte size so portable code can
         // select widths without <limits.h> (e.g. a pointer's bit width is
-        // `__SIZEOF_POINTER__ * 8`). All badc targets are 64-bit, so the
-        // pointer / size_t / ptrdiff_t sizes are 8; `long` and `wchar_t`
-        // follow the data model (LLP64 Windows narrows both).
+        // `__SIZEOF_POINTER__ * 8`). These are the sizes no data model
+        // moves; the rest go in through `install_data_model`.
+        // C99 5.2.4.2.1: CHAR_BIT is 8 on every supported target.
+        macros.insert("__CHAR_BIT__".to_string(), "8".to_string());
         macros.insert("__SIZEOF_SHORT__".to_string(), "2".to_string());
         macros.insert("__SIZEOF_INT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_LONG_LONG__".to_string(), "8".to_string());
-        macros.insert("__SIZEOF_POINTER__".to_string(), "8".to_string());
-        macros.insert("__SIZEOF_SIZE_T__".to_string(), "8".to_string());
-        macros.insert("__SIZEOF_PTRDIFF_T__".to_string(), "8".to_string());
         macros.insert("__SIZEOF_FLOAT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_DOUBLE__".to_string(), "8".to_string());
-        let (long_bytes, wchar_bytes) = match target {
-            Target::WindowsX64 | Target::WindowsAarch64 => ("4", "2"),
-            _ => ("8", "4"),
+        let wchar_bytes = match target {
+            Target::WindowsX64 | Target::WindowsAarch64 => "2",
+            _ => "4",
         };
-        macros.insert("__SIZEOF_LONG__".to_string(), long_bytes.to_string());
         macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar_bytes.to_string());
+        install_data_model(&mut macros, target, ElfClass::Elf64);
         match target {
             Target::MacOSAarch64 => {
                 macros.insert("__APPLE__".to_string(), "1".to_string());
@@ -693,15 +694,17 @@ impl Preprocessor {
             dylibs: Vec::new(),
             exports: Vec::new(),
             pragma_once_files: BTreeSet::new(),
+            include_guards: HashMap::new(),
             include_stack: Vec::new(),
             search_paths: Vec::new(),
+            own_header_roots: Vec::new(),
             quote_search_paths: Vec::new(),
             system_fallback_paths: Vec::new(),
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
             warnings: Vec::new(),
-            include_trace: Vec::new(),
-            show_includes: false,
+            include_records: Vec::new(),
+            track_includes: false,
             entrypoint: None,
             subsystem: None,
             counter: Cell::new(0),
@@ -716,44 +719,98 @@ impl Preprocessor {
         }
     }
 
+    /// Re-select the data-model predefines for an object of `class`.
+    /// The driver calls this for `-m16` / `-m32`, which gcc preprocesses
+    /// with the i386 set; see [`install_data_model`].
+    pub fn set_elf_class(&mut self, class: ElfClass) {
+        install_data_model(&mut self.macros, self.target, class);
+    }
+
     /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
     /// only on request because it implements most, but not all, of the
-    /// GNU C surface (`__int128` is absent). `__GNUC_STDC_INLINE__`
-    /// reports ISO C99 inline semantics (not the GNU89 dialect);
+    /// GNU C surface (`<x86intrin.h>` and the x86 intrinsics are
+    /// absent). Exactly one of `__GNUC_STDC_INLINE__` /
+    /// `__GNUC_GNU_INLINE__` reports which inline linkage model is in
+    /// force, per `gnu89_inline`; headers key the spelling of their
+    /// inline declarations off it.
     /// `__VERSION__` is the compiler-identification string embedded by
     /// code such as `Py_GetCompiler`. `__STRICT_ANSI__` reports strict
     /// ISO conformance alongside `__GNUC__`, exactly as
     /// `gcc`/`clang -std=c11` does, so portable code uses the standard
     /// path for the GNU-only features badc lacks.
-    pub fn enable_gnu(&mut self) {
-        self.macros.insert("__GNUC__".to_string(), "4".to_string());
+    pub fn enable_gnu(&mut self, gnu89_inline: bool, strict_ansi: bool) {
+        // The claimed version (`crate::GNU_COMPAT_VERSION`) stays at
+        // 4.2.1. The language features a 5.1 claim implies are backed --
+        // `__atomic_*` (4.7), `asm goto`
+        // (4.5), `__builtin_types_compatible_p` including array type
+        // names, designated-initializer ranges, `__builtin_*_overflow`
+        // (5.1) -- but the version also gates the x86 intrinsic surface.
+        // Real code keys `<x86intrin.h>` and the SSE2 / SSSE3 / SSE4.1 /
+        // AES-NI / PCLMUL / RDRAND intrinsic families off `__GNUC__ >=
+        // 4.4`, along with per-function `__attribute__((target(...)))`.
+        // badc lowers none of those, so 4.2.1 is the highest version it
+        // can claim without selecting paths it cannot compile. Raise it
+        // once the intrinsics are lowered, not merely once a header
+        // named `<x86intrin.h>` exists.
+        let mut compat = crate::GNU_COMPAT_VERSION.split('.');
+        for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
+            let component = compat.next().expect("GNU_COMPAT_VERSION is x.y.z");
+            self.macros.insert(name.to_string(), component.to_string());
+        }
+        let inline_model_macro = if gnu89_inline {
+            "__GNUC_GNU_INLINE__"
+        } else {
+            "__GNUC_STDC_INLINE__"
+        };
         self.macros
-            .insert("__GNUC_MINOR__".to_string(), "2".to_string());
-        self.macros
-            .insert("__GNUC_PATCHLEVEL__".to_string(), "1".to_string());
-        self.macros
-            .insert("__GNUC_STDC_INLINE__".to_string(), "1".to_string());
-        self.macros
-            .insert("__VERSION__".to_string(), "\"4.2.1\"".to_string());
-        // badc backs the `__`-prefixed GNU extensions but not the ones a
-        // GNU dialect gates on `!__STRICT_ANSI__` (`typeof` of an array,
-        // `__int128`). Reporting strict ISO conformance alongside
-        // `__GNUC__` -- exactly `gcc`/`clang -std=c11` -- routes portable
-        // code to the standard path for those, while keeping the
-        // `__`-prefixed surface available. (`__builtin_types_compatible_p`
-        // is now backed by the compiler, so code gating on it works
-        // regardless of this macro.)
-        self.macros
-            .insert("__STRICT_ANSI__".to_string(), "1".to_string());
+            .insert(inline_model_macro.to_string(), "1".to_string());
+        // Dialect version first, then the real producer, as clang
+        // spells it ("4.2.1 Compatible Clang ..."), so code that
+        // embeds `__VERSION__` (`Py_GetCompiler`, sqlite's
+        // "compiled by") names badc rather than claiming to be gcc.
+        self.macros.insert(
+            "__VERSION__".to_string(),
+            alloc::format!(
+                "\"{} Compatible badc {}\"",
+                crate::GNU_COMPAT_VERSION,
+                env!("CARGO_PKG_VERSION")
+            ),
+        );
+        // The `__sync_*` builtins lower for these widths, so the
+        // capability macros a lock-free path tests are honest.
+        for w in [1u32, 2, 4, 8] {
+            self.macros.insert(
+                alloc::format!("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{w}"),
+                "1".to_string(),
+            );
+        }
+        // Report strict ISO conformance alongside `__GNUC__`, exactly as
+        // `gcc`/`clang -std=c11` does, so a header takes its standard-C
+        // path rather than a GNU-dialect path for any extension badc
+        // does not provide. Both the plain and `__`-prefixed spellings
+        // of the extensions badc does implement stay available.
+        // `-std=gnu*` clears it: a header then reaches the GNU-dialect
+        // declarations the dialect promises, as under gcc and clang.
+        if strict_ansi {
+            self.macros
+                .insert("__STRICT_ANSI__".to_string(), "1".to_string());
+        }
+        // `=@cc<cond>` inline-asm flag outputs (GCC 6). Implemented for
+        // x86 only, so the macro follows the target rather than the
+        // dialect alone. gcc defines it under `-m32` too, so the test is
+        // the target and not the `__x86_64__` predefine.
+        if self.target.is_x86_64() {
+            self.macros
+                .insert("__GCC_ASM_FLAG_OUTPUTS__".to_string(), "1".to_string());
+        }
     }
 
-    /// Enable / disable gcc-`-H`-style include tracing. When on,
-    /// every `#include` resolution -- successful or missing --
-    /// emits a line into `include_trace`; the CLI's `-H` /
-    /// `--show-includes` flag flushes the list to stderr after
-    /// preprocessing.
-    pub fn set_show_includes(&mut self, enabled: bool) {
-        self.show_includes = enabled;
+    /// Enable / disable include tracking. When on, every `#include`
+    /// resolution -- successful, cached or missing -- appends to
+    /// `include_records`, which feeds both the CLI's `-H` trace and
+    /// the `-M` family's dependency output.
+    pub fn set_track_includes(&mut self, enabled: bool) {
+        self.track_includes = enabled;
     }
 
     /// Override the filename label used for the top-level translation
@@ -776,6 +833,17 @@ impl Preprocessor {
     pub fn add_search_path(&mut self, path: &str) {
         if !self.search_paths.iter().any(|p| p == path) {
             self.search_paths.push(path.to_string());
+        }
+    }
+
+    /// Append an on-disk copy of the compiler's own header set (the
+    /// source tree's `libc/include`, `$BADC_HOME/include`). A bundled
+    /// name found there replaces the in-binary body, keeping one
+    /// identity per header name so `#pragma once` and the include
+    /// guards see a single file however the include was reached.
+    pub fn add_own_header_root(&mut self, path: &str) {
+        if !self.own_header_roots.iter().any(|p| p == path) {
+            self.own_header_roots.push(path.to_string());
         }
     }
 
@@ -854,25 +922,29 @@ impl Preprocessor {
         // diagnostic targeting one of the synthesized lines
         // points at that label and the line in the original
         // source isn't shifted from the user's perspective.
+        let mut out = String::with_capacity(source.len());
         if !self.force_includes.is_empty() {
             let mut preamble = String::new();
             for name in &self.force_includes.clone() {
                 preamble.push_str(&format!("#include \"{name}\"\n"));
             }
-            let mut combined = self.process_named(&preamble, "<force-include>")?;
-            let label = self.source_label.clone();
-            combined.push_str(&self.process_named(source, &label)?);
-            return Ok(combined);
+            self.process_named(&preamble, "<force-include>", &mut out)?;
         }
         let label = self.source_label.clone();
-        self.process_named(source, &label)
+        self.process_named(source, &label, &mut out)?;
+        Ok(out)
     }
 
     /// Recursive entry point. `filename` labels the buffer so error
     /// messages and `#pragma once` can name what they're talking
     /// about; the top-level call uses `"<source>"`, `#include`'d
     /// files use the header name (`"stdio.h"`).
-    fn process_named(&mut self, source: &str, filename: &str) -> Result<String, C5Error> {
+    fn process_named(
+        &mut self,
+        source: &str,
+        filename: &str,
+        out: &mut String,
+    ) -> Result<(), C5Error> {
         // A UTF-8 byte-order mark opening the file is accepted and
         // skipped, following gcc and clang.
         let source = source.strip_prefix('\u{feff}').unwrap_or(source);
@@ -892,7 +964,7 @@ impl Preprocessor {
         // lexer sees comment tail text as code.
         let stripped = strip_c_comments(&unfolded);
         let source = stripped.as_str();
-        let mut out = String::with_capacity(source.len());
+        out.reserve(source.len());
 
         // Emit a leading line marker so the lexer attributes
         // tokens in this buffer to `(filename, 1)`. The
@@ -948,6 +1020,9 @@ impl Preprocessor {
         // grounded in the original source.
         let lines: Vec<&str> = source.lines().collect();
         let mut idx_iter = 0usize;
+        // Watches for the `#ifndef X` / `#endif` wrapper that lets a
+        // repeat `#include` of this file be dropped; see `include_guards`.
+        let mut guard = IncludeGuardScan::default();
         while idx_iter < lines.len() {
             let idx = idx_iter;
             let line = lines[idx];
@@ -956,105 +1031,23 @@ impl Preprocessor {
 
             if let Some(rest) = trimmed.strip_prefix('#') {
                 let directive = rest.trim_start();
-                match parse_directive(directive) {
-                    Directive::Define(name, body) => {
-                        if active {
-                            self.macros.insert(name.to_string(), body.to_string());
-                            self.fn_macros.remove(name);
-                        }
-                    }
-                    Directive::DefineFn(name, mut params, body) => {
-                        if active {
-                            // A trailing `...` (C99 6.10.3) or the GCC
-                            // named-rest form `name...` makes the macro
-                            // variadic; the named form additionally binds
-                            // the trailing arguments to `name`.
-                            let mut is_variadic = false;
-                            let mut va_name = None;
-                            if let Some(last) = params.last().copied() {
-                                if last == "..." {
-                                    is_variadic = true;
-                                    params.pop();
-                                } else if let Some(prefix) = last.strip_suffix("...") {
-                                    let prefix = prefix.trim();
-                                    if is_ident(prefix) {
-                                        is_variadic = true;
-                                        va_name = Some(prefix.to_string());
-                                        params.pop();
-                                    }
-                                }
-                            }
-                            self.fn_macros.insert(
-                                name.to_string(),
-                                FnMacro {
-                                    params: params.iter().map(|s| s.to_string()).collect(),
-                                    body: body.to_string(),
-                                    is_variadic,
-                                    va_name,
-                                },
-                            );
-                            self.macros.remove(name);
-                        }
-                    }
-                    Directive::Undef(name) => {
-                        if active {
-                            self.macros.remove(name);
-                            self.fn_macros.remove(name);
-                        }
-                    }
-                    Directive::Ifdef(name) => {
-                        // C99 6.10.1: `#ifdef` is true when the name is
-                        // defined as any macro -- object-like or
-                        // function-like.
-                        let taken = active
-                            && (self.macros.contains_key(name)
-                                || self.fn_macros.contains_key(name)
-                                || is_builtin_operator_name(name));
-                        cond_stack.push(CondFrame {
-                            parent_active: active,
-                            this_branch_taken: taken,
-                            any_branch_taken: taken,
-                            saw_else: false,
-                        });
-                        active = taken;
-                    }
-                    Directive::Ifndef(name) => {
-                        let taken = active
-                            && !(self.macros.contains_key(name)
-                                || self.fn_macros.contains_key(name)
-                                || is_builtin_operator_name(name));
-                        cond_stack.push(CondFrame {
-                            parent_active: active,
-                            this_branch_taken: taken,
-                            any_branch_taken: taken,
-                            saw_else: false,
-                        });
-                        active = taken;
-                    }
-                    Directive::If(expr) => {
-                        let taken = active && self.eval_condition(expr, source_line, filename)?;
-                        cond_stack.push(CondFrame {
-                            parent_active: active,
-                            this_branch_taken: taken,
-                            any_branch_taken: taken,
-                            saw_else: false,
-                        });
-                        active = taken;
-                    }
-                    Directive::Else => {
-                        active = apply_else(&mut cond_stack, filename, line_no)?;
-                    }
-                    Directive::Elif(expr) => {
-                        // The directive eval needs a `&Self`, but the
-                        // frame update borrows `cond_stack` -- check
-                        // eligibility first, evaluate, then mutate.
-                        let eligible = elif_eligible(&cond_stack, filename, line_no)?;
-                        let cond = eligible && self.eval_condition(expr, source_line, filename)?;
-                        active = apply_elif(&mut cond_stack, cond, filename, line_no)?;
-                    }
-                    Directive::Endif => {
-                        active = apply_endif(&mut cond_stack, filename, line_no)?;
-                    }
+                let parsed = parse_directive(directive);
+                guard.line(line, Some(&parsed), cond_stack.len());
+                if let Some(next) = self.apply_cond_or_macro_directive(
+                    &parsed,
+                    active,
+                    &mut cond_stack,
+                    source_line,
+                    line_no,
+                    filename,
+                )? {
+                    active = next;
+                    out.push('\n');
+                    source_line += 1;
+                    idx_iter += 1;
+                    continue;
+                }
+                match parsed {
                     Directive::Pragma(args) => {
                         if active {
                             match parse_pragma_directive(args) {
@@ -1062,7 +1055,8 @@ impl Preprocessor {
                                     self.pragma_once_files.insert(filename.to_string());
                                 }
                                 PragmaDirective::Other => {
-                                    // `#pragma pack(...)` is source-position-
+                                    // `#pragma pack(...)` and `#pragma GCC
+                                    // visibility ...` are source-position-
                                     // sensitive: a struct definition that
                                     // follows a `pack(1)` directive packs at
                                     // 1, but a struct AFTER a subsequent
@@ -1074,8 +1068,8 @@ impl Preprocessor {
                                     // through verbatim so the lexer
                                     // reaches it inline; the lexer's `#`
                                     // handler folds the directive into
-                                    // its `pack_stack`.
-                                    if pragma_is_pack(args) {
+                                    // its `pack_stack` / `visibility_stack`.
+                                    if pragma_is_pack(args) || pragma_is_visibility(args) {
                                         out.push('#');
                                         out.push_str(directive);
                                         out.push('\n');
@@ -1096,8 +1090,10 @@ impl Preprocessor {
                             // else is malformed; surface a
                             // warning and skip, matching how
                             // other unrecognised directives are
-                            // handled.
-                            let expanded = self.substitute(args, filename, line_no);
+                            // handled. The spelling-faithful form
+                            // keeps re-lex separators out of the
+                            // header name.
+                            let expanded = self.substitute_spelling(args, filename, line_no);
                             let trimmed = expanded.trim();
                             let name = trimmed
                                 .strip_prefix('<')
@@ -1110,9 +1106,7 @@ impl Preprocessor {
                                         .map(|n| (n, true))
                                 });
                             if let Some((n, quoted)) = name {
-                                let included =
-                                    self.process_include(n.trim(), line_no, filename, quoted)?;
-                                out.push_str(&included);
+                                self.process_include(n.trim(), line_no, filename, quoted, out)?;
                                 out.push_str(&format_line_marker(source_line + 1, &current_file));
                                 source_line += 1;
                                 idx_iter += 1;
@@ -1130,8 +1124,7 @@ impl Preprocessor {
                     }
                     Directive::Include { name, quoted } => {
                         if active {
-                            let included = self.process_include(name, line_no, filename, quoted)?;
-                            out.push_str(&included);
+                            self.process_include(name, line_no, filename, quoted, out)?;
                             // Closing marker uses `source_line + 1`
                             // (NOT `line_no + 1`) and `current_file`
                             // (NOT the static `filename` param).
@@ -1156,9 +1149,7 @@ impl Preprocessor {
                     }
                     Directive::IncludeNext { name, quoted } => {
                         if active {
-                            let included =
-                                self.process_include_next(name, line_no, filename, quoted)?;
-                            out.push_str(&included);
+                            self.process_include_next(name, line_no, filename, quoted, out)?;
                             out.push_str(&format_line_marker(source_line + 1, &current_file));
                             source_line += 1;
                             idx_iter += 1;
@@ -1229,38 +1220,6 @@ impl Preprocessor {
                             ));
                         }
                     }
-                    Directive::Error(message) => {
-                        // C99 sec 6.10.5: `#error` produces a compile-time
-                        // diagnostic. The text after the directive name,
-                        // up to the newline, is the diagnostic message;
-                        // we surface it verbatim through the standard
-                        // C5Error path so the same downstream tooling
-                        // that reports lexer / parser failures handles
-                        // it.
-                        if active {
-                            return Err(C5Error::Compile(super::error::fmt_compile_err(
-                                filename,
-                                line_no,
-                                &format!("#error {}", message.trim()),
-                            )));
-                        }
-                    }
-                    Directive::Warning(message) => {
-                        // gcc/clang extension; standardised in C23.
-                        // Same shape as `#error` but emits a
-                        // `warning:` diagnostic and lets compilation
-                        // continue. Goes into the preprocessor's
-                        // warning bag so the CLI surfaces it through
-                        // the same TTY-colorising path as
-                        // type-mismatch and tentative-decl warnings.
-                        if active {
-                            self.warnings.push(super::error::fmt_compile_warn(
-                                filename,
-                                line_no,
-                                &format!("#warning {}", message.trim()),
-                            ));
-                        }
-                    }
                     Directive::Other => {
                         // Unknown directive. C99 6.10.6 reserves
                         // every non-directive form for the
@@ -1292,6 +1251,23 @@ impl Preprocessor {
                         // First-line `#!/usr/bin/env badc` shebangs --
                         // no preprocessor semantics, just skipped.
                     }
+                    // Spelled out rather than `_` so a new directive
+                    // variant is a compile error here as well as in
+                    // `apply_cond_or_macro_directive`, which already
+                    // consumed every one of these.
+                    Directive::Define(..)
+                    | Directive::DefineFn(..)
+                    | Directive::Undef(..)
+                    | Directive::Ifdef(..)
+                    | Directive::Ifndef(..)
+                    | Directive::If(..)
+                    | Directive::Elif(..)
+                    | Directive::Else
+                    | Directive::Endif
+                    | Directive::Error(..)
+                    | Directive::Warning(..) => {
+                        unreachable!("consumed by apply_cond_or_macro_directive")
+                    }
                 }
                 out.push('\n');
                 source_line += 1;
@@ -1299,17 +1275,21 @@ impl Preprocessor {
                 continue;
             }
 
+            guard.line(line, None, cond_stack.len());
             if active {
                 let mut buffer = String::from(line);
                 let mut consumed = 1usize;
                 // A function-like macro call may span lines whose arguments
-                // carry conditional directives (C99 6.10.3p11 leaves this
-                // undefined, but the common toolchains evaluate them and
-                // real code relies on it). Track a local conditional state
-                // so only the active branch's lines join the argument
-                // buffer; directive lines never become argument text.
-                let mut join_stack: Vec<CondFrame> = Vec::new();
-                let mut join_active = true;
+                // carry preprocessor directives (C99 6.10.3p11 leaves this
+                // undefined; gcc and clang process such directives as if
+                // the invocation were not present, and real code relies on
+                // it). Directives here work on the same conditional stack
+                // as top-level ones -- an `#if` opened inside the argument
+                // list may close after the call's `)`, and vice versa.
+                // Directive lines never become argument text; content
+                // lines join the buffer only while the current branch is
+                // active.
+                //
                 // The scan state advances over appended bytes only;
                 // re-scanning the grown buffer per joined line is
                 // quadratic in the invocation length.
@@ -1327,91 +1307,25 @@ impl Preprocessor {
                 {
                     let cont = lines[idx + consumed];
                     consumed += 1;
+                    let dline = source_line + consumed - 1;
                     let cont_trimmed = cont.trim_start();
                     if let Some(rest) = cont_trimmed.strip_prefix('#') {
-                        match parse_directive(rest.trim_start()) {
-                            Directive::Ifdef(name) => {
-                                let taken = join_active
-                                    && (self.macros.contains_key(name)
-                                        || self.fn_macros.contains_key(name));
-                                join_stack.push(CondFrame {
-                                    parent_active: join_active,
-                                    this_branch_taken: taken,
-                                    any_branch_taken: taken,
-                                    saw_else: false,
-                                });
-                                join_active = taken;
-                            }
-                            Directive::Ifndef(name) => {
-                                let taken = join_active
-                                    && !(self.macros.contains_key(name)
-                                        || self.fn_macros.contains_key(name));
-                                join_stack.push(CondFrame {
-                                    parent_active: join_active,
-                                    this_branch_taken: taken,
-                                    any_branch_taken: taken,
-                                    saw_else: false,
-                                });
-                                join_active = taken;
-                            }
-                            Directive::If(expr) => {
-                                let taken = join_active
-                                    && self.eval_condition(expr, source_line, filename)?;
-                                join_stack.push(CondFrame {
-                                    parent_active: join_active,
-                                    this_branch_taken: taken,
-                                    any_branch_taken: taken,
-                                    saw_else: false,
-                                });
-                                join_active = taken;
-                            }
-                            // An `#elif` / `#else` / `#endif` with no
-                            // frame opened inside the argument list
-                            // belongs to the conditional enclosing the
-                            // macro call; apply it to the outer stack so
-                            // argument gathering resumes in the right
-                            // branch and the outer frame still closes.
-                            Directive::Elif(expr) => {
-                                let stack = if join_stack.is_empty() {
-                                    &mut cond_stack
-                                } else {
-                                    &mut join_stack
-                                };
-                                let eligible = elif_eligible(stack, filename, source_line)?;
-                                let cond =
-                                    eligible && self.eval_condition(expr, source_line, filename)?;
-                                let taken = apply_elif(stack, cond, filename, source_line)?;
-                                if join_stack.is_empty() {
-                                    active = taken;
-                                }
-                                join_active = taken;
-                            }
-                            Directive::Else => {
-                                let stack = if join_stack.is_empty() {
-                                    &mut cond_stack
-                                } else {
-                                    &mut join_stack
-                                };
-                                let taken = apply_else(stack, filename, source_line)?;
-                                if join_stack.is_empty() {
-                                    active = taken;
-                                }
-                                join_active = taken;
-                            }
-                            Directive::Endif => {
-                                if let Some(frame) = join_stack.pop() {
-                                    join_active = frame.parent_active;
-                                } else {
-                                    active = apply_endif(&mut cond_stack, filename, source_line)?;
-                                    join_active = active;
-                                }
-                            }
-                            // Other directives inside a macro argument are
-                            // rare and undefined; consume the line without
-                            // adding it to the argument text.
-                            _ => {}
+                        let parsed = parse_directive(rest.trim_start());
+                        // TODO: `#include`, `#line` and `#pragma` inside an
+                        // argument list are consumed without effect; their
+                        // output would have to interleave with the joined
+                        // expansion.
+                        if let Some(next) = self.apply_cond_or_macro_directive(
+                            &parsed,
+                            active,
+                            &mut cond_stack,
+                            dline,
+                            dline,
+                            filename,
+                        )? {
+                            active = next;
                         }
-                    } else if join_active {
+                    } else if active {
                         let appended = buffer.len();
                         buffer.push('\n');
                         buffer.push_str(cont);
@@ -1451,7 +1365,162 @@ impl Preprocessor {
             )));
         }
 
-        Ok(out)
+        // Only files reached through `#include` can be re-included, and
+        // only they have a resolved path to key on.
+        if !self.include_stack.is_empty()
+            && let Some(name) = guard.finish(cond_stack.len())
+        {
+            self.include_guards.insert(filename.to_string(), name);
+        }
+        Ok(())
+    }
+
+    /// Install an object-like macro definition.
+    fn apply_define(&mut self, name: &str, body: &str) {
+        self.macros.insert(name.to_string(), body.to_string());
+        self.fn_macros.remove(name);
+    }
+
+    /// Directives whose whole effect is on the macro table or the
+    /// conditional stack. Both the top-level line loop and the
+    /// macro-argument line joiner dispatch through this so the two
+    /// cannot drift; `None` means the directive belongs to neither
+    /// group and the caller must handle it. `presumed` is the
+    /// `#line`-adjusted number an `#if` expression evaluates against,
+    /// `diag` the buffer line a diagnostic cites.
+    fn apply_cond_or_macro_directive(
+        &mut self,
+        directive: &Directive<'_>,
+        active: bool,
+        cond_stack: &mut Vec<CondFrame>,
+        presumed: usize,
+        diag: usize,
+        filename: &str,
+    ) -> Result<Option<bool>, C5Error> {
+        let mut push_branch = |taken: bool| {
+            cond_stack.push(CondFrame {
+                parent_active: active,
+                this_branch_taken: taken,
+                any_branch_taken: taken,
+                saw_else: false,
+            });
+            taken
+        };
+        let next_active = match directive {
+            Directive::Define(name, body) => {
+                if active {
+                    self.check_paste_placement(name, body, filename, diag);
+                    self.apply_define(name, body);
+                }
+                active
+            }
+            Directive::DefineFn(name, params, body) => {
+                if active {
+                    self.check_paste_placement(name, body, filename, diag);
+                    self.apply_define_fn(name, params, body);
+                }
+                active
+            }
+            Directive::Undef(name) => {
+                if active {
+                    self.apply_undef(name);
+                }
+                active
+            }
+            // C99 6.10.1: `#ifdef` is true when the name is defined as
+            // any macro -- object-like or function-like.
+            Directive::Ifdef(name) => push_branch(active && self.is_defined_name(name)),
+            Directive::Ifndef(name) => push_branch(active && !self.is_defined_name(name)),
+            Directive::If(expr) => {
+                push_branch(active && self.eval_condition(expr, presumed, filename)?)
+            }
+            Directive::Elif(expr) => {
+                // The expression eval needs a `&Self` while the frame
+                // update borrows `cond_stack`: check eligibility
+                // first, evaluate, then mutate.
+                let eligible = elif_eligible(cond_stack, filename, diag)?;
+                let cond = eligible && self.eval_condition(expr, presumed, filename)?;
+                apply_elif(cond_stack, cond, filename, diag)?
+            }
+            Directive::Else => apply_else(cond_stack, filename, diag)?,
+            Directive::Endif => apply_endif(cond_stack, filename, diag)?,
+            Directive::Error(message) => {
+                if active {
+                    return Err(C5Error::Compile(super::error::fmt_compile_err(
+                        filename,
+                        diag,
+                        &format!("#error {}", message.trim()),
+                    )));
+                }
+                active
+            }
+            // gcc/clang extension, standardised in C23: same shape as
+            // `#error` but compilation continues.
+            Directive::Warning(message) => {
+                if active {
+                    self.warnings.push(super::error::fmt_compile_warn(
+                        filename,
+                        diag,
+                        &format!("#warning {}", message.trim()),
+                    ));
+                }
+                active
+            }
+            _ => return Ok(None),
+        };
+        Ok(Some(next_active))
+    }
+
+    /// C99 6.10.1 `defined`: any macro of either kind, plus the
+    /// `__has_*` operator names the preprocessor implements and the
+    /// predefines expanded from context. The context-expanded ones
+    /// hold no table entry, but C99 6.10.8 makes them macros, so
+    /// `#ifdef __FILE__` and the `#ifdef __COUNTER__` feature probe
+    /// must see them.
+    pub(super) fn is_defined_name(&self, name: &str) -> bool {
+        self.macros.contains_key(name)
+            || self.fn_macros.contains_key(name)
+            || is_operator_name(name)
+            || super::preprocessor::expand::is_dynamic_predefine(name)
+    }
+
+    /// Install a function-like macro definition. A trailing `...`
+    /// (C99 6.10.3) or the GCC named-rest form `name...` makes the
+    /// macro variadic; the named form additionally binds the trailing
+    /// arguments to `name`.
+    fn apply_define_fn(&mut self, name: &str, params: &[&str], body: &str) {
+        let mut is_variadic = false;
+        let mut va_name = None;
+        let mut params = params;
+        if let Some(last) = params.last().copied() {
+            if last == "..." {
+                is_variadic = true;
+                params = &params[..params.len() - 1];
+            } else if let Some(prefix) = last.strip_suffix("...") {
+                let prefix = prefix.trim();
+                if is_ident(prefix) {
+                    is_variadic = true;
+                    va_name = Some(prefix.to_string());
+                    params = &params[..params.len() - 1];
+                }
+            }
+        }
+        self.fn_macros.insert(
+            name.to_string(),
+            FnMacro {
+                params: params.iter().map(|s| s.to_string()).collect(),
+                body: body.to_string(),
+                is_variadic,
+                va_name,
+            },
+        );
+        self.macros.remove(name);
+    }
+
+    /// Remove a macro definition of either kind.
+    fn apply_undef(&mut self, name: &str) {
+        self.macros.remove(name);
+        self.fn_macros.remove(name);
     }
 
     /// Record the first macro-expansion diagnostic of a pass; later
@@ -1472,6 +1541,7 @@ impl Preprocessor {
     }
 }
 
+pub(super) mod builtins;
 mod cond;
 mod directive;
 mod expand;
@@ -1482,11 +1552,12 @@ mod text;
 #[cfg(test)]
 mod tests;
 
-use cond::is_builtin_operator_name;
+use builtins::is_operator_name;
 use directive::{
-    CondFrame, Directive, apply_elif, apply_else, apply_endif, elif_eligible, format_line_marker,
-    parse_directive,
+    CondFrame, Directive, IncludeGuardScan, apply_elif, apply_else, apply_endif, elif_eligible,
+    format_line_marker, parse_directive,
 };
 use expand::JoinScan;
-use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack};
+pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
+use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack, pragma_is_visibility};
 use text::{is_ident, strip_c_comments, unfold_line_continuations};

@@ -166,6 +166,9 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::ftrylockfile, "_ftrylockfile")
 #pragma binding(libc::getc_unlocked, "_getc_unlocked")
 #pragma binding(libc::putc_unlocked, "_putc_unlocked")
+#pragma binding(libc::getline,   "_getline")
+#pragma binding(libc::getdelim,  "_getdelim")
+#pragma binding(libc::dprintf,   "_dprintf")
 #endif
 
 #ifdef __linux__
@@ -242,6 +245,9 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::ftrylockfile, "ftrylockfile")
 #pragma binding(libc::getc_unlocked, "getc_unlocked")
 #pragma binding(libc::putc_unlocked, "putc_unlocked")
+#pragma binding(libc::getline,   "getline")
+#pragma binding(libc::getdelim,  "getdelim")
+#pragma binding(libc::dprintf,   "dprintf")
 #endif
 
 #ifdef _WIN32
@@ -511,7 +517,7 @@ void setbuf(FILE *stream, char *buf);
 void setbuffer(FILE *stream, char *buf, int size);
 #endif
 int puts(char *s);
-int perror(char *s);
+void perror(char *s);
 // C99 7.19.9.2 / 7.19.9.4: fseek takes a long offset, ftell returns long.
 // An `int` offset/return truncates positions past 2GB.
 int fseek(FILE *stream, long offset, int whence);
@@ -527,11 +533,11 @@ long long _ftelli64(FILE *stream);
 #endif
 int fgetpos(FILE *stream, fpos_t *pos);
 int fsetpos(FILE *stream, const fpos_t *pos);
-int rewind(FILE *stream);
+void rewind(FILE *stream);
 int fflush(FILE *stream);
 int feof(FILE *stream);
 int ferror(FILE *stream);
-int clearerr(FILE *stream);
+void clearerr(FILE *stream);
 int setvbuf(FILE *stream, char *buf, int mode, int size);
 int remove(char *path);
 int rename(char *old_path, char *new_path);
@@ -540,6 +546,15 @@ int rename(char *old_path, char *new_path);
 // size_t) slots the libc updates as bytes are written; the
 // `size_t` is c5's `int`-shaped machine word.
 FILE *open_memstream(char **bufp, int *sizep);
+// POSIX.1-2008 delimited line input: read through the next `delim`
+// (newline for `getline`) into a heap buffer `*lineptr` of capacity
+// `*n`, growing it as needed, and return the byte count or -1. The
+// return type is `ssize_t`, which is `long` on both targets that
+// export these (`<sys/types.h>`); msvcrt exports neither.
+long getline(char **lineptr, size_t *n, FILE *stream);
+long getdelim(char **lineptr, size_t *n, int delim, FILE *stream);
+// POSIX.1-2008 formatted output straight to a file descriptor.
+int dprintf(int fd, const char *fmt, ...);
 #endif
 #ifdef _WIN32
 FILE *_wfopen(unsigned short *path, unsigned short *mode);

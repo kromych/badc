@@ -10,16 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<handler>:
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
-               	leaq	-<rip>, %rax        # <addr>
-               	leaq	-<rip>, %rcx       # <addr>
-               	cmpq	%rcx, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	retq
                	xorq	%rax, %rax
                	retq

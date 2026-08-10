@@ -1,5 +1,5 @@
 //! Drop a redundant `Inst::Extend { value, kind }` by redirecting its
-//! consumers to `value`. An extend is redundant in two cases:
+//! consumers to `value`. An extend is redundant in three cases:
 //!
 //!   1. `value` is a narrow integer load whose own extension already
 //!      covers the extend: a signed load (`I8`/`I16`/`I32`) no wider than
@@ -17,7 +17,17 @@
 //!      per-op renormalization left over from a chain of low-word
 //!      integer arithmetic.
 //!
-//! A third case works across blocks: two `Extend`s of the same SSA
+//!   3. `value` is itself an `Extend` no wider than this one. The inner
+//!      result already holds its sign bit in every position at and above
+//!      its width, so re-extending from an equal or greater width
+//!      reproduces it bit for bit -- the covering argument of (1) with a
+//!      signed load replaced by a signed extend. Unlike (2) this holds in
+//!      all 64 bits, so it applies wherever the value is consumed; such
+//!      an extend is in turn transparent to the case-(2) analysis, which
+//!      would otherwise judge the operand against a consumer set the
+//!      collapse widens.
+//!
+//! A fourth case works across blocks: two `Extend`s of the same SSA
 //! value with the same `kind` compute the same result, so an occurrence
 //! at a position dominated by another redirects to the dominating one
 //! (`dedup_dominated_extends`). Extends of a value round-tripped
@@ -69,6 +79,15 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
 /// 6.5.2.2p4-converted value; the return boundary stays conservative, so a value
 /// feeding the return keeps its canonicalization).
 pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
+    compute_high_observed_through(func, &[])
+}
+
+/// `compute_high_observed`, with the extends flagged in `collapsing`
+/// treated as transparent rather than as a barrier. Such an extend is
+/// about to be replaced by its operand in all 64 bits, so it hands its
+/// own consumers' observation down: without that, the operand's low-word
+/// rule could fire against a consumer set the collapse is going to widen.
+fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec<bool> {
     let n = func.insts.len();
     let mut hi = alloc::vec![false; n];
     let mut work: Vec<ValueId> = Vec::new();
@@ -93,6 +112,15 @@ pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
                 observe(&mut hi, &mut work, *index);
             }
             Inst::Store {
+                addr, value, kind, ..
+            } => {
+                observe(&mut hi, &mut work, *addr);
+                if *kind == StoreKind::I64 {
+                    observe(&mut hi, &mut work, *value);
+                }
+            }
+            Inst::SegLoad { addr, .. } => observe(&mut hi, &mut work, *addr),
+            Inst::SegStore {
                 addr, value, kind, ..
             } => {
                 observe(&mut hi, &mut work, *addr);
@@ -228,6 +256,9 @@ pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
                     observe(&mut hi, &mut work, v);
                 }
             }
+            Inst::Extend { value, .. } if collapsing.get(r as usize).copied().unwrap_or(false) => {
+                observe(&mut hi, &mut work, *value)
+            }
             _ => {}
         }
     }
@@ -314,17 +345,19 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
     }
     let idom = crate::c5::codegen::ssa::mem2reg::dominators(func);
     // Dominator-tree depth per block; unreachable blocks get MAX.
+    // Reverse postorder settles a block's immediate dominator before the
+    // block itself, so one pass suffices.
     let mut depth = alloc::vec![u32::MAX; func.blocks.len()];
-    for b in 0..func.blocks.len() {
-        if idom[b] == u32::MAX {
+    let mut po = crate::c5::codegen::ssa::mem2reg::postorder(func);
+    po.reverse();
+    for b in po {
+        depth[b as usize] = if b == 0 {
+            0
+        } else if idom[b as usize] == u32::MAX {
             continue;
-        }
-        let (mut d, mut cur) = (0u32, b as u32);
-        while cur != 0 && idom[cur as usize] != u32::MAX {
-            cur = idom[cur as usize];
-            d += 1;
-        }
-        depth[b] = d;
+        } else {
+            depth[idom[b as usize] as usize].saturating_add(1)
+        };
     }
     let mut groups: HashMap<(ValueId, LoadKind), Vec<ValueId>> = HashMap::new();
     for (idx, inst) in func.insts.iter().enumerate() {
@@ -377,32 +410,36 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
         (range.start.max(br.start)..range.end.min(br.end))
             .any(|idx| is_call(&func.insts[idx as usize]))
     };
-    let succs = |b: u32| {
-        crate::c5::codegen::ssa::mem2reg::successors(
-            &func.blocks[b as usize].terminator,
-            &func.computed_goto_targets,
-            &func.jump_tables,
-        )
-    };
+    let graph = crate::c5::codegen::ssa::mem2reg::SuccGraph::new(func);
+    // A function with no call at all cannot have one between two
+    // points, so the search below never fires.
+    let any_call = block_has_call.iter().any(|&c| c);
+    // Visit marks for the search, reused across queries: `seen[b][f]`
+    // holds the query number that last marked block `b` in state `f`.
+    let mut seen = alloc::vec![[0u32; 2]; func.blocks.len()];
+    let mut query = 0u32;
+    let mut work: Vec<(u32, bool)> = Vec::new();
     // Whether some path from `c` (exclusive) to `e` (exclusive) passes a
     // call: the straight-line segment when both sit in one block, else a
     // forward search over successor edges carrying a seen-a-call state.
     // The start block contributes its calls after `c`, the target block
     // its calls before `e`, and any block in between its calls
     // wholesale (a cyclic revisit of the start / target block too).
-    let call_between = |c: ValueId, e: ValueId| -> bool {
+    let mut call_between = |c: ValueId, e: ValueId| -> bool {
+        if !any_call {
+            return false;
+        }
         let c_blk = inst_block[c as usize];
         let e_blk = inst_block[e as usize];
         if c_blk == e_blk && c < e && call_in(c_blk, c + 1..e) {
             return true;
         }
-        let n = func.blocks.len();
-        let mut seen = alloc::vec![[false; 2]; n];
-        let mut work: Vec<(u32, bool)> = Vec::new();
+        query += 1;
+        work.clear();
         let start_flag = call_in(c_blk, c + 1..u32::MAX);
-        for s in succs(c_blk) {
-            if !seen[s as usize][start_flag as usize] {
-                seen[s as usize][start_flag as usize] = true;
+        for &s in graph.of(c_blk) {
+            if seen[s as usize][start_flag as usize] != query {
+                seen[s as usize][start_flag as usize] = query;
                 work.push((s, start_flag));
             }
         }
@@ -411,9 +448,9 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
                 return true;
             }
             let f2 = f || block_has_call[b as usize];
-            for s in succs(b) {
-                if !seen[s as usize][f2 as usize] {
-                    seen[s as usize][f2 as usize] = true;
+            for &s in graph.of(b) {
+                if seen[s as usize][f2 as usize] != query {
+                    seen[s as usize][f2 as usize] = query;
                     work.push((s, f2));
                 }
             }
@@ -637,11 +674,32 @@ fn run_one(func: &mut FunctionSsa) {
     // unsigned load zero-extends, so a strictly-wider sign-extend lands its
     // sign bit in the zero region and is likewise a no-op. This covers the
     // `int`-return sign-extend of a char/short load left by the callee-
-    // narrowing convention. Or (2) it is an i32 sign-extend whose upper bits no
-    // consumer reads, so every consumer sees the same low 32 bits in the
-    // operand. Both redirect the extend's consumers to the operand; `resolve`
-    // walks redirect chains.
-    let high = compute_high_observed(func);
+    // narrowing convention. Or (3) its operand is an Extend no wider than
+    // it: the inner result holds its sign bit in every position at and
+    // above its own width, so re-extending from an equal or greater width
+    // reproduces it bit for bit. Or (2) it is an i32 sign-extend whose
+    // upper bits no consumer reads, so every consumer sees the same low 32
+    // bits in the operand. All three redirect the extend's consumers to the
+    // operand; `resolve` walks redirect chains.
+    //
+    // (1) and (3) hold in all 64 bits, (2) only in the low word, so a
+    // chain must never run one of the former into the latter. Case (3) is
+    // decided first, structurally, and its extends enter the high-bit
+    // analysis as transparent: an operand whose collapsing consumers read
+    // the upper half then fails (2) instead of being redirected under it.
+    let mut collapsing = alloc::vec![false; n];
+    for (idx, inst) in func.insts.iter().enumerate() {
+        let Inst::Extend { value, kind } = inst else {
+            continue;
+        };
+        let Some(Inst::Extend { kind: inner, .. }) = func.insts.get(*value as usize) else {
+            continue;
+        };
+        collapsing[idx] = narrow_kind_bits(*inner)
+            .zip(narrow_kind_bits(*kind))
+            .is_some_and(|(ibits, ebits)| ibits <= ebits);
+    }
+    let high = compute_high_observed_through(func, &collapsing);
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     for (idx, inst) in func.insts.iter().enumerate() {
         let Inst::Extend { value, kind } = inst else {
@@ -656,7 +714,7 @@ fn run_one(func: &mut FunctionSsa) {
                     lbits < ebits
                 }
             });
-        if load_covers || (*kind == LoadKind::I32 && !high[idx]) {
+        if load_covers || collapsing[idx] || (*kind == LoadKind::I32 && !high[idx]) {
             redirect[idx] = Some(*value);
         }
     }
@@ -672,106 +730,15 @@ fn run_one(func: &mut FunctionSsa) {
         if let Inst::Extend { value: _, kind: _ } = inst {
             continue;
         }
-        for_each_operand_mut(inst, |op| *op = resolve(&redirect, *op));
+        inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
     }
     for block in func.blocks.iter_mut() {
         if block.exit_acc != NO_VALUE {
             block.exit_acc = resolve(&redirect, block.exit_acc);
         }
-        match &mut block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                *cond = resolve(&redirect, *cond);
-            }
-            Terminator::Return(v) if *v != NO_VALUE => {
-                *v = resolve(&redirect, *v);
-            }
-            _ => {}
-        }
-    }
-}
-
-/// Walk every value operand the inst references and call `f` with
-/// a mutable reference. Mirrors `ssa_mem2reg::for_each_operand_mut`.
-fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
-    match inst {
-        Inst::Imm(_)
-        | Inst::ImmData(_)
-        | Inst::ImmCode(_)
-        | Inst::ImmExtCode(_)
-        | Inst::BlockAddr(_)
-        | Inst::LocalAddr(_)
-        | Inst::TlsAddr(_)
-        | Inst::LoadLocal { .. }
-        | Inst::TailExt(_)
-        | Inst::AllocaInit(_)
-        | Inst::ParamRef { .. } => {}
-        Inst::Load { addr, .. } => f(addr),
-        Inst::Store { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::StoreLocal { value, .. } => f(value),
-        Inst::LoadIndexed { base, index, .. } => {
-            f(base);
-            f(index);
-        }
-        Inst::StoreIndexed {
-            base, index, value, ..
-        } => {
-            f(base);
-            f(index);
-            f(value);
-        }
-        Inst::Binop { lhs, rhs, .. } => {
-            f(lhs);
-            f(rhs);
-        }
-        Inst::BinopI { lhs, .. } => f(lhs),
-        Inst::Fneg(v) => f(v),
-        Inst::Fma { a, b, c, .. } => {
-            f(a);
-            f(b);
-            f(c);
-        }
-        Inst::Extend { value, .. } => f(value),
-        Inst::FpCast { value, .. } => f(value),
-        Inst::Call { args, .. }
-        | Inst::CallExt { args, .. }
-        | Inst::Intrinsic { args, .. }
-        | Inst::InlineAsm { args, .. } => {
-            for a in args {
-                f(a);
-            }
-        }
-        Inst::CallIndirect { target, args, .. } => {
-            f(target);
-            for a in args {
-                f(a);
-            }
-        }
-        Inst::Mcpy { dst, src, .. } => {
-            f(dst);
-            f(src);
-        }
-        Inst::AtomicRmw { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            desired,
-            ..
-        } => {
-            f(addr);
-            f(expected_addr);
-            f(desired);
-        }
-        Inst::Phi { incoming, .. } => {
-            for (_, v) in incoming {
-                f(v);
-            }
-        }
+        block
+            .terminator
+            .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
     }
 }
 
@@ -792,6 +759,10 @@ mod tests {
             is_inline: false,
             is_always_inline: false,
             is_naked: false,
+            section: None,
+            is_weak: false,
+            is_internal: false,
+            const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
@@ -803,11 +774,16 @@ mod tests {
             ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            label_data_relocs: Vec::new(),
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
@@ -1482,6 +1458,85 @@ mod tests {
         assert!(
             matches!(f.insts[4], Inst::BinopI { lhs: 3, .. }),
             "signed compare must keep reading the sign-extended value",
+        );
+    }
+
+    /// v0 Imm; v1 Add(v0,v0); v2 Extend(v1,inner); v3 Extend(v2,outer);
+    /// Return(v3). The return reads all 64 bits, so only the covering
+    /// widths may collapse.
+    fn stacked_extends(inner: LoadKind, outer: LoadKind) -> FunctionSsa {
+        fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs: 0,
+                },
+                Inst::Extend {
+                    value: 1,
+                    kind: inner,
+                },
+                Inst::Extend {
+                    value: 2,
+                    kind: outer,
+                },
+            ],
+            vec![Block {
+                start_pc: 0,
+                inst_range: 0..4,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            }],
+        )
+    }
+
+    #[test]
+    fn extend_of_no_wider_extend_collapses() {
+        for (inner, outer) in [
+            (LoadKind::I32, LoadKind::I32),
+            (LoadKind::I8, LoadKind::I32),
+            (LoadKind::I16, LoadKind::I32),
+            (LoadKind::I8, LoadKind::I16),
+        ] {
+            let mut f = stacked_extends(inner, outer);
+            run_one(&mut f);
+            assert!(
+                matches!(f.blocks[0].terminator, Terminator::Return(2)),
+                "{inner:?} inside {outer:?} reproduces the inner bits; the \
+                 outer extend must drop",
+            );
+            assert_eq!(f.blocks[0].exit_acc, 2);
+        }
+    }
+
+    #[test]
+    fn extend_narrower_than_its_operand_is_kept() {
+        for (inner, outer) in [
+            (LoadKind::I32, LoadKind::I8),
+            (LoadKind::I32, LoadKind::I16),
+            (LoadKind::I16, LoadKind::I8),
+        ] {
+            let mut f = stacked_extends(inner, outer);
+            run_one(&mut f);
+            assert!(
+                matches!(f.blocks[0].terminator, Terminator::Return(3)),
+                "{outer:?} truncates below {inner:?}; the outer extend stays",
+            );
+        }
+    }
+
+    #[test]
+    fn collapsed_extend_forwards_its_high_use_to_the_operand() {
+        // The outer extend collapses onto the inner one, so the inner
+        // one inherits the return's read of the upper half and must not
+        // be dropped under the low-word rule -- the resolved chain would
+        // otherwise hand the return the un-normalized add.
+        let mut f = stacked_extends(LoadKind::I32, LoadKind::I32);
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            "the return must read the surviving extend, not the raw add",
         );
     }
 }

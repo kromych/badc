@@ -1,8 +1,9 @@
 // C99 6.2.4p3: an object with static storage duration is initialized
 // exactly once, before program startup semantics apply to its lifetime.
-// A static-local array whose initializer carries `&&label` elements is
-// filled by runtime stores at the declaration point; those stores must
-// not re-run on later calls, or they clobber user writes to the table.
+// A writable static-local array the program modifies must keep the
+// modification across re-entry: the declaration may not re-run its
+// initializer, whether the initial value comes from the data image or
+// from stores at the declaration point.
 
 static void *saved;
 
@@ -24,9 +25,9 @@ l2:
     return 20;
 }
 
-// A logical AND inside a constant element routes to the same runtime
-// path (the initializer scan keys on the `&&` token), so its once
-// semantics are locked too.
+// A logical AND is admitted in a constant expression (C99 6.6), so this
+// list is a compile-time image rather than runtime stores; the same once
+// semantics have to hold, and a later write must survive re-entry.
 static int flag_table(int n, int set) {
     static int flags[3] = { 1 && 1, 0, 1 };
     if (set) flags[1] = 7;

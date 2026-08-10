@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::program::Program;
 use super::table::Mnem;
-use super::{Abi, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
+use super::{Abi, AddrPart, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
 
 // ------------------------------------------------------------------
 // Register encoding.
@@ -465,7 +465,15 @@ pub(crate) fn emit_call_rel32(code: &mut Vec<u8>, rel32: i32) {
 
 /// `SUB rsp, imm32`. Used by the function prologue to reserve local
 /// stack space. Encoding: `REX.W + 81 /5 id`.
+///
+/// Capped at one page: moving rsp further without a probe can step over
+/// a guard region. Callers route larger amounts through the backend's
+/// `emit_stack_alloc`, which descends in probed steps.
 pub(crate) fn emit_sub_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
+    assert!(
+        imm <= super::super::ssa::emit_common::STACK_PROBE_PAGE,
+        "guard-unsafe single rsp decrement: {imm} bytes"
+    );
     emit_byte(code, rex(true, false, false, false));
     emit_byte(code, 0x81);
     // `/5` means ModR/M.reg = 5 (the opcode-extension digit for
@@ -1212,6 +1220,30 @@ impl Cc {
             Cc::Ns => Cc::S,
         }
     }
+
+    /// Recover a condition from its architectural nibble, the form an
+    /// inline-asm flag-output constraint carries through the IR.
+    pub(crate) fn from_nibble(n: u8) -> Option<Cc> {
+        Some(match n {
+            0x0 => Cc::O,
+            0x1 => Cc::No,
+            0x2 => Cc::B,
+            0x3 => Cc::Ae,
+            0x4 => Cc::E,
+            0x5 => Cc::Ne,
+            0x6 => Cc::Be,
+            0x7 => Cc::A,
+            0x8 => Cc::S,
+            0x9 => Cc::Ns,
+            0xA => Cc::P,
+            0xB => Cc::Np,
+            0xC => Cc::L,
+            0xD => Cc::Ge,
+            0xE => Cc::Le,
+            0xF => Cc::G,
+            _ => return None,
+        })
+    }
 }
 
 /// `SETcc r/m8` -- write byte = 1 if condition holds, else 0. The
@@ -1310,6 +1342,49 @@ pub(crate) fn emit_jmp_r(code: &mut Vec<u8>, target: Reg) {
     }
     emit_byte(code, 0xFF);
     emit_byte(code, modrm(0b11, 4, target.lo()));
+}
+
+/// `ENDBR64`. The only instruction an indirect branch may land on when
+/// CET indirect-branch tracking is active; emitted under
+/// `-fcf-protection=branch`. Decodes as a NOP on parts without CET.
+pub(crate) fn emit_endbr64(code: &mut Vec<u8>) {
+    emit_bytes(code, &[0xF3, 0x0F, 0x1E, 0xFA]);
+}
+
+/// `INT3`. Placed after an unconditional transfer under
+/// `-mharden-sls=`, so the bytes that follow are not an architectural
+/// successor the processor can speculate into.
+pub(crate) fn emit_int3(code: &mut Vec<u8>) {
+    emit_byte(code, 0xCC);
+}
+
+/// Symbol the return thunk carries under `-mfunction-return=thunk-extern`.
+pub(crate) const RETURN_THUNK_SYMBOL: &str = "__x86_return_thunk";
+
+/// Symbol of the indirect-branch thunk for `target` under
+/// `-mindirect-branch=thunk-extern`. One thunk per general register,
+/// named after the 64-bit register whose value it branches to; `rsp`
+/// has no thunk because no indirect branch targets it.
+pub(crate) fn indirect_thunk_symbol(target: Reg) -> &'static str {
+    const NAMES: [&str; 16] = [
+        "__x86_indirect_thunk_rax",
+        "__x86_indirect_thunk_rcx",
+        "__x86_indirect_thunk_rdx",
+        "__x86_indirect_thunk_rbx",
+        "__x86_indirect_thunk_rsp",
+        "__x86_indirect_thunk_rbp",
+        "__x86_indirect_thunk_rsi",
+        "__x86_indirect_thunk_rdi",
+        "__x86_indirect_thunk_r8",
+        "__x86_indirect_thunk_r9",
+        "__x86_indirect_thunk_r10",
+        "__x86_indirect_thunk_r11",
+        "__x86_indirect_thunk_r12",
+        "__x86_indirect_thunk_r13",
+        "__x86_indirect_thunk_r14",
+        "__x86_indirect_thunk_r15",
+    ];
+    NAMES[(target.0 & 0xf) as usize]
 }
 
 /// `CALL qword ptr [rip + disp32]` -- PC-relative indirect call
@@ -1695,7 +1770,12 @@ pub(crate) fn lower(
     target: Target,
     #[cfg_attr(not(feature = "std"), allow(unused_variables))] native: NativeOptions,
     imports: &super::ResolvedImports,
+    prebuilt: Option<super::ssa::shadow::PrebuiltSsa>,
+    mode: super::LowerMode,
 ) -> Result<Build, C5Error> {
+    // Asm label numbering restarts per lowering; see
+    // `emit_common::reset_asm_instance`.
+    super::ssa::emit_common::reset_asm_instance();
     let mut code: Vec<u8> = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
     let mut func_names: Vec<alloc::string::String> = Vec::new();
@@ -1703,9 +1783,25 @@ pub(crate) fn lower(
         alloc::collections::BTreeMap::new();
     let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
+    let mut asm_sections = super::ssa::emit_common::AsmSectionSink::default();
+    // File-scope asm section blocks precede the per-function ones
+    // (`.align` takes a byte count on x86-64 ELF).
+    super::ssa::emit_common::materialize_file_asm(
+        &program.file_asm,
+        false,
+        super::ssa::emit_common::AsmComments::X86,
+        &|blocks| {
+            crate::c5::codegen::encode_file_asm_section_code(blocks, target, native.elf_class)
+        },
+        &mut asm_sections,
+    )
+    .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
+    let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
+    let mut asm_text_abs_refs: Vec<super::AsmTextAbsRef> = Vec::new();
+    let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     // Each `JsrExt` / `TailExt` site records a `CALL rel32`
     // / `JMP rel32` placeholder; displacements get backfilled once
@@ -1728,16 +1824,27 @@ pub(crate) fn lower(
     // `ssa_emit_x86_64::emit_function`; a per-function emit bail
     // is a hard error so any IR + emit coverage gap surfaces
     // immediately.
-    let mut ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
-        super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
-            super::ssa::shadow::produce_ssa_funcs(program, target)
-        })?;
+    // A recompaction retry supplies the post-inline bodies directly; the
+    // walk and the -O passes that produced them are skipped, the rest of
+    // the pipeline runs unchanged.
+    let walked = prebuilt.is_none();
+    let mut rodata = super::RodataBuild::default();
+    let (mut ssa_funcs, prebuilt_promoted) = match prebuilt {
+        Some(p) => (p.funcs, p.promoted_local_slots),
+        None => (
+            super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
+                super::ssa::shadow::produce_ssa_funcs(program, target, native.optimize)
+            })?,
+            alloc::collections::BTreeMap::new(),
+        ),
+    };
+    super::ssa::emit_common::check_frame_limits(&ssa_funcs)?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
     // their stale frame location. Slots coalescing moved to a new exclusive
     // offset are recorded separately so the emitter rewrites the location.
     let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
-        alloc::collections::BTreeMap::new();
+        prebuilt_promoted;
     let mut coalesced_slot_remap: alloc::collections::BTreeMap<
         usize,
         alloc::collections::BTreeMap<i64, i64>,
@@ -1747,10 +1854,10 @@ pub(crate) fn lower(
     // analog, shrinking frames built from many control-flow merges whose
     // phi-substitute slots never overlap. The pass runs regardless of debug
     // info so the emitted code is identical with and without -g.
-    if !native.optimize {
+    if !native.optimize && walked {
         let coalesce_dwarf =
             super::ssa::emit_common::time_pass("ssa::slot_coalesce::run (x86_64)", || {
-                super::ssa::slot_coalesce::run(&mut ssa_funcs)
+                super::ssa::slot_coalesce::run(&mut ssa_funcs, false)
             });
         for (ent_pc, map) in coalesce_dwarf {
             for (orig, new) in map {
@@ -1766,11 +1873,18 @@ pub(crate) fn lower(
             }
         }
     }
+    // Data the -O pipeline orphans after the pre-inline compaction
+    // packed `.data`; the caller recompacts and lowers again.
+    let mut orphaned_data: Option<crate::c5::codegen::ssa::shadow::OrphanedData> = None;
+    // Written only under the `std` dump path; the Build field is
+    // unconditional.
+    #[cfg_attr(not(feature = "std"), allow(unused_mut))]
+    let mut ssa_dump = alloc::string::String::new();
     // -O: promote address-free local slots to SSA values before
     // register allocation, dropping their frame load / store traffic.
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
-    if native.optimize {
+    if native.optimize && walked {
         super::ssa::emit_common::time_pass("ssa::mem2reg::run (x86_64)", || {
             for f in &mut ssa_funcs {
                 let promoted = super::ssa::mem2reg::run(f);
@@ -1779,6 +1893,20 @@ pub(crate) fn lower(
                 }
             }
         });
+        // Simplify each body before the inliner reads it. A helper whose
+        // guard is constant -- a configuration predicate compiled to 0 --
+        // is a multi-block body with live parameter-cell reads until the
+        // dead arm is pruned, a shape the candidate filter rejects; folded
+        // first, it inlines and lets the caller's own guard fold in turn.
+        // `resolve_constant_p` stays false: a deferred
+        // `__builtin_constant_p` must survive for the inliner's argument
+        // substitution.
+        super::ssa::emit_common::time_pass(
+            "passes::simplify_branches::pre_inline (x86_64)",
+            || {
+                crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs);
+            },
+        );
         // Unroll constant-trip loops after mem2reg (the loop-carried
         // values are phis by then) and before the inliner, so a helper
         // whose body was a short loop becomes a single-block inline
@@ -1788,6 +1916,21 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::unroll::run (x86_64)", || {
             crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
         });
+        // Seed a parameter every call site of an internal function
+        // agrees a constant for, and record the range each parameter's
+        // argument stays inside for the range analysis below. After
+        // unrolling and before inlining: a callee the inliner absorbs
+        // gets the same constant by argument substitution, so this is
+        // what reaches the bodies that stay out of line.
+        // Interprocedural parameter ranges, by entry PC; read by the
+        // range analysis inside the branch-fold fixed point below.
+        let param_ranges =
+            super::ssa::emit_common::time_pass("passes::ipa_const_param::run (x86_64)", || {
+                let escaping = crate::c5::codegen::passes::ipa_const_param::escaping_functions(
+                    &ssa_funcs, program,
+                );
+                crate::c5::codegen::passes::ipa_const_param::run(&mut ssa_funcs, &escaping)
+            });
         // Inline after mem2reg so the candidate filter sees the
         // promoted form: dead cell loads / stores are gone and the
         // callee's body reads its parameters via `ParamRef`.
@@ -1808,7 +1951,7 @@ pub(crate) fn lower(
         // register value. Runs after the inliner produces the slot and
         // before store-forwarding cleans up any second-hop reload.
         super::ssa::emit_common::time_pass("passes::struct_return_reg::run (x86_64)", || {
-            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs);
+            crate::c5::codegen::passes::struct_return_reg::run(&mut ssa_funcs, native.strict_align);
         });
         // Constant folding over the post-inline tape: `Extend(Imm)` /
         // `Binop(Imm, Imm)` chains left by parameter substitution fold
@@ -1818,15 +1961,37 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::constfold::run (x86_64)", || {
             crate::c5::codegen::passes::constfold::run(&mut ssa_funcs);
         });
-        // Split constant-index local arrays that unrolling exposed into
-        // per-element slots and re-run mem2reg to promote them to SSA
-        // values. Gated to functions the unroll pass expanded so the
-        // mem2reg rebuild is confined; the promoted element slots feed
-        // the same debug-info location drop as the initial mem2reg.
+        // Re-run mem2reg on callers the inliner spliced into. A relocated
+        // callee local can land on an address-free, single-width slot that
+        // pre-inline mem2reg never saw (it did not exist then), so its store
+        // and load stay in the frame -- and a constant stored there is not
+        // folded into the `"i"`-constrained inline-asm operand that reads it.
+        // Confined to inlined callers by the did_inline gate; promoted slots
+        // feed the same debug-info location drop as the initial mem2reg.
+        super::ssa::emit_common::time_pass("ssa::mem2reg::run post-inline (x86_64)", || {
+            for f in &mut ssa_funcs {
+                if f.did_inline {
+                    let promoted = super::ssa::mem2reg::run(f);
+                    if !promoted.is_empty() {
+                        promoted_local_slots
+                            .entry(f.ent_pc)
+                            .or_default()
+                            .extend(promoted);
+                    }
+                }
+            }
+        });
+        // Split address-taken local aggregates into per-field slots and
+        // re-run mem2reg to promote them to SSA values. Gated to the
+        // functions unrolling expanded (constant-index array subscripts)
+        // or the inliner spliced into (a helper's field accesses through
+        // a caller local's address), so the mem2reg rebuild is confined;
+        // the promoted field slots feed the same debug-info location
+        // drop as the initial mem2reg.
         super::ssa::emit_common::time_pass("passes::sroa::run (x86_64)", || {
             let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
             for f in &mut ssa_funcs {
-                if f.did_unroll {
+                if f.did_unroll || f.did_inline {
                     let promoted = crate::c5::codegen::passes::sroa::run(f, usable_gpr);
                     if !promoted.is_empty() {
                         promoted_local_slots
@@ -1862,22 +2027,66 @@ pub(crate) fn lower(
         // leaves unreachable (so their calls and extern references are
         // neither lowered nor relocated), to a fixed point: pruning a
         // folded branch's dead predecessor can collapse a merge phi and
-        // expose a fresh constant condition one level down.
+        // expose a fresh constant condition one level down. The
+        // const-data-aware form also folds loads from const initialized
+        // data inside the same fixed point, so an inlined table lookup
+        // whose index just became constant decides the next branch (a
+        // build-time-assert guard reading a const table).
         super::ssa::emit_common::time_pass("passes::simplify_branches::run (x86_64)", || {
-            crate::c5::codegen::passes::simplify_branches::run(&mut ssa_funcs);
+            crate::c5::codegen::passes::simplify_branches::run_with_const_data(
+                &mut ssa_funcs,
+                program,
+                &param_ranges,
+            );
         });
-        // Re-run static DCE: inlining a static callee into its last caller,
-        // and the branch fold dropping calls in unreachable arms, can leave
-        // a static function with no remaining references. Dropping it now
-        // keeps its body -- and any undefined symbol it alone referenced
-        // (e.g. an unreachable build-time-assert canary the fold removed
-        // from the caller) -- out of the object.
-        super::ssa::emit_common::time_pass(
+    }
+    // Re-run static DCE: inlining a static callee into its last caller,
+    // and the branch fold dropping calls in unreachable arms, can leave
+    // a static function with no remaining references. Dropping it now
+    // keeps its body -- and any undefined symbol it alone referenced
+    // (e.g. an unreachable build-time-assert canary the fold removed
+    // from the caller) -- out of the object. It also reports the data the
+    // pipeline orphaned; the passes below run on prebuilt bodies too, so a
+    // recompaction retry re-runs them and re-checks the report is empty.
+    if native.optimize {
+        orphaned_data = super::ssa::emit_common::time_pass(
             "ssa::shadow::drop_unreachable_statics (x86_64)",
-            || {
-                crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program);
-            },
+            || crate::c5::codegen::ssa::shadow::drop_unreachable_statics(&mut ssa_funcs, program),
         );
+        if let Some(o) = &mut orphaned_data {
+            o.ssa.promoted_local_slots = promoted_local_slots.clone();
+        }
+        // A probe caller relowers the reported bodies against a `.data`
+        // this run cannot know, so everything below would be discarded.
+        if orphaned_data.is_some() && mode == super::LowerMode::DataLivenessProbe {
+            return Ok(Build {
+                orphaned_data,
+                stopped_at_data_liveness: true,
+                ..Default::default()
+            });
+        }
+        // Frame compaction after inlining, promotion, and the branch
+        // folds: slots with no remaining reference are dropped and the
+        // survivors repacked, so a spliced-then-promoted callee region
+        // stops occupying the frame. Before `index_fold`, whose derived
+        // address forms the compactor does not model.
+        let coalesce_dwarf =
+            super::ssa::emit_common::time_pass("ssa::slot_coalesce::run -O (x86_64)", || {
+                super::ssa::slot_coalesce::run(&mut ssa_funcs, true)
+            });
+        for (ent_pc, map) in coalesce_dwarf {
+            for (orig, new) in map {
+                match new {
+                    Some(new) => {
+                        coalesced_slot_remap
+                            .entry(ent_pc)
+                            .or_default()
+                            .insert(orig, new);
+                    }
+                    None => promoted_local_slots.entry(ent_pc).or_default().push(orig),
+                }
+            }
+        }
         super::ssa::emit_common::time_pass("passes::split_crit_edges::run (x86_64)", || {
             crate::c5::codegen::passes::split_crit_edges::run(&mut ssa_funcs);
         });
@@ -1962,10 +2171,26 @@ pub(crate) fn lower(
     let _ssa_emit_pass_start = std::time::Instant::now();
     // Function name -> entry PC, so an inline-asm `call`/`jmp` to a bare symbol
     // resolves to a relocation the fixup pass patches like any other call.
+    let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
+    let mut text_align: usize = 16;
+    let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
         .collect();
+    // Every function's entry PC -> its name, defined or extern (an extern
+    // function referenced by address gets an ent_pc placeholder too). A `%c`
+    // function operand a replacement `call` in a section relocates against
+    // resolves its `ImmCode` ent_pc through this.
+    let fn_name_by_pc: alloc::collections::BTreeMap<usize, &str> = {
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
+            .map(|s| (s.val as usize, s.link_name()))
+            .collect()
+    };
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         pc_to_native[ent_pc] = code.len();
@@ -1977,12 +2202,26 @@ pub(crate) fn lower(
         let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
             .extern_imm_data_refs
             .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
+            .collect();
+        // Same, for cross-TU function references: a `%c` function operand a
+        // replacement `call` / `jmp` in a section relocates against. Each
+        // `ImmCode` value-id maps to its callee's name via the entry PC.
+        let extern_code_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+            .insts
+            .iter()
+            .enumerate()
+            .filter_map(|(v, inst)| match inst {
+                super::super::ir::Inst::ImmCode(pc) => fn_name_by_pc
+                    .get(pc)
+                    .map(|n| (v as u32, alloc::string::String::from(*n))),
+                _ => None,
+            })
             .collect();
         let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
             .extern_tls_refs
             .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
             .collect();
         let ok = {
             let mut cx = super::ssa::emit_common::EmitCtx {
@@ -1996,6 +2235,10 @@ pub(crate) fn lower(
                 ssa_line_rows: &mut ssa_line_rows,
                 pc_to_native: &mut pc_to_native,
                 prologue_native: &mut func_prologue_native,
+                asm_sections: &mut asm_sections,
+                asm_extern_call_sites: &mut asm_extern_call_sites,
+                text_align: &mut text_align,
+                label_relocs: &mut label_relocs,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2007,6 +2250,7 @@ pub(crate) fn lower(
                 &mut fixups,
                 &mut got_fixups,
                 &extern_data_names,
+                &extern_code_names,
                 &extern_tls_names,
                 imports,
                 &variadic_targets,
@@ -2014,17 +2258,25 @@ pub(crate) fn lower(
                 program.tls_data.len(),
                 &mut fn_unwind,
                 &name2entpc,
+                &mut asm_section_text_refs,
+                &mut asm_text_abs_refs,
+                &mut asm_text_labels,
+                native.no_fp_regs,
+                native.strict_align,
+                &mut rodata,
+                native.output_kind == super::OutputKind::Relocatable && !native.pic,
+                native.hardening,
             )
         };
         #[cfg(feature = "std")]
         if super::ssa::dump::enabled(native) {
-            eprintln!(
-                "; --- SSA dump (ok={ok}) ent_pc={ent_pc} ---",
-                ok = ok,
-                ent_pc = ent_pc,
+            use core::fmt::Write;
+            let _ = write!(
+                ssa_dump,
+                "; --- SSA dump (ok={ok}) ent_pc={ent_pc} ---\n; name={name}\n{body}",
+                name = func_ssa.name,
+                body = super::ssa::dump::dump_function(func_ssa, alloc_for),
             );
-            eprintln!("; name={}", func_ssa.name);
-            eprint!("{}", super::ssa::dump::dump_function(func_ssa, alloc_for),);
         }
         if !ok {
             // Surface a recorded bail reason (an unencodable inline-asm form,
@@ -2032,9 +2284,8 @@ pub(crate) fn lower(
             // failed without recording one.
             #[cfg(feature = "std")]
             if let Some(reason) = super::ssa::emit_common::take_bail() {
-                return Err(C5Error::Compile(alloc::format!(
-                    "{reason} (x86_64, function `{}`)",
-                    func_ssa.name,
+                return Err(C5Error::Compile(crate::c5::error::fmt_codegen_err(
+                    &alloc::format!("{reason} (x86_64, function `{}`)", func_ssa.name),
                 )));
             }
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -2065,17 +2316,27 @@ pub(crate) fn lower(
         .iter()
         .map(|(pc, name)| (*pc, name.as_str()))
         .collect();
-    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
-    let resolved_fixups: Vec<Fixup> = if extern_pc_lookup.is_empty() {
-        fixups
-    } else {
+    // Seeded with the inline-asm branch sites whose target this unit does
+    // not define; they take the same by-name relocation.
+    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = asm_extern_call_sites;
+    // A direct branch whose callee the linker resolves -- across a
+    // named-section boundary, or to a weak definition a sibling unit
+    // may override -- likewise becomes a by-name call relocation.
+    let reloc_ctx = super::reloc_callee_ctx(program, &ssa_funcs, &pc_to_native, native.output_kind);
+    let resolved_fixups: Vec<Fixup> = {
         let mut out = Vec::with_capacity(fixups.len());
         for f in fixups {
+            let is_tail = matches!(f.kind, BranchKind::Jmp);
             if let Some(name) = extern_pc_lookup.get(&f.target_ent_pc) {
-                let is_tail = matches!(f.kind, BranchKind::Jmp);
                 user_extern_call_sites.push(super::UserExternCallSite {
                     instr_offset: f.native_offset,
                     symbol_name: (*name).into(),
+                    is_tail,
+                });
+            } else if let Some(name) = reloc_ctx.reloc_callee(f.native_offset, f.target_ent_pc) {
+                user_extern_call_sites.push(super::UserExternCallSite {
+                    instr_offset: f.native_offset,
+                    symbol_name: name.into(),
                     is_tail,
                 });
             } else {
@@ -2142,6 +2403,7 @@ pub(crate) fn lower(
             user_extern_data_refs.push(super::UserExternDataRef {
                 instr_offset,
                 symbol_name: (*name).into(),
+                direct_pcrel: None,
             });
             continue;
         }
@@ -2161,8 +2423,9 @@ pub(crate) fn lower(
             )));
         }
         func_fixups.push(FuncFixup {
-            adrp_offset: instr_offset,
+            instr_offset,
             target_native_offset: target,
+            part: AddrPart::Whole,
         });
     }
 
@@ -2178,8 +2441,9 @@ pub(crate) fn lower(
         for fx in &plt_call_fixups {
             if fx.is_addr {
                 func_fixups.push(FuncFixup {
-                    adrp_offset: fx.instr_offset,
+                    instr_offset: fx.instr_offset,
                     target_native_offset: plt_trampoline_offsets[fx.import_index],
+                    part: AddrPart::Whole,
                 });
             }
         }
@@ -2211,16 +2475,30 @@ pub(crate) fn lower(
         off
     };
 
+    let (asm_section_list, asm_sym_decls) = asm_sections.into_parts();
     Ok(Build {
+        emitted_relocs: Vec::new(),
+        asm_sections: asm_section_list,
+        asm_sym_decls,
+        asm_section_text_refs,
+        asm_text_abs_refs,
+        asm_text_labels,
+        label_relocs,
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
+        // The single-TU path keeps one writable data image; the
+        // read-only carve happens in the relocatable writer.
+        data_ro_len: 0,
         data_align: program.data_align,
+        text_align,
         bss_size: 0,
         init_fini_arrays: Default::default(),
         entry_offset,
         got_fixups,
         data_fixups,
+        rodata,
+        data_pcrel_relocs: Vec::new(),
         func_fixups,
         pc_to_native,
         func_ent_pcs,
@@ -2247,6 +2525,9 @@ pub(crate) fn lower(
         exports: Vec::new(),
         dynamic_exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
+        pic: native.pic,
+        code_model: native.code_model,
+        elf_class: native.elf_class,
         shared_lib_name: None,
         dllmain_pc: None,
         // Mach-O TLV is arm64-only on Apple Silicon; x86_64 macOS
@@ -2259,6 +2540,9 @@ pub(crate) fn lower(
         // Every import on this single-TU path gets a trampoline (data
         // imports ride `ResolvedImports::data_bindings`, not `imports`).
         plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),
+        orphaned_data,
+        stopped_at_data_liveness: false,
+        ssa_dump,
     })
 }
 
@@ -2322,12 +2606,13 @@ fn emit_plt_trampolines(
     for import_index in 0..n_imports {
         let tramp_off = code.len();
         offsets.push(tramp_off);
-        // Same `GotFixup` shape the inline indirect-call site used
-        // pre-#61. The writer reads `adrp_offset` as the byte
-        // position of the instruction whose disp32 needs the
-        // GOT-slot RVA; the JMP's encoding puts disp32 at byte 2.
+        // Same `GotFixup` shape the inline indirect-call site used.
+        // The writer reads `instr_offset` as the byte position of the
+        // instruction whose disp32 needs the GOT-slot RVA; the JMP's
+        // encoding puts disp32 at byte 2.
         got_fixups.push(GotFixup {
-            adrp_offset: tramp_off,
+            instr_offset: tramp_off,
+            part: AddrPart::Whole,
             import_index,
             is_data_load: false,
         });
@@ -2779,6 +3064,8 @@ mod tests {
             super::super::Target::WindowsX64,
             super::super::NativeOptions::default(),
             &imports,
+            None,
+            super::super::LowerMode::Full,
         )
         .expect("lower");
 
@@ -2832,6 +3119,8 @@ mod tests {
             super::super::Target::WindowsX64,
             super::super::NativeOptions::default(),
             &imports,
+            None,
+            super::super::LowerMode::Full,
         )
         .expect("lower");
 

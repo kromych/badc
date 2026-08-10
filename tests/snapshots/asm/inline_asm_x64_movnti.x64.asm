@@ -10,18 +10,18 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<store_nt>:
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	movslq	%edi, %rdi
-               	xorq	%rax, %rax
-               	movl	%eax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
+               	movl	$0x2a, %eax
+               	xorq	%rcx, %rcx
+               	movl	%ecx, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rcx
                	movq	%rax, -0x30(%rbp)
                	movq	%rbx, -0x28(%rbp)
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rdi, -0x18(%rbp)
+               	movq	%rcx, -0x20(%rbp)
+               	movq	%rax, -0x18(%rbp)
                	movq	-0x20(%rbp), %rax
                	movq	-0x18(%rbp), %rbx
                	movntil	%ebx, (%rax)
@@ -30,14 +30,5 @@ Disassembly of section .text:
                	movq	-0x28(%rbp), %rbx
                	movslq	-0x8(%rbp), %rax
                	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x2a, %edi
-               	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

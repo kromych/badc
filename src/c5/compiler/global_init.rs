@@ -1,29 +1,23 @@
-//! Global / TLS initializer parser.
+//! Global / TLS initializer parser: the right-hand side of a
+//! static-storage scalar's `=`.
 //!
-//! `parse_global_initializer` lives here because the body is the
-//! whole self-contained branch table for the right-hand side of a
-//! file-scope `=` -- function pointer, string literal, address-of-
-//! global with optional array index, or a constant expression. None
-//! of the cases call back into the rest of the compiler beyond
-//! `parse_const_expr_or` / `parse_constant_int` (already in
-//! `const_expr.rs`) and the small `size_of_type` / `warn` /
-//! `type_warning` helpers.
-//!
-//! Splitting it out keeps `compiler/mod.rs` from carrying the
-//! reloc-emit details for every supported initializer shape: the
-//! file-scope writer logic, the special `_Thread_local` rejections
-//! for the cases that don't have a stable address at link time, and
-//! the type-mismatch warning. mod.rs's only remaining role is to
-//! call `parse_global_initializer` from the file-scope decl loop.
+//! What the initializer *is* comes from `initializer.rs`'s
+//! `parse_constant_init_value`, the same constant-expression evaluator
+//! aggregate elements take, so both contexts accept one grammar. What
+//! stays here is how a scalar slot *stores* the result: the `.data` /
+//! `.tdata` split, the slot width, the `_Thread_local` rejections for
+//! values with no link-time-fixed address, and the type-mismatch
+//! warning. mod.rs's only role is to call `parse_global_initializer`
+//! from the file-scope decl loop.
 
 use alloc::format;
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth,
-};
+use super::const_expr::ConstVal;
+use super::initializer::InitElemReloc;
+use super::types::{is_pointer_ty, strip_unsigned};
 
 impl Compiler {
     /// After a leading `(TYPE)` cast in an initializer, returns true
@@ -84,27 +78,89 @@ impl Compiler {
                     || (c == Token::Glo as i64
                         && self.symbols[self.lex.curr_id_idx].array_size != 0)
             });
-        self.lex.restore(snap);
-        self.data.truncate(data_snap);
+        self.restore_lex(snap);
+        self.truncate_data(data_snap);
         Ok(reloc)
     }
 
-    /// Parse a global / TLS initializer's right-hand side and
-    /// stash the bytes into [`Self::data`] / [`Self::tls_data`]
-    /// at `var_offset`. The grammar is intentionally narrow --
-    /// integer constants (with optional unary `-`) and
-    /// `&<global-name>`. Anything else surfaces a clear "bad
-    /// global initializer" diagnostic so the parser stays
-    /// honest about what it accepts.
+    /// True when the identifier under the cursor is the whole
+    /// initializer. A function designator names its address only when
+    /// nothing follows it: `f(...)` is a call, whose value the constant
+    /// evaluator decides. The cursor is left where it was.
+    fn id_ends_initializer(&mut self) -> Result<bool, C5Error> {
+        let snap = self.lex.snapshot();
+        self.next()?;
+        let ends = self.at_initializer_end();
+        self.restore_lex(snap);
+        Ok(ends)
+    }
+
+    /// True when the cursor sits on a token that ends a scalar
+    /// initializer: the declarator list's `,` / `;`, the `}` of a
+    /// `{ value }` wrapper, or the `)` of a parenthesized initializer.
+    /// Anything else means the value parsed so far is a sub-operand of a
+    /// larger expression.
+    fn at_initializer_end(&self) -> bool {
+        self.lex.tk == ';' || self.lex.tk == ',' || self.lex.tk == '}' || self.lex.tk == ')'
+    }
+
+    /// Emit the link-time relocation for a data object's address stored
+    /// into the 8-byte slot at `var_offset`. `target_offset` is the
+    /// object's byte address plus any constant addend. An undefined extern
+    /// is resolved by name (`ExternDataReloc`); a defined object writes its
+    /// data-segment offset and a `DataReloc` the native writer / linker
+    /// patches to the runtime address (ELF resolves the VA; Mach-O / PE
+    /// emit a rebase / .reloc entry for the load slide).
+    fn emit_data_addr_reloc(&mut self, var_offset: i64, target_idx: usize, target_offset: i64) {
+        self.symbols[target_idx].was_referenced = true;
+        self.note_init_reloc(var_offset as usize);
+        let t = &self.symbols[target_idx];
+        let is_extern_data = t.is_extern_decl
+            && t.linkage == crate::c5::symbol::Linkage::External
+            && !t.has_initializer;
+        if is_extern_data {
+            let name = self.symbols[target_idx].link_name().into();
+            self.extern_data_relocs
+                .push(crate::c5::program::ExternDataReloc {
+                    data_offset: var_offset as u64,
+                    symbol_name: name,
+                    // The symbol's own `val` is a parse-time tentative slot
+                    // cleared at finalize; the addend is the byte offset alone.
+                    addend: target_offset - self.symbols[target_idx].val,
+                });
+            return;
+        }
+        let bytes = (target_offset as u64).to_le_bytes();
+        self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+        self.data_relocs.push(crate::c5::program::DataReloc {
+            data_offset: var_offset as u64,
+            target_offset: target_offset as u64,
+            target_anchor: self.symbols[target_idx].val as u64,
+        });
+        self.data_reloc_sym_idx.push(target_idx);
+    }
+
+    /// Parse a global / TLS initializer's right-hand side and stash the
+    /// bytes into [`Self::data`] / [`Self::tls_data`] at `var_offset`.
+    /// An address constant (C99 6.6p9) comes from the shared
+    /// constant-initializer evaluator; the arithmetic paths below fold
+    /// the integer and floating cases.
     pub(super) fn parse_global_initializer(
         &mut self,
         var_ty: i64,
         var_offset: i64,
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
-        self.with_nesting("initializer", |c| {
+        // A static object's initializer is a value position: block-scope
+        // `const` scalar objects fold (`static int x = h;` inside a
+        // function), as GCC accepts. No-op at file scope, where no
+        // block-scope object is live.
+        self.const_object_fold += 1;
+        let r = self.with_nesting("initializer", |c| {
             c.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)
-        })
+        });
+        self.const_object_fold -= 1;
+        r
     }
 
     fn parse_global_initializer_inner(
@@ -120,7 +176,7 @@ impl Compiler {
         if self.lex.tk == Token::Generic {
             let after = self.generic_select_to_winner()?;
             self.parse_global_initializer_inner(var_ty, var_offset, is_thread_local)?;
-            self.lex.restore(after);
+            self.restore_lex(after);
             return Ok(());
         }
         // C99 6.7.8p11 allows a scalar initializer to be enclosed
@@ -142,6 +198,25 @@ impl Compiler {
             self.next()?; // consume `}`
             return Ok(());
         }
+        // C99 6.6p9 address constant. The shared constant-initializer
+        // evaluator -- the one aggregate elements take -- decides which
+        // construct this is, and sees the initializer whole because a leading
+        // cast sets the stride of a trailing `+ n` (6.5.6p8). Anything else
+        // rewinds to the arithmetic paths below; a `_Thread_local` template
+        // holds no relocation.
+        if !is_thread_local {
+            let cp = self.init_checkpoint();
+            match self.parse_constant_init_value() {
+                Ok((value, reloc))
+                    if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
+                        && self.at_initializer_end() =>
+                {
+                    self.write_init_value(var_offset as usize, 8, value, reloc, var_ty);
+                    return Ok(());
+                }
+                _ => self.restore_init_checkpoint(cp),
+            }
+        }
         // Optional `(TYPE)` cast prefix. const-init only cares about
         // the resulting value, not the cast type, so we skip the
         // type spec and re-enter from the post-cast token. Common
@@ -155,6 +230,26 @@ impl Compiler {
             let pre_paren = self.lex.snapshot();
             self.next()?;
             if self.lex_is_type_start() {
+                // Fold the whole expression with the cast applied first: a
+                // cast participating in arithmetic (`(char *)&s.b -
+                // (char *)&s.a` strides by the cast's pointee, C99 6.5.6)
+                // must not be discarded by the reloc-leaf shortcut below.
+                // An arithmetic result that consumes the whole initializer
+                // routes to the shared evaluator tail, which refolds it.
+                let cp = self.init_checkpoint();
+                let data_before = self.data.len();
+                self.restore_lex(pre_paren);
+                let whole = self.parse_const_expr_cond_val();
+                // A parse that staged data (a string or compound literal)
+                // folded an address needing its relocation; only a
+                // stage-free arithmetic result takes the evaluator tail.
+                let arithmetic = matches!(whole, Ok(ConstVal::Int { .. }) | Ok(ConstVal::Float(_)))
+                    && self.at_initializer_end()
+                    && self.data.len() == data_before;
+                self.restore_init_checkpoint(cp);
+                if arithmetic {
+                    self.restore_lex(pre_paren);
+                } else
                 // A leading `(TYPE)` cast. When it applies to a
                 // relocation leaf (`&x`, a string, a function or
                 // global-array name) the value is the leaf's address and
@@ -180,7 +275,7 @@ impl Compiler {
                     }
                     return self.parse_global_initializer(var_ty, var_offset, is_thread_local);
                 }
-                self.lex.restore(pre_paren);
+                self.restore_lex(pre_paren);
             } else {
                 // Parenthesised expression. Peek past the matching `)`: a
                 // trailing operator means the parentheses wrap a sub-operand of a
@@ -207,9 +302,9 @@ impl Compiler {
                 if trailing_operator {
                     // Re-parse the whole initializer through the float / integer
                     // constant-expression path below.
-                    self.lex.restore(pre_paren);
+                    self.restore_lex(pre_paren);
                 } else {
-                    self.lex.restore(after_open);
+                    self.restore_lex(after_open);
                     self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
                     self.accept(')')?;
                     return Ok(());
@@ -227,6 +322,7 @@ impl Compiler {
         if self.lex.tk == Token::Id
             && (self.symbols[self.lex.curr_id_idx].class == Token::Fun as i64
                 || self.symbols[self.lex.curr_id_idx].class == Token::Sys as i64)
+            && self.id_ends_initializer()?
         {
             if is_thread_local {
                 return Err(self.compile_err_at(
@@ -243,6 +339,7 @@ impl Compiler {
             self.next()?;
             let bytes = (ent_pc as u64).to_le_bytes();
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.note_init_reloc(var_offset as usize);
             self.code_relocs.push(crate::c5::program::CodeReloc {
                 data_offset: var_offset as u64,
                 target_ent_pc: ent_pc as u64,
@@ -280,7 +377,7 @@ impl Compiler {
                 && t.linkage == crate::c5::symbol::Linkage::External
                 && !t.has_initializer;
             if is_extern_data {
-                let name = self.symbols[target_idx].name.clone();
+                let name = self.symbols[target_idx].link_name().into();
                 self.extern_data_relocs
                     .push(crate::c5::program::ExternDataReloc {
                         data_offset: var_offset as u64,
@@ -292,6 +389,7 @@ impl Compiler {
             let target_offset = self.symbols[target_idx].val;
             let bytes = (target_offset as u64).to_le_bytes();
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.note_init_reloc(var_offset as usize);
             self.data_relocs.push(crate::c5::program::DataReloc {
                 data_offset: var_offset as u64,
                 target_offset: target_offset as u64,
@@ -299,6 +397,30 @@ impl Compiler {
             });
             self.data_reloc_sym_idx.push(target_idx);
             return Ok(());
+        }
+        // `T *p = g.arr;` / `T *p = g.member.arr[i];` -- a bare designation of
+        // a global's array sub-object decays to the address of its first
+        // element (C99 6.3.2.1p3), an address constant. The whole-array case
+        // above and the `&`-forms below cover their shapes; here the base is
+        // any global (a union or a struct) reached through a `.`/`[` chain. A
+        // chain ending in a non-array sub-object is a non-constant load and
+        // falls through to the diagnostic below.
+        if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].class == Token::Glo as i64
+            && is_pointer_ty(var_ty)
+            && !is_thread_local
+        {
+            let snap = self.lex.snapshot();
+            let data_snap = self.data.len();
+            if let Some((off, sym_idx, is_array)) = self.parse_const_address()?
+                && is_array
+                && (self.lex.tk == ';' || self.lex.tk == ',')
+            {
+                self.emit_data_addr_reloc(var_offset, sym_idx, off);
+                return Ok(());
+            }
+            self.restore_lex(snap);
+            self.truncate_data(data_snap);
         }
         // String literal in a `char *p` global initializer.
         if self.lex.tk == '"' && is_pointer_ty(var_ty) {
@@ -313,9 +435,10 @@ impl Compiler {
             while self.lex.tk == '"' {
                 self.next()?;
             }
-            self.data.push(0);
+            self.push_literal_nul();
             let bytes = (addr as u64).to_le_bytes();
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.note_init_reloc(var_offset as usize);
             self.data_relocs.push(crate::c5::program::DataReloc {
                 data_offset: var_offset as u64,
                 target_offset: addr as u64,
@@ -327,7 +450,12 @@ impl Compiler {
             self.data_reloc_sym_idx.push(usize::MAX);
             return Ok(());
         }
-        // `&<global>` -- address-of-global pointer init.
+        // `&`-rooted address constant (C99 6.6p9). What the operand is --
+        // an object, a sub-object, a compound literal, or a function
+        // designator, at any depth of parentheses (6.5.1p5) -- is decided by
+        // the shared constant-initializer evaluator, the same one aggregate
+        // elements take, so both contexts accept the same grammar. Only the
+        // scalar storage rules stay here.
         if self.lex.tk == Token::AndOp {
             if is_thread_local {
                 return Err(self.compile_err_at(
@@ -338,230 +466,17 @@ impl Compiler {
                      initializers are fine)",
                 ));
             }
-            self.next()?;
-            // `&(T){...}` -- C99 6.5.2.5 compound literal in a
-            // file-scope initializer. Synthesize an anonymous
-            // internal-linkage symbol of type `T`, route its bytes
-            // through `collect_struct_initializer`, and write a
-            // data reloc from this global's slot to the synthetic
-            // symbol's offset.
-            if self.lex.tk == '(' {
-                self.next()?;
-                if !self.lex_is_type_start() {
-                    return Err(self.compile_err_at(
-                        line,
-                        "expected type name in `&(T){{...}}` compound literal",
-                    ));
-                }
-                let mut cl_ty = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp {
-                    self.next()?;
-                    cl_ty += Ty::Ptr as i64;
-                }
-                if self.lex.tk != ')' {
-                    return Err(
-                        self.compile_err_at(line, "`)` expected to close compound-literal type")
-                    );
-                }
-                self.next()?;
-                if self.lex.tk != '{' {
-                    return Err(self.compile_err_at(
-                        line,
-                        "`{{` expected to start compound-literal initializer",
-                    ));
-                }
-                if !is_struct_ty(cl_ty) {
-                    return Err(self.compile_err_at(
-                        line,
-                        "compound literal of non-struct type is not yet supported in global init",
-                    ));
-                }
-                let (off, new_idx) = self.emit_compound_literal_body(cl_ty)?;
-                let bytes = (off as u64).to_le_bytes();
-                self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-                self.data_relocs.push(crate::c5::program::DataReloc {
-                    data_offset: var_offset as u64,
-                    target_offset: off as u64,
-                    target_anchor: off as u64,
-                });
-                self.data_reloc_sym_idx.push(new_idx);
-                return Ok(());
-            }
-            if self.lex.tk != Token::Id {
-                return Err(
-                    self.compile_err_at(line, "identifier expected after `&` in initializer")
-                );
-            }
-            let target_idx = self.lex.curr_id_idx;
-            let target_class = self.symbols[target_idx].class;
-            // `&func` (C99 6.3.2.1p4): the address-of operator on a
-            // function designator yields the same function-pointer
-            // value as the bare name, so route it through the same
-            // CodeReloc path as `static int (*fp)() = func;`.
-            if target_class == Token::Fun as i64 || target_class == Token::Sys as i64 {
-                if is_thread_local {
-                    return Err(self.compile_err_at(
-                        line,
-                        "function-pointer initializer for `_Thread_local` not supported",
-                    ));
-                }
-                let mut sym_idx = target_idx;
-                if target_class == Token::Sys as i64 {
-                    sym_idx = self.ensure_sys_trampoline_sym(sym_idx);
-                }
-                self.symbols[sym_idx].was_referenced = true;
-                let ent_pc = self.symbols[sym_idx].val;
-                self.next()?;
-                let bytes = (ent_pc as u64).to_le_bytes();
-                self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-                self.code_relocs.push(crate::c5::program::CodeReloc {
-                    data_offset: var_offset as u64,
-                    target_ent_pc: ent_pc as u64,
-                });
-                self.code_reloc_sym_idx.push(sym_idx);
-                return Ok(());
-            }
-            if target_class != Token::Glo as i64 {
-                return Err(self.compile_err_at(
-                    line,
-                    format!(
-                        "`&{}` in a global initializer requires a \
-                     non-thread_local global; the right-hand side is \
-                     class={target_class}",
-                        self.symbols[target_idx].name
-                    ),
-                ));
-            }
-            if self.symbols[target_idx].is_thread_local {
-                return Err(self.compile_err_at(
-                    line,
-                    format!(
-                        "`&{}` -- can't take the address of a \
-                     `_Thread_local` global in a static initializer; the \
-                     per-thread address isn't fixed at link time",
-                        self.symbols[target_idx].name
-                    ),
-                ));
-            }
-            let mut target_offset = self.symbols[target_idx].val;
-            self.next()?;
-            // C99 6.6: the address of any array element or struct member of
-            // a static-storage object is an address constant. Walk the
-            // designator suffix -- a sequence of `[const]` subscripts and
-            // `.field` selections -- tracking the current type and its
-            // array dimensions. A subscript at level `i` strides by
-            // `product(array_dims[i+1..]) * sizeof(element)` (the first
-            // index spans whole sub-arrays, the innermost an element, C99
-            // 6.5.2.1p2; an empty `array_dims` is the 1D case); a member
-            // adds its byte offset and moves the current type to the
-            // field. The accumulated byte offset is the address constant.
-            let mut cur_ty = self.symbols[target_idx].type_;
-            let mut cur_dims = self.symbols[target_idx].array_dims.clone();
-            let mut level = 0usize;
-            loop {
-                if self.lex.tk == Token::Brak {
-                    self.next()?;
-                    let n = self.parse_constant_int()?;
-                    if self.lex.tk != ']' {
-                        return Err(self.compile_err_at(
-                            line,
-                            format!(
-                                "close bracket expected in `&{}[...]`",
-                                self.symbols[target_idx].name
-                            ),
-                        ));
-                    }
-                    self.next()?;
-                    let elem_size = self.size_of_type(cur_ty) as i64;
-                    let stride = if level < cur_dims.len() {
-                        cur_dims[level + 1..].iter().product::<i64>() * elem_size
-                    } else {
-                        elem_size
-                    };
-                    target_offset += n * stride;
-                    level += 1;
-                } else if self.lex.tk == Token::Dot {
-                    if !is_struct_ty(cur_ty) || struct_ptr_depth(cur_ty) != 0 {
-                        return Err(self.compile_err_at(
-                            line,
-                            "`.` on a non-struct value in a constant address",
-                        ));
-                    }
-                    self.next()?;
-                    if self.lex.tk != Token::Id {
-                        return Err(self
-                            .compile_err_at(line, "field name expected after `.` in initializer"));
-                    }
-                    let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
-                    let sid = struct_id_of(cur_ty);
-                    let Some(field) = self.structs[sid]
-                        .fields
-                        .iter()
-                        .find(|f| f.name == field_name)
-                        .cloned()
-                    else {
-                        return Err(self.compile_err_at(
-                            line,
-                            format!(
-                                "struct {} has no field {field_name}",
-                                self.structs[sid].name
-                            ),
-                        ));
-                    };
-                    target_offset += field.offset as i64;
-                    cur_ty = field.ty;
-                    cur_dims = field.array_dims.clone();
-                    level = 0;
-                    self.next()?;
-                } else {
-                    break;
-                }
-            }
-            // A target defined in another translation unit (`extern T g;`
-            // with no definition here) is resolved by name at link time;
-            // `target_offset` is the byte offset added to its address
-            // (the symbol's own `val` is 0 for an extern). The slot stays
-            // zero until the link resolves it.
-            {
-                let t = &self.symbols[target_idx];
-                let is_extern_data = t.is_extern_decl
-                    && t.linkage == crate::c5::symbol::Linkage::External
-                    && !t.has_initializer;
-                if is_extern_data {
-                    self.symbols[target_idx].was_referenced = true;
-                    let name = self.symbols[target_idx].name.clone();
-                    self.extern_data_relocs
-                        .push(crate::c5::program::ExternDataReloc {
-                            data_offset: var_offset as u64,
-                            symbol_name: name,
-                            // `target_offset` started at the symbol's own
-                            // `val` (a parse-time tentative slot that is
-                            // cleared at finalize); the addend is the
-                            // index/byte offset alone.
-                            addend: target_offset - self.symbols[target_idx].val,
-                        });
+            // The address may instead be the operand of a larger constant
+            // expression (`&s.b - &s.a` folds to an integer, C99 6.5.6p9);
+            // an incomplete parse rewinds to the arithmetic evaluator below.
+            let cp = self.init_checkpoint();
+            match self.parse_constant_init_value() {
+                Ok((value, reloc)) if self.at_initializer_end() => {
+                    self.write_init_value(var_offset as usize, 8, value, reloc, var_ty);
                     return Ok(());
                 }
+                _ => self.restore_init_checkpoint(cp),
             }
-            // Write the target's data-segment offset into the
-            // slot. The VM reads this directly because its
-            // pointers are small data offsets (no image-base
-            // arithmetic). The native writers overwrite this
-            // with the target's absolute VA at write time --
-            // ELF (ET_EXEC) writes a fully-resolved VA; Mach-O
-            // and PE write the preferred VA and emit a
-            // dynamic relocation (rebase opcode / .reloc DIR64
-            // entry) so the loader can patch in the slide
-            // delta.
-            let bytes = (target_offset as u64).to_le_bytes();
-            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-            self.data_relocs.push(crate::c5::program::DataReloc {
-                data_offset: var_offset as u64,
-                target_offset: target_offset as u64,
-                target_anchor: self.symbols[target_idx].val as u64,
-            });
-            self.data_reloc_sym_idx.push(target_idx);
-            return Ok(());
         }
 
         // Float / double scalar global with a constant-foldable
@@ -572,7 +487,7 @@ impl Compiler {
         // full 8 bytes the slot was sized for; a future
         // f32-narrow-storage path would shrink it for `float`.
         let var_is_float = {
-            let stripped = var_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+            let stripped = strip_unsigned(var_ty);
             stripped == Ty::Float as i64 || stripped == Ty::Double as i64
         };
         // Constant expression, evaluated at compile time. Handles
@@ -581,6 +496,45 @@ impl Compiler {
         // (enum / `#define`d constants), the conditional operator
         // (`static int n = A > B ? A : B;`), and the offsetof shape.
         let cv = self.parse_const_expr_cond_val()?;
+        // C99 6.6 / 6.3.2.3: an address constant cast to a pointer-width
+        // integer slot (`unsigned long x = (unsigned long)&obj;`, an object,
+        // array, or function name) is a link-time relocation, not a
+        // compile-time integer -- gcc / clang accept it and the linker
+        // resolves the address. Emit the same relocation the pointer-typed
+        // slot would. Restricted to a bare designator (offset equal to the
+        // symbol's own address): a symbol-relative addend from a const-expr
+        // `+`/`-` is not scaled by the pointee size here, so it stays rejected
+        // rather than stored with a wrong offset. A `&sym[i]` / `&sym.field`
+        // suffix, and any narrower or `_Thread_local` slot, are handled by
+        // the paths above; the rest falls through to the reject below, which
+        // gcc / clang also apply to a sub-pointer-width slot.
+        if let ConstVal::Addr(a) = cv
+            && let Some(sym_idx) = a.root.sym()
+            && a.value == self.symbols[sym_idx].val
+            && !is_thread_local
+            && !var_is_float
+            && self.size_of_type(var_ty) == 8
+        {
+            if matches!(a.root, super::const_expr::ConstRoot::Code(_)) {
+                self.symbols[sym_idx].was_referenced = true;
+                let ent_pc = self.symbols[sym_idx].val;
+                self.data[var_offset as usize..var_offset as usize + 8]
+                    .copy_from_slice(&(ent_pc as u64).to_le_bytes());
+                self.note_init_reloc(var_offset as usize);
+                self.code_relocs.push(crate::c5::program::CodeReloc {
+                    data_offset: var_offset as u64,
+                    target_ent_pc: ent_pc as u64,
+                });
+                self.code_reloc_sym_idx.push(sym_idx);
+            } else {
+                self.emit_data_addr_reloc(var_offset, sym_idx, a.value);
+            }
+            return Ok(());
+        }
+        // A bare symbol address in a narrower-than-pointer integer slot is
+        // not a relocation-bearing initializer; reject it rather than store
+        // the addend with no relocation.
+        let cv = self.require_integer_const(cv)?;
 
         // C99 6.7.8p11 / 6.3.1.4: a constant initializing a floating
         // object takes the floating value. Coerce the ConstVal to f64
@@ -590,14 +544,16 @@ impl Compiler {
         // for `float`, f64 for `double`).
         let value = if var_is_float {
             self.to_storage_bits(
-                cv.as_float().to_bits() as i64,
-                super::initializer::InitElemReloc::Float64Bits,
+                cv.as_float().to_bits() as i128,
+                InitElemReloc::Float64Bits,
                 var_ty,
             )
         } else {
-            cv.as_int()
+            cv.as_i128()
         };
-        let write_size = if var_is_float {
+        // Integer slots are preallocated 8 bytes wide; the 16-byte
+        // integer needs both halves written.
+        let write_size = if var_is_float || self.is_int128_ty(var_ty) {
             self.size_of_type(var_ty)
         } else {
             8
@@ -632,14 +588,21 @@ impl Compiler {
 
         // Type-check: warn (don't error) if the constant doesn't match
         // the declared type. Only pointer-vs-int mismatches are
-        // diagnosed here, matching the assignment path.
+        // diagnosed here, matching the assignment path. `init_ty` is
+        // synthesized from the folded constant rather than carried from
+        // the initializer expression, so it is too coarse to raise a
+        // 6.7.8p11 constraint error on; the aggregate initializer path
+        // checks element types against real ones.
         let init_ty = if value == 0 { 0 } else { Ty::Int as i64 };
-        if let Some(reason) = Self::type_warning(&self.structs, var_ty, init_ty, value == 0) {
+        if let Some(m) = Self::type_warning(&self.structs, var_ty, init_ty, value == 0) {
             let var_s = super::types::format_type(var_ty, &self.structs);
             let init_s = super::types::format_type(init_ty, &self.structs);
             self.warn_at(
                 line,
-                format!("{reason} in global initializer (var={var_s}, value={init_s})"),
+                format!(
+                    "{} in global initializer (var={var_s}, value={init_s})",
+                    m.reason
+                ),
             );
         }
         Ok(())

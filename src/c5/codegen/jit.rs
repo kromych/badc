@@ -125,7 +125,7 @@ mod jit_impl {
     use super::super::super::error::C5Error;
     use super::super::super::program::Program;
     use super::super::Target;
-    use super::super::{Build, GotFixup, NativeOptions, ResolvedImport, ResolvedImports};
+    use super::super::{AddrPart, Build, GotFixup, NativeOptions, ResolvedImport, ResolvedImports};
     use super::super::{aarch64, x86_64};
     use super::host_target;
     use alloc::format;
@@ -313,7 +313,7 @@ mod jit_impl {
         // page is RW (no exec permission); an attempt to execute
         // through it faults with the expected SIGSEGV / EXCEPTION.
         let mut data_region = if !build.data.is_empty() {
-            Some(DataRegion::new(&build.data)?)
+            Some(DataRegion::new(&build.data, build.data_align)?)
         } else {
             None
         };
@@ -375,8 +375,57 @@ mod jit_impl {
         // addresses *before* flipping to RX -- the writes need to
         // hit RW pages. Once exec is enabled the page is read-only
         // for the lifetime of the run.
-        let region = JitRegion::new(&build.text)?;
+        // The read-only blob (switch dispatch tables) rides at an
+        // 8-aligned tail of the same mapping; reads from RX pages
+        // are fine and the region sizing covers the whole blob.
+        let rodata_blob_off = (build.text.len() + 7) & !7;
+        let region = if build.rodata.bytes.is_empty() {
+            JitRegion::new(&build.text)?
+        } else {
+            let mut blob = Vec::with_capacity(rodata_blob_off + build.rodata.bytes.len());
+            blob.extend_from_slice(&build.text);
+            blob.resize(rodata_blob_off, 0);
+            blob.extend_from_slice(&build.rodata.bytes);
+            JitRegion::new(&blob)?
+        };
         let code_vmaddr = region.as_ptr() as u64;
+        // Resolve the blob's address fixups and entry slots against
+        // the mapped base: each table entry holds `target -
+        // table_base`, both inside this mapping.
+        if !build.rodata.bytes.is_empty() {
+            // The absolute-slot form is relocatable-only.
+            if !build.rodata.abs64.is_empty() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    "JIT: absolute table slots reached an in-memory build",
+                )));
+            }
+            let full_len = rodata_blob_off + build.rodata.bytes.len();
+            let bytes = unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), full_len) };
+            for fx in &build.rodata.addr_fixups {
+                patch_addr_load(
+                    target,
+                    bytes,
+                    code_vmaddr,
+                    fx.code_offset as u64,
+                    code_vmaddr + rodata_blob_off as u64 + fx.rodata_offset,
+                    AddrPart::Whole,
+                    "rodata fixup",
+                )?;
+            }
+            for r in &build.rodata.rel32 {
+                let value = r.text_offset as i64 - (rodata_blob_off as u64 + r.base_offset) as i64;
+                let Ok(v) = i32::try_from(value) else {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "JIT: rodata rel32 slot {:#x}: displacement {value:#x} exceeds 32 bits",
+                            r.slot_offset,
+                        ),
+                    )));
+                };
+                let off = rodata_blob_off + r.slot_offset as usize;
+                bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
+            }
+        }
         // Now that the code region's runtime address is known,
         // patch every CodeReloc slot in the data region to point
         // at the function's actual code byte offset. Mirrors the
@@ -404,6 +453,27 @@ mod jit_impl {
                     return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                         &format!(
                             "JIT: code reloc offset {off:#x} past end of data region ({})",
+                            bytes.len()
+                        ),
+                    )));
+                }
+                bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+            }
+        }
+        // `&&label` initializer slots: the emit already resolved each
+        // label to a text offset, so only the code region's runtime
+        // address has to be added.
+        if !build.label_relocs.is_empty()
+            && let Some(region) = &mut data_region
+        {
+            let bytes = region.as_mut_slice(build.data.len());
+            for r in &build.label_relocs {
+                let absolute = code_vmaddr + r.text_offset;
+                let off = r.data_offset as usize;
+                if off + 8 > bytes.len() {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "JIT: label reloc offset {off:#x} past end of data region ({})",
                             bytes.len()
                         ),
                     )));
@@ -756,6 +826,7 @@ mod jit_impl {
                     real_symbol: host.clone(),
                     dylib_index: *dylib,
                     flat_lookup: true,
+                    is_object: false,
                     is_variadic: false,
                     fixed_args: 0,
                     return_type_tag: 0,
@@ -765,7 +836,8 @@ mod jit_impl {
                 i
             });
             build.got_fixups.push(GotFixup {
-                adrp_offset: r.instr_offset,
+                instr_offset: r.instr_offset,
+                part: AddrPart::Whole,
                 import_index: idx,
                 is_data_load: true,
             });
@@ -785,18 +857,29 @@ mod jit_impl {
         // saw.
         let imports = ResolvedImports::resolve(program)?;
         let mut build = match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                aarch64::lower(program, target, options, &imports)?
-            }
-            Target::LinuxX64 | Target::WindowsX64 => {
-                x86_64::lower(program, target, options, &imports)?
-            }
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => aarch64::lower(
+                program,
+                target,
+                options,
+                &imports,
+                None,
+                crate::c5::codegen::LowerMode::Full,
+            )?,
+            Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(
+                program,
+                target,
+                options,
+                &imports,
+                None,
+                crate::c5::codegen::LowerMode::Full,
+            )?,
         };
         build.imports = imports;
         build.abi = target.abi();
         build.data_relocs = program.data_relocs.clone();
         build.code_relocs = program.code_relocs.clone();
         build.extern_data_relocs = program.extern_data_relocs.clone();
+        crate::c5::codegen::emit_ssa_dump(&mut build);
         Ok(build)
     }
 
@@ -1074,6 +1157,10 @@ mod jit_impl {
     /// strings + globals here through RIP-relative / ADRP+ADD
     /// loads patched by [`apply_jit_fixups`].
     struct DataRegion {
+        // Allocation base handed back to `munmap` / `VirtualFree`. `ptr`
+        // may be rounded up from it to meet a static object's alignment.
+        map_ptr: *mut u8,
+        // Usable data base, aligned to the program's data alignment.
         ptr: *mut u8,
         // Read by `munmap` on POSIX; Windows `VirtualFree(MEM_RELEASE)`
         // requires size = 0, so the field is dead on that target.
@@ -1083,7 +1170,7 @@ mod jit_impl {
 
     impl DataRegion {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        fn new(data: &[u8]) -> Result<Self, C5Error> {
+        fn new(data: &[u8], data_align: usize) -> Result<Self, C5Error> {
             unsafe extern "C" {
                 fn mmap(
                     addr: *mut c_void,
@@ -1094,7 +1181,13 @@ mod jit_impl {
                     offset: i64,
                 ) -> *mut c_void;
             }
-            let len = round_up_to_page(data.len());
+            // mmap only guarantees page alignment. A static object may
+            // request a wider boundary (a page-multiple per-CPU stack),
+            // so over-allocate by the shortfall and round the usable base
+            // up to `align`; the data offsets then land on their boundary.
+            let page = page_size();
+            let align = data_align.max(page).max(1).next_power_of_two();
+            let len = round_up_to_page(data.len()) + (align - page);
             let ptr = unsafe {
                 mmap(
                     std::ptr::null_mut(),
@@ -1110,17 +1203,22 @@ mod jit_impl {
                     &format!("JIT: data mmap failed: {}", std::io::Error::last_os_error()),
                 )));
             }
+            let base = ((ptr as usize + align - 1) & !(align - 1)) as *mut u8;
             unsafe {
-                std::ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut u8, data.len());
+                std::ptr::copy_nonoverlapping(data.as_ptr(), base, data.len());
             }
             Ok(DataRegion {
-                ptr: ptr as *mut u8,
+                map_ptr: ptr as *mut u8,
+                ptr: base,
                 len,
             })
         }
 
         #[cfg(target_os = "windows")]
-        fn new(data: &[u8]) -> Result<Self, C5Error> {
+        fn new(data: &[u8], _data_align: usize) -> Result<Self, C5Error> {
+            // VirtualAlloc returns memory aligned to the allocation
+            // granularity (64 KiB), which already meets the static-object
+            // alignment ceiling, so no extra rounding is needed here.
             let len = round_up_to_page(data.len());
             let ptr = unsafe {
                 VirtualAlloc(
@@ -1142,6 +1240,7 @@ mod jit_impl {
                 std::ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut u8, data.len());
             }
             Ok(DataRegion {
+                map_ptr: ptr as *mut u8,
                 ptr: ptr as *mut u8,
                 len,
             })
@@ -1172,11 +1271,11 @@ mod jit_impl {
                 unsafe extern "C" {
                     fn munmap(addr: *mut c_void, len: usize) -> c_int;
                 }
-                munmap(self.ptr as *mut c_void, self.len);
+                munmap(self.map_ptr as *mut c_void, self.len);
             }
             #[cfg(target_os = "windows")]
             unsafe {
-                VirtualFree(self.ptr as *mut c_void, 0, MEM_RELEASE);
+                VirtualFree(self.map_ptr as *mut c_void, 0, MEM_RELEASE);
             }
         }
     }
@@ -1549,8 +1648,9 @@ mod jit_impl {
                     target,
                     code,
                     code_vmaddr,
-                    fx.adrp_offset as u64,
+                    fx.instr_offset as u64,
                     slot_vmaddr,
+                    fx.part,
                     "GOT data fixup",
                 )?;
             } else {
@@ -1558,8 +1658,9 @@ mod jit_impl {
                     target,
                     code,
                     code_vmaddr,
-                    fx.adrp_offset as u64,
+                    fx.instr_offset as u64,
                     slot_vmaddr,
+                    fx.part,
                     "GOT fixup",
                 )?;
             }
@@ -1569,8 +1670,9 @@ mod jit_impl {
                 target,
                 code,
                 code_vmaddr,
-                fx.adrp_offset as u64,
+                fx.instr_offset as u64,
                 data_vmaddr + fx.data_offset,
+                fx.part,
                 "data fixup",
             )?;
         }
@@ -1579,8 +1681,9 @@ mod jit_impl {
                 target,
                 code,
                 code_vmaddr,
-                fx.adrp_offset as u64,
+                fx.instr_offset as u64,
                 code_vmaddr + fx.target_native_offset as u64,
+                fx.part,
                 "func fixup",
             )?;
         }
@@ -1597,13 +1700,15 @@ mod jit_impl {
         code_vmaddr: u64,
         instr_offset: u64,
         target_vmaddr: u64,
+        part: AddrPart,
         label: &str,
     ) -> Result<(), C5Error> {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, label)
+                patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, part, label)
             }
             Target::LinuxX64 | Target::WindowsX64 => {
+                super::super::require_whole_addr(part, label)?;
                 patch_call_qword_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
         }
@@ -1620,33 +1725,22 @@ mod jit_impl {
         code_vmaddr: u64,
         instr_offset: u64,
         target_vmaddr: u64,
+        part: AddrPart,
         label: &str,
     ) -> Result<(), C5Error> {
-        let off = instr_offset as usize;
-        let adrp_vmaddr = code_vmaddr + instr_offset;
-        let adrp_page = adrp_vmaddr & !0xFFF;
-        let target_page = target_vmaddr & !0xFFF;
-        let page_diff = target_page as i64 - adrp_page as i64;
-        if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: {label} page diff {page_diff} not 4 KiB aligned"),
-            )));
-        }
-        let imm21 = (page_diff >> 12) as i32;
-        let in_page = (target_vmaddr & 0xFFF) as u32;
-        if !in_page.is_multiple_of(8) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: {label} slot offset {in_page:#x} not 8-aligned"),
-            )));
-        }
-        let prev_adrp =
-            u32::from_le_bytes([code[off], code[off + 1], code[off + 2], code[off + 3]]);
-        let rd = super::super::aarch64::Reg((prev_adrp & 0x1F) as u8);
-        let adrp_word = super::super::aarch64::enc_adrp(rd, imm21);
-        let ldr_word = super::super::aarch64::enc_ldr_imm(rd, rd, in_page);
-        code[off..off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-        code[off + 4..off + 8].copy_from_slice(&ldr_word.to_le_bytes());
-        Ok(())
+        super::super::aarch64::patch::patch_slot(
+            code,
+            instr_offset as usize,
+            (code_vmaddr + instr_offset) as i64,
+            target_vmaddr as i64,
+            super::super::aarch64::patch::SlotWidth::W64,
+            part,
+        )
+        .map_err(|e| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &e.describe(&format!("JIT: {label}")),
+            ))
+        })
     }
 
     /// Patch an extern-data reference so the register receives the
@@ -1661,13 +1755,15 @@ mod jit_impl {
         code_vmaddr: u64,
         instr_offset: u64,
         target_vmaddr: u64,
+        part: AddrPart,
         label: &str,
     ) -> Result<(), C5Error> {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, label)
+                patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, part, label)
             }
             Target::LinuxX64 | Target::WindowsX64 => {
+                super::super::require_whole_addr(part, label)?;
                 let op_off = instr_offset as usize + 1;
                 if code[op_off] != 0x8D {
                     return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1719,13 +1815,15 @@ mod jit_impl {
         code_vmaddr: u64,
         instr_offset: u64,
         target_vmaddr: u64,
+        part: AddrPart,
         label: &str,
     ) -> Result<(), C5Error> {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                patch_adrp_add(code, code_vmaddr, instr_offset, target_vmaddr, label)
+                patch_adrp_add(code, code_vmaddr, instr_offset, target_vmaddr, part, label)
             }
             Target::LinuxX64 | Target::WindowsX64 => {
+                super::super::require_whole_addr(part, label)?;
                 patch_lea_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
         }
@@ -1736,41 +1834,21 @@ mod jit_impl {
         code_vmaddr: u64,
         instr_offset: u64,
         target_vmaddr: u64,
+        part: AddrPart,
         label: &str,
     ) -> Result<(), C5Error> {
-        let off = instr_offset as usize;
-        let adrp_vmaddr = code_vmaddr + instr_offset;
-        let adrp_page = adrp_vmaddr & !0xFFF;
-        let target_page = target_vmaddr & !0xFFF;
-        let page_diff = target_page as i64 - adrp_page as i64;
-        if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("JIT: {label} page diff {page_diff} not 4 KiB aligned"),
-            )));
-        }
-        let imm21 = (page_diff >> 12) as i32;
-        let in_page = (target_vmaddr & 0xFFF) as u32;
-
-        // Recover the destination register encoded by the codegen at
-        // the placeholder site. adrp/add carry rd in the low 5 bits;
-        // the add additionally carries rn in bits 5..10. Both match
-        // by construction (`adrp rd; add rd, rd, #imm`).
-        let prev_adrp =
-            u32::from_le_bytes([code[off], code[off + 1], code[off + 2], code[off + 3]]);
-        let prev_add =
-            u32::from_le_bytes([code[off + 4], code[off + 5], code[off + 6], code[off + 7]]);
-        let rd = (prev_adrp & 0x1F) as u8;
-        let add_rd = (prev_add & 0x1F) as u8;
-        let add_rn = ((prev_add >> 5) & 0x1F) as u8;
-        let adrp_word = super::super::aarch64::enc_adrp(super::super::aarch64::Reg(rd), imm21);
-        let add_word = super::super::aarch64::enc_add_imm(
-            super::super::aarch64::Reg(add_rd),
-            super::super::aarch64::Reg(add_rn),
-            in_page,
-        );
-        code[off..off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-        code[off + 4..off + 8].copy_from_slice(&add_word.to_le_bytes());
-        Ok(())
+        super::super::aarch64::patch::patch_addr(
+            code,
+            instr_offset as usize,
+            (code_vmaddr + instr_offset) as i64,
+            target_vmaddr as i64,
+            part,
+        )
+        .map_err(|e| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &e.describe(&format!("JIT: {label}")),
+            ))
+        })
     }
 
     fn patch_lea_rip32(
@@ -1817,8 +1895,7 @@ mod jit_impl {
     /// requested length, but rounding the length here keeps the two
     /// consistent.
     fn round_up_to_page(n: usize) -> usize {
-        let p = page_size();
-        (n + p - 1) & !(p - 1)
+        crate::c5::layout::round_up(n, page_size())
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

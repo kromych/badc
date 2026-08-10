@@ -147,6 +147,29 @@ pub(crate) enum Inst {
         value: ValueId,
         kind: StoreKind,
     },
+    /// Load through an x86 named-address-space pointer (`__seg_gs` /
+    /// `__seg_fs`): the memory reference rides a segment-override prefix
+    /// (`%gs:` / `%fs:`). Width / signedness follow `kind` as for
+    /// [`Self::Load`]. `addr` holds the full effective address; kept
+    /// opaque to the addressing-mode passes so a segment access is never
+    /// merged with a plain access at the same numeric address (they name
+    /// different memory). x86-only; `seg` is `Gs` or `Fs`.
+    SegLoad {
+        addr: ValueId,
+        kind: LoadKind,
+        volatile: bool,
+        seg: AsmSeg,
+    },
+    /// Store through an x86 named-address-space pointer. Companion to
+    /// [`Self::SegLoad`]; leaves the stored value in the accumulator like
+    /// [`Self::Store`].
+    SegStore {
+        addr: ValueId,
+        value: ValueId,
+        kind: StoreKind,
+        volatile: bool,
+        seg: AsmSeg,
+    },
     /// Binary arithmetic / comparison / shift. `lhs` is the value
     /// that was on top of the c5 stack at the op; `rhs` is the
     /// current accumulator (matches `a = pop() <op> a` semantics).
@@ -302,6 +325,13 @@ pub(crate) enum Inst {
         dst: ValueId,
         src: ValueId,
         size: i64,
+        /// Alignment both endpoints are known to satisfy, in bytes: the
+        /// aggregate type's alignment, or a larger value the walker can
+        /// prove (a frame slot and a `.data` staging offset are both
+        /// 8-aligned). The per-arch lowering caps its transfer width at
+        /// this under `-mstrict-align`; without the flag it copies in
+        /// 8-byte units regardless.
+        align: u32,
     },
     /// Atomic read-modify-write on the `width`-byte object at `addr`
     /// (C11 7.17.7.2-7.17.7.5). `op` selects the operator; the operand
@@ -390,6 +420,275 @@ pub(crate) enum Inst {
         incoming: Vec<(BlockId, ValueId)>,
         kind: LoadKind,
     },
+}
+
+impl Inst {
+    /// Whether the inst's only effect is defining its result, so it can be
+    /// dropped when nothing reads that result. The allocator's use-count
+    /// fixed point and the per-arch emit's dead-value skip must agree on
+    /// this: an inst pure to one and not the other loses its operands'
+    /// materialization yet is still emitted, so the access reads whatever
+    /// the operand register happens to hold.
+    ///
+    /// A volatile load is an access the abstract machine performs even
+    /// when the value is unused (C99 5.1.2.3p2, 6.7.3p6), so it is never
+    /// pure.
+    pub(crate) fn is_pure(&self) -> bool {
+        matches!(
+            self,
+            Inst::Imm(_)
+                | Inst::ImmData(_)
+                | Inst::ImmCode(_)
+                | Inst::ImmExtCode(_)
+                | Inst::LocalAddr(_)
+                | Inst::TlsAddr(_)
+                | Inst::Load {
+                    volatile: false,
+                    ..
+                }
+                | Inst::LoadLocal {
+                    volatile: false,
+                    ..
+                }
+                | Inst::SegLoad {
+                    volatile: false,
+                    ..
+                }
+                | Inst::LoadIndexed { .. }
+                | Inst::Binop { .. }
+                | Inst::BinopI { .. }
+                | Inst::Fneg(_)
+                | Inst::Fma { .. }
+                | Inst::FpCast { .. }
+                | Inst::Extend { .. }
+        )
+    }
+
+    /// Variant name for diagnostics. Exhaustive so a new variant is
+    /// named rather than reported as an unknown.
+    pub(crate) fn variant_name(&self) -> &'static str {
+        match self {
+            Inst::Imm(_) => "Imm",
+            Inst::ImmData(_) => "ImmData",
+            Inst::ImmCode(_) => "ImmCode",
+            Inst::ImmExtCode(_) => "ImmExtCode",
+            Inst::BlockAddr(_) => "BlockAddr",
+            Inst::LocalAddr(_) => "LocalAddr",
+            Inst::TlsAddr(_) => "TlsAddr",
+            Inst::Load { .. } => "Load",
+            Inst::Store { .. } => "Store",
+            Inst::SegLoad { .. } => "SegLoad",
+            Inst::SegStore { .. } => "SegStore",
+            Inst::LoadLocal { .. } => "LoadLocal",
+            Inst::StoreLocal { .. } => "StoreLocal",
+            Inst::LoadIndexed { .. } => "LoadIndexed",
+            Inst::StoreIndexed { .. } => "StoreIndexed",
+            Inst::Binop { .. } => "Binop",
+            Inst::BinopI { .. } => "BinopI",
+            Inst::Fneg(_) => "Fneg",
+            Inst::Fma { .. } => "Fma",
+            Inst::Extend { .. } => "Extend",
+            Inst::FpCast { .. } => "FpCast",
+            Inst::Call { .. } => "Call",
+            Inst::CallIndirect { .. } => "CallIndirect",
+            Inst::CallExt { .. } => "CallExt",
+            Inst::TailExt(_) => "TailExt",
+            Inst::Mcpy { .. } => "Mcpy",
+            Inst::AtomicRmw { .. } => "AtomicRmw",
+            Inst::AtomicCas { .. } => "AtomicCas",
+            Inst::Intrinsic { .. } => "Intrinsic",
+            Inst::InlineAsm { .. } => "InlineAsm",
+            Inst::AllocaInit(_) => "AllocaInit",
+            Inst::ParamRef { .. } => "ParamRef",
+            Inst::Phi { .. } => "Phi",
+        }
+    }
+
+    /// Apply `f` to every `ValueId` operand the inst references.
+    ///
+    /// This and [`Self::for_each_operand_mut`] are the one definition of
+    /// which fields are operands. Both matches are exhaustive, so a new
+    /// variant does not compile until its operands are routed here; a
+    /// hand-maintained copy that misses a variant silently leaves its
+    /// operands out of use counts and renumbering.
+    pub(crate) fn for_each_operand(&self, mut f: impl FnMut(ValueId)) {
+        match self {
+            Inst::Imm(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
+            | Inst::BlockAddr(_)
+            | Inst::LocalAddr(_)
+            | Inst::TlsAddr(_)
+            | Inst::LoadLocal { .. }
+            | Inst::TailExt(_)
+            | Inst::AllocaInit(_)
+            | Inst::ParamRef { .. } => {}
+            Inst::Load { addr, .. } => f(*addr),
+            Inst::Store { addr, value, .. } => {
+                f(*addr);
+                f(*value);
+            }
+            Inst::SegLoad { addr, .. } => f(*addr),
+            Inst::SegStore { addr, value, .. } => {
+                f(*addr);
+                f(*value);
+            }
+            Inst::StoreLocal { value, .. } => f(*value),
+            Inst::LoadIndexed { base, index, .. } => {
+                f(*base);
+                f(*index);
+            }
+            Inst::StoreIndexed {
+                base, index, value, ..
+            } => {
+                f(*base);
+                f(*index);
+                f(*value);
+            }
+            Inst::Binop { lhs, rhs, .. } => {
+                f(*lhs);
+                f(*rhs);
+            }
+            Inst::BinopI { lhs, .. } => f(*lhs),
+            Inst::Fneg(v) => f(*v),
+            Inst::Fma { a, b, c, .. } => {
+                f(*a);
+                f(*b);
+                f(*c);
+            }
+            Inst::Extend { value, .. } => f(*value),
+            Inst::FpCast { value, .. } => f(*value),
+            Inst::Call { args, .. }
+            | Inst::CallExt { args, .. }
+            | Inst::Intrinsic { args, .. }
+            | Inst::InlineAsm { args, .. } => {
+                for &a in args {
+                    f(a);
+                }
+            }
+            Inst::CallIndirect { target, args, .. } => {
+                f(*target);
+                for &a in args {
+                    f(a);
+                }
+            }
+            Inst::Mcpy { dst, src, .. } => {
+                f(*dst);
+                f(*src);
+            }
+            Inst::AtomicRmw { addr, value, .. } => {
+                f(*addr);
+                f(*value);
+            }
+            Inst::AtomicCas {
+                addr,
+                expected_addr,
+                desired,
+                ..
+            } => {
+                f(*addr);
+                f(*expected_addr);
+                f(*desired);
+            }
+            Inst::Phi { incoming, .. } => {
+                for (_, v) in incoming {
+                    f(*v);
+                }
+            }
+        }
+    }
+
+    /// Apply `f` to every `ValueId` operand in place. Mutable counterpart
+    /// of [`Self::for_each_operand`]; the two visit the same fields in the
+    /// same order.
+    pub(crate) fn for_each_operand_mut(&mut self, mut f: impl FnMut(&mut ValueId)) {
+        match self {
+            Inst::Imm(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
+            | Inst::BlockAddr(_)
+            | Inst::LocalAddr(_)
+            | Inst::TlsAddr(_)
+            | Inst::LoadLocal { .. }
+            | Inst::TailExt(_)
+            | Inst::AllocaInit(_)
+            | Inst::ParamRef { .. } => {}
+            Inst::Load { addr, .. } => f(addr),
+            Inst::Store { addr, value, .. } => {
+                f(addr);
+                f(value);
+            }
+            Inst::SegLoad { addr, .. } => f(addr),
+            Inst::SegStore { addr, value, .. } => {
+                f(addr);
+                f(value);
+            }
+            Inst::StoreLocal { value, .. } => f(value),
+            Inst::LoadIndexed { base, index, .. } => {
+                f(base);
+                f(index);
+            }
+            Inst::StoreIndexed {
+                base, index, value, ..
+            } => {
+                f(base);
+                f(index);
+                f(value);
+            }
+            Inst::Binop { lhs, rhs, .. } => {
+                f(lhs);
+                f(rhs);
+            }
+            Inst::BinopI { lhs, .. } => f(lhs),
+            Inst::Fneg(v) => f(v),
+            Inst::Fma { a, b, c, .. } => {
+                f(a);
+                f(b);
+                f(c);
+            }
+            Inst::Extend { value, .. } => f(value),
+            Inst::FpCast { value, .. } => f(value),
+            Inst::Call { args, .. }
+            | Inst::CallExt { args, .. }
+            | Inst::Intrinsic { args, .. }
+            | Inst::InlineAsm { args, .. } => {
+                for a in args {
+                    f(a);
+                }
+            }
+            Inst::CallIndirect { target, args, .. } => {
+                f(target);
+                for a in args {
+                    f(a);
+                }
+            }
+            Inst::Mcpy { dst, src, .. } => {
+                f(dst);
+                f(src);
+            }
+            Inst::AtomicRmw { addr, value, .. } => {
+                f(addr);
+                f(value);
+            }
+            Inst::AtomicCas {
+                addr,
+                expected_addr,
+                desired,
+                ..
+            } => {
+                f(addr);
+                f(expected_addr);
+                f(desired);
+            }
+            Inst::Phi { incoming, .. } => {
+                for (_, v) in incoming {
+                    f(v);
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -565,6 +864,13 @@ pub(crate) enum AsmConstraint {
     /// `b`->rbx, `c`->rcx, `d`->rdx, `S`->rsi, `D`->rdi); the value is
     /// the architectural register number.
     Fixed(u8),
+    /// An operand naming a `register T v asm("reg")` variable: the
+    /// operand IS that register. `%N` resolves to it, and no value moves
+    /// in or out -- the variable has no storage behind it, so there is
+    /// nothing to load from or store back to. The register is also left
+    /// out of the save / restore set, since the binding's purpose is for
+    /// the asm to see and affect that exact register.
+    Bound(u8),
     /// Matching constraint (`"0".."9"`): shares the register assigned to
     /// the operand at that index (an earlier output).
     Match(u8),
@@ -579,6 +885,27 @@ pub(crate) enum AsmConstraint {
     /// through it (not a register). Assigned a register to hold the
     /// address; the instruction dereferences that register.
     Mem,
+    /// A flag output (`=@cc<cond>`): the asm block's condition flags are
+    /// the operand's value. The payload is the x86_64 condition-code
+    /// nibble; after the template runs, `set<cond>` materializes 0 or 1
+    /// into the destination, zero-extended to the operand width.
+    Flags(u8),
+    /// AArch64 `Q` (`Q`, `=Q`, `+Q`): a memory operand whose address is a
+    /// single base register with no offset, the addressing mode the
+    /// acquire/release and exclusive instructions take. Assigned a
+    /// register to hold the address; a template `%N` substitutes as `[xN]`.
+    MemBase,
+}
+
+/// x86 named-address-space qualifier on a memory operand's object
+/// (`__seg_gs` / `__seg_fs`): the memory reference rides a segment
+/// override prefix. `None` for an unqualified operand and on every
+/// target without segment registers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AsmSeg {
+    None,
+    Gs,
+    Fs,
 }
 
 /// One operand of a GCC extended-asm statement.
@@ -594,6 +921,9 @@ pub(crate) struct AsmOperand {
     /// the default register-name size of a `%N` reference and the width
     /// of the load / store through an output address.
     pub width: u8,
+    /// Segment override for a memory operand whose object is
+    /// `__seg_gs` / `__seg_fs`-qualified (x86 only).
+    pub seg: AsmSeg,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :
@@ -617,6 +947,35 @@ pub(crate) struct AsmBlock {
     pub clobber_memory: bool,
     /// The statement carried the `volatile` qualifier.
     pub volatile: bool,
+}
+
+impl AsmBlock {
+    /// True when the template names the stack pointer (`rsp` / `esp` /
+    /// `sp` / `wsp` as a token). Such asm can capture or switch the stack
+    /// -- the setjmp / longjmp / stack-switch idioms -- so an activation
+    /// of the surrounding frame may stay live while later code in the
+    /// same frame runs, and may be resumed afterwards. Lifetimes are then
+    /// not bounded by the CFG or the C block structure, and frame-storage
+    /// sharing decisions must exclude the function.
+    pub fn references_sp(&self) -> bool {
+        let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+        let t = &self.template;
+        let mut i = 0;
+        while i < t.len() {
+            if !is_word(t[i]) {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < t.len() && is_word(t[i]) {
+                i += 1;
+            }
+            if matches!(&t[start..i], b"sp" | b"wsp" | b"rsp" | b"esp") {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 /// A basic block's terminator. Drives the block's control-flow
@@ -681,6 +1040,35 @@ pub(crate) enum Terminator {
     Unreachable,
 }
 
+impl Terminator {
+    /// Apply `f` to every `ValueId` operand the terminator references.
+    ///
+    /// The one definition of which terminators carry an operand, for the
+    /// passes that renumber values. Exhaustive, so a new terminator does
+    /// not compile until it answers here; a variant missed by a
+    /// hand-maintained copy keeps a pre-rewrite value id.
+    ///
+    /// `Return` may carry `NO_VALUE` for a void return, which is passed
+    /// through unchanged.
+    pub(crate) fn for_each_operand_mut(&mut self, mut f: impl FnMut(&mut ValueId)) {
+        match self {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => f(cond),
+            Terminator::GotoIndirect { target } => f(target),
+            Terminator::JumpTable { idx, .. } => f(idx),
+            Terminator::Return(v) => {
+                if *v != NO_VALUE {
+                    f(v);
+                }
+            }
+            Terminator::Jmp(_)
+            | Terminator::FallThrough(_)
+            | Terminator::TailExt(_)
+            | Terminator::AsmGoto { .. }
+            | Terminator::Unreachable => {}
+        }
+    }
+}
+
 /// A single basic block of SSA instructions plus its terminator.
 #[derive(Debug, Clone)]
 pub(crate) struct Block {
@@ -714,6 +1102,18 @@ pub(crate) struct AggDesc {
     pub size: u32,
     pub align: u32,
     pub fields: Vec<crate::c5::codegen::abi_classify::FlatField>,
+}
+
+/// A static-initializer data slot holding the address of a labelled
+/// code location in this function (GCC `&&label`). The label's address
+/// is a link-time constant, so the slot is filled by a relocation
+/// rather than by stores at the declaration point.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LabelDataReloc {
+    /// Byte offset in the program's data image of the 8-byte slot.
+    pub data_offset: u64,
+    /// Block whose code address the slot receives.
+    pub block: BlockId,
 }
 
 /// Per-function SSA program. Consumed by the allocator and the
@@ -752,15 +1152,41 @@ pub(crate) struct FunctionSsa {
     pub is_inline: bool,
     /// True if the function carried a *mandatory* inline request --
     /// `__attribute__((always_inline))` or MSVC `__forceinline` -- as
-    /// opposed to the plain `inline` hint. Implies `is_inline`. The
-    /// inliner warns when it cannot honour the request, matching the
-    /// gcc / MSVC diagnostic; a plain `inline` that stays out of line is
-    /// silent (it is only a hint).
+    /// opposed to the plain `inline` hint. Implies `is_inline`. No size
+    /// or frame budget applies to it, matching gcc and clang, which
+    /// report a diagnostic rather than silently declining. gcc's is an
+    /// error because its inliner admits nearly any callee shape; badc's
+    /// candidate filter is narrower, so an unhonoured request is a
+    /// warning -- an error would reject conforming programs over a
+    /// coverage gap. A plain `inline` that stays out of line is silent
+    /// (it is only a hint).
     pub is_always_inline: bool,
     /// True if the function carried `__attribute__((naked))`: emit no
     /// prologue/epilogue and no implicit return; the body (inline asm) is the
     /// function's entire machine code. Used for interrupt service routines.
     pub is_naked: bool,
+    /// True when the definition binds STB_WEAK: `__attribute__((weak))` on
+    /// the function or one of its declarations, or a file-scope asm `.weak`
+    /// naming it. A strong definition in another object replaces it at link
+    /// time, so the body this unit sees is not necessarily the one that runs
+    /// and every call has to reach it through the symbol.
+    pub is_weak: bool,
+    /// True when the definition has internal linkage (C99 6.2.2): a
+    /// file-scope `static` function. Every call reaching it is in this
+    /// translation unit, so the whole-program facts a pass can derive
+    /// from the call sites it sees are complete.
+    pub is_internal: bool,
+    /// Explicit placement from `__attribute__((section(...)))`, `None`
+    /// for the default text section. Placement is a contract consumers
+    /// read (the kernel whitelists init references by section), so a
+    /// body with one is only spliced into a caller placed identically,
+    /// as gcc does.
+    pub section: Option<alloc::string::String>,
+    /// Declared parameters, by index, whose value a whole-program
+    /// constant reached (`passes::ipa_const_param`). Their incoming
+    /// argument register has no reader left, so the entry spill of
+    /// their frame cell buys nothing. Indices past 63 are not tracked.
+    pub const_params: u64,
     /// Flat list of all SSA instructions in the function, indexed
     /// by [`ValueId`]. Each [`Block::inst_range`] is a contiguous
     /// slice of this list.
@@ -872,6 +1298,14 @@ pub(crate) struct FunctionSsa {
     /// treat an indirect branch as a branch to all of these. Empty
     /// for functions with no computed goto.
     pub computed_goto_targets: Vec<BlockId>,
+    /// Static-initializer data slots holding a `&&label` address: the
+    /// slot at `data_offset` in the program's data image receives the
+    /// runtime code address of `block` plus `addend`. Native emit
+    /// resolves each once block layout is final; the VM writes the
+    /// tagged block index. Every listed block is also a computed-goto
+    /// target, so the CFG keeps it reachable and its id stable through
+    /// the block-remapping passes. Empty for the common case.
+    pub label_data_relocs: Vec<LabelDataReloc>,
     /// Target-block lists for the function's `Terminator::JumpTable`
     /// terminators, keyed by the terminator's `table` index. Entry
     /// `i` is the successor for a runtime index of `i`; blocks may
@@ -897,6 +1331,20 @@ pub(crate) struct FunctionSsa {
     /// an interior cell, which is referenced by no instruction. Empty for SSA
     /// built outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
+    /// Automatic objects whose required alignment exceeds the 8-byte frame
+    /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`), as `(slot_off,
+    /// region_off)`. The prologue reserves a `frame_align`-aligned region
+    /// below the static frame; every backend resolves these slots to
+    /// `region_base + region_off` rather than the fp-relative slot. Empty for
+    /// the common case.
+    pub over_aligned: Vec<(i64, i64)>,
+    /// Alignment of the realigned region (max over `over_aligned`, a power of
+    /// two >= 16), or 0 when no automatic object needs realignment. Non-zero
+    /// forces the dynamic-sp frame model.
+    pub frame_align: i64,
+    /// Byte size of the realigned region, a multiple of `frame_align`; 0 when
+    /// `over_aligned` is empty.
+    pub realign_region_bytes: i64,
     /// True when the body calls a function that may return twice into
     /// this frame: the setjmp family (C99 7.13) or vfork(2). Ordinary
     /// liveness under-approximates storage lifetime here -- a value
@@ -912,6 +1360,65 @@ pub(crate) struct FunctionSsa {
     /// whose constant-trip loops turned array subscripts into constant
     /// offsets. False for every function the unroll pass left unchanged.
     pub did_unroll: bool,
+    /// True once `passes::inline` spliced a callee into this function.
+    /// Set by the inliner; read post-inline to gate a mem2reg re-run to
+    /// callers that received an inline. A relocated callee local can land
+    /// on an address-free, single-width slot that pre-inline mem2reg never
+    /// saw (the slot did not exist then), so the re-run promotes it. False
+    /// for every function the inliner left unchanged.
+    pub did_inline: bool,
+}
+
+impl FunctionSsa {
+    /// True when any inline-asm template in the body names the stack
+    /// pointer (`AsmBlock::references_sp`).
+    pub fn has_sp_asm(&self) -> bool {
+        self.insts.iter().any(|i| match i {
+            Inst::InlineAsm { asm, .. } => asm.references_sp(),
+            _ => false,
+        })
+    }
+}
+
+/// Functions that contain stack-pointer asm or reach one through the
+/// unit's direct `Inst::Call` graph, by ent_pc. A caller of such a
+/// function may acquire the asm by inlining, and its frame may then host
+/// an activation that stays live across CFG-sequential code (a
+/// stack-switch parks it, a saved context resumes it), so frame regions
+/// in every such function must stay per-site. Inlining only moves bodies
+/// along existing call edges, so membership computed on pre-inline
+/// bodies is stable for a whole inline run.
+pub(crate) fn sp_asm_reachers(funcs: &[FunctionSsa]) -> alloc::collections::BTreeSet<usize> {
+    let idx_of: alloc::collections::BTreeMap<usize, usize> = funcs
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.ent_pc, i))
+        .collect();
+    let n = funcs.len();
+    let mut preds: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
+    for (v, f) in funcs.iter().enumerate() {
+        for inst in &f.insts {
+            if let Inst::Call { target_pc, .. } = inst
+                && let Some(&w) = idx_of.get(target_pc)
+            {
+                preds[w].push(v);
+            }
+        }
+    }
+    let mut tainted: Vec<bool> = funcs.iter().map(|f| f.has_sp_asm()).collect();
+    let mut work: Vec<usize> = (0..n).filter(|&v| tainted[v]).collect();
+    while let Some(v) = work.pop() {
+        for &p in &preds[v] {
+            if !tainted[p] {
+                tainted[p] = true;
+                work.push(p);
+            }
+        }
+    }
+    (0..n)
+        .filter(|&v| tainted[v])
+        .map(|v| funcs[v].ent_pc)
+        .collect()
 }
 
 /// External functions that may return twice into the caller's frame:
@@ -925,4 +1432,318 @@ pub(crate) fn returns_twice_fn_name(name: &str) -> bool {
         name,
         "setjmp" | "_setjmp" | "sigsetjmp" | "__sigsetjmp" | "__c5_msvcrt_setjmp" | "vfork"
     )
+}
+
+impl crate::c5::layout::DataOffsets for Inst {
+    fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
+        match self {
+            // The only `.data` offset the IR holds; an interior address is a
+            // separate add, so the payload is always an object base.
+            Inst::ImmData(off) => crate::c5::layout::remap_self(off, r),
+            Inst::Imm { .. }
+            | Inst::ImmCode { .. }
+            | Inst::ImmExtCode { .. }
+            | Inst::BlockAddr { .. }
+            | Inst::LocalAddr { .. }
+            | Inst::TlsAddr { .. }
+            | Inst::Load { .. }
+            | Inst::Store { .. }
+            | Inst::LoadLocal { .. }
+            | Inst::StoreLocal { .. }
+            | Inst::LoadIndexed { .. }
+            | Inst::StoreIndexed { .. }
+            | Inst::SegLoad { .. }
+            | Inst::SegStore { .. }
+            | Inst::Binop { .. }
+            | Inst::BinopI { .. }
+            | Inst::Fneg { .. }
+            | Inst::Fma { .. }
+            | Inst::Extend { .. }
+            | Inst::FpCast { .. }
+            | Inst::Call { .. }
+            | Inst::CallIndirect { .. }
+            | Inst::CallExt { .. }
+            | Inst::TailExt { .. }
+            | Inst::Mcpy { .. }
+            | Inst::AtomicRmw { .. }
+            | Inst::AtomicCas { .. }
+            | Inst::Intrinsic { .. }
+            | Inst::InlineAsm { .. }
+            | Inst::AllocaInit { .. }
+            | Inst::ParamRef { .. }
+            | Inst::Phi { .. } => {}
+        }
+    }
+}
+
+impl crate::c5::layout::DataOffsets for FunctionSsa {
+    fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
+        let Self {
+            name: _,
+            ent_pc: _,
+            end_pc: _,
+            locals: _,
+            n_params: _,
+            is_variadic: _,
+            is_inline: _,
+            is_always_inline: _,
+            is_naked: _,
+            is_weak: _,
+            is_internal: _,
+            section: _,
+            const_params: _,
+            insts,
+            inst_src: _,
+            blocks: _,
+            extern_call_refs: _,
+            extern_imm_code_refs: _,
+            extern_imm_data_refs: _,
+            extern_tls_refs: _,
+            f32_values: _,
+            param_fp_mask: _,
+            agg_descs: _,
+            param_aggs: _,
+            param_local_slots: _,
+            ret_agg: _,
+            ret_is_fp: _,
+            ret_type_tag: _,
+            indirect_result_slot: _,
+            computed_goto_targets: _,
+            label_data_relocs,
+            jump_tables: _,
+            synthetic_base: _,
+            multi_cell_slots: _,
+            over_aligned: _,
+            frame_align: _,
+            realign_region_bytes: _,
+            has_returns_twice_call: _,
+            did_unroll: _,
+            did_inline: _,
+        } = self;
+        for i in insts.iter_mut() {
+            i.remap_data_offsets(r);
+        }
+        for l in label_data_relocs.iter_mut() {
+            crate::c5::layout::remap_self_u64(&mut l.data_offset, r);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One instance of every operand-bearing `Inst` shape, with distinct
+    /// operand ids so a dropped field is visible in the visit order.
+    fn operand_bearing_insts() -> alloc::vec::Vec<(Inst, alloc::vec::Vec<ValueId>)> {
+        alloc::vec![
+            (
+                Inst::Load {
+                    addr: 1,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: false
+                },
+                alloc::vec![1]
+            ),
+            (
+                Inst::Store {
+                    addr: 1,
+                    disp: 0,
+                    value: 2,
+                    kind: StoreKind::I64,
+                    volatile: false
+                },
+                alloc::vec![1, 2]
+            ),
+            (
+                Inst::SegLoad {
+                    addr: 1,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                    seg: AsmSeg::Gs
+                },
+                alloc::vec![1]
+            ),
+            (
+                Inst::SegStore {
+                    addr: 1,
+                    value: 2,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                    seg: AsmSeg::Fs,
+                },
+                alloc::vec![1, 2]
+            ),
+            (
+                Inst::StoreLocal {
+                    off: 0,
+                    value: 3,
+                    kind: StoreKind::I64,
+                    volatile: false
+                },
+                alloc::vec![3]
+            ),
+            (
+                Inst::LoadIndexed {
+                    base: 1,
+                    index: 2,
+                    scale: 8,
+                    kind: LoadKind::I64
+                },
+                alloc::vec![1, 2]
+            ),
+            (
+                Inst::StoreIndexed {
+                    base: 1,
+                    index: 2,
+                    scale: 8,
+                    value: 3,
+                    kind: StoreKind::I64
+                },
+                alloc::vec![1, 2, 3]
+            ),
+            (
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs: 2
+                },
+                alloc::vec![1, 2]
+            ),
+            (
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs_imm: 7
+                },
+                alloc::vec![1]
+            ),
+            (Inst::Fneg(4), alloc::vec![4]),
+            (
+                Inst::Fma {
+                    a: 1,
+                    b: 2,
+                    c: 3,
+                    neg_product: false,
+                    neg_addend: false
+                },
+                alloc::vec![1, 2, 3]
+            ),
+            (
+                Inst::Extend {
+                    value: 5,
+                    kind: LoadKind::I32
+                },
+                alloc::vec![5]
+            ),
+            (
+                Inst::FpCast {
+                    kind: FpCastKind::FpToInt,
+                    value: 6
+                },
+                alloc::vec![6]
+            ),
+            (
+                Inst::Mcpy {
+                    dst: 1,
+                    src: 2,
+                    size: 16,
+                    align: 8
+                },
+                alloc::vec![1, 2]
+            ),
+            (
+                Inst::AtomicRmw {
+                    op: AtomicRmwOp::Add,
+                    addr: 1,
+                    value: 2,
+                    width: 8
+                },
+                alloc::vec![1, 2]
+            ),
+            (
+                Inst::AtomicCas {
+                    addr: 1,
+                    expected_addr: 2,
+                    desired: 3,
+                    width: 8
+                },
+                alloc::vec![1, 2, 3]
+            ),
+            (
+                Inst::Intrinsic {
+                    kind: 0,
+                    args: alloc::vec![7, 8]
+                },
+                alloc::vec![7, 8]
+            ),
+            (
+                Inst::Phi {
+                    incoming: alloc::vec![(0, 9), (1, 10)],
+                    kind: LoadKind::I64
+                },
+                alloc::vec![9, 10]
+            ),
+        ]
+    }
+
+    /// The walker is the one definition of which fields are operands. A
+    /// variant left out of it drops its operands from every consumer's use
+    /// counts and value renumbering: the access is still emitted while the
+    /// operand that feeds it is treated as unreferenced.
+    #[test]
+    fn for_each_operand_visits_every_operand() {
+        for (inst, expect) in operand_bearing_insts() {
+            let mut seen = alloc::vec::Vec::new();
+            inst.for_each_operand(|v| seen.push(v));
+            assert_eq!(seen, expect, "operands of {inst:?}");
+        }
+    }
+
+    /// The by-value and in-place walkers must visit the same fields in the
+    /// same order, so a pass that renumbers through one agrees with a pass
+    /// that counts through the other.
+    #[test]
+    fn operand_walkers_agree() {
+        for (mut inst, _) in operand_bearing_insts() {
+            let mut by_ref = alloc::vec::Vec::new();
+            inst.for_each_operand(|v| by_ref.push(v));
+            let mut by_mut = alloc::vec::Vec::new();
+            inst.for_each_operand_mut(|v| by_mut.push(*v));
+            assert_eq!(by_ref, by_mut, "walker disagreement on {inst:?}");
+        }
+    }
+
+    /// Renumbering through the walker must reach a segment access's address
+    /// and stored value. A walk that dropped them left the operands pointing
+    /// at pre-rewrite values.
+    #[test]
+    fn segment_access_operands_are_renumbered() {
+        let mut load = Inst::SegLoad {
+            addr: 1,
+            kind: LoadKind::I64,
+            volatile: false,
+            seg: AsmSeg::Gs,
+        };
+        load.for_each_operand_mut(|v| *v += 100);
+        assert!(matches!(load, Inst::SegLoad { addr: 101, .. }));
+
+        let mut store = Inst::SegStore {
+            addr: 1,
+            value: 2,
+            kind: StoreKind::I64,
+            volatile: false,
+            seg: AsmSeg::Gs,
+        };
+        store.for_each_operand_mut(|v| *v += 100);
+        assert!(matches!(
+            store,
+            Inst::SegStore {
+                addr: 101,
+                value: 102,
+                ..
+            }
+        ));
+    }
 }

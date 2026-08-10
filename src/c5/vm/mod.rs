@@ -64,7 +64,7 @@ pub struct Vm<H: Host> {
     extern_fn_names: alloc::collections::BTreeMap<usize, String>,
     /// `(name, defined_here)` per parser symbol, indexed by the
     /// sym idx the `FunctionSsa::extern_*_refs` tables carry.
-    symbol_defs: Vec<(String, bool)>,
+    symbol_defs: Vec<(String, bool, bool)>,
     /// Local names bound to host data (`#pragma binding(data ...)`).
     data_binding_locals: alloc::collections::BTreeSet<String>,
     /// `target_ent_pc` of every static-initializer function
@@ -102,7 +102,8 @@ impl<H: Host> Vm<H> {
         // dispatch into the interpreter directly. Failures here
         // (walker compile errors, etc.) are deferred to `run`
         // because `with_host` doesn't return `Result`.
-        let ssa_funcs = super::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host());
+        let ssa_funcs =
+            super::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false);
         let binding_names = program
             .dylibs
             .iter()
@@ -116,7 +117,7 @@ impl<H: Host> Vm<H> {
         let symbol_defs = program
             .symbols
             .iter()
-            .map(|s| (s.name.clone(), s.defined_here))
+            .map(|s| (s.name.clone(), s.defined_here, s.is_weak))
             .collect();
         let data_binding_locals = program
             .dylibs
@@ -163,6 +164,21 @@ impl<H: Host> Vm<H> {
             let runtime = ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc;
             data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
         }
+        // A `&&label` initializer slot takes the same treatment against
+        // the label's block: `Inst::BlockAddr` materializes
+        // `CODE_ADDR_TAG | block` and `GotoIndirect` masks the tag back
+        // off, so the slot holds the value a runtime label address has.
+        // The block index is meaningful only inside its own function,
+        // which is where C99's `goto *` confines the value anyway.
+        if let Ok(funcs) = &ssa_funcs {
+            for f in funcs {
+                for r in &f.label_data_relocs {
+                    let off = r.data_offset as usize;
+                    let runtime = ssa::CODE_ADDR_TAG as u64 | r.block as u64;
+                    data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
+                }
+            }
+        }
         let tls_base = data.len();
         data.extend_from_slice(&program.tls_data);
         Self {
@@ -208,17 +224,19 @@ impl<H: Host> Vm<H> {
             // parser sym; the sentinel is ambiguous (the first
             // function's ent_pc is also 0), so consult the symbol.
             for &(_, sym) in f.extern_call_refs.iter().chain(&f.extern_imm_code_refs) {
-                if let Some((name, defined)) = self.symbol_defs.get(sym as usize)
+                if let Some((name, defined, _)) = self.symbol_defs.get(sym as usize)
                     && !defined
                 {
                     return Err(undef(name));
                 }
             }
             for &(_, sym) in f.extern_imm_data_refs.iter().chain(&f.extern_tls_refs) {
-                let Some((name, defined)) = self.symbol_defs.get(sym as usize) else {
+                let Some((name, defined, weak)) = self.symbol_defs.get(sym as usize) else {
                     continue;
                 };
-                if *defined {
+                // A weak reference with no definition is not an undefined
+                // symbol: the link resolves it to a null address.
+                if *defined || *weak {
                     continue;
                 }
                 if self.data_binding_locals.contains(name) {

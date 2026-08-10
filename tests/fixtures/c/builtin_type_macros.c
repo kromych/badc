@@ -40,5 +40,22 @@ int main(void) {
     if (__SIZEOF_FLOAT__ != (int)sizeof(float)) return 16;
     if (__SIZEOF_DOUBLE__ != (int)sizeof(double)) return 17;
 
+    // __SIZEOF_INT128__ is how headers decide the 128-bit type is
+    // available, so it must be defined and agree with sizeof.
+#ifndef __SIZEOF_INT128__
+    return 18;
+#else
+    if (__SIZEOF_INT128__ != (int)sizeof(__int128)) return 19;
+    if (__SIZEOF_INT128__ != (int)sizeof(unsigned __int128)) return 20;
+    {
+        // The macro advertises usable 128-bit integers: exercise the
+        // arithmetic it gates so the two cannot drift apart.
+        unsigned __int128 v = ((unsigned __int128)1 << 100) + 3;
+        if ((unsigned long long)(v >> 100) != 1) return 21;
+        if ((unsigned long long)(v * 5 - 15) != 0) return 22;
+        if (!(v > (unsigned __int128)1)) return 23;
+    }
+#endif
+
     return 0;
 }

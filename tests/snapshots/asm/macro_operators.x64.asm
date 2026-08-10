@@ -13,50 +13,12 @@ Disassembly of section .text:
 <sum>:
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax
-               	movsbq	(%rax), %rcx
-               	cmpq	$0x68, %rcx
-               	je	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	movsbq	0x1(%rax), %rcx
-               	cmpq	$0x65, %rcx
-               	je	<addr>
-               	movl	$0x2, %eax
-               	popq	%rbp
-               	retq
-               	movsbq	0x2(%rax), %rcx
-               	cmpq	$0x6c, %rcx
-               	je	<addr>
-               	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	movsbq	0x3(%rax), %rcx
-               	cmpq	$0x6c, %rcx
-               	je	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbp
-               	retq
-               	movsbq	0x4(%rax), %rcx
-               	cmpq	$0x6f, %rcx
-               	je	<addr>
-               	movl	$0x5, %eax
-               	popq	%rbp
-               	retq
-               	movsbq	0x5(%rax), %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x6, %eax
-               	popq	%rbp
-               	retq
                	leaq	<rip>, %rdi
                	movl	$0x7, %esi
                	movl	$0x8, %edx

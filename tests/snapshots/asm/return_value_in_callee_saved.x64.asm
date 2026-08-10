@@ -21,15 +21,10 @@ Disassembly of section .text:
 
 <hop>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x7, %edi
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	popq	%rbp
+               	movl	$0x7, %eax
+               	movl	$0x7, %eax
                	retq

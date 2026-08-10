@@ -12,6 +12,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
+use super::fixture_tables::NATIVE_ELF_FIXTURES;
 use crate::{Compiler, NativeOptions, Target, emit_native, emit_native_with_options};
 
 /// Outcome of compiling-and-running a native ELF binary. Mirrors
@@ -150,6 +151,29 @@ fn return_42() {
 #[test]
 fn return_zero() {
     assert_eq!(build_and_run("int main() { return 0; }", "elf-ret0"), 0);
+}
+
+/// aarch64 twin of `native_elf_x64::symbol_get_weak_hidden_undef_reads_null`.
+/// The kernel `symbol_get(x)` idiom takes the address of a block-scope
+/// `extern typeof(x) x __attribute__((weak, visibility("hidden")))`
+/// redeclaration; undefined, it reads as null and the guard skips the call.
+#[test]
+fn symbol_get_weak_hidden_undef_reads_null() {
+    let code = build_and_run(
+        "extern void optional_hook(void);\n\
+         #define symbol_get(x) \
+         ({ extern typeof(x) x __attribute__((weak, visibility(\"hidden\"))); &(x); })\n\
+         int main(void) {\n\
+             void (*fn)(void) = symbol_get(optional_hook);\n\
+             if (fn) {\n\
+                 fn();\n\
+                 return 1;\n\
+             }\n\
+             return 0;\n\
+         }\n",
+        "symbol_get_weak_hidden",
+    );
+    assert_eq!(code, 0, "weak hidden undefined address must read as null");
 }
 
 #[test]
@@ -385,526 +409,6 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
     let stem = name.trim_end_matches(".c");
     build_and_run_outcome_with_options(&src, &format!("elf-fixture-{stem}{suffix}"), opts)
 }
-
-/// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
-/// stay in sync because both backends should faithfully execute the
-/// same fixtures; if they drift, one of them has a bug.
-const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
-    ("vla_basic_sum.c", 0),
-    ("vla_runtime_sizeof.c", 0),
-    ("vla_size_from_arg.c", 0),
-    ("vla_scope_reclaim_loop.c", 0),
-    ("alloca_large.c", 42),
-    ("alloca_spill_arith.c", 42),
-    ("alloca_call_args.c", 42),
-    ("vla_large_runtime.c", 42),
-    ("vla_loop_stack_restore.c", 42),
-    ("vla_param_decay.c", 0),
-    ("arithmetic.c", 60),
-    ("compound_literal_struct_field.c", 0),
-    ("goto.c", 5),
-    ("switch_statement.c", 25),
-    ("switch_binary_search.c", 0),
-    ("switch_jump_table_dense.c", 0),
-    ("switch_jump_table_sparse_kept.c", 0),
-    ("switch_jumptable_dead_branch_prune.c", 12),
-    ("switch_jump_table_phi_join.c", 0),
-    ("branch_relaxation.c", 21),
-    ("float_register_resident.c", 45),
-    ("variadic_struct_arg.c", 18),
-    ("variadic_struct_arg_16b.c", 51),
-    ("libc_div.c", 0),
-    ("strtof_parses_float.c", 0),
-    ("snprintf_truncation_c99.c", 0),
-    ("ioctl_fionread_pipe.c", 0),
-    ("shm_open_mode_arg.c", 0),
-    ("strength_reduce_pow2_divmod.c", 0),
-    ("return_callee_saved_value.c", 0),
-    ("spill_slot_reuse_disjoint_calls.c", 0),
-    ("rotate_variable_count.c", 0),
-    ("rotate_inline_const_count.c", 0),
-    ("constfold_post_inline.c", 0),
-    ("bitwise_not_mvn.c", 0),
-    ("add_three_operand_lea.c", 0),
-    ("add_sub_negative_imm.c", 0),
-    ("wide_string_literal_alignment.c", 0),
-    ("va_arg_through_pointer.c", 0),
-    ("pthread_key_once_width.c", 0),
-    ("dev_t_width.c", 0),
-    ("libc_int_arith.c", 0),
-    ("switch_default_routing.c", 100),
-    ("control_flow.c", 1),
-    ("do_while.c", 5),
-    ("break_continue.c", 4),
-    ("for_loop.c", 10),
-    ("for_init_stmt_expr_nested_stmt.c", 6),
-    ("layout_bottom_test_loop.c", 45),
-    ("layout_nested_loops.c", 27),
-    ("layout_goto_block_addr.c", 16),
-    ("unroll_const_trip_copy.c", 0),
-    ("unroll_trip_17_stays_rolled.c", 0),
-    ("unroll_volatile_stays_rolled.c", 0),
-    ("sroa_const_index_local_array.c", 0),
-    ("sroa_runtime_index_stays_memory.c", 0),
-    ("recursion_factorial.c", 120),
-    ("pointers.c", 200),
-    ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
-    ("expression_precedence.c", 1),
-    ("variable_shadowing.c", 10),
-    ("pointer_arithmetic.c", 3),
-    ("predefined_constants.c", 0),
-    ("c99_qualifiers.c", 0),
-    ("integer_suffixes.c", 0),
-    ("predefined_macros.c", 0),
-    ("macro_multiline_comment_body.c", 0),
-    ("compound_literal_paren_init.c", 0),
-    ("alignof_operator.c", 0),
-    ("return_void_expression.c", 0),
-    ("macro_operators.c", 0),
-    ("typedef_basic.c", 0),
-    ("ptr_to_array_typedef.c", 42),
-    ("local_init_and_block_scope.c", 0),
-    ("arrays_basic.c", 0),
-    ("function_pointer_typedefs.c", 0),
-    ("unions_basic.c", 0),
-    ("array_initializers.c", 0),
-    ("local_array_partial_init_zero.c", 0),
-    ("ssa_call_result_spill.c", 0),
-    ("param_reg_swap.c", 77),
-    ("struct_field_assign_from_call.c", 0),
-    ("struct_byval_param_followed_by_ptr.c", 0),
-    ("tail_call_no_address_escape.c", 0),
-    ("fib.c", 0),
-    ("tailrec_narrow_param.c", 0),
-    ("tailrec_void_accumulate.c", 0),
-    ("queens.c", 0),
-    ("inline_keyword_uncaps.c", 0),
-    ("ssa_bail_fixup_rollback.c", 0),
-    ("ssa_fp_routing.c", 0),
-    ("ssa_callee_saved_x19.c", 0),
-    ("ssa_va_arg_loop.c", 0),
-    ("ssa_variadic_fp_arg.c", 0),
-    ("sysv_variadic_host_abi.c", 0),
-    ("aapcs64_variadic_host_abi.c", 0),
-    ("param_fp_before_int_pressure.c", 0),
-    ("ssa_fp_compare_nan.c", 0),
-    ("ssa_c5_internal_fp_arg.c", 0),
-    ("struct_initializers.c", 0),
-    ("enum_tag_types.c", 0),
-    ("bitfields.c", 0),
-    ("bound_import_arg_narrowing.c", 0),
-    ("block_extern_shadows_local.c", 0),
-    ("win64_xmm_scratch_callee_save.c", 0),
-    ("variadic_fnptr_proto_erased.c", 0),
-    ("union_bitfield_layout.c", 0),
-    ("init_float_to_int.c", 0),
-    ("global_init_midexpr_cast_narrow.c", 0),
-    ("init_brace_intermediate_cast.c", 0),
-    ("dead_local_load_frame_elide.c", 0),
-    ("narrow_param_entry_extend.c", 0),
-    ("qsort_scan_extend_dedup.c", 0),
-    ("tailcall_return_extension.c", 0),
-    ("fnptr_array_call.c", 0),
-    ("call_arg_extend_drop.c", 0),
-    ("indirect_call_narrow_scalar_args.c", 0),
-    ("indirect_call_ten_scalar_args.c", 0),
-    ("indirect_call_mixed_fp_int_args.c", 0),
-    ("float_param_stack_overflow.c", 0),
-    ("indirect_call_variadic_fp_control.c", 0),
-    ("ternary_arith_conversion.c", 0),
-    ("struct_layout.c", 0),
-    ("const_expr_conditional.c", 27),
-    ("comma_operator_in_loops.c", 3),
-    ("size_t_via_stdio.c", 3),
-    ("ndebug_optimize_predefine.c", 100),
-    ("leading_dot_float_literal.c", 7),
-    ("libc_fp_return_value.c", 11),
-    ("libc_fp_classify.c", 0),
-    ("libc_math_fdim_scalbn.c", 0),
-    ("libc_fileno_isblank.c", 0),
-    ("libc_math_minmax.c", 0),
-    ("libc_math_round.c", 0),
-    ("libc_math_libm.c", 0),
-    ("libc_math_hyperbolic.c", 0),
-    ("libc_math_special.c", 0),
-    ("libc_math_nextafter.c", 0),
-    ("pragma_entrypoint.c", 23),
-    ("struct_field_enum_type.c", 13),
-    ("compound_assign_fp_int_rhs.c", 17),
-    ("optimizer_fp_arg_mask_remap.c", 19),
-    ("many_args_host_stack_overflow.c", 0),
-    ("variadic_optimizer_survives.c", 0),
-    ("struct_2d_array_field.c", 27),
-    ("anonymous_aggregates.c", 0),
-    ("static_locals.c", 0),
-    ("large_stack_frame.c", 42),
-    ("octal_literal.c", 42),
-    ("short_types.c", 42),
-    ("long_long_distinct.c", 0),
-    ("signed_cast_extends.c", 0),
-    ("fn_ptr_struct_return.c", 0),
-    ("static_init_cast_funcptr.c", 0),
-    ("static_init_struct_fp_call.c", 0),
-    ("libc_data_globals.c", 0),
-    ("stdint_widths.c", 0),
-    ("fd_set_macros.c", 0),
-    ("fn_ptr_explicit_deref.c", 42),
-    ("fn_ptr_decay_inside_block.c", 0),
-    ("switch_nested_case_in_compound.c", 0),
-    ("ternary_middle_comma.c", 0),
-    ("local_init_int_to_float.c", 0),
-    ("sys_addr_in_static_init.c", 42),
-    ("sys_addr_zero_arg.c", 42),
-    ("libc_struct_buf_size.c", 42),
-    ("libc_basic.c", 0),
-    ("memset_mcmp.c", 42),
-    ("memcpy_basic.c", 'A' as i32),
-    ("struct_basic.c", 25),
-    ("struct_linked_list.c", 10),
-    ("global_initializer_int.c", 141),
-    ("global_initializer_pointer.c", 0),
-    ("static_linked_list.c", 0),
-    ("struct_sizeof.c", 0),
-    ("memory_ops.c", 0),
-    ("linked_list.c", 10),
-    ("double_pointers.c", 0),
-    ("printf.c", 0),
-    ("shebang.c", 7),
-    ("adjacent_strings.c", 'f' as i32),
-    ("sizeof_with_write.c", 16), // 4 + 4 + 8
-    ("function_pointers.c", 150),
-    ("nested_function_calls.c", 100),
-    ("quicksort.c", 0),
-    ("loop_iv_spill_priority.c", 40),
-    ("binary_search_tree.c", 0),
-    ("bst_free.c", 0),
-    ("cast_to_struct_pointer.c", 42),
-    ("argc.c", 1),
-    ("argv_first_char.c", 0),
-    ("sizeof_basic.c", 0),
-    ("sizeof_expr.c", 0),
-    ("write_stdout.c", 0),
-    ("ir_translation_simple.c", 42),
-    ("ir_translation_if.c", 2),
-    ("ir_translation_while.c", 0),
-    ("type_warning_int_to_ptr.c", 0),
-    ("type_warning_return.c", 0),
-    ("type_warning_silenced_by_cast.c", 0),
-    ("type_warning_arity.c", 0),
-    ("setenv_then_get.c", 'Z' as i32),
-    ("setenv_overwrite.c", 0),
-    // Runtime dynamic linking through libdl (libdl.so.2 +
-    // libc.so.6 are both DT_NEEDED). dlopen+dlsym+blr finds
-    // libc atoi and the indirect call passes "123" in x0.
-    ("dlopen_atoi.c", 123),
-    ("dlopen_strlen.c", 13),
-    // Multi-arg dlsym call path. glibc 2.34+ folded pthread into
-    // libc and keeps libpthread.so.0 as a stub the loader pulls in
-    // anyway, so dlopen(NULL) finds pthread_create in our scope.
-    ("pthread_create.c", 11),
-    ("pthread_cond_timedwait.c", 0),
-    ("posix_os_headers.c", 0),
-    ("dirent_readdir.c", 0),
-    ("ftw_walk.c", 0),
-    ("stat_timespec.c", 0),
-    ("malloc_size.c", 0),
-    // sprintf 2-fixed + 4-variadic; cross-checks the ABI's
-    // variadic packing on Linux AAPCS64 (where it stays in
-    // registers, unlike macOS).
-    ("variadic_sprintf.c", 0),
-    // c5-side vprintf walking the c5 va_list. Stays inside the
-    // c5 stack convention; no libc va_list bridge involved.
-    // Float / double frontend (decls, pointer arith, sizeof).
-    ("float_pointer_basics.c", 0),
-    // Full FP arithmetic + comparisons + casts.
-    ("float_arithmetic.c", 0),
-    ("float_single_precision.c", 0),
-    ("float_literal_f_suffix.c", 0),
-    ("float_literal_arith_single_precision.c", 0),
-    ("fp_direct_width_cast.c", 0),
-    ("fp_const_fold_cast.c", 0),
-    ("float_literal_variadic_printf.c", 0),
-    ("fp_arg_passed_in_fp_reg.c", 0),
-    ("float_arg_single_precision.c", 0),
-    ("fp_return_value.c", 0),
-    ("many_fp_args.c", 0),
-    ("fp_param_after_int_overflow.c", 0),
-    ("float_double_mix.c", 0),
-    ("fma_contraction.c", 0),
-    ("hex_float_literal.c", 0),
-    ("bool_normalize_c99.c", 0),
-    ("compound_literal_block.c", 0),
-    ("struct_arg_in_registers.c", 0),
-    ("struct_arg_by_stack.c", 0),
-    ("wide_char_utf8.c", 0),
-    ("local_aggregate_runtime_init.c", 0),
-    ("aggregate_init_struct_member_copy.c", 0),
-    ("computed_goto.c", 0),
-    ("label_addr_array_init.c", 0),
-    ("static_init_once_guard.c", 0),
-    ("computed_goto_static_table.c", 0),
-    ("sieve_of_eratosthenes.c", 0),
-    ("static_neg_infinity_init.c", 0),
-    ("sub_word_return_narrow.c", 0),
-    ("fp_const_return.c", 0),
-    ("struct_array_init_from_lvalue.c", 0),
-    ("shift_result_type_signedness.c", 0),
-    ("integer_negate_shift_overflow.c", 0),
-    ("case_label_declaration.c", 0),
-    ("char_constant_signedness.c", 0),
-    ("func_name_in_initializer.c", 0),
-    ("anon_union_braced_init.c", 0),
-    ("array_2d_struct_init.c", 0),
-    ("cast_abstract_fn_ptr.c", 0),
-    ("decl_trailing_attribute.c", 0),
-    ("winsock_netdb_protoent.c", 0),
-    ("slot_coalesce_disjoint_temps.c", 0),
-    ("alloca_alignment.c", 0),
-    ("alloca_arena_in_bounds.c", 0),
-    ("slot_coalesce_declared.c", 0),
-    ("slot_coalesce_alloca.c", 0),
-    ("fn_arg_decay_then_deref_assign.c", 0),
-    ("array_range_designator.c", 0),
-    ("bitfield_mixed_base_packing.c", 0),
-    ("flex_array_member_sizing.c", 0),
-    ("variadic_struct_return.c", 0),
-    ("variadic_union_struct_return.c", 0),
-    ("union_fp_member_regs_return.c", 0),
-    ("fn_ptr_float_return.c", 0),
-    ("fn_ptr_float_arg.c", 0),
-    ("variadic_fn_ptr_init.c", 0),
-    ("flexible_array_member.c", 0),
-    ("flex_array_member_static_init.c", 0),
-    ("attribute_cleanup.c", 0),
-    ("array_compound_literal_static_init.c", 0),
-    ("const_address_cast_and_arith.c", 0),
-    ("const_conditional_address_init.c", 0),
-    ("sizeof_array_type_and_binding.c", 0),
-    ("sizeof_abstract_fn_ptr.c", 0),
-    ("pragma_operator.c", 0),
-    ("variadic_macro_named_rest.c", 0),
-    ("stdatomic_c11.c", 0),
-    ("atomic_rmw_ops.c", 0),
-    ("fn_ptr_typedef_multi_declarator.c", 0),
-    ("hfa_struct_return.c", 0),
-    ("bitfield_assign_value.c", 0),
-    ("struct_arg_indirect_subscript.c", 0),
-    ("out_pointer_return_float_args.c", 0),
-    ("compound_literal_tagged_address.c", 0),
-    ("function_typed_parameter.c", 0),
-    ("static_init_braced_scalar.c", 0),
-    ("paren_string_char_array_init.c", 0),
-    ("static_init_paren_relocation.c", 0),
-    ("do_while_zero_returns.c", 0),
-    ("self_referential_macro.c", 0),
-    ("logical_not_float.c", 0),
-    ("designator_override_and_braced_string.c", 0),
-    ("multidim_array_init.c", 0),
-    ("macro_paste_stringize_unexpanded.c", 0),
-    ("line_directive.c", 0),
-    ("float_global_init.c", 0),
-    ("func_name_array.c", 0),
-    ("unary_plus_init_and_param_shadow.c", 0),
-    ("fn_ptr_multi_deref.c", 0),
-    ("stringize_whitespace.c", 0),
-    ("kr_old_style_def.c", 0),
-    ("fn_ptr_return_type.c", 0),
-    ("fn_returning_fn_ptr.c", 0),
-    ("duff_switch_into_loop.c", 0),
-    ("empty_macro_arg_and_string_rows.c", 0),
-    ("inline_arg_count_mismatch.c", 0),
-    ("block_scope_extern.c", 0),
-    ("extern_incomplete_struct_completion.c", 0),
-    ("const_member_address_init.c", 0),
-    ("const_float_div_zero.c", 0),
-    ("array_of_struct_brace_elision.c", 0),
-    ("local_struct_array_runtime_init.c", 0),
-    ("scanf_fscanf_binding.c", 0),
-    ("builtin_bit_count.c", 0),
-    ("typeof_operator.c", 0),
-    ("attribute_packed.c", 0),
-    ("attribute_positions.c", 0),
-    ("attribute_declspec.c", 0),
-    ("attribute_c23.c", 0),
-    ("static_assert_in_struct.c", 0),
-    ("gnu_extension_keyword.c", 0),
-    ("variadic_struct_by_value_arg.c", 0),
-    ("fn_ptr_ternary_call_return.c", 0),
-    ("float_condition_negative_zero.c", 0),
-    ("tentative_array_definition.c", 0),
-    ("tentative_array_use_before_init.c", 0),
-    ("tentative_deferred_array_grows.c", 0),
-    ("directive_in_macro_argument.c", 0),
-    ("builtin_bswap_expect.c", 0),
-    ("builtin_frame_address.c", 0),
-    ("zero_length_array.c", 0),
-    ("nested_compound_literal.c", 0),
-    ("indirect_struct_return.c", 0),
-    ("indirect_struct_return_outptr.c", 0),
-    ("bitfield_incdec.c", 0),
-    ("c11_atomic_specifier.c", 0),
-    ("c11_atomic_ops.c", 0),
-    ("inline_asm_hint.c", 0),
-    ("inline_asm_a64_operands.c", 42),
-    ("inline_asm_a64_memory.c", 42),
-    ("inline_asm_a64_call.c", 42),
-    ("inline_asm_a64_ldr_reg.c", 30),
-    ("inline_asm_a64_ldr_sub.c", 42),
-    ("inline_asm_a64_ldst_modes.c", 42),
-    ("inline_asm_a64_ldrb_reg.c", 42),
-    ("inline_asm_a64_sysop.c", 42),
-    ("inline_asm_a64_adr.c", 42),
-    ("inline_asm_a64_ccmp.c", 42),
-    ("inline_asm_a64_bitfield.c", 42),
-    ("inline_asm_a64_prfm.c", 42),
-    ("inline_asm_a64_fmov.c", 42),
-    ("inline_asm_a64_w_constraint.c", 42),
-    ("inline_asm_a64_fp_arith.c", 42),
-    ("inline_asm_a64_fp_cvt.c", 42),
-    ("inline_asm_a64_fcmp.c", 42),
-    ("inline_asm_a64_fp_ldst.c", 42),
-    ("inline_asm_a64_neon.c", 42),
-    ("inline_asm_a64_fp_vector.c", 42),
-    ("inline_asm_a64_vector_shift.c", 42),
-    ("inline_asm_a64_lane_transfer.c", 42),
-    ("inline_asm_a64_permute.c", 42),
-    ("inline_asm_a64_ldr_str_q.c", 42),
-    ("inline_asm_a64_vector_immediate.c", 42),
-    ("inline_asm_a64_vector_unary.c", 42),
-    ("inline_asm_a64_vector_arith2.c", 42),
-    ("inline_asm_a64_crypto.c", 42),
-    ("inline_asm_a64_widen_narrow.c", 42),
-    ("inline_asm_a64_ld1_st1.c", 42),
-    ("inline_asm_a64_tbl.c", 42),
-    ("inline_asm_a64_ld1_postindex.c", 42),
-    ("inline_asm_a64_reduce.c", 42),
-    ("inline_asm_a64_ld1r.c", 42),
-    ("inline_asm_a64_ld1_lane.c", 42),
-    ("inline_asm_a64_pmull.c", 42),
-    ("inline_asm_a64_fp_immediate.c", 42),
-    ("inline_asm_a64_clobber.c", 42),
-    ("inline_asm_a64_fp_modifier.c", 42),
-    ("inline_asm_a64_dp.c", 42),
-    ("inline_asm_a64_labels.c", 42),
-    ("inline_asm_goto.c", 42),
-    ("inline_asm_reg_var.c", 42),
-    ("compound_assign_int_fp.c", 0),
-    ("signal_sig_t.c", 0),
-    ("math_classify.c", 0),
-    ("switch_unsigned_negative_case.c", 0),
-    ("enum_bitfield_unsigned.c", 0),
-    ("addr_of_intrinsic_math.c", 0),
-    ("libc_struct_arg_by_value.c", 0),
-    ("posix_unix_headers.c", 0),
-    ("socket_headers_abi.c", 0),
-    ("posix_utime_errno_headers.c", 0),
-    ("cast_fn_typedef_ptr_in_initializer.c", 0),
-    ("global_init_paren_operand.c", 0),
-    ("function_type_typedef_declaration.c", 0),
-    ("float_increment_decrement.c", 0),
-    ("compound_assign_float_register_resident.c", 0),
-    ("addr_of_libm_import.c", 0),
-    ("addr_of_libc_strcmp.c", 0),
-    ("fts_and_fd_set_headers.c", 0),
-    ("addr_of_intrinsic_math_float.c", 0),
-    ("fn_ptr_float_arg_narrow.c", 0),
-    ("struct_array_elided_runtime.c", 0),
-    ("fn_type_typedef_field.c", 0),
-    ("fn_type_typedef_local.c", 0),
-    ("fn_type_typedef_cast.c", 0),
-    ("nested_runtime_init.c", 0),
-    ("anon_union_init.c", 0),
-    ("packed_anon_union_layout.c", 0),
-    ("packed_member_alignment.c", 0),
-    ("builtin_trap.c", 0),
-    ("struct_multi_byval.c", 0),
-    ("struct_arg_two_eightbyte.c", 0),
-    ("struct_return_by_value.c", 0),
-    ("cast_fn_ptr_call.c", 0),
-    ("fma_numeric_kernels.c", 0),
-    ("fp_unary_intrinsic.c", 0),
-    ("param_incoming_reg_clobber.c", 0),
-    ("indexed_load_store.c", 0),
-    ("struct_field_displacement.c", 0),
-    ("indexed_swap_shared_addr.c", 0),
-    ("store_to_load_forward.c", 0),
-    ("inc_dec_step_one.c", 0),
-    ("logical_op_normalize.c", 0),
-    // Struct-value locals + `.` field access.
-    ("struct_value_basics.c", 0),
-    // Whole-struct copy via Inst::Mcpy.
-    ("struct_value_copy.c", 0),
-    // Struct-by-value parameter / return.
-    ("struct_by_value_param.c", 0),
-    ("struct_by_value_return.c", 0),
-    // `_Thread_local` round-trip in the main thread; exercises
-    // PT_TLS + .tbss layout and the variant-1 (TPIDR_EL0 +
-    // TCB_HEAD + offset) lowering. The loader copies p_filesz=0
-    // bytes and zero-fills the rest; the test reads/writes the
-    // resulting per-thread region.
-    ("thread_local_basic.c", 0),
-    ("msvc_decl_decorators.c", 0),
-    ("msvc_pragma_operator.c", 0),
-    ("thread_local_gnu.c", 0),
-    ("wmem_functions.c", 0),
-    ("posix_module_headers.c", 0),
-    ("mmap_anonymous.c", 0),
-    ("struct_tm_tm_zone_offset.c", 0),
-    ("for_init_multiple_declarators.c", 0),
-    ("compound_literal_member_operand.c", 0),
-    ("signal_nsig.c", 0),
-    // thread_local_initializer.c works in isolation but fails when
-    // the test prelude pulls in <stdio.h>'s static lazy-resolver
-    // state. The TLS template offset assignment interacts with
-    // the static-locals + Glo bookkeeping in a way that shifts
-    // the loader's per-thread view; tracked separately, doesn't
-    // block this lane.
-    // ("thread_local_initializer.c", 0),
-    // Per-thread isolation: spawn a pthread, mutate TLS in the
-    // child, join, verify main's view is untouched. Fails in any
-    // accidental "TLS lowered as a regular global" regression.
-    ("thread_local_per_thread.c", 0),
-    // Variadic FP packer: `printf("%f\n", 1.5)` -- on Linux
-    // AAPCS64, FP variadic args ride d0..d7 the same as fixed
-    // FP args. The all-int packer would land 1.5's bit pattern
-    // in x1 and the formatter would print 0.0; the FP-aware
-    // packer routes it to d0 and the test passes.
-    ("printf_float.c", 0),
-    // AAPCS64 returns binary128 in v0; the libc binding metadata
-    // carries `returns_long_double`, and the aarch64 codegen
-    // emits a `__trunctfdf2` call after each such libc return to
-    // narrow v0 down to d0 before it becomes the c5 accumulator.
-    // Without that, `strtold` would land at 0.0 for any power-of-
-    // two value (mantissa = 0, exponent only in v0's high half).
-    ("strtold_aapcs_return.c", 0),
-    ("packed_bitfield_repack.c", 0),
-    ("nested_designator_string_member.c", 0),
-    ("union_member_unbraced_init.c", 0),
-    ("inline_multi_block_result_forward.c", 10),
-    ("inline_multi_block_only_caller.c", 42),
-    ("inline_nonleaf_const_switch.c", 0),
-    ("inline_multi_block_phi_caller.c", 16),
-    ("inline_const_array_field_nonnull.c", 43),
-    ("inline_noreturn_branch_single_return.c", 42),
-    ("sxtw_fold_source_liveness.c", 18),
-    ("data_reloc_one_past_end.c", 10),
-    ("variadic_libc_fnptr_static_init.c", 0),
-    ("block_scope_typedef_variadic_fnptr.c", 0),
-    ("atomic_operand_in_working_regs.c", 0),
-    ("setjmp_value_live_across.c", 0),
-    ("setjmp_spill_slots_unshared.c", 0),
-    ("vfork_shared_stack_slot_reuse.c", 0),
-    ("mixed_sse_int_aggregate_args.c", 0),
-    ("variadic_agg_return_classes.c", 0),
-    ("va_copy_under_pressure.c", 0),
-    ("variable_shift_rcx_loop.c", 0),
-    ("va_arg_composite_straddle.c", 0),
-    ("variadic_cast_fnptr_dispatch.c", 0),
-    ("fcntl_lock_via_cast_fnptr.c", 0),
-    ("call_sp_adjust_imm12_overflow.c", 0),
-    ("indirect_call_target_scratch_exhausted.c", 0),
-    ("fp_load_folded_disp.c", 0),
-];
 
 #[test]
 fn fixture_parity() {
@@ -1333,5 +837,170 @@ int main(void) { return (sum_arr() == 666) ? 0 : 1; }\n";
         output.status.code(),
         Some(0),
         "extern global moved by data DCE but its symbol offset was not updated to match"
+    );
+}
+
+/// The AAPCS64 variadic callee prologue spills q0..q7 into the vector
+/// half of the register save area unconditionally (AAPCS64 has no
+/// caller-passed vector count). A freestanding aarch64 environment runs
+/// with CPACR_EL1.FPEN trapping, so each `str dN` raises a synchronous
+/// exception before the kernel can report it. Under `no_fp_regs`
+/// (`-mgeneral-regs-only`) the object must contain none of the eight
+/// stores; the default object contains all eight. The area stays
+/// reserved, so every offset above it is unchanged.
+#[test]
+fn variadic_prologue_no_fp_regs_omits_vector_save_aarch64() {
+    use crate::{CompileOptions, OutputKind};
+
+    const SRC: &str = "int sum(int n, ...) {\n\
+         \t__builtin_va_list ap;\n\
+         \t__builtin_va_start(ap, n);\n\
+         \tint t = 0;\n\
+         \tfor (int i = 0; i < n; i++) t += __builtin_va_arg(ap, int);\n\
+         \t__builtin_va_end(ap);\n\
+         \treturn t;\n\
+         }\n";
+    let emit = |no_fp_regs: bool| -> Vec<u8> {
+        let prog = Compiler::with_options(
+            SRC.to_string(),
+            Target::LinuxAarch64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile variadic callee: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            no_fp_regs,
+            ..NativeOptions::default()
+        };
+        emit_native_with_options(&prog, Target::LinuxAarch64, opts)
+            .unwrap_or_else(|e| panic!("emit object (no_fp_regs={no_fp_regs}): {e}"))
+    };
+    // `str dN, [sp, #imm]` is 0xfd0000?? little-endian; count the eight
+    // save-area stores by their encodings.
+    let stores: Vec<[u8; 4]> = (0..8u32)
+        .map(|i| {
+            let imm12 = (64 + i * 16) / 8;
+            let insn: u32 = 0xfd00_0000 | (imm12 << 10) | (31 << 5) | i;
+            insn.to_le_bytes()
+        })
+        .collect();
+    let count = |obj: &[u8]| -> usize {
+        stores
+            .iter()
+            .filter(|s| obj.windows(4).any(|w| w == s.as_slice()))
+            .count()
+    };
+    assert_eq!(
+        count(&emit(false)),
+        8,
+        "default object lacks the vector save"
+    );
+    assert_eq!(
+        count(&emit(true)),
+        0,
+        "no_fp_regs object still contains the vector save stores"
+    );
+}
+
+/// Executed companion to the encoding check: the narrowed copy must
+/// still move every byte. Runs the strict-align lowering over struct
+/// alignments 8, 4, 2 and 1 -- one transfer width each -- plus a size
+/// that leaves a sub-unit tail.
+#[test]
+fn strict_align_aggregate_copy_moves_every_byte_aarch64() {
+    const SRC: &str = "struct A8 { long long a, b; };\n\
+         struct A4 { int a, b, c; };\n\
+         struct A2 { short a[5]; };\n\
+         struct A1 { char a[13]; };\n\
+         int check(void) {\n\
+         \tstruct A8 s8 = {0x1122334455667788LL, 0x99aabbccddeeff00LL}, d8;\n\
+         \tstruct A4 s4 = {0x11223344, 0x55667788, 0x99aabbcc}, d4;\n\
+         \tstruct A2 s2 = {{1, 2, 3, 4, 5}}, d2;\n\
+         \tstruct A1 s1 = {{1,2,3,4,5,6,7,8,9,10,11,12,13}}, d1;\n\
+         \td8 = s8; d4 = s4; d2 = s2; d1 = s1;\n\
+         \tconst char *p = (const char *)&s8, *q = (const char *)&d8;\n\
+         \tfor (int i = 0; i < (int)sizeof s8; i++) if (p[i] != q[i]) return 1;\n\
+         \tp = (const char *)&s4; q = (const char *)&d4;\n\
+         \tfor (int i = 0; i < (int)sizeof s4; i++) if (p[i] != q[i]) return 2;\n\
+         \tp = (const char *)&s2; q = (const char *)&d2;\n\
+         \tfor (int i = 0; i < (int)sizeof s2; i++) if (p[i] != q[i]) return 3;\n\
+         \tp = (const char *)&s1; q = (const char *)&d1;\n\
+         \tfor (int i = 0; i < (int)sizeof s1; i++) if (p[i] != q[i]) return 4;\n\
+         \treturn 42;\n\
+         }\n\
+         int main(void) { return check(); }\n";
+    for optimize in [false, true] {
+        let opts = NativeOptions {
+            strict_align: true,
+            optimize,
+            ..NativeOptions::default()
+        };
+        let outcome = build_and_run_outcome_with_options(SRC, "strict-align-copy", opts);
+        assert!(
+            outcome.matches(42),
+            "strict-align struct copy (optimize={optimize}): {outcome:?}"
+        );
+    }
+}
+
+/// A frame past the 24-bit reach of the immediate `ADD`/`SUB`, driven
+/// through an `always_inline` helper (no size or frame budget applies to
+/// one). The probed prologue, the register-form teardown and the
+/// materialised slot addresses must all agree. The indices come from
+/// `argc` so the buffer survives store forwarding. Runs under a raised
+/// stack limit so the frame fits.
+#[test]
+fn frame_past_the_immediate_reach_runs() {
+    const SIZE: usize = 20_000_000;
+    let src = format!(
+        "static __attribute__((always_inline)) inline long helper(char *p, long i, long j) {{\n\
+             p[i] = 2;\n\
+             p[j] = 3;\n\
+             return (long)p[i] + (long)p[j];\n\
+         }}\n\
+         int main(int argc, char **argv) {{\n\
+             char buf[{SIZE}];\n\
+             long i;\n\
+             long j;\n\
+             (void)argv;\n\
+             i = argc & 0xffff;\n\
+             j = (long)sizeof buf - i;\n\
+             return (int)helper(buf, i, j);\n\
+         }}\n"
+    );
+
+    let program = Compiler::new(super::with_prelude(&src))
+        .compile()
+        .expect("compile");
+    let bytes = emit_native_with_options(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit_native");
+    // `add sp, sp, x16` -- the immediate forms top out at 16 MiB.
+    assert!(
+        bytes.windows(4).any(|w| w == 0x8B30_63FFu32.to_le_bytes()),
+        "expected the register-form stack teardown"
+    );
+
+    let path = unique_temp_path("badc-elf-aarch64-frame", "large_frame");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(format!("ulimit -s 65536 && exec {}", path.display()))
+        .output()
+        .expect("run under a raised stack limit");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(5),
+        "a frame past the immediate stack-adjustment reach miscomputed"
     );
 }

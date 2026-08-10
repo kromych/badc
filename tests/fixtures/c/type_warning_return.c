@@ -1,15 +1,10 @@
 // `return <expr>;` whose expression type doesn't match the function
 // return type warns the same way an assignment does (C99 6.8.6.4p3:
-// the value is converted as if by assignment). Pointer-vs-integer and
-// incompatible-struct mismatches warn; the NULL idiom, a matching
-// return, and char*/void* interconversion stay silent.
-
-struct A {
-    int a;
-};
-struct B {
-    int b;
-};
+// the value is converted as if by assignment). Pointer-vs-integer
+// mismatches warn because a conversion exists; the NULL idiom, a
+// matching return, and char*/void* interconversion stay silent. A
+// mismatch involving a structure or union object has no conversion and
+// is rejected instead -- see the constraint-violation tests.
 
 static int *g;
 
@@ -19,10 +14,6 @@ int ret_ptr_as_int(void) {
 
 int *ret_int_as_ptr(int x) {
     return x; // warn: integer returned where pointer declared
-}
-
-struct A ret_wrong_struct(struct B b) {
-    return b; // warn: incompatible struct types
 }
 
 int *ret_null(void) {

@@ -55,8 +55,6 @@ Disassembly of section .text:
                	xorq	%r9, %rdi
                	movl	%edi, (%rdx,%rsi,4)
                	jmp	<addr>
-               	testq	%rdi, %rdi
-               	jne	<addr>
                	movl	%edx, %edi
                	movl	%esi, %r9d
                	leaq	<rip>, %rdx
@@ -83,6 +81,5 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	movl	%eax, %eax
                	andq	$0x7f, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq

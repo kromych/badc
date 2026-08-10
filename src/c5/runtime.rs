@@ -40,3 +40,16 @@ pub(super) const EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[(
     "compiler_rt.c",
     include_str!("../../libc/lib/compiler_rt.c"),
 )];
+
+/// C-library sources joined to the link the same way, for entry points a
+/// bundled header declares on a target whose platform library has no
+/// definition to bind. Each source gates itself on the targets that need
+/// it, so elsewhere it compiles to nothing.
+pub fn embedded_libc() -> &'static [(&'static str, &'static str)] {
+    EMBEDDED_LIBC
+}
+
+pub(super) const EMBEDDED_LIBC: &[(&str, &str)] = &[
+    ("pattern.c", include_str!("../../libc/lib/pattern.c")),
+    ("string_ext.c", include_str!("../../libc/lib/string_ext.c")),
+];

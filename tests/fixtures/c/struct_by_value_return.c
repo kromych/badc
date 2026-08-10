@@ -8,6 +8,10 @@
 
 struct Pair { int a; int b; };
 
+// `volatile` keeps an argument a runtime value, so each call below is
+// emitted and really goes through the out-pointer return path.
+static int rt(int v) { volatile int t = v; return t; }
+
 struct Pair make_pair(int a, int b) {
     struct Pair r;
     r.a = a;
@@ -42,12 +46,12 @@ struct Pair sum_pair_pair(struct Pair x, struct Pair y) {
 int main() {
     struct Pair p;
     int junk;
-    p = make_pair(11, 22);
+    p = make_pair(rt(11), rt(22));
     // Run a clobber call BETWEEN the return and the
     // value-checks. A naive implementation that returns the
     // callee's local-frame address would lose the data here --
     // clobber()'s frame reuses the same slots make_pair()'s did.
-    junk = clobber(7);
+    junk = clobber(rt(7));
     if (junk == 0) return 99;       // satisfy "use" of `junk`
     if (p.a != 11) return 1;
     if (p.b != 22) return 2;
@@ -56,7 +60,7 @@ int main() {
     // feeds straight into the next as a struct-by-value arg.
     {
         struct Pair q;
-        q = make_pair(3, 4);
+        q = make_pair(rt(3), rt(4));
         if (q.a != 3) return 3;
         if (q.b != 4) return 4;
     }
@@ -70,8 +74,8 @@ int main() {
     {
         struct Pair r;
         struct Pair s;
-        r = make_pair(100, 200);
-        s = make_pair(300, 400);
+        r = make_pair(rt(100), rt(200));
+        s = make_pair(rt(300), rt(400));
         if (r.a != 100) return 5;
         if (r.b != 200) return 6;
         if (s.a != 300) return 7;
@@ -85,7 +89,7 @@ int main() {
     // staging the worst.
     {
         struct Pair t;
-        t = sum_pair_pair(make_pair(1, 2), make_pair(3, 4));
+        t = sum_pair_pair(make_pair(rt(1), rt(2)), make_pair(rt(3), rt(4)));
         // sum_pair_pair returns a struct whose .a is sum of the
         // two .a's and .b is sum of the two .b's.
         if (t.a != 4) return 9;     // 1 + 3

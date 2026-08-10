@@ -1,6 +1,8 @@
-use super::text::{is_ident, is_ident_byte};
+use super::builtins;
+use super::text::{is_ident, is_ident_byte, skip_literal};
 use super::{Binding, DylibSpec, Preprocessor, Subsystem};
 use crate::c5::error::C5Error;
+use alloc::borrow::Cow;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -15,14 +17,14 @@ impl Preprocessor {
     /// unchanged so a `_Pragma` substring inside one is not mistaken for
     /// the operator. A malformed operator is left in place for the lexer
     /// to diagnose.
-    pub(super) fn apply_pragma_operators(
+    pub(super) fn apply_pragma_operators<'t>(
         &mut self,
-        text: &str,
+        text: &'t str,
         line_no: usize,
         filename: &str,
-    ) -> Result<String, C5Error> {
+    ) -> Result<Cow<'t, str>, C5Error> {
         if !text.contains("_Pragma") && !text.contains("__pragma") {
-            return Ok(text.to_string());
+            return Ok(Cow::Borrowed(text));
         }
         let bytes = text.as_bytes();
         let mut out = String::with_capacity(text.len());
@@ -31,18 +33,7 @@ impl Preprocessor {
         while i < bytes.len() {
             let c = bytes[i];
             if c == b'"' || c == b'\'' {
-                i += 1;
-                while i < bytes.len() {
-                    if bytes[i] == b'\\' {
-                        i += 2;
-                        continue;
-                    }
-                    let closed = bytes[i] == c;
-                    i += 1;
-                    if closed {
-                        break;
-                    }
-                }
+                i = skip_literal(bytes, i);
                 continue;
             }
             let is_operator = c == b'_'
@@ -78,14 +69,14 @@ impl Preprocessor {
             i += 1;
         }
         out.push_str(&text[copied..]);
-        Ok(out)
+        Ok(Cow::Owned(out))
     }
 
     /// Apply a single destringized `_Pragma` operand through the same
     /// dispatch as the `#pragma` directive (see the `Directive::Pragma`
-    /// arm in `process_named`). `pack(...)` is emitted as an inline
-    /// `#pragma pack` directive on its own line so the lexer folds it
-    /// into the pack stack at this source position.
+    /// arm in `process_named`). The position-sensitive pragmas are
+    /// re-emitted as inline `#pragma` directives on their own line so the
+    /// lexer folds them in at this source position.
     pub(super) fn dispatch_pragma_operator(
         &mut self,
         args: &str,
@@ -98,7 +89,7 @@ impl Preprocessor {
                 self.pragma_once_files.insert(filename.to_string());
             }
             PragmaDirective::Other => {
-                if pragma_is_pack(args) {
+                if pragma_is_pack(args) || pragma_is_visibility(args) {
                     out.push_str("\n#pragma ");
                     out.push_str(args.trim());
                     out.push('\n');
@@ -469,49 +460,6 @@ impl Preprocessor {
     /// whose spellings collide with c5 keywords don't trip
     /// the identifier parser; the body uses `is_ident` to
     /// stay strict.
-    /// Map an intrinsic name to its [`Intrinsic`] discriminant, or `None`
-    /// when the name is not one c5 lowers specially.
-    pub(super) fn intrinsic_id(name: &str) -> Option<i64> {
-        let id = match name {
-            "alloca" | "__builtin_alloca" => crate::c5::op::Intrinsic::Alloca as i64,
-            // C11 7.17 atomic generic operations. Lowered at the call
-            // site to load / store / read-modify-write, not to an
-            // `Inst::Intrinsic`.
-            "atomic_load" => crate::c5::op::Intrinsic::AtomicLoad as i64,
-            "atomic_store" => crate::c5::op::Intrinsic::AtomicStore as i64,
-            "atomic_exchange" => crate::c5::op::Intrinsic::AtomicExchange as i64,
-            "atomic_fetch_add" => crate::c5::op::Intrinsic::AtomicFetchAdd as i64,
-            "atomic_fetch_sub" => crate::c5::op::Intrinsic::AtomicFetchSub as i64,
-            "atomic_fetch_and" => crate::c5::op::Intrinsic::AtomicFetchAnd as i64,
-            "atomic_fetch_or" => crate::c5::op::Intrinsic::AtomicFetchOr as i64,
-            "atomic_fetch_xor" => crate::c5::op::Intrinsic::AtomicFetchXor as i64,
-            "atomic_compare_exchange_strong" => {
-                crate::c5::op::Intrinsic::AtomicCompareExchangeStrong as i64
-            }
-            "__c5_aarch64_setjmp" => crate::c5::op::Intrinsic::SetjmpAArch64 as i64,
-            "__c5_aarch64_longjmp" => crate::c5::op::Intrinsic::LongjmpAArch64 as i64,
-            "__builtin_va_start" => crate::c5::op::Intrinsic::VaStart as i64,
-            "__builtin_va_arg" => crate::c5::op::Intrinsic::VaArg as i64,
-            "__builtin_va_end" => crate::c5::op::Intrinsic::VaEnd as i64,
-            "__builtin_va_copy" => crate::c5::op::Intrinsic::VaCopy as i64,
-            "fma" => crate::c5::op::Intrinsic::Fma as i64,
-            "fmaf" => crate::c5::op::Intrinsic::Fmaf as i64,
-            "sqrt" => crate::c5::op::Intrinsic::Sqrt as i64,
-            "sqrtf" => crate::c5::op::Intrinsic::Sqrtf as i64,
-            "fabs" => crate::c5::op::Intrinsic::Fabs as i64,
-            "fabsf" => crate::c5::op::Intrinsic::Fabsf as i64,
-            "floor" => crate::c5::op::Intrinsic::Floor as i64,
-            "floorf" => crate::c5::op::Intrinsic::Floorf as i64,
-            "ceil" => crate::c5::op::Intrinsic::Ceil as i64,
-            "ceilf" => crate::c5::op::Intrinsic::Ceilf as i64,
-            "trunc" => crate::c5::op::Intrinsic::Trunc as i64,
-            "truncf" => crate::c5::op::Intrinsic::Truncf as i64,
-            "__builtin_trap" => crate::c5::op::Intrinsic::Trap as i64,
-            _ => return None,
-        };
-        Some(id)
-    }
-
     pub(super) fn parse_pragma_intrinsic(
         &mut self,
         inner: &str,
@@ -540,24 +488,21 @@ impl Preprocessor {
                         ),
                     )));
                 }
-                let Some(id) = Self::intrinsic_id(name) else {
+                if !builtins::is_builtin(name) {
                     return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
                         filename,
                         line_no,
                         &format!(
-                            "`#pragma intrinsic(\"{name}\")` -- unknown \
-                             intrinsic; supported today: alloca, \
-                             __builtin_alloca, __c5_aarch64_setjmp, \
-                             __c5_aarch64_longjmp, __builtin_va_start, \
-                             __builtin_va_arg, __builtin_va_end, \
-                             __builtin_va_copy, fma, fmaf, sqrt, sqrtf, \
-                             fabs, fabsf, and the C11 atomic_* operations"
+                            "`#pragma intrinsic(\"{name}\")` -- `{name}` is not a \
+                             builtin badc provides"
                         ),
                     )));
-                };
-                self.intrinsics.insert(name.to_string(), id);
+                }
+                if let Some(id) = builtins::intrinsic_id(name, self.target) {
+                    self.intrinsics.insert(name.to_string(), id);
+                }
             } else if is_ident(item) {
-                if let Some(id) = Self::intrinsic_id(item) {
+                if let Some(id) = builtins::intrinsic_id(item, self.target) {
                     self.intrinsics.insert(item.to_string(), id);
                 }
             } else {
@@ -830,21 +775,7 @@ pub(super) fn parse_msvc_pragma_args(text: &str, start: usize) -> Option<(String
     i = inner_start;
     while i < bytes.len() {
         match bytes[i] {
-            b'"' | b'\'' => {
-                let q = bytes[i];
-                i += 1;
-                while i < bytes.len() {
-                    if bytes[i] == b'\\' {
-                        i += 2;
-                        continue;
-                    }
-                    let closed = bytes[i] == q;
-                    i += 1;
-                    if closed {
-                        break;
-                    }
-                }
-            }
+            b'"' | b'\'' => i = skip_literal(bytes, i),
             b'(' => {
                 depth += 1;
                 i += 1;
@@ -949,4 +880,20 @@ pub(super) fn pragma_is_pack(args: &str) -> bool {
     // Anything else (`packfoo`, `pack_extra`) is a different
     // pragma the preprocessor still wants to silently swallow.
     rest.trim_start().starts_with('(')
+}
+
+/// True when `args` is the head of a `GCC visibility` pragma. Its extent
+/// is a source range, so like `pack` the line goes through to the lexer
+/// rather than being consumed here.
+pub(super) fn pragma_is_visibility(args: &str) -> bool {
+    let Some(rest) = args.trim_start().strip_prefix("GCC") else {
+        return false;
+    };
+    let Some(rest) = rest.trim_start().strip_prefix("visibility") else {
+        return false;
+    };
+    // A following `push` / `pop` must be a separate token, so anything
+    // that continues the identifier (`visibility_mode`) is a different
+    // pragma.
+    !rest.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
 }

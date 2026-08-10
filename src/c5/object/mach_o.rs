@@ -70,8 +70,9 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::program::Program;
-use super::Build;
 use super::dwarf;
+use super::{AddrPart, Build};
+use crate::c5::layout::{pad_to_align as pad_to, round_up, write_struct};
 
 // ------------------------------------------------------------------
 // Mach-O constants. Names mirror `<mach-o/loader.h>` and `<mach-o/nlist.h>`
@@ -206,6 +207,10 @@ const N_UNDF: u8 = 0x0;
 const N_SECT: u8 = 0xE;
 const N_EXT: u8 = 0x01;
 const NO_SECT: u8 = 0;
+/// `N_WEAK_DEF` (`n_desc` bit) and its export-trie counterpart: a
+/// definition dyld may coalesce with a strong one from another image.
+const N_WEAK_DEF: u16 = 0x0080;
+const EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION: u64 = 0x04;
 /// `DYNAMIC_LOOKUP_ORDINAL` (<mach-o/nlist.h>): the n_desc library
 /// ordinal for a symbol resolved through the flat namespace rather than
 /// a specific LC_LOAD_DYLIB.
@@ -220,6 +225,11 @@ const SECT_INDEX_TEXT: u8 = 1;
 /// (section 3); the `__thread_*` sections, when present, come after.
 /// Used as `n_sect` for an exported data symbol.
 const SECT_INDEX_DATA: u8 = 3;
+/// 1-based index of `__DATA,__bss`, which follows `__data` and the two
+/// `__thread_*` sections when TLS is present.
+fn sect_index_bss(tls_present: bool) -> u8 {
+    SECT_INDEX_DATA + if tls_present { 3 } else { 1 }
+}
 
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
 /// commands. Bind opcodes refer to segments by this index.
@@ -468,24 +478,6 @@ struct Nlist64 {
 const NLIST_64_SIZE: usize = 16;
 const _: () = assert!(core::mem::size_of::<Nlist64>() == NLIST_64_SIZE);
 
-/// Append a `#[repr(C)]` struct's raw bytes to `out`.
-///
-/// Mach-O is little-endian on every CPU we target, so a memcpy of the
-/// in-memory struct produces the right wire format. The structs above
-/// have explicit field order and const-asserted sizes; the only
-/// remaining surprise would be host endianness, and a const-time
-/// check rules that out.
-fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
-    const _: () = assert!(
-        cfg!(target_endian = "little"),
-        "Mach-O writer assumes a little-endian host; emit bytes manually if you ever need a big-endian build host"
-    );
-    let bytes = unsafe {
-        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
-    };
-    out.extend_from_slice(bytes);
-}
-
 /// Pack a name into the 16-byte `segname` / `sectname` field, NUL-
 /// padded. `<mach-o/loader.h>` only requires NUL-termination when the
 /// name is shorter than 16 bytes, so a name that exactly fills the
@@ -513,29 +505,31 @@ fn put_uleb128(out: &mut Vec<u8>, mut v: u64) {
     }
 }
 
-/// Build the `LC_DYLD_INFO` export trie from `(disk name, address)` pairs
-/// where `address` is the symbol's offset from the image base. dyld
-/// resolves two-level-namespace imports and `dlsym` through this trie, not
-/// the classic symbol table, so a shared library without it exports
-/// nothing dyld can bind against. The trie is a radix tree over the names;
-/// a terminal node carries the export flags (0 = regular) and the address.
-/// Child-edge offsets are ULEB128, so node sizes depend on each other; the
-/// layout iterates to a fixed point before emitting.
-fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
+/// Build the `LC_DYLD_INFO` export trie from `(disk name, address,
+/// flags)` triples where `address` is the symbol's offset from the
+/// image base. dyld resolves two-level-namespace imports and `dlsym`
+/// through this trie, not the classic symbol table, so a shared library
+/// without it exports nothing dyld can bind against. The trie is a
+/// radix tree over the names; a terminal node carries the export flags
+/// and the address. Child-edge offsets are ULEB128, so node sizes
+/// depend on each other; the layout iterates to a fixed point before
+/// emitting.
+fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
     if entries.is_empty() {
         return Vec::new();
     }
     struct Node {
-        addr: Option<u64>,
+        /// `(address, export flags)` on a terminal node.
+        term: Option<(u64, u64)>,
         edges: Vec<(Vec<u8>, usize)>,
         offset: usize,
     }
     let mut nodes: Vec<Node> = alloc::vec![Node {
-        addr: None,
+        term: None,
         edges: Vec::new(),
         offset: 0,
     }];
-    for (name, addr) in entries {
+    for (name, addr, flags) in entries {
         let bytes = name.as_bytes();
         let mut cur = 0usize;
         let mut pos = 0usize;
@@ -558,7 +552,7 @@ fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
                 // Partial match: split the edge at the common prefix.
                 let split = nodes.len();
                 nodes.push(Node {
-                    addr: None,
+                    term: None,
                     edges: alloc::vec![(label[k..].to_vec(), child)],
                     offset: 0,
                 });
@@ -569,7 +563,7 @@ fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
             }
             let leaf = nodes.len();
             nodes.push(Node {
-                addr: None,
+                term: None,
                 edges: Vec::new(),
                 offset: 0,
             });
@@ -577,12 +571,12 @@ fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
             cur = leaf;
             pos = bytes.len();
         }
-        nodes[cur].addr = Some(*addr);
+        nodes[cur].term = Some((*addr, *flags));
     }
     let body = |node: &Node, nodes: &[Node]| -> Vec<u8> {
         let mut term = Vec::new();
-        if let Some(addr) = node.addr {
-            put_uleb128(&mut term, 0);
+        if let Some((addr, flags)) = node.term {
+            put_uleb128(&mut term, flags);
             put_uleb128(&mut term, addr);
         }
         let mut out = Vec::new();
@@ -621,20 +615,6 @@ fn build_export_trie(entries: &[(String, u64)]) -> Vec<u8> {
         out.push(0);
     }
     out
-}
-
-/// Pad a Vec to the next multiple of `align`. Used for keeping load-
-/// command bodies (LC_LOAD_DYLIB strings etc.) at their required
-/// 8-byte alignment.
-fn pad_to(out: &mut Vec<u8>, align: usize) {
-    while !out.len().is_multiple_of(align) {
-        out.push(0);
-    }
-}
-
-/// Round `n` up to the next multiple of `align`.
-fn round_up(n: u64, align: u64) -> u64 {
-    (n + align - 1) & !(align - 1)
 }
 
 // ------------------------------------------------------------------
@@ -1411,105 +1391,49 @@ fn apply_got_fixups(
     fixups: &[super::GotFixup],
 ) -> Result<(), C5Error> {
     for fx in fixups {
-        let adrp_file_off = code_base_in_file + fx.adrp_offset;
-        let ldr_file_off = adrp_file_off + 4;
-
-        let adrp_vmaddr = code_vmaddr_base + fx.adrp_offset as u64;
-        let target_vmaddr = got_base_vmaddr + (fx.import_index as u64) * 8;
-
-        // adrp computes (PC & ~0xFFF) + (imm21 << 12). Solve for imm21.
-        let adrp_page = adrp_vmaddr & !0xFFF;
-        let target_page = target_vmaddr & !0xFFF;
-        let page_diff = target_page as i64 - adrp_page as i64;
-        if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: GOT page diff {page_diff} not 4 KiB aligned"),
-            )));
-        }
-        let imm21 = (page_diff >> 12) as i32;
-
-        // ldr xN, [xN, #imm12] uses a 12-bit unsigned offset scaled
-        // by 8 for 64-bit loads. The in-page byte offset must be
-        // 8-aligned.
-        let in_page = (target_vmaddr & 0xFFF) as u32;
-        if !in_page.is_multiple_of(8) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: GOT slot offset {in_page:#x} not 8-aligned"),
-            )));
-        }
-
-        // The codegen emitted `adrp Rd, page` + a second instruction
-        // into the same Rd to compute the address. Preserve Rd (bits
-        // [4:0] of the adrp) so the rewritten `adrp Rd; ldr Rd, [Rd,
-        // slot]` lands the GOT pointer in the register the following
-        // dereference reads, rather than a fixed scratch register.
-        let orig_adrp =
-            u32::from_le_bytes(out[adrp_file_off..adrp_file_off + 4].try_into().unwrap());
-        let rd = super::aarch64::Reg((orig_adrp & 0x1F) as u8);
-        let adrp_word = super::aarch64::enc_adrp(rd, imm21);
-        let ldr_word = super::aarch64::enc_ldr_imm(rd, rd, in_page);
-        out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-        out[ldr_file_off..ldr_file_off + 4].copy_from_slice(&ldr_word.to_le_bytes());
+        let slot_vmaddr = got_base_vmaddr + (fx.import_index as u64) * 8;
+        super::aarch64::patch::patch_slot(
+            out,
+            code_base_in_file + fx.instr_offset,
+            (code_vmaddr_base + fx.instr_offset as u64) as i64,
+            slot_vmaddr as i64,
+            super::aarch64::patch::SlotWidth::W64,
+            fx.part,
+        )
+        .map_err(|e| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &e.describe("Mach-O: GOT"),
+            ))
+        })?;
     }
     Ok(())
 }
 
-/// Patch the `adrp + add` pair the codegen emitted for an absolute-
-/// address materialization. `target_vmaddr` is the runtime address
-/// the pair should compute into x19. The codegen uses the same shape
-/// for both data-segment references and function-pointer literals;
-/// the only difference between callers is how they compute the target.
+/// Patch the fields `part` names so the reference computes
+/// `target_vmaddr`. The codegen uses the same shape for both
+/// data-segment references and function-pointer literals; the only
+/// difference between callers is how they compute the target.
 fn patch_adrp_add(
     out: &mut [u8],
     code_base_in_file: usize,
     code_vmaddr_base: u64,
-    adrp_offset: usize,
+    instr_offset: usize,
     target_vmaddr: u64,
+    part: AddrPart,
     label: &str,
 ) -> Result<(), C5Error> {
-    let adrp_file_off = code_base_in_file + adrp_offset;
-    let add_file_off = adrp_file_off + 4;
-    let adrp_vmaddr = code_vmaddr_base + adrp_offset as u64;
-
-    let adrp_page = adrp_vmaddr & !0xFFF;
-    let target_page = target_vmaddr & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("Mach-O: {label} page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = (target_vmaddr & 0xFFF) as u32;
-
-    // Recover the destination register encoded by the codegen at the
-    // placeholder site. adrp/add carry the rd in the low 5 bits; the
-    // add additionally carries rn in bits 5..10. Both registers match
-    // by construction (`adrp rd; add rd, rd, #imm`).
-    let prev_adrp = u32::from_le_bytes([
-        out[adrp_file_off],
-        out[adrp_file_off + 1],
-        out[adrp_file_off + 2],
-        out[adrp_file_off + 3],
-    ]);
-    let prev_add = u32::from_le_bytes([
-        out[add_file_off],
-        out[add_file_off + 1],
-        out[add_file_off + 2],
-        out[add_file_off + 3],
-    ]);
-    let rd = (prev_adrp & 0x1F) as u8;
-    let add_rd = (prev_add & 0x1F) as u8;
-    let add_rn = ((prev_add >> 5) & 0x1F) as u8;
-    let adrp_word = super::aarch64::enc_adrp(super::aarch64::Reg(rd), imm21);
-    let add_word = super::aarch64::enc_add_imm(
-        super::aarch64::Reg(add_rd),
-        super::aarch64::Reg(add_rn),
-        in_page,
-    );
-    out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-    out[add_file_off..add_file_off + 4].copy_from_slice(&add_word.to_le_bytes());
-    Ok(())
+    super::aarch64::patch::patch_addr(
+        out,
+        code_base_in_file + instr_offset,
+        (code_vmaddr_base + instr_offset as u64) as i64,
+        target_vmaddr as i64,
+        part,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe(&format!("Mach-O: {label}")),
+        ))
+    })
 }
 
 /// Patch each `Inst::ImmData` lowering site. `data_off_to_vaddr` maps
@@ -1527,8 +1451,9 @@ fn apply_data_fixups(
             out,
             code_base_in_file,
             code_vmaddr_base,
-            fx.adrp_offset,
+            fx.instr_offset,
             target,
+            fx.part,
             "data fixup",
         )?;
     }
@@ -1550,40 +1475,15 @@ fn apply_macho_tlv_fixups(
     for fx in fixups {
         let descriptor_vmaddr =
             thread_vars_vmaddr + (fx.descriptor_index as u64) * TLV_DESCRIPTOR_SIZE;
-        // The codegen emitted the adrp/add with rd = x0, but
-        // `patch_adrp_add` writes x19. Patch the words directly
-        // so the encoded rd field stays as the codegen wrote it.
-        let adrp_file_off = code_base_in_file + fx.adrp_offset;
-        let add_file_off = adrp_file_off + 4;
-        let adrp_vmaddr = code_vmaddr_base + fx.adrp_offset as u64;
-
-        let adrp_page = adrp_vmaddr & !0xFFF;
-        let target_page = descriptor_vmaddr & !0xFFF;
-        let page_diff = target_page as i64 - adrp_page as i64;
-        if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: TLV adrp page diff {page_diff} not 4 KiB aligned"),
-            )));
-        }
-        let imm21 = (page_diff >> 12) as i32;
-        let in_page = (descriptor_vmaddr & 0xFFF) as u32;
-
-        // Preserve rd from the original adrp (codegen emitted rd=x0)
-        // by reading the existing word; rd shouldn't change here, but
-        // mirrors `patch_adrp_add`'s shape so future per-fixup rd
-        // changes are easy.
-        let adrp_word = u32::from_le_bytes([
-            out[adrp_file_off],
-            out[adrp_file_off + 1],
-            out[adrp_file_off + 2],
-            out[adrp_file_off + 3],
-        ]);
-        let rd = (adrp_word & 0x1F) as u8;
-        let new_adrp = super::aarch64::enc_adrp(super::aarch64::Reg(rd), imm21);
-        let new_add =
-            super::aarch64::enc_add_imm(super::aarch64::Reg(rd), super::aarch64::Reg(rd), in_page);
-        out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&new_adrp.to_le_bytes());
-        out[add_file_off..add_file_off + 4].copy_from_slice(&new_add.to_le_bytes());
+        patch_adrp_add(
+            out,
+            code_base_in_file,
+            code_vmaddr_base,
+            fx.adrp_offset,
+            descriptor_vmaddr,
+            AddrPart::Whole,
+            "TLV descriptor",
+        )?;
     }
     Ok(())
 }
@@ -1602,8 +1502,9 @@ fn apply_func_fixups(
             out,
             code_base_in_file,
             code_vmaddr_base,
-            fx.adrp_offset,
+            fx.instr_offset,
             target,
+            fx.part,
             "func fixup",
         )?;
     }
@@ -1671,10 +1572,11 @@ fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result
 fn build_rebase_opcodes(
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
+    label_relocs: &[crate::c5::codegen::LabelReloc],
     segment: u8,
     data_section_offset_in_segment: u64,
 ) -> Vec<u8> {
-    if data_relocs.is_empty() && code_relocs.is_empty() {
+    if data_relocs.is_empty() && code_relocs.is_empty() && label_relocs.is_empty() {
         return Vec::new();
     }
     let mut out = Vec::new();
@@ -1683,9 +1585,11 @@ fn build_rebase_opcodes(
     // pointer-typed rebase opcode -- dyld just adds the slide. Sort
     // the merged list by data_offset so a future contiguous-burst
     // pass can walk it cleanly.
-    let mut all: Vec<u64> = Vec::with_capacity(data_relocs.len() + code_relocs.len());
+    let mut all: Vec<u64> =
+        Vec::with_capacity(data_relocs.len() + code_relocs.len() + label_relocs.len());
     all.extend(data_relocs.iter().map(|r| r.data_offset));
     all.extend(code_relocs.iter().map(|r| r.data_offset));
+    all.extend(label_relocs.iter().map(|r| r.data_offset));
     all.sort();
     for &off in &all {
         let seg_off = data_section_offset_in_segment + off;
@@ -1835,7 +1739,7 @@ fn nlist_local(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
     out
 }
 
-fn nlist_defined(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
+fn nlist_defined(n_strx: u32, n_value: u64, n_sect: u8, weak: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);
     write_struct(
         &mut out,
@@ -1843,7 +1747,7 @@ fn nlist_defined(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
             n_strx,
             n_type: N_EXT | N_SECT,
             n_sect,
-            n_desc: 0,
+            n_desc: if weak { N_WEAK_DEF } else { 0 },
             n_value,
         },
     );
@@ -1877,6 +1781,14 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let code = &build.text;
     let tls_present = !build.macho_tlv_descriptors.is_empty();
     let n_tlv = build.macho_tlv_descriptors.len();
+    // The aarch64 lowering keeps switch tables in `.text`, so these
+    // carriers are empty on every build that reaches this writer.
+    // Fail loud rather than drop them if that changes. TODO
+    if !build.rodata.bytes.is_empty() || !build.data_pcrel_relocs.is_empty() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "Mach-O writer: read-only blob / data rel32 slots not implemented",
+        )));
+    }
 
     // ---- step 1: build __LINKEDIT contents ----
     //
@@ -2003,7 +1915,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     const CODESIGN_LC_PAD: u64 = 64;
 
     let header_plus_lcs = mh_size + sizeofcmds;
-    let entry_file_offset = round_up(header_plus_lcs + CODESIGN_LC_PAD, 16);
+    // An asm alignment request above the section default raises the
+    // code placement past 16 so the section-relative padding holds
+    // absolutely (file offset == vmaddr modulo the page size).
+    let text_align = build.text_align.max(16) as u64;
+    let entry_file_offset = round_up(header_plus_lcs + CODESIGN_LC_PAD, text_align);
     let lc_pad_bytes = (entry_file_offset - header_plus_lcs) as usize;
     let code_size = code.len() as u64;
     let text_filesize = round_up(entry_file_offset + code_size, PAGE_SIZE);
@@ -2022,7 +1938,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let got_section_offset_in_segment: u64 = 0;
     // __data's base alignment: the segment base is page-aligned, so
     // aligning the in-segment offset aligns both fileoff and vmaddr.
-    let data_align = build.data_align.max(8) as u64;
+    let data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
     let data_section_offset_in_segment: u64 = round_up(got_size, data_align);
     let program_data_size = build.data.len() as u64;
     let post_data_offset_in_segment: u64 =
@@ -2125,6 +2041,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let rebase_ops = build_rebase_opcodes(
         &build.data_relocs,
         &build.code_relocs,
+        &build.label_relocs,
         SEG_INDEX_DATA,
         data_section_offset_in_segment,
     );
@@ -2219,7 +2136,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // `build.text`.
     // The export trie carries the same defined externals as the symtab's
     // extdef range, addressed relative to the image base (TEXT_VMADDR_BASE).
-    let mut export_trie_entries: Vec<(String, u64)> = Vec::new();
+    let mut export_trie_entries: Vec<(String, u64, u64)> = Vec::new();
     for (i, exp) in build.exports.iter().enumerate() {
         let n_strx = str_indices[n_locals + i];
         let native_off = build
@@ -2237,17 +2154,18 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             )));
         }
         let n_value = code_vmaddr_base + native_off as u64;
-        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT));
-        export_trie_entries.push((export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE));
+        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT, false));
+        export_trie_entries.push((export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE, 0));
     }
 
     // [Defined dynamic exports] (N_EXT | N_SECT) -- the program's
     // global symbols, so a dlopen'd module binds against them. A text
     // symbol's value is the code base plus its byte offset within
-    // `build.text`; a data symbol's value is the `__data` section
-    // vmaddr plus its byte offset within `build.data`. dyld resolves
-    // an image carrying LC_DYLD_INFO through the export trie only, so
-    // each dynamic export joins the trie alongside its symtab entry.
+    // `build.text`; a data symbol's value comes from the merged
+    // data-byte offset, which lands in `__data` or in the zero-fill
+    // `__bss` tail past it. dyld resolves an image carrying
+    // LC_DYLD_INFO through the export trie only, so each dynamic export
+    // joins the trie alongside its symtab entry.
     let dyn_export_str_base = n_locals + export_disk_names.len();
     for (i, d) in dyn_exports_emit.iter().enumerate() {
         let n_strx = str_indices[dyn_export_str_base + i];
@@ -2255,16 +2173,25 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             crate::c5::codegen::DynamicExportSection::Text => {
                 (code_vmaddr_base + d.offset, SECT_INDEX_TEXT)
             }
-            crate::c5::codegen::DynamicExportSection::Data => {
-                // Data exports are never bss-resident today (synth_build drops
-                // zero-init globals from the export set). When that is wired
-                // up, a `d.offset >= program_data_size` export needs n_sect =
-                // __DATA,__bss, not __data.
-                (data_off_to_vaddr(d.offset), SECT_INDEX_DATA)
-            }
+            crate::c5::codegen::DynamicExportSection::Data => (
+                data_off_to_vaddr(d.offset),
+                if d.offset < program_data_size {
+                    SECT_INDEX_DATA
+                } else {
+                    sect_index_bss(tls_present)
+                },
+            ),
         };
-        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect));
-        export_trie_entries.push((dyn_export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE));
+        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect, d.weak));
+        export_trie_entries.push((
+            dyn_export_disk_names[i].clone(),
+            n_value - TEXT_VMADDR_BASE,
+            if d.weak {
+                EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION
+            } else {
+                0
+            },
+        ));
     }
     // [Undefined imports] (N_EXT | N_UNDF). Indices in
     // `str_indices` are shifted past the locals + exports.
@@ -2333,6 +2260,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             }
             for r in &md.debug_line_text_relocs {
                 super::apply_merged_dwarf_text_reloc(&mut debug_line, r, code_vmaddr_base)?;
+            }
+            for r in &md.debug_info_data_relocs {
+                super::apply_merged_dwarf_data_reloc(&mut debug_info, r, &data_off_to_vaddr)?;
             }
             let fresh = dwarf::emit(
                 program,
@@ -2719,6 +2649,22 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         }
         data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
     }
+    // `&&label` initializers: the label's text offset is already
+    // resolved, so the preferred VA is the text base plus that offset.
+    // dyld slides it through the same rebase stream.
+    for r in &build.label_relocs {
+        let preferred_va = code_vmaddr_base + r.text_offset;
+        let off = r.data_offset as usize;
+        if off + 8 > data_with_relocs.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "Mach-O: label reloc offset {off:#x} past end of __data ({})",
+                    data_with_relocs.len()
+                ),
+            )));
+        }
+        data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+    }
     out.extend_from_slice(&data_with_relocs);
     if tls_present {
         // __thread_vars: one 24-byte descriptor per TLS variable.
@@ -2813,7 +2759,13 @@ mod tests {
     fn tiny_program() -> Program {
         Program {
             data: Vec::new(),
+            file_asm: Vec::new(),
+            asm_weak_names: Vec::new(),
+            asm_hidden_names: Vec::new(),
             data_object_starts: Vec::new(),
+            const_data_ranges: Vec::new(),
+            data_pad_ranges: Vec::new(),
+            data_align_marks: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
             tls_data: Vec::new(),
@@ -2840,6 +2792,7 @@ mod tests {
             user_ssa_funcs: alloc::vec::Vec::new(),
             extern_function_imports: alloc::vec::Vec::new(),
             init_funcs: alloc::vec::Vec::new(),
+            function_aliases: alloc::vec::Vec::new(),
         }
     }
 
@@ -2847,16 +2800,32 @@ mod tests {
         use super::super::{ResolvedImport, ResolvedImports};
         use crate::c5::codegen::ResolvedDylib;
         Build {
+            emitted_relocs: Vec::new(),
+            text_align: 16,
+            orphaned_data: None,
+            stopped_at_data_liveness: false,
+            ssa_dump: alloc::string::String::new(),
+            asm_sections: Vec::new(),
+            asm_section_text_refs: Vec::new(),
+            asm_text_abs_refs: Vec::new(),
+            asm_text_labels: Vec::new(),
+            asm_sym_decls: Vec::new(),
             copy_relocs: Default::default(),
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
+            data_ro_len: 0,
+            pic: false,
+            code_model: Default::default(),
+            elf_class: Default::default(),
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),
             entry_offset: 0,
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),
+            rodata: Default::default(),
+            data_pcrel_relocs: Vec::new(),
             func_fixups: Vec::new(),
             pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
@@ -2877,6 +2846,7 @@ mod tests {
                     real_symbol: "_write".into(),
                     dylib_index: 0,
                     flat_lookup: false,
+                    is_object: false,
                     is_variadic: false,
                     fixed_args: 3,
                     return_type_tag: 0,
@@ -2896,6 +2866,7 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,
@@ -3043,6 +3014,7 @@ mod tests {
             real_symbol: format!("_s{dylib_index}"),
             dylib_index,
             flat_lookup,
+            is_object: false,
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
@@ -3102,9 +3074,9 @@ mod tests {
         // Shared prefixes ("_Init...") exercise the radix edge splitting.
         // A minimal walker decodes each name back to its address.
         let entries = [
-            ("_InitWindow".to_string(), 0x1234u64),
-            ("_InitAudioDevice".to_string(), 0x5678u64),
-            ("_DrawRectangle".to_string(), 0x9abcu64),
+            ("_InitWindow".to_string(), 0x1234u64, 0u64),
+            ("_InitAudioDevice".to_string(), 0x5678u64, 0u64),
+            ("_DrawRectangle".to_string(), 0x9abcu64, 0u64),
         ];
         let trie = build_export_trie(&entries);
         assert!(!trie.is_empty(), "non-empty input must produce a trie");
@@ -3160,7 +3132,7 @@ mod tests {
                 }
             }
         };
-        for (name, addr) in &entries {
+        for (name, addr, _) in &entries {
             assert_eq!(lookup(&trie, name), Some(*addr), "trie lookup {name}");
         }
         assert_eq!(lookup(&trie, "_Nonexistent"), None);
@@ -3199,20 +3171,38 @@ mod tests {
 
     #[test]
     fn dynamic_exports_emitted_as_external_defined() {
-        // A text and a data global carried as dynamic exports must
-        // appear in the symbol table as N_EXT | N_SECT entries with
-        // the right section index, so a dlopen'd module can bind them.
+        // A text, a data and a zero-init global carried as dynamic
+        // exports must appear in the symbol table as N_EXT | N_SECT
+        // entries with the right section index, so a dlopen'd module
+        // can bind them. The zero-init one is addressed by a data-byte
+        // offset past `build.data`, which resolves into `__DATA,__bss`.
         let mut build = tiny_build();
+        build.data = alloc::vec![0u8; 16];
+        build.bss_size = 8;
         build.dynamic_exports = vec![
             crate::c5::codegen::DynamicExport {
                 name: "myfunc".into(),
                 section: super::super::DynamicExportSection::Text,
                 offset: 0,
+                size: 0,
+                is_object: false,
+                weak: false,
             },
             crate::c5::codegen::DynamicExport {
                 name: "myglobal".into(),
                 section: super::super::DynamicExportSection::Data,
                 offset: 8,
+                size: 4,
+                is_object: true,
+                weak: false,
+            },
+            crate::c5::codegen::DynamicExport {
+                name: "myzero".into(),
+                section: super::super::DynamicExportSection::Data,
+                offset: 16,
+                size: 8,
+                is_object: true,
+                weak: false,
             },
         ];
         let bytes = write(&tiny_program(), &build).unwrap();
@@ -3236,7 +3226,7 @@ mod tests {
                     let start = stroff + n_strx;
                     let len = bytes[start..].iter().position(|&b| b == 0).unwrap();
                     let name = String::from_utf8_lossy(&bytes[start..start + len]).into_owned();
-                    if name == "_myfunc" || name == "_myglobal" {
+                    if matches!(name.as_str(), "_myfunc" | "_myglobal" | "_myzero") {
                         found.push((name, n_type, n_sect));
                     }
                 }
@@ -3260,6 +3250,17 @@ mod tests {
         assert_eq!(data.1 & N_EXT, N_EXT, "data export must be external");
         assert_eq!(data.1 & N_SECT, N_SECT, "data export must be N_SECT");
         assert_eq!(data.2, SECT_INDEX_DATA, "data export n_sect");
+
+        let zero = found
+            .iter()
+            .find(|(n, _, _)| n == "_myzero")
+            .expect("_myzero export");
+        assert_eq!(zero.1 & N_EXT, N_EXT, "bss export must be external");
+        assert_eq!(
+            zero.2,
+            sect_index_bss(false),
+            "a data offset past build.data must resolve to __DATA,__bss"
+        );
     }
 
     #[test]
@@ -3530,13 +3531,16 @@ mod tests {
         let program = Compiler::with_target(super::super::super::tests::with_prelude(src), target)
             .compile()
             .expect("compile");
-        let (compacted, bss_size) =
-            crate::c5::codegen::ssa::shadow::compact_program_data(&program, target, true)
+        let compacted =
+            crate::c5::codegen::ssa::shadow::compact_program_data(&program, target, true, false)
                 .expect("compact");
-        let mut build =
-            super::super::lower_for(&compacted, target, super::super::NativeOptions::default())
-                .expect("lower");
-        build.bss_size = bss_size;
+        let mut build = super::super::lower_for(
+            &compacted.program,
+            target,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        build.bss_size = compacted.bss_size;
         assert!(build.bss_size > 0, "the zero array must occupy bss");
         let bytes = write(&tiny_program(), &build).expect("write Mach-O");
 

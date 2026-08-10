@@ -15,7 +15,10 @@ Each lane:
   4. On Linux lanes, rerun the suite under the register-pressure caps
      (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--features "codegen_test full"`)
      as CI's pressure matrix does.
-  5. Run the demos sqlite3 / lua / miniz / monocypher / stb / tweetnacl.
+  5. Run the gating demos (`GATING_DEMOS` below).
+  6. On Linux lanes, compile and link the pinned `defconfig` kernel with
+     badc -- CI's kernel corpus, not the vendored minimal configs. Skip
+     with `--no-kernel`.
 
 Usage (one `--box` flag per remote lane):
 
@@ -60,7 +63,28 @@ GATING_DEMOS = (
     "demos/libmill/smoke.py",
     "demos/libdill/smoke.py",
     "demos/coroutines/smoke.py",
+    # A badc-built assembler runs its own golden suite, so a wrong value
+    # in compiled code surfaces as a runtime failure rather than a bad
+    # object. Every other demo here compiled clean while this caught a
+    # stale-value miscompile, so it gates too. (demos/python is the same
+    # kind of check and is gated in CI, but it cannot join this list
+    # until a BSS global can be dynamically exported -- see the TODO in
+    # src/c5/linker/synth_build.rs.)
+    "demos/nasm/smoke.py",
 )
+
+
+# The kernel step's corpus is the pinned `defconfig` release setup.py fetches,
+# which is the tree CI's `kernel` job builds. The vendored minimal configs
+# compile a third to a half of defconfig's units and are not a substitute: they
+# have passed while defconfig-only defects reached the branch. Its own cache
+# dir, so the tree glob below cannot pick up a minimal-config tree.
+KERNEL_CACHE = "~/.cache/badc-kernel-gate"
+
+# Per-architecture unit floors, the same values as the `kernel` job's matrix in
+# .github/workflows/ci.yml. A count below the floor means units dropped out of
+# the build. Update both together.
+KERNEL_FLOORS = {"aarch64": 4400, "x86_64": 2900}
 
 
 @dataclass
@@ -111,6 +135,7 @@ def stream(prefix: str, cmd: list[str]) -> int:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        errors="replace",
         bufsize=1,
     )
     assert proc.stdout is not None
@@ -137,22 +162,65 @@ def sync_linux(box: Box, github_token: str) -> int:
     return stream(box.short, cmd)
 
 
-def remote_run_linux(box: Box, github_token: str) -> int:
-    # `set -o pipefail` so a failing build / test / demo propagates its
-    # exit status through the `| tail` truncation; without it the pipe
-    # exits with tail's status (0) and a red lane reports green.
-    inner = (
-        f"set -o pipefail && "
-        f"cd {box.remote_path} && "
-        f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
-        f"cargo build --release --locked --features full 2>&1 | tail -3 && "
-        f"cargo test --release --lib --features full 2>&1 | tail -3 && "
+# Each step's output is captured to a file rather than piped through
+# `tail`: a green step is worth three lines, but a red one has to arrive
+# whole. Truncating uniformly discarded exactly the part that names the
+# failure -- cargo prints `failures:`, the test name and `test result:
+# FAILED` before the final `error:` line, so a tail of the merged stream
+# kept the error and dropped what it referred to.
+FAIL_TAIL_LINES = 120
+
+STEP_FN = (
+    "step() { "
+    'log=$(mktemp); if "$@" > "$log" 2>&1; then tail -3 "$log"; rm -f "$log"; '
+    'else rc=$?; echo "--- lane step FAILED (rc=$rc): $*"; '
+    f'tail -{FAIL_TAIL_LINES} "$log"; rm -f "$log"; exit $rc; fi; '
+    "}"
+)
+
+
+def kernel_steps() -> list[str]:
+    """Compile and link the pinned defconfig kernel with badc.
+
+    The architecture is the box's own: setup.py and verify.py both default to
+    the host. No boot phase -- this covers what is decided at the vmlinux link
+    (a unit badc cannot compile, one that fell back, a link badc could not
+    make, an undefined reference, a unit count below the floor), and a boot
+    would add the emulator to the gate's dependencies for a class CI already
+    covers. setup.py is idempotent: it re-verifies the cached tarball's sha256
+    and reconfigures, so only the first run on a box pays the download."""
+    floors = " ".join(f"{a}) floor={n};;" for a, n in KERNEL_FLOORS.items())
+    return [
+        f"step python3 demos/linux/setup.py --cache {KERNEL_CACHE}",
+        f'ktree=$(find {KERNEL_CACHE} -maxdepth 1 -type d -name "linux-*" | head -1)',
+        f'test -n "$ktree" || {{ echo "--- no kernel tree under {KERNEL_CACHE}"; exit 1; }}',
+        f"case $(uname -m) in {floors} *) floor=0;; esac",
+        # The boxes' reference compiler is not the one the pinned release was
+        # released against; its warnings are not this step's subject, same as
+        # in CI.
+        "step env KCFLAGS=-Wno-error python3 demos/linux/verify.py "
+        '--kernel-dir "$ktree" --linker badc --no-boot '
+        f'--expect-units "$floor" --workdir {KERNEL_CACHE}/verify-out',
+    ]
+
+
+def remote_run_linux(box: Box, github_token: str, kernel: bool) -> int:
+    steps = [
+        "step cargo build --release --locked --features full",
+        "step cargo test --release --lib --features full",
         # CI additionally runs the suite under register-pressure caps
         # (BADC_MAX_GPR / BADC_MAX_FPR over several N); N=2 is the value
         # that has caught spill-interaction bugs the default banks hide.
-        f"BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
-        f'cargo test --release --lib --features "codegen_test full" 2>&1 | tail -3 && '
-        + " && ".join(f"python3 {d} 2>&1 | tail -2" for d in GATING_DEMOS)
+        "step env BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
+        'cargo test --release --lib --features "codegen_test full"',
+    ] + [f"step python3 {d}" for d in GATING_DEMOS]
+    # Last: the most expensive step, so the cheaper ones report first.
+    if kernel:
+        steps += kernel_steps()
+    inner = (
+        f"cd {box.remote_path} && "
+        f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
+        f"{STEP_FN}; " + " && ".join(steps)
     )
     return stream(box.short, ["ssh", box.host, inner])
 
@@ -175,6 +243,7 @@ def sync_windows(box: Box, github_token: str) -> int:
         ],
         capture_output=True,
         text=True,
+        errors="replace",
     )
     if tar.returncode != 0:
         sys.stdout.write(f"[{box.short}] tar failed: {tar.stderr}\n")
@@ -189,6 +258,7 @@ def sync_windows(box: Box, github_token: str) -> int:
         ["ssh", box.host, 'cmd /c "mkdir C:\\tmp 2>NUL & exit /b 0"'],
         capture_output=True,
         text=True,
+        errors="replace",
     )
     if mkdir.returncode != 0:
         sys.stdout.write(f"[{box.short}] mkdir C:\\tmp failed: {mkdir.stderr}\n")
@@ -197,6 +267,7 @@ def sync_windows(box: Box, github_token: str) -> int:
         ["scp", str(archive), f"{box.host}:C:/tmp/badc-tree.tar.gz"],
         capture_output=True,
         text=True,
+        errors="replace",
     )
     if scp.returncode != 0:
         sys.stdout.write(f"[{box.short}] scp failed: {scp.stderr}\n")
@@ -219,7 +290,9 @@ def sync_windows(box: Box, github_token: str) -> int:
     )
 
 
-def remote_run_windows(box: Box, github_token: str) -> int:
+# `_kernel` is unused: the kernel step is a Linux-lane dimension, and the
+# parameter is present only so both lane kinds dispatch through one signature.
+def remote_run_windows(box: Box, github_token: str, _kernel: bool) -> int:
     demo_cmd = " && ".join(f"python {d}" for d in GATING_DEMOS)
     # cmd's path separator is the backslash; forward slashes from a
     # caller-supplied --box arg work for some commands but not for
@@ -240,14 +313,14 @@ def remote_run_windows(box: Box, github_token: str) -> int:
     return stream(box.short, ["ssh", box.host, f'cmd /c "{inner}"'])
 
 
-def run_box(box: Box, github_token: str) -> int:
+def run_box(box: Box, github_token: str, kernel: bool) -> int:
     sync = sync_linux if box.kind == "linux" else sync_windows
     test = remote_run_linux if box.kind == "linux" else remote_run_windows
     rc = sync(box, github_token)
     if rc != 0:
         sys.stdout.write(f"[{box.short}] SYNC FAILED ({rc})\n")
         return rc
-    rc = test(box, github_token)
+    rc = test(box, github_token, kernel)
     sys.stdout.write(f"[{box.short}] {'OK' if rc == 0 else f'FAIL ({rc})'}\n")
     return rc
 
@@ -264,11 +337,28 @@ def main() -> int:
         metavar="NAME=HOST:PATH:KIND",
         help="add one remote lane; repeat for additional lanes",
     )
+    p.add_argument(
+        "--no-kernel",
+        action="store_true",
+        help="skip the defconfig kernel step on Linux lanes",
+    )
     args = p.parse_args()
     selected: list[Box] = args.box
     if not selected:
         print("no boxes selected", file=sys.stderr)
         return 2
+
+    if any(b.kind == "linux" for b in selected):
+        if args.no_kernel:
+            print("kernel step: SKIPPED (--no-kernel); the defconfig corpus is "
+                  "where CI's kernel gate finds link-visible regressions")
+        else:
+            print("kernel step: 7.1.6 defconfig, compile + link, no boot; "
+                  "adds 4.5-11 min per Linux lane (measured on an idle box and "
+                  "on one shared with five other jobs). Lanes run in parallel, "
+                  "so the gate grows by the slowest lane, not the sum. First "
+                  "run on a box also downloads the release (~150 MB). "
+                  "Skip with --no-kernel.")
 
     github_token = ""
     try:
@@ -283,7 +373,7 @@ def main() -> int:
     results: dict[str, int] = {}
 
     def worker(box: Box) -> None:
-        results[box.short] = run_box(box, github_token)
+        results[box.short] = run_box(box, github_token, not args.no_kernel)
 
     threads = [threading.Thread(target=worker, args=(b,)) for b in selected]
     for t in threads:

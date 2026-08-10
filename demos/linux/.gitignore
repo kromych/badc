@@ -1,0 +1,5 @@
+# setup.py fetches + extracts the kernel here; sweep.py writes objects and
+# result sets here. Neither is a commit input.
+.cache/
+.work/
+__pycache__/

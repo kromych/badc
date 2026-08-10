@@ -7,18 +7,21 @@ use super::error::C5Error;
 use super::symbol::Symbol;
 use super::token::{Tok, Token, Ty};
 
-/// Default struct-alignment cap when no `#pragma pack(N)` is
-/// active. Matches the aggregate-layout cap of 16 bytes; no natural
-/// type exceeds 8, so this only lets an explicit
-/// `__attribute__((aligned(16)))` survive, and explicit pack pragmas
-/// can lower it.
-const DEFAULT_PACK: usize = 16;
+/// Member-alignment cap when no `#pragma pack(N)` is active: none.
+/// A member's alignment is then whatever its type or an explicit
+/// `__attribute__((aligned(N)))` asks for.
+const DEFAULT_PACK: usize = usize::MAX;
 
-/// Clamp a user-supplied pack value to `[1, DEFAULT_PACK]`. C99
-/// permits 1, 2, 4, 8, 16. `0` is treated as "default" (matching
-/// `#pragma pack()` with no arg).
+/// Largest pack value that packs. GCC and clang honor 1, 2, 4, 8 and
+/// 16; a larger request packs nothing, since no natural alignment
+/// exceeds 16, and it must not clamp an explicit `aligned(N)` either.
+const MAX_HONORED_PACK: usize = 16;
+
+/// Clamp a user-supplied pack value. `0` means "default" (matching
+/// `#pragma pack()` with no arg); anything above [`MAX_HONORED_PACK`]
+/// packs nothing.
 fn clamp_pack(n: usize) -> usize {
-    if n == 0 || n > DEFAULT_PACK {
+    if n == 0 || n > MAX_HONORED_PACK {
         DEFAULT_PACK
     } else {
         n
@@ -37,6 +40,17 @@ enum PackDirective {
     /// `#pragma pack(push, N)` -- push N onto the stack.
     Push(usize),
     /// `#pragma pack(pop)` -- pop one frame (no-op if at bottom).
+    Pop,
+}
+
+/// One parsed `#pragma GCC visibility` directive, folded into
+/// [`Lexer::visibility_stack`] by [`Lexer::apply_visibility_directive`].
+#[derive(Debug, Clone, Copy)]
+enum VisibilityDirective {
+    /// `push(<vis>)` -- the payload is whether `<vis>` is non-preemptible
+    /// (`hidden` / `internal`).
+    Push(bool),
+    /// `pop` -- drop one frame (no-op at the bottom).
     Pop,
 }
 
@@ -197,8 +211,32 @@ fn parse_pragma_pack_line(body: &[u8]) -> Option<PackDirective> {
     inner.parse::<usize>().ok().map(PackDirective::Set)
 }
 
-/// Snapshot of the lexer's positional state. See
-/// [`Lexer::snapshot`] / [`Lexer::restore`].
+/// Parse a single `#`-prefix-stripped line as `pragma GCC visibility
+/// push(<vis>)` or `pragma GCC visibility pop`, returning `None` for any
+/// other shape so the caller falls back to skipping the line. The pragma
+/// supplies the ELF visibility for declarations in its extent, which the
+/// declaration paths sample the same way struct layout samples the pack
+/// stack.
+fn parse_pragma_visibility_line(body: &[u8]) -> Option<VisibilityDirective> {
+    let s = core::str::from_utf8(body).ok()?.trim();
+    let rest = s.strip_prefix("pragma")?.trim_start();
+    let rest = rest.strip_prefix("GCC")?.trim_start();
+    let rest = rest.strip_prefix("visibility")?.trim_start();
+    if rest.starts_with("pop") {
+        return Some(VisibilityDirective::Pop);
+    }
+    let rest = rest.strip_prefix("push")?.trim_start();
+    let after_open = rest.strip_prefix('(')?;
+    let close = after_open.find(')')?;
+    let vis = after_open[..close].trim();
+    Some(VisibilityDirective::Push(
+        vis == "hidden" || vis == "internal",
+    ))
+}
+
+/// Snapshot of the lexer's positional state plus every attribute
+/// `next()` produces for the current token. See [`Lexer::snapshot`] /
+/// [`Lexer::restore`].
 #[derive(Clone, Copy)]
 pub(crate) struct LexerSnapshot {
     pos: usize,
@@ -206,6 +244,13 @@ pub(crate) struct LexerSnapshot {
     tk: Tok,
     ival: i64,
     curr_id_idx: usize,
+    int_suffix_long: u8,
+    int_suffix_unsigned: bool,
+    int_is_decimal: bool,
+    float_suffix_f32: bool,
+    char_is_wide: bool,
+    str_is_wide: bool,
+    str_elem_bytes: usize,
 }
 
 /// Marker-aware map from (file, line) to the line's byte span in
@@ -313,6 +358,12 @@ pub(crate) struct Lexer {
     /// dependent within the source and can't be batched up the way
     /// `#pragma binding(...)` is).
     pack_stack: Vec<usize>,
+    /// Stack of `#pragma GCC visibility push(...)` frames; the top holds
+    /// whether the visibility currently in effect is non-preemptible.
+    /// Scanned inline like `pack_stack`, and read by the declaration
+    /// paths as the default for a declaration that carries no explicit
+    /// `visibility` attribute.
+    visibility_stack: Vec<bool>,
 }
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
@@ -430,7 +481,16 @@ impl Lexer {
             // upper bound here too. Real `#pragma pack(N)` updates
             // happen via `apply_pack_directive`.
             pack_stack: vec![DEFAULT_PACK],
+            visibility_stack: vec![false],
         }
+    }
+
+    /// Whether the visibility in effect at the current source position is
+    /// non-preemptible, i.e. inside a `#pragma GCC visibility
+    /// push(hidden)` (or `internal`) extent. Default visibility outside
+    /// any such extent.
+    pub fn visibility_hidden(&self) -> bool {
+        *self.visibility_stack.last().unwrap_or(&false)
     }
 
     /// Active `#pragma pack(N)` value at the current source
@@ -773,6 +833,19 @@ impl Lexer {
         }
     }
 
+    fn apply_visibility_directive(&mut self, dir: VisibilityDirective) {
+        match dir {
+            VisibilityDirective::Push(hidden) => self.visibility_stack.push(hidden),
+            VisibilityDirective::Pop => {
+                // Keep the bottom frame so `visibility_hidden()` always
+                // has an answer; popping past it is a user error.
+                if self.visibility_stack.len() > 1 {
+                    self.visibility_stack.pop();
+                }
+            }
+        }
+    }
+
     /// Return true if the next non-whitespace byte (after the current position) equals `b`.
     /// Used by the compiler to detect `name:` label syntax without consuming the colon.
     pub fn peek_after_whitespace(&self, b: u8) -> bool {
@@ -796,6 +869,42 @@ impl Lexer {
         p < self.src.len() && (self.src[p].is_ascii_alphabetic() || self.src[p] == b'_')
     }
 
+    /// Whether a `?` appears at the current grouping depth before the
+    /// end of the expression region the cursor is in: a depth-0 `,`,
+    /// `;`, `:`, or closing bracket ends the region. `depth` accounts
+    /// for the already-lexed current token (1 when it opens a group).
+    /// String and character literals are skipped. A byte scan, so a
+    /// speculative conditional-expression parse (with its data and
+    /// relocation staging) runs only when a conditional can be present.
+    pub fn scan_ahead_for_cond(&self, mut depth: i64) -> bool {
+        let mut p = self.pos;
+        while p < self.src.len() {
+            match self.src[p] {
+                b'?' if depth == 0 => return true,
+                b',' | b';' | b':' if depth == 0 => return false,
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => {
+                    if depth == 0 {
+                        return false;
+                    }
+                    depth -= 1;
+                }
+                q @ (b'"' | b'\'') => {
+                    p += 1;
+                    while p < self.src.len() && self.src[p] != q {
+                        if self.src[p] == b'\\' {
+                            p += 1;
+                        }
+                        p += 1;
+                    }
+                }
+                _ => {}
+            }
+            p += 1;
+        }
+        false
+    }
+
     /// Lightweight snapshot of the lexer's positional state so a
     /// caller can speculatively advance and then rewind. Captures
     /// just the fields the lexer mutates inside `next()`; identifier
@@ -807,17 +916,34 @@ impl Lexer {
             tk: self.tk,
             ival: self.ival,
             curr_id_idx: self.curr_id_idx,
+            int_suffix_long: self.int_suffix_long,
+            int_suffix_unsigned: self.int_suffix_unsigned,
+            int_is_decimal: self.int_is_decimal,
+            float_suffix_f32: self.float_suffix_f32,
+            char_is_wide: self.char_is_wide,
+            str_is_wide: self.str_is_wide,
+            str_elem_bytes: self.str_elem_bytes,
         }
     }
 
     /// Restore a previously taken [`Self::snapshot`]. The lexer
     /// returns to the exact state it had at the snapshot point.
+    /// The attributes travel with `tk`/`ival` because they type the
+    /// token (C99 6.4.4.1); leaving them behind would retype the
+    /// restored token from whatever the abandoned parse lexed last.
     pub fn restore(&mut self, s: LexerSnapshot) {
         self.pos = s.pos;
         self.line = s.line;
         self.tk = s.tk;
         self.ival = s.ival;
         self.curr_id_idx = s.curr_id_idx;
+        self.int_suffix_long = s.int_suffix_long;
+        self.int_suffix_unsigned = s.int_suffix_unsigned;
+        self.int_is_decimal = s.int_is_decimal;
+        self.float_suffix_f32 = s.float_suffix_f32;
+        self.char_is_wide = s.char_is_wide;
+        self.str_is_wide = s.str_is_wide;
+        self.str_elem_bytes = s.str_elem_bytes;
     }
 
     /// True if the next non-whitespace byte is the start of a
@@ -1130,12 +1256,12 @@ impl Lexer {
                 //     attribute later tokens to the right
                 //     `(file, line)` pair. The body parses to
                 //     `LineMarker` and the lexer updates state.
-                //   * `#pragma pack(...)` -- the preprocessor passes
-                //     pack pragmas through verbatim (they're
-                //     source-position-dependent, unlike the binding
-                //     / dylib / export pragmas the preprocessor
-                //     batches). Parse the args and fold into
-                //     `pack_stack`.
+                //   * `#pragma pack(...)` and `#pragma GCC visibility
+                //     ...` -- the preprocessor passes these through
+                //     verbatim (they're source-position-dependent,
+                //     unlike the binding / dylib / export pragmas the
+                //     preprocessor batches). Parse the args and fold
+                //     into `pack_stack` / `visibility_stack`.
                 //   * Any other `#` line -- (shebangs,
                 //     unrecognised pragmas, stray `#`s the
                 //     preprocessor didn't consume). Skip to EOL.
@@ -1155,6 +1281,8 @@ impl Lexer {
                     }
                 } else if let Some(dir) = parse_pragma_pack_line(body) {
                     self.apply_pack_directive(dir);
+                } else if let Some(dir) = parse_pragma_visibility_line(body) {
+                    self.apply_visibility_directive(dir);
                 }
                 self.pos = line_end;
             } else if c.is_ascii_alphabetic() || c == '_' {
@@ -1898,6 +2026,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("typeof", Token::Typeof),
     ("__typeof__", Token::Typeof),
     ("__typeof", Token::Typeof),
+    ("__auto_type", Token::AutoType),
     ("__attribute__", Token::Attribute),
     ("__attribute", Token::Attribute),
     ("__declspec", Token::Attribute),
@@ -1956,6 +2085,10 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("restrict", Token::TypeQual),
     ("__restrict", Token::TypeQual),
     ("__restrict__", Token::TypeQual),
+    // x86 named-address-space qualifiers: an access through such a type
+    // rides a `%gs:` / `%fs:` segment override (GCC named address spaces).
+    ("__seg_gs", Token::TypeQual),
+    ("__seg_fs", Token::TypeQual),
     // MSVC calling-convention decorations. Each badc target has a
     // single calling convention, so these carry no information and are
     // consumed as no-op qualifiers wherever a declarator decoration may
@@ -1979,6 +2112,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__signed", Token::Signed),
     ("__signed__", Token::Signed),
     ("__extension__", Token::Extension),
+    ("__label__", Token::LocalLabel),
     ("unsigned", Token::Unsigned),
     ("short", Token::Short),
     ("long", Token::Long),

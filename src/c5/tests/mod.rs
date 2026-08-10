@@ -25,6 +25,11 @@ mod codegen;
 mod deferred;
 #[cfg(feature = "full")]
 mod dwarf;
+mod fixture_tables;
+mod frame_slot_fuzz;
+mod inline_asm;
+#[cfg(feature = "full")]
+mod inline_linkage;
 mod intrinsics;
 mod jit;
 mod lexer;
@@ -45,6 +50,10 @@ mod pointer_tracking;
 mod programs;
 #[cfg(feature = "full")]
 mod reloc_golden;
+#[cfg(feature = "full")]
+mod relocatable;
+#[cfg(feature = "full")]
+mod stack_guard;
 mod types;
 mod vla;
 
@@ -102,6 +111,14 @@ pub fn compile_str(src: &str) -> Program {
 /// (or any future prelude-only function) appearing in the output.
 pub fn compile_str_bare(src: &str) -> Program {
     Compiler::new(src.to_string()).compile().unwrap()
+}
+
+/// `compile_str_bare` with an explicit target, for sources whose asm
+/// constraints only parse for that target's family.
+pub fn compile_str_bare_for(src: &str, target: crate::Target) -> Program {
+    Compiler::with_target(src.to_string(), target)
+        .compile()
+        .unwrap()
 }
 
 /// Link a compiled program against the embedded startup runtime into
@@ -177,6 +194,8 @@ pub fn link_executable_with_runtime(
         objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
     }
 
+    append_on_demand_objects(&mut objs, target, reloc)?;
+
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
     let plt = match merged.machine {
         NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
@@ -192,6 +211,115 @@ pub fn link_executable_with_runtime(
         OutputKind::Executable,
         target,
         None,
+    )
+    .map_err(|e| format!("write image: {e}"))
+}
+
+/// Offer the compiler-runtime and C-library sources the way the CLI's
+/// link does: each joins only when it defines a symbol the object set
+/// still leaves undefined. Nothing is compiled when nothing is
+/// undefined, which is the usual case for a fixture.
+#[cfg(feature = "full")]
+fn append_on_demand_objects(
+    objs: &mut Vec<crate::NativeObject>,
+    target: crate::Target,
+    reloc: crate::NativeOptions,
+) -> Result<(), String> {
+    use crate::{
+        CompileOptions, NativeSymSection, embedded_compiler_rt, embedded_libc,
+        emit_native_with_options, parse_native_elf,
+    };
+    let unresolved = |objs: &[crate::NativeObject]| {
+        let mut defined = alloc::collections::BTreeSet::new();
+        let mut undefined = alloc::collections::BTreeSet::new();
+        for o in objs {
+            for s in &o.symbols {
+                if s.binding == 0 {
+                    continue;
+                }
+                if s.section == NativeSymSection::Undef {
+                    if s.binding == 1 && !defined.contains(&s.name) {
+                        undefined.insert(s.name.clone());
+                    }
+                } else {
+                    defined.insert(s.name.clone());
+                    undefined.remove(&s.name);
+                }
+            }
+        }
+        undefined
+    };
+    if unresolved(objs).is_empty() {
+        return Ok(());
+    }
+    let mut pool = Vec::new();
+    for (name, body) in embedded_compiler_rt().iter().chain(embedded_libc().iter()) {
+        let copts = CompileOptions::default().with_no_entry_point(true);
+        let p = Compiler::with_options(body.to_string(), target, copts)
+            .compile()
+            .map_err(|e| format!("compile {name}: {e}"))?;
+        let bytes =
+            emit_native_with_options(&p, target, reloc).map_err(|e| format!("emit {name}: {e}"))?;
+        pool.push(Some(
+            parse_native_elf(&bytes).map_err(|e| format!("parse {name}: {e}"))?,
+        ));
+    }
+    loop {
+        let undefined = unresolved(objs);
+        let mut progress = false;
+        for slot in pool.iter_mut() {
+            let wanted = slot.as_ref().is_some_and(|o| {
+                o.symbols.iter().any(|s| {
+                    s.binding == 1
+                        && !matches!(s.section, NativeSymSection::Undef | NativeSymSection::Abs)
+                        && undefined.contains(&s.name)
+                })
+            });
+            if wanted {
+                objs.push(slot.take().expect("a wanted slot is occupied"));
+                progress = true;
+            }
+        }
+        if !progress {
+            return Ok(());
+        }
+    }
+}
+
+/// Link one translation unit into a shared library, the way the CLI's
+/// `--shared` does: no startup runtime, and an unresolved global becomes
+/// a load-time import the host supplies.
+#[cfg(feature = "full")]
+#[allow(dead_code)] // used by the feature-gated shared-library tests
+pub fn link_shared_library(
+    program: &Program,
+    target: crate::Target,
+    opts: crate::NativeOptions,
+) -> Result<Vec<u8>, String> {
+    use crate::{
+        NativeMachine, OutputKind, emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt,
+        link_native_objects_with_options, parse_native_elf, write_native_image_from_merged,
+    };
+    let mut reloc = opts;
+    reloc.output_kind = OutputKind::Relocatable;
+    let bytes = emit_native_with_options(program, target, reloc)
+        .map_err(|e| format!("emit program object: {e}"))?;
+    let obj = parse_native_elf(&bytes).map_err(|e| format!("parse program object: {e}"))?;
+    let mut merged =
+        link_native_objects_with_options(&[obj], true).map_err(|e| format!("link: {e}"))?;
+    let plt = match merged.machine {
+        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+    }
+    .map_err(|e| format!("plt: {e}"))?;
+    write_native_image_from_merged(
+        &merged,
+        &plt,
+        program.entry_name.as_deref().unwrap_or("main"),
+        program.subsystem,
+        OutputKind::SharedLibrary,
+        target,
+        Some("libbadctest"),
     )
     .map_err(|e| format!("write image: {e}"))
 }

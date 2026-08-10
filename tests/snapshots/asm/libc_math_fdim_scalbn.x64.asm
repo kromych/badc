@@ -22,7 +22,7 @@ Disassembly of section .text:
 <scalbln>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
+               	movl	$0x4, %edi
                	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp
@@ -31,7 +31,7 @@ Disassembly of section .text:
 <scalbnf>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
+               	movl	$0x2, %edi
                	cvtss2sd	%xmm0, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
@@ -42,7 +42,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x70, %rsp
+               	subq	$0x10, %rsp
                	movabsq	$0x4014000000000000, %rcx # imm = 0x4014000000000000
                	movabsq	$0x4008000000000000, %rdx # imm = 0x4008000000000000
                	movq	%rcx, %xmm14
@@ -79,8 +79,8 @@ Disassembly of section .text:
                	movq	%rdx, %xmm15
                	movq	%rcx, %xmm0
                	subsd	%xmm15, %xmm0
-               	movsd	%xmm0, -0x28(%rbp,%riz)
-               	movsd	-0x28(%rbp,%riz), %xmm0
+               	movsd	%xmm0, -0x8(%rbp,%riz)
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
@@ -131,8 +131,8 @@ Disassembly of section .text:
                	movq	%rdx, %xmm15
                	movq	%rcx, %xmm0
                	subsd	%xmm15, %xmm0
-               	movsd	%xmm0, -0x40(%rbp,%riz)
-               	movsd	-0x40(%rbp,%riz), %xmm0
+               	movsd	%xmm0, -0x8(%rbp,%riz)
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -144,7 +144,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
@@ -182,8 +182,8 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	movq	%rax, %xmm0
                	subsd	%xmm15, %xmm0
-               	movsd	%xmm0, -0x58(%rbp,%riz)
-               	movsd	-0x58(%rbp,%riz), %xmm0
+               	movsd	%xmm0, -0x8(%rbp,%riz)
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -195,7 +195,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
@@ -214,7 +214,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x4008000000000000, %rdi # imm = 0x4008000000000000
@@ -233,7 +233,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
@@ -252,7 +252,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movl	$0x3f800000, %edi       # imm = 0x3F800000
@@ -271,7 +271,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x7, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movl	$0x40a00000, %eax       # imm = 0x40A00000
@@ -306,8 +306,8 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	subsd	%xmm1, %xmm0
-               	movsd	%xmm0, -0x70(%rbp,%riz)
-               	movsd	-0x70(%rbp,%riz), %xmm0
+               	movsd	%xmm0, -0x8(%rbp,%riz)
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movq	%rax, %xmm15
@@ -320,34 +320,34 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x70, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x70(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp,%riz)
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x58(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp,%riz)
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x40(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp,%riz)
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x28(%rbp,%riz)
+               	movsd	%xmm14, -0x8(%rbp,%riz)
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

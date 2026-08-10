@@ -119,6 +119,27 @@ fn fmt_inst(inst: &Inst) -> String {
             fmt_store_kind(*kind),
             fmt_volatile(*volatile),
         ),
+        SegLoad {
+            addr,
+            kind,
+            volatile,
+            seg,
+        } => format!(
+            "SegLoad {{ addr=v{addr}, kind={}, seg={seg:?}{} }}",
+            fmt_load_kind(*kind),
+            fmt_volatile(*volatile),
+        ),
+        SegStore {
+            addr,
+            value,
+            kind,
+            volatile,
+            seg,
+        } => format!(
+            "SegStore {{ addr=v{addr}, value=v{value}, kind={}, seg={seg:?}{} }}",
+            fmt_store_kind(*kind),
+            fmt_volatile(*volatile),
+        ),
         LoadLocal {
             off,
             kind,
@@ -219,7 +240,12 @@ fn fmt_inst(inst: &Inst) -> String {
             )
         }
         TailExt(b) => format!("TailExt({b})"),
-        Mcpy { dst, src, size } => format!("Mcpy {{ dst=v{dst}, src=v{src}, size={size} }}"),
+        Mcpy {
+            dst,
+            src,
+            size,
+            align,
+        } => format!("Mcpy {{ dst=v{dst}, src=v{src}, size={size}, align={align} }}"),
         AtomicRmw {
             op,
             addr,

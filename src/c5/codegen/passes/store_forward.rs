@@ -41,17 +41,21 @@
 //!
 //! Frame slots (`StoreLocal` / `LoadLocal`) are tracked in a second
 //! table keyed by slot index, with the same width, volatile, and
-//! distance discipline. A slot participates only when nothing but
-//! `LoadLocal` / `StoreLocal` can reach it: no `LocalAddr`, no volatile
-//! access (`mem2reg::promotable_slots`), and no write through a
-//! `FunctionSsa` field or call result slot. Such a slot's address is
-//! never a value, so no `Store`, `Mcpy`, or atomic can write it; its
-//! entries survive those instructions and die at another `StoreLocal`
-//! to the same slot, at a call (a reload after the call is cheaper
-//! than keeping the value live across it), or at the block boundary.
+//! distance discipline. A slot reachable only through `LoadLocal` /
+//! `StoreLocal` -- no `LocalAddr`, no volatile access
+//! (`mem2reg::promotable_slots`), and no write through a `FunctionSsa`
+//! field or call result slot -- has no address value, so no `Store`,
+//! `Mcpy`, or atomic can write it; its entries survive those
+//! instructions and die at another `StoreLocal` to the same slot, at a
+//! call (a reload after the call is cheaper than keeping the value live
+//! across it), or at the block boundary. An address-exposed slot
+//! (`LocalAddr` taken, e.g. by an asm output) still forwards, under a
+//! stricter discipline: any instruction that can write memory through a
+//! pointer also kills its entries. A volatile access neither forwards
+//! nor seeds on either discipline.
 
 use crate::c5::codegen::ssa::mem2reg::promotable_slots;
-use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
@@ -162,6 +166,50 @@ fn forwardable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
     slots
 }
 
+/// Slots outside `forwardable` that still forward under the stricter
+/// exposed discipline (every pointer write kills): any slot the body
+/// accesses through `LoadLocal` / `StoreLocal`, less the ones the emit
+/// writes outside the instruction stream. The runtime-frame bail
+/// matches `forwardable_slots`.
+fn exposed_slots(func: &FunctionSsa, forwardable: &BTreeSet<i64>) -> BTreeSet<i64> {
+    if func
+        .insts
+        .iter()
+        .any(|i| matches!(i, Inst::AllocaInit(s) if *s != 0))
+    {
+        return BTreeSet::new();
+    }
+    let mut slots = BTreeSet::new();
+    for inst in &func.insts {
+        match inst {
+            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
+                slots.insert(*off);
+            }
+            _ => {}
+        }
+    }
+    for inst in &func.insts {
+        match inst {
+            Inst::Call { ret_slot_local, .. }
+            | Inst::CallIndirect { ret_slot_local, .. }
+            | Inst::CallExt { ret_slot_local, .. }
+                if *ret_slot_local != 0 =>
+            {
+                slots.remove(ret_slot_local);
+            }
+            _ => {}
+        }
+    }
+    slots.remove(&func.indirect_result_slot);
+    for s in &func.param_local_slots {
+        slots.remove(s);
+    }
+    for s in forwardable {
+        slots.remove(s);
+    }
+    slots
+}
+
 /// Byte ranges `[a, a+aw)` and `[b, b+bw)` overlap.
 fn overlaps(a: i32, aw: u8, b: i32, bw: u8) -> bool {
     let a_end = a as i64 + aw as i64;
@@ -187,6 +235,7 @@ fn run_one(func: &mut FunctionSsa) {
     let mut rewrites: Vec<(usize, Inst)> = Vec::new();
     let mut any = false;
     let slots = forwardable_slots(func);
+    let exposed = exposed_slots(func, &slots);
 
     for block in &func.blocks {
         let mut table: Vec<Entry> = Vec::new();
@@ -285,8 +334,10 @@ fn run_one(func: &mut FunctionSsa) {
                     let volatile = *volatile;
                     let w = store_width(kind);
                     // Drop every entry not provably disjoint from the
-                    // written range.
+                    // written range. An exposed slot's address is a value,
+                    // so the write can reach it.
                     table.retain(|e| e.addr == addr && !overlaps(e.disp, e.width, disp, w));
+                    slot_table.retain(|e| !exposed.contains(&e.off));
                     // A volatile store invalidates like any store but
                     // seeds no forward: a later load of the location
                     // must read memory (C99 6.7.3p6).
@@ -301,9 +352,9 @@ fn run_one(func: &mut FunctionSsa) {
                         });
                     }
                 }
-                // A volatile slot access is never tracked; its slot is
-                // outside `forwardable_slots`. A volatile load reads
-                // only, so existing entries stay valid.
+                // A volatile slot access neither forwards nor seeds
+                // (C99 6.7.3p6). A volatile load reads only, so
+                // existing entries stay valid.
                 Inst::LoadLocal { volatile: true, .. } => {}
                 Inst::LoadLocal {
                     off,
@@ -312,7 +363,7 @@ fn run_one(func: &mut FunctionSsa) {
                 } => {
                     let off = *off;
                     let kind = *kind;
-                    if !slots.contains(&off) {
+                    if !slots.contains(&off) && !exposed.contains(&off) {
                         continue;
                     }
                     let w = load_width(kind);
@@ -374,7 +425,10 @@ fn run_one(func: &mut FunctionSsa) {
                     // so the pointer table clears as before.
                     table.clear();
                     slot_table.retain(|e| e.off != off);
-                    if slots.contains(&off) && is_int_store(kind) && !volatile {
+                    if (slots.contains(&off) || exposed.contains(&off))
+                        && is_int_store(kind)
+                        && !volatile
+                    {
                         slot_table.push(SlotEntry {
                             off,
                             width: store_width(kind),
@@ -385,8 +439,13 @@ fn run_one(func: &mut FunctionSsa) {
                     }
                 }
                 // Reads and pure computes the pass does not model: no
-                // clobber, no entry.
-                Inst::LoadIndexed { .. }
+                // clobber, no entry. A `__seg_gs` / `__seg_fs` access names a
+                // distinct address space that does not alias the generic-space
+                // pointer table or any tracked slot, so it neither forwards nor
+                // invalidates an entry here.
+                Inst::SegLoad { .. }
+                | Inst::SegStore { .. }
+                | Inst::LoadIndexed { .. }
                 | Inst::Imm(_)
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
@@ -403,15 +462,16 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::ParamRef { .. }
                 | Inst::Phi { .. } => {}
                 // Anything that can write through a pointer the pass
-                // does not track clears the pointer table. Slot entries
-                // survive: a forwardable slot's address is never a
-                // value, so none of these can write it.
+                // does not track clears the pointer table. Forwardable
+                // slot entries survive (no address value); exposed slot
+                // entries die.
                 Inst::StoreIndexed { .. }
                 | Inst::Mcpy { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
                 | Inst::AllocaInit(_) => {
                     table.clear();
+                    slot_table.retain(|e| !exposed.contains(&e.off));
                 }
                 // A call cannot write a forwardable slot either, but
                 // forwarding across one would hold the value in a
@@ -456,110 +516,15 @@ fn run_one(func: &mut FunctionSsa) {
     for inst in func.insts.iter_mut() {
         // A forwarded load keeps its slot but is now unreferenced; its
         // own operand need not be resolved.
-        for_each_operand_mut(inst, |op| *op = resolve(&redirect, *op));
+        inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
     }
     for block in func.blocks.iter_mut() {
         if block.exit_acc != NO_VALUE {
             block.exit_acc = resolve(&redirect, block.exit_acc);
         }
-        match &mut block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                *cond = resolve(&redirect, *cond);
-            }
-            Terminator::GotoIndirect { target } => {
-                *target = resolve(&redirect, *target);
-            }
-            Terminator::JumpTable { idx, .. } => {
-                *idx = resolve(&redirect, *idx);
-            }
-            Terminator::Return(v) if *v != NO_VALUE => {
-                *v = resolve(&redirect, *v);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
-    match inst {
-        Inst::Imm(_)
-        | Inst::ImmData(_)
-        | Inst::ImmCode(_)
-        | Inst::ImmExtCode(_)
-        | Inst::BlockAddr(_)
-        | Inst::LocalAddr(_)
-        | Inst::TlsAddr(_)
-        | Inst::LoadLocal { .. }
-        | Inst::TailExt(_)
-        | Inst::AllocaInit(_)
-        | Inst::ParamRef { .. } => {}
-        Inst::Load { addr, .. } => f(addr),
-        Inst::Store { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::StoreLocal { value, .. } => f(value),
-        Inst::LoadIndexed { base, index, .. } => {
-            f(base);
-            f(index);
-        }
-        Inst::StoreIndexed {
-            base, index, value, ..
-        } => {
-            f(base);
-            f(index);
-            f(value);
-        }
-        Inst::Binop { lhs, rhs, .. } => {
-            f(lhs);
-            f(rhs);
-        }
-        Inst::BinopI { lhs, .. } => f(lhs),
-        Inst::Fneg(v) => f(v),
-        Inst::Fma { a, b, c, .. } => {
-            f(a);
-            f(b);
-            f(c);
-        }
-        Inst::Extend { value, .. } => f(value),
-        Inst::FpCast { value, .. } => f(value),
-        Inst::Call { args, .. }
-        | Inst::CallExt { args, .. }
-        | Inst::Intrinsic { args, .. }
-        | Inst::InlineAsm { args, .. } => {
-            for a in args {
-                f(a);
-            }
-        }
-        Inst::CallIndirect { target, args, .. } => {
-            f(target);
-            for a in args {
-                f(a);
-            }
-        }
-        Inst::Mcpy { dst, src, .. } => {
-            f(dst);
-            f(src);
-        }
-        Inst::AtomicRmw { addr, value, .. } => {
-            f(addr);
-            f(value);
-        }
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            desired,
-            ..
-        } => {
-            f(addr);
-            f(expected_addr);
-            f(desired);
-        }
-        Inst::Phi { incoming, .. } => {
-            for (_, v) in incoming {
-                f(v);
-            }
-        }
+        block
+            .terminator
+            .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
     }
 }
 
@@ -581,6 +546,10 @@ mod tests {
             is_inline: false,
             is_always_inline: false,
             is_naked: false,
+            section: None,
+            is_weak: false,
+            is_internal: false,
+            const_params: 0,
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
             param_fp_mask: 0,
@@ -592,11 +561,16 @@ mod tests {
             ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            label_data_relocs: Vec::new(),
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -766,7 +740,8 @@ mod tests {
                 Inst::Mcpy {
                     dst: 0,
                     src: 1,
-                    size: 8
+                    size: 8,
+                    align: 8,
                 },
                 Inst::Load {
                     addr: 0,
@@ -784,6 +759,57 @@ mod tests {
             "the load past a block copy must not forward",
         );
         assert!(matches!(f.insts[4], Inst::Load { .. }));
+    }
+
+    /// An `Inst::InlineAsm` is an ordering barrier (`asm
+    /// volatile("" ::: "memory")`): a store before it may not satisfy
+    /// a load after it.
+    #[test]
+    fn inline_asm_barrier_blocks_forwarding() {
+        let asm = alloc::boxed::Box::new(crate::c5::ir::AsmBlock {
+            template: Vec::new(),
+            operands: Vec::new(),
+            clobber_regs: 0,
+            clobber_fp_regs: 0,
+            clobber_memory: true,
+            volatile: true,
+        });
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64
+                },
+                Inst::Store {
+                    addr: 0,
+                    disp: 0,
+                    value: 1,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                },
+                Inst::InlineAsm {
+                    asm,
+                    args: Vec::new()
+                },
+                Inst::Load {
+                    addr: 0,
+                    disp: 0,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                },
+            ],
+            Terminator::Return(4),
+            4,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(4)),
+            "a load must not forward across an asm barrier",
+        );
     }
 
     /// A volatile store seeds no forwarding entry: the reload after it

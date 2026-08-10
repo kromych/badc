@@ -10,15 +10,6 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<run>:
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leaq	<rip>, %rcx
-               	incq	%rax
-               	movl	%eax, (%rcx)
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	leaq	<rip>, %rax
                	movl	$0x29, %ecx

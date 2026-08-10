@@ -13,14 +13,28 @@ Pipeline:
   - The badc-built interpreter runs a baselined slice of the standard
     library test suite.
 
-CPython's object allocator embeds mimalloc, whose per-thread heap tables
-use a thread-local pointer initialized with the address of a global -- a
-relocation against the TLS template badc does not yet emit. The build is
-configured ``--without-mimalloc`` so ``Objects/obmalloc.c`` uses the
-pymalloc allocator instead.
+Configuration, with the first error each disabled knob produces today:
 
-POSIX only. macOS is the first supported host; this is not wired into CI
-yet.
+  ``--without-mimalloc``
+    ``Objects/obmalloc.c`` includes the whole allocator, whose per-thread
+    heap table is a thread-local pointer initialized with the address of a
+    global: ``address-of-global initializer for _Thread_local not yet
+    supported``. On macOS ``mach/vm_statistics.h`` is missing and is hit
+    first. ``Objects/obmalloc.c`` uses pymalloc instead.
+  ``--without-remote-debug``
+    ``Python/remote_debug.h`` needs ``process_vm_readv`` on Linux and
+    ``libproc.h`` plus the Mach introspection headers on macOS. The
+    configured-out stub satisfies the interpreter's calls.
+  ``--with-ensurepip=no``
+    No effect on what badc compiles: ``ENSUREPIP`` is read only by the
+    ``install`` recipes, which this script never runs. Kept so a stray
+    ``make install`` cannot reach the network.
+  ``--disable-test-modules`` (macOS)
+    Skips the host compiler's build of the test extension modules. They
+    are not part of badc's link set, so this only shortens the reference
+    build.
+
+POSIX only: the reference build runs ./configure + make.
 """
 
 from __future__ import annotations
@@ -42,8 +56,32 @@ SRC = PY_DIR / ".cache" / f"Python-{VERSION}"
 # Maximum tolerated test failures. Tightened as the interpreter stabilizes.
 BASELINE_FAILURES = 0
 
-# Test-suite slice to run once the interpreter is up. Kept small and
-# allocation/codegen-revealing; expanded as the build matures.
+# Test-suite slice to run once the interpreter is up. Every module here was
+# verified to pass on the badc-built interpreter on linux-x64,
+# linux-aarch64 and macos-aarch64. The second group is chosen to complement
+# `build.py`'s slices rather than repeat them: compression and hashing
+# (zlib, lzma, the HACL hashes), the file and temporary-file paths, and the
+# pure-Python library corners those two do not reach.
+#
+# The last group (`test_pickle` onwards) covers the `dlopen`'d extension
+# modules that bind the interpreter's data globals -- `_pickle`, `_ssl`,
+# `pyexpat` and `_elementtree` all resolve `_PyByteArray_empty_string`
+# or `_Py_HashSecret`, both zero-initialized.
+#
+# `test_generators` needs the process to start with SIGINT at its default
+# disposition: one case raises SIGINT and expects `KeyboardInterrupt` in a
+# generator. A shell that starts this script as a background job sets
+# SIGINT to SIG_IGN, and the case then fails for the reference interpreter
+# too.
+#
+# Deliberately absent, each with a tracked cause:
+#   test_coroutines (macOS)-- an async comprehension faults in the
+#     badc-built interpreter on macos-aarch64; passes on linux-x64.
+#   test_time              -- <time.h> lacks CLOCK_THREAD_CPUTIME_ID, so
+#     time.thread_time() is absent.
+#   test_json              -- json.tool's colour cases spawn an isolated
+#     child interpreter, which ignores PYTHONHOME; getpath cannot find
+#     Lib without an install layout. A harness limit, not a runtime one.
 TEST_SLICE = [
     "test_grammar",
     "test_builtin",
@@ -53,7 +91,28 @@ TEST_SLICE = [
     "test_dict",
     "test_string",
     "test_exceptions",
+    "test_tuple",
+    "test_deque",
+    "test_hashlib",
+    "test_hmac",
+    "test_zlib",
+    "test_lzma",
+    "test_statistics",
+    "test_calendar",
+    "test_types",
+    "test_abc",
+    "test_generators",
+    "test_fileio",
+    "test_tempfile",
+    "test_posixpath",
+    "test_pickle",
+    "test_ssl",
+    "test_pyexpat",
+    "test_xml_etree",
 ]
+# Runs everywhere but macos-aarch64; see the note above.
+if sys.platform != "darwin":
+    TEST_SLICE.append("test_coroutines")
 
 
 def run(cmd, **kw):
@@ -93,9 +152,6 @@ def host_build(log) -> Path:
         log("host build present, reusing")
         return trace
 
-    # `--without-remote-debug` drops the PEP 768 remote-debugging code,
-    # whose macOS path pulls in the Mach-O / mach_vm introspection
-    # surface; the configured-out stub satisfies the interpreter's calls.
     args = [
         "./configure",
         "--without-mimalloc",

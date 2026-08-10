@@ -4,15 +4,21 @@
 // for either sign. <stdlib.h> provides these inline.
 #include <stdlib.h>
 
+// `volatile` keeps the operands runtime values, so the division and the
+// aggregate return are emitted rather than folded.
+static int rti(int v) { volatile int t = v; return t; }
+static long rtl(long v) { volatile long t = v; return t; }
+static long long rtll(long long v) { volatile long long t = v; return t; }
+
 int main(void) {
-    div_t a = div(17, 5);
+    div_t a = div(rti(17), rti(5));
     if (a.quot != 3 || a.rem != 2) return 1;
-    div_t b = div(-17, 5);
+    div_t b = div(rti(-17), rti(5));
     if (b.quot != -3 || b.rem != -2) return 2;
     if (b.quot * 5 + b.rem != -17) return 3;
-    ldiv_t c = ldiv(100L, 7L);
+    ldiv_t c = ldiv(rtl(100L), rtl(7L));
     if (c.quot != 14 || c.rem != 2) return 4;
-    lldiv_t d = lldiv(1000LL, 3LL);
+    lldiv_t d = lldiv(rtll(1000LL), rtll(3LL));
     if (d.quot != 333 || d.rem != 1) return 5;
     return 0;
 }

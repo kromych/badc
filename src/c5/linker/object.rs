@@ -26,12 +26,15 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use crate::c5::codegen::BinaryFormat;
 use crate::c5::error::C5Error;
 
-// ELF64 on-disk constants. Kept verbatim from
-// `codegen/elf_reloc.rs` so the encoder and decoder share a
-// single source of truth; a future refactor can lift them into
-// a common module.
+/// One concatenated file-backed stream: its bytes, the alignment the
+/// merged blob must be placed at, and each contributing section's base
+/// within it.
+type ConcatStream = (Vec<u8>, usize, Vec<(usize, u64)>);
+
+// ELF constants the reader matches on.
 const ELF_CLASS_64: u8 = 2;
 const ELF_DATA_LSB: u8 = 1;
 const ET_REL: u16 = 1;
@@ -42,6 +45,7 @@ const SHT_SYMTAB: u32 = 2;
 const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
 const SHT_NOBITS: u32 = 8;
+const SHT_NOTE: u32 = 7;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
 const SHN_COMMON: u16 = 0xfff2;
@@ -51,64 +55,12 @@ const ELF64_SHDR_SIZE: usize = core::mem::size_of::<Elf64Shdr>();
 const ELF64_SYM_SIZE: usize = core::mem::size_of::<Elf64Sym>();
 const ELF64_RELA_SIZE: usize = core::mem::size_of::<Elf64Rela>();
 
-// On-disk ELF64 records as `#[repr(C)]` structs. The struct
-// layout matches the ELF spec verbatim because every field is
-// naturally aligned at the offset the spec calls out and the
-// platforms we target (x86_64, aarch64) are little-endian, so
-// field byte-order matches on-disk order. `static_assert`-style
-// sanity checks at the bottom of this block lock the sizes.
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Elf64Ehdr {
-    pub(crate) e_ident: [u8; 16],
-    pub(crate) e_type: u16,
-    pub(crate) e_machine: u16,
-    pub(crate) e_version: u32,
-    pub(crate) e_entry: u64,
-    pub(crate) e_phoff: u64,
-    pub(crate) e_shoff: u64,
-    pub(crate) e_flags: u32,
-    pub(crate) e_ehsize: u16,
-    pub(crate) e_phentsize: u16,
-    pub(crate) e_phnum: u16,
-    pub(crate) e_shentsize: u16,
-    pub(crate) e_shnum: u16,
-    pub(crate) e_shstrndx: u16,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-struct Elf64Shdr {
-    sh_name: u32,
-    sh_type: u32,
-    sh_flags: u64,
-    sh_addr: u64,
-    sh_offset: u64,
-    sh_size: u64,
-    sh_link: u32,
-    sh_info: u32,
-    sh_addralign: u64,
-    sh_entsize: u64,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-struct Elf64Sym {
-    st_name: u32,
-    st_info: u8,
-    st_other: u8,
-    st_shndx: u16,
-    st_value: u64,
-    st_size: u64,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-struct Elf64Rela {
-    r_offset: u64,
-    r_info: u64,
-    r_addend: i64,
-}
+// On-disk record shapes and the class oracle are shared with the
+// object writer; `object::elf_class` is their definition site.
+pub(crate) use crate::c5::object::elf_class::{
+    Elf32Ehdr, Elf32Rel, Elf32Rela, Elf32Shdr, Elf32Sym, Elf64Ehdr, Elf64Rel, Elf64Rela, Elf64Shdr,
+    Elf64Sym, ElfClass,
+};
 
 /// On-disk ELF64 `.dynamic` entry: a `(tag, value)` directive read by
 /// the dynamic loader (DT_NEEDED, DT_SONAME, ...).
@@ -130,10 +82,6 @@ struct Elf64Nhdr {
 }
 
 const _: () = {
-    assert!(core::mem::size_of::<Elf64Ehdr>() == 64);
-    assert!(core::mem::size_of::<Elf64Shdr>() == 64);
-    assert!(core::mem::size_of::<Elf64Sym>() == 24);
-    assert!(core::mem::size_of::<Elf64Rela>() == 24);
     assert!(core::mem::size_of::<Elf64Nhdr>() == 12);
     assert!(core::mem::size_of::<Elf64Dyn>() == 16);
 };
@@ -145,7 +93,7 @@ const _: () = {
 /// `T` to the on-disk shape -- the helper sidesteps Rust's type
 /// system there because every ELF struct has its own well-known
 /// layout.
-fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
+pub(crate) fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
     let n = core::mem::size_of::<T>();
     if off.checked_add(n).is_none_or(|end| end > bytes.len()) {
         return Err(err(&alloc::format!(
@@ -340,10 +288,228 @@ pub enum NativeMachine {
     Aarch64,
 }
 
+/// Name a relocation type the way `readelf -r` prints it, for
+/// diagnostics about an object the linker cannot handle.
+pub(crate) fn reloc_desc(machine: NativeMachine, rtype: u32) -> String {
+    use crate::c5::object::elf_reloc_types::{aarch64_reloc_desc, x86_64_reloc_desc};
+    match machine {
+        NativeMachine::X86_64 => x86_64_reloc_desc(rtype),
+        NativeMachine::Aarch64 => aarch64_reloc_desc(rtype),
+    }
+}
+
+/// Where a relocation entry came from. Held by a [`RelocSite`] so a
+/// diagnostic can name the containing object and the input section;
+/// the section lookup runs only when a diagnostic is formatted.
+#[derive(Clone, Copy)]
+pub(crate) struct RelocOrigin<'a> {
+    /// [`NativeObject::source`] of the containing input. Empty for
+    /// content the link has already merged, which has no single origin.
+    pub source: &'a str,
+    /// [`NativeObject::sections`] of the containing input, empty when
+    /// the origin names its section directly.
+    pub sections: &'a [InputSection],
+    /// Family blob the site's offset is measured in, for the section
+    /// lookup. `None` when `label` already names the section.
+    family: Option<SectionFamily>,
+    /// Section name to print when no input section covers the offset.
+    label: &'a str,
+}
+
+impl<'a> RelocOrigin<'a> {
+    /// Origin of a relocation applying to `family` within `obj`.
+    pub(crate) fn in_object(obj: &'a NativeObject, family: SectionFamily) -> Self {
+        Self::in_input(&obj.source, &obj.sections, family)
+    }
+
+    /// As [`Self::in_object`], for a caller holding the input's origin
+    /// label and section list separately.
+    pub(crate) fn in_input(
+        source: &'a str,
+        sections: &'a [InputSection],
+        family: SectionFamily,
+    ) -> Self {
+        RelocOrigin {
+            source,
+            sections,
+            family: Some(family),
+            label: family_name(family),
+        }
+    }
+
+    /// Origin of a relocation applying to a named section of `obj`
+    /// that the family classification does not name, such as a DWARF
+    /// section the parse keeps outside the image families.
+    pub(crate) fn in_object_section(obj: &'a NativeObject, section: &'a str) -> Self {
+        Self::in_named_section(&obj.source, section)
+    }
+
+    /// Origin of a relocation the caller has already located to an
+    /// input and a section by name.
+    pub(crate) fn in_named_section(source: &'a str, section: &'a str) -> Self {
+        RelocOrigin {
+            source,
+            sections: &[],
+            family: None,
+            label: section,
+        }
+    }
+
+    /// Origin of a relocation applying to a merged stream, which has
+    /// no single input to name.
+    pub(crate) fn merged(section: &'a str) -> Self {
+        RelocOrigin {
+            source: "",
+            sections: &[],
+            family: None,
+            label: section,
+        }
+    }
+
+    pub(crate) fn at(
+        &self,
+        machine: NativeMachine,
+        rtype: u32,
+        symbol: &'a str,
+        offset: u64,
+    ) -> RelocSite<'a> {
+        RelocSite {
+            origin: *self,
+            machine,
+            rtype,
+            symbol,
+            offset,
+        }
+    }
+}
+
+/// Placeholder family name for an origin that names no input section.
+fn family_name(family: SectionFamily) -> &'static str {
+    match family {
+        SectionFamily::Text => ".text",
+        SectionFamily::RoData => ".rodata",
+        SectionFamily::Data => ".data",
+        SectionFamily::Bss => ".bss",
+        SectionFamily::Tdata => ".tdata",
+        SectionFamily::Tbss => ".tbss",
+        SectionFamily::Discard => "<section>",
+    }
+}
+
+/// One relocation entry, located for a diagnostic. Every place that
+/// declines a relocation reports through this so the wording, the ABI
+/// name and the located-at fields are the same wherever the refusal
+/// comes from.
+pub(crate) struct RelocSite<'a> {
+    pub origin: RelocOrigin<'a>,
+    pub machine: NativeMachine,
+    pub rtype: u32,
+    /// Referenced symbol, or a stand-in when the entry names a section.
+    pub symbol: &'a str,
+    /// Offset within the origin's family blob.
+    pub offset: u64,
+}
+
+impl RelocSite<'_> {
+    /// `<object>(<section>+<offset>)`, the way GNU ld locates a site.
+    pub(crate) fn locate(&self) -> String {
+        let obj = if self.origin.source.is_empty() {
+            "<merged image>"
+        } else {
+            self.origin.source
+        };
+        let sec = self
+            .origin
+            .sections
+            .iter()
+            .find(|s| {
+                Some(s.family) == self.origin.family
+                    && self.offset >= s.offset
+                    && self.offset < s.offset + s.size.max(1)
+            })
+            .map_or(self.origin.label, |s| s.name.as_str());
+        format!("{obj}({sec}+{:#x})", self.offset)
+    }
+
+    /// An input carrying a relocation form the linker has no patcher
+    /// for is unsupported input, not a broken invariant.
+    pub(crate) fn unsupported(&self) -> C5Error {
+        self.located(&format!(
+            "unsupported {} against symbol `{}`",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
+    /// An absolute relocation in an image the loader places at an
+    /// address of its choosing: `S + A` is not a link-time constant,
+    /// and neither ELF `ET_DYN` nor Mach-O `MH_PIE` admits a relocation
+    /// against an executable section. GNU ld declines the same input
+    /// for the same reason, naming the output kind.
+    pub(crate) fn absolute_in_pie(&self, shared: bool) -> C5Error {
+        let kind = if shared {
+            "a shared object"
+        } else {
+            "a position-independent executable"
+        };
+        self.rejected(&format!(
+            "{} against symbol `{}` can not be used when making {kind}: the reference \
+             needs an absolute address, which no load address supplies",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
+    /// A resolved value the relocation's field cannot hold. GNU ld
+    /// makes this a link error rather than truncating, and so does
+    /// badc: a silently narrowed address is a miscompile.
+    pub(crate) fn truncated(&self, value: i64) -> C5Error {
+        self.located(&format!(
+            "relocation truncated to fit: {} against symbol `{}` ({value:#x})",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
+    /// A resolved value whose alignment the relocation's field cannot
+    /// represent, e.g. an odd displacement in a word-scaled immediate.
+    pub(crate) fn misaligned(&self, value: i64, scale: u32) -> C5Error {
+        self.located(&format!(
+            "misaligned relocation: {} against symbol `{}` resolves to {value:#x}, not a \
+             multiple of {scale}",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
+    /// `<location>: <msg>` under the unsupported-input prefix.
+    fn located(&self, msg: &str) -> C5Error {
+        C5Error::Compile(crate::c5::error::fmt_unsupported_err(&format!(
+            "{}: {msg}",
+            self.locate()
+        )))
+    }
+
+    /// `<location>: <msg>` under the link-error prefix, for a reference
+    /// the output format admits no encoding of. Unlike [`Self::located`]
+    /// the refusal follows from the reference and the output kind, so
+    /// implementing more of badc does not lift it.
+    fn rejected(&self, msg: &str) -> C5Error {
+        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+            "{}: {msg}",
+            self.locate()
+        )))
+    }
+}
+
 /// Which section a symbol's value lives in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeSymSection {
     Text,
+    /// Allocatable, non-writable, non-executable payload (`.rodata*`
+    /// and any other read-only allocatable section). Kept apart from
+    /// `Data` so the image writers can place it on a read-only page.
+    RoData,
     Data,
     Bss,
     /// `SHN_UNDEF` -- the unit references the symbol but doesn't
@@ -384,6 +550,14 @@ pub enum NativeSymSection {
     DebugStr,
 }
 
+/// `st_info & 0xf` symbol types the linker distinguishes.
+pub const STT_NOTYPE: u8 = 0;
+pub const STT_OBJECT: u8 = 1;
+pub const STT_FUNC: u8 = 2;
+/// `st_other & 0x3` -- the only visibility that reaches the dynamic
+/// symbol table.
+pub const STV_DEFAULT: u8 = 0;
+
 /// One entry from the unit's `.symtab`. Section symbols (the
 /// `STT_SECTION` LOCAL entries the writer emits) are dropped
 /// during parse -- they're an internal convenience for the
@@ -402,6 +576,11 @@ pub struct NativeSymbol {
     pub binding: u8,
     /// `STT_NOTYPE` / `STT_OBJECT` / `STT_FUNC` etc. (`st_info & 0xf`).
     pub kind: u8,
+    /// `STV_DEFAULT` (0) / `STV_INTERNAL` (1) / `STV_HIDDEN` (2) /
+    /// `STV_PROTECTED` (3) -- `st_other & 0x3`. Anything but
+    /// `STV_DEFAULT` keeps the definition out of the image's dynamic
+    /// symbol table.
+    pub visibility: u8,
 }
 
 /// One entry from the unit's `.rela.text`. Patched by the
@@ -455,11 +634,47 @@ pub enum ElfTpoffTarget {
     Extern(String),
 }
 
+/// One family-classified input section: its name as spelled in the
+/// object and its extent within this object's merged family blob.
+/// The linker rebases `offset` by the object's per-family base so a
+/// link map can attribute every output byte range to the input
+/// section that produced it.
+#[derive(Debug, Clone)]
+pub struct InputSection {
+    pub name: String,
+    pub family: SectionFamily,
+    /// Byte offset within this object's family blob ([`NativeObject::text`],
+    /// [`NativeObject::rodata`], [`NativeObject::data`], the bss space,
+    /// or the TLS block).
+    pub offset: u64,
+    pub size: u64,
+}
+
 /// Result of parsing one native ELF ET_REL object.
 #[derive(Debug, Clone)]
 pub struct NativeObject {
+    /// Origin label for diagnostics and the link map: the input path,
+    /// or `lib.a(member.o)` for an archive member. Set by the caller
+    /// after parse; empty when unset.
+    pub source: String,
+    /// Family-classified input sections in placement order.
+    pub sections: Vec<InputSection>,
+    /// Sections the parser drops (`Discard` family content), as
+    /// `(name, sh_size)`. Symbol / string / relocation tables are
+    /// metadata consumed by the parse, not dropped content.
+    pub discarded: Vec<(String, u64)>,
     pub machine: NativeMachine,
     pub text: Vec<u8>,
+    /// Largest sh_addralign among the text-family sections, at least 16.
+    /// The linker aligns this object's base in the merged `.text` to it
+    /// and the image writers keep the merged stream's base alignment.
+    pub text_align: usize,
+    /// Concatenated bytes from every read-only allocatable section
+    /// (`.rodata*` and the flag-classified equivalents). Kept apart
+    /// from `data` so the merged image can place it read-only.
+    pub rodata: Vec<u8>,
+    /// Largest sh_addralign among the rodata-family sections.
+    pub rodata_align: usize,
     pub data: Vec<u8>,
     /// Largest sh_addralign among the data-family sections. The linker
     /// aligns this object's base in the merged `.data` to it and the
@@ -469,6 +684,9 @@ pub struct NativeObject {
     /// allocate bytes for it (the writer doesn't either --
     /// `SHT_NOBITS` records size but no file content).
     pub bss_size: usize,
+    /// Largest sh_addralign among the bss-family sections. The linker
+    /// aligns this object's base in the merged `.bss` to it.
+    pub bss_align: usize,
     /// Concatenated bytes from every `.tdata*` section
     /// (initialised TLS storage). Empty for objects without
     /// `_Thread_local` data.
@@ -545,6 +763,11 @@ pub struct NativeObject {
     /// The final-image writer binds the local data symbol to the
     /// host's data object with an `R_*_COPY` relocation.
     pub copy_relocs: Vec<(String, String)>,
+    /// Post-prologue anchors (`NT_BADC_PROLOGUE_END`), each
+    /// `(entry_offset, post_prologue_offset)` in this unit's `.text`.
+    /// The merge pass rebases them into `MergedNative::prologue_ends`,
+    /// where the merged-image frame writer reads the prologue extent.
+    pub prologue_ends: Vec<(u64, u64)>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -572,6 +795,34 @@ pub struct NativeObject {
 /// the header matches the ET_REL shape the writer produces.
 pub fn is_elf_object(bytes: &[u8]) -> bool {
     bytes.len() >= 4 && &bytes[0..4] == b"\x7fELF"
+}
+
+/// Container format of a blob, by leading magic; `None` when nothing
+/// matches. Reports what an input is when the linker cannot read it.
+/// Mach-O has 32- and 64-bit magics in both byte orders plus the
+/// fat/universal header; a PE/COFF object carries only the COFF
+/// `Machine` word, an image the `MZ` stub.
+pub fn detect_binary_format(bytes: &[u8]) -> Option<BinaryFormat> {
+    if bytes.len() < 4 {
+        return None;
+    }
+    if &bytes[0..4] == b"\x7fELF" {
+        return Some(BinaryFormat::Elf);
+    }
+    let magic = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    match magic {
+        0xFEED_FACE | 0xFEED_FACF | 0xCEFA_EDFE | 0xCFFA_EDFE | 0xCAFE_BABE | 0xBEBA_FECA => {
+            return Some(BinaryFormat::MachO);
+        }
+        _ => {}
+    }
+    if &bytes[0..2] == b"MZ" {
+        return Some(BinaryFormat::Pe);
+    }
+    match u16::from_le_bytes([bytes[0], bytes[1]]) {
+        0x8664 | 0xAA64 | 0x014C => Some(BinaryFormat::Pe),
+        _ => None,
+    }
 }
 
 /// Parse a native ELF64 ET_REL object. Returns
@@ -654,18 +905,25 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     }
     let shstrtab_bytes = section_slice(bytes, shstrtab)?;
 
+    // Sections an `SHT_RELA` targets. `classify_section` needs this to
+    // keep a relocated read-only section out of the read-only stream,
+    // so it is collected before the classification walk.
+    let mut relocated_sections: alloc::collections::BTreeSet<usize> =
+        alloc::collections::BTreeSet::new();
+    for sh in shdrs.iter() {
+        if sh.sh_type == SHT_RELA {
+            relocated_sections.insert(sh.sh_info as usize);
+        }
+    }
+
     // Walk the headers once to classify each by section family
-    // (text / data / bss / rela-target / other). The parser
+    // (text / rodata / data / bss / tls / discard). The parser
     // concatenates every section in a family after the unqualified
     // base section's bytes, remapping each symbol's value and any
     // `.rela.<section>` reloc offset by the section's base in the
-    // merged blob. Data-family covers `.data`, per-variable
-    // `.data.<name>` subsections (clang/gcc `-fdata-sections`),
-    // every `.rodata*` (string literals + const globals), and
-    // every `.data.rel.ro*` (initialised-then-readonly tables);
-    // they share the same merged-data layout because there is no
-    // separate read-only segment in the loader.
+    // merged blob.
     let mut text_section_indices: Vec<usize> = Vec::new();
+    let mut rodata_section_indices: Vec<usize> = Vec::new();
     let mut data_section_indices: Vec<usize> = Vec::new();
     let mut bss_section_indices: Vec<usize> = Vec::new();
     let mut tdata_section_indices: Vec<usize> = Vec::new();
@@ -681,6 +939,11 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut rela_debug_line_idx: Option<usize> = None;
     // `.init_array*` / `.fini_array*` sections: (shndx, is_dtor, priority).
     let mut init_array_sections: Vec<(usize, bool, Option<u32>)> = Vec::new();
+    let mut discarded: Vec<(String, u64)> = Vec::new();
+    // Family per section index, for the symbol decoder. Sections the
+    // walk routes to a dedicated channel keep `Discard`: they carry no
+    // merged-stream payload.
+    let mut section_family: Vec<SectionFamily> = alloc::vec![SectionFamily::Discard; e_shnum];
     for (i, sh) in shdrs.iter().enumerate() {
         let name = strtab_str(shstrtab_bytes, sh.sh_name as usize)?;
         if name == ".symtab" {
@@ -719,21 +982,52 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             rela_debug_line_idx = Some(i);
             continue;
         }
-        match classify_section_family(name) {
+        let family = if sh.sh_type == SHT_RELA {
+            SectionFamily::Discard
+        } else {
+            classify_section(
+                name,
+                sh.sh_type,
+                sh.sh_flags,
+                relocated_sections.contains(&i),
+            )?
+        };
+        section_family[i] = family;
+        match family {
             SectionFamily::Text => text_section_indices.push(i),
+            SectionFamily::RoData => rodata_section_indices.push(i),
             SectionFamily::Data => data_section_indices.push(i),
             SectionFamily::Bss => bss_section_indices.push(i),
             SectionFamily::Tdata => tdata_section_indices.push(i),
             SectionFamily::Tbss => tbss_section_indices.push(i),
-            SectionFamily::Other => {
-                if let Some(target) = name.strip_prefix(".rela")
-                    && !matches!(classify_section_family(target), SectionFamily::Other)
-                {
+            SectionFamily::Discard => {
+                if sh.sh_type == SHT_RELA && name.starts_with(".rela") {
+                    // Kept when its target section joined a family;
+                    // filtered below once every index is classified.
                     rela_section_indices.push(i);
+                } else if !matches!(sh.sh_type, 0 | SHT_RELA | SHT_SYMTAB | SHT_STRTAB) {
+                    // Dropped content, recorded for the link map's
+                    // "Discarded input sections" report.
+                    discarded.push((name.to_string(), sh.sh_size));
                 }
             }
         }
     }
+    // Keep only relocation sections whose target (sh_info) joined a
+    // merged family; `.rela.debug_*` and `.rela.init_array*` were
+    // routed above / are handled by their own channels.
+    rela_section_indices.retain(|&i| {
+        let target = shdrs[i].sh_info as usize;
+        matches!(
+            section_family.get(target),
+            Some(
+                SectionFamily::Text
+                    | SectionFamily::RoData
+                    | SectionFamily::Data
+                    | SectionFamily::Bss
+            )
+        )
+    });
     let symtab_sh_i = symtab_idx.ok_or_else(|| err("ELF object has no `.symtab` section"))?;
     let symtab_sh = &shdrs[symtab_sh_i];
 
@@ -744,6 +1038,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     // bss. Empty merged sections are allowed -- a translation
     // unit with no functions and no globals is rare but valid.
     let mut text_bytes: Vec<u8> = Vec::new();
+    let mut text_align: usize = 16;
     let mut text_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(text_section_indices.len());
     for &sh_i in &text_section_indices {
         let sh = &shdrs[sh_i];
@@ -752,36 +1047,54 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                 "text-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
             )));
         }
+        // Pad to the section's alignment (at least instruction
+        // alignment): the `.text` tail carries an odd-length version
+        // marker, so a following named text section would otherwise
+        // land misaligned.
+        let align = (sh.sh_addralign.max(4)) as usize;
+        text_align = text_align.max(align);
+        let padded = text_bytes.len().div_ceil(align) * align;
+        text_bytes.resize(padded, 0);
         let base = text_bytes.len() as u64;
         text_base_per_shndx.push((sh_i, base));
         text_bytes.extend_from_slice(section_slice(bytes, sh)?);
     }
-    let mut data_bytes: Vec<u8> = Vec::new();
-    let mut data_align: usize = 1;
-    let mut data_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(data_section_indices.len());
-    for &sh_i in &data_section_indices {
-        let sh = &shdrs[sh_i];
-        if sh.sh_type == SHT_NOBITS {
-            return Err(err(&format!(
-                "data-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
-            )));
+    // Both file-backed data streams concatenate the same way; the only
+    // difference is which merged blob and alignment the bytes join.
+    // Honoring `sh_addralign` matters for e.g. `.rodata.cst16`, which
+    // carries 16 for SSE constants.
+    let concat_progbits = |indices: &[usize], what: &str| -> Result<ConcatStream, C5Error> {
+        let mut out: Vec<u8> = Vec::new();
+        let mut out_align: usize = 1;
+        let mut base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(indices.len());
+        for &sh_i in indices {
+            let sh = &shdrs[sh_i];
+            if sh.sh_type == SHT_NOBITS {
+                return Err(err(&format!(
+                    "{what}-family section at index {sh_i} has sh_type SHT_NOBITS \
+                     (must hold file bytes)",
+                )));
+            }
+            let align = sh.sh_addralign.max(1) as usize;
+            if !align.is_power_of_two() {
+                return Err(err(&format!(
+                    "{what}-family section at index {sh_i} has non-power-of-two \
+                     sh_addralign {align}",
+                )));
+            }
+            out_align = out_align.max(align);
+            out.resize(out.len().next_multiple_of(align), 0);
+            base_per_shndx.push((sh_i, out.len() as u64));
+            out.extend_from_slice(section_slice(bytes, sh)?);
         }
-        // Honor the section's sh_addralign (e.g. `.rodata.cst16` carries
-        // 16 for SSE constants): pad the merged blob before appending and
-        // carry the maximum outward so the image placement keeps it.
-        let align = sh.sh_addralign.max(1) as usize;
-        if !align.is_power_of_two() {
-            return Err(err(&format!(
-                "data-family section at index {sh_i} has non-power-of-two sh_addralign {align}",
-            )));
-        }
-        data_align = data_align.max(align);
-        data_bytes.resize(data_bytes.len().next_multiple_of(align), 0);
-        let base = data_bytes.len() as u64;
-        data_base_per_shndx.push((sh_i, base));
-        data_bytes.extend_from_slice(section_slice(bytes, sh)?);
-    }
+        Ok((out, out_align, base_per_shndx))
+    };
+    let (rodata_bytes, rodata_align, rodata_base_per_shndx) =
+        concat_progbits(&rodata_section_indices, "rodata")?;
+    let (data_bytes, data_align, data_base_per_shndx) =
+        concat_progbits(&data_section_indices, "data")?;
     let mut bss_size: usize = 0;
+    let mut bss_align: usize = 1;
     let mut bss_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(bss_section_indices.len());
     for &sh_i in &bss_section_indices {
         let sh = &shdrs[sh_i];
@@ -790,6 +1103,17 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                 "bss-family section at index {sh_i} is not SHT_NOBITS",
             )));
         }
+        // Same rule as the data-family loop above: honor sh_addralign
+        // when concatenating and carry the maximum outward, so the
+        // linker aligns this object's base in the merged `.bss`.
+        let align = sh.sh_addralign.max(1) as usize;
+        if !align.is_power_of_two() {
+            return Err(err(&format!(
+                "bss-family section at index {sh_i} has non-power-of-two sh_addralign {align}",
+            )));
+        }
+        bss_align = bss_align.max(align);
+        bss_size = bss_size.next_multiple_of(align);
         bss_base_per_shndx.push((sh_i, bss_size as u64));
         bss_size += sh.sh_size as usize;
     }
@@ -827,6 +1151,39 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         tls_bss_size += sh.sh_size as usize;
     }
 
+    // Input-section identity records: name, family, and extent within
+    // this object's family blob, in placement order.
+    let mut sections: Vec<InputSection> = Vec::new();
+    for (list, family) in [
+        (&text_base_per_shndx, SectionFamily::Text),
+        (&rodata_base_per_shndx, SectionFamily::RoData),
+        (&data_base_per_shndx, SectionFamily::Data),
+        (&bss_base_per_shndx, SectionFamily::Bss),
+    ] {
+        for &(sh_i, base) in list {
+            sections.push(InputSection {
+                name: strtab_str(shstrtab_bytes, shdrs[sh_i].sh_name as usize)?.to_string(),
+                family,
+                offset: base,
+                size: shdrs[sh_i].sh_size,
+            });
+        }
+    }
+    for (k, &(sh_i, base)) in tls_base_per_shndx.iter().enumerate() {
+        // The TLS base table lists `.tdata*` entries first, then `.tbss*`.
+        let family = if k < tdata_section_indices.len() {
+            SectionFamily::Tdata
+        } else {
+            SectionFamily::Tbss
+        };
+        sections.push(InputSection {
+            name: strtab_str(shstrtab_bytes, shdrs[sh_i].sh_name as usize)?.to_string(),
+            family,
+            offset: base,
+            size: shdrs[sh_i].sh_size,
+        });
+    }
+
     // `.symtab` -> linked `.strtab` lives at `sh_link`.
     let strtab_sh_i = symtab_sh.sh_link as usize;
     let strtab_sh = shdrs.get(strtab_sh_i).ok_or_else(|| {
@@ -855,20 +1212,24 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let symtab_bytes = section_slice(bytes, symtab_sh)?;
     let n_syms = symtab_bytes.len() / ELF64_SYM_SIZE;
     let mut symbols: Vec<NativeSymbol> = Vec::with_capacity(n_syms);
+    let shndx_map = ShndxMap::build(
+        e_shnum,
+        &[
+            (&text_base_per_shndx, NativeSymSection::Text),
+            (&rodata_base_per_shndx, NativeSymSection::RoData),
+            (&data_base_per_shndx, NativeSymSection::Data),
+            (&bss_base_per_shndx, NativeSymSection::Bss),
+            (&tls_base_per_shndx, NativeSymSection::Tls),
+        ],
+        debug_abbrev_idx,
+        debug_line_idx,
+        debug_str_idx,
+    );
     for i in 0..n_syms {
         let sym: Elf64Sym = read_struct(symtab_bytes, i * ELF64_SYM_SIZE)?;
         let binding = sym.st_info >> 4;
         let kind = sym.st_info & 0xf;
-        let (section, value_offset) = section_of_shndx(
-            sym.st_shndx,
-            &text_base_per_shndx,
-            &data_base_per_shndx,
-            &bss_base_per_shndx,
-            &tls_base_per_shndx,
-            debug_abbrev_idx,
-            debug_line_idx,
-            debug_str_idx,
-        );
+        let (section, value_offset) = shndx_map.lookup(sym.st_shndx);
         symbols.push(NativeSymbol {
             name: if sym.st_name == 0 {
                 String::new()
@@ -880,6 +1241,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             size: sym.st_size,
             binding,
             kind,
+            visibility: sym.st_other & 0x3,
         });
     }
 
@@ -912,21 +1274,15 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         // family base maps to find its position within the
         // merged section's blob.
         let target_shndx = rela_sh.sh_info as usize;
-        let (target_base, into_text) = if let Some(&(_, base)) = text_base_per_shndx
-            .iter()
-            .find(|&&(idx, _)| idx == target_shndx)
-        {
-            (base, true)
-        } else if let Some(&(_, base)) = data_base_per_shndx
-            .iter()
-            .find(|&&(idx, _)| idx == target_shndx)
-        {
-            (base, false)
-        } else {
-            return Err(err(&format!(
-                ".rela.* section at index {rela_sh_i} targets section {target_shndx} \
-                 which is neither a text-family nor a data-family section",
-            )));
+        let (target_base, into_text) = match shndx_map.lookup(target_shndx as u16) {
+            (NativeSymSection::Text, base) => (base, true),
+            (NativeSymSection::Data, base) => (base, false),
+            (other, _) => {
+                return Err(err(&format!(
+                    ".rela.* section at index {rela_sh_i} targets section {target_shndx} \
+                     ({other:?}), which carries no patchable merged bytes",
+                )));
+            }
         };
         let rela_bytes = section_slice(bytes, rela_sh)?;
         let n_relocs = rela_bytes.len() / ELF64_RELA_SIZE;
@@ -1009,6 +1365,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     //                                     values, one per variable.
     //   type=6 NT_BADC_MACHO_TLV_FIXUP -- (u64 adrp_offset, u64
     //                                     descriptor_index) pairs.
+    //   type=11 NT_BADC_PROLOGUE_END -- (u64 entry_offset, u64
+    //                                   post_prologue_offset) `.text` pairs.
     // Records under namesz != "badc\0" are skipped silently so
     // future vendor extensions can coexist.
     let mut dylibs: Vec<String> = Vec::new();
@@ -1021,6 +1379,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut tls_symbols: Vec<(String, u64, u64)> = Vec::new();
     let mut macho_tlv_descriptor_syms: Vec<(usize, String)> = Vec::new();
     let mut elf_tpoff_fixups: Vec<(u64, ElfTpoffTarget)> = Vec::new();
+    let mut prologue_ends: Vec<(u64, u64)> = Vec::new();
     if let Some(i) = dylibs_section_idx {
         let body = section_slice(bytes, &shdrs[i])?;
         let mut cur = 0usize;
@@ -1173,6 +1532,15 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                             elf_tpoff_fixups.push((text_off, target));
                         }
                     }
+                    11 => {
+                        let mut c = cur;
+                        while c + 16 <= desc_end {
+                            let entry = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
+                            let post = u64::from_le_bytes(body[c + 8..c + 16].try_into().unwrap());
+                            prologue_ends.push((entry, post));
+                            c += 16;
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -1218,11 +1586,18 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     };
 
     Ok(NativeObject {
+        source: String::new(),
+        sections,
+        discarded,
         machine,
         text: text_bytes,
+        text_align,
+        rodata: rodata_bytes,
+        rodata_align,
         data: data_bytes,
         data_align,
         bss_size,
+        bss_align,
         tls_data: tls_data_bytes,
         tls_bss_size,
         symbols,
@@ -1239,6 +1614,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         elf_tpoff_fixups,
         macho_tlv_fixups,
         copy_relocs,
+        prologue_ends,
         debug_info,
         debug_abbrev,
         debug_line,
@@ -1293,7 +1669,7 @@ fn err(msg: &str) -> C5Error {
     )))
 }
 
-fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Error> {
+pub(crate) fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Error> {
     if sh.sh_type == SHT_NOBITS {
         return Ok(&[]);
     }
@@ -1311,7 +1687,7 @@ fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Erro
     Ok(&bytes[off..off + size])
 }
 
-fn strtab_str(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
+pub(crate) fn strtab_str(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
     if off >= strtab.len() {
         return Err(err(&format!(
             "string offset 0x{off:x} past end of strtab (len {})",
@@ -1326,80 +1702,91 @@ fn strtab_str(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
         .map_err(|e| err(&format!("strtab string is not UTF-8: {e}")))
 }
 
-/// Returns the merged-image section kind for a section index
-/// plus the byte offset to add to the symbol's `st_value` so it
-/// lands at the right position inside the merged section. The
-/// base maps cover every section in the family (the unqualified
-/// `.text` / `.data` / `.bss` sit at base 0 by construction);
-/// any section not in the family maps surfaces as UNDEF so the
-/// linker treats it as a missing reference rather than silently
-/// miscategorising it.
-#[allow(clippy::too_many_arguments)]
-fn section_of_shndx(
-    shndx: u16,
-    text_base_per_shndx: &[(usize, u64)],
-    data_base_per_shndx: &[(usize, u64)],
-    bss_base_per_shndx: &[(usize, u64)],
-    tls_base_per_shndx: &[(usize, u64)],
-    debug_abbrev_idx: Option<usize>,
-    debug_line_idx: Option<usize>,
-    debug_str_idx: Option<usize>,
-) -> (NativeSymSection, u64) {
-    if shndx == SHN_UNDEF {
-        return (NativeSymSection::Undef, 0);
+/// Dense `shndx -> (merged section kind, rebase offset)` table. The
+/// offset is what a symbol's `st_value` needs so it lands at the
+/// right position inside the merged section; the base maps cover
+/// every section in a family (the unqualified `.text` / `.rodata` /
+/// `.data` / `.bss` sit at base 0 by construction).
+///
+/// One entry per section index, so a symbol lookup is an index rather
+/// than a scan of four tables. `None` marks a section that carries no
+/// merged payload -- its symbols surface as UNDEF, the same treatment
+/// a genuinely undefined reference gets.
+struct ShndxMap {
+    entries: Vec<Option<(NativeSymSection, u64)>>,
+}
+
+impl ShndxMap {
+    fn build(
+        n_sections: usize,
+        families: &[(&[(usize, u64)], NativeSymSection)],
+        debug_abbrev_idx: Option<usize>,
+        debug_line_idx: Option<usize>,
+        debug_str_idx: Option<usize>,
+    ) -> Self {
+        let mut entries = alloc::vec![None; n_sections];
+        for (bases, kind) in families {
+            for &(idx, base) in *bases {
+                if idx < entries.len() {
+                    entries[idx] = Some((*kind, base));
+                }
+            }
+        }
+        for (idx, kind) in [
+            (debug_abbrev_idx, NativeSymSection::DebugAbbrev),
+            (debug_line_idx, NativeSymSection::DebugLine),
+            (debug_str_idx, NativeSymSection::DebugStr),
+        ] {
+            if let Some(i) = idx.filter(|&i| i < entries.len()) {
+                entries[i] = Some((kind, 0));
+            }
+        }
+        Self { entries }
     }
-    if shndx == SHN_ABS {
-        return (NativeSymSection::Abs, 0);
+
+    fn lookup(&self, shndx: u16) -> (NativeSymSection, u64) {
+        match shndx {
+            SHN_UNDEF => (NativeSymSection::Undef, 0),
+            SHN_ABS => (NativeSymSection::Abs, 0),
+            // st_value is the requested alignment for SHN_COMMON
+            // symbols; the symbol decoder preserves it in
+            // NativeSymbol::value (no rebasing -- there is no
+            // backing section to concatenate into yet).
+            SHN_COMMON => (NativeSymSection::Common, 0),
+            _ => self
+                .entries
+                .get(shndx as usize)
+                .copied()
+                .flatten()
+                .unwrap_or((NativeSymSection::Undef, 0)),
+        }
     }
-    if shndx == SHN_COMMON {
-        // st_value is the requested alignment for SHN_COMMON
-        // symbols; the symbol decoder preserves it in
-        // NativeSymbol::value (no rebasing -- there is no
-        // backing section to concatenate into yet).
-        return (NativeSymSection::Common, 0);
-    }
-    let i = shndx as usize;
-    if let Some(&(_, base)) = text_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
-        return (NativeSymSection::Text, base);
-    }
-    if let Some(&(_, base)) = data_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
-        return (NativeSymSection::Data, base);
-    }
-    if let Some(&(_, base)) = bss_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
-        return (NativeSymSection::Bss, base);
-    }
-    if let Some(&(_, base)) = tls_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
-        return (NativeSymSection::Tls, base);
-    }
-    if Some(i) == debug_abbrev_idx {
-        return (NativeSymSection::DebugAbbrev, 0);
-    }
-    if Some(i) == debug_line_idx {
-        return (NativeSymSection::DebugLine, 0);
-    }
-    if Some(i) == debug_str_idx {
-        return (NativeSymSection::DebugStr, 0);
-    }
-    (NativeSymSection::Undef, 0)
 }
 
 /// Classification used to fold each section into the merged
-/// text / data / bss / tls blob. `Text` covers `.text` and any
-/// `.text.<name>` clang/gcc `-ffunction-sections` emits;
-/// `Data` covers `.data` + per-variable `.data.<name>`
-/// (`-fdata-sections`), `.rodata*` (string literals + const
-/// globals), and `.data.rel.ro*` (initialised-then-readonly
-/// tables); `Bss` covers `.bss` + per-variable `.bss.<name>`;
-/// `Tdata` and `Tbss` cover the matching `_Thread_local`
-/// storage families.
+/// text / rodata / data / bss / tls blob. `Text` covers `.text` and
+/// any `.text.<name>` clang/gcc `-ffunction-sections` emits;
+/// `RoData` covers `.rodata*` and any other allocatable
+/// non-writable non-executable payload; `Data` covers `.data` +
+/// per-variable `.data.<name>` (`-fdata-sections`) and
+/// `.data.rel.ro*` (initialised-then-readonly tables, which need a
+/// writable page because the image has no `PT_GNU_RELRO`); `Bss`
+/// covers `.bss` + per-variable `.bss.<name>`; `Tdata` and `Tbss`
+/// cover the matching `_Thread_local` storage families.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SectionFamily {
+pub enum SectionFamily {
     Text,
+    RoData,
     Data,
     Bss,
     Tdata,
     Tbss,
-    Other,
+    /// Deliberately not merged: the section carries no image payload
+    /// (`.symtab`, `.strtab`, `.comment`, `.group`, DWARF, `SHT_RELA`)
+    /// or is an allocatable note the merged image does not reproduce.
+    /// Distinct from an unrecognised allocatable section, which is an
+    /// error rather than a silent drop.
+    Discard,
 }
 
 /// Recognise `.init_array` / `.fini_array` (and their
@@ -1426,23 +1813,90 @@ fn parse_init_array_section_name(name: &str) -> Option<(bool, Option<u32>)> {
     }
 }
 
-fn classify_section_family(name: &str) -> SectionFamily {
+/// Standard family for a section name, `None` when the name carries
+/// no convention and the header has to decide.
+fn family_by_name(name: &str) -> Option<SectionFamily> {
+    // The `.data.` arm precedes the `.rodata` one so `.data.rel.ro*`
+    // lands in the writable stream.
     if name == ".text" || name.starts_with(".text.") {
-        SectionFamily::Text
-    } else if name == ".data"
-        || name.starts_with(".data.")
-        || name == ".rodata"
-        || name.starts_with(".rodata.")
-    {
-        SectionFamily::Data
+        Some(SectionFamily::Text)
+    } else if name == ".data" || name.starts_with(".data.") {
+        Some(SectionFamily::Data)
+    } else if name == ".rodata" || name.starts_with(".rodata.") {
+        Some(SectionFamily::RoData)
     } else if name == ".bss" || name.starts_with(".bss.") {
-        SectionFamily::Bss
+        Some(SectionFamily::Bss)
     } else if name == ".tdata" || name.starts_with(".tdata.") {
-        SectionFamily::Tdata
+        Some(SectionFamily::Tdata)
     } else if name == ".tbss" || name.starts_with(".tbss.") {
-        SectionFamily::Tbss
+        Some(SectionFamily::Tbss)
     } else {
-        SectionFamily::Other
+        None
+    }
+}
+
+/// The single authority on which merged stream a section joins.
+///
+/// The name table names the standard families; every other
+/// allocatable section (an `__attribute__((section("name")))`
+/// placement, an assembler `.pushsection` payload, `.eh_frame`)
+/// classifies from its header flags. `has_relocs` reports whether an
+/// `SHT_RELA` section targets it: a slot the loader has to fix up
+/// cannot sit on a read-only page, so a relocated read-only section
+/// joins the writable stream the way a toolchain routes such content
+/// to `.data.rel.ro`.
+///
+/// Returns `Err` for an allocatable section whose header shape the
+/// merge does not model, so a new kind surfaces as a diagnostic
+/// instead of vanishing from the image.
+fn classify_section(
+    name: &str,
+    sh_type: u32,
+    sh_flags: u64,
+    has_relocs: bool,
+) -> Result<SectionFamily, C5Error> {
+    const SHF_WRITE: u64 = 0x1;
+    const SHF_ALLOC: u64 = 0x2;
+    const SHF_EXECINSTR: u64 = 0x4;
+    const SHF_TLS: u64 = 0x400;
+    let demote = |f: SectionFamily| {
+        if f == SectionFamily::RoData && has_relocs {
+            SectionFamily::Data
+        } else {
+            f
+        }
+    };
+    if let Some(f) = family_by_name(name) {
+        // A `.rodata` the producer marked writable keeps its own word:
+        // the flags describe the storage, the name only groups it.
+        if f == SectionFamily::RoData && sh_flags & SHF_WRITE != 0 {
+            return Ok(SectionFamily::Data);
+        }
+        return Ok(demote(f));
+    }
+    if sh_flags & SHF_ALLOC == 0 {
+        return Ok(SectionFamily::Discard);
+    }
+    if sh_flags & SHF_TLS != 0 {
+        // `_Thread_local` storage under a non-standard name: the merged
+        // TLS block is built from `.tdata` / `.tbss` only.
+        return Err(err(&format!(
+            "section `{name}` is SHF_TLS but not a `.tdata` / `.tbss` family name"
+        )));
+    }
+    match sh_type {
+        SHT_PROGBITS if sh_flags & SHF_EXECINSTR != 0 => Ok(SectionFamily::Text),
+        SHT_PROGBITS if sh_flags & SHF_WRITE != 0 => Ok(SectionFamily::Data),
+        SHT_PROGBITS => Ok(demote(SectionFamily::RoData)),
+        SHT_NOBITS => Ok(SectionFamily::Bss),
+        // An allocatable note reaches the loader through the program
+        // header table the merged image builds itself; there is no
+        // stream to concatenate its bytes into.
+        SHT_NOTE => Ok(SectionFamily::Discard),
+        _ => Err(err(&format!(
+            "allocatable section `{name}` has unhandled sh_type {sh_type} \
+             (flags {sh_flags:#x}); the merge has no stream for it"
+        ))),
     }
 }
 
@@ -1617,6 +2071,7 @@ mod tests {
         /// Override `sh_size` -- needed for SHT_NOBITS where
         /// the file body is empty but the runtime size isn't.
         sh_size_override: Option<u64>,
+        sh_addralign: u64,
     }
 
     impl<'a> SecPlan<'a> {
@@ -1629,6 +2084,7 @@ mod tests {
                 sh_info: 0,
                 sh_entsize: 0,
                 sh_size_override: None,
+                sh_addralign: 0,
             }
         }
         fn nobits(name: &'a str, size: u64) -> Self {
@@ -1640,6 +2096,7 @@ mod tests {
                 sh_info: 0,
                 sh_entsize: 0,
                 sh_size_override: Some(size),
+                sh_addralign: 0,
             }
         }
         fn symtab(name: &'a str, body: Vec<u8>, link: u32, info: u32) -> Self {
@@ -1651,6 +2108,7 @@ mod tests {
                 sh_info: info,
                 sh_entsize: ELF64_SYM_SIZE as u64,
                 sh_size_override: None,
+                sh_addralign: 0,
             }
         }
         fn strtab(name: &'a str, body: Vec<u8>) -> Self {
@@ -1662,7 +2120,12 @@ mod tests {
                 sh_info: 0,
                 sh_entsize: 0,
                 sh_size_override: None,
+                sh_addralign: 0,
             }
+        }
+        fn aligned(mut self, align: u64) -> Self {
+            self.sh_addralign = align;
+            self
         }
         fn rela(name: &'a str, body: Vec<u8>, link: u32, info: u32) -> Self {
             Self {
@@ -1673,6 +2136,7 @@ mod tests {
                 sh_info: info,
                 sh_entsize: ELF64_RELA_SIZE as u64,
                 sh_size_override: None,
+                sh_addralign: 0,
             }
         }
     }
@@ -1798,7 +2262,7 @@ mod tests {
                     sh_size: p.sh_size_override.unwrap_or(p.body.len() as u64),
                     sh_link: p.sh_link,
                     sh_info: p.sh_info,
-                    sh_addralign: 0,
+                    sh_addralign: p.sh_addralign,
                     sh_entsize: p.sh_entsize,
                 },
             );
@@ -1889,34 +2353,136 @@ mod tests {
         ];
         let bytes = build_test_elf(EM_X86_64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse hand-built ET_REL");
-        // .data = original 8 bytes + 8 rodata bytes.
-        assert_eq!(
-            obj.data.len(),
-            16,
-            "merged data should be `.data` || `.rodata`"
-        );
-        assert_eq!(
-            &obj.data[8..10],
-            b"hi",
-            "rodata bytes prepended after .data"
-        );
-        // sym[2] is the .rodata STT_SECTION; it should now sit in Data at value=8 (rodata base in merged data).
+        assert_eq!(obj.data.len(), 8, "`.data` keeps only writable content");
+        assert_eq!(obj.rodata.len(), 8, "`.rodata` gets its own stream");
+        assert_eq!(&obj.rodata[0..2], b"hi");
         let rodata_sym = &obj.symbols[2];
         assert!(
-            matches!(rodata_sym.section, NativeSymSection::Data),
-            "rodata STT_SECTION should land in Data; got {:?}",
+            matches!(rodata_sym.section, NativeSymSection::RoData),
+            "rodata STT_SECTION should land in RoData; got {:?}",
             rodata_sym.section,
         );
         assert_eq!(
-            rodata_sym.value, 8,
-            "rodata STT_SECTION value should = .data size"
+            rodata_sym.value, 0,
+            "rodata STT_SECTION value is its own stream's base"
         );
-        // The one .rela.data entry resolves to data_base + rodata_sym.value + addend = 0 + 8 + 0.
+        // The one .rela.data entry resolves to data_base + addend.
         assert_eq!(obj.data_relocs.len(), 1);
         let r = obj.data_relocs[0];
         assert_eq!(r.offset, 0);
         assert_eq!(r.sym_idx, 2);
         assert_eq!(r.addend, 0);
+    }
+
+    /// The parser records each family section's identity (name +
+    /// extent within the family blob) and the sections it drops, so
+    /// the linker's section map and the link map's "Discarded input
+    /// sections" report reflect the object's real contents.
+    #[test]
+    fn parse_records_input_sections_and_discarded() {
+        let strtab: Vec<u8> = vec![0];
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 1),
+            SecPlan::progbits(".text", vec![0u8; 4]),
+            SecPlan::progbits(".data", vec![0u8; 8]),
+            SecPlan::progbits(".rodata.str1.1", b"hi\0".to_vec()),
+            SecPlan::nobits(".bss", 16),
+            SecPlan::progbits(".comment", b"cc 1.0\0".to_vec()),
+            SecPlan::progbits(".mysec", vec![1, 2, 3]),
+        ];
+        let bytes = build_test_elf(EM_X86_64, &plans);
+        let obj = parse_native_elf(&bytes).expect("parse hand-built ET_REL");
+        let recorded: Vec<(&str, SectionFamily, u64, u64)> = obj
+            .sections
+            .iter()
+            .map(|s| (s.name.as_str(), s.family, s.offset, s.size))
+            .collect();
+        assert_eq!(
+            recorded,
+            vec![
+                (".text", SectionFamily::Text, 0, 4),
+                (".rodata.str1.1", SectionFamily::RoData, 0, 3),
+                (".data", SectionFamily::Data, 0, 8),
+                (".bss", SectionFamily::Bss, 0, 16),
+            ],
+        );
+        assert_eq!(
+            obj.discarded,
+            vec![(".comment".to_string(), 7), (".mysec".to_string(), 3)],
+        );
+        assert!(obj.source.is_empty(), "source is the caller's to set");
+    }
+
+    /// A `.rodata` an `SHT_RELA` targets cannot be mapped read-only:
+    /// the loader has to write the resolved address into the slot, and
+    /// the merged image carries no `PT_GNU_RELRO`. It joins the
+    /// writable stream, the way a toolchain routes such content to
+    /// `.data.rel.ro`.
+    #[test]
+    fn relocated_rodata_joins_the_writable_stream() {
+        let strtab: Vec<u8> = vec![0];
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // STT_SECTION on .rodata (shndx=5).
+        push_test_sym(&mut symtab, 0, 0x03, 5, 0, 0);
+        let mut rela_rodata = Vec::new();
+        push_test_rela(&mut rela_rodata, 0, 1, 1, 0);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 2),
+            SecPlan::progbits(".text", Vec::new()),
+            SecPlan::progbits(".rodata", vec![0u8; 8]),
+            SecPlan::rela(".rela.rodata", rela_rodata, 3, 5),
+        ];
+        let bytes = build_test_elf(EM_X86_64, &plans);
+        let obj = parse_native_elf(&bytes).expect("parse hand-built ET_REL");
+        assert!(obj.rodata.is_empty(), "relocated rodata is not read-only");
+        assert_eq!(obj.data.len(), 8);
+        assert!(matches!(obj.symbols[1].section, NativeSymSection::Data));
+    }
+
+    /// `classify_section` is the one authority on which merged stream
+    /// a section joins: the standard names first, then the header
+    /// flags. The `SHF_WRITE` test decides read-only versus writable
+    /// rather than being subsumed by `SHF_ALLOC`.
+    #[test]
+    fn section_classification_separates_read_only_from_writable() {
+        const W: u64 = 0x1;
+        const A: u64 = 0x2;
+        const X: u64 = 0x4;
+        let cases: &[(&str, u32, u64, SectionFamily)] = &[
+            (".text", SHT_PROGBITS, A | X, SectionFamily::Text),
+            (".rodata", SHT_PROGBITS, A, SectionFamily::RoData),
+            (".rodata.cst16", SHT_PROGBITS, A, SectionFamily::RoData),
+            (".data", SHT_PROGBITS, A | W, SectionFamily::Data),
+            // Initialised-then-readonly tables need a writable page.
+            (".data.rel.ro", SHT_PROGBITS, A | W, SectionFamily::Data),
+            (".bss", SHT_NOBITS, A | W, SectionFamily::Bss),
+            // Flag-classified strangers.
+            (".eh_frame", SHT_PROGBITS, A, SectionFamily::RoData),
+            (".my.rw", SHT_PROGBITS, A | W, SectionFamily::Data),
+            (".my.ro", SHT_PROGBITS, A, SectionFamily::RoData),
+            (".my.code", SHT_PROGBITS, A | X, SectionFamily::Text),
+            (".comment", SHT_PROGBITS, 0, SectionFamily::Discard),
+            (".note.gnu.property", SHT_NOTE, A, SectionFamily::Discard),
+        ];
+        for &(name, ty, flags, want) in cases {
+            let got =
+                classify_section(name, ty, flags, false).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(got, want, "{name}");
+        }
+        // A `.rodata` the producer marked writable keeps its word.
+        assert_eq!(
+            classify_section(".rodata", SHT_PROGBITS, A | W, false).unwrap(),
+            SectionFamily::Data,
+        );
+        // An allocatable section shape the merge has no stream for is
+        // a diagnostic, not a silent drop.
+        assert!(classify_section(".weird", 0x6fff_4c00, A, false).is_err());
+        assert!(classify_section(".tls.odd", SHT_PROGBITS, A | 0x400, false).is_err());
     }
 
     /// Clang/gcc `-ffunction-sections` shape: two `.text.<fn>`
@@ -2100,6 +2666,42 @@ mod tests {
         assert_eq!(obj.symbols[3].value, 0);
     }
 
+    /// A `.bss` subsection's `sh_addralign` must be honored when the
+    /// bss family is concatenated, the same as the data family: a
+    /// 4-byte `.bss.small` followed by a 64-aligned `.bss.wide` puts
+    /// the second at offset 64, not 4. The widest alignment is carried
+    /// out on `bss_align` so the linker can align this object's base
+    /// in the merged `.bss`.
+    #[test]
+    fn bss_subsection_alignment_is_honored() {
+        let mut strtab: Vec<u8> = vec![0];
+        let small_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"small\0");
+        let wide_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"wide\0");
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // shndx 5 = .bss.small, 6 = .bss.wide.
+        push_test_sym(&mut symtab, small_off, 0x11, 5, 0, 4);
+        push_test_sym(&mut symtab, wide_off, 0x11, 6, 0, 32);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 1),
+            SecPlan::progbits(".text", Vec::new()),
+            SecPlan::nobits(".bss.small", 4).aligned(4),
+            SecPlan::nobits(".bss.wide", 32).aligned(64),
+        ];
+        let bytes = build_test_elf(EM_AARCH64, &plans);
+        let obj = parse_native_elf(&bytes).expect("parse aligned-bss fixture");
+        assert_eq!(obj.bss_align, 64, "widest bss sh_addralign is carried out");
+        assert_eq!(obj.bss_size, 96, "64-aligned base plus 32 bytes");
+        assert_eq!(obj.symbols[1].value, 0, "`small` at the bss base");
+        assert_eq!(
+            obj.symbols[2].value, 64,
+            "`wide` must land on its 64-byte boundary, not at offset 4"
+        );
+    }
+
     /// Same shape as `rodata_section_lands_in_merged_data_blob`
     /// but the section is named `.rodata.str.1.1` (clang's
     /// per-string subsection layout under `-fdata-sections`).
@@ -2125,18 +2727,11 @@ mod tests {
         let bytes = build_test_elf(EM_AARCH64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse rodata.str.1.1 fixture");
         assert_eq!(obj.machine, NativeMachine::Aarch64);
-        assert_eq!(
-            obj.data.len(),
-            4 + 6,
-            "merged data should hold .data || .rodata.str.1.1"
-        );
-        assert_eq!(&obj.data[4..10], b"hello\0");
+        assert_eq!(obj.data.len(), 4, "`.data` keeps only writable content");
+        assert_eq!(obj.rodata, b"hello\0", "the string subsection is read-only");
         let s = &obj.symbols[1];
-        assert!(matches!(s.section, NativeSymSection::Data));
-        assert_eq!(
-            s.value, 4,
-            "rodata STT_SECTION value should land at .data size"
-        );
+        assert!(matches!(s.section, NativeSymSection::RoData));
+        assert_eq!(s.value, 0, "the subsection is the rodata stream's base");
     }
 
     #[test]
@@ -2179,6 +2774,7 @@ mod tests {
                 sh_info: 0,
                 sh_entsize: ELF64_SYM_SIZE as u64,
                 sh_size_override: None,
+                sh_addralign: 0,
             },
             SecPlan {
                 name: ".dynamic",
@@ -2188,6 +2784,7 @@ mod tests {
                 sh_info: 0,
                 sh_entsize: core::mem::size_of::<Elf64Dyn>() as u64,
                 sh_size_override: None,
+                sh_addralign: 0,
             },
         ];
         let bytes = build_test_elf(EM_X86_64, &plans);

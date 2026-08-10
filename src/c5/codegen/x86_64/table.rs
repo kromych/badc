@@ -18,6 +18,47 @@ use alloc::vec::Vec;
 
 pub(crate) use super::isa_x86_table::Mnem;
 
+/// Encoding mode, selected by `.code16` / `.code32` / `.code64`. It fixes the
+/// default operand and address sizes the `66` and `67` prefixes select away
+/// from, and whether REX (so 64-bit operands, `r8`..`r15`, and RIP-relative
+/// addressing) exists at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Mode {
+    Bits16,
+    Bits32,
+    #[default]
+    Bits64,
+}
+
+impl Mode {
+    /// Default operand size in bytes of the `v` width class.
+    pub(crate) fn opsize(self) -> u8 {
+        match self {
+            Mode::Bits16 => 2,
+            _ => 4,
+        }
+    }
+
+    /// Default operand size of the stack and near-branch group, which long
+    /// mode promotes to 64-bit.
+    pub(crate) fn stack_opsize(self) -> u8 {
+        match self {
+            Mode::Bits16 => 2,
+            Mode::Bits32 => 4,
+            Mode::Bits64 => 8,
+        }
+    }
+
+    /// Default address size in bytes.
+    pub(crate) fn addrsize(self) -> u8 {
+        match self {
+            Mode::Bits16 => 2,
+            Mode::Bits32 => 4,
+            Mode::Bits64 => 8,
+        }
+    }
+}
+
 /// Operand-size width class of a form's operand slot.
 ///
 /// `V` is 16/32/64 (word/dword/qword) selected by the operation width; `Y` is
@@ -62,8 +103,9 @@ pub(crate) enum OpPat {
     /// Memory only (`ModRM.rm` with a memory form).
     Mem(W),
     /// Memory of unspecified size (`clflush`, `prefetch`, the descriptor-table
-    /// and save/restore ops): matches a memory operand of any width and never
-    /// contributes an operand-size prefix.
+    /// and save/restore ops): matches a memory operand of any width. Only the
+    /// descriptor-table ops read an operand-size-dependent pair
+    /// (`m16&16` / `m16&32` / `m16&64`); the rest ignore the width entirely.
     MemAny,
     /// Immediate.
     Imm(ImmC),
@@ -148,6 +190,11 @@ pub(crate) enum Opnd {
         num: u8,
         width: u8,
     },
+    /// A legacy high-byte register `%ah` / `%ch` / `%dh` / `%bh`, held as its
+    /// ModRM field value 4..8. The same field values name `spl` / `bpl` /
+    /// `sil` / `dil` when a REX prefix is present, so an encoding that needs
+    /// one cannot name a high-byte register and is rejected below.
+    HighByteReg(u8),
     Mem {
         base: u8,
         index: Option<u8>,
@@ -162,15 +209,34 @@ pub(crate) enum Opnd {
         disp: i32,
         width: u8,
     },
+    /// Absolute memory `disp32` with no base or index: ModRM mod=00 rm=100,
+    /// SIB base=101 index=100 (none). Meaningful under a segment override,
+    /// where the displacement is segment-relative.
+    AbsMem {
+        disp: i32,
+        width: u8,
+    },
+    /// Scaled-index memory with no base register (`disp(,%index,scale)`):
+    /// ModRM mod=00 rm=100, SIB base=101 + disp32. The small/kernel code-model
+    /// per-CPU form; `disp` is a literal or a relocation-patched symbol offset.
+    IndexMem {
+        index: u8,
+        scale: u8,
+        disp: i32,
+        width: u8,
+    },
     Imm(i64),
 }
 
 impl Opnd {
     fn width(self) -> Option<u8> {
         match self {
-            Opnd::Reg { width, .. } | Opnd::Mem { width, .. } | Opnd::RipRel { width, .. } => {
-                Some(width)
-            }
+            Opnd::Reg { width, .. }
+            | Opnd::Mem { width, .. }
+            | Opnd::RipRel { width, .. }
+            | Opnd::AbsMem { width, .. }
+            | Opnd::IndexMem { width, .. } => Some(width),
+            Opnd::HighByteReg(_) => Some(1),
             Opnd::Imm(_) => None,
         }
     }
@@ -188,36 +254,122 @@ fn wbytes(w: W, opw: u8) -> Option<u8> {
     }
 }
 
-fn pat_matches(p: OpPat, o: Opnd, opw: u8) -> bool {
+/// Encoded width of an immediate field in bytes, or `None` for the implicit
+/// `1` operand, which encodes nothing.
+fn imm_field_bytes(c: ImmC, opw: u8) -> Option<u8> {
+    Some(match c {
+        ImmC::Ib | ImmC::Imms8 => 1,
+        ImmC::Iw => 2,
+        ImmC::Id => 4,
+        ImmC::Iv if opw == 2 => 2,
+        ImmC::Iv => 4,
+        ImmC::Iq => 8,
+        ImmC::One => return None,
+    })
+}
+
+/// The width class of a form's operand slot as `mode` reads it. The catalogue
+/// is generated for long mode, where the stack and near-branch group takes a
+/// promoted 64-bit operand size; in every other mode the group follows the
+/// mode default, which is the `v` class.
+fn eff_w(w: W, rexw: RexW, mode: Mode) -> W {
+    if mode != Mode::Bits64 && rexw == RexW::Default64 && w == W::Q {
+        W::V
+    } else {
+        w
+    }
+}
+
+/// A leading `66` on a legacy-map form is the operand-size prefix selecting
+/// the 16-bit member, not a mandatory prefix: the mode decides whether it is
+/// emitted. Mandatory `66` only occurs on the escape maps.
+fn legacy66(f: &Form) -> bool {
+    f.map == Map::Legacy && f.pp.first() == Some(&0x66)
+}
+
+/// Whether the operand-size prefix selects the form's operand width even
+/// though no slot carries the `v` class. The catalogue pins a width the
+/// architecture leaves to that class in three places: an extending move's
+/// destination (`movzx r32, r/m16`), a fixed accumulator wider than a byte
+/// (`in eax, dx`), and a register-in-opcode group whose members differ only
+/// by operand size (`B8+rd mov`, whose immediate width follows it, so the
+/// catalogue splits the group into `iw` / `id` / `iq` members). All three
+/// name the operation width.
+fn pinned_width(f: &Form) -> bool {
+    let slot = |p: Option<&OpPat>| match p {
+        Some(&(OpPat::Reg(w) | OpPat::Rm(w) | OpPat::Mem(w))) => wbytes(w, 0),
+        _ => None,
+    };
+    let extends = matches!(f.reg, RegField::FromOp(0))
+        && f.rm == 1
+        && matches!((slot(f.ops.first()), slot(f.ops.get(1))), (Some(a), Some(b)) if a > b);
+    extends
+        || f.ops
+            .iter()
+            .any(|p| matches!(p, OpPat::Fixed(0, W::Wd | W::L | W::Q)))
+        || (f.plus_r
+            && f.ops
+                .iter()
+                .any(|p| matches!(p, OpPat::Reg(W::Wd | W::L | W::Q))))
+}
+
+/// Byte size of a form's relative-offset slot. The near-branch group's
+/// displacement follows the operand size, so it is 16-bit outside long mode
+/// unless the operand-size prefix selects 32.
+fn rel_bytes(sz: u8, f: &Form, opw: u8) -> u8 {
+    if sz > 1 && f.rexw == RexW::Default64 {
+        opw.min(4)
+    } else {
+        sz
+    }
+}
+
+fn pat_matches(p: OpPat, o: Opnd, opw: u8, opw_known: bool) -> bool {
     match (p, o) {
         (OpPat::Reg(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Rm(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
+        (OpPat::Reg(w) | OpPat::Rm(w), Opnd::HighByteReg(_)) => wbytes(w, opw) == Some(1),
         (OpPat::Rm(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
-        (OpPat::Rm(w), Opnd::RipRel { width, .. }) => wbytes(w, opw) == Some(width),
+        (
+            OpPat::Rm(w),
+            Opnd::RipRel { width, .. } | Opnd::AbsMem { width, .. } | Opnd::IndexMem { width, .. },
+        ) => wbytes(w, opw) == Some(width),
         (OpPat::Mem(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
-        (OpPat::Mem(w), Opnd::RipRel { width, .. }) => wbytes(w, opw) == Some(width),
-        (OpPat::MemAny, Opnd::Mem { .. } | Opnd::RipRel { .. }) => true,
+        (
+            OpPat::Mem(w),
+            Opnd::RipRel { width, .. } | Opnd::AbsMem { width, .. } | Opnd::IndexMem { width, .. },
+        ) => wbytes(w, opw) == Some(width),
+        (
+            OpPat::MemAny,
+            Opnd::Mem { .. } | Opnd::RipRel { .. } | Opnd::AbsMem { .. } | Opnd::IndexMem { .. },
+        ) => true,
         (OpPat::Fixed(num, w), Opnd::Reg { num: n, width }) => {
             n == num && wbytes(w, opw) == Some(width)
         }
         // An immediate must fit its field as the instruction will read it
         // (byte fields take either signedness; a 32-bit field under a 64-bit
         // operation sign-extends), or a narrow form would win on length and
-        // silently truncate the value.
-        (OpPat::Imm(c), Opnd::Imm(v)) => match c {
-            ImmC::Ib => (-0x80..=0xff).contains(&v),
-            ImmC::Imms8 => (-0x80..=0x7f).contains(&v),
-            ImmC::Iw => (-0x8000..=0xffff).contains(&v),
-            ImmC::Id if opw == 8 => (-0x8000_0000..=0x7fff_ffff).contains(&v),
-            ImmC::Id => (-0x8000_0000..=0xffff_ffff).contains(&v),
-            ImmC::Iv => match opw {
-                2 => (-0x8000..=0xffff).contains(&v),
-                8 => (-0x8000_0000..=0x7fff_ffff).contains(&v),
-                _ => (-0x8000_0000..=0xffff_ffff).contains(&v),
-            },
-            ImmC::Iq => true,
-            ImmC::One => v == 1,
-        },
+        // silently truncate the value. A field at least as wide as the
+        // operation takes any value: the assembler reduces the expression to
+        // the operation width there (`movl $~0xfa1e0ff3, %eax`), so only a
+        // field narrower than the operation constrains the choice of form.
+        (OpPat::Imm(c), Opnd::Imm(v)) => {
+            let fits = match c {
+                ImmC::Ib => (-0x80..=0xff).contains(&v),
+                ImmC::Imms8 => (-0x80..=0x7f).contains(&v),
+                ImmC::Iw => (-0x8000..=0xffff).contains(&v),
+                ImmC::Id if opw == 8 => (-0x8000_0000..=0x7fff_ffff).contains(&v),
+                ImmC::Id => (-0x8000_0000..=0xffff_ffff).contains(&v),
+                ImmC::Iv => match opw {
+                    2 => (-0x8000..=0xffff).contains(&v),
+                    8 => (-0x8000_0000..=0x7fff_ffff).contains(&v),
+                    _ => (-0x8000_0000..=0xffff_ffff).contains(&v),
+                },
+                ImmC::Iq => true,
+                ImmC::One => v == 1,
+            };
+            fits || (opw_known && imm_field_bytes(c, opw).is_some_and(|f| f >= opw))
+        }
         // A relative offset must fit its field, or the short branch form
         // would win with a truncated displacement.
         (OpPat::Rel(sz), Opnd::Imm(v)) => match sz {
@@ -229,13 +381,25 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8) -> bool {
     }
 }
 
+/// Whether the operation width is established rather than defaulted: an
+/// explicit size suffix, or an operand that carries one. An immediate-only
+/// instruction (`push $imm`) has neither, and the assembler's default-64
+/// operation width for that group is not modelled, so an out-of-range
+/// immediate there stays a diagnostic instead of being reduced.
+fn width_known(ops: &[Opnd], override_w: Option<u8>) -> bool {
+    override_w.is_some() || ops.iter().any(|o| o.width().is_some())
+}
+
 /// Operation width in bytes: the widest register / memory operand, defaulting
 /// to 4 (dword) when there are none.
-fn op_width(ops: &[Opnd], override_w: Option<u8>) -> u8 {
+fn op_width(ops: &[Opnd], override_w: Option<u8>, mode: Mode) -> u8 {
     if let Some(w) = override_w {
         return w;
     }
-    ops.iter().filter_map(|o| o.width()).max().unwrap_or(4)
+    ops.iter()
+        .filter_map(|o| o.width())
+        .max()
+        .unwrap_or_else(|| mode.opsize())
 }
 
 fn rex(w: bool, r: bool, x: bool, b: bool) -> u8 {
@@ -282,12 +446,71 @@ fn emit_modrm_mem(code: &mut InsnBuf, reg: u8, base: u8, index: Option<u8>, scal
     }
 }
 
+/// ModRM for a 16-bit address. There is no SIB byte: the r/m field names one
+/// of the fixed base / index pairs over bx, bp, si and di, and the
+/// displacement is 8- or 16-bit.
+fn emit_modrm_mem16(
+    code: &mut InsnBuf,
+    reg: u8,
+    base: Option<u8>,
+    index: Option<u8>,
+    disp: i32,
+) -> Result<(), String> {
+    const BX: u8 = 3;
+    const BP: u8 = 5;
+    const SI: u8 = 6;
+    const DI: u8 = 7;
+    // The pair is unordered: `(%bx,%si)` and `(%si,%bx)` name one address.
+    let pair = match (base, index) {
+        (Some(b), Some(i)) if i == BX || i == BP => (i, b),
+        (b, i) => (b.unwrap_or(0), i.unwrap_or(0)),
+    };
+    let rm = match (base, index, pair) {
+        (_, Some(_), (BX, SI)) => 0,
+        (_, Some(_), (BX, DI)) => 1,
+        (_, Some(_), (BP, SI)) => 2,
+        (_, Some(_), (BP, DI)) => 3,
+        (Some(SI), None, _) => 4,
+        (Some(DI), None, _) => 5,
+        (Some(BP), None, _) => 6,
+        (Some(BX), None, _) => 7,
+        (None, None, _) => {
+            // mod=00 rm=110 is the base-less disp16 form.
+            code.push(((reg & 7) << 3) | 6);
+            code.extend_from_slice(&(disp as u16).to_le_bytes());
+            return Ok(());
+        }
+        _ => {
+            return Err(String::from(
+                "inline asm: 16-bit addressing takes only bx / bp with si / di",
+            ));
+        }
+    };
+    // rm=110 with mod=00 is the base-less form, so `(%bp)` encodes a disp8 of 0.
+    let mod_ = if disp == 0 && rm != 6 {
+        0
+    } else if (-128..=127).contains(&disp) {
+        1
+    } else {
+        2
+    };
+    code.push((mod_ << 6) | ((reg & 7) << 3) | rm);
+    match mod_ {
+        1 => code.push(disp as u8),
+        2 => code.extend_from_slice(&(disp as u16).to_le_bytes()),
+        _ => {}
+    }
+    Ok(())
+}
+
 fn reg_num(o: Opnd) -> u8 {
     match o {
         Opnd::Reg { num, .. } => num,
+        Opnd::HighByteReg(num) => num,
         Opnd::Mem { base, .. } => base,
-        // RIP-relative has no base register (rm=101 is fixed): no REX.B.
-        Opnd::RipRel { .. } | Opnd::Imm(_) => 0,
+        // RIP-relative / absolute / no-base scaled index have no base
+        // register: no REX.B (REX.X for the index is computed separately).
+        Opnd::RipRel { .. } | Opnd::AbsMem { .. } | Opnd::IndexMem { .. } | Opnd::Imm(_) => 0,
     }
 }
 
@@ -322,12 +545,24 @@ impl InsnBuf {
     }
 }
 
-fn form_matches(f: &Form, ops: &[Opnd], opw: u8) -> bool {
+/// One operand slot of a form as `mode` reads it.
+fn mode_pat(p: OpPat, f: &Form, opw: u8, mode: Mode) -> OpPat {
+    match p {
+        OpPat::Reg(w) => OpPat::Reg(eff_w(w, f.rexw, mode)),
+        OpPat::Rm(w) => OpPat::Rm(eff_w(w, f.rexw, mode)),
+        OpPat::Mem(w) => OpPat::Mem(eff_w(w, f.rexw, mode)),
+        OpPat::Fixed(n, w) => OpPat::Fixed(n, eff_w(w, f.rexw, mode)),
+        OpPat::Rel(sz) => OpPat::Rel(rel_bytes(sz, f, opw)),
+        other => other,
+    }
+}
+
+fn form_matches(f: &Form, ops: &[Opnd], opw: u8, opw_known: bool, mode: Mode) -> bool {
     f.ops.len() == ops.len()
         && f.ops
             .iter()
             .zip(ops.iter())
-            .all(|(&p, &o)| pat_matches(p, o, opw))
+            .all(|(&p, &o)| pat_matches(mode_pat(p, f, opw, mode), o, opw, opw_known))
 }
 
 impl Mnem {
@@ -341,6 +576,26 @@ impl Mnem {
     }
 }
 
+/// Operand shapes in AT&T order, for a diagnostic naming what was rejected.
+fn describe_operands(ops: &[Opnd]) -> String {
+    let mut out = String::new();
+    for (i, o) in ops.iter().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        match *o {
+            Opnd::Reg { num, width } => out.push_str(&format!("r{num}:{width}")),
+            Opnd::HighByteReg(num) => out.push_str(&format!("rh{num}:1")),
+            Opnd::Mem { width, .. } => out.push_str(&format!("mem:{width}")),
+            Opnd::RipRel { width, .. } => out.push_str(&format!("riprel:{width}")),
+            Opnd::AbsMem { width, .. } => out.push_str(&format!("absmem:{width}")),
+            Opnd::IndexMem { width, .. } => out.push_str(&format!("indexmem:{width}")),
+            Opnd::Imm(v) => out.push_str(&format!("imm({v})")),
+        }
+    }
+    out
+}
+
 /// Encode one instruction. `width_override` forces the operation width (an
 /// AT&T size suffix); otherwise it comes from the operands. Among the forms
 /// that match, the shortest encoding is chosen (ties broken by catalogue
@@ -351,13 +606,43 @@ pub(crate) fn encode(
     width_override: Option<u8>,
     ops: &[Opnd],
 ) -> Result<Vec<u8>, String> {
-    let opw = op_width(ops, width_override);
-    let (best, matched) = encode_best(mnem, opw, ops);
+    encode_in(
+        Mode::Bits64,
+        Mode::Bits64.addrsize(),
+        mnem,
+        width_override,
+        ops,
+    )
+}
+
+/// Encode one instruction in `mode`. `addr` is the address size in bytes the
+/// instruction's memory operand is written at; it differs from the mode
+/// default exactly when the `67` prefix is required.
+pub(crate) fn encode_in(
+    mode: Mode,
+    addr: u8,
+    mnem: Mnem,
+    width_override: Option<u8>,
+    ops: &[Opnd],
+) -> Result<Vec<u8>, String> {
+    // Long mode addresses at 64 or 32 bits; the other modes at 32 or 16.
+    let ok_addr: [u8; 2] = if mode == Mode::Bits64 { [8, 4] } else { [4, 2] };
+    if !ok_addr.contains(&addr) {
+        return Err(format!(
+            "inline asm: address size {addr} is not encodable in this mode"
+        ));
+    }
+    let opw = op_width(ops, width_override, mode);
+    let (best, matched) = encode_best(mnem, opw, width_known(ops, width_override), ops, mode, addr);
     match best {
         Some(b) => Ok(b.as_slice().to_vec()),
-        None if matched => Err(format!("inline asm: `{mnem:?}` operand form not encodable")),
+        None if matched => Err(format!(
+            "inline asm: `{mnem:?}` operand form not encodable ({})",
+            describe_operands(ops)
+        )),
         None => Err(format!(
-            "inline asm: no encoding for `{mnem:?}` with these operands"
+            "inline asm: no encoding for `{mnem:?}` with these operands ({})",
+            describe_operands(ops)
         )),
     }
 }
@@ -371,8 +656,18 @@ pub(crate) fn encode_into(
     width_override: Option<u8>,
     ops: &[Opnd],
 ) {
-    let opw = op_width(ops, width_override);
-    match encode_best(mnem, opw, ops).0 {
+    let mode = Mode::Bits64;
+    let opw = op_width(ops, width_override, mode);
+    match encode_best(
+        mnem,
+        opw,
+        width_known(ops, width_override),
+        ops,
+        mode,
+        mode.addrsize(),
+    )
+    .0
+    {
         Some(b) => code.extend_from_slice(b.as_slice()),
         None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
     }
@@ -382,20 +677,26 @@ pub(crate) fn encode_into(
 /// distinguish "no such form" from "form matched but not encodable"). The
 /// catalogue is sorted by mnemonic and `Mnem`'s Ord matches that order, so this
 /// binary-searches on the integer discriminant to the mnemonic's run of forms.
-fn encode_best(mnem: Mnem, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
+fn encode_best(
+    mnem: Mnem,
+    opw: u8,
+    opw_known: bool,
+    ops: &[Opnd],
+    mode: Mode,
+    addr: u8,
+) -> (Option<InsnBuf>, bool) {
     let forms = super::isa_x86_table::FORMS;
     let start = forms.partition_point(|f| f.mnem < mnem);
     let mut best: Option<InsnBuf> = None;
     let mut matched = false;
-    for f in &forms[start..] {
-        if f.mnem != mnem {
-            break;
-        }
-        if !form_matches(f, ops, opw) {
+    let generated = forms[start..].iter().take_while(|f| f.mnem == mnem);
+    let supplemental = FORMS_SUPPLEMENT.iter().filter(|f| f.mnem == mnem);
+    for f in generated.chain(supplemental) {
+        if !form_matches(f, ops, opw, opw_known, mode) {
             continue;
         }
         matched = true;
-        if let Ok(buf) = encode_form(f, ops, opw)
+        if let Ok(buf) = encode_form(f, ops, opw, opw_known, mode, addr)
             && best.is_none_or(|b| buf.len < b.len)
         {
             best = Some(buf);
@@ -404,29 +705,386 @@ fn encode_best(mnem: Mnem, opw: u8, ops: &[Opnd]) -> (Option<InsnBuf>, bool) {
     (best, matched)
 }
 
-fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
+/// Forms the external instruction database omits, encoded by the same
+/// interpreter as the generated catalogue. The segment-descriptor loads
+/// `lsl` / `lar` take a 16-bit source but the destination may be 32-bit; the
+/// generator's uniform-width `r/m` model drops those mixed-width forms. The
+/// source is `r/m16` regardless of whether the assembler wrote a 16- or
+/// 32-bit register (both `lar %di,%eax` and `lar %edi,%eax` encode `0F 02 C7`);
+/// the `r32,r/m32` and `r32,r/m16` forms are both supplemented so a
+/// 16- or 32-bit source register or `m16` memory operand matches. A 64-bit
+/// destination does not occur. The AMD SVM ops `vmload` / `vmsave` / `vmrun`
+/// address the VMCB through an implicit `rax`; the database lists only the
+/// operandless spelling, so the explicit-`%rax` form the compilers emit
+/// (`vmsave %rax`) is supplemented, encoding identically since `rax` is not
+/// named in the opcode. `invlpga` is the two-operand member of the same class:
+/// the address rides an implicit `rax` and the ASID an implicit `ecx`, so the
+/// compilers emit `invlpga %rax, %ecx` (Intel-ordered `ecx, rax` here); like
+/// `vmsave` the registers are not named in the opcode.
+static FORMS_SUPPLEMENT: &[Form] = &[
+    Form {
+        mnem: Mnem::Lsl,
+        mnemonic: "lsl",
+        ops: &[OpPat::Reg(W::Q), OpPat::Rm(W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x03],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lsl,
+        mnemonic: "lsl",
+        ops: &[OpPat::Reg(W::Q), OpPat::Rm(W::Wd)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x03],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lar,
+        mnemonic: "lar",
+        ops: &[OpPat::Reg(W::Q), OpPat::Rm(W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x02],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lar,
+        mnemonic: "lar",
+        ops: &[OpPat::Reg(W::Q), OpPat::Rm(W::Wd)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x02],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verr,
+        mnemonic: "verr",
+        ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(4),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verr,
+        mnemonic: "verr",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(4),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verr,
+        mnemonic: "verr",
+        ops: &[OpPat::Rm(W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(4),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verw,
+        mnemonic: "verw",
+        ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(5),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verw,
+        mnemonic: "verw",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(5),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verw,
+        mnemonic: "verw",
+        ops: &[OpPat::Rm(W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(5),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ud0,
+        mnemonic: "ud0",
+        ops: &[],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0xFF],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ud0,
+        mnemonic: "ud0",
+        ops: &[OpPat::Reg(W::V), OpPat::Rm(W::V)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0xFF],
+        plus_r: false,
+        rexw: RexW::ByWidth,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ud1,
+        mnemonic: "ud1",
+        ops: &[],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0xB9],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ud1,
+        mnemonic: "ud1",
+        ops: &[OpPat::Reg(W::V), OpPat::Rm(W::V)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0xB9],
+        plus_r: false,
+        rexw: RexW::ByWidth,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lsl,
+        mnemonic: "lsl",
+        ops: &[OpPat::Reg(W::L), OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x03],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lsl,
+        mnemonic: "lsl",
+        ops: &[OpPat::Reg(W::L), OpPat::Rm(W::Wd)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x03],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lar,
+        mnemonic: "lar",
+        ops: &[OpPat::Reg(W::L), OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x02],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lar,
+        mnemonic: "lar",
+        ops: &[OpPat::Reg(W::L), OpPat::Rm(W::Wd)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x02],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Vmload,
+        mnemonic: "vmload",
+        ops: &[OpPat::Fixed(0, W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01, 0xDA],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Vmsave,
+        mnemonic: "vmsave",
+        ops: &[OpPat::Fixed(0, W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01, 0xDB],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Vmrun,
+        mnemonic: "vmrun",
+        ops: &[OpPat::Fixed(0, W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01, 0xD8],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Invlpga,
+        mnemonic: "invlpga",
+        ops: &[OpPat::Fixed(1, W::L), OpPat::Fixed(0, W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01, 0xDF],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+];
+
+fn encode_form(
+    f: &Form,
+    ops: &[Opnd],
+    opw: u8,
+    opw_known: bool,
+    mode: Mode,
+    addr: u8,
+) -> Result<InsnBuf, String> {
     let mut code = InsnBuf::new();
-    // Operand-size prefix: `66` selects the 16-bit member of a `v` width
-    // group. A form whose widths are all fixed (lldt r16/m16, in al/dx) has
-    // its operand size baked into the opcode and takes no prefix, matching
-    // the assembler.
-    let has_v = f.ops.iter().any(|p| {
+    // Address-size prefix: `67` selects the non-default address size. A form
+    // with no memory r/m operand addresses nothing and takes none.
+    let rm_op = (f.rm != 255).then(|| ops[f.rm as usize]);
+    let mem_rm = matches!(
+        rm_op,
+        Some(Opnd::Mem { .. } | Opnd::AbsMem { .. } | Opnd::IndexMem { .. })
+    );
+    if mem_rm && addr != mode.addrsize() {
+        code.push(0x67);
+    }
+    // Operand-size prefix: `66` selects the width class member that is not the
+    // mode default. A form whose widths are all fixed (lldt r16/m16, in al/dx)
+    // has its operand size baked into the opcode and takes no prefix; a
+    // legacy-map form carrying `66` in `pp` is the 16-bit member of such a
+    // class, so the prefix comes from this rule instead of from `pp`.
+    let pp66 = legacy66(f);
+    let has_v = f.ops.iter().any(|&p| {
         matches!(
-            p,
+            mode_pat(p, f, opw, mode),
             OpPat::Reg(W::V) | OpPat::Rm(W::V) | OpPat::Mem(W::V) | OpPat::Fixed(_, W::V)
         )
     });
-    if opw == 2 && has_v {
+    let fopw = if pp66 { 2 } else { opw };
+    let dflt = if f.rexw == RexW::Default64 {
+        mode.stack_opsize()
+    } else {
+        mode.opsize()
+    };
+    // An operandless form, and a descriptor-table op, take their width from
+    // the mnemonic's size suffix (`retl` and `lgdtl` in a `.code16` stub);
+    // with no suffix it is the mode default, which the 64-bit exclusion below
+    // leaves unprefixed.
+    let desc_table = matches!(f.mnem, Mnem::Lgdt | Mnem::Lidt | Mnem::Sgdt | Mnem::Sidt);
+    let sized = has_v || pp66 || desc_table || pinned_width(f) || (f.ops.is_empty() && opw_known);
+    if sized && fopw != dflt && fopw != 8 {
         code.push(0x66);
     }
-    code.extend_from_slice(f.pp);
+    code.extend_from_slice(if pp66 { &f.pp[1..] } else { f.pp });
 
-    // Resolve the reg-field and rm operands.
+    // Resolve the reg-field operand.
     let reg_op = match f.reg {
         RegField::FromOp(i) => Some(ops[i as usize]),
         _ => None,
     };
-    let rm_op = (f.rm != 255).then(|| ops[f.rm as usize]);
 
     // `xchg eax, eax` must not take the 90+r accumulator short form: 0x90
     // decodes as NOP and skips the 32-bit zero-extension a real exchange
@@ -451,13 +1109,29 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
     let reg_hi = reg_op.map(|o| reg_num(o) >= 8).unwrap_or(false);
     let rm_hi = rm_op.map(|o| reg_num(o) >= 8).unwrap_or(false);
     // REX.X extends a SIB index register.
-    let index_hi = matches!(rm_op, Some(Opnd::Mem { index: Some(i), .. }) if i >= 8);
-    // A byte operation naming spl/bpl/sil/dil (4..8) needs a REX to reach the
-    // new byte registers rather than ah/ch/dh/bh.
-    let byte_rex = opw == 1
-        && (matches!(reg_op, Some(Opnd::Reg { num, .. }) if (4..8).contains(&num))
-            || matches!(rm_op, Some(Opnd::Reg { num, .. }) if (4..8).contains(&num)));
+    let index_hi = matches!(rm_op, Some(Opnd::Mem { index: Some(i), .. }) if i >= 8)
+        || matches!(rm_op, Some(Opnd::IndexMem { index, .. }) if index >= 8);
+    // A byte register spl/bpl/sil/dil (4..8) needs a REX to be named at all,
+    // otherwise those encodings mean ah/ch/dh/bh. The requirement is a
+    // property of the operand, not of the operation width: movsx/movzx mix a
+    // byte source with a wider destination, so `opw` is not 1 there.
+    let byte_reg =
+        |o: Option<Opnd>| matches!(o, Some(Opnd::Reg { num, width: 1 }) if (4..8).contains(&num));
+    let byte_rex = byte_reg(reg_op) || byte_reg(rm_op);
+    let high_byte = |o: Option<Opnd>| matches!(o, Some(Opnd::HighByteReg(_)));
     if w || reg_hi || rm_hi || index_hi || byte_rex {
+        if high_byte(reg_op) || high_byte(rm_op) {
+            return Err(String::from(
+                "inline asm: `%ah`/`%ch`/`%dh`/`%bh` has no encoding under a REX prefix",
+            ));
+        }
+        // REX exists only in long mode, so a 64-bit operand, an `r8`..`r15`
+        // register, and the uniform byte registers have no encoding elsewhere.
+        if mode != Mode::Bits64 {
+            return Err(String::from(
+                "inline asm: form needs a REX prefix, which 16- and 32-bit modes have not",
+            ));
+        }
         code.push(rex(w, reg_hi, index_hi, rm_hi));
     }
 
@@ -486,7 +1160,21 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
     // A `+r` form embeds its register in the opcode and has no ModRM byte.
     if !f.plus_r && (f.reg != RegField::NoReg || f.rm != 255) {
         match rm_op {
-            Some(Opnd::Reg { num, .. }) => code.push(modrm_reg(regfield, num)),
+            Some(Opnd::Reg { num, .. }) | Some(Opnd::HighByteReg(num)) => {
+                code.push(modrm_reg(regfield, num))
+            }
+            Some(Opnd::Mem {
+                base,
+                index,
+                scale,
+                disp,
+                ..
+            }) if addr == 2 => {
+                if scale != 1 {
+                    return Err(String::from("inline asm: 16-bit addressing has no scale"));
+                }
+                emit_modrm_mem16(&mut code, regfield, Some(base), index, disp)?
+            }
             Some(Opnd::Mem {
                 base,
                 index,
@@ -495,8 +1183,42 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
                 ..
             }) => emit_modrm_mem(&mut code, regfield, base, index, scale, disp),
             Some(Opnd::RipRel { disp, .. }) => {
+                if mode != Mode::Bits64 {
+                    return Err(String::from(
+                        "inline asm: RIP-relative addressing exists only in 64-bit mode",
+                    ));
+                }
                 // mod=00 rm=101: RIP-relative, disp32 follows.
                 code.push(((regfield & 7) << 3) | 5);
+                code.extend_from_slice(&disp.to_le_bytes());
+            }
+            Some(Opnd::AbsMem { disp, .. }) if addr == 2 => {
+                emit_modrm_mem16(&mut code, regfield, None, None, disp)?
+            }
+            Some(Opnd::AbsMem { disp, .. }) if mode != Mode::Bits64 => {
+                // mod=00 rm=101 is the plain disp32 form; only long mode reads
+                // it as RIP-relative and needs the base-less SIB instead.
+                code.push(((regfield & 7) << 3) | 5);
+                code.extend_from_slice(&disp.to_le_bytes());
+            }
+            Some(Opnd::AbsMem { disp, .. }) => {
+                // mod=00 rm=100, SIB base=101 index=100: absolute disp32.
+                code.push(((regfield & 7) << 3) | 4);
+                code.push(0x25);
+                code.extend_from_slice(&disp.to_le_bytes());
+            }
+            Some(Opnd::IndexMem {
+                index, scale, disp, ..
+            }) => {
+                // mod=00 rm=100, SIB base=101 (no base) + disp32, scaled index.
+                let scale_bits = match scale {
+                    2 => 1,
+                    4 => 2,
+                    8 => 3,
+                    _ => 0,
+                };
+                code.push(((regfield & 7) << 3) | 4);
+                code.push((scale_bits << 6) | ((index & 7) << 3) | 5);
                 code.extend_from_slice(&disp.to_le_bytes());
             }
             _ => return Err(String::from("inline asm: form needs an r/m operand")),
@@ -513,7 +1235,15 @@ fn encode_form(f: &Form, ops: &[Opnd], opw: u8) -> Result<InsnBuf, String> {
                 _ => return Err(String::from("inline asm: immediate operand expected")),
             }
         };
-        emit_imm(&mut code, c, val, opw);
+        // A relative offset's field is as wide as the branch displacement, not
+        // as the immediate class the catalogue names for long mode.
+        match f.ops.first() {
+            Some(&OpPat::Rel(sz)) if f.ops.len() == 1 => {
+                let n = rel_bytes(sz, f, fopw);
+                code.extend_from_slice(&val.to_le_bytes()[..n as usize]);
+            }
+            _ => emit_imm(&mut code, c, val, opw),
+        }
     }
     Ok(code)
 }

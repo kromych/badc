@@ -1,0 +1,1164 @@
+//! EVEX encoding tests.
+//!
+//! Every expected byte string is what GNU as 2.46.1 emits for the AT&T text on
+//! the left, taken from `objdump -d` of an assembled object. The `disp8*N`
+//! cases carry, per tuple type, a displacement that compresses, the largest and
+//! smallest that do, and the neighbours that must fall back to disp32: a wrong
+//! scale factor encodes cleanly and addresses the wrong memory, so the boundary
+//! is where it shows.
+
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use crate::c5::ir::AsmRegSize;
+
+use super::super::asm::{AsmMemBase, AsmOpnd, Concrete, encode, parse_template};
+
+/// Assemble one AT&T instruction the way the file-scope asm path does.
+fn enc(text: &str) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    for insn in parse_template(text.as_bytes())? {
+        let reg_of = |b: AsmMemBase| match b {
+            AsmMemBase::Reg { num, .. } => num,
+            AsmMemBase::Ref(_) => unreachable!("explicit-register template expected"),
+        };
+        let ops: Vec<Concrete> = insn
+            .operands
+            .iter()
+            .map(|o| match *o {
+                AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
+                AsmOpnd::Imm(v) => Concrete::Imm(v),
+                AsmOpnd::Mem {
+                    base,
+                    index,
+                    scale,
+                    disp,
+                } => Concrete::Mem {
+                    base: reg_of(base),
+                    index: index.map(reg_of),
+                    scale,
+                    disp,
+                    size: AsmRegSize::Quad,
+                },
+                ref other => panic!("unexpected operand {other:?}"),
+            })
+            .collect();
+        encode(&mut out, insn.mnemonic, insn.suffix, &ops)?;
+    }
+    Ok(out)
+}
+
+/// Check one instruction against the bytes GNU as emits for it.
+#[track_caller]
+fn gas(text: &str, bytes: &[u8]) {
+    match enc(text) {
+        Ok(got) if got == bytes => {}
+        Ok(got) => panic!("{text}\n  badc {got:02x?}\n  gas  {bytes:02x?}"),
+        Err(e) => panic!("{text}: {e}"),
+    }
+}
+
+/// Check that an instruction is refused, and that the diagnostic names why.
+#[track_caller]
+fn refused(text: &str, needle: &str) {
+    match enc(text) {
+        Err(e) if e.contains(needle) => {}
+        Err(e) => panic!("{text}: refused with `{e}`, expected `{needle}`"),
+        Ok(b) => panic!("{text}: encoded {b:02x?}, expected a refusal"),
+    }
+}
+
+/// The two instructions that kept the x86_64 defconfig kernel's last assembly
+/// units on gas.
+#[test]
+fn kernel_units() {
+    // lib/crypto/x86/blake2s-core.S.
+    gas(
+        "vpermi2d %ymm7,%ymm6,%ymm8",
+        &[0x62, 0x72, 0x4D, 0x28, 0x76, 0xC7],
+    );
+    gas(
+        "vpermi2d %ymm7,%ymm6,%ymm9",
+        &[0x62, 0x72, 0x4D, 0x28, 0x76, 0xCF],
+    );
+    // lib/crc/x86/crc32-pclmul.S: `_cond_vex "pextrd $1 + LSB_CRC,"` with
+    // LSB_CRC = 1, so the immediate is the expression `1 + 1`.
+    gas(
+        "vpextrd $1 + 1, %xmm0, %eax",
+        &[0xC4, 0xE3, 0x79, 0x16, 0xC0, 0x02],
+    );
+    gas(
+        "vpextrd $2,%xmm0,%eax",
+        &[0xC4, 0xE3, 0x79, 0x16, 0xC0, 0x02],
+    );
+    // The rest of that unit's AVX-512 instantiation (vl=64, avx_level=512).
+    gas(
+        "vpternlogq $0x96,%xmm2,%xmm1,%xmm0",
+        &[0x62, 0xF3, 0xF5, 0x08, 0x25, 0xC2, 0x96],
+    );
+    gas(
+        "vpternlogq $0x96,(%rsi),%zmm1,%zmm0",
+        &[0x62, 0xF3, 0xF5, 0x48, 0x25, 0x06, 0x96],
+    );
+    gas(
+        "vpternlogq $0x96,64(%rsi),%zmm1,%zmm0",
+        &[0x62, 0xF3, 0xF5, 0x48, 0x25, 0x46, 0x01, 0x96],
+    );
+    gas(
+        "vpxorq (%rsi),%zmm1,%zmm0",
+        &[0x62, 0xF1, 0xF5, 0x48, 0xEF, 0x06],
+    );
+    gas(
+        "vmovdqu8 (%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x0E],
+    );
+    gas(
+        "vmovdqu8 0xc0(%rsi),%zmm3",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x5E, 0x03],
+    );
+    gas(
+        "vbroadcasti32x4 -0x20(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x5A, 0x79, 0xFE],
+    );
+    gas(
+        "vextracti64x4 $0x1,%zmm0,%ymm1",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x3B, 0xC1, 0x01],
+    );
+    gas(
+        "vpclmulqdq $0x11,%zmm7,%zmm1,%zmm1",
+        &[0x62, 0xF3, 0x75, 0x48, 0x44, 0xCF, 0x11],
+    );
+    // The same op below 512 bits stays on VEX, as GNU as encodes it.
+    gas(
+        "vpclmulqdq $0x00,%ymm7,%ymm0,%ymm0",
+        &[0xC4, 0xE3, 0x7D, 0x44, 0xC7, 0x00],
+    );
+    gas(
+        "vpclmulqdq $0x00,%xmm7,%xmm0,%xmm0",
+        &[0xC4, 0xE3, 0x79, 0x44, 0xC7, 0x00],
+    );
+}
+
+/// `disp8*N` per tuple type: the scale factor the tuple fixes, the largest and
+/// smallest quotients a signed byte holds, and the displacements just past them
+/// or off the multiple, which take disp32.
+#[test]
+fn disp8_compressed_displacement() {
+    // Full vector memory (`vmovdqu8`), N = VL: 64 / 32 / 16 bytes.
+    gas(
+        "vmovdqu8 (%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x0E],
+    );
+    gas(
+        "vmovdqu8 64(%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x4E, 0x01],
+    );
+    gas(
+        "vmovdqu8 -64(%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x4E, 0xFF],
+    );
+    gas(
+        "vmovdqu8 8128(%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x4E, 0x7F],
+    );
+    gas(
+        "vmovdqu8 -8192(%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x4E, 0x80],
+    );
+    // 63 is not a multiple of 64; 65 is not either; 8192 and -8256 are but
+    // their quotients overflow a signed byte. All four take disp32.
+    gas(
+        "vmovdqu8 63(%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x8E, 0x3F, 0, 0, 0],
+    );
+    gas(
+        "vmovdqu8 65(%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x8E, 0x41, 0, 0, 0],
+    );
+    gas(
+        "vmovdqu8 8192(%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x8E, 0x00, 0x20, 0, 0],
+    );
+    gas(
+        "vmovdqu8 -8256(%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0x8E, 0xC0, 0xDF, 0xFF, 0xFF],
+    );
+    // The same form at 256 and 128 bits scales by 32 and 16.
+    gas(
+        "vmovdqu8 32(%rsi),%ymm1",
+        &[0x62, 0xF1, 0x7F, 0x28, 0x6F, 0x4E, 0x01],
+    );
+    gas(
+        "vmovdqu8 4064(%rsi),%ymm1",
+        &[0x62, 0xF1, 0x7F, 0x28, 0x6F, 0x4E, 0x7F],
+    );
+    gas(
+        "vmovdqu8 4096(%rsi),%ymm1",
+        &[0x62, 0xF1, 0x7F, 0x28, 0x6F, 0x8E, 0x00, 0x10, 0, 0],
+    );
+    gas(
+        "vmovdqu8 16(%rsi),%xmm1",
+        &[0x62, 0xF1, 0x7F, 0x08, 0x6F, 0x4E, 0x01],
+    );
+    gas(
+        "vmovdqu8 2032(%rsi),%xmm1",
+        &[0x62, 0xF1, 0x7F, 0x08, 0x6F, 0x4E, 0x7F],
+    );
+    gas(
+        "vmovdqu8 2048(%rsi),%xmm1",
+        &[0x62, 0xF1, 0x7F, 0x08, 0x6F, 0x8E, 0x00, 0x08, 0, 0],
+    );
+    // Full vector (`vpternlog*`), N = VL without a broadcast and the element
+    // width with one: 8 under W1, 4 under W0.
+    gas(
+        "vpternlogq $0x96,8128(%rsi),%zmm1,%zmm0",
+        &[0x62, 0xF3, 0xF5, 0x48, 0x25, 0x46, 0x7F, 0x96],
+    );
+    gas(
+        "vpternlogq $0x96,8192(%rsi),%zmm1,%zmm0",
+        &[0x62, 0xF3, 0xF5, 0x48, 0x25, 0x86, 0x00, 0x20, 0, 0, 0x96],
+    );
+    gas(
+        "vpternlogq $0x96,-8192(%rsi),%zmm1,%zmm0",
+        &[0x62, 0xF3, 0xF5, 0x48, 0x25, 0x46, 0x80, 0x96],
+    );
+    gas(
+        "vpternlogq $0x96,8(%rsi){1to8},%zmm1,%zmm0",
+        &[0x62, 0xF3, 0xF5, 0x58, 0x25, 0x46, 0x01, 0x96],
+    );
+    gas(
+        "vpternlogq $0x96,1016(%rsi){1to8},%zmm1,%zmm0",
+        &[0x62, 0xF3, 0xF5, 0x58, 0x25, 0x46, 0x7F, 0x96],
+    );
+    gas(
+        "vpternlogq $0x96,1024(%rsi){1to8},%zmm1,%zmm0",
+        &[0x62, 0xF3, 0xF5, 0x58, 0x25, 0x86, 0x00, 0x04, 0, 0, 0x96],
+    );
+    gas(
+        "vpternlogq $0x96,-1024(%rsi){1to8},%zmm1,%zmm0",
+        &[0x62, 0xF3, 0xF5, 0x58, 0x25, 0x46, 0x80, 0x96],
+    );
+    gas(
+        "vpternlogd $0x96,4(%rsi){1to16},%zmm1,%zmm0",
+        &[0x62, 0xF3, 0x75, 0x58, 0x25, 0x46, 0x01, 0x96],
+    );
+    gas(
+        "vpternlogd $0x96,508(%rsi){1to16},%zmm1,%zmm0",
+        &[0x62, 0xF3, 0x75, 0x58, 0x25, 0x46, 0x7F, 0x96],
+    );
+    gas(
+        "vpternlogd $0x96,512(%rsi){1to16},%zmm1,%zmm0",
+        &[0x62, 0xF3, 0x75, 0x58, 0x25, 0x86, 0x00, 0x02, 0, 0, 0x96],
+    );
+    gas(
+        "vpternlogd $0x96,32(%rsi),%ymm1,%ymm0",
+        &[0x62, 0xF3, 0x75, 0x28, 0x25, 0x46, 0x01, 0x96],
+    );
+    gas(
+        "vpternlogd $0x96,16(%rsi),%xmm1,%xmm0",
+        &[0x62, 0xF3, 0x75, 0x08, 0x25, 0x46, 0x01, 0x96],
+    );
+    gas(
+        "vpaddd 64(%rsi),%zmm1,%zmm0",
+        &[0x62, 0xF1, 0x75, 0x48, 0xFE, 0x46, 0x01],
+    );
+    gas(
+        "vpaddd 4(%rsi){1to16},%zmm1,%zmm0",
+        &[0x62, 0xF1, 0x75, 0x58, 0xFE, 0x46, 0x01],
+    );
+    gas(
+        "vpaddq 8(%rsi){1to8},%zmm1,%zmm0",
+        &[0x62, 0xF1, 0xF5, 0x58, 0xD4, 0x46, 0x01],
+    );
+    // Element groups: N is the count times the width EVEX.W selects, so it
+    // does not follow the vector length.
+    gas(
+        "vbroadcasti32x4 16(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x5A, 0x79, 0x01],
+    );
+    gas(
+        "vbroadcasti32x4 2032(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x5A, 0x79, 0x7F],
+    );
+    gas(
+        "vbroadcasti32x4 2048(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x5A, 0xB9, 0x00, 0x08, 0, 0],
+    );
+    gas(
+        "vbroadcasti32x4 -2048(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x5A, 0x79, 0x80],
+    );
+    gas(
+        "vbroadcasti32x4 16(%rcx),%ymm7",
+        &[0x62, 0xF2, 0x7D, 0x28, 0x5A, 0x79, 0x01],
+    );
+    gas(
+        "vbroadcasti64x4 32(%rcx),%zmm7",
+        &[0x62, 0xF2, 0xFD, 0x48, 0x5B, 0x79, 0x01],
+    );
+    gas(
+        "vbroadcasti64x4 4064(%rcx),%zmm7",
+        &[0x62, 0xF2, 0xFD, 0x48, 0x5B, 0x79, 0x7F],
+    );
+    gas(
+        "vbroadcasti64x4 4096(%rcx),%zmm7",
+        &[0x62, 0xF2, 0xFD, 0x48, 0x5B, 0xB9, 0x00, 0x10, 0, 0],
+    );
+    gas(
+        "vbroadcasti32x2 8(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x59, 0x79, 0x01],
+    );
+    gas(
+        "vbroadcasti64x2 16(%rcx),%zmm7",
+        &[0x62, 0xF2, 0xFD, 0x48, 0x5A, 0x79, 0x01],
+    );
+    gas(
+        "vinserti64x4 $1,32(%rcx),%zmm7,%zmm7",
+        &[0x62, 0xF3, 0xC5, 0x48, 0x3A, 0x79, 0x01, 0x01],
+    );
+    gas(
+        "vextracti64x4 $1,%zmm0,32(%rcx)",
+        &[0x62, 0xF3, 0xFD, 0x48, 0x3B, 0x41, 0x01, 0x01],
+    );
+    gas(
+        "vextracti32x4 $1,%zmm0,16(%rcx)",
+        &[0x62, 0xF3, 0x7D, 0x48, 0x39, 0x41, 0x01, 0x01],
+    );
+    // Half, quarter and eighth of a vector: the packed extends and converts.
+    gas(
+        "vpmovzxbw 32(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x30, 0x79, 0x01],
+    );
+    gas(
+        "vpmovzxbw 4064(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x30, 0x79, 0x7F],
+    );
+    gas(
+        "vpmovzxbw 4096(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x30, 0xB9, 0x00, 0x10, 0, 0],
+    );
+    gas(
+        "vpmovzxbd 16(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x31, 0x79, 0x01],
+    );
+    gas(
+        "vpmovzxbd 2032(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x31, 0x79, 0x7F],
+    );
+    gas(
+        "vpmovzxbq 8(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x32, 0x79, 0x01],
+    );
+    gas(
+        "vpmovzxbq 1016(%rcx),%zmm7",
+        &[0x62, 0xF2, 0x7D, 0x48, 0x32, 0x79, 0x7F],
+    );
+    gas(
+        "vcvtdq2pd 32(%rcx),%zmm7",
+        &[0x62, 0xF1, 0x7E, 0x48, 0xE6, 0x79, 0x01],
+    );
+    gas(
+        "vcvtdq2pd 4064(%rcx),%zmm7",
+        &[0x62, 0xF1, 0x7E, 0x48, 0xE6, 0x79, 0x7F],
+    );
+    gas(
+        "vcvtdq2pd 4(%rcx){1to8},%zmm7",
+        &[0x62, 0xF1, 0x7E, 0x58, 0xE6, 0x79, 0x01],
+    );
+    // One element, width from EVEX.W.
+    gas(
+        "vaddss 4(%rcx),%xmm17,%xmm18",
+        &[0x62, 0xE1, 0x76, 0x00, 0x58, 0x51, 0x01],
+    );
+    gas(
+        "vaddss 508(%rcx),%xmm17,%xmm18",
+        &[0x62, 0xE1, 0x76, 0x00, 0x58, 0x51, 0x7F],
+    );
+    gas(
+        "vaddss 512(%rcx),%xmm17,%xmm18",
+        &[0x62, 0xE1, 0x76, 0x00, 0x58, 0x91, 0x00, 0x02, 0, 0],
+    );
+    gas(
+        "vaddsd 8(%rcx),%xmm17,%xmm18",
+        &[0x62, 0xE1, 0xF7, 0x00, 0x58, 0x51, 0x01],
+    );
+    gas(
+        "vaddsd 1016(%rcx),%xmm17,%xmm18",
+        &[0x62, 0xE1, 0xF7, 0x00, 0x58, 0x51, 0x7F],
+    );
+}
+
+/// The extended register file: xmm/ymm16..31 and zmm0..31 reach ModRM.reg
+/// through `R'`, ModRM.rm through `X` in the register-direct form, and
+/// EVEX.vvvv through `V'`.
+#[test]
+fn extended_registers() {
+    gas(
+        "vpaddd %zmm2,%zmm1,%zmm0",
+        &[0x62, 0xF1, 0x75, 0x48, 0xFE, 0xC2],
+    );
+    gas(
+        "vpaddd %zmm18,%zmm17,%zmm16",
+        &[0x62, 0xA1, 0x75, 0x40, 0xFE, 0xC2],
+    );
+    gas(
+        "vpaddd %zmm31,%zmm30,%zmm29",
+        &[0x62, 0x01, 0x0D, 0x40, 0xFE, 0xEF],
+    );
+    gas(
+        "vpaddd %xmm31,%xmm30,%xmm29",
+        &[0x62, 0x01, 0x0D, 0x00, 0xFE, 0xEF],
+    );
+    gas(
+        "vpaddd %ymm31,%ymm30,%ymm29",
+        &[0x62, 0x01, 0x0D, 0x20, 0xFE, 0xEF],
+    );
+    gas(
+        "vpxorq %zmm31,%zmm31,%zmm31",
+        &[0x62, 0x01, 0x85, 0x40, 0xEF, 0xFF],
+    );
+    gas(
+        "vpternlogq $0x96,%zmm31,%zmm30,%zmm29",
+        &[0x62, 0x03, 0x8D, 0x40, 0x25, 0xEF, 0x96],
+    );
+    gas(
+        "vpermi2d %zmm31,%zmm30,%zmm29",
+        &[0x62, 0x02, 0x0D, 0x40, 0x76, 0xEF],
+    );
+    gas(
+        "vpermi2d %xmm7,%xmm6,%xmm8",
+        &[0x62, 0x72, 0x4D, 0x08, 0x76, 0xC7],
+    );
+    gas(
+        "vmovdqa64 %zmm29,%zmm30",
+        &[0x62, 0x01, 0xFD, 0x48, 0x6F, 0xF5],
+    );
+    gas(
+        "vextracti64x4 $1,%zmm16,%ymm17",
+        &[0x62, 0xA3, 0xFD, 0x48, 0x3B, 0xC1, 0x01],
+    );
+    gas(
+        "vmovd 4(%rcx),%xmm16",
+        &[0x62, 0xE1, 0x7D, 0x08, 0x6E, 0x41, 0x01],
+    );
+    gas(
+        "vmovd %xmm16,4(%rcx)",
+        &[0x62, 0xE1, 0x7D, 0x08, 0x7E, 0x41, 0x01],
+    );
+    gas("vmovd %eax,%xmm16", &[0x62, 0xE1, 0x7D, 0x08, 0x6E, 0xC0]);
+    gas("vmovd %xmm16,%eax", &[0x62, 0xE1, 0x7D, 0x08, 0x7E, 0xC0]);
+    gas("vmovd %r10d,%xmm16", &[0x62, 0xC1, 0x7D, 0x08, 0x6E, 0xC2]);
+    gas(
+        "vmovq 8(%rcx),%xmm16",
+        &[0x62, 0xE1, 0xFD, 0x08, 0x6E, 0x41, 0x01],
+    );
+    gas("vmovq %rax,%xmm16", &[0x62, 0xE1, 0xFD, 0x08, 0x6E, 0xC0]);
+    gas("vmovq %xmm16,%rax", &[0x62, 0xE1, 0xFD, 0x08, 0x7E, 0xC0]);
+    // A vector-register pair takes the F3-prefixed opcode instead.
+    gas("vmovq %xmm16,%xmm17", &[0x62, 0xA1, 0xFE, 0x08, 0x7E, 0xC8]);
+    gas(
+        "vpextrd $2,%xmm16,%eax",
+        &[0x62, 0xE3, 0x7D, 0x08, 0x16, 0xC0, 0x02],
+    );
+    gas(
+        "vpinsrd $2,4(%rcx),%xmm16,%xmm17",
+        &[0x62, 0xE3, 0x7D, 0x00, 0x22, 0x49, 0x01, 0x02],
+    );
+    // High general registers in the address: EVEX.B is the base's bit 3 and
+    // EVEX.X the index's, exactly as REX carries them.
+    gas(
+        "vpaddd (%rsi,%r14,8),%zmm1,%zmm0",
+        &[0x62, 0xB1, 0x75, 0x48, 0xFE, 0x04, 0xF6],
+    );
+    gas(
+        "vpaddd 64(%r13),%zmm1,%zmm0",
+        &[0x62, 0xD1, 0x75, 0x48, 0xFE, 0x45, 0x01],
+    );
+    gas(
+        "vpaddd 64(%r12),%zmm1,%zmm0",
+        &[0x62, 0xD1, 0x75, 0x48, 0xFE, 0x44, 0x24, 0x01],
+    );
+    gas(
+        "vpaddd (%r12),%zmm1,%zmm0",
+        &[0x62, 0xD1, 0x75, 0x48, 0xFE, 0x04, 0x24],
+    );
+    gas(
+        "vpaddd (%r13),%zmm1,%zmm0",
+        &[0x62, 0xD1, 0x75, 0x48, 0xFE, 0x45, 0x00],
+    );
+    gas(
+        "vmovdqu64 %zmm29,64(%r13,%r14,4)",
+        &[0x62, 0x01, 0xFE, 0x48, 0x7F, 0x6C, 0xB5, 0x01],
+    );
+}
+
+/// `{%kN}` write masks and `{z}` zeroing.
+#[test]
+fn opmask_decorators() {
+    gas(
+        "vpaddd %zmm2,%zmm1,%zmm0{%k1}",
+        &[0x62, 0xF1, 0x75, 0x49, 0xFE, 0xC2],
+    );
+    gas(
+        "vpaddd %zmm2,%zmm1,%zmm0{%k7}",
+        &[0x62, 0xF1, 0x75, 0x4F, 0xFE, 0xC2],
+    );
+    gas(
+        "vpaddd %zmm2,%zmm1,%zmm0{%k1}{z}",
+        &[0x62, 0xF1, 0x75, 0xC9, 0xFE, 0xC2],
+    );
+    gas(
+        "vpaddd 64(%rsi),%zmm1,%zmm0{%k3}{z}",
+        &[0x62, 0xF1, 0x75, 0xCB, 0xFE, 0x46, 0x01],
+    );
+    // `%k<N>` under a single `%` is GCC's operand modifier -- the 32-bit form
+    // of operand N -- not an opmask register, so a decorator is the only place
+    // an opmask is spelled.
+    assert_eq!(
+        parse_template(b"shrl %k1, %k0").unwrap()[0].operands,
+        [
+            AsmOpnd::Ref {
+                idx: 1,
+                size: Some(AsmRegSize::Long)
+            },
+            AsmOpnd::Ref {
+                idx: 0,
+                size: Some(AsmRegSize::Long)
+            }
+        ]
+    );
+}
+
+/// The packed moves, in both directions.
+#[test]
+fn packed_moves() {
+    gas(
+        "vmovdqu8 %zmm1,%zmm2",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x6F, 0xD1],
+    );
+    gas(
+        "vmovdqu8 %zmm1,64(%rsi)",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x7F, 0x4E, 0x01],
+    );
+    gas(
+        "vmovdqu64 %zmm0,%zmm1",
+        &[0x62, 0xF1, 0xFE, 0x48, 0x6F, 0xC8],
+    );
+    gas(
+        "vmovdqu32 %zmm0,%zmm1",
+        &[0x62, 0xF1, 0x7E, 0x48, 0x6F, 0xC8],
+    );
+    gas(
+        "vmovdqu16 %zmm0,%zmm1",
+        &[0x62, 0xF1, 0xFF, 0x48, 0x6F, 0xC8],
+    );
+    gas(
+        "vmovdqa32 %zmm0,%zmm1",
+        &[0x62, 0xF1, 0x7D, 0x48, 0x6F, 0xC8],
+    );
+    gas(
+        "vmovdqu8 %zmm1,(%rsi)",
+        &[0x62, 0xF1, 0x7F, 0x48, 0x7F, 0x0E],
+    );
+    gas(
+        "vmovaps 64(%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7C, 0x48, 0x28, 0x4E, 0x01],
+    );
+    gas(
+        "vmovaps %zmm1,64(%rsi)",
+        &[0x62, 0xF1, 0x7C, 0x48, 0x29, 0x4E, 0x01],
+    );
+    gas(
+        "vmovups 64(%rsi),%zmm1",
+        &[0x62, 0xF1, 0x7C, 0x48, 0x10, 0x4E, 0x01],
+    );
+    gas(
+        "vmovupd 64(%rsi),%zmm1",
+        &[0x62, 0xF1, 0xFD, 0x48, 0x10, 0x4E, 0x01],
+    );
+    gas(
+        "vmovapd 64(%rsi),%zmm1",
+        &[0x62, 0xF1, 0xFD, 0x48, 0x28, 0x4E, 0x01],
+    );
+    gas(
+        "vpshufb %zmm2,%zmm1,%zmm0",
+        &[0x62, 0xF2, 0x75, 0x48, 0x00, 0xC2],
+    );
+    gas(
+        "vpshufb 64(%rsi),%zmm1,%zmm0",
+        &[0x62, 0xF2, 0x75, 0x48, 0x00, 0x46, 0x01],
+    );
+    gas(
+        "vpclmulqdq $0,64(%rsi),%zmm1,%zmm0",
+        &[0x62, 0xF3, 0x75, 0x48, 0x44, 0x46, 0x01, 0x00],
+    );
+}
+
+/// Shifts and rotates by immediate: the destination rides EVEX.vvvv and the
+/// opcode extension ModRM.reg. `vprord` is what the AVX-512 BLAKE2s round uses.
+#[test]
+fn shift_rotate_by_immediate() {
+    gas(
+        "vprord $16,%xmm3,%xmm3",
+        &[0x62, 0xF1, 0x65, 0x08, 0x72, 0xC3, 0x10],
+    );
+    gas(
+        "vprord $16,%zmm3,%zmm4",
+        &[0x62, 0xF1, 0x5D, 0x48, 0x72, 0xC3, 0x10],
+    );
+    gas(
+        "vprord $16,%zmm31,%zmm30",
+        &[0x62, 0x91, 0x0D, 0x40, 0x72, 0xC7, 0x10],
+    );
+    gas(
+        "vprold $16,%zmm3,%zmm4",
+        &[0x62, 0xF1, 0x5D, 0x48, 0x72, 0xCB, 0x10],
+    );
+    gas(
+        "vprorq $16,%zmm3,%zmm4",
+        &[0x62, 0xF1, 0xDD, 0x48, 0x72, 0xC3, 0x10],
+    );
+    gas(
+        "vprolq $16,%zmm3,%zmm4",
+        &[0x62, 0xF1, 0xDD, 0x48, 0x72, 0xCB, 0x10],
+    );
+    gas(
+        "vprord $16,64(%rcx),%zmm4",
+        &[0x62, 0xF1, 0x5D, 0x48, 0x72, 0x41, 0x01, 0x10],
+    );
+    gas(
+        "vprord $16,4(%rcx){1to16},%zmm4",
+        &[0x62, 0xF1, 0x5D, 0x58, 0x72, 0x41, 0x01, 0x10],
+    );
+    // The packed shifts by immediate keep their VEX encoding between
+    // registers; only the memory-source form AVX-512 added needs EVEX.
+    gas("vpslld $3,%xmm3,%xmm4", &[0xC5, 0xD9, 0x72, 0xF3, 0x03]);
+    gas("vpslld $3,%ymm3,%ymm4", &[0xC5, 0xDD, 0x72, 0xF3, 0x03]);
+    gas(
+        "vpslld $3,%zmm3,%zmm4",
+        &[0x62, 0xF1, 0x5D, 0x48, 0x72, 0xF3, 0x03],
+    );
+    gas(
+        "vpslld $3,64(%rcx),%zmm4",
+        &[0x62, 0xF1, 0x5D, 0x48, 0x72, 0x71, 0x01, 0x03],
+    );
+    gas(
+        "vpslld $3,4(%rcx){1to16},%zmm4",
+        &[0x62, 0xF1, 0x5D, 0x58, 0x72, 0x71, 0x01, 0x03],
+    );
+    gas(
+        "vpsllq $3,%zmm3,%zmm4",
+        &[0x62, 0xF1, 0xDD, 0x48, 0x73, 0xF3, 0x03],
+    );
+    gas(
+        "vpsraq $3,%zmm3,%zmm4",
+        &[0x62, 0xF1, 0xDD, 0x48, 0x72, 0xE3, 0x03],
+    );
+    // 16-bit elements and the byte-lane shifts have no broadcast form, so
+    // their memory operand is a whole vector.
+    gas(
+        "vpsllw $3,64(%rcx),%zmm4",
+        &[0x62, 0xF1, 0x5D, 0x48, 0x71, 0x71, 0x01, 0x03],
+    );
+    gas(
+        "vpslldq $3,64(%rcx),%zmm4",
+        &[0x62, 0xF1, 0x5D, 0x48, 0x73, 0x79, 0x01, 0x03],
+    );
+}
+
+/// Between two registers a VEX move encodes the same transfer either way
+/// round, and GNU as picks the direction that fits the 2-byte prefix.
+#[test]
+fn vex_move_direction() {
+    gas("vmovdqa %xmm14,%xmm2", &[0xC5, 0x79, 0x7F, 0xF2]);
+    gas("vmovdqa %xmm2,%xmm14", &[0xC5, 0x79, 0x6F, 0xF2]);
+    gas("vmovdqa %xmm14,%xmm15", &[0xC4, 0x41, 0x79, 0x6F, 0xFE]);
+    gas("vmovdqa %xmm2,%xmm3", &[0xC5, 0xF9, 0x6F, 0xDA]);
+    gas("vmovdqu %ymm8,%ymm6", &[0xC5, 0x7E, 0x7F, 0xC6]);
+    gas("vmovdqu %ymm6,%ymm8", &[0xC5, 0x7E, 0x6F, 0xC6]);
+    gas("vmovdqu %ymm8,%ymm9", &[0xC4, 0x41, 0x7E, 0x6F, 0xC8]);
+    gas("vmovaps %xmm14,%xmm2", &[0xC5, 0x78, 0x29, 0xF2]);
+    gas("vmovups %ymm14,%ymm2", &[0xC5, 0x7C, 0x11, 0xF2]);
+    gas("vmovapd %xmm14,%xmm2", &[0xC5, 0x79, 0x29, 0xF2]);
+    gas("vmovupd %xmm14,%xmm2", &[0xC5, 0x79, 0x11, 0xF2]);
+    // EVEX is four bytes either way, so it keeps the register direction.
+    gas(
+        "vmovdqu8 %zmm18,%zmm2",
+        &[0x62, 0xB1, 0x7F, 0x48, 0x6F, 0xD2],
+    );
+    gas(
+        "vmovdqu8 %zmm2,%zmm18",
+        &[0x62, 0xE1, 0x7F, 0x48, 0x6F, 0xD2],
+    );
+    gas(
+        "vmovaps %zmm18,%zmm2",
+        &[0x62, 0xB1, 0x7C, 0x48, 0x28, 0xD2],
+    );
+    // A general-register transfer takes its width from the register, whichever
+    // of the two spellings names it.
+    gas("vmovd %rcx,%xmm0", &[0xC4, 0xE1, 0xF9, 0x6E, 0xC1]);
+    gas("vmovd %ecx,%xmm0", &[0xC5, 0xF9, 0x6E, 0xC1]);
+    gas("vmovd %xmm0,%rcx", &[0xC4, 0xE1, 0xF9, 0x7E, 0xC1]);
+    gas("vmovq %rcx,%xmm0", &[0xC4, 0xE1, 0xF9, 0x6E, 0xC1]);
+}
+
+/// The EVEX element insert / extract forms, reached when the vector operand is
+/// one only EVEX names.
+#[test]
+fn evex_element_insert_extract() {
+    gas(
+        "vpextrb $7,%xmm16,%eax",
+        &[0x62, 0xE3, 0x7D, 0x08, 0x14, 0xC0, 0x07],
+    );
+    gas(
+        "vpextrb $7,%xmm16,1(%rcx)",
+        &[0x62, 0xE3, 0x7D, 0x08, 0x14, 0x41, 0x01, 0x07],
+    );
+    gas(
+        "vpextrd $1,%xmm16,(%rcx)",
+        &[0x62, 0xE3, 0x7D, 0x08, 0x16, 0x01, 0x01],
+    );
+    gas(
+        "vpextrq $1,%xmm16,%rax",
+        &[0x62, 0xE3, 0xFD, 0x08, 0x16, 0xC0, 0x01],
+    );
+    gas(
+        "vpextrq $1,%xmm16,8(%rcx)",
+        &[0x62, 0xE3, 0xFD, 0x08, 0x16, 0x41, 0x01, 0x01],
+    );
+    gas(
+        "vextractps $1,%xmm16,4(%rcx)",
+        &[0x62, 0xE3, 0x7D, 0x08, 0x17, 0x41, 0x01, 0x01],
+    );
+    gas(
+        "vpinsrb $7,%eax,%xmm16,%xmm17",
+        &[0x62, 0xE3, 0x7D, 0x00, 0x20, 0xC8, 0x07],
+    );
+    gas(
+        "vpinsrw $3,2(%rcx),%xmm16,%xmm17",
+        &[0x62, 0xE1, 0x7D, 0x00, 0xC4, 0x49, 0x01, 0x03],
+    );
+    gas(
+        "vpinsrq $1,8(%rcx),%xmm16,%xmm17",
+        &[0x62, 0xE3, 0xFD, 0x00, 0x22, 0x49, 0x01, 0x01],
+    );
+}
+
+/// The VEX element insert / extract family, which the AVX-512 CRC template
+/// reaches through `vpextrd`.
+#[test]
+fn vex_element_insert_extract() {
+    gas(
+        "vpextrb $7,%xmm0,%eax",
+        &[0xC4, 0xE3, 0x79, 0x14, 0xC0, 0x07],
+    );
+    gas(
+        "vpextrb $7,%xmm0,(%rcx)",
+        &[0xC4, 0xE3, 0x79, 0x14, 0x01, 0x07],
+    );
+    // The word extract's register form is the shorter 0F-map opcode, with the
+    // roles of ModRM.reg and r/m swapped.
+    gas("vpextrw $3,%xmm0,%eax", &[0xC5, 0xF9, 0xC5, 0xC0, 0x03]);
+    gas(
+        "vpextrw $3,%xmm0,(%rcx)",
+        &[0xC4, 0xE3, 0x79, 0x15, 0x01, 0x03],
+    );
+    gas(
+        "vpextrd $1,%xmm0,(%rcx)",
+        &[0xC4, 0xE3, 0x79, 0x16, 0x01, 0x01],
+    );
+    gas(
+        "vpextrq $1,%xmm0,%rax",
+        &[0xC4, 0xE3, 0xF9, 0x16, 0xC0, 0x01],
+    );
+    gas(
+        "vpextrq $1,%xmm0,(%rcx)",
+        &[0xC4, 0xE3, 0xF9, 0x16, 0x01, 0x01],
+    );
+    gas(
+        "vpextrd $1,%xmm9,%r10d",
+        &[0xC4, 0x43, 0x79, 0x16, 0xCA, 0x01],
+    );
+    gas(
+        "vextractps $1,%xmm0,%eax",
+        &[0xC4, 0xE3, 0x79, 0x17, 0xC0, 0x01],
+    );
+    gas(
+        "vpinsrb $7,%eax,%xmm1,%xmm0",
+        &[0xC4, 0xE3, 0x71, 0x20, 0xC0, 0x07],
+    );
+    gas(
+        "vpinsrw $3,%eax,%xmm1,%xmm0",
+        &[0xC5, 0xF1, 0xC4, 0xC0, 0x03],
+    );
+    gas(
+        "vpinsrd $1,%eax,%xmm1,%xmm0",
+        &[0xC4, 0xE3, 0x71, 0x22, 0xC0, 0x01],
+    );
+    gas(
+        "vpinsrq $1,%rax,%xmm1,%xmm0",
+        &[0xC4, 0xE3, 0xF1, 0x22, 0xC0, 0x01],
+    );
+    gas(
+        "vpinsrd $1,(%rcx),%xmm1,%xmm0",
+        &[0xC4, 0xE3, 0x71, 0x22, 0x01, 0x01],
+    );
+}
+
+/// What this encoder does not implement is refused, not guessed.
+#[test]
+fn refusals() {
+    // A name with no EVEX form cannot take an EVEX-only register.
+    refused("vpxor %zmm2,%zmm1,%zmm0", "no EVEX");
+    refused("vmovdqu (%rsi),%zmm1", "no EVEX");
+    refused("vperm2i128 $1,%ymm18,%ymm1,%ymm0", "no EVEX");
+    // Rounding and SAE controls.
+    refused("vaddps {rn-sae},%zmm2,%zmm1,%zmm0", "rounding / SAE");
+    refused("vmaxps {sae},%zmm2,%zmm1,%zmm0", "rounding / SAE");
+    // Decorators that do not apply.
+    refused("vpaddd %zmm2,%zmm1,%zmm0{%k0}", "not a write mask");
+    refused("vpaddd %zmm2,%zmm1,%zmm0{z}", "needs a `{%k1}`");
+    refused(
+        "vpshufb 64(%rsi){1to16},%zmm1,%zmm0",
+        "no `{1toN}` broadcast",
+    );
+    refused("vpaddd 4(%rsi){1to8},%zmm1,%zmm0", "does not match");
+    refused("vpaddd %zmm2,%zmm1,%zmm0{%k9}", "no mask register");
+    // Gather / scatter addressing: a vector index never reaches the encoder,
+    // the address parse having refused it.
+    refused("vpaddd (%rsi,%zmm2,8),%zmm1,%zmm0", "unsupported operand");
+    refused("vpaddd (%rsi,%xmm2,8),%zmm1,%zmm0", "unsupported operand");
+    // A sub-vector broadcast reads memory only, as GNU as also requires.
+    refused("vbroadcasti32x4 %xmm1,%zmm0", "memory source");
+    // `vmovd` has no vector-register pair form.
+    refused("vmovd %xmm16,%xmm17", "general register or memory");
+    // `vpextrw`'s register-destination form puts the general register in
+    // ModRM.reg, inverting the shape; it is left out of the EVEX table rather
+    // than encoded as the memory form, which writes 16 bits.
+    refused("vpextrw $3,%xmm16,%eax", "no EVEX");
+    // Instructions that name an opmask as an operand rather than a decorator
+    // are not implemented: `%k<N>` under a single `%` is GCC's operand
+    // modifier, so the spelling is not available to them.
+    refused("kmovw %k1,%eax", "unsupported instruction");
+    refused("vpcmpeqd %zmm1,%zmm2,%k1", "no EVEX");
+}
+
+/// The tuple table is the SDM's, restated as a function; these are the factors
+/// the byte-parity cases above exercise.
+#[test]
+fn tuple_scale_factors() {
+    use super::Tuple::*;
+    let n = |t: super::Tuple, vl, w, b| t.disp8_n(vl, w, b);
+    assert_eq!(
+        [n(Full, 16, false, false), n(Full, 32, false, false)],
+        [16, 32]
+    );
+    assert_eq!([n(Full, 64, false, true), n(Full, 64, true, true)], [4, 8]);
+    assert_eq!(
+        [n(Half, 64, false, false), n(Half, 64, false, true)],
+        [32, 4]
+    );
+    assert_eq!(n(FullMem, 64, true, false), 64);
+    assert_eq!(
+        [n(Group(2), 64, false, false), n(Group(2), 64, true, false)],
+        [8, 16]
+    );
+    assert_eq!(
+        [n(Group(4), 64, false, false), n(Group(4), 64, true, false)],
+        [16, 32]
+    );
+    assert_eq!(n(Group(8), 64, false, false), 32);
+    assert_eq!(
+        [
+            n(HalfMem, 64, false, false),
+            n(QuarterMem, 64, false, false),
+            n(EighthMem, 64, false, false)
+        ],
+        [32, 16, 8]
+    );
+    assert_eq!(
+        [n(ElemW, 64, false, false), n(ElemW, 64, true, false)],
+        [4, 8]
+    );
+    assert_eq!(
+        [n(Elem(1), 64, false, false), n(Elem(2), 64, false, false)],
+        [1, 2]
+    );
+    assert_eq!([n(Dup, 16, true, false), n(Dup, 64, true, false)], [8, 64]);
+}
+
+// ------------------------------------------------------------------
+// Differential sweep against the system assembler.
+// ------------------------------------------------------------------
+
+/// Cross-check every row of [`super::TABLE`] against the system assembler over
+/// the operand shapes and displacements the row admits. Gated on
+/// `BADC_FUZZ_ASM=1` and the presence of `cc` + `objdump`, so a bare
+/// `cargo test` skips it; the golden cases above cover that run.
+#[cfg(feature = "std")]
+mod differential {
+    use alloc::format;
+    use alloc::string::{String, ToString};
+    use alloc::vec::Vec;
+    use std::process::Command;
+
+    use super::super::{Form, Shape, TABLE, Tuple};
+
+    fn enabled() -> bool {
+        std::env::var("BADC_FUZZ_ASM").is_ok()
+            && Command::new("cc").arg("--version").output().is_ok()
+            && Command::new("objdump").arg("--version").output().is_ok()
+    }
+
+    /// AT&T name of vector register `n` at `bytes` wide.
+    fn v(bytes: u32, n: u8) -> String {
+        let bank = match bytes {
+            16 => "xmm",
+            32 => "ymm",
+            _ => "zmm",
+        };
+        format!("%{bank}{n}")
+    }
+
+    /// AT&T name of general register `n` at `bytes` wide.
+    fn g(bytes: u32, n: u8) -> String {
+        const R32: &[&str] = &["%eax", "%ecx", "%edx", "%ebx"];
+        const R64: &[&str] = &["%rax", "%rcx", "%rdx", "%rbx"];
+        String::from(if bytes >= 8 { R64 } else { R32 }[n as usize])
+    }
+
+    /// The width of a form's r/m operand: the size of its memory operand,
+    /// which is also the width of the register that may stand in its place.
+    fn rm_bytes(f: Form, vl: u32) -> u32 {
+        f.tuple.disp8_n(vl, f.w, false).max(16)
+    }
+
+    /// The displacements worth encoding for a scale of `n`: zero, one step,
+    /// the extremes a signed byte holds, and the neighbours that must fall
+    /// back to disp32.
+    fn disps(n: i32) -> Vec<i32> {
+        alloc::vec![0, n, 127 * n, 128 * n, -128 * n, -129 * n, n + 1]
+    }
+
+    /// The r/m operand spellings to try for one form at one vector length: a
+    /// register, then each displacement, with and without a broadcast.
+    fn rms(f: Form, vl: u32) -> Vec<String> {
+        let mut out = Vec::new();
+        out.push(if f.gpr_rm {
+            g(rm_bytes(f, vl), 1)
+        } else {
+            v(rm_bytes(f, vl), 1)
+        });
+        if f.shape == Shape::RmMem {
+            out.clear();
+        }
+        let n = f.tuple.disp8_n(vl, f.w, false) as i32;
+        for d in disps(n) {
+            out.push(format!("{d}(%rcx)"));
+        }
+        out.push("(%rdx,%r14,8)".to_string());
+        out.push("64(%r13,%r14,4)".to_string());
+        if matches!(f.tuple, Tuple::Full | Tuple::Half) {
+            let (whole, one) = (
+                f.tuple.disp8_n(vl, f.w, false),
+                f.tuple.disp8_n(vl, f.w, true),
+            );
+            let nb = f.tuple.disp8_n(vl, f.w, true) as i32;
+            for d in [nb, 127 * nb, 128 * nb] {
+                out.push(format!("{d}(%rcx){{1to{}}}", whole / one));
+            }
+        }
+        out
+    }
+
+    /// Every instruction spelling this sweep tries for one table row.
+    fn cases(name: &str, f: Form) -> Vec<String> {
+        let mut out = Vec::new();
+        for vl in [16u32, 32, 64] {
+            let dst = |n: u8| v(vl, n);
+            for rm in rms(f, vl) {
+                let line = match f.shape {
+                    Shape::Rvm => format!("{name} {rm},{},{}", v(vl, 2), dst(0)),
+                    Shape::RvmI => format!("{name} $0x1,{rm},{},{}", v(vl, 2), dst(0)),
+                    Shape::Rm | Shape::RmMem => format!("{name} {rm},{}", dst(0)),
+                    Shape::RmI => format!("{name} $0x1,{rm},{}", dst(0)),
+                    Shape::MrI => format!("{name} $0x1,{},{rm}", v(vl, 0)),
+                    Shape::VmI(_) => format!("{name} $0x1,{rm},{}", v(vl, 0)),
+                    Shape::Mov => format!("{name} {rm},{}", v(vl, 0)),
+                };
+                out.push(line);
+            }
+            // The store direction of a move, and the extended register file.
+            if f.shape == Shape::Mov {
+                out.push(format!("{name} {},16(%rcx)", v(vl, 0)));
+                if !f.gpr_rm {
+                    out.push(format!("{name} {},{}", v(vl, 0), v(rm_bytes(f, vl), 1)));
+                }
+            }
+            let hi = if f.gpr_rm {
+                g(rm_bytes(f, vl), 2)
+            } else {
+                v(rm_bytes(f, vl), 31)
+            };
+            let (a, b) = (v(vl, 29), v(vl, 30));
+            match f.shape {
+                Shape::Rvm => {
+                    out.push(format!("{name} {hi},{b},{a}"));
+                    out.push(format!("{name} {hi},{b},{a}{{%k3}}"));
+                    out.push(format!("{name} {hi},{b},{a}{{%k7}}{{z}}"));
+                }
+                Shape::RvmI => {
+                    out.push(format!("{name} $0x2,{hi},{b},{a}"));
+                    out.push(format!("{name} $0x2,{hi},{b},{a}{{%k5}}{{z}}"));
+                }
+                Shape::Rm => {
+                    out.push(format!("{name} {hi},{a}"));
+                    out.push(format!("{name} {hi},{a}{{%k1}}"));
+                }
+                Shape::RmI => out.push(format!("{name} $0x2,{hi},{a}")),
+                Shape::MrI => out.push(format!("{name} $0x2,{},{hi}", v(vl, 29))),
+                Shape::VmI(_) => {
+                    out.push(format!("{name} $0x2,{hi},{a}"));
+                    out.push(format!("{name} $0x2,{hi},{a}{{%k2}}{{z}}"));
+                }
+                // A scalar transfer with no vector-register pair form takes
+                // only its general-register and memory spellings.
+                Shape::Mov if f.gpr_rm && f.alt_op == 0 => {}
+                Shape::Mov => {
+                    out.push(format!("{name} {hi},{a}"));
+                    out.push(format!("{name} {a},{hi}"));
+                }
+                Shape::RmMem => {}
+            }
+        }
+        out
+    }
+
+    /// Assemble `lines`, dropping the ones the assembler rejects, and return
+    /// the surviving lines with their bytes. Each instruction is bracketed by
+    /// an eight-byte nop run so the stream splits without decoding it.
+    fn assemble(mut lines: Vec<String>) -> Vec<(String, Vec<u8>)> {
+        let dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let (s, o) = (
+            dir.join(format!("badc-evex-{pid}.s")),
+            dir.join(format!("badc-evex-{pid}.o")),
+        );
+        let bytes = loop {
+            let mut src = String::from(".text\n");
+            for l in &lines {
+                src.push_str("\t.byte 0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90\n\t");
+                src.push_str(l);
+                src.push('\n');
+            }
+            src.push_str("\t.byte 0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90\n");
+            std::fs::write(&s, &src).expect("write assembler input");
+            let out = Command::new("cc")
+                .args(["-c", "-x", "assembler"])
+                .arg(&s)
+                .arg("-o")
+                .arg(&o)
+                .output()
+                .expect("spawn cc");
+            if out.status.success() {
+                break Command::new("objdump")
+                    .args(["-d", "--insn-width=16"])
+                    .arg(&o)
+                    .output()
+                    .expect("spawn objdump")
+                    .stdout;
+            }
+            // Errors carry a line number into the file written above: two
+            // header lines precede the first instruction's `.byte` line, and
+            // each instruction takes two lines.
+            let text = String::from_utf8_lossy(&out.stderr).to_string();
+            let mut bad: Vec<usize> = text
+                .lines()
+                .filter_map(|l| l.split(':').nth(1)?.parse::<usize>().ok())
+                .filter_map(|n| n.checked_sub(2))
+                .filter(|n| n % 2 == 1)
+                .map(|n| n / 2)
+                .filter(|&i| i < lines.len())
+                .collect();
+            bad.sort_unstable();
+            bad.dedup();
+            assert!(
+                !bad.is_empty(),
+                "cc rejected the input with no usable line numbers:\n{text}"
+            );
+            for i in bad.into_iter().rev() {
+                lines.remove(i);
+            }
+        };
+        let _ = std::fs::remove_file(&s);
+        let _ = std::fs::remove_file(&o);
+        let text = String::from_utf8_lossy(&bytes);
+        let mut stream: Vec<u8> = Vec::new();
+        for l in text.lines() {
+            let Some(tab) = l.find(':') else { continue };
+            if !l[..tab].trim_start().chars().all(|c| c.is_ascii_hexdigit())
+                || l[..tab].trim().is_empty()
+            {
+                continue;
+            }
+            for tok in l[tab + 1..].split_whitespace() {
+                match u8::from_str_radix(tok, 16) {
+                    Ok(b) if tok.len() == 2 => stream.push(b),
+                    _ => break,
+                }
+            }
+        }
+        let nop8 = [0x90u8; 8];
+        let (mut out, mut i) = (Vec::new(), 0usize);
+        while i < stream.len() {
+            if stream[i..].starts_with(&nop8) {
+                i += 8;
+                let start = i;
+                while i < stream.len() && !stream[i..].starts_with(&nop8) {
+                    i += 1;
+                }
+                if i > start {
+                    out.push(stream[start..i].to_vec());
+                }
+            } else {
+                i += 1;
+            }
+        }
+        assert_eq!(
+            out.len(),
+            lines.len(),
+            "chunk count does not match line count"
+        );
+        lines.into_iter().zip(out).collect()
+    }
+
+    #[test]
+    fn table_matches_system_assembler() {
+        if !enabled() {
+            return;
+        }
+        let lines: Vec<String> = TABLE.iter().flat_map(|&(n, f)| cases(n, f)).collect();
+        let total = lines.len();
+        let pairs = assemble(lines);
+        let mut mismatch = Vec::new();
+        for (text, want) in &pairs {
+            match super::enc(text) {
+                Ok(got) if got == *want => {}
+                Ok(got) => mismatch.push(format!("{text}\n  badc {got:02x?}\n  as   {want:02x?}")),
+                Err(e) => mismatch.push(format!("{text}\n  badc refused: {e}")),
+            }
+        }
+        assert!(
+            mismatch.is_empty(),
+            "{} of {} compared ({total} generated) disagree with the system assembler:\n{}",
+            mismatch.len(),
+            pairs.len(),
+            mismatch.join("\n")
+        );
+        assert!(
+            pairs.len() > 2000,
+            "only {} of {total} spellings survived assembly; the sweep is not covering the table",
+            pairs.len()
+        );
+    }
+}

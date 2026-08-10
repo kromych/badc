@@ -50,8 +50,13 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::program::Program;
-use super::{Abi, Build, Machine};
+use super::elf_reloc_types::{
+    R_AARCH64_COPY, R_AARCH64_GLOB_DAT, R_AARCH64_RELATIVE, R_X86_64_COPY, R_X86_64_GLOB_DAT,
+    R_X86_64_RELATIVE,
+};
+use super::{Abi, AddrPart, Build, Machine};
 use super::{aarch64, dwarf, x86_64};
+use crate::c5::layout::{round_up, write_struct};
 
 // ------------------------------------------------------------------
 // ELF constants. Names mirror `<elf.h>` so cross-checking is mechanical.
@@ -124,6 +129,9 @@ const VER_NDX_FIRST: u16 = 2;
 /// `.dynsym`'s loader-visible globals.
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
+/// `STB_WEAK` -- a definition a strong one elsewhere in the process
+/// overrides.
+const STB_WEAK: u8 = 2;
 /// `STT_FUNC` symbol type -- `st_info` low nibble for both
 /// imported and exported functions. Imports use it so debuggers
 /// (`gdb`, `lldb`) treat the dynamic-symbol entry as a callable
@@ -134,22 +142,13 @@ const STT_FUNC: u8 = 2;
 /// `STT_OBJECT` symbol type -- a data object. Used for the defined
 /// data symbols a COPY relocation binds to the host's object.
 const STT_OBJECT: u8 = 1;
+/// `STT_SECTION` -- the per-section symbols the `--emit-relocs`
+/// relocation entries reference.
+const STT_SECTION: u8 = 3;
+/// `SHF_INFO_LINK` -- sh_info names the section the relocations
+/// patch.
+const SHF_INFO_LINK: u64 = 0x40;
 const SHN_UNDEF: u16 = 0;
-
-// Relocation types we emit.
-const R_AARCH64_GLOB_DAT: u64 = 1025;
-const R_X86_64_GLOB_DAT: u64 = 6;
-// `R_*_RELATIVE`: the loader writes `load_bias + r_addend` into the slot.
-// Used in a shared object for an internal absolute pointer (a function /
-// data pointer baked into static data) so it tracks the runtime load base.
-const R_AARCH64_RELATIVE: u64 = 1027;
-const R_X86_64_RELATIVE: u64 = 8;
-// `R_*_COPY`: the loader copies the named symbol's object from the
-// defining shared library into the slot at `r_offset` and binds the
-// symbol to that slot. Used for a data import (`extern char **environ`)
-// so the program and libc share one storage cell.
-const R_AARCH64_COPY: u64 = 1024;
-const R_X86_64_COPY: u64 = 5;
 
 /// `PT_LOAD` segment alignment. The loader mmaps each segment at
 /// `p_vaddr` rounded down to the runtime page size, so `p_align` must
@@ -319,17 +318,159 @@ struct Elf64Shdr {
 
 const _: () = assert!(core::mem::size_of::<Elf64Shdr>() == ELF64_SHDR_SIZE as usize);
 
-/// Append a `#[repr(C)]` struct's raw bytes to `out`. Same shape
-/// the PE writer uses; see that module for the safety argument.
-fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
-    const _: () = assert!(
-        cfg!(target_endian = "little"),
-        "ELF writer assumes a little-endian host; emit bytes manually if you need to cross-build from big-endian"
+/// Section-header table layout.
+///
+/// The writer emits a fixed sequence of sections, some conditional. Every
+/// count and every section index derives from this one description, so a
+/// section added here shifts the indices of the sections after it without
+/// any other site needing to know. `index_of` answers for an absent
+/// section too: it reports the slot the section would occupy, which is
+/// what a symbol referring to a section this image does not carry needs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Sec {
+    Null,
+    Interp,
+    Dynsym,
+    Dynstr,
+    Hash,
+    GnuVersion,
+    GnuVersionR,
+    RelaDyn,
+    Text,
+    RoData,
+    Tdata,
+    Dynamic,
+    Got,
+    Data,
+    Tbss,
+    Bss,
+    Debug,
+    RelaText,
+    RelaData,
+    Symtab,
+    Strtab,
+    Shstrtab,
+}
+
+/// Emission order. `Sec::Debug` stands for the whole `.debug_*` run.
+const SECTION_ORDER: [Sec; 22] = [
+    Sec::Null,
+    Sec::Interp,
+    Sec::Dynsym,
+    Sec::Dynstr,
+    Sec::Hash,
+    Sec::GnuVersion,
+    Sec::GnuVersionR,
+    Sec::RelaDyn,
+    Sec::Text,
+    Sec::RoData,
+    Sec::Tdata,
+    Sec::Dynamic,
+    Sec::Got,
+    Sec::Data,
+    Sec::Tbss,
+    Sec::Bss,
+    Sec::Debug,
+    Sec::RelaText,
+    Sec::RelaData,
+    Sec::Symtab,
+    Sec::Strtab,
+    Sec::Shstrtab,
+];
+
+struct SectionPlan {
+    /// Headers each slot of [`SECTION_ORDER`] contributes.
+    counts: [usize; 22],
+}
+
+/// Which optional sections an image carries. `dwarf` is a count because
+/// the `.debug_*` run contributes several headers to one slot.
+#[derive(Clone, Copy, Default)]
+struct SectionsPresent {
+    versions: bool,
+    rodata: bool,
+    tdata: bool,
+    data: bool,
+    tbss: bool,
+    bss: bool,
+    dwarf: usize,
+    rela_text: bool,
+    rela_data: bool,
+    plt_symtab: bool,
+}
+
+impl SectionPlan {
+    fn new(p: SectionsPresent) -> Self {
+        let mut counts = [1usize; 22];
+        let mut set =
+            |s: Sec, n: usize| counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()] = n;
+        set(Sec::GnuVersion, p.versions as usize);
+        set(Sec::GnuVersionR, p.versions as usize);
+        set(Sec::RoData, p.rodata as usize);
+        set(Sec::Tdata, p.tdata as usize);
+        set(Sec::Data, p.data as usize);
+        set(Sec::Tbss, p.tbss as usize);
+        set(Sec::Bss, p.bss as usize);
+        set(Sec::Debug, p.dwarf);
+        set(Sec::RelaText, p.rela_text as usize);
+        set(Sec::RelaData, p.rela_data as usize);
+        set(Sec::Symtab, p.plt_symtab as usize);
+        set(Sec::Strtab, p.plt_symtab as usize);
+        Self { counts }
+    }
+
+    /// Plan carrying only the sections that precede `.text`, for the
+    /// early `text_shndx` the symbol tables need.
+    fn prefix(has_versions: bool) -> Self {
+        Self::new(SectionsPresent {
+            versions: has_versions,
+            ..Default::default()
+        })
+    }
+
+    fn len(&self) -> usize {
+        self.counts.iter().sum()
+    }
+
+    /// Section-header index of `s`, or of the slot it would occupy.
+    fn index_of(&self, s: Sec) -> u16 {
+        let at = SECTION_ORDER.iter().position(|&x| x == s).unwrap();
+        self.counts[..at].iter().sum::<usize>() as u16
+    }
+
+    /// Which slot the header at index `i` belongs to.
+    fn at(&self, i: usize) -> Sec {
+        let mut seen = 0;
+        for (slot, &n) in self.counts.iter().enumerate() {
+            seen += n;
+            if i < seen {
+                return SECTION_ORDER[slot];
+            }
+        }
+        panic!("section index {i} past the plan");
+    }
+}
+
+/// Append one section header, checking it lands where the plan says.
+/// Emission and the derived indices then cannot disagree.
+///
+/// Checked in release too: the indices are handed to every exported
+/// symbol's `st_shndx`, so a table emitted out of plan order produces a
+/// silently corrupt image rather than a failure.
+fn emit_shdr(
+    out: &mut Vec<u8>,
+    plan: &SectionPlan,
+    cursor: &mut usize,
+    kind: Sec,
+    shdr: &Elf64Shdr,
+) {
+    assert_eq!(
+        plan.at(*cursor),
+        kind,
+        "section header {cursor} emitted out of plan order"
     );
-    let bytes = unsafe {
-        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
-    };
-    out.extend_from_slice(bytes);
+    *cursor += 1;
+    write_struct(out, shdr);
 }
 
 /// Dynamic linker path. Selected per machine: `aarch64` lives at
@@ -354,16 +495,19 @@ fn e_machine(machine: Machine) -> u16 {
 /// address into the GOT slot. Different value on each arch.
 fn r_glob_dat(machine: Machine) -> u64 {
     match machine {
-        Machine::Aarch64 => R_AARCH64_GLOB_DAT,
-        Machine::X86_64 => R_X86_64_GLOB_DAT,
+        Machine::Aarch64 => R_AARCH64_GLOB_DAT.into(),
+        Machine::X86_64 => R_X86_64_GLOB_DAT.into(),
     }
 }
 
-/// `R_*_RELATIVE` relocation type. Different value on each arch.
+/// `R_*_RELATIVE` relocation type: the loader writes
+/// `load_bias + r_addend` into the slot. Used in a shared object for
+/// an internal absolute pointer (a function / data pointer baked into
+/// static data) so it tracks the runtime load base.
 fn r_relative(machine: Machine) -> u64 {
     match machine {
-        Machine::Aarch64 => R_AARCH64_RELATIVE,
-        Machine::X86_64 => R_X86_64_RELATIVE,
+        Machine::Aarch64 => R_AARCH64_RELATIVE.into(),
+        Machine::X86_64 => R_X86_64_RELATIVE.into(),
     }
 }
 
@@ -377,10 +521,6 @@ fn r_relative(machine: Machine) -> u64 {
 
 fn put_u32(out: &mut Vec<u8>, v: u32) {
     out.extend_from_slice(&v.to_le_bytes());
-}
-
-fn round_up(n: u64, align: u64) -> u64 {
-    (n + align - 1) & !(align - 1)
 }
 
 // ------------------------------------------------------------------
@@ -466,9 +606,9 @@ fn emit_start_stub_aarch64(
 
     let result = if use_libc_exit {
         // Placeholder adrp + ldr + blr through the libc exit GOT
-        // slot. The caller appends a GotFixup with adrp_offset =
-        // current code length so the writer fills in imm21/imm12
-        // once the GOT vmaddr is known.
+        // slot. The caller patches it at the current code length so
+        // the writer fills in imm21/imm12 once the GOT vmaddr is
+        // known.
         let exit_adrp_offset = code.len();
         aarch64::emit(code, aarch64::enc_adrp(Reg::X16, 0));
         aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
@@ -729,31 +869,10 @@ fn build_plt_symtab(
     // without DWARF (perf maps a sample by `[st_value, st_value +
     // st_size)`, so a zero size leaves the function unattributable).
     // `func_names` covers global and static functions on the merged
-    // path. The size is the span to the next function or trampoline
-    // start, capped at the text length; collecting all of them as
-    // boundaries handles any code layout.
-    let text_len = build.text.len() as u64;
-    let mut boundaries: Vec<u64> = build
-        .func_ent_pcs
-        .iter()
-        .map(|&pc| build.pc_to_native[pc] as u64)
-        .collect();
-    boundaries.extend(
-        build
-            .plt_trampoline_offsets
-            .iter()
-            .flatten()
-            .map(|&o| o as u64),
-    );
-    boundaries.push(text_len);
-    boundaries.sort_unstable();
+    // path.
+    let boundaries = text_boundaries(build);
     for (i, name) in build.func_names.iter().enumerate() {
         let start = build.pc_to_native[build.func_ent_pcs[i]] as u64;
-        let end = boundaries
-            .iter()
-            .copied()
-            .find(|&b| b > start)
-            .unwrap_or(text_len);
         let st_name = strtab.len() as u32;
         strtab.extend_from_slice(name.as_bytes());
         strtab.push(0);
@@ -765,47 +884,71 @@ fn build_plt_symtab(
                 st_other: 0,
                 st_shndx: text_shndx,
                 st_value: text_vmaddr + start,
-                st_size: end.saturating_sub(start),
+                st_size: text_body_len(&boundaries, start),
             },
         );
     }
     (symtab, strtab)
 }
 
+/// Sorted native `.text` offsets that end a function body: every
+/// defined function entry, every import trampoline, and the end of
+/// `.text`. Collecting all of them handles any code layout.
+fn text_boundaries(build: &super::Build) -> Vec<u64> {
+    let mut boundaries: Vec<u64> = build
+        .func_ent_pcs
+        .iter()
+        .filter_map(|&pc| build.pc_to_native.get(pc).map(|&o| o as u64))
+        .collect();
+    boundaries.extend(
+        build
+            .plt_trampoline_offsets
+            .iter()
+            .flatten()
+            .map(|&o| o as u64),
+    );
+    boundaries.push(build.text.len() as u64);
+    boundaries.sort_unstable();
+    boundaries.dedup();
+    boundaries
+}
+
+/// Byte length of the body starting at `start`: the span to the next
+/// boundary past it. A zero size leaves the function unattributable to
+/// a profiler, which maps a sample by `[st_value, st_value + st_size)`.
+fn text_body_len(boundaries: &[u64], start: u64) -> u64 {
+    boundaries
+        .get(boundaries.partition_point(|&b| b <= start))
+        .copied()
+        .unwrap_or_else(|| boundaries.last().copied().unwrap_or(start))
+        .saturating_sub(start)
+}
+
 /// Build .dynsym. Layout:
 ///
 /// * Index 0: zero sentinel (required by ELF).
-/// * `[1, 1+n_imports)`: undefined imports (`STB_GLOBAL |
-///   STT_NOTYPE`, `st_shndx = SHN_UNDEF`). Loader resolves
-///   these via `.rela.dyn`.
-/// * `[1+n_imports, 1+n_imports+n_exports)`: defined exports
-///   (`STB_GLOBAL | STT_FUNC`, `st_shndx = 1` -- a placeholder
-///   non-zero index since we don't emit section headers, but
-///   `dlsym` only checks `SHN_UNDEF` to gate a name as
-///   resolvable). `st_value` is the runtime VA of the
-///   function.
-#[allow(clippy::too_many_arguments)]
+/// * `[1, 1+n_imports)`: undefined imports (`STB_GLOBAL`,
+///   `st_shndx = SHN_UNDEF`). Loader resolves these via `.rela.dyn`.
+/// * `[1+n_imports, 1+n_imports+n_exports)`: defined exports, each
+///   carrying the runtime VA, size, type, binding, and section index
+///   of the definition it publishes.
 fn build_dynsym(
     import_name_offsets: &[u32],
-    export_name_offsets: &[u32],
-    export_addrs: &[u64],
-    export_is_data: &[bool],
-    copy_name_offsets: &[u32],
-    copy_addrs: &[u64],
-    copy_sizes: &[u64],
-    copy_is_bss: &[bool],
-    // Section-header indices a defined symbol resides in, so `nm` /
-    // `readelf -s` attribute each export to its real section.
-    text_shndx: u16,
-    data_shndx: u16,
-    bss_shndx: u16,
+    import_is_object: &[bool],
+    exports: &[DynsymExport],
+    copies: &DynsymCopyTargets<'_>,
 ) -> Vec<u8> {
-    debug_assert_eq!(export_name_offsets.len(), export_addrs.len());
-    debug_assert_eq!(export_name_offsets.len(), export_is_data.len());
+    let DynsymCopyTargets {
+        name_offsets: copy_name_offsets,
+        addrs: copy_addrs,
+        sizes: copy_sizes,
+        is_bss: copy_is_bss,
+        data_shndx,
+        bss_shndx,
+    } = *copies;
     debug_assert_eq!(copy_name_offsets.len(), copy_addrs.len());
     debug_assert_eq!(copy_name_offsets.len(), copy_sizes.len());
-    let n_total =
-        1 + import_name_offsets.len() + export_name_offsets.len() + copy_name_offsets.len();
+    let n_total = 1 + import_name_offsets.len() + exports.len() + copy_name_offsets.len();
     let mut out = Vec::with_capacity(n_total * ELF64_SYM_SIZE as usize);
 
     // Sentinel at index 0 -- all zero. Required by ELF.
@@ -821,27 +964,25 @@ fn build_dynsym(
         },
     );
 
-    for &name_off in import_name_offsets {
+    debug_assert_eq!(import_name_offsets.len(), import_is_object.len());
+    for (i, &name_off) in import_name_offsets.iter().enumerate() {
         write_struct(
             &mut out,
             &Elf64Sym {
                 st_name: name_off,
-                // c5's only dynamic-import mechanism today is
-                // `#pragma binding(<lib>::<name>, "<sym>")`, and
-                // every binding is reached via `Inst::CallExt`
-                // (a call site) -- there's no path that imports a
-                // data symbol. So tagging every import `STT_FUNC`
-                // is correct in practice and gives `gdb` / `nm`
-                // the right hint about callability. If we ever
-                // grow an `extern int errno;`-style data import,
-                // `ResolvedImport` would need an `is_function`
-                // discriminator and this branch would pick
-                // `STT_OBJECT` for the data case. The dynamic
-                // linker doesn't care either way -- it resolves
-                // by name -- so the worst case for a future
-                // mis-tag is a confused debugger, not a broken
-                // load.
-                st_info: (STB_GLOBAL << 4) | STT_FUNC,
+                // The type comes from the referencing unit's symbol
+                // table: a reference to a data object republishes
+                // STT_OBJECT, everything else STT_FUNC. A reference
+                // that carried no type reaches here as STT_FUNC, which
+                // is what a call site is. The dynamic linker resolves
+                // by name either way; the type is what `nm` and a
+                // consuming linker read.
+                st_info: (STB_GLOBAL << 4)
+                    | if import_is_object[i] {
+                        STT_OBJECT
+                    } else {
+                        STT_FUNC
+                    },
                 st_other: 0, // STV_DEFAULT
                 st_shndx: SHN_UNDEF,
                 st_value: 0,
@@ -850,28 +991,16 @@ fn build_dynsym(
         );
     }
 
-    for ((&name_off, &addr), &is_data) in export_name_offsets
-        .iter()
-        .zip(export_addrs.iter())
-        .zip(export_is_data.iter())
-    {
-        // A code export is STT_FUNC; a data global (`--export-data`,
-        // e.g. a `PyTypeObject`) is STT_OBJECT so `nm` / a debugger
-        // classify it correctly. The dynamic linker resolves by name
-        // and ignores the type, so a `dlsym` lookup works either way.
-        let st_type = if is_data { STT_OBJECT } else { STT_FUNC };
+    for e in exports {
         write_struct(
             &mut out,
             &Elf64Sym {
-                st_name: name_off,
-                st_info: (STB_GLOBAL << 4) | st_type,
-                st_other: 0,
-                // The export resides in .data (a data global) or .text
-                // (a code export). dlsym resolves by name regardless,
-                // but section-attributing consumers need the real index.
-                st_shndx: if is_data { data_shndx } else { text_shndx },
-                st_value: addr,
-                st_size: 0,
+                st_name: e.name_off,
+                st_info: e.st_info,
+                st_other: 0, // STV_DEFAULT -- restricted visibility never exports
+                st_shndx: e.shndx,
+                st_value: e.addr,
+                st_size: e.size,
             },
         );
     }
@@ -1058,13 +1187,42 @@ struct DynamicInfo {
 }
 
 /// A defined dynamic-symbol export for the ELF writer. `offset` is a
-/// byte offset within `build.text` (`section == Text`) or `build.data`
-/// (`section == Data`); the writer adds the matching runtime base and
-/// picks STT_FUNC or STT_OBJECT.
+/// byte offset within `build.text` (`section == Text`) or within the
+/// merged data-byte space (`section == Data`); the writer resolves it
+/// to a runtime address and to the `.rodata` / `.data` / `.bss`
+/// section that holds it.
 struct ElfExport {
     name: String,
     section: super::DynamicExportSection,
     offset: u64,
+    size: u64,
+    is_object: bool,
+    weak: bool,
+}
+
+/// The copy-relocation targets `.dynsym` publishes: one defined
+/// `STT_OBJECT` per data binding, in `Build::copy_relocs` order.
+#[derive(Clone, Copy)]
+struct DynsymCopyTargets<'a> {
+    name_offsets: &'a [u32],
+    addrs: &'a [u64],
+    sizes: &'a [u64],
+    is_bss: &'a [bool],
+    /// Section indices the targets resolve into; zero while the layout
+    /// is still being sized.
+    data_shndx: u16,
+    bss_shndx: u16,
+}
+
+/// An `ElfExport` resolved against the final layout, ready to write.
+struct DynsymExport {
+    name_off: u32,
+    addr: u64,
+    size: u64,
+    /// `STB_GLOBAL` / `STB_WEAK` binding packed with `STT_FUNC` /
+    /// `STT_OBJECT`.
+    st_info: u8,
+    shndx: u16,
 }
 
 /// One `.gnu.version_r` Vernaux: `(version dynstr offset, elf_hash,
@@ -1082,6 +1240,25 @@ struct VersionInfo {
     verneed_num: u64,
 }
 
+/// Where the written code blob sits: its byte offset in the image and
+/// the runtime address of that same byte. Every fixup patcher indexes
+/// the image with the first and computes displacements with the second.
+#[derive(Clone, Copy)]
+struct CodePlacement {
+    file_off: u64,
+    vmaddr: u64,
+}
+
+impl CodePlacement {
+    fn file_at(self, offset_in_code: u64) -> usize {
+        (self.file_off + offset_in_code) as usize
+    }
+
+    fn vmaddr_at(self, offset_in_code: u64) -> u64 {
+        self.vmaddr + offset_in_code
+    }
+}
+
 // ------------------------------------------------------------------
 // Adrp/ldr/add fixup patching. The codegen records GotFixup,
 // DataFixup, and FuncFixup entries against `Build::text` byte offsets;
@@ -1095,49 +1272,25 @@ struct VersionInfo {
 /// that the loader has written into .got.
 fn patch_adrp_ldr(
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
-    adrp_offset_in_code: u64,
+    code: CodePlacement,
+    instr_offset_in_code: u64,
     target_vmaddr: u64,
+    part: AddrPart,
     label: &str,
 ) -> Result<(), C5Error> {
-    let adrp_file_off = (code_base_in_file + adrp_offset_in_code) as usize;
-    let ldr_file_off = adrp_file_off + 4;
-    let adrp_vmaddr = code_vmaddr_base + adrp_offset_in_code;
-
-    let adrp_page = adrp_vmaddr & !0xFFF;
-    let target_page = target_vmaddr & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("ELF: {label} page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = (target_vmaddr & 0xFFF) as u32;
-    if !in_page.is_multiple_of(8) {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("ELF: {label} slot offset {in_page:#x} not 8-aligned"),
-        )));
-    }
-
-    // Preserve the destination register the codegen chose: a GOT call
-    // loads into x16 (matched by its `blr x16`), but an inline GOT data
-    // load (`adrp x0; ldr x0, [x0]` for the address of an imported data
-    // object) loads into the register the following code reads. Read the
-    // original `Rd` from the adrp being patched rather than forcing x16,
-    // which would strand the loaded address in a register the code never
-    // reads. `adrp` Rd is bits 0..4; `ldr` (unsigned offset) has Rt in
-    // 0..4 and Rn in 5..9, both the same register for this pair.
-    let orig_adrp = u32::from_le_bytes(out[adrp_file_off..adrp_file_off + 4].try_into().unwrap());
-    let rd = orig_adrp & 0x1f;
-    let adrp_word = (aarch64::enc_adrp(aarch64::Reg::X16, imm21) & !0x1f) | rd;
-    let ldr_word = (aarch64::enc_ldr_imm(aarch64::Reg::X16, aarch64::Reg::X16, in_page) & !0x3ff)
-        | rd
-        | (rd << 5);
-    out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-    out[ldr_file_off..ldr_file_off + 4].copy_from_slice(&ldr_word.to_le_bytes());
-    Ok(())
+    aarch64::patch::patch_slot(
+        out,
+        code.file_at(instr_offset_in_code),
+        code.vmaddr_at(instr_offset_in_code) as i64,
+        target_vmaddr as i64,
+        aarch64::patch::SlotWidth::W64,
+        part,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe(&format!("ELF: {label}")),
+        ))
+    })
 }
 
 /// Per-machine dispatch for "load an absolute address into the
@@ -1148,29 +1301,20 @@ fn patch_adrp_ldr(
 fn patch_addr_load(
     machine: Machine,
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
+    code: CodePlacement,
     instr_offset_in_code: u64,
     target_vmaddr: u64,
+    part: AddrPart,
     label: &str,
 ) -> Result<(), C5Error> {
     match machine {
-        Machine::Aarch64 => patch_adrp_add(
-            out,
-            code_base_in_file,
-            code_vmaddr_base,
-            instr_offset_in_code,
-            target_vmaddr,
-            label,
-        ),
-        Machine::X86_64 => patch_lea_rip32(
-            out,
-            code_base_in_file,
-            code_vmaddr_base,
-            instr_offset_in_code,
-            target_vmaddr,
-            label,
-        ),
+        Machine::Aarch64 => {
+            patch_adrp_add(out, code, instr_offset_in_code, target_vmaddr, part, label)
+        }
+        Machine::X86_64 => {
+            crate::c5::codegen::require_whole_addr(part, label)?;
+            patch_lea_rip32(out, code, instr_offset_in_code, target_vmaddr, label)
+        }
     }
 }
 
@@ -1181,29 +1325,20 @@ fn patch_addr_load(
 fn patch_got_call(
     machine: Machine,
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
+    code: CodePlacement,
     instr_offset_in_code: u64,
     target_vmaddr: u64,
+    part: AddrPart,
     label: &str,
 ) -> Result<(), C5Error> {
     match machine {
-        Machine::Aarch64 => patch_adrp_ldr(
-            out,
-            code_base_in_file,
-            code_vmaddr_base,
-            instr_offset_in_code,
-            target_vmaddr,
-            label,
-        ),
-        Machine::X86_64 => patch_call_qword_rip32(
-            out,
-            code_base_in_file,
-            code_vmaddr_base,
-            instr_offset_in_code,
-            target_vmaddr,
-            label,
-        ),
+        Machine::Aarch64 => {
+            patch_adrp_ldr(out, code, instr_offset_in_code, target_vmaddr, part, label)
+        }
+        Machine::X86_64 => {
+            crate::c5::codegen::require_whole_addr(part, label)?;
+            patch_call_qword_rip32(out, code, instr_offset_in_code, target_vmaddr, label)
+        }
     }
 }
 
@@ -1213,14 +1348,13 @@ fn patch_got_call(
 /// `instr_vmaddr + CALL_QWORD_RIP32_LEN`).
 fn patch_call_qword_rip32(
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
+    code: CodePlacement,
     instr_offset_in_code: u64,
     target_vmaddr: u64,
     label: &str,
 ) -> Result<(), C5Error> {
     let call_len = x86_64::CALL_QWORD_RIP32_LEN as u64;
-    let instr_vmaddr = code_vmaddr_base + instr_offset_in_code;
+    let instr_vmaddr = code.vmaddr_at(instr_offset_in_code);
     let after = instr_vmaddr + call_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
@@ -1230,7 +1364,7 @@ fn patch_call_qword_rip32(
     }
     let disp32 = delta as i32;
     // disp32 is the last 4 bytes of `FF 15 dd dd dd dd`.
-    let disp_file_off = (code_base_in_file + instr_offset_in_code + call_len - 4) as usize;
+    let disp_file_off = code.file_at(instr_offset_in_code + call_len - 4);
     out[disp_file_off..disp_file_off + 4].copy_from_slice(&disp32.to_le_bytes());
     Ok(())
 }
@@ -1241,14 +1375,13 @@ fn patch_call_qword_rip32(
 /// `instr_vmaddr + LEA_RIP32_LEN`). 32-bit signed range, ~+/-2 GiB.
 fn patch_lea_rip32(
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
+    code: CodePlacement,
     instr_offset_in_code: u64,
     target_vmaddr: u64,
     label: &str,
 ) -> Result<(), C5Error> {
     let lea_len = x86_64::LEA_RIP32_LEN as u64;
-    let instr_vmaddr = code_vmaddr_base + instr_offset_in_code;
+    let instr_vmaddr = code.vmaddr_at(instr_offset_in_code);
     let after = instr_vmaddr + lea_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
@@ -1259,117 +1392,62 @@ fn patch_lea_rip32(
     let disp32 = delta as i32;
     // disp32 is the last 4 bytes of a 7-byte LEA encoding:
     //   REX.W + 0x8D + ModR/M + 4*disp
-    let disp_file_off = (code_base_in_file + instr_offset_in_code + lea_len - 4) as usize;
+    let disp_file_off = code.file_at(instr_offset_in_code + lea_len - 4);
     out[disp_file_off..disp_file_off + 4].copy_from_slice(&disp32.to_le_bytes());
     Ok(())
 }
 
 /// Patch a data-import GOT reference so it loads the import's address from
 /// its GOT slot at `slot_vmaddr`. The reference reads the slot's value
-/// (an imported data object's address), not a call thunk. GOT relaxation
-/// (see `link.rs`) left a `lea r64, [rip+disp32]` (opcode 0x8D); flip it
-/// back to `mov r64, [rip+disp32]` (0x8B) against the slot. `mov` and
-/// `lea` share the 7-byte REX-prefixed encoding and disp32 position, so
-/// the disp is patched with the same `patch_lea_rip32` math.
+/// (an imported data object's address), not a call thunk. The site is
+/// either the `lea r64, [rip+disp32]` (opcode 0x8D) GOT relaxation left
+/// behind (see `link.rs`) or the unrelaxed `mov r64, [rip+disp32]`
+/// (0x8B); both end as the `mov`. The two share the 7-byte REX-prefixed
+/// encoding and disp32 position, so the disp is patched with the same
+/// `patch_lea_rip32` math.
 fn patch_got_data_load(
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
+    code: CodePlacement,
     instr_offset_in_code: u64,
     slot_vmaddr: u64,
     label: &str,
 ) -> Result<(), C5Error> {
-    let opcode_off = (code_base_in_file + instr_offset_in_code + 1) as usize;
-    if out[opcode_off] != 0x8D {
+    let opcode_off = code.file_at(instr_offset_in_code + 1);
+    if out[opcode_off] != 0x8D && out[opcode_off] != 0x8B {
         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
             &format!(
-                "ELF: {label} expected lea opcode 0x8D at file+{opcode_off:#x}, found {:#04x}",
+                "ELF: {label} expected lea 0x8D or mov 0x8B at file+{opcode_off:#x}, found {:#04x}",
                 out[opcode_off],
             ),
         )));
     }
     out[opcode_off] = 0x8B;
-    patch_lea_rip32(
-        out,
-        code_base_in_file,
-        code_vmaddr_base,
-        instr_offset_in_code,
-        slot_vmaddr,
-        label,
-    )
+    patch_lea_rip32(out, code, instr_offset_in_code, slot_vmaddr, label)
 }
 
-/// Patch an `adrp Xd, page; add Xd, Xd, #imm12` pair so the result
-/// equals `target_vmaddr`. Used for data-segment references and
+/// Patch the fields `part` names so the reference computes
+/// `target_vmaddr`. Used for data-segment references and
 /// function-pointer literals; both are absolute-address materializations.
 fn patch_adrp_add(
     out: &mut [u8],
-    code_base_in_file: u64,
-    code_vmaddr_base: u64,
-    adrp_offset_in_code: u64,
+    code: CodePlacement,
+    instr_offset_in_code: u64,
     target_vmaddr: u64,
+    part: AddrPart,
     label: &str,
 ) -> Result<(), C5Error> {
-    let adrp_file_off = (code_base_in_file + adrp_offset_in_code) as usize;
-    let add_file_off = adrp_file_off + 4;
-    let adrp_vmaddr = code_vmaddr_base + adrp_offset_in_code;
-
-    let adrp_page = adrp_vmaddr & !0xFFF;
-    let target_page = target_vmaddr & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("ELF: {label} page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = (target_vmaddr & 0xFFF) as u32;
-
-    // Recover the registers the codegen (or another toolchain) encoded at the
-    // placeholder site. The adrp carries rd in the low 5 bits; the second
-    // instruction is either `add rd, rn, #lo12` or an unsigned-offset
-    // load/store (`ldr/str [rn, #:lo12:sym]`), patched in place below.
-    let prev_adrp = u32::from_le_bytes([
-        out[adrp_file_off],
-        out[adrp_file_off + 1],
-        out[adrp_file_off + 2],
-        out[adrp_file_off + 3],
-    ]);
-    let prev_add = u32::from_le_bytes([
-        out[add_file_off],
-        out[add_file_off + 1],
-        out[add_file_off + 2],
-        out[add_file_off + 3],
-    ]);
-    let rd = (prev_adrp & 0x1F) as u8;
-    let adrp_word = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
-    out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
-
-    // ADD (immediate) takes the low 12 bits unscaled. An unsigned-offset
-    // load/store scales the immediate by the access size (2^size, size in bits
-    // 31..30), so its opcode is preserved and only imm12 (bits 21..10) is
-    // rewritten.
-    let second = if (prev_add & 0x7F80_0000) == 0x1100_0000 {
-        let add_rd = (prev_add & 0x1F) as u8;
-        let add_rn = ((prev_add >> 5) & 0x1F) as u8;
-        aarch64::enc_add_imm(aarch64::Reg(add_rd), aarch64::Reg(add_rn), in_page)
-    } else if (prev_add & 0x3B00_0000) == 0x3900_0000 {
-        let scale = 1u32 << (prev_add >> 30);
-        if !in_page.is_multiple_of(scale) {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "ELF: {label} low-12 offset {in_page:#x} not aligned to load/store size {scale}"
-                ),
-            )));
-        }
-        (prev_add & !(0xFFF << 10)) | (((in_page / scale) & 0xFFF) << 10)
-    } else {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("ELF: {label} adrp paired with an unrecognized instruction {prev_add:#010x}"),
-        )));
-    };
-    out[add_file_off..add_file_off + 4].copy_from_slice(&second.to_le_bytes());
-    Ok(())
+    aarch64::patch::patch_addr(
+        out,
+        code.file_at(instr_offset_in_code),
+        code.vmaddr_at(instr_offset_in_code) as i64,
+        target_vmaddr as i64,
+        part,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe(&format!("ELF: {label}")),
+        ))
+    })
 }
 
 // ------------------------------------------------------------------
@@ -1412,6 +1490,22 @@ fn resolve_import_version_reqs(
     _machine: super::Machine,
 ) -> Vec<Option<(String, String)>> {
     alloc::vec![None; imports.imports.len()]
+}
+
+/// Index of a relocated 8-byte slot within the writable data payload.
+/// A slot below the read-only prefix would need a load-time write to a
+/// page the loader maps without write permission, so the producer's
+/// segregation is checked rather than assumed.
+fn reloc_slot_in_data(data_offset: u64, ro_len: u64, kind: &str) -> Result<usize, C5Error> {
+    if data_offset < ro_len {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "ELF: {kind} reloc slot {data_offset:#x} lies in the read-only data prefix \
+                 (len {ro_len:#x})"
+            ),
+        )));
+    }
+    Ok((data_offset - ro_len) as usize)
 }
 
 pub(super) fn write(
@@ -1471,12 +1565,31 @@ pub(super) fn write(
     // `Build::exports`) and `--export-data` (every global, function and
     // data, via `Build::dynamic_exports`) -- the `-rdynamic` behaviour
     // that lets a `dlopen`'d module resolve the host's symbols from the
-    // global scope. Each entry carries the section it lives in so the
-    // dynsym picks STT_FUNC (`.text`) or STT_OBJECT (`.data`); the offset
-    // is a byte offset within `build.text` / `build.data`. An ordinary
-    // executable has no exports, so the tables are unchanged.
-    let mut elf_exports: Vec<ElfExport> = Vec::new();
+    // global scope. An ordinary executable has no exports, so the tables
+    // are unchanged.
+    // `dynamic_exports` comes first: it is resolved from the merged
+    // symbol table and carries each definition's real size, type, and
+    // binding, so a name in both lists takes those over the
+    // entry-point-only record in `build.exports`.
+    let mut elf_exports: Vec<ElfExport> = build
+        .dynamic_exports
+        .iter()
+        .map(|d| ElfExport {
+            name: d.name.clone(),
+            section: d.section,
+            offset: d.offset,
+            size: d.size,
+            is_object: d.is_object,
+            weak: d.weak,
+        })
+        .collect();
+    let exported_names: alloc::collections::BTreeSet<String> =
+        elf_exports.iter().map(|e| e.name.clone()).collect();
+    let text_bounds = text_boundaries(build);
     for exp in &build.exports {
+        if exported_names.contains(exp.name.as_str()) {
+            continue;
+        }
         let native_off = build
             .pc_to_native
             .get(exp.ent_pc)
@@ -1495,49 +1608,47 @@ pub(super) fn write(
             name: exp.name.clone(),
             section: super::DynamicExportSection::Text,
             offset: native_off as u64,
+            size: text_body_len(&text_bounds, native_off as u64),
+            is_object: false,
+            weak: false,
         });
     }
-    for d in &build.dynamic_exports {
-        if !elf_exports.iter().any(|e| e.name == d.name) {
-            elf_exports.push(ElfExport {
-                name: d.name.clone(),
-                section: d.section,
-                offset: d.offset,
-            });
-        }
-    }
     let export_names: Vec<&str> = elf_exports.iter().map(|e| e.name.as_str()).collect();
-    let export_is_data: Vec<bool> = elf_exports
-        .iter()
-        .map(|e| e.section == super::DynamicExportSection::Data)
-        .collect();
 
     // ---- Build the dynamic-linking metadata up front so we know the
     //      sizes for layout calculations. ----
     let (mut dynstr, name_offsets, lib_strtab_offsets, export_name_offsets, copy_name_offsets) =
         build_dynstr(&build.imports, &export_names, &build.copy_relocs);
+    let import_is_object: Vec<bool> = build.imports.imports.iter().map(|i| i.is_object).collect();
     let copy_sizes: Vec<u64> = build.copy_relocs.iter().map(|cr| cr.size).collect();
     let copy_is_bss: Vec<bool> = build.copy_relocs.iter().map(|cr| cr.is_bss).collect();
     let n_copy = build.copy_relocs.len();
-    // Compute each export's and copy target's runtime VA. We fill in the
-    // real values after layout is fixed and `code_vmaddr` is known; here
-    // we just reserve the slots.
-    let export_addrs_placeholder: Vec<u64> = vec![0; elf_exports.len()];
+    // Each export's and copy target's runtime VA is filled in after
+    // layout is fixed and `code_vmaddr` is known; here we only need the
+    // table's byte size, so addresses and section indices stay zero.
     let copy_addrs_placeholder: Vec<u64> = vec![0; n_copy];
-    // Size-only placeholder build (zero addresses); the section indices
-    // here are irrelevant because only the final build below is written.
+    let exports_placeholder: Vec<DynsymExport> = export_name_offsets
+        .iter()
+        .map(|&name_off| DynsymExport {
+            name_off,
+            addr: 0,
+            size: 0,
+            st_info: 0,
+            shndx: 0,
+        })
+        .collect();
     let dynsym = build_dynsym(
         &name_offsets,
-        &export_name_offsets,
-        &export_addrs_placeholder,
-        &export_is_data,
-        &copy_name_offsets,
-        &copy_addrs_placeholder,
-        &copy_sizes,
-        &copy_is_bss,
-        0,
-        0,
-        0,
+        &import_is_object,
+        &exports_placeholder,
+        &DynsymCopyTargets {
+            name_offsets: &copy_name_offsets,
+            addrs: &copy_addrs_placeholder,
+            sizes: &copy_sizes,
+            is_bss: &copy_is_bss,
+            data_shndx: 0,
+            bss_shndx: 0,
+        },
     );
     // The hash table must cover every `.dynsym` entry, in dynsym
     // order: imports occupy indices [1, 1+n_imports), exports the
@@ -1619,11 +1730,9 @@ pub(super) fn write(
         dynstr.push(0);
     }
     let has_versions = !verneed_groups.is_empty();
-    // Two extra allocated sections (.gnu.version / .gnu.version_r) precede
-    // .rela.dyn when has_versions, shifting .text onward by two. Symbols
-    // whose st_shndx names .text must use this shifted index.
-    let ver_shdrs: u16 = if has_versions { 2 } else { 0 };
-    let text_shndx: u16 = 6 + ver_shdrs;
+    // Every section before `.text` is unconditional except the two
+    // version sections, so `.text`'s index needs only `has_versions`.
+    let text_shndx: u16 = SectionPlan::prefix(has_versions).index_of(Sec::Text);
     let (gnu_version, gnu_version_r): (Vec<u8>, Vec<u8>) = if has_versions {
         let mut versym: Vec<u8> = Vec::with_capacity(total_dynsym * 2);
         versym.extend_from_slice(&0u16.to_le_bytes()); // null symbol
@@ -1682,7 +1791,21 @@ pub(super) fn write(
     // zero-filled (no file storage) and accounted for via PT_TLS's
     // `p_memsz - p_filesz` only.
     let has_tls = !build.tls_data.is_empty();
-    let n_program_headers = N_BASE_PROGRAM_HEADERS + if has_tls { 1 } else { 0 };
+    // `build.data[..data_ro_len]` gets a PF_R load of its own (see the
+    // read-only layout pass); an empty prefix emits no header. The
+    // emit-produced read-only blob (switch dispatch tables) rides in
+    // the same load at an 8-aligned tail past the prefix.
+    let ro_len = build.data_ro_len.min(build.data.len()) as u64;
+    let jt_len = build.rodata.bytes.len() as u64;
+    let jt_off = if jt_len > 0 {
+        round_up(ro_len, 8)
+    } else {
+        ro_len
+    };
+    let ro_total = jt_off + jt_len;
+    let has_rodata = ro_total > 0;
+    let n_program_headers =
+        N_BASE_PROGRAM_HEADERS + if has_tls { 1 } else { 0 } + if has_rodata { 1 } else { 0 };
     let phoff = ELF_HEADER_SIZE;
     let phsize = n_program_headers * PROGRAM_HEADER_SIZE;
 
@@ -1710,12 +1833,22 @@ pub(super) fn write(
     // relocation so it tracks the runtime load base; an executable maps at
     // its link-time vmaddr, so the baked bytes are final and need none.
     let n_relative = if emit_dyn {
-        build.data_relocs.len() + build.code_relocs.len()
+        build.data_relocs.len() + build.code_relocs.len() + build.label_relocs.len()
     } else {
         0
     };
     let rela_size = (n_imports as u64 + n_relative as u64 + n_copy as u64) * ELF64_RELA_SIZE;
-    let code_off = round_up(rela_off + rela_size, 16);
+    // An asm alignment request above the section default places
+    // `build.text[0]` (which follows the entry stub) at that alignment,
+    // so the section-relative padding holds absolutely; p_offset ==
+    // p_vaddr modulo the page size. Without such a request the code
+    // blob keeps its established 16-aligned placement.
+    let text_align = build.text_align.max(16) as u64;
+    let code_off = if text_align > 16 {
+        round_up(rela_off + rela_size + stub_len, text_align) - stub_len
+    } else {
+        round_up(rela_off + rela_size, 16)
+    };
 
     // Build the code blob: _start stub + build.text (with shifted
     // fixup offsets at write time). For shared-library output
@@ -1751,9 +1884,24 @@ pub(super) fn write(
     let seg = seg_align(machine);
     let segment1_end = round_up(segment1_filesize, seg);
 
+    // ---- Layout pass 1.5: read-only data segment. ----
+    // `build.data[..data_ro_len]` is `const`-qualified storage with no
+    // relocated slot, so it gets its own PF_R load rather than sharing
+    // the writable one. Its own segment (not the R+X one) keeps it
+    // non-executable as well as non-writable.
+    let rodata_off = segment1_end;
+    let rodata_end = if ro_total > 0 {
+        round_up(rodata_off + ro_total, seg)
+    } else {
+        rodata_off
+    };
+    let rodata_vmaddr = TEXT_VMADDR_BASE + rodata_off;
+    // Runtime VA of the switch-table blob's first byte.
+    let jt_vmaddr = rodata_vmaddr + jt_off;
+
     // ---- Layout pass 2: rw segment (.dynamic, .got, build.data,
     //      .tdata, .tbss). ----
-    let segment2_off = segment1_end;
+    let segment2_off = rodata_end;
     let dynamic_off = segment2_off;
     // `build_dynamic` emits one DT_NEEDED per resolved dylib plus
     // 11 fixed tags (DT_HASH, DT_STRTAB, ..., DT_NULL terminator).
@@ -1770,9 +1918,16 @@ pub(super) fn write(
     let got_size = (n_imports as u64) * 8;
     // `.data`'s base alignment: p_vaddr == p_offset within the RW
     // segment, so aligning the file offset aligns the vaddr.
-    let data_align = build.data_align.max(8) as u64;
+    let data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
     let data_off = round_up(got_off + got_size, data_align);
-    let data_size = build.data.len() as u64;
+    let data_size = build.data.len() as u64 - ro_len;
+    // An object wider than the arch page size needs the RW segment's
+    // p_align raised to it: the image is a PIE, and the loader aligns the
+    // load bias down to the maximum PT_LOAD p_align, so a page-only value
+    // would let the bias land the object off its boundary. TEXT_VMADDR_BASE
+    // is a multiple of every alignment up to itself, so the ELF congruence
+    // p_vaddr == p_offset (mod p_align) holds for the raised value.
+    let rw_seg_align = seg.max(data_align.next_power_of_two());
     // PT_TLS requires `p_vaddr % p_align == 0` (ELF gABI), and glibc
     // computes a `_Thread_local`'s address as `tp - roundup(p_memsz,
     // p_align) + var_offset`. A misaligned TLS image makes the loader
@@ -1794,6 +1949,7 @@ pub(super) fn write(
     // `bss_vmaddr + (offset - data_size)`, which the loader zero-fills
     // through `p_memsz > p_filesz`.
     let bss_vmaddr = TEXT_VMADDR_BASE + segment2_off + segment2_filesize + tbss_size;
+    let file_data_len = build.data.len() as u64;
     // The PT_LOAD's p_memsz must cover `.tbss` and `.bss` even though
     // neither has file backing -- the loader zero-fills the difference.
     let segment2_memsize = segment2_filesize + tbss_size + build.bss_size as u64;
@@ -1822,10 +1978,12 @@ pub(super) fn write(
     // Runtime VA of a data-segment byte: `.data` for an offset within the
     // file image, otherwise the zero-fill `.bss` tail past it.
     let data_off_to_vaddr = |off: u64| -> u64 {
-        if off < data_size {
-            data_vmaddr + off
+        if off < ro_len {
+            rodata_vmaddr + off
+        } else if off < file_data_len {
+            data_vmaddr + (off - ro_len)
         } else {
-            bss_vmaddr + (off - data_size)
+            bss_vmaddr + (off - file_data_len)
         }
     };
 
@@ -1889,6 +2047,9 @@ pub(super) fn write(
         for r in &md.debug_line_text_relocs {
             super::apply_merged_dwarf_text_reloc(&mut debug_line, r, dwarf_text_vmaddr)?;
         }
+        for r in &md.debug_info_data_relocs {
+            super::apply_merged_dwarf_data_reloc(&mut debug_info, r, &data_off_to_vaddr)?;
+        }
         let fresh = dwarf::emit(
             program,
             build,
@@ -1942,29 +2103,166 @@ pub(super) fn write(
     // payloads degenerate to the SHT_SYMTAB sentinel + the empty
     // string.
     let emit_plt_symtab = !build.plt_trampoline_offsets.is_empty();
+    // `--emit-relocs` payloads: entries reference the section symbols
+    // the static symtab carries, so requesting them forces a symtab.
+    let er_text: Vec<&crate::c5::codegen::EmittedFinalReloc> = build
+        .emitted_relocs
+        .iter()
+        .filter(|r| matches!(r.site, crate::c5::codegen::EmitStream::Text))
+        .collect();
+    let er_data: Vec<&crate::c5::codegen::EmittedFinalReloc> = build
+        .emitted_relocs
+        .iter()
+        .filter(|r| matches!(r.site, crate::c5::codegen::EmitStream::Data))
+        .collect();
+    let has_rela_text = !er_text.is_empty();
+    let has_rela_data = !er_data.is_empty();
+    let emit_symtab = emit_plt_symtab || has_rela_text || has_rela_data;
+    let has_data = data_size > 0;
+    let has_tdata = has_tls && tdata_size > 0;
+    let has_tbss = has_tls && tbss_size > 0;
+    let has_bss = build.bss_size > 0;
+    let plan = SectionPlan::new(SectionsPresent {
+        versions: has_versions,
+        rodata: has_rodata,
+        tdata: has_tdata,
+        data: has_data,
+        tbss: has_tbss,
+        bss: has_bss,
+        dwarf: if emit_dwarf { 5 } else { 0 },
+        rela_text: has_rela_text,
+        rela_data: has_rela_data,
+        plt_symtab: emit_symtab,
+    });
+    // Section symbols the emitted relocations reference: (plan index,
+    // vaddr), in symtab order right after the sentinel.
+    let sec_syms: Vec<(Sec, u64)> = if has_rela_text || has_rela_data {
+        let mut v = alloc::vec![(Sec::Text, code_vmaddr)];
+        if has_rodata {
+            v.push((Sec::RoData, rodata_vmaddr));
+        }
+        if has_data {
+            v.push((Sec::Data, data_vmaddr));
+        }
+        if has_bss {
+            v.push((Sec::Bss, bss_vmaddr));
+        }
+        v
+    } else {
+        Vec::new()
+    };
+    // Symbol index of a target stream's section symbol and the addend
+    // rebased into that section. Data offsets index the unified
+    // stream: read-only prefix, then .data, then the zero-fill region.
+    let sec_sym_idx =
+        |sec: Sec| -> u64 { 1 + sec_syms.iter().position(|&(s, _)| s == sec).unwrap() as u64 };
+    let map_data_off = |d: u64| -> (Sec, u64) {
+        if d < ro_len {
+            (Sec::RoData, d)
+        } else if d < file_data_len {
+            (Sec::Data, d - ro_len)
+        } else {
+            (Sec::Bss, d - file_data_len)
+        }
+    };
+    let site_vaddr = |r: &crate::c5::codegen::EmittedFinalReloc| -> u64 {
+        match r.site {
+            crate::c5::codegen::EmitStream::Text => code_vmaddr + stub_len + r.site_offset,
+            crate::c5::codegen::EmitStream::Data => {
+                let (sec, off) = map_data_off(r.site_offset);
+                let base = sec_syms
+                    .iter()
+                    .find(|&&(s, _)| s == sec)
+                    .map(|&(_, v)| v)
+                    .unwrap_or(0);
+                base + off
+            }
+        }
+    };
+    let build_rela = |list: &[&crate::c5::codegen::EmittedFinalReloc]| -> Vec<u8> {
+        let mut b = Vec::with_capacity(list.len() * ELF64_RELA_SIZE as usize);
+        for r in list {
+            let (sym, addend) = match r.target {
+                crate::c5::codegen::EmitStream::Text => {
+                    (sec_sym_idx(Sec::Text), stub_len as i64 + r.addend)
+                }
+                crate::c5::codegen::EmitStream::Data => {
+                    let (sec, off) = map_data_off(r.addend as u64);
+                    (sec_sym_idx(sec), off as i64)
+                }
+            };
+            b.extend_from_slice(&site_vaddr(r).to_le_bytes());
+            b.extend_from_slice(&((sym << 32) | r.rtype as u64).to_le_bytes());
+            b.extend_from_slice(&addend.to_le_bytes());
+        }
+        b
+    };
+    let rela_text_bytes = build_rela(&er_text);
+    let rela_data_bytes = build_rela(&er_data);
     let trampoline_size: u64 = match machine {
         super::Machine::Aarch64 => 12, // adrp + ldr + br
         super::Machine::X86_64 => 6,   // jmp qword ptr [rip+disp32]
     };
-    let (plt_symtab_bytes, plt_strtab_bytes) = if emit_plt_symtab {
+    let (mut plt_symtab_bytes, plt_strtab_bytes) = if emit_plt_symtab {
         build_plt_symtab(build, dwarf_text_vmaddr, trampoline_size, text_shndx)
+    } else if emit_symtab {
+        let mut st = Vec::with_capacity(ELF64_SYM_SIZE as usize);
+        write_struct(
+            &mut st,
+            &Elf64Sym {
+                st_name: 0,
+                st_info: 0,
+                st_other: 0,
+                st_shndx: 0,
+                st_value: 0,
+                st_size: 0,
+            },
+        );
+        (st, alloc::vec![0u8])
     } else {
         (Vec::new(), alloc::vec![0u8])
     };
+    if emit_symtab && !sec_syms.is_empty() {
+        // Section symbols land right after the sentinel; the reloc
+        // entries above indexed them as 1..=n in `sec_syms` order.
+        let mut prefix: Vec<u8> = Vec::with_capacity(sec_syms.len() * ELF64_SYM_SIZE as usize);
+        for &(sec, vaddr) in &sec_syms {
+            write_struct(
+                &mut prefix,
+                &Elf64Sym {
+                    st_name: 0,
+                    st_info: STT_SECTION,
+                    st_other: 0,
+                    st_shndx: plan.index_of(sec),
+                    st_value: vaddr,
+                    st_size: 0,
+                },
+            );
+        }
+        let at = ELF64_SYM_SIZE as usize;
+        plt_symtab_bytes.splice(at..at, prefix);
+    }
     let post_dwarf_off = dwarf_frame_off + dwarf_sections.debug_frame.len() as u64;
-    let (symtab_off, strtab_off, shstrtab_off) = if emit_plt_symtab {
+    let (rela_text_off, rela_data_off, post_rela_off) = if has_rela_text || has_rela_data {
+        let t = round_up(post_dwarf_off, 8);
+        let d = t + rela_text_bytes.len() as u64;
+        (t, d, d + rela_data_bytes.len() as u64)
+    } else {
+        (post_dwarf_off, post_dwarf_off, post_dwarf_off)
+    };
+    let (symtab_off, strtab_off, shstrtab_off) = if emit_symtab {
         // .symtab requires 8-byte alignment (each Elf64_Sym is 24
         // bytes). The file body pads to `symtab_off` before
         // emitting the bytes; .strtab and .shstrtab sit immediately
         // after with no further padding.
-        let s = round_up(post_dwarf_off, 8);
+        let s = round_up(post_rela_off, 8);
         let st = s + plt_symtab_bytes.len() as u64;
         let sh = st + plt_strtab_bytes.len() as u64;
         (s, st, sh)
     } else {
-        // No PLT symtab -> .shstrtab abuts DWARF directly,
+        // No static symtab -> .shstrtab abuts DWARF directly,
         // matching the pre-#61 layout.
-        (post_dwarf_off, post_dwarf_off, post_dwarf_off)
+        (post_rela_off, post_rela_off, post_rela_off)
     };
     // .shstrtab content: NUL + section names. The empty name at the
     // front backs the SHT_NULL sentinel (sh_name=0). The catalog lists
@@ -1984,6 +2282,7 @@ pub(super) fn write(
         ".gnu.version_r",
         ".rela.dyn",
         ".text",
+        ".rodata",
         ".tdata",
         ".dynamic",
         ".got",
@@ -2004,7 +2303,13 @@ pub(super) fn write(
     // Always paired -- a SHT_SYMTAB section's `sh_link` must
     // reference a real strtab. Only emitted when there are
     // trampolines to name.
-    let plt_symtab_name_idx_in_shstrtab = if emit_plt_symtab {
+    if has_rela_text {
+        shstrtab_names.push(".rela.text");
+    }
+    if has_rela_data {
+        shstrtab_names.push(".rela.data");
+    }
+    let plt_symtab_name_idx_in_shstrtab = if emit_symtab {
         shstrtab_names.push(".symtab");
         shstrtab_names.push(".strtab");
         Some(shstrtab_names.len() - 2)
@@ -2035,38 +2340,12 @@ pub(super) fn write(
     // .hash + .rela.dyn + .text + (optional .tdata) +
     // .dynamic + .got + (optional .data) + (optional .tbss) +
     // (optional .bss) + 5 .debug_* + .shstrtab. Counted dynamically.
-    let has_data = !build.data.is_empty();
-    let has_tdata = has_tls && tdata_size > 0;
-    let has_tbss = has_tls && tbss_size > 0;
-    let has_bss = build.bss_size > 0;
-    // Section-header indices of the allocated sections, in the order
-    // emitted below: .text=6, then optional .tdata, .dynamic, .got, then
-    // optional .data, .tbss, .bss. Used to attribute each .dynsym export
-    // to its real section. `ver_shdrs` / `text_shndx` are computed near
-    // `has_versions` above so the PLT symtab can share the shifted index.
-    let data_shndx: u16 = 9 + ver_shdrs + has_tdata as u16;
-    let bss_shndx: u16 = 9 + ver_shdrs + has_tdata as u16 + has_data as u16 + has_tbss as u16;
-    let n_section_headers: u64 = 1 // NULL
-        + 1 // .interp
-        + 1 // .dynsym
-        + 1 // .dynstr
-        + 1 // .hash
-        + ver_shdrs as u64 // .gnu.version + .gnu.version_r
-        + 1 // .rela.dyn
-        + 1 // .text
-        + (if has_tdata { 1 } else { 0 }) // .tdata
-        + 1 // .dynamic
-        + 1 // .got
-        + (if has_data { 1 } else { 0 }) // .data
-        + (if has_tbss { 1 } else { 0 }) // .tbss
-        + (if has_bss { 1 } else { 0 }) // .bss
-        + (if emit_dwarf { 5 } else { 0 }) // .debug_* x 5 (info, abbrev, line, str, frame);
-        + (if emit_plt_symtab { 2 } else { 0 }) // .symtab + .strtab; 
-        + 1; // .shstrtab
+    let rodata_shndx: u16 = plan.index_of(Sec::RoData);
+    let data_shndx: u16 = plan.index_of(Sec::Data);
+    let bss_shndx: u16 = plan.index_of(Sec::Bss);
+    let n_section_headers: u64 = plan.len() as u64;
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
-    // shstrtab is the last section in the table; its index is
-    // n_section_headers - 1.
-    let shstrtab_idx: u16 = (n_section_headers - 1) as u16;
+    let shstrtab_idx: u16 = plan.index_of(Sec::Shstrtab);
 
     // ---- Build the bytes. ----
     let mut out: Vec<u8> = Vec::with_capacity(total_filesize as usize);
@@ -2146,6 +2425,23 @@ pub(super) fn write(
         seg,
     );
 
+    // PT_LOAD r-- -- .rodata. Only emitted when the data image has a
+    // read-only prefix; a segment of its own is what keeps the bytes
+    // both non-writable (unlike the RW load) and non-executable
+    // (unlike the R+X one).
+    if has_rodata {
+        write_phdr(
+            &mut out,
+            PT_LOAD,
+            PF_R,
+            rodata_off,
+            rodata_vmaddr,
+            ro_total,
+            ro_total,
+            seg,
+        );
+    }
+
     // PT_LOAD rw -- .dynamic, .got, .data, .tdata, [.tbss memsz].
     write_phdr(
         &mut out,
@@ -2155,7 +2451,7 @@ pub(super) fn write(
         TEXT_VMADDR_BASE + segment2_off,
         segment2_filesize,
         segment2_memsize,
-        seg,
+        rw_seg_align,
     );
 
     // PT_DYNAMIC -- mirror of the .dynamic section.
@@ -2202,14 +2498,39 @@ pub(super) fn write(
     // placeholder we built up front (with `st_value = 0`)
     // had the right byte count for layout; the real values
     // go in here.
-    let export_addrs: Vec<u64> = elf_exports
+    let final_exports: Vec<DynsymExport> = elf_exports
         .iter()
-        .map(|e| match e.section {
+        .zip(export_name_offsets.iter())
+        .map(|(e, &name_off)| {
             // Code blob layout is `[stub_len bytes of _start][build.text]`;
             // shared-library output has stub_len=0 so the shift is a
-            // no-op there. A data export's offset is within `build.data`.
-            super::DynamicExportSection::Text => code_vmaddr + stub_len + e.offset,
-            super::DynamicExportSection::Data => data_off_to_vaddr(e.offset),
+            // no-op there. A data offset partitions into `.rodata`, the
+            // writable `.data`, or the zero-fill `.bss` tail exactly as
+            // `data_off_to_vaddr` does.
+            let (addr, shndx) = match e.section {
+                super::DynamicExportSection::Text => {
+                    (code_vmaddr + stub_len + e.offset, text_shndx)
+                }
+                super::DynamicExportSection::Data => (
+                    data_off_to_vaddr(e.offset),
+                    if e.offset < ro_len {
+                        rodata_shndx
+                    } else if e.offset < file_data_len {
+                        data_shndx
+                    } else {
+                        bss_shndx
+                    },
+                ),
+            };
+            let binding = if e.weak { STB_WEAK } else { STB_GLOBAL };
+            let st_type = if e.is_object { STT_OBJECT } else { STT_FUNC };
+            DynsymExport {
+                name_off,
+                addr,
+                size: e.size,
+                st_info: (binding << 4) | st_type,
+                shndx,
+            }
         })
         .collect();
     // Copy-relocation targets sit in the static data segment: a `.data`
@@ -2222,22 +2543,22 @@ pub(super) fn write(
             if cr.is_bss {
                 bss_vmaddr + cr.local_offset
             } else {
-                data_vmaddr + cr.local_offset
+                data_off_to_vaddr(cr.local_offset)
             }
         })
         .collect();
     let final_dynsym = build_dynsym(
         &name_offsets,
-        &export_name_offsets,
-        &export_addrs,
-        &export_is_data,
-        &copy_name_offsets,
-        &copy_addrs,
-        &copy_sizes,
-        &copy_is_bss,
-        text_shndx,
-        data_shndx,
-        bss_shndx,
+        &import_is_object,
+        &final_exports,
+        &DynsymCopyTargets {
+            name_offsets: &copy_name_offsets,
+            addrs: &copy_addrs,
+            sizes: &copy_sizes,
+            is_bss: &copy_is_bss,
+            data_shndx,
+            bss_shndx,
+        },
     );
     debug_assert_eq!(final_dynsym.len(), dynsym.len());
     out.extend_from_slice(&final_dynsym);
@@ -2278,7 +2599,7 @@ pub(super) fn write(
             write_struct(
                 &mut rela,
                 &Elf64Rela {
-                    r_offset: data_vmaddr + r.data_offset,
+                    r_offset: data_off_to_vaddr(r.data_offset),
                     r_info: r_type,
                     r_addend: addend as i64,
                 },
@@ -2294,19 +2615,34 @@ pub(super) fn write(
             write_struct(
                 &mut rela,
                 &Elf64Rela {
-                    r_offset: data_vmaddr + r.data_offset,
+                    r_offset: data_off_to_vaddr(r.data_offset),
                     r_info: r_type,
                     r_addend: addend as i64,
                 },
             );
         }
+        // `&&label` initializers: same shape, the target being a text
+        // offset the emit already resolved.
+        for r in &build.label_relocs {
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: data_off_to_vaddr(r.data_offset),
+                    r_info: r_type,
+                    r_addend: (code_vmaddr + stub_len + r.text_offset) as i64,
+                },
+            );
+        }
     }
-    // COPY relocations for data imports. The dynsym index of copy target
-    // `i` is `1 + n_imports + n_exports + i` (sentinel, imports, exports,
+    // COPY relocations for data imports: the loader copies the named
+    // symbol's object from the defining shared library into the slot at
+    // `r_offset` and binds the symbol to that slot, so the program and
+    // libc share one storage cell. The dynsym index of copy target `i`
+    // is `1 + n_imports + n_exports + i` (sentinel, imports, exports,
     // then the copy group). `r_offset` is the target's runtime address.
-    let r_copy = match machine {
-        Machine::Aarch64 => R_AARCH64_COPY,
-        Machine::X86_64 => R_X86_64_COPY,
+    let r_copy: u64 = match machine {
+        Machine::Aarch64 => R_AARCH64_COPY.into(),
+        Machine::X86_64 => R_X86_64_COPY.into(),
     };
     let copy_dynsym_base = (1 + n_imports + elf_exports.len()) as u64;
     for (i, &addr) in copy_addrs.iter().enumerate() {
@@ -2339,6 +2675,46 @@ pub(super) fn write(
         out.push(0);
     }
 
+    // .rodata -- the read-only prefix of the data image, in its own
+    // PF_R load, then the switch-table blob. The prefix carries no
+    // relocated slot by construction; each table slot is baked below
+    // as a text-minus-base difference, which slides with the image,
+    // so no `.rela.dyn` entry targets the load.
+    debug_assert_eq!(out.len() as u64, rodata_off);
+    out.extend_from_slice(&build.data[..ro_len as usize]);
+    if jt_len > 0 {
+        // The absolute-slot form is relocatable-only; an image build
+        // carries difference slots exclusively.
+        if !build.rodata.abs64.is_empty() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "ELF image: absolute table slots reached a final-image build",
+            )));
+        }
+        while (out.len() as u64) < rodata_off + jt_off {
+            out.push(0);
+        }
+        out.extend_from_slice(&build.rodata.bytes);
+        // Table entries: each 4-byte slot holds `target - table_base`.
+        for r in &build.rodata.rel32 {
+            let target = code_vmaddr + stub_len + r.text_offset;
+            let base = jt_vmaddr + r.base_offset;
+            let value = target as i64 - base as i64;
+            let Ok(v) = i32::try_from(value) else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "ELF: table slot {:#x}: displacement {value:#x} exceeds 32 bits",
+                        r.slot_offset,
+                    ),
+                )));
+            };
+            let file_off = (rodata_off + jt_off + r.slot_offset) as usize;
+            out[file_off..file_off + 4].copy_from_slice(&v.to_le_bytes());
+        }
+    }
+    while (out.len() as u64) < rodata_end {
+        out.push(0);
+    }
+
     // .dynamic
     let dynamic = build_dynamic(
         &lib_strtab_offsets,
@@ -2361,11 +2737,11 @@ pub(super) fn write(
             init_array: build
                 .init_fini_arrays
                 .init
-                .map(|(off, len)| (data_vmaddr + off, len)),
+                .map(|(off, len)| (data_off_to_vaddr(off), len)),
             fini_array: build
                 .init_fini_arrays
                 .fini
-                .map(|(off, len)| (data_vmaddr + off, len)),
+                .map(|(off, len)| (data_off_to_vaddr(off), len)),
         },
     );
     debug_assert_eq!(dynamic.len() as u64, dynamic_size);
@@ -2386,10 +2762,10 @@ pub(super) fn write(
     // `.rela.dyn` R_*_RELATIVE entry (built above) whose addend is this same
     // VA; the RELA loader overwrites the slot with `load_bias + addend`. The
     // baked value is the pre-slide initializer.
-    let mut data_with_relocs = build.data.clone();
+    let mut data_with_relocs = build.data[ro_len as usize..].to_vec();
     for r in &build.data_relocs {
         let absolute = data_off_to_vaddr(r.target_offset);
-        let off = r.data_offset as usize;
+        let off = reloc_slot_in_data(r.data_offset, ro_len, "data")?;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -2419,7 +2795,7 @@ pub(super) fn write(
             )));
         }
         let absolute = code_vmaddr + stub_len + native_off as u64;
-        let off = r.data_offset as usize;
+        let off = reloc_slot_in_data(r.data_offset, ro_len, "code")?;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -2429,6 +2805,61 @@ pub(super) fn write(
             )));
         }
         data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+    }
+    // `&&label` initializers: the label's text offset is already
+    // resolved, so only the text vmaddr is added. Slides at load time
+    // through the matching `.rela.dyn` entry, like a function pointer.
+    for r in &build.label_relocs {
+        let absolute = code_vmaddr + stub_len + r.text_offset;
+        let off = reloc_slot_in_data(r.data_offset, ro_len, "label")?;
+        if off + 8 > data_with_relocs.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: label reloc offset {off:#x} past end of .data ({})",
+                    data_with_relocs.len()
+                ),
+            )));
+        }
+        data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+    }
+    // Object-linked pc-relative slots (switch tables, assembler
+    // `label - .` records): each holds `target - slot` as link-time
+    // vaddrs at the recorded width. A pure difference slides with the
+    // image, so no `.rela.dyn` entry is needed. The reader demotes a
+    // reloc-bearing read-only section into the writable stream, so
+    // the slots sit past `ro_len`.
+    for r in &build.data_pcrel_relocs {
+        let target = if r.target_in_data {
+            // `.rodata` / `.data` / `.bss` occupy separate runtime
+            // regions, so an addend that moves the target out of the
+            // anchor's object is applied to the address, not the offset.
+            data_off_to_vaddr(r.target_anchor)
+                .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor))
+        } else {
+            code_vmaddr + stub_len + r.target_offset
+        };
+        let slot_vaddr = data_off_to_vaddr(r.slot_data_offset);
+        let off = reloc_slot_in_data(r.slot_data_offset, ro_len, "pcrel")?;
+        let width = r.width as usize;
+        if off + width > data_with_relocs.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: data pcrel slot {off:#x} past end of .data ({})",
+                    data_with_relocs.len()
+                ),
+            )));
+        }
+        let value = target as i64 - slot_vaddr as i64;
+        if width == 8 {
+            data_with_relocs[off..off + 8].copy_from_slice(&value.to_le_bytes());
+            continue;
+        }
+        let Ok(v) = i32::try_from(value) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("ELF: data pcrel slot {off:#x}: displacement {value:#x} exceeds 32 bits"),
+            )));
+        };
+        data_with_relocs[off..off + 4].copy_from_slice(&v.to_le_bytes());
     }
     out.extend_from_slice(&data_with_relocs);
 
@@ -2458,7 +2889,16 @@ pub(super) fn write(
     out.extend_from_slice(&dwarf_sections.debug_frame);
 
     // ---- PLT-trampoline static symbol table. ----
-    if emit_plt_symtab {
+    if has_rela_text || has_rela_data {
+        while (out.len() as u64) < rela_text_off {
+            out.push(0);
+        }
+        out.extend_from_slice(&rela_text_bytes);
+        debug_assert_eq!(out.len() as u64, rela_data_off);
+        out.extend_from_slice(&rela_data_bytes);
+        debug_assert_eq!(out.len() as u64, post_rela_off);
+    }
+    if emit_symtab {
         // Pad to 8 so each Elf64_Sym lands aligned.
         while (out.len() as u64) < symtab_off {
             out.push(0);
@@ -2502,12 +2942,16 @@ pub(super) fn write(
     let dynsym_shdr_idx: u16 = 2;
     let dynstr_shdr_idx: u16 = 3;
     let _hash_shdr_idx: u16 = 4;
-    let _rela_shdr_idx: u16 = 5 + ver_shdrs;
+    let _rela_shdr_idx: u16 = plan.index_of(Sec::RelaDyn);
     let _ = (dynsym_shdr_idx, dynstr_shdr_idx);
 
+    let mut shdr_cursor = 0usize;
     // [0] NULL sentinel.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Null,
         &Elf64Shdr {
             sh_name: name_off(""),
             sh_type: SHT_NULL,
@@ -2523,8 +2967,11 @@ pub(super) fn write(
     );
 
     // [1] .interp -- the dynamic linker path string.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Interp,
         &Elf64Shdr {
             sh_name: name_off(".interp"),
             sh_type: SHT_PROGBITS,
@@ -2543,8 +2990,11 @@ pub(super) fn write(
     // sh_info = index of first non-local symbol (we have only
     // a NULL sentinel + globals, so 1).
     let dynsym_link_pending: u16 = dynstr_shdr_idx;
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Dynsym,
         &Elf64Shdr {
             sh_name: name_off(".dynsym"),
             sh_type: SHT_DYNSYM,
@@ -2560,8 +3010,11 @@ pub(super) fn write(
     );
 
     // [3] .dynstr -- string table for .dynsym.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Dynstr,
         &Elf64Shdr {
             sh_name: name_off(".dynstr"),
             sh_type: SHT_STRTAB,
@@ -2578,8 +3031,11 @@ pub(super) fn write(
 
     // [4] .hash -- DT_HASH bucket / chain table.
     let dynsym_idx_for_hash = dynsym_shdr_idx;
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Hash,
         &Elf64Shdr {
             sh_name: name_off(".hash"),
             sh_type: SHT_HASH,
@@ -2599,8 +3055,11 @@ pub(super) fn write(
     // .rela.dyn so the section-header order tracks the file/address
     // order; present only when an import carries a version requirement.
     if has_versions {
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::GnuVersion,
             &Elf64Shdr {
                 sh_name: name_off(".gnu.version"),
                 sh_type: SHT_GNU_VERSYM,
@@ -2614,8 +3073,11 @@ pub(super) fn write(
                 sh_entsize: 2,
             },
         );
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::GnuVersionR,
             &Elf64Shdr {
                 sh_name: name_off(".gnu.version_r"),
                 sh_type: SHT_GNU_VERNEED,
@@ -2632,8 +3094,11 @@ pub(super) fn write(
     }
 
     // [5] .rela.dyn -- relocations resolved at load time.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::RelaDyn,
         &Elf64Shdr {
             sh_name: name_off(".rela.dyn"),
             sh_type: SHT_RELA,
@@ -2650,8 +3115,11 @@ pub(super) fn write(
 
     // [6] .text -- the executable code segment. The size covers
     // the entry stub + build.text; the address is `code_vmaddr`.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Text,
         &Elf64Shdr {
             sh_name: name_off(".text"),
             sh_type: SHT_PROGBITS,
@@ -2666,10 +3134,36 @@ pub(super) fn write(
         },
     );
 
+    // [optional] .rodata -- read-only data. `SHF_ALLOC` without
+    // `SHF_WRITE`; its own PF_R load keeps it non-executable too.
+    if has_rodata {
+        emit_shdr(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::RoData,
+            &Elf64Shdr {
+                sh_name: name_off(".rodata"),
+                sh_type: SHT_PROGBITS,
+                sh_flags: SHF_ALLOC,
+                sh_addr: rodata_vmaddr,
+                sh_offset: rodata_off,
+                sh_size: ro_total,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: build.data_align.max(8) as u64,
+                sh_entsize: 0,
+            },
+        );
+    }
+
     // [optional] .tdata -- TLS image template (when has_tdata).
     if has_tdata {
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Tdata,
             &Elf64Shdr {
                 sh_name: name_off(".tdata"),
                 sh_type: SHT_PROGBITS,
@@ -2686,8 +3180,11 @@ pub(super) fn write(
     }
 
     // [N] .dynamic -- dynamic linking info table.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Dynamic,
         &Elf64Shdr {
             sh_name: name_off(".dynamic"),
             sh_type: SHT_DYNAMIC,
@@ -2703,8 +3200,11 @@ pub(super) fn write(
     );
 
     // [N+1] .got -- global offset table (one slot per import).
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Got,
         &Elf64Shdr {
             sh_name: name_off(".got"),
             sh_type: SHT_PROGBITS,
@@ -2721,8 +3221,11 @@ pub(super) fn write(
 
     // [optional] .data -- the initialised data segment.
     if has_data {
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Data,
             &Elf64Shdr {
                 sh_name: name_off(".data"),
                 sh_type: SHT_PROGBITS,
@@ -2743,8 +3246,11 @@ pub(super) fn write(
         // .tbss has no file-resident bytes; sh_offset still
         // points where the loader-zeroed region would conceptually
         // start so tools can compute its boundaries.
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Tbss,
             &Elf64Shdr {
                 sh_name: name_off(".tbss"),
                 sh_type: 8,                              // SHT_NOBITS
@@ -2764,8 +3270,11 @@ pub(super) fn write(
     // PT_LOAD p_memsz tail reserves these bytes; the header lets size /
     // llvm-size attribute them to bss rather than reading zero.
     if has_bss {
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Bss,
             &Elf64Shdr {
                 sh_name: name_off(".bss"),
                 sh_type: 8, // SHT_NOBITS
@@ -2819,8 +3328,11 @@ pub(super) fn write(
             ),
         ];
         for &(name_offset, off, sz) in dwarf_section_specs {
-            write_struct(
+            emit_shdr(
                 &mut out,
+                &plan,
+                &mut shdr_cursor,
+                Sec::Debug,
                 &Elf64Shdr {
                     sh_name: name_offset,
                     sh_type: SHT_PROGBITS,
@@ -2837,27 +3349,64 @@ pub(super) fn write(
         }
     }
 
+    // `--emit-relocs` sections: the resolved relocations re-emitted
+    // against the section symbols in .symtab.
+    if has_rela_text || has_rela_data {
+        let symtab_shdr_idx = plan.index_of(Sec::Symtab) as u32;
+        let mut rela = |kind: Sec, name: &str, off: u64, bytes: &[u8], target: Sec| {
+            if bytes.is_empty() {
+                return;
+            }
+            emit_shdr(
+                &mut out,
+                &plan,
+                &mut shdr_cursor,
+                kind,
+                &Elf64Shdr {
+                    sh_name: name_off(name),
+                    sh_type: SHT_RELA,
+                    sh_flags: SHF_INFO_LINK,
+                    sh_addr: 0,
+                    sh_offset: off,
+                    sh_size: bytes.len() as u64,
+                    sh_link: symtab_shdr_idx,
+                    sh_info: plan.index_of(target) as u32,
+                    sh_addralign: 8,
+                    sh_entsize: ELF64_RELA_SIZE,
+                },
+            );
+        };
+        rela(
+            Sec::RelaText,
+            ".rela.text",
+            rela_text_off,
+            &rela_text_bytes,
+            Sec::Text,
+        );
+        rela(
+            Sec::RelaData,
+            ".rela.data",
+            rela_data_off,
+            &rela_data_bytes,
+            Sec::Data,
+        );
+    }
+
     // PLT-trampoline static symbol table. `.symtab`'s
     // `sh_info` field must point one past the last LOCAL symbol;
     // we only emit locals, so it's `n_symbols` (sentinel + one
     // per import). `sh_link` references the matching `.strtab`.
     if let Some(name_idx) = plt_symtab_name_idx_in_shstrtab {
-        // Section-header indices for `.symtab` / `.strtab`. They
-        // sit just before `.shstrtab` (which is always at
-        // `n_section_headers - 1`), so they're at -3 / -2 from
-        // the end. These are independent of `shstrtab_names`
-        // ordering -- the names list and the shdr table use
-        // different indexing schemes (the former includes only
-        // names; the latter includes optional sections like
-        // `.tdata` / `.data` / `.tbss` whose names are at fixed
-        // shstrtab slots).
-        let symtab_shdr_idx = (n_section_headers - 3) as u32;
-        let strtab_shdr_idx = (n_section_headers - 2) as u32;
+        let symtab_shdr_idx = plan.index_of(Sec::Symtab) as u32;
+        let strtab_shdr_idx = plan.index_of(Sec::Strtab) as u32;
         let _ = symtab_shdr_idx;
         let n_sym = (plt_symtab_bytes.len() as u64) / ELF64_SYM_SIZE;
         // [N] .symtab
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Symtab,
             &Elf64Shdr {
                 sh_name: shstrtab_offsets[name_idx],
                 sh_type: SHT_SYMTAB,
@@ -2872,8 +3421,11 @@ pub(super) fn write(
             },
         );
         // [N+1] .strtab
-        write_struct(
+        emit_shdr(
             &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Strtab,
             &Elf64Shdr {
                 sh_name: shstrtab_offsets[name_idx + 1],
                 sh_type: SHT_STRTAB,
@@ -2890,8 +3442,11 @@ pub(super) fn write(
     }
 
     // [last] .shstrtab.
-    write_struct(
+    emit_shdr(
         &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Shstrtab,
         &Elf64Shdr {
             sh_name: shstrtab_offsets[shstrtab_idx_self],
             sh_type: SHT_STRTAB,
@@ -2906,11 +3461,23 @@ pub(super) fn write(
         },
     );
 
+    // `e_shnum` and the file size were both computed from the plan before
+    // the table existed; a short or long table means the header describes a
+    // file the writer did not produce.
+    assert_eq!(
+        shdr_cursor,
+        plan.len(),
+        "section table length differs from the plan"
+    );
     debug_assert_eq!(out.len() as u64, total_filesize);
 
     // ---- Patch fixups. ----
-    // The code blob layout is [_start stub][build.text]. The codegen's
-    // adrp_offset is relative to build.text, so we shift by stub len.
+    // The code blob layout is [_start stub][build.text]. A fixup's
+    // instr_offset is relative to build.text, so we shift by stub len.
+    let code_place = CodePlacement {
+        file_off: code_file_offset,
+        vmaddr: code_vmaddr,
+    };
     // Shared libraries have no `_start` and skip this patch
     // entirely; the stub-len shift below collapses to zero
     // and the libc-exit GOT lookup never gets emitted in
@@ -2931,10 +3498,10 @@ pub(super) fn write(
         patch_got_call(
             machine,
             &mut out,
-            code_file_offset,
-            code_vmaddr,
+            code_place,
             exit_off as u64,
             got_vmaddr + (exit_idx as u64) * 8,
+            AddrPart::Whole,
             "_start exit fixup",
         )?;
     }
@@ -2949,13 +3516,13 @@ pub(super) fn write(
     // call the lookup helper emits), so it routes to a data-load patch.
     // aarch64's adrp + ldr already loads the slot for both.
     for fx in &build.got_fixups {
-        let instr_off = stub_len + fx.adrp_offset as u64;
+        let instr_off = stub_len + fx.instr_offset as u64;
         let slot_vmaddr = got_vmaddr + (fx.import_index as u64) * 8;
         if fx.is_data_load && machine == Machine::X86_64 {
+            crate::c5::codegen::require_whole_addr(fx.part, "GOT data-load fixup")?;
             patch_got_data_load(
                 &mut out,
-                code_file_offset,
-                code_vmaddr,
+                code_place,
                 instr_off,
                 slot_vmaddr,
                 "GOT data-load fixup",
@@ -2964,10 +3531,10 @@ pub(super) fn write(
             patch_got_call(
                 machine,
                 &mut out,
-                code_file_offset,
-                code_vmaddr,
+                code_place,
                 instr_off,
                 slot_vmaddr,
+                fx.part,
                 "GOT fixup",
             )?;
         }
@@ -2979,10 +3546,10 @@ pub(super) fn write(
         patch_addr_load(
             machine,
             &mut out,
-            code_file_offset,
-            code_vmaddr,
-            stub_len + fx.adrp_offset as u64,
+            code_place,
+            stub_len + fx.instr_offset as u64,
             data_off_to_vaddr(fx.data_offset),
+            fx.part,
             "data fixup",
         )?;
     }
@@ -2994,11 +3561,25 @@ pub(super) fn write(
         patch_addr_load(
             machine,
             &mut out,
-            code_file_offset,
-            code_vmaddr,
-            stub_len + fx.adrp_offset as u64,
+            code_place,
+            stub_len + fx.instr_offset as u64,
             code_vmaddr + stub_len + fx.target_native_offset as u64,
+            fx.part,
             "func fixup",
+        )?;
+    }
+
+    // Switch-table base materializations (the lea feeding the
+    // dispatch); the blob sits in the PF_R load at `jt_vmaddr`.
+    for fx in &build.rodata.addr_fixups {
+        patch_addr_load(
+            machine,
+            &mut out,
+            code_place,
+            stub_len + fx.code_offset as u64,
+            jt_vmaddr + fx.rodata_offset,
+            AddrPart::Whole,
+            "table fixup",
         )?;
     }
 
@@ -3037,6 +3618,12 @@ fn write_phdr(
 mod tests {
     use super::*;
 
+    /// Code blob at file offset 0, loaded at 0x1000.
+    const PLACE_1000: CodePlacement = CodePlacement {
+        file_off: 0,
+        vmaddr: 0x1000,
+    };
+
     #[test]
     fn patch_adrp_add_scales_load_store_imm12() {
         // `adrp x0, page ; ldrh w0, [x0, #:lo12:sym]`: the ldrh keeps its
@@ -3046,7 +3633,7 @@ mod tests {
         let mut out = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
         out.extend_from_slice(&ldrh.to_le_bytes());
         // code at file offset 0, vmaddr 0x1000; target 0x2008 (in-page 8).
-        patch_adrp_add(&mut out, 0, 0x1000, 0, 0x2008, "test").unwrap();
+        patch_adrp_add(&mut out, PLACE_1000, 0, 0x2008, AddrPart::Whole, "test").unwrap();
         let ldst = u32::from_le_bytes([out[4], out[5], out[6], out[7]]);
         assert_eq!(
             ldst & !(0xFFF << 10),
@@ -3058,7 +3645,7 @@ mod tests {
         let addi = aarch64::enc_add_imm(aarch64::Reg(0), aarch64::Reg(0), 0);
         let mut out2 = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
         out2.extend_from_slice(&addi.to_le_bytes());
-        patch_adrp_add(&mut out2, 0, 0x1000, 0, 0x2008, "test").unwrap();
+        patch_adrp_add(&mut out2, PLACE_1000, 0, 0x2008, AddrPart::Whole, "test").unwrap();
         let add = u32::from_le_bytes([out2[4], out2[5], out2[6], out2[7]]);
         assert_eq!((add >> 10) & 0xFFF, 8, "add imm12 unscaled");
     }
@@ -3076,10 +3663,58 @@ mod tests {
     /// vec produces an empty subprogram list and trivial section
     /// bytes, which is enough for the structural invariants the
     /// tests check.
+    /// Every section index the writer hands out resolves back to the
+    /// section it names, for every combination of optional sections, and
+    /// the table length is the sum of what the plan carries. The indices
+    /// used to be hand-summed against a separate emission list.
+    #[test]
+    fn section_indices_resolve_to_their_own_section() {
+        for bits in 0u8..128 {
+            let plan = SectionPlan::new(SectionsPresent {
+                versions: bits & 1 != 0,
+                rodata: bits & 64 != 0,
+                tdata: bits & 2 != 0,
+                data: bits & 4 != 0,
+                tbss: bits & 8 != 0,
+                bss: bits & 16 != 0,
+                dwarf: if bits & 32 != 0 { 5 } else { 0 },
+                rela_text: bits & 64 != 0,
+                rela_data: bits & 2 != 0,
+                plt_symtab: bits & 1 != 0,
+            });
+            // Independent restatement of the unconditional set: NULL,
+            // .interp, .dynsym, .dynstr, .hash, .rela.dyn, .text, .dynamic,
+            // .got, .shstrtab.
+            let mut expected = 10;
+            expected += 2 * (bits & 1 != 0) as usize; // .gnu.version{,_r}
+            expected += (bits & 64 != 0) as usize; // .rodata
+            expected += (bits & 2 != 0) as usize; // .tdata
+            expected += (bits & 4 != 0) as usize; // .data
+            expected += (bits & 8 != 0) as usize; // .tbss
+            expected += (bits & 16 != 0) as usize; // .bss
+            expected += if bits & 32 != 0 { 5 } else { 0 }; // .debug_*
+            expected += (bits & 64 != 0) as usize; // .rela.text
+            expected += (bits & 2 != 0) as usize; // .rela.data
+            expected += 2 * (bits & 1 != 0) as usize; // .symtab + .strtab
+            assert_eq!(plan.len(), expected, "bits={bits}");
+            for s in [Sec::Null, Sec::Text, Sec::Dynamic, Sec::Got, Sec::Shstrtab] {
+                assert_eq!(plan.at(plan.index_of(s) as usize), s, "bits={bits} {s:?}");
+            }
+            // `.shstrtab` is always last.
+            assert_eq!(plan.index_of(Sec::Shstrtab) as usize, plan.len() - 1);
+        }
+    }
+
     fn tiny_program() -> Program {
         Program {
             data: Vec::new(),
+            file_asm: Vec::new(),
+            asm_weak_names: Vec::new(),
+            asm_hidden_names: Vec::new(),
             data_object_starts: Vec::new(),
+            const_data_ranges: Vec::new(),
+            data_pad_ranges: Vec::new(),
+            data_align_marks: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
             tls_data: Vec::new(),
@@ -3106,6 +3741,7 @@ mod tests {
             user_ssa_funcs: alloc::vec::Vec::new(),
             extern_function_imports: alloc::vec::Vec::new(),
             init_funcs: alloc::vec::Vec::new(),
+            function_aliases: alloc::vec::Vec::new(),
         }
     }
 
@@ -3113,9 +3749,25 @@ mod tests {
         use super::super::{ResolvedImport, ResolvedImports};
         use crate::c5::codegen::ResolvedDylib;
         Build {
+            emitted_relocs: Vec::new(),
+            text_align: 16,
+            orphaned_data: None,
+            stopped_at_data_liveness: false,
+            ssa_dump: alloc::string::String::new(),
+            asm_sections: Vec::new(),
+            asm_section_text_refs: Vec::new(),
+            asm_text_abs_refs: Vec::new(),
+            asm_text_labels: Vec::new(),
+            asm_sym_decls: Vec::new(),
             copy_relocs: Default::default(),
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
+            data_ro_len: 0,
+            pic: false,
+            code_model: Default::default(),
+            elf_class: Default::default(),
+            rodata: Default::default(),
+            data_pcrel_relocs: Vec::new(),
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),
@@ -3142,6 +3794,7 @@ mod tests {
                     real_symbol: "exit".into(),
                     dylib_index: 0,
                     flat_lookup: false,
+                    is_object: false,
                     is_variadic: false,
                     fixed_args: 1,
                     return_type_tag: 0,
@@ -3161,6 +3814,7 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,
@@ -3386,7 +4040,7 @@ mod tests {
             );
             // Code at vmaddr 0x1000, GOT slot at 0x5008: page diff 0x4000
             // (4 KiB aligned), in-page offset 8 (8-aligned).
-            patch_adrp_ldr(&mut out, 0, 0x1000, 0, 0x5008, "test").unwrap();
+            patch_adrp_ldr(&mut out, PLACE_1000, 0, 0x5008, AddrPart::Whole, "test").unwrap();
             let adrp = u32::from_le_bytes(out[0..4].try_into().unwrap());
             let ldr = u32::from_le_bytes(out[4..8].try_into().unwrap());
             assert_eq!(adrp & 0x1f, rd as u32, "adrp Rd preserved (rd={rd})");
@@ -3420,7 +4074,7 @@ mod tests {
         let mut out = vec![0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00, 0xC3];
         // code at file offset 0, code vmaddr base 0x1000, instr at code
         // offset 0, GOT slot at vmaddr 0x2000.
-        patch_got_data_load(&mut out, 0, 0x1000, 0, 0x2000, "test").unwrap();
+        patch_got_data_load(&mut out, PLACE_1000, 0, 0x2000, "test").unwrap();
         assert_eq!(out[0], 0x48, "REX.W preserved");
         assert_eq!(out[1], 0x8B, "lea (0x8D) flipped to mov (0x8B)");
         assert_eq!(out[2], 0x05, "ModRM preserved (rax, RIP-relative)");

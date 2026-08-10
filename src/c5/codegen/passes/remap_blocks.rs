@@ -7,7 +7,8 @@
 //! input are unaffected. The complete block-id reference surface is
 //! the terminators' targets (`Jmp`, `Bz`, `Bnz`, `FallThrough`),
 //! `Phi::incoming` predecessor ids, `Inst::BlockAddr`,
-//! `FunctionSsa::computed_goto_targets`, and the
+//! `FunctionSsa::computed_goto_targets`,
+//! `FunctionSsa::label_data_relocs`, and the
 //! `FunctionSsa::jump_tables` target lists (`Terminator::JumpTable`
 //! itself carries only the table index).
 
@@ -36,12 +37,26 @@ pub(crate) fn permute_blocks(func: &mut FunctionSsa, order: &[BlockId]) {
     remap_block_ids(func, &new_id);
 }
 
+/// Map one recorded reference. Every reference must name a block the
+/// map keeps: a pass that deletes blocks scrubs the references to them
+/// first, or the stale id lands back in the function and faults a
+/// later remap.
+fn mapped(new_id: &[BlockId], old: BlockId, surface: &str) -> BlockId {
+    debug_assert!(
+        (old as usize) < new_id.len() && new_id[old as usize] != BlockId::MAX,
+        "{surface} names block {old}, which the block-id map does not keep",
+    );
+    new_id[old as usize]
+}
+
 /// Rewrite every block-id reference through `new_id` (indexed by the
 /// old id). The caller has already reordered `func.blocks` to match.
 pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
     for block in func.blocks.iter_mut() {
         match &mut block.terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => *t = new_id[*t as usize],
+            Terminator::Jmp(t) | Terminator::FallThrough(t) => {
+                *t = mapped(new_id, *t, "terminator")
+            }
             Terminator::Bz {
                 target,
                 fall_through,
@@ -52,8 +67,8 @@ pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
                 fall_through,
                 ..
             } => {
-                *target = new_id[*target as usize];
-                *fall_through = new_id[*fall_through as usize];
+                *target = mapped(new_id, *target, "terminator");
+                *fall_through = mapped(new_id, *fall_through, "terminator");
             }
             Terminator::Return(_)
             | Terminator::TailExt(_)
@@ -65,10 +80,10 @@ pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
     }
     for inst in func.insts.iter_mut() {
         match inst {
-            Inst::BlockAddr(b) => *b = new_id[*b as usize],
+            Inst::BlockAddr(b) => *b = mapped(new_id, *b, "BlockAddr"),
             Inst::Phi { incoming, .. } => {
                 for (b, _) in incoming.iter_mut() {
-                    *b = new_id[*b as usize];
+                    *b = mapped(new_id, *b, "phi incoming");
                 }
             }
             _ => {}
@@ -76,11 +91,14 @@ pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
     }
     for table in func.jump_tables.iter_mut() {
         for t in table.iter_mut() {
-            *t = new_id[*t as usize];
+            *t = mapped(new_id, *t, "jump table target");
         }
     }
     for t in func.computed_goto_targets.iter_mut() {
-        *t = new_id[*t as usize];
+        *t = mapped(new_id, *t, "computed goto target");
+    }
+    for r in func.label_data_relocs.iter_mut() {
+        r.block = mapped(new_id, r.block, "label data relocation target");
     }
 }
 

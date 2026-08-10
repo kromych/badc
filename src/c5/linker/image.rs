@@ -31,9 +31,18 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
+// Reloc kinds the dynamic linker resolves at startup.
+use crate::c5::object::elf_reloc_types::{R_AARCH64_JUMP_SLOT, R_X86_64_JUMP_SLOT};
 
 use super::link::MergedNative;
 use super::object::{NativeMachine, NativeSymSection};
+use crate::c5::layout::round_up;
+use crate::c5::object::elf_reloc_types::AbsCheck;
+
+/// Page-align `n` up to the next multiple of [`PAGE_SIZE`].
+fn round_up_page(n: u64) -> u64 {
+    round_up(n, PAGE_SIZE)
+}
 
 const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
 const EI_CLASS_64: u8 = 2;
@@ -70,10 +79,6 @@ const DT_JMPREL: u64 = 23;
 const DT_FLAGS: u64 = 30;
 
 const DF_BIND_NOW: u64 = 0x8;
-
-// Reloc kinds the dynamic linker resolves at startup.
-const R_X86_64_JUMP_SLOT: u32 = 7;
-const R_AARCH64_JUMP_SLOT: u32 = 1026;
 
 // Symbol-table bookkeeping for `.dynsym`.
 const STB_GLOBAL: u8 = 1;
@@ -175,8 +180,8 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
     // `p_vaddr & (PAGE_SIZE - 1) == p_offset & (PAGE_SIZE - 1)`
     // -- the kernel requires that congruence for executable
     // mmap.
-    let data_file_off: u64 = page_align(text_file_off + text_file_size);
-    let data_vaddr: u64 = page_align(text_vaddr + text_file_size) + PAGE_SIZE;
+    let data_file_off: u64 = round_up_page(text_file_off + text_file_size);
+    let data_vaddr: u64 = round_up_page(text_vaddr + text_file_size) + PAGE_SIZE;
     let data_file_size: u64 = merged.data.len() as u64;
     let data_mem_size: u64 = data_file_size + merged.bss_size as u64;
 
@@ -191,6 +196,7 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
         data_vaddr,
         &merged.pending_imports,
         merged.machine,
+        &merged.section_map,
     )?;
 
     // Apply absolute data-segment relocations. `int *gp =
@@ -201,6 +207,7 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
     // resolve against `text_vaddr` instead.
     let mut data = merged.data.clone();
     patch_data_abs_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_abs_relocs)?;
+    patch_data_pcrel_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_pcrel_relocs)?;
 
     let mut out: Vec<u8> = Vec::with_capacity(
         headers_size as usize + text.len() + merged.data.len() + PAGE_SIZE as usize,
@@ -290,7 +297,6 @@ fn patch_data_abs_relocs(
     data_vaddr: u64,
     relocs: &[super::link::DataAbsReloc],
 ) -> Result<(), C5Error> {
-    use crate::c5::linker::object::NativeSymSection;
     for r in relocs {
         let slot = r.slot_offset as usize;
         if slot + 8 > data.len() {
@@ -300,25 +306,58 @@ fn patch_data_abs_relocs(
                 data.len()
             )));
         }
-        let value = match r.target_section {
-            NativeSymSection::Data => data_vaddr + r.target_offset,
-            NativeSymSection::Text => text_vaddr + r.target_offset,
-            NativeSymSection::Bss => data_vaddr + data.len() as u64 + r.target_offset,
-            other => {
-                return Err(err(&format!(
-                    "data abs reloc at slot 0x{:x} has unsupported target section {:?}",
-                    slot, other,
-                )));
-            }
+        // `MergedTarget::Data` spans the file-backed data and the
+        // zero-fill tail past it in one offset space, so `.bss` needs
+        // no separate bias here.
+        let value = match r.target {
+            super::link::MergedTarget::Data(off) => data_vaddr.wrapping_add(off as u64),
+            super::link::MergedTarget::Text(off) => text_vaddr.wrapping_add(off as u64),
         };
         data[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
     }
     Ok(())
 }
 
-/// Page-align `n` up to the next multiple of [`PAGE_SIZE`].
-fn page_align(n: u64) -> u64 {
-    (n + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1)
+/// Apply each pc-relative data-slot relocation (switch dispatch
+/// tables in folded `.rodata`, assembler `label - .` records): the
+/// slot receives `(text_vaddr + target_offset) - (data_vaddr +
+/// slot_offset)` at the recorded width.
+fn patch_data_pcrel_relocs(
+    data: &mut [u8],
+    text_vaddr: u64,
+    data_vaddr: u64,
+    relocs: &[super::link::DataPcRel],
+) -> Result<(), C5Error> {
+    for r in relocs {
+        let slot = r.slot_offset as usize;
+        let width = r.width as usize;
+        if slot + width > data.len() {
+            return Err(err(&format!(
+                "data pcrel reloc at slot 0x{:x} extends past .data (len 0x{:x})",
+                slot,
+                data.len()
+            )));
+        }
+        // `MergedTarget::Data` spans the file-backed data and the
+        // zero-fill tail past it in one offset space (as in
+        // `patch_data_abs_relocs`).
+        let target = match r.target {
+            super::link::MergedTarget::Data(off) => data_vaddr.wrapping_add(off as u64),
+            super::link::MergedTarget::Text(off) => text_vaddr.wrapping_add(off as u64),
+        };
+        let value = target as i64 - (data_vaddr + r.slot_offset) as i64;
+        if width == 8 {
+            data[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
+            continue;
+        }
+        let Ok(v) = i32::try_from(value) else {
+            return Err(err(&format!(
+                "data pcrel reloc at slot 0x{slot:x}: displacement 0x{value:x} exceeds 32 bits",
+            )));
+        };
+        data[slot..slot + 4].copy_from_slice(&v.to_le_bytes());
+    }
+    Ok(())
 }
 
 fn write_u16(out: &mut Vec<u8>, v: u16) {
@@ -612,8 +651,8 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     // segment. Page-align both the file offset and the load
     // vaddr; the kernel's mmap requires
     // `vaddr % PAGE_SIZE == offset % PAGE_SIZE`.
-    let data_seg_file_off = page_align(text_off + text_size);
-    let data_seg_vaddr = page_align(BASE_ADDR + text_off + text_size) + PAGE_SIZE;
+    let data_seg_file_off = round_up_page(text_off + text_size);
+    let data_seg_vaddr = round_up_page(BASE_ADDR + text_off + text_size) + PAGE_SIZE;
     let got_plt_off = data_seg_file_off;
     let got_plt_size: u64 = (n_imports as u64) * 8;
     let data_off = got_plt_off + got_plt_size;
@@ -666,12 +705,14 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
         data_vaddr,
         &merged.pending_imports,
         merged.machine,
+        &merged.section_map,
     )?;
 
     // Apply absolute data-segment relocations the same way as
     // in the static path.
     let mut data = merged.data.clone();
     patch_data_abs_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_abs_relocs)?;
+    patch_data_pcrel_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_pcrel_relocs)?;
 
     let mut out: Vec<u8> =
         Vec::with_capacity((dynamic_off + dynamic_size + PAGE_SIZE) as usize + merged.data.len());
@@ -838,12 +879,15 @@ fn patch_data_refs(
     data_vaddr: u64,
     pending: &[super::link::PendingImportReloc],
     machine: NativeMachine,
+    map: &super::link::SectionMap,
 ) -> Result<(), C5Error> {
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21, R_X86_64_PC32, R_X86_64_PLT32,
+        aarch64_ldst_lo12_scale, aarch64_movw_field, aarch64_pcrel_imm_field,
+    };
+
     use super::link::PendingImportReloc;
-    const R_X86_64_PC32: u32 = 2;
-    const R_X86_64_PLT32: u32 = 4;
-    const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
-    const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
+    use super::object::RelocOrigin;
 
     for r in pending {
         let r: &PendingImportReloc = r;
@@ -851,10 +895,14 @@ fn patch_data_refs(
             continue;
         }
         let site_vaddr = text_vaddr + r.text_offset;
+        // A parked reference carries a unified data-byte offset in its
+        // addend (`park_data_ref`), so the read-only prefix, the
+        // writable data and the zero-fill tail share one base.
         let target_base = match r.target_section {
             NativeSymSection::Text => text_vaddr as i64,
-            NativeSymSection::Data => data_vaddr as i64,
-            NativeSymSection::Bss => data_vaddr as i64,
+            NativeSymSection::RoData | NativeSymSection::Data | NativeSymSection::Bss => {
+                data_vaddr as i64
+            }
             NativeSymSection::Undef
             | NativeSymSection::Abs
             | NativeSymSection::Common
@@ -870,24 +918,104 @@ fn patch_data_refs(
         };
         let target_vaddr = target_base + r.addend;
         let site = r.text_offset as usize;
-        // `text_offset` derives from an untrusted object's r_offset; each
-        // arm writes a 4-byte instruction word, so validate the site is in
-        // bounds before indexing rather than panicking on the slice bound.
-        if site.checked_add(4).is_none_or(|end| end > text.len()) {
+        // Locating a parked reference means a scan of the section map,
+        // so it runs only when a diagnostic is raised. The merge pass
+        // drops the referencing symbol unless the writer may still
+        // decline the reference, in which case it kept the name.
+        let fail = |mk: &dyn Fn(&super::object::RelocSite<'_>) -> C5Error| -> C5Error {
+            let sym = r
+                .sym_name
+                .clone()
+                .unwrap_or_else(|| format!("<{:?} section reference>", r.target_section).into());
+            let (source, section, offset) =
+                map.locate_text(r.text_offset)
+                    .unwrap_or(("", ".text", r.text_offset));
+            mk(&RelocOrigin::in_named_section(source, section).at(machine, r.rtype, &sym, offset))
+        };
+        // `text_offset` derives from an untrusted object's r_offset, so
+        // validate the field's byte range before indexing rather than
+        // panicking on the slice bound.
+        let width = abs_field(machine, r.rtype)
+            .or_else(|| super::link::pcrel_data_field(machine, r.rtype))
+            .map_or(4, |(w, _)| w as usize);
+        if site.checked_add(width).is_none_or(|end| end > text.len()) {
             return Err(err(&format!(
                 "data-ref reloc patch offset {site:#x} past end of text (len {})",
                 text.len(),
             )));
         }
+        // `R_AARCH64_LDST<n>_ABS_LO12_NC` writes bits [11:log2(n)] of
+        // `S + A` into the unsigned-offset load/store imm12, which the
+        // instruction scales back by its access size.
+        if machine == NativeMachine::Aarch64
+            && let Some(scale) = aarch64_ldst_lo12_scale(r.rtype)
+        {
+            let lo12 = (target_vaddr as u64) & 0xfff;
+            if !lo12.is_multiple_of(scale.into()) {
+                return Err(fail(&|rs| rs.misaligned(lo12 as i64, scale)));
+            }
+            let mut w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
+            w &= !(0xfff << 10);
+            w |= (lo12 as u32 / scale) << 10;
+            text[site..site + 4].copy_from_slice(&w.to_le_bytes());
+            continue;
+        }
+        // The branch and PC-relative-literal immediates: a distance in
+        // scaled units, checked against the field's signed range.
+        if machine == NativeMachine::Aarch64
+            && let Some((lsb, bits, scale)) = aarch64_pcrel_imm_field(r.rtype)
+        {
+            let disp = target_vaddr - site_vaddr as i64;
+            if disp.rem_euclid(scale as i64) != 0 {
+                return Err(fail(&|rs| rs.misaligned(disp, scale)));
+            }
+            let units = disp / scale as i64;
+            if !(-(1i64 << (bits - 1))..(1i64 << (bits - 1))).contains(&units) {
+                return Err(fail(&|rs| rs.truncated(disp)));
+            }
+            let mask = ((1u32 << bits) - 1) << lsb;
+            let mut w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
+            w = (w & !mask) | (((units as u32) << lsb) & mask);
+            text[site..site + 4].copy_from_slice(&w.to_le_bytes());
+            continue;
+        }
+        // A `movz` / `movk` group immediate: one 16-bit group of `S + A`.
+        if machine == NativeMachine::Aarch64
+            && let Some((group, signed, check)) = aarch64_movw_field(r.rtype)
+        {
+            use crate::c5::codegen::aarch64::patch;
+            if let Some(bits) = check
+                && !patch::movw_fits(target_vaddr, bits, signed)
+            {
+                return Err(fail(&|rs| rs.truncated(target_vaddr)));
+            }
+            let w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
+            let w = patch::movw_word(w, group, signed, target_vaddr);
+            text[site..site + 4].copy_from_slice(&w.to_le_bytes());
+            continue;
+        }
+        // A `.long x - .` / `.quad x - .` word in an executable
+        // section: `S + A - P` once both ends have runtime addresses.
+        if let Some((bytes, check)) = super::link::pcrel_data_field(machine, r.rtype) {
+            let disp = target_vaddr - site_vaddr as i64;
+            if !check.admits(disp, bytes) {
+                return Err(fail(&|rs| rs.truncated(disp)));
+            }
+            let n = bytes as usize;
+            text[site..site + n].copy_from_slice(&disp.to_le_bytes()[..n]);
+            continue;
+        }
+        // The absolute forms: `S + A` as a runtime address, which this
+        // writer knows because the image is `ET_EXEC` at a fixed base.
+        if let Some((bytes, check)) = abs_field(machine, r.rtype) {
+            write_abs_field(&mut text[site..], target_vaddr, bytes, check)
+                .map_err(|_| fail(&|rs| rs.truncated(target_vaddr)))?;
+            continue;
+        }
         match (machine, r.rtype) {
             (NativeMachine::X86_64, R_X86_64_PC32) | (NativeMachine::X86_64, R_X86_64_PLT32) => {
                 let disp = target_vaddr - site_vaddr as i64;
-                let disp32 = i32::try_from(disp).map_err(|_| {
-                    err(&format!(
-                        "data-ref reloc at text[{site:#x}]: PC32 displacement {disp:#x} out of \
-                         range"
-                    ))
-                })?;
+                let disp32 = i32::try_from(disp).map_err(|_| fail(&|rs| rs.truncated(disp)))?;
                 text[site..site + 4].copy_from_slice(&disp32.to_le_bytes());
             }
             (NativeMachine::Aarch64, R_AARCH64_ADR_PREL_PG_HI21) => {
@@ -911,14 +1039,39 @@ fn patch_data_refs(
                 w |= lo12 << 10;
                 text[site..site + 4].copy_from_slice(&w.to_le_bytes());
             }
-            _ => {
-                return Err(err(&format!(
-                    "data-ref reloc at text[{site:#x}]: unsupported (machine={:?}, rtype={})",
-                    machine, r.rtype
-                )));
-            }
+            _ => return Err(fail(&|rs| rs.unsupported())),
         }
     }
+    Ok(())
+}
+
+/// Byte width and overflow rule of the field an absolute relocation
+/// writes `S + A` into, for either machine.
+pub(crate) fn abs_field(machine: NativeMachine, rtype: u32) -> Option<(u32, AbsCheck)> {
+    use crate::c5::object::elf_reloc_types::{aarch64_abs_field, x86_64_abs_field};
+    match machine {
+        NativeMachine::X86_64 => x86_64_abs_field(rtype),
+        NativeMachine::Aarch64 => aarch64_abs_field(rtype),
+    }
+}
+
+/// Store `S + A` little-endian into a `width`-byte field, rejecting a
+/// value the field's overflow rule does not admit.
+pub(crate) fn write_abs_field(
+    dst: &mut [u8],
+    value: i64,
+    width: u32,
+    check: AbsCheck,
+) -> Result<(), ()> {
+    if !check.admits(value, width) {
+        return Err(());
+    }
+    let bytes = value.to_le_bytes();
+    let n = width as usize;
+    if n > bytes.len() || dst.len() < n {
+        return Err(());
+    }
+    dst[..n].copy_from_slice(&bytes[..n]);
     Ok(())
 }
 
@@ -1019,6 +1172,22 @@ fn write_dyn(out: &mut Vec<u8>, d_tag: u64, d_val: u64) {
 mod tests {
     use super::*;
 
+    /// GNU ld 2.46.1 writes `00 00 10 81` for an `R_X86_64_32S` whose
+    /// `S + A` is `0xffffffff81100000` (`.text` at
+    /// `0xffffffff81000000`, `-mcmodel=kernel` placement) and reports
+    /// `relocation truncated to fit` once the value leaves the field's
+    /// signed range.
+    #[test]
+    fn absolute_field_bytes_match_gnu_ld() {
+        use crate::c5::object::elf_reloc_types::R_X86_64_32S;
+        let (w, c) = abs_field(NativeMachine::X86_64, R_X86_64_32S).expect("32S is absolute");
+        let mut buf = [0u8; 4];
+        write_abs_field(&mut buf, 0xffff_ffff_8110_0000u64 as i64, w, c).expect("in range");
+        assert_eq!(buf, [0x00, 0x00, 0x10, 0x81]);
+        write_abs_field(&mut buf, 0x8000_0000, w, c)
+            .expect_err("a value ld truncates must be a link error here too");
+    }
+
     fn text_then_data_image() -> MergedNative {
         let mut defined = alloc::collections::BTreeMap::new();
         defined.insert(
@@ -1027,18 +1196,25 @@ mod tests {
                 section: NativeSymSection::Text,
                 value: 0,
                 size: 8,
+                kind: crate::c5::linker::object::STT_FUNC,
+                visibility: 0,
+                weak: false,
             },
         );
         MergedNative {
+            applied_text_relocs: Vec::new(),
+            text_align: 16,
             // x86_64: `mov eax, 42; ret` -- minimal main body.
             text: alloc::vec![0xb8, 0x2a, 0x00, 0x00, 0x00, 0xc3],
             data: alloc::vec![],
+            data_ro_len: 0,
             data_align: 8,
             bss_size: 0,
             defined,
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
+            data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
             machine: NativeMachine::X86_64,
             dylibs: alloc::vec![],
@@ -1049,7 +1225,7 @@ mod tests {
             macho_tlv_descriptors: alloc::vec![],
             macho_tlv_fixups: alloc::vec![],
             copy_relocs: alloc::vec![],
-            data_import_indices: alloc::collections::BTreeSet::new(),
+            object_imports: alloc::collections::BTreeSet::new(),
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
             debug_line: alloc::vec![],
@@ -1063,12 +1239,14 @@ mod tests {
             unit_for_debug_info_reloc: alloc::vec![],
             unit_for_debug_line_reloc: alloc::vec![],
             debug_info_text_relocs: alloc::vec![],
+            debug_info_data_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
-            prologue_ends: alloc::collections::BTreeMap::new(),
+            prologue_ends: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
             init_fini_arrays: Default::default(),
+            section_map: Default::default(),
         }
     }
 

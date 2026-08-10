@@ -22,6 +22,13 @@
 ** `pid_t` without each caller needing a separate `<stddef.h>`. */
 #include <stddef.h>
 
+/* POSIX-2017 also requires `time_t` and `clock_t` here. Their
+** canonical (per-target width) definitions live in `<time.h>`;
+** including it keeps one definition site, as `<sys/time.h>` does.
+** System headers layered over this file spell `time_t` in
+** declarations without including `<time.h>` themselves. */
+#include <time.h>
+
 #ifdef __BADC_WINDOWS__
 typedef long long ssize_t;
 typedef long long off_t;

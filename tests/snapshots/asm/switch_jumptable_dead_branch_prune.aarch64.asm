@@ -6,10 +6,12 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x270              // =624
+               	mov	x1, <entry_off>
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
+
+<classify>:
                	sxtw	x0, w0
                	cmp	x0, #0xa
                	b.hs	<addr>
@@ -18,18 +20,17 @@ Disassembly of section .text:
                	add	x17, x17, x16
                	br	x17
                	udf	#0x28
-               	udf	#0x38
-               	udf	#0x40
-               	udf	#0x48
-               	udf	#0x50
-               	udf	#0x58
-               	udf	#0x60
-               	udf	#0x68
-               	udf	#0x70
-               	udf	#0x78
+               	udf	#0x34
+               	udf	#0x3c
+               	udf	#0x44
+               	udf	#0x4c
+               	udf	#0x54
+               	udf	#0x5c
+               	udf	#0x64
+               	udf	#0x6c
+               	udf	#0x74
                	mov	x0, #0xa                // =10
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
                	mov	x0, #0x15               // =21
                	b	<addr>

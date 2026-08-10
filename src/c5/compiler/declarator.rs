@@ -30,7 +30,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::is_decl_modifier;
+use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier, strip_unsigned};
 
 impl Compiler {
     /// Speculatively parse a block-scope function prototype
@@ -86,6 +86,13 @@ impl Compiler {
                     crate::c5::symbol::Linkage::External
                 };
             }
+            self.skip_attribute_specifiers()?;
+            // A block-scope prototype takes the same GNU asm-label rename a
+            // file-scope one does; the declared entity has external linkage
+            // either way (C99 6.2.2p4).
+            if self.lex.tk == Token::Asm {
+                self.parse_declarator_asm_label(id_idx)?;
+            }
             // A trailing comma list (`int foo(int), bar(int);`) is rare;
             // skip any remainder to the terminator.
             while self.lex.tk != ';' && self.lex.tk != 0 {
@@ -94,7 +101,7 @@ impl Compiler {
             self.next()?;
             return Ok(true);
         }
-        self.lex.restore(proto_snap);
+        self.restore_lex(proto_snap);
         Ok(false)
     }
 
@@ -116,7 +123,7 @@ impl Compiler {
         }
         let is_param_list =
             ok && self.lex.tk != Token::MulOp && (self.lex.tk == ')' || self.lex_is_type_start());
-        self.lex.restore(snap);
+        self.restore_lex(snap);
         is_param_list
     }
 
@@ -132,7 +139,7 @@ impl Compiler {
     /// operand parser and the `sizeof` type-name parser.
     pub(super) fn parse_abstract_ptr_declarator_levels(&mut self) -> Result<i64, C5Error> {
         self.parse_abstract_ptr_declarator(false)
-            .map(|(levels, _)| levels)
+            .map(|(levels, _, _)| levels)
     }
 
     /// As [`Self::parse_abstract_ptr_declarator_levels`], but with
@@ -143,7 +150,14 @@ impl Compiler {
     pub(super) fn parse_abstract_ptr_declarator(
         &mut self,
         capture_proto: bool,
-    ) -> Result<(i64, Option<super::function::ParsedParams>), C5Error> {
+    ) -> Result<
+        (
+            i64,
+            Option<super::function::ParsedParams>,
+            alloc::vec::Vec<i64>,
+        ),
+        C5Error,
+    > {
         debug_assert!(self.lex.tk == '(');
         let mut depth: i64 = 1;
         self.next()?;
@@ -177,25 +191,39 @@ impl Compiler {
         if self.lex.tk == '(' {
             self.next()?;
             if capture_proto && plain && nested_ptrs > 0 {
+                // C99 6.2.1p4: the parameter names of a function declarator
+                // that is not part of a function definition have no scope.
+                // Record the pointee prototype's types without binding the
+                // names -- binding one that matches an enclosing local would
+                // overwrite the single-slot shadow the enclosing scope
+                // restores from at block / function exit.
+                let saved = self.pending.parsing_fn_ptr_proto;
+                self.pending.parsing_fn_ptr_proto = true;
                 let pp = self.parse_function_params()?;
-                for &p in &pp.indices {
-                    Self::restore_shadowed_symbol(&mut self.symbols[p]);
-                }
+                self.pending.parsing_fn_ptr_proto = saved;
                 proto = Some(pp);
             } else {
                 self.skip_balanced_parens_after_open()?;
             }
         }
+        // The pointee dimensions of `T (*)[M1]...[Mn]`: the caller folds
+        // them into an aggregate-backed tag so the pointee keeps its size.
+        // An unspecified bound (`T (*)[]`, C99 6.7.5.2p4 incomplete array
+        // type) records the -1 sentinel.
+        let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
             if self.lex.tk == ']' {
+                dims.push(-1);
                 self.next()?;
             } else {
-                let _ = self.parse_constant_int()?;
+                // A type-name dimension: the const-object fold stays
+                // masked (see `with_const_object_fold_masked`).
+                dims.push(self.with_const_object_fold_masked(|c| c.parse_constant_int())?);
                 self.accept(']')?;
             }
         }
-        Ok((nested_ptrs, proto))
+        Ok((nested_ptrs, proto, dims))
     }
 
     /// Parse a single declarator: zero-or-more `*` (pointer levels)
@@ -229,7 +257,7 @@ impl Compiler {
         // Consume either here so neither stands in for the declarator name.
         loop {
             if self.lex.tk == Token::TypeQual {
-                ty |= self.lex_volatile_bit();
+                ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                 self.next()?;
             } else if self.at_attribute_specifier() {
                 self.skip_attribute_specifiers()?;
@@ -238,18 +266,24 @@ impl Compiler {
             }
         }
         let mut leading_ptr_count: i64 = 0;
+        // A `const` after the outermost `*` qualifies the declared object,
+        // so only the last derivation's qualifiers count.
+        let mut outer_const = false;
         while self.lex.tk == Token::MulOp {
             self.next()?;
-            ty += Ty::Ptr as i64;
+            ty = add_ptr_level(ty);
             leading_ptr_count += 1;
+            outer_const = false;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
-            // `char *restrict s`. A pointer-level `volatile` sets the
-            // tag's qualifier bit (C99 6.7.3; the single bit does not
-            // record the level). An attribute may sit here too
+            // `char *restrict s`. A `volatile` here qualifies the pointer
+            // object, which is what `apply_qual_bits` records by clearing
+            // the inner-only marker `add_ptr_level` just set (C99
+            // 6.7.5.1p1). An attribute may sit here too
             // (`void * __attribute__((malloc)) p`).
             loop {
                 if self.lex.tk == Token::TypeQual {
-                    ty |= self.lex_volatile_bit();
+                    outer_const |= self.lex_is_const_qual();
+                    ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                     self.next()?;
                 } else if self.at_attribute_specifier() {
                     self.skip_attribute_specifiers()?;
@@ -258,6 +292,7 @@ impl Compiler {
                 }
             }
         }
+        self.pending.declarator_outer_const = outer_const;
         // Record the leading `*` count so a use of an array typedef can
         // tell `A x` (fold the dimension onto `x`) from `A *p` (pointer to
         // the array) even when the typedef's element type is itself a
@@ -266,10 +301,12 @@ impl Compiler {
         // C99 6.7.7p3 + 6.7.6.1: `A *p` for an array typedef `A` declares
         // a pointer to the array. Rebuild the flat tag into the
         // aggregate-backed pointer-to-array form so the array layer rides
-        // the type through typedefs and extra pointer levels. A deferred
-        // alias (`typedef T X[]`, carried as `-1`) has no complete pointee
-        // and stays a flat element pointer.
-        if leading_ptr_count > 0 && self.pending.typedef_base_array_size > 0 {
+        // the type through typedefs and extra pointer levels. An
+        // unspecified bound (`typedef T X[]`, carried as `-1`) is an
+        // incomplete array type (6.7.5.2p4), and `T (*)[]` is a pointer to
+        // it: `*p` still decays to `T *` under 6.3.2.1p3, which does not
+        // require a complete type.
+        if leading_ptr_count > 0 && self.pending.typedef_base_array_size != 0 {
             ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
         }
         // Fn-pointer lineage propagation: if the caller pre-seeded
@@ -357,7 +394,10 @@ impl Compiler {
             // `(args)` (fn-ptr) or by `[N]` (pointer-to-array, not a
             // fn-ptr). Set the indirection unconditionally here and clear
             // it back to None if the shape resolves to an array.
-            let ty_delta = inner_ty - outer_ty_before_inner;
+            // Band arithmetic: a qualifier bit the inner declarator
+            // added (`T (*volatile name)(args)`) would otherwise land in
+            // the difference and make the quotient garbage.
+            let ty_delta = strip_unsigned(inner_ty) - strip_unsigned(outer_ty_before_inner);
             let inner_ptr_levels = ty_delta / (Ty::Ptr as i64);
             // The inner declarator may have stopped on `(` if it
             // was a function-returning-fp shape like
@@ -462,9 +502,16 @@ impl Compiler {
                         pointee_dims.push(1);
                     } else {
                         let m = self.parse_constant_int()?;
-                        if m > 0 {
-                            pointee_dims.push(m);
+                        if m < 0 {
+                            return Err(self.compile_err(format!(
+                                "array dimension must be positive (got {m})"
+                            )));
                         }
+                        // `T (*p)[0]` -- a GCC zero-length array pointee:
+                        // a complete type of zero size. The 0 dimension
+                        // rides into the aggregate tag so `sizeof(*p)`
+                        // folds to 0.
+                        pointee_dims.push(m);
                         self.accept(']')?;
                     }
                     // The aggregate-backed rebuild below carries the
@@ -507,11 +554,12 @@ impl Compiler {
                     // the abstract form `T (*)[N]` (no symbol).
                     inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
                         + inner_ptr_levels * (Ty::Ptr as i64))
-                        | (inner_ty & super::types::VOLATILE_BIT);
-                } else if idx != usize::MAX {
+                        | (inner_ty & super::types::VOLATILE_MASK);
+                } else if idx != usize::MAX && pointee_dims.iter().all(|&d| d > 0) {
                     // Redundant-paren shape `T (name)[N]`: keep the
                     // per-bracket level plus the leading-0 sentinel dims
-                    // the indexing paths expect.
+                    // the indexing paths expect. A zero dimension keeps
+                    // the pre-aggregate handling (same as `T name[0]`).
                     let mut dims = alloc::vec::Vec::with_capacity(pointee_dims.len() + 1);
                     dims.push(0);
                     dims.extend(pointee_dims);
@@ -538,6 +586,12 @@ impl Compiler {
             )));
         }
         let idx = self.lex.curr_id_idx;
+        // First identifier of a member declarator: keep its symbol entry so
+        // the aggregate path can undo the writes below (C99 6.2.3).
+        if self.pending.in_member_declarator && self.pending.member_decl_save.is_none() {
+            self.pending.member_decl_save =
+                Some((idx, alloc::boxed::Box::new(self.symbols[idx].clone())));
+        }
         self.next()?;
 
         // A function-typed parameter `RET name(args)` (no parentheses
@@ -562,6 +616,7 @@ impl Compiler {
 
         let mut array_size: i64 = 0;
         if self.lex.tk == Token::Brak {
+            self.pending.declarator_zero_len_array = false;
             self.next()?;
             // C99 6.7.5.3p7 + 6.7.5.2p1: `[`'s contents may be
             // prefixed by `static` and / or any type qualifier
@@ -582,7 +637,9 @@ impl Compiler {
                 // decide how to interpret it.
                 self.next()?;
                 array_size = -1;
-            } else if let Some(n) = self.try_parse_constant_dim()? {
+            } else if let Some(n) =
+                self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+            {
                 // `int xs[N]` -- N folded to an integer constant. The
                 // constant-expression evaluator accepts integer literals
                 // (with optional unary minus) and identifiers bound to
@@ -598,12 +655,14 @@ impl Compiler {
                     return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;
-                // `T x[0]` -- a GCC zero-length array. It behaves like a
-                // C99 6.7.2.1 flexible array member (`T x[]`): zero size,
-                // valid as a struct/union's trailing member with storage
-                // allocated past the fixed part. Route it through the same
-                // `array_size = -1` sentinel.
+                // `T x[0]` -- a GCC zero-length array. As a struct or union
+                // member it behaves like a C99 6.7.2.1 flexible array member
+                // (`T x[]`), so it rides the same `array_size = -1` sentinel.
+                // As a declared object the two differ -- `[0]` is a complete
+                // type of size zero -- which `declarator_zero_len_array`
+                // carries to the object allocators.
                 array_size = if n == 0 { -1 } else { n };
+                self.pending.declarator_zero_len_array = n == 0;
             } else {
                 // Non-constant dimension (C99 6.7.6.2). In a parameter it
                 // is adjusted to a pointer, so the size is parsed and
@@ -660,7 +719,8 @@ impl Compiler {
                     self.next()?;
                     continue;
                 }
-                let Some(m) = self.try_parse_constant_dim()? else {
+                let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+                else {
                     // A non-constant inner dimension makes the whole
                     // object a variably-modified type (C99 6.7.6.2); c5's
                     // stride model is compile-time only, so reject it
@@ -689,14 +749,18 @@ impl Compiler {
             // C99 6.7.7p3: when the base type is a typedef whose
             // alias is an array, the typedef's dimensions extend
             // the declarator's. `typedef i64 gf[16]; gf q[4];`
-            // declares `q` as `i64[4][16]`. The carrier is left
-            // intact so the rest of a comma-separated declarator
-            // list (`gf p[4], q[4];`) still folds the dimension;
-            // it is reset when the next declaration's base type
-            // is parsed. The caller observes `array_size > 0` and
-            // skips its own typedef-dim fold to avoid double
-            // application.
-            if array_size > 0 {
+            // declares `q` as `i64[4][16]`. The same composition
+            // applies under a deferred or unsized outer bracket
+            // (`gf q[]` as an object completed later, or as a
+            // parameter adjusting to a row pointer): the alias's
+            // dims are the row shape, only the outer count is
+            // open. The carrier is left intact so the rest of a
+            // comma-separated declarator list (`gf p[4], q[4];`)
+            // still folds the dimension; it is reset when the next
+            // declaration's base type is parsed. The caller
+            // observes `array_size != 0` and skips its own
+            // typedef-dim fold to avoid double application.
+            if array_size != 0 {
                 let typedef_dim = self.pending.typedef_base_array_size;
                 if typedef_dim > 0 {
                     if self.pending.typedef_base_array_dims.len() >= 2 {
@@ -704,7 +768,14 @@ impl Compiler {
                     } else {
                         dims.push(typedef_dim);
                     }
-                    array_size *= typedef_dim;
+                    if array_size > 0 {
+                        array_size *= typedef_dim;
+                    }
+                } else if typedef_dim < 0 && self.pending.typedef_base_zero_len {
+                    // An array of a zero-length-array alias has zero
+                    // elements whatever the declarator's own bounds are.
+                    array_size = -1;
+                    self.pending.declarator_zero_len_array = true;
                 }
             }
             // Deferred-outer multi-dim arrays (`T arr[][N]`,

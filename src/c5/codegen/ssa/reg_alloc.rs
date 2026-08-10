@@ -31,8 +31,10 @@
 
 #![allow(dead_code)]
 
+use alloc::collections::BinaryHeap;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cmp::Reverse;
 
 use super::super::ir::{
     BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
@@ -386,7 +388,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     }
 
     let banks = RegBanks::for_target(target);
-    let last_use = compute_last_use(func);
     // Phi class union-find: every phi result and its incoming sources
     // join one equivalence class. The allocator places the first-
     // allocated member of a class, then routes every other member to
@@ -396,7 +397,15 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
     let liveness = super::liveness::Liveness::compute(func);
-    let mut classes = super::phi_class::PhiClasses::build(func, &liveness);
+    // Reads the block-level live-out sets the analysis above solved.
+    let last_use = compute_last_use(func, liveness.block_liveness());
+    // Interference over individual values, the relation the coalescer
+    // tests classes against. `node_of` is the identity here because no
+    // class exists yet; the colourer's graph below is the same sweep over
+    // the class roots this produces.
+    let value_of: Vec<ValueId> = (0..func.insts.len() as ValueId).collect();
+    let value_interference = liveness.interference(func, &value_of);
+    let mut classes = super::phi_class::PhiClasses::build(func, &value_interference);
     let mut calls_after_def = compute_calls_after_def(func, &liveness, target);
     // Promote per-value `calls_after_def` to the class: members share
     // one register, so a member whose own range does not cross a call
@@ -423,7 +432,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
-    let interference = liveness.interference(func, &node_of);
     let param_incoming_forbid = compute_param_incoming_forbid(func, target);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
@@ -447,7 +455,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let (max_gpr, max_fpr) = pool_size_limits();
     let spill_weights = compute_spill_weights(func, &node_of);
     let coloring = color_graph(
-        &interference,
+        &value_interference,
         &node_of,
         &node_cons,
         &banks,
@@ -555,7 +563,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             | Inst::LoadIndexed { .. }
             | Inst::Store { .. }
             | Inst::StoreLocal { .. }
-            | Inst::StoreIndexed { .. } => true,
+            | Inst::StoreIndexed { .. }
+            | Inst::SegLoad { .. }
+            | Inst::SegStore { .. } => true,
             Inst::BinopI { op, .. } => {
                 !matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
             }
@@ -674,7 +684,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         if use_counts[v] == 0
             && matches!(
                 inst,
-                Inst::Store { .. } | Inst::StoreLocal { .. } | Inst::StoreIndexed { .. }
+                Inst::Store { .. }
+                    | Inst::StoreLocal { .. }
+                    | Inst::StoreIndexed { .. }
+                    | Inst::SegStore { .. }
             )
         {
             places[v] = Place::None;
@@ -1015,6 +1028,26 @@ fn pool_size_limits() -> (usize, usize) {
     }
 }
 
+/// Values of each congruence class, keyed by the class root and laid
+/// out CSR: row `r` is `values[offsets[r]..offsets[r + 1]]`, ascending.
+fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
+    let n = node_of.len();
+    let mut offsets = vec![0u32; n + 1];
+    for &r in node_of {
+        offsets[r as usize + 1] += 1;
+    }
+    for i in 0..n {
+        offsets[i + 1] += offsets[i];
+    }
+    let mut cursor = offsets[..n].to_vec();
+    let mut values = vec![0 as ValueId; n];
+    for (v, &r) in node_of.iter().enumerate() {
+        values[cursor[r as usize] as usize] = v as ValueId;
+        cursor[r as usize] += 1;
+    }
+    (offsets, values)
+}
+
 /// Assign a register or spill slot to every constrained node so that
 /// no two interfering nodes share a register, then propagate each
 /// node's placement to its class members. Greedy coloring: nodes are
@@ -1026,9 +1059,11 @@ fn pool_size_limits() -> (usize, usize) {
 /// it must be callee-saved, otherwise a callee-saved register, and
 /// spills when its bank offers no free register. Because the coldest
 /// remaining node is colored last, it is the one left to spill when a
-/// bank fills. The interference graph (built from CFG liveness) is the
-/// sole source of conflicts, so a value live across a back-edge
-/// passthrough block is never given a register that block reuses.
+/// bank fills. `interference` (built from CFG liveness) is the sole
+/// source of conflicts, so a value live across a back-edge passthrough
+/// block is never given a register that block reuses; it holds the
+/// relation over individual values, and a node's conflicts are its
+/// members' rows mapped through `node_of`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn color_graph(
     interference: &super::liveness::Interference,
@@ -1058,6 +1093,11 @@ pub(crate) fn color_graph(
     // not a linear scan of the neighbour list.
     let mut slot_used: Vec<u32> = vec![0u32; n];
     let mut stamp: u32 = 0;
+    // `interference` is over individual values, so a node's neighbouring
+    // nodes are its members' neighbours mapped through `node_of`. Members
+    // by root, CSR, so the walk is one pass over the node's own rows
+    // rather than a second graph built over the roots.
+    let (memb_off, memb_val) = class_members(node_of);
     for &node in &order {
         let Some(c) = constraints[node] else {
             continue;
@@ -1067,12 +1107,18 @@ pub(crate) fn color_graph(
         // A spill slot is 8 bytes of stack shared bank-agnostically (FP
         // and integer spills both store/reload 8 bytes), so a slot held
         // by any interfering neighbour is off-limits regardless of bank.
-        for &nb in interference.neighbors(node as ValueId) {
-            match color[nb as usize] {
-                Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
-                Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
-                Place::Spill(s) => slot_used[s as usize] = stamp,
-                _ => {}
+        for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
+            for &nb in interference.neighbors(m) {
+                let root = node_of[nb as usize];
+                if root as usize == node {
+                    continue;
+                }
+                match color[root as usize] {
+                    Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
+                    Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
+                    Place::Spill(s) => slot_used[s as usize] = stamp,
+                    _ => {}
+                }
             }
         }
         // Registers excluded beyond interference: the incoming argument
@@ -1239,8 +1285,9 @@ fn compute_spill_weights(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<u64> {
 
 /// Count consumers for every SSA value, then iterate to fixed point
 /// so transitively-dead pure insts also drop to use_count == 0.
-/// Drives the emit pass's dead-code skip.
-fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
+/// Drives the emit pass's dead-code skip, and the static DCE's
+/// address edges: both must agree on which materializations lower.
+pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     let n = func.insts.len();
     let mut counts: Vec<u32> = vec![0; n];
     let bump_into = |counts: &mut Vec<u32>, v: ValueId| {
@@ -1281,7 +1328,7 @@ fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     loop {
         let mut changed = false;
         for (i, inst) in func.insts.iter().enumerate() {
-            if killed[i] || !is_pure_inst(inst) {
+            if killed[i] || !inst.is_pure() {
                 continue;
             }
             if counts[i] == 0 {
@@ -1297,39 +1344,6 @@ fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     counts
 }
 
-/// True when the inst has no side effects and can be DCE'd if its
-/// result is unread. Mirrors `is_dead_pure` in ssa_emit_common but
-/// kept here to drive the allocator's use-count fixed-point pass.
-/// A volatile load is an access the abstract machine performs even
-/// when the value is unused (C99 5.1.2.3p2 / 6.7.3p6), so it is
-/// never pure.
-fn is_pure_inst(inst: &Inst) -> bool {
-    matches!(
-        inst,
-        Inst::Imm(_)
-            | Inst::ImmData(_)
-            | Inst::ImmCode(_)
-            | Inst::ImmExtCode(_)
-            | Inst::LocalAddr(_)
-            | Inst::TlsAddr(_)
-            | Inst::Load {
-                volatile: false,
-                ..
-            }
-            | Inst::LoadLocal {
-                volatile: false,
-                ..
-            }
-            | Inst::LoadIndexed { .. }
-            | Inst::Binop { .. }
-            | Inst::BinopI { .. }
-            | Inst::Fneg(_)
-            | Inst::Fma { .. }
-            | Inst::FpCast { .. }
-            | Inst::Extend { .. }
-    )
-}
-
 /// Whether `inst` is the inline setjmp intrinsic. A longjmp back to
 /// the setjmp site restores only the jmp_buf register set (x19-x28,
 /// x29, sp, d8-d15), so for allocation the site clobbers the
@@ -1343,103 +1357,27 @@ pub(crate) fn is_setjmp_barrier(inst: &Inst) -> bool {
     )
 }
 
-/// Invoke `f` for each operand `ValueId` referenced by `inst`.
+/// Invoke `f` for each operand `ValueId` referenced by `inst`, for the
+/// allocator's use counting.
+///
+/// The traversal itself is `Inst::for_each_operand`; the one deviation is
+/// the `VaArg` intrinsic's second operand, a compile-time packed type
+/// descriptor (`(kind << 16) | size`) the per-target emit reads straight
+/// off the constant `Inst::Imm`. It is never a runtime value, so counting
+/// it would force the descriptor into a register instead of letting it
+/// stay dead.
 pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
-    match inst {
-        Inst::Imm(_)
-        | Inst::ImmData(_)
-        | Inst::ImmCode(_)
-        | Inst::ImmExtCode(_)
-        | Inst::BlockAddr(_)
-        | Inst::LocalAddr(_)
-        | Inst::TlsAddr(_)
-        | Inst::AllocaInit(_)
-        | Inst::ParamRef { .. }
-        | Inst::TailExt(_)
-        | Inst::LoadLocal { .. } => {}
-        Inst::Load { addr, .. } => f(*addr),
-        Inst::Store { addr, value, .. } => {
-            f(*addr);
-            f(*value);
-        }
-        Inst::StoreLocal { value, .. } => f(*value),
-        Inst::LoadIndexed { base, index, .. } => {
-            f(*base);
-            f(*index);
-        }
-        Inst::StoreIndexed {
-            base, index, value, ..
-        } => {
-            f(*base);
-            f(*index);
-            f(*value);
-        }
-        Inst::Binop { lhs, rhs, .. } => {
-            f(*lhs);
-            f(*rhs);
-        }
-        Inst::BinopI { lhs, .. } => f(*lhs),
-        Inst::Fneg(v) => f(*v),
-        Inst::Fma { a, b, c, .. } => {
-            f(*a);
-            f(*b);
-            f(*c);
-        }
-        Inst::Extend { value, .. } => f(*value),
-        Inst::FpCast { value, .. } => f(*value),
-        Inst::Intrinsic { kind, args } => {
-            // The VaArg intrinsic's second operand is a compile-time
-            // packed type descriptor (`(kind << 16) | size`); the
-            // per-target emit reads it from the constant `Inst::Imm`
-            // directly (System V routes the gp / fp save area by it; the
-            // cursor / stack targets ignore it). It is never a runtime
-            // value, so it must not contribute a use that would force the
-            // descriptor `Inst::Imm` to be materialised into a register.
-            // Skipping it keeps the descriptor dead (DCE'd at emit time)
-            // and the stack-based targets byte-identical.
-            let is_va_arg = *kind == crate::c5::op::Intrinsic::VaArg as i64;
-            for (i, &a) in args.iter().enumerate() {
-                if is_va_arg && i == 1 {
-                    continue;
-                }
+    if let Inst::Intrinsic { kind, args } = inst
+        && *kind == crate::c5::op::Intrinsic::VaArg as i64
+    {
+        for (i, &a) in args.iter().enumerate() {
+            if i != 1 {
                 f(a);
             }
         }
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::InlineAsm { args, .. } => {
-            for &a in args {
-                f(a);
-            }
-        }
-        Inst::CallIndirect { target, args, .. } => {
-            f(*target);
-            for &a in args {
-                f(a);
-            }
-        }
-        Inst::Mcpy { dst, src, .. } => {
-            f(*dst);
-            f(*src);
-        }
-        Inst::AtomicRmw { addr, value, .. } => {
-            f(*addr);
-            f(*value);
-        }
-        Inst::AtomicCas {
-            addr,
-            expected_addr,
-            desired,
-            ..
-        } => {
-            f(*addr);
-            f(*expected_addr);
-            f(*desired);
-        }
-        Inst::Phi { incoming, .. } => {
-            for (_, v) in incoming {
-                f(*v);
-            }
-        }
+        return;
     }
+    inst.for_each_operand(f);
 }
 
 /// Whether an instruction defines an int / FP value or none at all.
@@ -1481,7 +1419,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
             LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
-        Load { kind, .. } | LoadLocal { kind, .. } => match kind {
+        Load { kind, .. } | LoadLocal { kind, .. } | SegLoad { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
@@ -1492,8 +1430,12 @@ fn result_kind(inst: &Inst) -> ResultKind {
         | StoreLocal {
             kind: StoreKind::F32 | StoreKind::F64,
             ..
+        }
+        | SegStore {
+            kind: StoreKind::F32 | StoreKind::F64,
+            ..
         } => ResultKind::Fp,
-        Store { .. } | StoreLocal { .. } | StoreIndexed { .. } => ResultKind::Int,
+        Store { .. } | StoreLocal { .. } | StoreIndexed { .. } | SegStore { .. } => ResultKind::Int,
         LoadIndexed { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
@@ -1954,18 +1896,146 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
 /// phi result drops to a self-move that `schedule_int_reg_moves`
 /// drops outright, eliminating the move.
 ///
-/// The pass is a fixpoint loop: a phi whose incoming is itself a
-/// phi inherits through the chain. Each iteration picks the first
-/// existing hint within the group and assigns it to every still-
-/// unhinted member; iteration stops when no member changes.
+/// The pass is a fixpoint over the phis: a phi whose incoming is
+/// itself a phi inherits through the chain. Visiting a phi picks the
+/// first existing hint within its group and assigns it to every
+/// still-unhinted member.
+///
+/// A hint is written once, so a phi whose group members all kept their
+/// hint since its last visit cannot change anything. Only the phis a
+/// write reached are therefore revisited, ordered by instruction index
+/// within a sweep and deferred to the next sweep once the sweep has
+/// passed them -- the visit order a rescan of every phi per sweep
+/// produces, without its cost on a long propagation chain. The order
+/// decides which hint a group keeps when two reach it.
+///
 /// The allocator's hint policy is advisory; an unsuitable hint
 /// (register live elsewhere at the pick site) falls through to the
 /// default policy without compromising correctness.
-fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
+///
+/// Returns the number of phi visits, which is the cost measure that
+/// separates the worklist from the rescan.
+fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) -> usize {
+    let phis: Vec<usize> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|(_, i)| matches!(i, Inst::Phi { .. }))
+        .map(|(v, _)| v)
+        .collect();
+    if phis.is_empty() {
+        return 0;
+    }
+    let n = func.insts.len();
+    let lim = hints.len().min(n);
+    let operand = move |src: &ValueId| *src != NO_VALUE && (*src as usize) < lim;
+    // Phis a write to a given value can unblock, CSR by value: the phis
+    // naming it as an incoming, plus the value's own phi.
+    let mut watch_off = vec![0u32; n + 1];
+    for &v in &phis {
+        let Inst::Phi { incoming, .. } = &func.insts[v] else {
+            continue;
+        };
+        watch_off[v + 1] += 1;
+        for (_, src) in incoming.iter().filter(|(_, s)| operand(s)) {
+            watch_off[*src as usize + 1] += 1;
+        }
+    }
+    for i in 0..n {
+        watch_off[i + 1] += watch_off[i];
+    }
+    let mut cursor = watch_off[..n].to_vec();
+    let mut watchers = vec![0u32; watch_off[n] as usize];
+    for (rank, &v) in phis.iter().enumerate() {
+        let Inst::Phi { incoming, .. } = &func.insts[v] else {
+            continue;
+        };
+        let mut put = |slot: usize| {
+            watchers[cursor[slot] as usize] = rank as u32;
+            cursor[slot] += 1;
+        };
+        put(v);
+        for (_, src) in incoming.iter().filter(|(_, s)| operand(s)) {
+            put(*src as usize);
+        }
+    }
+    // Two rank-ordered queues: the sweep in progress and the next one.
+    // A phi ahead of the cursor rejoins the current sweep, one already
+    // passed waits for the next.
+    let mut cur: BinaryHeap<Reverse<u32>> = (0..phis.len() as u32).map(Reverse).collect();
+    let mut next: BinaryHeap<Reverse<u32>> = BinaryHeap::new();
+    let mut queued = vec![true; phis.len()];
+    let mut queued_next = vec![false; phis.len()];
+    let mut visits = 0usize;
+    loop {
+        while let Some(Reverse(rank)) = cur.pop() {
+            visits += 1;
+            queued[rank as usize] = false;
+            let v = phis[rank as usize];
+            let Inst::Phi { incoming, .. } = &func.insts[v] else {
+                continue;
+            };
+            let group_hint = hints[v].or_else(|| {
+                incoming
+                    .iter()
+                    .filter(|(_, s)| operand(s))
+                    .find_map(|(_, src)| hints[*src as usize])
+            });
+            let Some(r) = group_hint else { continue };
+            let mut wake = |slot: usize,
+                            cur: &mut BinaryHeap<Reverse<u32>>,
+                            next: &mut BinaryHeap<Reverse<u32>>| {
+                for &w in &watchers[watch_off[slot] as usize..watch_off[slot + 1] as usize] {
+                    if w > rank {
+                        if !queued[w as usize] {
+                            queued[w as usize] = true;
+                            cur.push(Reverse(w));
+                        }
+                    } else if !queued_next[w as usize] {
+                        queued_next[w as usize] = true;
+                        next.push(Reverse(w));
+                    }
+                }
+            };
+            if hints[v].is_none() {
+                hints[v] = Some(r);
+                wake(v, &mut cur, &mut next);
+            }
+            for (_, src) in incoming.iter().filter(|(_, s)| operand(s)) {
+                if hints[*src as usize].is_none() {
+                    hints[*src as usize] = Some(r);
+                    wake(*src as usize, &mut cur, &mut next);
+                }
+            }
+        }
+        if next.is_empty() {
+            break;
+        }
+        core::mem::swap(&mut cur, &mut next);
+        core::mem::swap(&mut queued, &mut queued_next);
+    }
+    visits
+}
+
+/// Rescan every phi per sweep until no hint changes. Same relation as
+/// [`populate_phi_hints`], including the visit order that decides which
+/// hint a group keeps; this is the reference the tests below hold the
+/// worklist to. Returns its phi visits on the same measure.
+#[cfg(test)]
+fn populate_phi_hints_by_rescan(func: &FunctionSsa, hints: &mut [Option<u8>]) -> usize {
+    let phis: Vec<usize> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|(_, i)| matches!(i, Inst::Phi { .. }))
+        .map(|(v, _)| v)
+        .collect();
+    let mut visits = 0usize;
     loop {
         let mut changed = false;
-        for (v, inst) in func.insts.iter().enumerate() {
-            let Inst::Phi { incoming, .. } = inst else {
+        for &v in &phis {
+            visits += 1;
+            let Inst::Phi { incoming, .. } = &func.insts[v] else {
                 continue;
             };
             let mut group_hint = hints[v];
@@ -1999,12 +2069,13 @@ fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
             break;
         }
     }
+    visits
 }
 
 /// For each value, the PC index of its last use across the
 /// function. Defaults to the value's own PC (so a value with no
 /// uses still has a single-PC interval).
-fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
+fn compute_last_use(func: &FunctionSsa, live: &super::liveness::BlockLiveness) -> Vec<u32> {
     let n = func.insts.len();
     let mut last_use: Vec<u32> = (0..n as u32).collect();
     for (idx, inst) in func.insts.iter().enumerate() {
@@ -2046,7 +2117,7 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             _ => {}
         }
     }
-    extend_last_use_across_blocks(func, &mut last_use);
+    extend_last_use_across_blocks(func, live, &mut last_use);
     last_use
 }
 
@@ -2059,110 +2130,23 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
 /// liveness over the control-flow graph captures that. The pass only
 /// raises `last_use`, so a value that is not live across a back edge
 /// or an out-of-order block keeps the range the scan computed.
-fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
-    let nblocks = func.blocks.len();
-    let n = func.insts.len();
-    let words = n.div_ceil(64);
-    if nblocks == 0 || words == 0 {
+fn extend_last_use_across_blocks(
+    func: &FunctionSsa,
+    live: &super::liveness::BlockLiveness,
+    last_use: &mut [u32],
+) {
+    if func.blocks.is_empty() {
         return;
-    }
-    let bit = |bits: &mut [u64], base: usize, v: u32| {
-        bits[base + (v as usize) / 64] |= 1u64 << ((v as usize) % 64);
-    };
-    // used_set: values referenced in a block but defined outside it
-    // (upward exposed). kill: values defined in the block's range.
-    // phi_live_out: per-predecessor set of phi-incoming values --
-    // these must be live at the end of the predecessor regardless
-    // of where they are defined (a loop body whose phi reads a value
-    // defined in that same body needs the value to survive the back
-    // edge, but `~kill[B]` would otherwise drop it).
-    let mut used_set = vec![0u64; nblocks * words];
-    let mut kill = vec![0u64; nblocks * words];
-    let mut phi_live_out = vec![0u64; nblocks * words];
-    for (b, blk) in func.blocks.iter().enumerate() {
-        let base = b * words;
-        let (start, end) = (blk.inst_range.start, blk.inst_range.end);
-        for v in start..end {
-            bit(&mut kill, base, v);
-        }
-        let mut mark = |v: ValueId| {
-            if v != NO_VALUE && (v < start || v >= end) {
-                bit(&mut used_set, base, v);
-            }
-        };
-        for idx in start..end {
-            if let Inst::Phi { incoming, .. } = &func.insts[idx as usize] {
-                for (pred, v) in incoming {
-                    if *v != NO_VALUE {
-                        bit(&mut phi_live_out, (*pred as usize) * words, *v);
-                    }
-                }
-                continue;
-            }
-            for_each_operand(&func.insts[idx as usize], &mut mark);
-        }
-        if blk.exit_acc != NO_VALUE {
-            mark(blk.exit_acc);
-        }
-        match &blk.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
-            Terminator::Return(v) if *v != NO_VALUE => mark(*v),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                if *target != NO_VALUE =>
-            {
-                mark(*target)
-            }
-            _ => {}
-        }
-    }
-    // Backward dataflow to a fixed point:
-    //   live_out[b] = phi_live_out[b] | U live_in[succ];
-    //   live_in[b]  = gen[b] | (live_out[b] & ~kill[b]).
-    let mut live_in = vec![0u64; nblocks * words];
-    let mut live_out = vec![0u64; nblocks * words];
-    let mut scratch = vec![0u64; words];
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for b in (0..nblocks).rev() {
-            let base = b * words;
-            scratch.iter_mut().for_each(|w| *w = 0);
-            for s in super::mem2reg::successors(
-                &func.blocks[b].terminator,
-                &func.computed_goto_targets,
-                &func.jump_tables,
-            ) {
-                let sb = s as usize * words;
-                for w in 0..words {
-                    scratch[w] |= live_in[sb + w];
-                }
-            }
-            for w in 0..words {
-                scratch[w] |= phi_live_out[base + w];
-                live_out[base + w] = scratch[w];
-                let ni = used_set[base + w] | (scratch[w] & !kill[base + w]);
-                if ni != live_in[base + w] {
-                    live_in[base + w] = ni;
-                    changed = true;
-                }
-            }
-        }
     }
     // A value live-out of a block must survive to the end of that
     // block's instruction range.
     for (b, blk) in func.blocks.iter().enumerate() {
-        let base = b * words;
         let end = blk.inst_range.end;
-        for w in 0..words {
-            let mut bits = live_out[base + w];
-            while bits != 0 {
-                let v = (w * 64) as u32 + bits.trailing_zeros();
-                if last_use[v as usize] < end {
-                    last_use[v as usize] = end;
-                }
-                bits &= bits - 1;
+        live.for_each_live_out(b as crate::c5::ir::BlockId, |v| {
+            if last_use[v as usize] < end {
+                last_use[v as usize] = end;
             }
-        }
+        });
     }
 }
 
@@ -2205,14 +2189,16 @@ fn promote_calls_after_def_to_classes(
     classes: &mut super::phi_class::PhiClasses,
     calls_after_def: &mut [bool],
 ) {
-    let mut class_must_callee: alloc::collections::BTreeMap<ValueId, bool> =
-        alloc::collections::BTreeMap::new();
+    // Roots index the flag directly: the class ids are value ids, so an
+    // array covers them without the per-value map node an ordered map
+    // costs.
+    let mut class_must_callee = alloc::vec![false; calls_after_def.len()];
     for (v, &crosses) in calls_after_def.iter().enumerate() {
         let root = classes.find(v as ValueId);
-        *class_must_callee.entry(root).or_insert(false) |= crosses;
+        class_must_callee[root as usize] |= crosses;
     }
     for (v, entry) in calls_after_def.iter_mut().enumerate() {
-        if class_must_callee[&classes.find(v as ValueId)] {
+        if class_must_callee[classes.find(v as ValueId) as usize] {
             *entry = true;
         }
     }
@@ -2228,7 +2214,7 @@ mod tests {
         let src =
             std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
         let program = Compiler::new(src).compile().expect("compile");
-        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host())
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false)
             .expect("produce_ssa_funcs")
     }
 
@@ -2305,7 +2291,7 @@ int main(void) { return 0; }
 "#;
         let program = Compiler::new(src.to_string()).compile().expect("compile");
         let funcs =
-            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::WindowsX64)
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::WindowsX64, false)
                 .expect("produce_ssa_funcs");
         for func in &funcs {
             let alloc = allocate(func, Target::WindowsX64);
@@ -2352,8 +2338,8 @@ int main(void) { return 0; }
             .compile()
             .expect("compile");
         for (target, want_scratch) in [(Target::WindowsX64, true), (Target::LinuxX64, false)] {
-            let funcs =
-                crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target).expect("ssa");
+            let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false)
+                .expect("ssa");
             let f = funcs.iter().find(|f| f.name == "f").expect("f");
             let alloc = allocate(f, target);
             let saves_14_15 = alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15);
@@ -2370,7 +2356,7 @@ int main(void) { return 0; }
             .compile()
             .expect("compile");
         let funcs =
-            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::WindowsX64)
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::WindowsX64, false)
                 .expect("ssa");
         let g = funcs.iter().find(|f| f.name == "g").expect("g");
         assert!(
@@ -2753,6 +2739,57 @@ int main(void) { return 0; }
         );
     }
 
+    /// The allocator's use-count fixed point and the emit's dead-value
+    /// skip read one purity predicate, so an inst whose operands stop
+    /// being counted is also skipped. Two lists let a variant be pure to
+    /// the allocator alone: its address operand was dropped as unread
+    /// while the access itself was still emitted, reading through
+    /// whatever the register held.
+    #[test]
+    fn dead_pure_insts_drop_together_with_their_operands() {
+        use crate::c5::ir::{AsmSeg, Block};
+        let f = FunctionSsa {
+            insts: vec![
+                Inst::Imm(0x1000),
+                Inst::SegLoad {
+                    addr: 0,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                    seg: AsmSeg::Gs,
+                },
+                Inst::Imm(0),
+                Inst::Fma {
+                    a: 2,
+                    b: 2,
+                    c: 2,
+                    neg_product: false,
+                    neg_addend: false,
+                },
+                Inst::ImmExtCode(0),
+                Inst::Imm(0),
+            ],
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..6,
+                terminator: Terminator::Return(5),
+                exit_acc: 5,
+            }],
+            ..Default::default()
+        };
+        let alloc = allocate(&f, Target::LinuxX64);
+        for v in [0usize, 1, 3, 4] {
+            assert!(
+                super::super::emit_common::is_dead_pure(&f.insts[v], v as ValueId, &alloc),
+                "v{v} is dead and pure, so emit must skip it: {:?}",
+                f.insts[v]
+            );
+        }
+        assert_eq!(
+            alloc.use_counts[0], 0,
+            "the dead segment read stops counting its address operand"
+        );
+    }
+
     #[test]
     fn allocate_quicksort_no_spill() {
         let funcs = lift("tests/fixtures/c/quicksort.c");
@@ -2786,7 +2823,10 @@ int main(void) { return 0; }
                 let kind = result_kind(&f.insts[i]);
                 let store_with_dead_dst = matches!(
                     f.insts[i],
-                    Inst::Store { .. } | Inst::StoreLocal { .. } | Inst::StoreIndexed { .. }
+                    Inst::Store { .. }
+                        | Inst::StoreLocal { .. }
+                        | Inst::StoreIndexed { .. }
+                        | Inst::SegStore { .. }
                 ) && alloc.use_counts.get(i).copied().unwrap_or(0) == 0;
                 match kind {
                     ResultKind::None => assert_eq!(*p, Place::None),
@@ -2828,7 +2868,10 @@ int main(void) { return 0; }
         let v_tls_idx = v_tls as usize;
         assert!(v_imm_idx < v_tls_idx, "v_imm must be defined before v_tls");
 
-        let last_use = compute_last_use(&func);
+        let last_use = compute_last_use(
+            &func,
+            &crate::c5::codegen::ssa::liveness::BlockLiveness::compute(&func),
+        );
         assert!(
             last_use[v_imm_idx] > v_tls_idx as u32,
             "v_imm's last use ({}) must cross the TlsAddr at pc {v_tls_idx}",
@@ -3012,7 +3055,7 @@ int main(void) { return 0; }
         let mut b = SsaBuilder::new(0, 0, false);
         let v_dst = b.imm(0x2000);
         let v_src = b.imm(0x3000);
-        b.mcpy(v_dst, v_src, 8);
+        b.mcpy(v_dst, v_src, 8, 8);
         let v_zero = b.imm(0);
         b.return_(v_zero);
         let func = b.finish();
@@ -3117,6 +3160,10 @@ int main(void) { return 0; }
             is_inline: false,
             is_always_inline: false,
             is_naked: false,
+            section: None,
+            is_weak: false,
+            is_internal: false,
+            const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
@@ -3128,11 +3175,16 @@ int main(void) { return 0; }
             ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            label_data_relocs: Vec::new(),
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
@@ -3185,7 +3237,11 @@ int main(void) { return 0; }
             for f in &funcs {
                 let alloc = allocate(f, target);
                 let live = crate::c5::codegen::ssa::liveness::Liveness::compute(f);
-                let mut classes = crate::c5::codegen::ssa::phi_class::PhiClasses::build(f, &live);
+                let ids: Vec<ValueId> = (0..f.insts.len() as ValueId).collect();
+                let mut classes = crate::c5::codegen::ssa::phi_class::PhiClasses::build(
+                    f,
+                    &live.interference(f, &ids),
+                );
                 let mut non_singleton_root = alloc::vec![false; f.insts.len()];
                 for v in 0..f.insts.len() {
                     let root = classes.find(v as ValueId) as usize;
@@ -3216,5 +3272,107 @@ int main(void) { return 0; }
                 }
             }
         }
+    }
+
+    /// A phi tape holding `chain` links plus `extra` hint sources, in
+    /// the shape the walker emits for a chain of loops: phi `k` names
+    /// phi `k - 1` as an incoming.
+    fn phi_chain(chain: usize) -> FunctionSsa {
+        let mut insts: Vec<Inst> = alloc::vec![Inst::Imm(0)];
+        for k in 0..chain {
+            let prev = k as ValueId; // Imm at 0, then phi k - 1
+            insts.push(Inst::Phi {
+                incoming: alloc::vec![(0, prev), (1, (k + 1) as ValueId)],
+                kind: crate::c5::ir::LoadKind::I64,
+            });
+        }
+        let n = insts.len();
+        FunctionSsa {
+            inst_src: alloc::vec![(0, 0); n],
+            f32_values: alloc::vec![false; n],
+            insts,
+            blocks: alloc::vec![crate::c5::ir::Block {
+                start_pc: 0,
+                inst_range: 0..n as u32,
+                terminator: Terminator::Return(NO_VALUE),
+                exit_acc: NO_VALUE,
+            }],
+            ..FunctionSsa::default()
+        }
+    }
+
+    /// The worklist must reproduce the rescan's assignment exactly: the
+    /// hint a group keeps depends on which candidate reaches it first,
+    /// so any visit-order drift changes register assignments.
+    #[test]
+    fn phi_hints_match_the_rescan_reference() {
+        for chain in [0usize, 1, 2, 5, 17, 64] {
+            let func = phi_chain(chain);
+            let n = func.insts.len();
+            // Seed competing hints at several positions, including one
+            // past the chain's head, so propagation runs both with and
+            // against the sweep direction.
+            for seed in [
+                alloc::vec![],
+                alloc::vec![(0usize, 3u8)],
+                alloc::vec![(n - 1, 7u8)],
+                {
+                    let mut v = alloc::vec![(0usize, 3u8)];
+                    if n > 2 {
+                        v.push((n / 2, 5u8));
+                    }
+                    v.push((n - 1, 7u8));
+                    v
+                },
+            ] {
+                let mut a: Vec<Option<u8>> = alloc::vec![None; n];
+                let mut b: Vec<Option<u8>> = alloc::vec![None; n];
+                for &(i, r) in &seed {
+                    a[i] = Some(r);
+                    b[i] = Some(r);
+                }
+                populate_phi_hints(&func, &mut a);
+                populate_phi_hints_by_rescan(&func, &mut b);
+                assert_eq!(a, b, "chain={chain} seed={seed:?}");
+            }
+        }
+    }
+
+    /// The rescan costs the function's phi count per propagation hop, so
+    /// a chain of N phis costs N^2; the worklist visits a phi only when
+    /// a write reached it. Both are measured in phi visits -- the
+    /// operation count the two differ in -- so the bound holds whatever
+    /// the machine is doing. Seeding the far end of the chain makes
+    /// propagation run against the sweep direction, the shape that costs
+    /// the rescan one sweep per hop.
+    #[test]
+    fn phi_hint_propagation_is_not_quadratic_in_the_chain() {
+        let visits = |chain: usize| -> (usize, usize) {
+            let func = phi_chain(chain);
+            let n = func.insts.len();
+            let (mut a, mut b) = (alloc::vec![None; n], alloc::vec![None; n]);
+            a[n - 1] = Some(7u8);
+            b[n - 1] = Some(7u8);
+            let worklist = populate_phi_hints(&func, &mut a);
+            let rescan = populate_phi_hints_by_rescan(&func, &mut b);
+            assert!(a.iter().all(|h| h.is_some()), "chain={chain} unpropagated");
+            assert_eq!(a, b, "chain={chain} assignments differ");
+            (worklist, rescan)
+        };
+        let (small, small_rescan) = visits(500);
+        let (large, large_rescan) = visits(2000);
+        assert!(
+            large < small * 6,
+            "4x the chain cost {large} phi visits against {small}, \
+             past the 6x headroom over linear",
+        );
+        // The reference the worklist replaced fails the same bound at
+        // the same sizes, so the bound separates the two algorithms.
+        assert!(
+            large_rescan >= small_rescan * 6,
+            "the rescan reference no longer costs a sweep per hop \
+             ({small_rescan} -> {large_rescan} visits); the bound above \
+             no longer proves anything",
+        );
     }
 }

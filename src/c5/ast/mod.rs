@@ -39,6 +39,10 @@ pub(crate) type StmtId = u32;
 /// Index into [`Ast::decls`].
 pub(crate) type DeclId = u32;
 
+/// `Expr::StmtExpr::value_item` for a block that wrote no item, whose
+/// statement expression therefore has no value.
+pub(crate) const NO_VALUE_ITEM: u32 = u32::MAX;
+
 /// Forward-referenced label slot for `goto`. Allocated at the first
 /// `goto` or label definition; resolved when the matching
 /// `Stmt::Labeled` is emitted.
@@ -82,6 +86,64 @@ pub(crate) enum UnOp {
     /// `*expr` -- dereference a pointer. C99 6.5.3.2.
     Deref,
 }
+
+/// Memory transfer the compiler expands inline, from a GCC
+/// `__builtin_mem*` call whose byte count is an integer constant
+/// expression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MemTransferOp {
+    /// C99 7.21.2.1 `memcpy` -- the objects may not overlap.
+    Copy,
+    /// C99 7.21.2.2 `memmove` -- the objects may overlap.
+    Move,
+    /// C99 7.21.6.1 `memset` -- fill with a byte value.
+    Fill,
+}
+
+/// Alignment guaranteed for a frame slot address and for the `.data`
+/// staging area a brace-list initializer is laid into: both are
+/// 8-byte slotted. An `Inst::Mcpy` between two such addresses may be
+/// transferred 8 bytes at a time whatever the copied type's own
+/// alignment is.
+pub(crate) const SLOT_ALIGN: u32 = 8;
+
+/// Widest access the inline expansion of a memory transfer may use at
+/// `align`-byte endpoint alignment.
+pub(crate) fn mem_transfer_unit(align: u32) -> u32 {
+    align.clamp(1, 8)
+}
+
+/// Number of accesses that expansion emits for `size` bytes: whole
+/// units, then one access per set bit of the remainder as the width
+/// halves down to a byte.
+pub(crate) fn mem_transfer_accesses(size: i64, align: u32) -> i64 {
+    let unit = i64::from(mem_transfer_unit(align));
+    size / unit + i64::from((size % unit).count_ones())
+}
+
+/// The `(byte offset, access width)` sequence that expansion emits.
+/// Width is never raised past the endpoint alignment, so the sequence
+/// holds on a target that faults on a misaligned access.
+pub(crate) fn mem_transfer_chunks(size: i64, align: u32) -> Vec<(i64, u32)> {
+    let unit = mem_transfer_unit(align);
+    let mut chunks = Vec::new();
+    let mut off = 0i64;
+    while off < size {
+        let left = size - off;
+        let w = [8u32, 4, 2, 1]
+            .into_iter()
+            .find(|w| *w <= unit && i64::from(*w) <= left)
+            .unwrap_or(1);
+        chunks.push((off, w));
+        off += i64::from(w);
+    }
+    chunks
+}
+
+/// Largest number of stores a zero fill is expanded to inline, in place
+/// of copying an all-zero staged template. Matches the bound the
+/// `__builtin_memset` expansion uses; past it the copy is kept.
+pub(crate) const MAX_MEM_FILL_ACCESSES: i64 = 32;
 
 /// C11 7.17 generic atomic operation. The operand width is the
 /// pointee type of the first argument; the walker lowers each kind
@@ -135,17 +197,45 @@ pub(crate) enum AtomicKind {
 /// time; the walker emits the load + shift + mask sequence.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BitfieldDesc {
-    /// Bit offset within the storage unit. Range `[0, 63]`.
+    /// Bit offset within the storage unit. Range `[0, 127]`.
     pub bit_offset: u8,
-    /// Bit width of the field. Range `[1, 64]`.
+    /// Bit width of the field. Range `[1, 128]`.
     pub bit_width: u8,
-    /// Storage-unit width in bytes (1, 2, 4, or 8). Drives the
-    /// load / store opcode pair per C99 6.7.2.1p11.
+    /// Storage-unit width in bytes (1, 2, 4, 8, or 16). Drives the
+    /// load / store opcode pair per C99 6.7.2.1p11; a 16-byte unit is
+    /// accessed as the two halves of a 128-bit value.
     pub unit_size: u8,
     /// True when the declared field type is signed -- C99
     /// 6.7.2.1p10 says the read sign-extends through the top of
     /// the storage word.
     pub signed: bool,
+}
+
+impl BitfieldDesc {
+    /// True when the access yields a 128-bit value: the field is stored
+    /// in a 16-byte unit and is too wide for the integer promotions to
+    /// narrow it (see [`bitfield_keeps_declared_ty`]).
+    pub(crate) fn is_wide_value(&self) -> bool {
+        self.unit_size == 16 && bitfield_keeps_declared_ty(self.bit_width as u32)
+    }
+}
+
+/// True when a bitfield of `width` keeps its declared type under the
+/// C99 6.3.1.1p2 integer promotions; a narrower field's value converts
+/// to `int`, or to `unsigned int` at exactly `int`'s width.
+pub(crate) fn bitfield_keeps_declared_ty(width: u32) -> bool {
+    width > 32
+}
+
+/// A bitfield's slice of its storage unit: `((1 << width) - 1) << offset`.
+/// A unit of 8 bytes or less keeps the whole result in the low 64 bits.
+pub(crate) fn bitfield_slice_mask(width: u32, offset: u32) -> u128 {
+    let m: u128 = if width >= 128 {
+        u128::MAX
+    } else {
+        (1u128 << width) - 1
+    };
+    m << offset
 }
 
 /// Operand of `sizeof`. C99 6.5.3.4p2 allows either a type-name or
@@ -190,8 +280,11 @@ pub(crate) enum Expr {
         is_thread_local: bool,
         /// Snapshot of `Symbol::array_size` at parse time. Non-zero
         /// for an array-shaped symbol (`T name[N];` -- the decay
-        /// happens in the rvalue path). Captured here so the walker
-        /// doesn't have to re-index the symbol table post-shadow.
+        /// happens in the rvalue path); `-1` covers the shapes with
+        /// no positive element count here, an incomplete `extern
+        /// T x[];` and a zero-length `T x[] = {}`. Captured so the
+        /// walker doesn't have to re-index the symbol table
+        /// post-shadow.
         array_size: i64,
     },
     /// `op child`, where `child` is the operand. Increment /
@@ -367,11 +460,18 @@ pub(crate) enum Expr {
     /// GCC statement expression `({ ... })` (Annex J.5 common
     /// extension). `block` is the enclosed compound statement (or,
     /// for a single-item block, the bare statement `ast_wrap_block_items`
-    /// yields). The value and type are those of the last
-    /// expression-statement; `ty` is `Ty::Void` when the trailing
-    /// block-item is not an expression statement.
+    /// yields). `value_item` indexes the block item the value and type
+    /// come from: the last expression-statement the source wrote, which
+    /// is not the block's last item once the parser has appended the
+    /// scope-exit statements (`cleanup` destructor calls, the VLA stack
+    /// restore). `NO_VALUE_ITEM` when the block wrote no item, and `ty`
+    /// is `Ty::Int` when the item is not an expression statement.
     #[allow(clippy::enum_variant_names)]
-    StmtExpr { block: StmtId, ty: i64 },
+    StmtExpr {
+        block: StmtId,
+        ty: i64,
+        value_item: u32,
+    },
     /// GCC checked-arithmetic builtin
     /// `__builtin_{add,sub,mul}_overflow(a, b, dst)`. `op` is 0 = add,
     /// 1 = sub, 2 = mul. `dst` is the result pointer; `elem_ty` is its
@@ -384,6 +484,20 @@ pub(crate) enum Expr {
         b: ExprId,
         dst: ExprId,
         elem_ty: i64,
+        ty: i64,
+    },
+    /// GCC `__builtin_memcpy` / `__builtin_memmove` / `__builtin_memset`
+    /// with an integer-constant-expression byte count. `src` is the
+    /// source address for the copies and the fill byte for the set.
+    /// `align` is the alignment both endpoints satisfy by virtue of
+    /// their pointer types (C99 6.3.2.3p7). The walker expands the
+    /// transfer inline; the value is the destination address (`ty`).
+    MemTransfer {
+        op: MemTransferOp,
+        dst: ExprId,
+        src: ExprId,
+        size: i64,
+        align: u32,
         ty: i64,
     },
 }
@@ -475,17 +589,30 @@ pub(crate) enum Stmt {
     VlaScopeExit { save_slot: i64 },
 }
 
+/// Value source of one runtime-initializer element: an expression to
+/// evaluate, or a copy of `bytes` from an earlier-initialized span of
+/// the same object at `src_off`. The copy form implements the GNU
+/// range designator (`[lo ... hi] = expr`) in an automatic
+/// initializer: the expression is evaluated once into the range's
+/// first span and every further span copies its bytes, matching the
+/// reference compilers' once-evaluation semantics.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum RuntimeInitValue {
+    Expr(ExprId),
+    Copy { src_off: i64, bytes: i64 },
+}
+
 /// One stored element in a runtime aggregate initializer.
 /// `offset` is the byte offset into the local; `value` is the
-/// element's expression; `ty` is the destination type that
-/// drives the walker's `store_kind_for` pick. `bitfield`, when set,
-/// makes the walker emit a load-clear-shift-or-store into the
+/// element's expression or copy source; `ty` is the destination type
+/// that drives the walker's `store_kind_for` pick. `bitfield`, when
+/// set, makes the walker emit a load-clear-shift-or-store into the
 /// storage unit at `offset` instead of a full-width store (a
 /// bitfield member with a non-constant initializer).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RuntimeInitElement {
     pub offset: i64,
-    pub value: ExprId,
+    pub value: RuntimeInitValue,
     pub ty: i64,
     pub bitfield: Option<BitfieldDesc>,
 }
@@ -502,11 +629,16 @@ pub(crate) struct RuntimeInitElement {
 ///   constant. The parser stages the bytes at `src_data_off`
 ///   inside `Program.data`; the walker emits `Inst::Mcpy` to
 ///   copy them into the local's slot.
+/// * `Zero { size_bytes }` -- the same, for a template that is
+///   wholly zero and short enough to store inline. The parser
+///   stages no bytes and the walker emits the stores, so no data
+///   object is emitted for it.
 /// * `Runtime { zero_init, elements }` -- a brace-list
 ///   initializer with at least one non-constant element. C99
-///   6.7.8p13. `zero_init` is the optional Mcpy-from-staged-zero
-///   prelude that implements the "omitted entries are zero" rule
-///   (6.7.8p19); `elements` is the per-position store sequence.
+///   6.7.8p13. `zero_init` is the optional prelude that implements
+///   the "omitted entries are zero" rule (6.7.8p19), in either of
+///   the two shapes above; `elements` is the per-position store
+///   sequence.
 #[derive(Debug, Clone)]
 pub(crate) enum LocalInit {
     None,
@@ -515,10 +647,21 @@ pub(crate) enum LocalInit {
         src_data_off: i64,
         size_bytes: i64,
     },
+    Zero {
+        size_bytes: i64,
+    },
     Runtime {
-        zero_init: Option<(i64, i64)>,
+        zero_init: Option<LocalInitPrelude>,
         elements: Vec<RuntimeInitElement>,
     },
+}
+
+/// The zero prelude of a `Runtime` initializer: either a copy from a
+/// staged template or the inline stores that replace it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LocalInitPrelude {
+    Template { src_data_off: i64, size_bytes: i64 },
+    Zero { size_bytes: i64 },
 }
 
 /// Declaration node. Captures variable / function declarations
@@ -573,7 +716,7 @@ pub(crate) enum Decl {
 /// the param count + variadic flag for the function prologue,
 /// and the post-parse local slot high-water mark for frame
 /// sizing.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct FinishedFunction {
     pub ast: Ast,
     pub ent_pc: usize,
@@ -636,6 +779,17 @@ pub(crate) struct FinishedFunction {
     /// no direct slot reference (reached only via the base address). Empty
     /// when the function has no multi-cell local.
     pub multi_cell_slots: alloc::vec::Vec<(i64, i64)>,
+    /// `(slot_off, align, size_bytes)` for each automatic object whose required
+    /// alignment exceeds 16 (C11 6.7.5 `_Alignas` / GNU `aligned`). The walker
+    /// packs these into `FunctionSsa::over_aligned` + `frame_align`. Empty when
+    /// no automatic object needs stack realignment.
+    pub over_aligned_slots: alloc::vec::Vec<(i64, i64, i64)>,
+    /// `&&label` elements of this function's static initializers, as
+    /// data slots awaiting a label address. The walk resolves each
+    /// label to its basic block and seeds
+    /// `FunctionSsa::label_data_relocs`. Empty for a function with no
+    /// label-address initializer.
+    pub label_data_slots: alloc::vec::Vec<crate::c5::compiler::PendingLabelReloc>,
     pub name: alloc::string::String,
 }
 
@@ -770,27 +924,40 @@ impl Ast {
                     is_thread_local,
                     ..
                 } if *class == Token::Glo as i64 && !*is_thread_local => f(val),
-                Expr::CompoundLiteral { init, .. } => match init {
-                    LocalInit::Aggregate { src_data_off, .. } => f(src_data_off),
-                    LocalInit::Runtime {
-                        zero_init: Some((off, _)),
-                        ..
-                    } => f(off),
-                    _ => {}
-                },
-                _ => {}
+                Expr::CompoundLiteral { init, .. } => local_init_offsets(init, f),
+                Expr::Ident { .. }
+                | Expr::IntLit { .. }
+                | Expr::FloatLit { .. }
+                | Expr::Unary { .. }
+                | Expr::LabelAddr { .. }
+                | Expr::Binary { .. }
+                | Expr::Ternary { .. }
+                | Expr::Call { .. }
+                | Expr::Member { .. }
+                | Expr::Index { .. }
+                | Expr::Cast { .. }
+                | Expr::Assign { .. }
+                | Expr::BitfieldAssign { .. }
+                | Expr::CompoundAssign { .. }
+                | Expr::PreInc { .. }
+                | Expr::PostInc { .. }
+                | Expr::Sizeof { .. }
+                | Expr::Comma { .. }
+                | Expr::ShortCircuit { .. }
+                | Expr::Intrinsic { .. }
+                | Expr::InlineAsm { .. }
+                | Expr::Atomic { .. }
+                | Expr::VlaBase { .. }
+                | Expr::VlaSizeof { .. }
+                | Expr::StmtExpr { .. }
+                | Expr::CheckedArith { .. }
+                | Expr::MemTransfer { .. } => {}
             }
         }
         for decl in &mut self.decls {
-            if let Decl::Local { init, .. } = decl {
-                match init {
-                    LocalInit::Aggregate { src_data_off, .. } => f(src_data_off),
-                    LocalInit::Runtime {
-                        zero_init: Some((off, _)),
-                        ..
-                    } => f(off),
-                    _ => {}
-                }
+            match decl {
+                Decl::Local { init, .. } => local_init_offsets(init, f),
+                Decl::Vla { .. } | Decl::StaticLocal { .. } => {}
             }
         }
     }
@@ -805,14 +972,6 @@ impl Ast {
             return;
         }
         self.for_each_data_offset(&mut |off| *off += data_base);
-    }
-
-    /// Rewrite every data-segment offset through `remap`. Used by static
-    /// DCE after `.data` is compacted: an object that survives the prune
-    /// moves to a new packed offset, and every AST reference to it must
-    /// follow. `remap` must be defined for every offset the AST holds.
-    pub(crate) fn remap_data_offsets(&mut self, remap: &impl Fn(i64) -> i64) {
-        self.for_each_data_offset(&mut |off| *off = remap(*off));
     }
 
     /// Linker-side fixup for multi-TU builds: shift every
@@ -947,10 +1106,9 @@ impl Ast {
 /// tags carried outside the AST (e.g. `FinishedFunction::param_tys`,
 /// `Symbol::type_`).
 pub(crate) fn remap_struct_ty(ty: i64, remap: &[usize]) -> i64 {
-    use crate::c5::compiler::types::{STRUCT_BASE, STRUCT_STRIDE};
-    use crate::c5::compiler::types::{UNSIGNED_BIT, VOLATILE_BIT};
+    use crate::c5::compiler::types::{STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, strip_unsigned};
     let unsigned = ty & UNSIGNED_BIT;
-    let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+    let stripped = strip_unsigned(ty);
     if stripped < STRUCT_BASE {
         return ty;
     }
@@ -987,7 +1145,8 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         | Expr::Atomic { ty, .. }
         | Expr::VlaBase { ty, .. }
         | Expr::StmtExpr { ty, .. }
-        | Expr::CheckedArith { ty, .. } => f(ty),
+        | Expr::CheckedArith { ty, .. }
+        | Expr::MemTransfer { ty, .. } => f(ty),
         Expr::VlaSizeof { .. } => {}
         Expr::Cast { to_ty, .. } => f(to_ty),
         Expr::CompoundLiteral { ty, init, .. } => {
@@ -1018,6 +1177,61 @@ fn visit_decl_ty(decl: &mut Decl, f: &mut impl FnMut(&mut i64)) {
         }
         Decl::Vla { elem_ty, .. } => f(elem_ty),
         Decl::StaticLocal { .. } => {}
+    }
+}
+
+impl crate::c5::layout::DataOffsets for FinishedFunction {
+    fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
+        let Self {
+            ast,
+            ent_pc: _,
+            end_pc: _,
+            n_params: _,
+            is_variadic: _,
+            is_inline: _,
+            is_always_inline: _,
+            is_naked: _,
+            n_locals: _,
+            param_tys: _,
+            param_local_slots: _,
+            returns_struct: _,
+            return_struct_size: _,
+            return_ty: _,
+            alloca_top_slot: _,
+            multi_cell_slots: _,
+            over_aligned_slots: _,
+            label_data_slots,
+            name: _,
+        } = self;
+        for s in label_data_slots.iter_mut() {
+            crate::c5::layout::remap_self_u64(&mut s.data_offset, r);
+        }
+        ast.remap_data_offsets(r);
+    }
+}
+
+/// Offsets a local-object initializer holds. Matched exhaustively so a new
+/// initializer shape carrying staged data is classified here.
+fn local_init_offsets(init: &mut LocalInit, f: &mut impl FnMut(&mut i64)) {
+    match init {
+        LocalInit::Aggregate { src_data_off, .. } => f(src_data_off),
+        LocalInit::Runtime {
+            zero_init: Some(LocalInitPrelude::Template { src_data_off, .. }),
+            ..
+        } => f(src_data_off),
+        LocalInit::Runtime {
+            zero_init: Some(LocalInitPrelude::Zero { .. }) | None,
+            ..
+        }
+        | LocalInit::Zero { .. }
+        | LocalInit::None
+        | LocalInit::Scalar(..) => {}
+    }
+}
+
+impl crate::c5::layout::DataOffsets for Ast {
+    fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
+        self.for_each_data_offset(&mut |off| crate::c5::layout::remap_self(off, r));
     }
 }
 

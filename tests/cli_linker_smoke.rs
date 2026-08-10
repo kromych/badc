@@ -3197,3 +3197,1097 @@ fn glibc_nonshared_atexit_runs() {
         "atexit handler must run: stdout={stdout:?}"
     );
 }
+
+// A load through an extern data symbol must not fold against this unit's
+// own const image. The address instruction badc emits for an extern
+// object is an `ImmData` whose payload is a link-time placeholder, so a
+// member read lands at the member's byte offset -- an offset that names
+// an unrelated object here. `pad` is sized so the read at offset 64 falls
+// inside it; folding returns pad's bytes and `g.tag` reads non-zero.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn extern_data_load_is_not_folded_against_local_const_image() {
+    let dir = tempdir("extern-const-fold");
+    write_source(
+        &dir,
+        "defs.c",
+        "struct Big { unsigned char head[64]; long tag; };\n\
+         struct Big g;\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "static const unsigned char pad[4096] = { [0 ... 4095] = 0x41 };\n\
+         struct Big { unsigned char head[64]; long tag; };\n\
+         extern struct Big g;\n\
+         int main(void) {\n\
+         \tif (pad[0] != 0x41) return 2;\n\
+         \treturn g.tag == 0 ? 0 : 1;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-O")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("defs.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link extern-const-fold",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "extern member read folded against local const data: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// Section headers of an ELF64 image as `(name, sh_type, sh_flags)`.
+fn elf_sections(bytes: &[u8]) -> Vec<(String, u32, u64)> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd64(0x28) as usize;
+    let e_shentsize = rd16(0x3a);
+    let e_shnum = rd16(0x3c);
+    let e_shstrndx = rd16(0x3e);
+    let str_off = rd64(e_shoff + e_shstrndx * e_shentsize + 0x18) as usize;
+    (0..e_shnum)
+        .map(|i| {
+            let sh = e_shoff + i * e_shentsize;
+            let n = str_off + rd32(sh) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
+            (
+                String::from_utf8_lossy(&bytes[n..end]).into_owned(),
+                rd32(sh + 4),
+                rd64(sh + 8),
+            )
+        })
+        .collect()
+}
+
+/// `SHT_SYMTAB` entries of an ELF64 image as
+/// `(name, st_value, st_size, st_shndx)`.
+fn elf_symbols(bytes: &[u8]) -> Vec<(String, u64, u64, u16)> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_shoff = rd64(0x28) as usize;
+    let e_shentsize = rd16(0x3a) as usize;
+    let e_shnum = rd16(0x3c) as usize;
+    let sh = |i: usize| e_shoff + i * e_shentsize;
+    let symtab = (0..e_shnum)
+        .find(|&i| rd32(sh(i) + 4) == 2)
+        .expect("no .symtab");
+    let str_off = rd64(sh(rd32(sh(symtab) + 40) as usize) + 24) as usize;
+    let off = rd64(sh(symtab) + 24) as usize;
+    let count = rd64(sh(symtab) + 32) as usize / 24;
+    (0..count)
+        .map(|i| {
+            let e = off + i * 24;
+            let n = str_off + rd32(e) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
+            (
+                String::from_utf8_lossy(&bytes[n..end]).into_owned(),
+                rd64(e + 8),
+                rd64(e + 16),
+                rd16(e + 6),
+            )
+        })
+        .collect()
+}
+
+/// Program headers of an ELF64 image as `(p_type, p_flags)`.
+fn elf_segments(bytes: &[u8]) -> Vec<(u32, u32)> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_phoff = rd64(0x20) as usize;
+    let e_phentsize = rd16(0x36);
+    let e_phnum = rd16(0x38);
+    (0..e_phnum)
+        .map(|i| {
+            let ph = e_phoff + i * e_phentsize;
+            (rd32(ph), rd32(ph + 4))
+        })
+        .collect()
+}
+
+const SHF_WRITE: u64 = 0x1;
+const SHF_ALLOC: u64 = 0x2;
+
+/// A named section carries `SHF_WRITE` only when some member of it is
+/// writable: an all-`const` section is read-only, matching gcc and
+/// clang. The flags of members sharing a name union, so one writable
+/// member makes the whole section writable.
+#[test]
+fn named_section_flags_follow_member_constness() {
+    let dir = tempdir("named-section-const");
+    let src = write_source(
+        &dir,
+        "s.c",
+        "__attribute__((section(\".ro.tab\"))) const int ro_only[4] = {1,2,3,4};\n\
+         __attribute__((section(\".rw.tab\"))) int rw_tab[4] = {1,2,3,4};\n\
+         __attribute__((section(\".mixed\"))) const int mixed_c[2] = {1,2};\n\
+         __attribute__((section(\".mixed\"))) int mixed_w[2] = {3,4};\n\
+         int main(void) { return ro_only[0] + rw_tab[0] + mixed_c[0] + mixed_w[0]; }\n",
+    );
+    let out = dir.join("s.o");
+    run(
+        Command::new(badc())
+            .args(["-c", "--target=linux-x64", "-o"])
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile named sections",
+    );
+    let bytes = std::fs::read(&out).expect("read .o");
+    let flags = |name: &str| -> u64 {
+        elf_sections(&bytes)
+            .into_iter()
+            .find(|(n, ..)| n == name)
+            .unwrap_or_else(|| panic!("section {name} missing"))
+            .2
+    };
+    assert_eq!(
+        flags(".ro.tab"),
+        SHF_ALLOC,
+        "all-const section is read-only"
+    );
+    assert_eq!(flags(".rw.tab"), SHF_ALLOC | SHF_WRITE);
+    assert_eq!(
+        flags(".mixed"),
+        SHF_ALLOC | SHF_WRITE,
+        "one writable member makes the section writable",
+    );
+}
+
+/// `const`-qualified file-scope storage with no relocated slot lands
+/// in a read-only `.rodata`, not in writable `.data`.
+#[test]
+fn const_globals_land_in_read_only_rodata() {
+    let dir = tempdir("rodata-carve");
+    let src = write_source(
+        &dir,
+        "r.c",
+        "const int ctab[4] = {1,2,3,4};\n\
+         int wtab[4] = {5,6,7,8};\n\
+         int main(void) { return ctab[0] + wtab[0]; }\n",
+    );
+    let out = dir.join("r.o");
+    run(
+        Command::new(badc())
+            .args(["-c", "--target=linux-x64", "-o"])
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile const globals",
+    );
+    let bytes = std::fs::read(&out).expect("read .o");
+    let secs = elf_sections(&bytes);
+    let ro = secs
+        .iter()
+        .find(|(n, ..)| n == ".rodata")
+        .expect(".rodata section missing");
+    assert_eq!(ro.2, SHF_ALLOC, ".rodata must not be writable");
+    let data = secs
+        .iter()
+        .find(|(n, ..)| n == ".data")
+        .expect(".data section missing");
+    assert_eq!(data.2, SHF_ALLOC | SHF_WRITE);
+}
+
+/// A zero-length array (`T x[] = {}` and `T x[0]`, the GNU extension
+/// C99 6.7.5.2 leaves out) occupies no storage: it reports `st_size` 0
+/// and shares the address of the object that follows it, as gcc does.
+/// Sizing it from its element width instead gave it a range that ran
+/// into that object, which the `.rodata` carve rejects as an overlap.
+#[test]
+fn zero_length_arrays_occupy_no_storage() {
+    let dir = tempdir("zero-len-array");
+    let src = write_source(
+        &dir,
+        "z.c",
+        "const unsigned empty_pins[] = {};\n\
+         const unsigned zerodim[0] = {};\n\
+         const unsigned filled_pins[] = { 1, 2, 3, 4, 5, 6 };\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        let out = dir.join(format!("z-{target}.o"));
+        run(
+            Command::new(badc())
+                .args(["-c", &format!("--target={target}"), "-o"])
+                .arg(&out)
+                .arg(&src)
+                .current_dir(&dir),
+            "compile zero-length arrays",
+        );
+        let bytes = std::fs::read(&out).expect("read .o");
+        let syms = elf_symbols(&bytes);
+        let get = |n: &str| {
+            syms.iter()
+                .find(|(s, ..)| s == n)
+                .unwrap_or_else(|| panic!("{n} missing from {target}"))
+        };
+        let filled = get("filled_pins");
+        assert_eq!(filled.2, 24, "{target}: sized array keeps its size");
+        for n in ["empty_pins", "zerodim"] {
+            let z = get(n);
+            assert_eq!(z.2, 0, "{target}: {n} occupies no storage");
+            assert_eq!(
+                (z.1, z.3),
+                (filled.1, filled.3),
+                "{target}: {n} shares the address of the object after it",
+            );
+        }
+        let secs = elf_sections(&bytes);
+        assert_eq!(
+            secs[filled.3 as usize].0, ".rodata",
+            "{target}: const arrays are carved into .rodata",
+        );
+    }
+}
+
+/// A block-scope `static T x[] = {};` is the same zero-length array as
+/// the file-scope form and reserves storage the same way. Sizing it from
+/// its element width instead left several of them sharing one start
+/// offset while each claimed an element's span, which the `.rodata` carve
+/// rejects as an overlap. Both element kinds go through the deferred-size
+/// path: an aggregate element and a scalar one.
+#[test]
+fn zero_length_block_scope_statics_do_not_overlap() {
+    let dir = tempdir("zero-len-block-static");
+    let src = write_source(
+        &dir,
+        "z.c",
+        "struct e { const char *a; const char *b; const char *c; };\n\
+         extern void sink(const void *p, unsigned long n);\n\
+         static void f(void) { static const struct e t[] = {}; sink(t, sizeof t); }\n\
+         static void g(void) { static const struct e t[] = {}; sink(t, sizeof t); }\n\
+         static void h(void) { static const int t[] = {}; sink(t, sizeof t); }\n\
+         static void i(void) { static const int t[] = {}; sink(t, sizeof t); }\n\
+         static const long pad[64] = { 1 };\n\
+         int main(void) { f(); g(); h(); i(); sink(pad, sizeof pad); return 0; }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        let out = dir.join(format!("z-{target}.o"));
+        run(
+            Command::new(badc())
+                .args(["-c", &format!("--target={target}"), "-o"])
+                .arg(&out)
+                .arg(&src)
+                .current_dir(&dir),
+            "compile zero-length block-scope statics",
+        );
+    }
+}
+
+/// The linked image keeps the read-only payload out of the writable
+/// load: `.rodata` is `SHF_ALLOC` without `SHF_WRITE` and gets a
+/// `PT_LOAD` whose `p_flags` is `PF_R` alone -- neither writable nor
+/// executable.
+#[test]
+fn linked_image_maps_rodata_read_only() {
+    let dir = tempdir("rodata-image");
+    write_source(
+        &dir,
+        "a.c",
+        "extern int helper(void);\n\
+         const int tab[8] = {1,2,3,4,5,6,7,8};\n\
+         int rw[4] = {9,9,9,9};\n\
+         int main(void) { return tab[3] + rw[0] + helper(); }\n",
+    );
+    write_source(
+        &dir,
+        "b.c",
+        "const char note[] = \"helper\";\n\
+         int helper(void) { return (int)note[0]; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["--target=linux-x64", "-o"])
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("b.c"))
+            .current_dir(&dir),
+        "link rodata image",
+    );
+    let bytes = std::fs::read(&exe).expect("read image");
+    let ro = elf_sections(&bytes)
+        .into_iter()
+        .find(|(n, ..)| n == ".rodata")
+        .expect(".rodata section missing from linked image");
+    assert_eq!(ro.2, SHF_ALLOC, ".rodata must not be writable");
+    // PT_LOAD = 1, PF_X = 1, PF_W = 2, PF_R = 4.
+    let loads: Vec<u32> = elf_segments(&bytes)
+        .into_iter()
+        .filter(|&(t, _)| t == 1)
+        .map(|(_, f)| f)
+        .collect();
+    assert!(
+        loads.contains(&4),
+        "expected a read-only PT_LOAD; got p_flags {loads:?}",
+    );
+}
+
+/// An assembler section flag letter the object writer cannot
+/// reproduce is a diagnostic, not a silent drop that would emit a
+/// section with the wrong permissions.
+#[test]
+fn unknown_asm_section_flag_is_diagnosed() {
+    let dir = tempdir("asm-section-flag");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "__asm__(\".pushsection .tls.tab,\\\"awT\\\",@progbits\\n\"\n\
+         \"       .long 1\\n\"\n\
+         \"       .popsection\\n\");\n\
+         int main(void) { return 0; }\n",
+    );
+    let out = Command::new(badc())
+        .args(["-c", "--target=linux-x64", "-o"])
+        .arg(dir.join("t.o"))
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(!out.status.success(), "expected the T flag to be rejected");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("TLS") && err.contains(".tls.tab"),
+        "diagnostic should name the section and the flag: {err}",
+    );
+}
+
+/// An absolute 32-bit reference resolves to a fixed address, which a
+/// position-independent image cannot promise. The `-c` object carries
+/// the relocation (its shape is locked in the linker tests); linking it
+/// into an executable names the constraint rather than reporting a
+/// missing patcher. GNU ld and clang reject the same object with
+/// "relocation R_X86_64_32S ... can not be used when making a PIE
+/// object".
+#[test]
+fn absolute_text_reloc_is_rejected_for_a_pie() {
+    let dir = tempdir("abs-text-reloc-pie");
+    let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("c")
+        .join("file_scope_asm_sym_mem.c");
+    run(
+        Command::new(badc())
+            .args(["-c", "--target=linux-x64", "-o"])
+            .arg(dir.join("t.o"))
+            .arg(&src)
+            .current_dir(&dir),
+        "compile to an object",
+    );
+    let out = Command::new(badc())
+        .args(["--target=linux-x64", "-o"])
+        .arg(dir.join("prog"))
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        !out.status.success(),
+        "expected the PIE link to be rejected"
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("R_X86_64_32S")
+            && err.contains("per_slot_base")
+            && err.contains("position-independent"),
+        "diagnostic should name the relocation, the symbol and the constraint: {err}",
+    );
+    // Same constraint, different output kind: GNU ld says "shared
+    // object" here, and the reason it gives is the reference's, not a
+    // missing patcher's.
+    let out = Command::new(badc())
+        .args(["--target=linux-x64", "--shared", "-o"])
+        .arg(dir.join("libt.so"))
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        !out.status.success(),
+        "expected the shared-object link to be rejected"
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("R_X86_64_32S")
+            && err.contains("shared object")
+            && !err.contains("unsupported"),
+        "diagnostic should name the relocation and the output kind: {err}",
+    );
+}
+
+// Gated on Linux: the read-only data page only exists on the native ELF
+// link path, and the test exec's the produced binary.
+//
+// A `&&label` dispatch table is filled by stores the declaration emits,
+// so the storage is written during execution however it is qualified. Any
+// `const` spelling that put it on a read-only page faults on the first
+// store. Runs both optimization levels because placement is independent
+// of the pipeline.
+#[cfg(target_os = "linux")]
+#[test]
+fn const_label_address_table_storage_is_writable() {
+    let dir = tempdir("const-label-table");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "static int p(const unsigned char *c) {\n\
+         static const void *const t[] = {&&A, &&B, &&H};\n\
+         int a = 0, i = 0;\n\
+         goto *t[c[i++]];\n\
+         A: a += c[i++]; goto *t[c[i++]];\n\
+         B: a += a; goto *t[c[i++]];\n\
+         H: return a; }\n\
+         static int q(const unsigned char *c) {\n\
+         static void *const t[] = {&&A, &&B, &&H};\n\
+         int a = 0, i = 0;\n\
+         goto *t[c[i++]];\n\
+         A: a += c[i++]; goto *t[c[i++]];\n\
+         B: a += a; goto *t[c[i++]];\n\
+         H: return a; }\n\
+         static int r(const unsigned char *c) {\n\
+         static const long t[] = {(long)&&A, (long)&&B, (long)&&H};\n\
+         int a = 0, i = 0;\n\
+         goto *(void *)t[c[i++]];\n\
+         A: a += c[i++]; goto *(void *)t[c[i++]];\n\
+         B: a += a; goto *(void *)t[c[i++]];\n\
+         H: return a; }\n\
+         int main(void) {\n\
+         static const unsigned char g[] = {0, 5, 1, 2};\n\
+         if (p(g) != 10) return 1;\n\
+         if (p(g) != 10) return 2;\n\
+         if (q(g) != 10) return 3;\n\
+         if (r(g) != 10) return 4;\n\
+         return 42; }\n",
+    );
+    for (opt, stem) in [(None, "prog"), (Some("-O"), "prog-opt")] {
+        let exe = dir.join(stem);
+        let mut cmd = Command::new(badc());
+        cmd.arg("-o").arg(&exe);
+        if let Some(o) = opt {
+            cmd.arg(o);
+        }
+        run(cmd.arg(&src).current_dir(&dir), "build label table");
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(
+            out.status.code(),
+            Some(42),
+            "{stem}: label-address table storage must be writable (status {})",
+            out.status
+        );
+    }
+}
+
+// A pc-relative record in a pushed data section whose addend puts the
+// target below the symbol it is measured from (`(sym - 8)(%rip)`). The
+// merged data-byte offset then falls outside the image, and `.rodata` /
+// `.data` / `.bss` map to non-contiguous runtime regions, so the writer
+// has to resolve the anchor and apply the difference to the address.
+// The program reads back the committed disp32 fields.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn data_pcrel_target_below_its_anchor_symbol() {
+    let dir = tempdir("data-pcrel-below-anchor");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "long counter[2] = {42, 7};\n\
+         extern const unsigned char tmpl;\n\
+         __asm__(\".pushsection .rodata\\n\"\n\
+         \t\".globl tmpl\\n\"\n\
+         \t\"tmpl:\\n\"\n\
+         \t\"leaq (counter - 8)(%rip), %rdx\\n\"\n\
+         \t\"movq counter(%rip), %rax\\n\"\n\
+         \t\".popsection\\n\");\n\
+         static long disp32(const unsigned char *p) {\n\
+         \tunsigned int v = (unsigned int)p[0] | ((unsigned int)p[1] << 8) |\n\
+         \t\t((unsigned int)p[2] << 16) | ((unsigned int)p[3] << 24);\n\
+         \treturn (long)(int)v; }\n\
+         int main(void) {\n\
+         \tconst unsigned char *t = &tmpl;\n\
+         \tif ((const char *)(t + 7) + disp32(t + 3) != (const char *)counter - 8)\n\
+         \t\treturn 1;\n\
+         \tif ((const char *)(t + 14) + disp32(t + 10) != (const char *)counter)\n\
+         \t\treturn 2;\n\
+         \treturn 42; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "build data-pcrel below-anchor program",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "committed disp32 does not reach the relocation target (status {})",
+        out.status
+    );
+}
+
+// A `dlopen`'d module resolves the host executable's symbols through
+// its dynamic symbol table. Gated on POSIX (dlopen) and on a system C
+// driver to build the module: the point is the cross-toolchain
+// boundary an extension module actually crosses.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn dlopened_module_binds_host_data_and_bss_globals() {
+    let cc = ["cc", "gcc", "clang"].into_iter().find(|c| {
+        Command::new(c)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    });
+    let Some(cc) = cc else {
+        eprintln!("skipping dlopened_module_binds_host_data_and_bss_globals: no system C driver");
+        return;
+    };
+    let dir = tempdir("dlopen-host-globals");
+    let host = write_source(
+        &dir,
+        "host.c",
+        "#include <dlfcn.h>\n\
+         #include <stdio.h>\n\
+         int host_initialized = 7;\n\
+         int host_zero;\n\
+         char host_empty[] = \"\";\n\
+         int host_fn(void) { return 11; }\n\
+         int main(int argc, char **argv) {\n\
+             void *h; int (*probe)(void);\n\
+             host_zero = 3;\n\
+             h = dlopen(argv[1], RTLD_NOW);\n\
+             if (!h) { printf(\"dlopen: %s\\n\", dlerror()); return 1; }\n\
+             probe = (int (*)(void))dlsym(h, \"probe\");\n\
+             if (!probe) { printf(\"dlsym: %s\\n\", dlerror()); return 2; }\n\
+             (void)argc; return probe(); }\n",
+    );
+    let module = write_source(
+        &dir,
+        "module.c",
+        "extern int host_initialized;\n\
+         extern int host_zero;\n\
+         extern char host_empty[];\n\
+         extern int host_fn(void);\n\
+         int probe(void) {\n\
+             return host_initialized + host_zero + host_empty[0] + host_fn(); }\n",
+    );
+    let exe = dir.join("host");
+    run(
+        Command::new(badc())
+            // The data half of the export set is what a zero-init
+            // global needs; the code half resolves `host_fn`.
+            .arg("--export-all")
+            .arg("--export-data")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&host)
+            .current_dir(&dir),
+        "link host executable",
+    );
+    let so = dir.join(if cfg!(target_os = "macos") {
+        "module.dylib"
+    } else {
+        "module.so"
+    });
+    let mut build = Command::new(cc);
+    build.arg("-shared").arg("-fPIC").arg("-o").arg(&so);
+    if cfg!(target_os = "macos") {
+        build.arg("-undefined").arg("dynamic_lookup");
+    }
+    run(build.arg(&module).current_dir(&dir), "build module");
+
+    let out = Command::new(&exe)
+        .arg(&so)
+        .output()
+        .expect("run host executable");
+    assert_eq!(
+        out.status.code(),
+        Some(21),
+        "the module must bind the host's .data, .bss and .text globals \
+         (stdout {:?})",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+// `-Map=FILE` / `-Map FILE` / `-M` produce a GNU-ld-style link map.
+// Emitting a Linux ELF needs no matching host, so these run anywhere.
+#[test]
+fn map_file_reports_sections_and_archive_members() {
+    let dir = tempdir("map-file");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(int);\nextern int archfn(int);\nint g_global = 42;\n\
+         int main() { return helper(1) + archfn(2) + g_global; }\n",
+    );
+    write_source(
+        &dir,
+        "helper.c",
+        "int h_data = 5;\nint helper(int x) { return x + h_data; }\n",
+    );
+    write_source(&dir, "archmem.c", "int archfn(int x) { return x * 2; }\n");
+    run(
+        Command::new(badc())
+            .arg("--ar")
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(dir.join("libarch.a"))
+            .arg(dir.join("archmem.c"))
+            .current_dir(&dir),
+        "build archive",
+    );
+    let map_path = dir.join("prog.map");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .arg(dir.join("main.c"))
+            .arg(dir.join("helper.c"))
+            .arg(dir.join("libarch.a"))
+            .arg(format!("-Map={}", map_path.display()))
+            .arg("-q")
+            .current_dir(&dir),
+        "link with -Map=",
+    );
+    let map = std::fs::read_to_string(&map_path).expect("read map file");
+    assert!(
+        map.contains("Archive member included to satisfy reference by file (symbol)"),
+        "archive table missing:\n{map}"
+    );
+    assert!(
+        map.contains("libarch.a(archmem.c.o)") || map.contains("libarch.a(archmem.o)"),
+        "archive member label missing:\n{map}"
+    );
+    assert!(map.contains("(archfn)"), "pulling symbol missing:\n{map}");
+    assert!(map.contains("Memory Configuration"), "missing:\n{map}");
+    assert!(
+        map.contains("Linker script and memory map"),
+        "missing:\n{map}"
+    );
+    for row in ["\n.text ", "\n.data "] {
+        assert!(map.contains(row), "missing {row:?}:\n{map}");
+    }
+    for source in ["main.c", "helper.c"] {
+        assert!(
+            map.lines()
+                .any(|l| l.starts_with(" .text") && l.ends_with(source)),
+            "no .text contribution from {source}:\n{map}"
+        );
+    }
+    assert!(
+        map.contains("OUTPUT(prog elf64-x86-64)"),
+        "OUTPUT line missing:\n{map}"
+    );
+
+    // The two-arg `-Map FILE` form and `--print-map` (stdout) coexist.
+    // `-M` is gcc's dependency-output flag, not the map.
+    let map2 = dir.join("prog2.map");
+    let out = run(
+        Command::new(badc())
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(dir.join("prog2"))
+            .arg(dir.join("main.c"))
+            .arg(dir.join("helper.c"))
+            .arg(dir.join("libarch.a"))
+            .arg("-Map")
+            .arg(&map2)
+            .arg("--print-map")
+            .arg("-q")
+            .current_dir(&dir),
+        "link with -Map FILE and --print-map",
+    );
+    assert!(map2.is_file(), "-Map FILE (two-arg) must write the file");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Linker script and memory map"),
+        "--print-map must print the map to stdout: {stdout:?}"
+    );
+}
+
+#[test]
+fn aarch64_low12_references_sharing_one_adrp_are_all_patched() {
+    // The AArch64 ELF ABI relocates the page and in-page halves of an
+    // address reference separately, and gcc/clang emit one `adrp`
+    // serving several in-page references at -O2. Assembling and linking
+    // the sequence through the driver must patch every in-page site.
+    //
+    // The expected words are GNU ld 2.46.1's for the same two objects
+    // from GNU as 2.46.1, whose `.o` bytes badc's assembler reproduces;
+    // `gdata` lands at in-page offset 0xd0 in both links.
+    let dir = tempdir("a64-shared-adrp");
+    // The image writer prepends its own entry stub, so the sequence is
+    // located by the unrelocated trailer parked behind it.
+    const MARKER: u64 = 0x6c6f_3132_6d61_726b;
+    let refs = write_source(
+        &dir,
+        "ref.s",
+        "\t.text\n\t.globl _start\n_start:\n\
+         \tadrp\tx1, gdata\n\
+         \tldr\tx2, [x1, #:lo12:gdata]\n\
+         \tldr\tq3, [x1, #:lo12:gdata]\n\
+         \tadd\tx4, x1, #:lo12:gdata\n\
+         \tret\n\
+         \t.quad\t0x6c6f31326d61726b\n",
+    );
+    let def = write_source(
+        &dir,
+        "def.s",
+        "\t.data\n\t.balign 16\n\t.globl gdata\ngdata:\n\t.quad 0x1122334455667788\n\t.quad 0\n",
+    );
+    for src in [&refs, &def] {
+        run(
+            Command::new(badc())
+                .arg("--target=linux-aarch64")
+                .arg("-c")
+                .arg(src)
+                .current_dir(&dir),
+            "assemble",
+        );
+    }
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-aarch64")
+            .arg("--freestanding")
+            .arg("--entry=_start")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("ref.o"))
+            .arg(dir.join("def.o"))
+            .arg("-q")
+            .current_dir(&dir),
+        "link the shared-adrp objects",
+    );
+    let image = std::fs::read(&exe).expect("read the linked image");
+    let words = words_before_marker(&image, MARKER, 5);
+    assert_eq!(
+        words[3] >> 10 & 0xfff,
+        0xd0,
+        "the reference words assume `gdata` at in-page offset 0xd0; \
+         this link placed it at {:#x}",
+        words[3] >> 10 & 0xfff
+    );
+    assert_eq!(words[1], 0xf940_6822, "ldr x2, [x1, #208]");
+    assert_eq!(words[2], 0x3dc0_3423, "ldr q3, [x1, #208]");
+    assert_eq!(words[3], 0x9103_4024, "add x4, x1, #0xd0");
+    assert_eq!(words[4], 0xd65f_03c0, "ret");
+}
+
+/// The `count` 4-byte words immediately preceding the sole occurrence
+/// of `marker` in `image`.
+fn words_before_marker(image: &[u8], marker: u64, count: usize) -> Vec<u32> {
+    let pattern = marker.to_le_bytes();
+    let hits: Vec<usize> = image
+        .windows(8)
+        .enumerate()
+        .filter(|(_, w)| *w == pattern)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(hits.len(), 1, "marker must occur once: {hits:?}");
+    let start = hits[0] - count * 4;
+    (0..count)
+        .map(|i| u32::from_le_bytes(image[start + i * 4..start + i * 4 + 4].try_into().unwrap()))
+        .collect()
+}
+
+#[test]
+fn map_option_requires_a_link() {
+    let dir = tempdir("map-requires-link");
+    let src = write_source(&dir, "one.c", "int main() { return 0; }\n");
+    let out = Command::new(badc())
+        .arg("-c")
+        .arg(&src)
+        .arg("-Map=one.map")
+        .current_dir(&dir)
+        .output()
+        .expect("run badc -c -Map");
+    assert!(!out.status.success(), "-c with -Map must be rejected");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("require a link"),
+        "diagnostic must say the map needs a link: {stderr:?}"
+    );
+}
+
+/// The archive reader's member names must agree with the platform
+/// `ar`'s own view of the same file. Which variant that exercises
+/// follows the host: `/usr/bin/ar` on macOS writes the BSD `#1/<len>`
+/// inline-name form and a `__.SYMDEF` index, GNU `ar` on Linux writes
+/// the `//` long-name table and a `/` index. The names straddle the
+/// 16-byte header field so both the short and the spilled encoding
+/// appear.
+#[test]
+fn platform_ar_member_names_match_ar_t() {
+    let dir = tempdir("platform-ar");
+    let names = [
+        "a_very_long_member_name_over_sixteen.o",
+        "short.o",
+        "exactly_sixteen.o",
+    ];
+    // The members are built by the host C compiler, not by badc: macOS
+    // `ar` drops a member whose container is not Mach-O, so only a
+    // host-native object exercises the archiver at all. Only the names
+    // and the verbatim bodies matter here.
+    let mut objects: Vec<PathBuf> = Vec::new();
+    for (i, name) in names.iter().enumerate() {
+        let src = write_source(
+            &dir,
+            &format!("m{i}.c"),
+            &format!("int m{i}(void) {{ return {i}; }}\n"),
+        );
+        let obj = dir.join(name);
+        let built = Command::new("cc")
+            .arg("-c")
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj)
+            .current_dir(&dir)
+            .output();
+        match built {
+            Ok(o) if o.status.success() => {}
+            // No host C compiler; the byte-level encodings of both ar
+            // variants are covered by the archive reader's own tests.
+            _ => return,
+        }
+        objects.push(obj);
+    }
+    let lib = dir.join("libmix.a");
+    let made = Command::new("ar")
+        .arg("rcs")
+        .arg(&lib)
+        .args(&objects)
+        .current_dir(&dir)
+        .output();
+    match made {
+        Ok(o) if o.status.success() => {}
+        _ => return, // no platform `ar` on this host
+    }
+    let listing = Command::new("ar")
+        .arg("t")
+        .arg(&lib)
+        .current_dir(&dir)
+        .output()
+        .expect("run ar t");
+    let expected: Vec<String> = String::from_utf8_lossy(&listing.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty() && !l.starts_with("__.SYMDEF"))
+        .collect();
+    assert_eq!(expected.len(), names.len(), "ar t must list every member");
+
+    let blob = std::fs::read(&lib).expect("read the archive");
+    let members = badc::read_archive(&blob).expect("read the archive members");
+    let got: Vec<String> = members.iter().map(|m| m.name.clone()).collect();
+    assert_eq!(got, expected, "badc's member names must match `ar t`");
+    for m in &members {
+        let on_disk = std::fs::read(dir.join(&m.name)).expect("read the member's source object");
+        assert_eq!(
+            m.bytes, on_disk,
+            "member `{}` body must be verbatim",
+            m.name
+        );
+    }
+}
+
+/// A member whose container is not ELF is named by its resolved member
+/// name and by its own format. badc's relocatable format is ELF on
+/// every target, so a Mach-O member cannot be linked even where the
+/// target's images are Mach-O; the diagnostic says that rather than
+/// reporting the raw header field.
+#[test]
+fn foreign_format_archive_member_is_diagnosed_by_name_and_format() {
+    let dir = tempdir("foreign-member");
+    let src = write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    // MH_CIGAM_64 leads a 64-bit Mach-O object; the rest is padding,
+    // since the input is rejected on the container alone.
+    let mut macho = vec![0xCFu8, 0xFA, 0xED, 0xFE];
+    macho.extend_from_slice(&[0u8; 28]);
+    let lib = dir.join("libforeign.a");
+    let blob = badc::write_archive(
+        &[badc::ArchiveMember {
+            name: "a_very_long_member_name_over_sixteen.o".into(),
+            bytes: macho,
+        }],
+        &[(0, vec!["_unused".into()])],
+    );
+    std::fs::write(&lib, &blob).expect("write the archive");
+
+    for target in ["macos-aarch64", "linux-x64"] {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["-o", "prog"])
+            .arg(&lib)
+            .arg(&src)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        assert!(!out.status.success(), "a Mach-O member must be rejected");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            err.contains("a_very_long_member_name_over_sixteen.o") && err.contains("Mach-O"),
+            "diagnostic must name the member and its format on {target}: {err}",
+        );
+        assert!(
+            !err.contains("#1/"),
+            "diagnostic must not surface a raw header field on {target}: {err}",
+        );
+    }
+}
+
+/// `-l<name>` looks for the shared spelling the target's container
+/// format uses, and says so when nothing is found: `.so` for ELF,
+/// `.dylib` for Mach-O, `.dll` for PE.
+#[test]
+fn library_search_spelling_follows_the_target_format() {
+    let dir = tempdir("lib-spelling");
+    let src = write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    for (target, shared) in [
+        ("linux-x64", "libnosuchlib.so"),
+        ("macos-aarch64", "libnosuchlib.dylib"),
+        ("windows-x64", "libnosuchlib.dll"),
+    ] {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["-o", "prog", "-lnosuchlib"])
+            .arg(&src)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        assert!(!out.status.success(), "the library does not exist");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            err.contains(shared) && err.contains("libnosuchlib.a"),
+            "search must name the {target} spellings: {err}",
+        );
+    }
+}
+
+/// A shared library in a container the linker cannot read is reported
+/// as such. Without the check the bytes fall through to the linker-
+/// script reader, which finds no GROUP / INPUT entries in them and
+/// resolves the `-l` to nothing at all.
+#[test]
+fn foreign_format_shared_library_is_diagnosed() {
+    let dir = tempdir("foreign-dylib");
+    let src = write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    let mut macho = vec![0xCFu8, 0xFA, 0xED, 0xFE];
+    macho.extend_from_slice(&[0u8; 28]);
+    std::fs::write(dir.join("libfake.dylib"), &macho).expect("write the dylib");
+    let out = Command::new(badc())
+        .args(["--target=macos-aarch64", "-o", "prog", "-L.", "-lfake"])
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(!out.status.success(), "a Mach-O dylib must be rejected");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("libfake.dylib") && err.contains("Mach-O"),
+        "diagnostic must name the file and its format: {err}",
+    );
+}
+
+/// Append a member to a BSD-format archive: `#1/<len>` in the header
+/// with the name NUL-padded at the head of the body, the size field
+/// covering both. `/usr/bin/ar` pads the name to a multiple of eight.
+fn push_bsd_ar_member(out: &mut Vec<u8>, name: &str, body: &[u8]) {
+    let field = name.len().div_ceil(8) * 8;
+    let size = field + body.len();
+    let mut hdr = [b' '; 60];
+    let name_field = format!("#1/{field}");
+    hdr[..name_field.len()].copy_from_slice(name_field.as_bytes());
+    for i in [16, 28, 34, 40] {
+        hdr[i] = b'0';
+    }
+    let size_field = format!("{size}");
+    hdr[48..48 + size_field.len()].copy_from_slice(size_field.as_bytes());
+    hdr[58] = 0x60;
+    hdr[59] = 0x0A;
+    out.extend_from_slice(&hdr);
+    out.extend_from_slice(name.as_bytes());
+    out.extend(std::iter::repeat_n(0u8, field - name.len()));
+    out.extend_from_slice(body);
+    if !size.is_multiple_of(2) {
+        out.push(b'\n');
+    }
+}
+
+/// A BSD-format archive links like a GNU one: the archive variant is a
+/// property of the producer, not of the target, so the reader has to
+/// resolve `#1/<len>` names and skip the `__.SYMDEF` index whatever is
+/// being linked. Members carry no symbol index here, which is legal --
+/// the linker scans member symbol tables to decide inclusion.
+#[test]
+fn bsd_format_archive_links_on_the_host_target() {
+    let dir = tempdir("bsd-archive-link");
+    write_source(
+        &dir,
+        "util.c",
+        "int doubled(int n) { return n + n; }\nint trebled(int n) { return n * 3; }\n",
+    );
+    write_source(&dir, "unused.c", "int unused_helper(void) { return 99; }\n");
+    let main = write_source(
+        &dir,
+        "main.c",
+        "extern int doubled(int);\nextern int trebled(int);\n\
+         int main(void) { return doubled(7) + trebled(8); }\n",
+    );
+    let mut blob: Vec<u8> = b"!<arch>\n".to_vec();
+    push_bsd_ar_member(&mut blob, "__.SYMDEF SORTED", &[0u8; 4]);
+    for (src, member) in [
+        ("util.c", "util_with_a_name_over_sixteen_bytes.o"),
+        ("unused.c", "unused.o"),
+    ] {
+        let obj = dir.join(member);
+        run(
+            Command::new(badc())
+                .args(["-c", "-q", "-o"])
+                .arg(&obj)
+                .arg(dir.join(src))
+                .current_dir(&dir),
+            "compile an archive member",
+        );
+        let bytes = std::fs::read(&obj).expect("read the member object");
+        push_bsd_ar_member(&mut blob, member, &bytes);
+    }
+    let lib = dir.join("libbsd.a");
+    std::fs::write(&lib, &blob).expect("write the archive");
+
+    let members = badc::read_archive(&blob).expect("read the archive");
+    let names: Vec<&str> = members.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(names, ["util_with_a_name_over_sixteen_bytes.o", "unused.o"]);
+
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["-q", "-o"])
+            .arg(&exe)
+            .arg(&main)
+            .arg("-L")
+            .arg(&dir)
+            .args(["-l", "bsd"])
+            .current_dir(&dir),
+        "link against a BSD-format archive",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(38), "14 + 24");
+}

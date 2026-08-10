@@ -16,8 +16,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	shlq	%rax
                	addq	$0x0, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	movslq	%eax, %rax
                	retq
 
@@ -27,8 +25,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	shlq	%rax
                	incq	%rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	movslq	%eax, %rax
                	retq
 
@@ -38,8 +34,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	shlq	%rax
                	addq	$0x2, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	movslq	%eax, %rax
                	retq
 
@@ -49,8 +43,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	shlq	%rax
                	addq	$0x3, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	movslq	%eax, %rax
                	retq
 

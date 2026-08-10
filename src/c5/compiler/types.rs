@@ -34,6 +34,7 @@
 
 use super::super::ir::LoadKind;
 use super::super::token::{Tok, Token, Ty};
+pub(super) use crate::c5::layout::round_up;
 
 /// Base of the struct-tag namespace. Every primitive (including
 /// the long band at 300) sits below this.
@@ -71,15 +72,105 @@ pub(crate) fn is_unsigned_ty(ty: i64) -> bool {
 /// [`strip_unsigned`] before any band classifier consults the tag. The
 /// single bit does not record which indirection level carries the
 /// qualifier, so `volatile T *`, `T * volatile`, and `volatile T`
-/// all set it; every access through such a tag is treated as a
+/// all set it; every access *through* such a tag is treated as a
 /// volatile access (a conservative over-approximation -- extra
 /// volatility only inhibits optimization, per 5.1.2.3p2 an access to
-/// a volatile object may not be elided or coalesced).
+/// a volatile object may not be elided or coalesced). Whether the
+/// declared object itself is volatile is the separate question
+/// [`VOLATILE_INNER_BIT`] answers.
 pub(crate) const VOLATILE_BIT: i64 = 1 << 29;
 
 /// `true` if `ty` carries the volatile qualifier at any level.
 pub(crate) fn is_volatile_ty(ty: i64) -> bool {
     (ty & VOLATILE_BIT) != 0
+}
+
+/// High-bit flag recording that [`VOLATILE_BIT`] came from a derivation
+/// below the outermost one: `volatile T *p` qualifies the pointee, not
+/// `p` (C99 6.7.5.1p1). Set by [`add_ptr_level`] when a declarator adds
+/// a pointer level, cleared by [`apply_qual_bits`] when a qualifier
+/// applies to the type built so far. Absence is the conservative
+/// answer, so a tag that never passed through the declarator keeps the
+/// whole-tag reading; only [`is_volatile_object_ty`] consults it.
+pub(crate) const VOLATILE_INNER_BIT: i64 = 1 << 33;
+
+/// `true` if the object a declaration gives this tag is itself
+/// volatile-qualified (`volatile T x`, `T *volatile p`), as opposed to
+/// one that merely points at volatile data (`volatile T *p`). Governs
+/// whether the object's own storage is a volatile lvalue; accesses
+/// *through* the tag stay on [`is_volatile_ty`].
+pub(crate) fn is_volatile_object_ty(ty: i64) -> bool {
+    is_volatile_ty(ty) && (ty & VOLATILE_INNER_BIT) == 0
+}
+
+/// Both volatile markers. Sites that move the qualifier onto a
+/// rebuilt tag, or that must ignore volatility entirely, take the pair
+/// as a unit -- splitting them would make two spellings of the same
+/// qualified type compare unequal.
+pub(crate) const VOLATILE_MASK: i64 = VOLATILE_BIT | VOLATILE_INNER_BIT;
+
+/// Add one pointer derivation level. The pointer object is unqualified
+/// until a post-`*` qualifier says otherwise, so any volatile already
+/// on the tag becomes inner-only. The marker qualifies
+/// [`VOLATILE_BIT`] and is never set without it, which keeps every
+/// unqualified tag numerically identical to what plain `+ Ty::Ptr`
+/// produced.
+pub(crate) fn add_ptr_level(ty: i64) -> i64 {
+    let ty = ty + Ty::Ptr as i64;
+    if ty & VOLATILE_BIT != 0 {
+        ty | VOLATILE_INNER_BIT
+    } else {
+        ty
+    }
+}
+
+/// Fold type-qualifier bits into a tag. A `volatile` among them
+/// qualifies the outermost derivation built so far, which is what
+/// [`VOLATILE_INNER_BIT`] denies.
+pub(crate) fn apply_qual_bits(ty: i64, bits: i64) -> i64 {
+    if bits & VOLATILE_BIT != 0 {
+        (ty | bits) & !VOLATILE_INNER_BIT
+    } else {
+        ty | bits
+    }
+}
+
+/// High-bit flags marking a type tag qualified by an x86 named address
+/// space (GCC `__seg_gs` / `__seg_fs`). An access through such a tag
+/// rides a segment-override prefix (`%gs:` / `%fs:`). Orthogonal to the
+/// band scheme like [`UNSIGNED_BIT`] and stripped by [`strip_unsigned`].
+/// x86-only; the two spellings never both appear on one tag.
+pub(crate) const SEG_GS_BIT: i64 = 1 << 31;
+pub(crate) const SEG_FS_BIT: i64 = 1 << 32;
+const SEG_MASK: i64 = SEG_GS_BIT | SEG_FS_BIT;
+
+/// High-bit flag marking a type tag whose base type was spelled `void`.
+/// `void` keeps `unsigned char`'s representation (1-byte `sizeof` under
+/// the GNU extension, +1 `void *` arithmetic stride, U8 access width),
+/// so the tag stays in the char band and this orthogonal bit carries
+/// the distinct-incomplete-type identity C99 6.2.5p19 gives `void`.
+/// Stripped by [`strip_unsigned`] like the other qualifier bits, so
+/// band classifiers and codegen are unaffected; identity-sensitive
+/// sites ([`is_void_ty`], [`is_void_ptr_ty`], the 6.5.15p6 conditional
+/// rule, `_Generic` matching) test the bit.
+pub(crate) const VOID_BIT: i64 = 1 << 28;
+
+/// The x86 named address space a type tag carries.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Segment {
+    Gs,
+    Fs,
+}
+
+/// The named address space qualifying `ty`, or `None`.
+pub(crate) fn segment_of_ty(ty: i64) -> Option<Segment> {
+    if ty & SEG_GS_BIT != 0 {
+        Some(Segment::Gs)
+    } else if ty & SEG_FS_BIT != 0 {
+        Some(Segment::Fs)
+    } else {
+        None
+    }
 }
 
 /// Apply a C99 6.3.1.3 integer conversion to a constant value:
@@ -89,43 +180,49 @@ pub(crate) fn is_volatile_ty(ty: i64) -> bool {
 /// included). Used by the constant-expression evaluator so a cast
 /// like `(int)UINT_MAX` folds to `-1` at parse time rather than
 /// retaining the un-narrowed operand.
-pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i64) -> i64 {
+pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i128) -> i128 {
     if is_bool {
-        return (v != 0) as i64;
+        return (v != 0) as i128;
     }
-    if bytes >= 8 {
+    if bytes >= 16 {
         return v;
     }
     let bits = (bytes * 8) as u32;
-    let mask: i64 = ((1u64 << bits) - 1) as i64;
+    let mask: i128 = ((1u128 << bits) - 1) as i128;
     let truncated = v & mask;
     if unsigned {
         truncated
     } else {
-        let sign_bit: i64 = 1i64 << (bits - 1);
+        let sign_bit: i128 = 1i128 << (bits - 1);
         (truncated ^ sign_bit).wrapping_sub(sign_bit)
     }
 }
 
-/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`). Use to
-/// recover the bare band-encoded type before consulting a helper that
-/// classifies by band. Most of the helpers in this module call this at
-/// their entry; outside callers only need it when storing a type tag
-/// where a non-bit-flagged tag is expected (e.g., switch-table
-/// comparisons against `Ty::Int as i64`).
+/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`,
+/// `VOLATILE_INNER_BIT`, `VOID_BIT`, the segment bits). Use to recover
+/// the bare band-encoded type before
+/// consulting a helper that classifies by band. Most of the helpers in
+/// this module call this at their entry; outside callers only need it
+/// when storing a type tag where a non-bit-flagged tag is expected
+/// (e.g., switch-table comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
-    ty & !(UNSIGNED_BIT | VOLATILE_BIT)
+    ty & !(UNSIGNED_BIT | VOLATILE_BIT | VOLATILE_INNER_BIT | SEG_MASK | VOID_BIT)
 }
 
-/// Round `x` up to the nearest multiple of `alignment` (which must
-/// be a power of two). Used by struct-field layout, struct-tail
-/// padding, bitfield-storage placement, and any other code that
-/// needs `(x + alignment-1) & ~(alignment-1)` -- the helper makes
-/// the intent explicit and centralises the +1/!mask off-by-one
-/// trap in one place.
-pub(super) fn round_up(x: usize, alignment: usize) -> usize {
-    let mask = alignment - 1;
-    (x + mask) & !mask
+/// The scalar `void` type tag.
+pub(crate) fn void_ty() -> i64 {
+    Ty::Char as i64 | UNSIGNED_BIT | VOID_BIT
+}
+
+/// True for scalar `void`, at any qualification.
+pub(crate) fn is_void_ty(ty: i64) -> bool {
+    (ty & VOID_BIT) != 0 && strip_unsigned(ty) == Ty::Char as i64
+}
+
+/// True for a depth-1 `void *`, at any qualification. Exact: character
+/// pointers carry no [`VOID_BIT`] and answer false.
+pub(crate) fn is_void_ptr_ty(ty: i64) -> bool {
+    (ty & VOID_BIT) != 0 && strip_unsigned(ty) == Ty::Char as i64 + Ty::Ptr as i64
 }
 
 /// Render a c5 type tag back into a C-like spelling: `int`, `char *`,
@@ -141,6 +238,9 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     let unsigned = (ty & UNSIGNED_BIT) != 0;
     let bare = strip_unsigned(ty);
     let prefix = if unsigned { "unsigned " } else { "" };
+    if (ty & VOID_BIT) != 0 && (0..100).contains(&bare) {
+        return format!("void{}", "*".repeat((bare / 2) as usize));
+    }
     if bare >= STRUCT_BASE {
         let id = struct_id_of(bare);
         let depth = struct_ptr_depth(bare) as usize;
@@ -219,6 +319,15 @@ pub(crate) fn struct_id_of(ty: i64) -> usize {
 pub(crate) fn struct_ptr_depth(ty: i64) -> i64 {
     let ty = strip_unsigned(ty);
     ((ty - STRUCT_BASE) % STRUCT_STRIDE) / Ty::Ptr as i64
+}
+
+/// True when `ty` names an aggregate *value* -- a struct, union, GCC
+/// vector or 128-bit integer object -- rather than a pointer to one. The
+/// distinction decides whether a type is copied by extent or held in a
+/// register, so it gates aggregate assignment, argument passing, member
+/// access and the initializer traversal.
+pub(crate) fn is_struct_value_ty(ty: i64) -> bool {
+    is_struct_ty(ty) && struct_ptr_depth(ty) == 0
 }
 
 pub(super) fn struct_ty_for(id: usize) -> i64 {
@@ -603,6 +712,7 @@ pub(super) fn is_type_start_token(tk: Tok) -> bool {
         || tk == Token::Extern
         || tk == Token::Static
         || tk == Token::Typeof
+        || tk == Token::AutoType
         || is_decl_modifier(tk)
 }
 
@@ -684,7 +794,7 @@ mod ty_tag {
     // `is_pointer_ty`. The base band ([0, 100): char / int) admits any
     // offset >= Ty::Ptr; every other band reserves even offsets.
     fn pointer_by_even_stride(ty: i64) -> bool {
-        let stripped = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let stripped = strip_unsigned(ty);
         let base = stripped - (stripped % 100);
         let off = stripped - base;
         if base == 0 {
@@ -724,9 +834,62 @@ mod ty_tag {
     }
 
     #[test]
+    fn void_identity_is_exact() {
+        let uchar = Ty::Char as i64 | UNSIGNED_BIT;
+        let ptr = Ty::Ptr as i64;
+        assert!(is_void_ty(void_ty()));
+        assert!(is_void_ty(void_ty() | VOLATILE_BIT));
+        assert!(!is_void_ty(uchar));
+        assert!(!is_void_ty(void_ty() + ptr));
+        assert!(is_void_ptr_ty(void_ty() + ptr));
+        assert!(is_void_ptr_ty((void_ty() + ptr) | VOLATILE_BIT));
+        assert!(!is_void_ptr_ty(uchar + ptr));
+        assert!(!is_void_ptr_ty(Ty::Char as i64 + ptr));
+        assert!(!is_void_ptr_ty(void_ty() + 2 * ptr));
+        // Representation: strips to unsigned char, so size / load /
+        // arithmetic classifiers are unaffected.
+        assert_eq!(strip_unsigned(void_ty()), Ty::Char as i64);
+        assert!(is_unsigned_ty(void_ty()));
+        assert_eq!(pointee_size_no_struct(strip_unsigned(void_ty() + ptr)), 1);
+    }
+
+    /// The declarator's qualifier algebra: `add_ptr_level` demotes a
+    /// volatile to inner-only, `apply_qual_bits` promotes it back.
+    #[test]
+    fn volatile_object_tracks_the_outermost_derivation() {
+        let int = Ty::Int as i64;
+        let vol = VOLATILE_BIT;
+        // `volatile T x` -- the object is volatile.
+        assert!(is_volatile_object_ty(apply_qual_bits(int, vol)));
+        // `volatile T *p` -- the pointee is, `p` is not.
+        let pointee_vol = add_ptr_level(apply_qual_bits(int, vol));
+        assert!(is_volatile_ty(pointee_vol));
+        assert!(!is_volatile_object_ty(pointee_vol));
+        // `T *volatile p` -- the pointer object is.
+        let obj_vol = apply_qual_bits(add_ptr_level(int), vol);
+        assert!(is_volatile_object_ty(obj_vol));
+        // `volatile T *volatile p` -- both.
+        assert!(is_volatile_object_ty(apply_qual_bits(pointee_vol, vol)));
+        // `volatile T **p` -- neither pointer level is qualified.
+        assert!(!is_volatile_object_ty(add_ptr_level(pointee_vol)));
+        // `volatile T *volatile *p` -- the inner pointer is, `p` is not.
+        assert!(!is_volatile_object_ty(add_ptr_level(apply_qual_bits(
+            pointee_vol,
+            vol
+        ))));
+        // The marker never appears without the qualifier it modifies, so
+        // an unqualified tag keeps the value plain `+ Ty::Ptr` produced.
+        assert_eq!(add_ptr_level(int), int + Ty::Ptr as i64);
+        assert_eq!(strip_unsigned(pointee_vol), int + Ty::Ptr as i64);
+        // Band classifiers see through both markers.
+        assert!(is_pointer_ty(pointee_vol));
+        assert!(is_pointer_ty(obj_vol));
+    }
+
+    #[test]
     fn is_pointer_ty_matches_producible_tags() {
         for &ty in &producible_tags() {
-            for u in [0i64, UNSIGNED_BIT] {
+            for u in [0i64, UNSIGNED_BIT, UNSIGNED_BIT | VOID_BIT] {
                 let t = ty | u;
                 assert_eq!(
                     is_pointer_ty(t),

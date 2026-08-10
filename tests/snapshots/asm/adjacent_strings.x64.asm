@@ -11,6 +11,5 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	leaq	<rip>, %rax
-               	movsbq	0x5(%rax), %rax
+               	movl	$0x66, %eax
                	retq

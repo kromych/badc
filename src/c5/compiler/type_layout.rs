@@ -12,12 +12,14 @@ use alloc::vec::Vec;
 
 use super::super::codegen::Target;
 use super::super::codegen::abi_classify::{FlatField, ScalarKind};
+use super::super::error::C5Error;
 use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, is_pointer_ty, is_struct_ty, is_type_start_token,
-    pointee_size_no_struct, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
+    UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_type_start_token, pointee_size_no_struct, strip_unsigned, struct_id_of,
+    struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
 use super::{StructDef, StructField};
 
@@ -34,7 +36,7 @@ impl Compiler {
             // struct value, whose size lives in the struct table.
             return self.structs[struct_id_of(ptr_ty)].size as i64;
         }
-        let stripped = ptr_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let stripped = strip_unsigned(ptr_ty);
         if stripped == (Ty::Long as i64) + (Ty::Ptr as i64) && self.target.is_windows() {
             return 4;
         }
@@ -113,7 +115,7 @@ impl Compiler {
     /// before the struct's body has been seen -- common idioms
     /// like `typedef struct Foo Foo;` and `struct Foo *p;` rely
     /// on this.
-    pub(super) fn find_or_forward_declare_struct(&mut self, name: &str) -> usize {
+    pub(super) fn find_or_forward_declare_struct(&mut self, name: &str, is_union: bool) -> usize {
         if let Some(id) = self.find_struct_id(name) {
             return id;
         }
@@ -121,16 +123,48 @@ impl Compiler {
             name: name.to_string(),
             size: 0,
             align: 1,
+            explicit_align: 0,
             fields: Vec::new(),
-            is_union: false,
+            anon_bitfields: Vec::new(),
+            anon_members: Vec::new(),
+            is_union,
+            is_complete: false,
             is_vector: false,
             is_array: false,
+            is_anonymous: false,
         });
         let id = self.structs.len() - 1;
         if let Some(scope) = self.tag_scopes.last_mut() {
             scope.push((name.to_string(), id));
         }
         id
+    }
+
+    /// Rewrite `ty` into the type named by a `__attribute__((mode(M)))`
+    /// spec of `(bytes, is_float)`, keeping the operand's signedness.
+    /// Only scalar operands have a machine mode; anything else is the
+    /// error GCC reports as "applied to inappropriate type".
+    pub(super) fn apply_mode_to_type(&mut self, ty: i64, m: (u8, bool)) -> Result<i64, C5Error> {
+        let (bytes, is_float) = m;
+        let floating = is_floating_scalar(ty);
+        if is_pointer_ty(ty) || (is_struct_ty(ty) && !self.is_int128_ty(ty)) || is_float != floating
+        {
+            return Err(self.compile_err("`mode` applied to an inappropriate type"));
+        }
+        if is_float {
+            return Ok(match bytes {
+                4 => Ty::Float as i64,
+                _ => Ty::Double as i64,
+            });
+        }
+        let unsigned = ty & UNSIGNED_BIT;
+        Ok(match bytes {
+            1 => Ty::Char as i64 | unsigned,
+            2 => Ty::Short as i64 | unsigned,
+            4 => Ty::Int as i64 | unsigned,
+            8 => Ty::LongLong as i64 | unsigned,
+            _ => self.builtin_int128_tag() | unsigned,
+        })
     }
 
     /// True when the current identifier is a spelling of the GCC 128-bit
@@ -146,12 +180,11 @@ impl Compiler {
     /// Type tag for the GCC 128-bit integer (`__int128` / `__uint128_t`).
     /// badc models it as a 16-byte aggregate `{ long long; long long; }`:
     /// declarations, struct / array layout, `sizeof`, and by-value copies
-    /// go through the struct machinery, while 128-bit arithmetic is an
-    /// aggregate-operand error (see `reject_aggregate_binop`) rather than
-    /// a silent truncation. Two `long long` fields make it exactly 16
-    /// bytes on every target (LLP64 `long` would be 8). Registered once,
-    /// on first use. Needed to parse Linux kernel-UAPI headers
-    /// (`asm/sigcontext.h`'s `__uint128_t vregs[32]`).
+    /// go through the struct machinery. The operators are expanded by the
+    /// walker over the two 64-bit halves, so the type stays an integer
+    /// type to the front end (see `arith_common_ty`). Two `long long`
+    /// fields make it exactly 16 bytes on every target (LLP64 `long`
+    /// would be 8). Registered once, on first use.
     pub(super) fn builtin_int128_tag(&mut self) -> i64 {
         if let Some(id) = self.structs.iter().position(|s| s.name == "__int128") {
             return struct_ty_for(id);
@@ -171,17 +204,126 @@ impl Compiler {
             is_variadic: false,
             anon_union_group: 0,
             anon_struct_group: 0,
+            explicit_align: 0,
+            align: 0,
         };
         self.structs.push(StructDef {
             name: "__int128".to_string(),
             size: 16,
-            align: 8,
+            // GCC / clang give `__int128` 16-byte alignment on every
+            // target that provides it, which the member offsets of a
+            // containing struct and the x86-64 / AArch64 argument
+            // classification both depend on.
+            align: 16,
+            explicit_align: 0,
             fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
+            anon_bitfields: Vec::new(),
+            anon_members: Vec::new(),
+            is_complete: true,
             is_union: false,
             is_vector: false,
             is_array: false,
+            is_anonymous: false,
         });
         struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// True when the current identifier spells the GCC builtin type name
+    /// `__builtin_va_list`.
+    pub(super) fn is_lex_va_list_spelling(&self) -> bool {
+        self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].name == "__builtin_va_list"
+    }
+
+    /// Base type for `__builtin_va_list`, resolving to the same
+    /// per-target representation `<stdarg.h>` documents, so the two
+    /// spellings are interchangeable:
+    ///
+    ///   * System V AMD64 (Linux x86_64): the `__va_list_tag` record
+    ///     (System V AMD64 ABI 3.5.7) as an array of one element.
+    ///   * AAPCS64 (Linux aarch64): the `__va_list` record (AAPCS64
+    ///     Appendix B) as an array of one element.
+    ///   * Every other target: a single `void *` cursor.
+    ///
+    /// The record is registered once, on first use; the one-element
+    /// array dimension rides `pending.typedef_base_array_size`, the
+    /// same carrier an array-typedef base uses.
+    pub(super) fn builtin_va_list_tag(&mut self) -> i64 {
+        let ptr = super::types::void_ty() + Ty::Ptr as i64;
+        let uint = Ty::Int as i64 | UNSIGNED_BIT;
+        let (fields, size): (&[(&str, usize, i64)], usize) = match self.target {
+            Target::LinuxX64 => (
+                &[
+                    ("gp_offset", 0, uint),
+                    ("fp_offset", 4, uint),
+                    ("overflow_arg_area", 8, ptr),
+                    ("reg_save_area", 16, ptr),
+                ],
+                24,
+            ),
+            Target::LinuxAarch64 => (
+                &[
+                    ("__stack", 0, ptr),
+                    ("__gr_top", 8, ptr),
+                    ("__vr_top", 16, ptr),
+                    ("__gr_offs", 24, Ty::Int as i64),
+                    ("__vr_offs", 28, Ty::Int as i64),
+                ],
+                32,
+            ),
+            _ => return ptr,
+        };
+        self.pending.typedef_base_array_size = 1;
+        self.pending.typedef_base_array_dims.clear();
+        if let Some(id) = self
+            .structs
+            .iter()
+            .position(|s| s.name == "__builtin_va_list")
+        {
+            return struct_ty_for(id);
+        }
+        let field = |(name, offset, ty): &(&str, usize, i64)| StructField {
+            name: name.to_string(),
+            offset: *offset,
+            ty: *ty,
+            array_size: 0,
+            inner_array_size: 0,
+            array_dims: Vec::new(),
+            bit_offset: 0,
+            bit_width: 0,
+            bit_unit_size: 0,
+            fn_ptr_indirection: 0,
+            params: Vec::new(),
+            is_variadic: false,
+            anon_union_group: 0,
+            anon_struct_group: 0,
+            explicit_align: 0,
+            align: 0,
+        };
+        self.structs.push(StructDef {
+            name: "__builtin_va_list".to_string(),
+            size,
+            align: 8,
+            explicit_align: 0,
+            fields: fields.iter().map(field).collect(),
+            anon_bitfields: Vec::new(),
+            anon_members: Vec::new(),
+            is_complete: true,
+            is_union: false,
+            is_vector: false,
+            is_array: false,
+            is_anonymous: false,
+        });
+        struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// Tag for the int128 spelling at the current (unconsumed) token:
+    /// the `__int128` struct tag, with `UNSIGNED_BIT` for the
+    /// `__uint128_t` spelling or a preceding `unsigned` modifier.
+    pub(super) fn lex_int128_tag(&mut self, saw_unsigned: bool) -> i64 {
+        let unsigned =
+            saw_unsigned || self.symbols[self.lex.curr_id_idx].name.as_str() == "__uint128_t";
+        let tag = self.builtin_int128_tag();
+        if unsigned { tag | UNSIGNED_BIT } else { tag }
     }
 
     /// True when `t` is the GCC 128-bit `__int128` as a value (not a
@@ -193,6 +335,28 @@ impl Compiler {
         }
         let id = struct_id_of(t);
         self.structs.get(id).is_some_and(|s| s.name == "__int128")
+    }
+
+    /// True when a member of type `t` is an aggregate the initializer
+    /// traversal descends into. The 128-bit integer reuses the aggregate
+    /// layout machinery but initializes as a single scalar leaf, so a
+    /// brace list must not spend a sibling's value on its halves.
+    pub(super) fn is_traversable_aggregate_ty(&self, t: i64) -> bool {
+        is_struct_value_ty(t) && !self.is_int128_ty(t)
+    }
+
+    /// C99 6.3.1.8 usual arithmetic conversions, with the GCC 128-bit
+    /// integer ranked above every standard integer type. Two 128-bit
+    /// operands take the unsigned flavor when either is unsigned; a
+    /// 128-bit operand against a narrower type keeps its own
+    /// signedness, since it represents every value of that type.
+    pub(super) fn arith_common_ty(&self, a: i64, b: i64) -> i64 {
+        match (self.is_int128_ty(a), self.is_int128_ty(b)) {
+            (true, true) => a | (b & UNSIGNED_BIT),
+            (true, false) => a,
+            (false, true) => b,
+            (false, false) => usual_arith_common_ty(a, b, self.target),
+        }
     }
 
     /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector
@@ -221,15 +385,22 @@ impl Compiler {
             is_variadic: false,
             anon_union_group: 0,
             anon_struct_group: 0,
+            explicit_align: 0,
+            align: 0,
         };
         self.structs.push(StructDef {
             name,
             size: n_bytes as usize,
             align: (n_bytes as usize).min(8),
+            explicit_align: 0,
             fields: alloc::vec![field],
+            anon_bitfields: Vec::new(),
+            anon_members: Vec::new(),
+            is_complete: true,
             is_union: false,
             is_vector: true,
             is_array: false,
+            is_anonymous: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -241,7 +412,18 @@ impl Compiler {
     /// `make_vector_type`. The entry's size is the row byte count, so
     /// `pointee_size` scales `p[i]` / `p + 1` by the whole row.
     pub(super) fn array_agg_type(&mut self, elem_ty: i64, dims: &[i64]) -> i64 {
-        let count: i64 = dims.iter().product::<i64>().max(1);
+        // A zero dimension (`T (*p)[0]`, GCC zero-length array) makes a
+        // complete zero-size pointee. A negative dimension is the
+        // unspecified-bound sentinel (`T (*)[]`, C99 6.7.5.2p4 incomplete
+        // array): the size is unknown (recorded 0) and the sentinel is
+        // kept on the field so 6.7.5.2p6 compatibility and `typeof`
+        // recovery see the unspecified bound.
+        let unspecified = dims.iter().any(|&d| d < 0);
+        let count: i64 = if unspecified {
+            -1
+        } else {
+            dims.iter().product()
+        };
         let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
         let mut name = alloc::format!("__array_{}", elem_ty);
         for d in dims {
@@ -269,15 +451,26 @@ impl Compiler {
             is_variadic: false,
             anon_union_group: 0,
             anon_struct_group: 0,
+            explicit_align: 0,
+            align: 0,
         };
         self.structs.push(StructDef {
             name,
-            size: (count * elem_size) as usize,
+            size: if unspecified {
+                0
+            } else {
+                (count * elem_size) as usize
+            },
             align: self.align_of_type(elem_ty),
+            explicit_align: 0,
             fields: alloc::vec![field],
+            anon_bitfields: Vec::new(),
+            anon_members: Vec::new(),
+            is_complete: true,
             is_union: false,
             is_vector: false,
             is_array: true,
+            is_anonymous: false,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -337,7 +530,7 @@ impl Compiler {
             alloc::vec![self.pending.typedef_base_array_size]
         };
         let agg = self.array_agg_type(elem_ty, &dims);
-        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & VOLATILE_BIT)
+        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & VOLATILE_MASK)
     }
 
     /// True when the current lexer position starts a type. The free
@@ -351,6 +544,7 @@ impl Compiler {
         is_type_start_token(self.lex.tk)
             || self.is_lex_typedef_name()
             || self.is_lex_int128_spelling()
+            || self.is_lex_va_list_spelling()
             // A leading C23 `[[ ... ]]` attribute introduces a
             // declaration (`[[noreturn]] void f(void);`).
             || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
@@ -383,7 +577,7 @@ impl Compiler {
         // Unsigned bit is orthogonal to width: `unsigned char` is
         // still 1 byte, `unsigned int` is still 4 bytes. Strip it
         // before consulting the band identity.
-        let ty = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let ty = strip_unsigned(ty);
         if is_struct_ty(ty) {
             if struct_ptr_depth(ty) > 0 {
                 8
@@ -422,10 +616,9 @@ impl Compiler {
     /// Mirrors the C alignment rule: the value lives on a boundary
     /// equal to its size for scalars (`char` = 1, `int` = 4,
     /// `long` / pointer = 8). Struct values inherit the max
-    /// alignment of their fields, but c5 currently caps struct
-    /// alignment at 8 to match the rest of the IR's slot model.
+    /// alignment of their fields, capped at `MAX_STATIC_ALIGN`.
     pub(super) fn align_of_type(&self, ty: i64) -> usize {
-        let ty = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+        let ty = strip_unsigned(ty);
         if ty == Ty::Float as i64 {
             // `float` is 4 bytes; its natural alignment matches.
             // Same rule the rest of the integer / pointer family
@@ -436,7 +629,8 @@ impl Compiler {
             if struct_ptr_depth(ty) > 0 {
                 8
             } else {
-                // Struct alignment = max field alignment, capped at 8.
+                // Struct alignment = max field alignment, capped at
+                // MAX_STATIC_ALIGN.
                 // Computed eagerly during layout so we don't have to
                 // walk every nested struct on each call.
                 self.structs[struct_id_of(ty)].align.max(1)
@@ -454,13 +648,40 @@ impl Compiler {
         }
     }
 
+    /// C99 6.2.5p20 lays array elements contiguously, so an element type
+    /// whose requested alignment exceeds its size cannot tile an array;
+    /// a declarator-added dimension over such an element is rejected, as
+    /// gcc does. The alignment an array typedef itself carries
+    /// (`typedef char A[4] aligned(16)`) binds to the array object, not
+    /// its elements, so only a new dimension (`declared_array_size`, from
+    /// the declarator) triggers the check; `typedef_dim` scales the
+    /// element when the base is itself an array typedef.
+    pub(super) fn check_array_elem_align(
+        &self,
+        declared_array_size: i64,
+        elem_ty: i64,
+        typedef_dim: i64,
+        type_align: i64,
+    ) -> Result<(), C5Error> {
+        if declared_array_size == 0 || type_align <= 0 || is_pointer_ty(elem_ty) {
+            return Ok(());
+        }
+        let elem_bytes = self.size_of_type(elem_ty).max(1) as i64 * typedef_dim.max(1);
+        if type_align > elem_bytes {
+            return Err(
+                self.compile_err("alignment of array elements is greater than element size")
+            );
+        }
+        Ok(())
+    }
+
     /// Number of c5 stack slots required to hold a value of `ty`.
     /// Each c5 slot is 8 bytes; struct values may span several. The
     /// existing scalar / pointer paths always return 1, so existing
     /// `loc_offs += 1` patterns map to `loc_offs += slots_of(ty)`
     /// without changing emit semantics.
     pub(super) fn slots_of_type(&self, ty: i64) -> i64 {
-        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+        if is_struct_value_ty(ty) {
             // Struct fields are 8-byte aligned (see parse_struct_body),
             // so the size is already a multiple of 8 -- the +7 round
             // is defensive in case a future change adds sub-8-byte
@@ -480,7 +701,7 @@ fn flat_scalar_size(ty: i64, target: Target) -> u32 {
     if is_pointer_ty(ty) {
         return 8;
     }
-    let bare = ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+    let bare = strip_unsigned(ty);
     if bare == Ty::Bool as i64 || bare == Ty::Char as i64 {
         1
     } else if bare == Ty::Short as i64 {
@@ -513,7 +734,7 @@ pub(crate) fn flatten_struct_fields(
     let sd = &structs[struct_id];
     for f in &sd.fields {
         let elem_ty = f.ty;
-        let is_struct_value = is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0;
+        let is_struct_value = is_struct_value_ty(elem_ty);
         let elem_size = if is_struct_value {
             structs[struct_id_of(elem_ty)].size as u32
         } else {
@@ -529,7 +750,7 @@ pub(crate) fn flatten_struct_fields(
             if is_struct_value {
                 flatten_struct_fields(structs, target, struct_id_of(elem_ty), off, out);
             } else {
-                let bare = elem_ty & !(UNSIGNED_BIT | VOLATILE_BIT);
+                let bare = strip_unsigned(elem_ty);
                 let kind = if is_pointer_ty(elem_ty) {
                     ScalarKind::Int
                 } else if bare == Ty::Float as i64 {

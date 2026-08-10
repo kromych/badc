@@ -9,12 +9,25 @@
 use super::*;
 
 fn x(n: u8) -> Opnd {
-    Opnd::Reg { num: n, is64: true }
+    Opnd::Reg {
+        num: n,
+        is64: true,
+        sp: false,
+    }
+}
+/// The stack pointer written as `sp` / `wsp` (register 31, SP spelling).
+fn sp(is64: bool) -> Opnd {
+    Opnd::Reg {
+        num: 31,
+        is64,
+        sp: true,
+    }
 }
 fn w(n: u8) -> Opnd {
     Opnd::Reg {
         num: n,
         is64: false,
+        sp: false,
     }
 }
 fn m(base: u8) -> Opnd {
@@ -26,6 +39,102 @@ fn m(base: u8) -> Opnd {
 }
 fn enc(mnem: &str, ops: &[Opnd]) -> u32 {
     encode(mnem, ops).unwrap_or_else(|e| panic!("{mnem}: {e}"))
+}
+fn shift(kind: u8, amount: u8) -> Opnd {
+    Opnd::Shift { kind, amount }
+}
+fn extend(option: u8, amount: u8) -> Opnd {
+    Opnd::Extend { option, amount }
+}
+
+/// Register 31 written as `sp` selects the encoding that reads it as the
+/// stack pointer. Words match GNU as / clang for `aarch64-linux-gnu`.
+#[test]
+fn stack_pointer_operand_selects_the_extended_form() {
+    // add/sub/adds/subs with a register source: the extended-register form
+    // (bit 21 set, option = UXTX/UXTW), not the shifted one.
+    assert_eq!(enc("add", &[x(0), sp(true), x(0)]), 0x8B2063E0);
+    assert_eq!(enc("sub", &[x(2), sp(true), x(3)]), 0xCB2363E2);
+    assert_eq!(enc("subs", &[x(2), sp(true), x(3)]), 0xEB2363E2);
+    assert_eq!(enc("adds", &[x(2), sp(true), x(3)]), 0xAB2363E2);
+    assert_eq!(enc("add", &[sp(true), x(0), x(1)]), 0x8B21601F);
+    assert_eq!(enc("add", &[sp(true), sp(true), x(0)]), 0x8B2063FF);
+    assert_eq!(enc("sub", &[sp(true), sp(true), x(3)]), 0xCB2363FF);
+    // 32-bit forms extend from W with UXTW as the identity option.
+    assert_eq!(enc("add", &[w(0), sp(false), w(1)]), 0x0B2143E0);
+    assert_eq!(enc("add", &[sp(false), w(0), w(1)]), 0x0B21401F);
+    assert_eq!(enc("subs", &[w(1), sp(false), w(3)]), 0x6B2343E1);
+    // cmp/cmn alias subs/adds with a zero-register destination.
+    assert_eq!(enc("cmp", &[sp(true), x(0)]), 0xEB2063FF);
+    assert_eq!(enc("cmn", &[sp(true), x(0)]), 0xAB2063FF);
+    assert_eq!(enc("cmp", &[sp(false), w(0)]), 0x6B2043FF);
+    // The immediate forms already read 31 as SP.
+    assert_eq!(enc("cmp", &[sp(true), Opnd::Imm(16)]), 0xF10043FF);
+    assert_eq!(enc("add", &[x(0), sp(true), Opnd::Imm(8)]), 0x910023E0);
+    assert_eq!(enc("bic", &[sp(true), x(2), Opnd::Imm(1)]), 0x927FF85F);
+    // xzr keeps the shifted form; only the sp spelling moves the encoding.
+    assert_eq!(enc("add", &[x(0), x(31), x(1)]), 0x8B0103E0);
+    assert_eq!(enc("add", &[x(0), sp(true), x(31)]), 0x8B3F63E0);
+    // Memory bases and the SP-capable pointer forms encode 31 directly.
+    assert_eq!(enc("ldr", &[x(0), m(31)]), 0xF94003E0);
+    assert_eq!(enc("pacia", &[x(1), sp(true)]), 0xDAC103E1);
+}
+
+/// Register 31 is the zero register in every other form, so a written `sp`
+/// names no encoding there rather than silently reading as `xzr`.
+#[test]
+fn stack_pointer_rejected_where_31_is_the_zero_register() {
+    // Logical shifted-register and immediate flag-setting forms.
+    assert!(encode("and", &[sp(true), x(1), x(2)]).is_err());
+    assert!(encode("orr", &[sp(true), x(1), x(2)]).is_err());
+    assert!(encode("ands", &[sp(true), x(1), Opnd::Imm(1)]).is_err());
+    // The extended second source is a zero register, not SP.
+    assert!(encode("add", &[x(0), x(1), sp(true)]).is_err());
+    // The flag-setting add/sub cannot write SP.
+    assert!(encode("adds", &[sp(true), x(1), Opnd::Imm(1)]).is_err());
+    assert!(encode("subs", &[sp(true), sp(true), x(3)]).is_err());
+    // Plain data processing never names SP.
+    assert!(encode("mul", &[sp(true), x(1), x(2)]).is_err());
+    assert!(encode("madd", &[x(0), sp(true), x(2), x(3)]).is_err());
+}
+
+/// The shifted- and extended-register operand groups.
+#[test]
+fn register_shift_and_extend_groups() {
+    // Shifted register: lsl/lsr/asr on the arithmetic forms, ror on logical.
+    assert_eq!(enc("add", &[x(0), x(1), x(2), Opnd::Lsl(3)]), 0x8B020C20);
+    assert_eq!(enc("add", &[x(0), x(1), x(2), shift(2, 3)]), 0x8B820C20);
+    assert_eq!(enc("add", &[x(0), x(1), x(2), shift(1, 63)]), 0x8B42FC20);
+    assert_eq!(enc("and", &[x(0), x(1), x(2), shift(3, 3)]), 0x8AC20C20);
+    assert_eq!(enc("add", &[w(0), w(1), w(2), Opnd::Lsl(31)]), 0x0B027C20);
+    assert!(encode("add", &[x(0), x(1), x(2), shift(3, 3)]).is_err()); // ror
+    assert!(encode("add", &[w(0), w(1), w(2), Opnd::Lsl(32)]).is_err());
+    // Extended register: the option fixes the second source's width.
+    assert_eq!(enc("add", &[x(0), x(1), w(2), extend(0, 0)]), 0x8B220020);
+    assert_eq!(enc("add", &[x(0), x(1), w(2), extend(5, 2)]), 0x8B22A820);
+    assert_eq!(
+        enc("add", &[x(0), sp(true), w(1), extend(6, 4)]),
+        0x8B21D3E0
+    );
+    assert_eq!(
+        enc("add", &[x(0), sp(true), x(1), extend(3, 0)]),
+        0x8B2163E0
+    );
+    assert_eq!(
+        enc("add", &[x(0), sp(true), x(1), Opnd::Lsl(3)]),
+        0x8B216FE0
+    );
+    assert_eq!(
+        enc("sub", &[x(0), sp(true), x(1), Opnd::Lsl(2)]),
+        0xCB216BE0
+    );
+    assert_eq!(enc("cmp", &[sp(true), x(1), Opnd::Lsl(2)]), 0xEB216BFF);
+    assert_eq!(
+        enc("add", &[w(0), sp(false), w(1), extend(7, 0)]),
+        0x0B21E3E0
+    );
+    assert!(encode("add", &[x(0), x(1), x(2), extend(0, 0)]).is_err()); // width
+    assert!(encode("add", &[x(0), x(1), w(2), extend(0, 5)]).is_err()); // amount
 }
 
 #[test]
@@ -246,6 +355,10 @@ fn sys_op_dc_ic_tlbi() {
     assert_eq!(enc("tlbi", &[Opnd::SysOp(0xD508_8700)]), 0xD508_871F); // tlbi vmalle1
     assert_eq!(enc("tlbi", &[Opnd::SysOp(0xD508_8720), x(3)]), 0xD508_8723); // tlbi vae1, x3
     assert_eq!(enc("ic", &[Opnd::SysOp(0xD508_7100)]), 0xD508_711F); // ic ialluis
+    // `at`/`sys` share the same path; base words verified against clang.
+    assert_eq!(enc("at", &[Opnd::SysOp(0xD508_7800), x(0)]), 0xD508_7800); // at s1e1r, x0
+    assert_eq!(enc("sys", &[Opnd::SysOp(0xD50B_7A20), x(0)]), 0xD50B_7A20); // sys #3,c7,c10,#1,x0
+    assert_eq!(enc("sys", &[Opnd::SysOp(0xD50B_7E20)]), 0xD50B_7E3F); // sys #3,c7,c14,#1 (xzr)
 }
 
 #[test]
@@ -306,8 +419,12 @@ fn prefetch() {
         shift: None,
     };
     assert_eq!(enc("prfm", &[Opnd::Imm(2), mr]), 0xF8A2_6822); // pldl2keep, [x1, x2]
-    // The immediate offset must be a multiple of the access size.
-    assert!(encode("prfm", &[Opnd::Imm(0), mem(1, 4)]).is_err());
+    // An offset the scaled field cannot hold -- not a multiple of the access
+    // size, or negative -- takes the unscaled `prfum` sibling, as GNU as
+    // encodes it. Words from `as`.
+    assert_eq!(enc("prfm", &[Opnd::Imm(0), mem(1, 4)]), 0xF880_4020);
+    assert_eq!(enc("prfum", &[Opnd::Imm(0), mem(1, 4)]), 0xF880_4020);
+    assert_eq!(enc("prfm", &[Opnd::Imm(9), mem(30, -8)]), 0xF89F_83C9); // plil1strm
 }
 
 #[test]
@@ -403,17 +520,152 @@ fn fp_load_store() {
     };
     assert_eq!(enc("ldr", &[d(0), mr(None)]), 0xFC62_6820);
     assert_eq!(enc("str", &[d(0), mr(Some(3))]), 0xFC22_7820);
-    // A misaligned immediate offset is rejected.
-    assert!(encode("ldr", &[d(0), mem(1, 4)]).is_err());
+    // A misaligned offset falls back to the unscaled form.
+    assert_eq!(enc("ldr", &[d(0), mem(1, 4)]), 0xFC40_4020); // ldur d0, [x1, #4]
     // The 128-bit `qN` register: immediate offset scaled by 16, register offset
     // with the size-4 shift.
     let q = Opnd::QReg;
     assert_eq!(enc("ldr", &[q(0), mem(1, 0)]), 0x3DC0_0020);
     assert_eq!(enc("ldr", &[q(0), mem(1, 16)]), 0x3DC0_0420);
     assert_eq!(enc("str", &[q(0), mem(1, 32)]), 0x3D80_0820);
+    assert_eq!(enc("ldr", &[q(0), mem(1, 65520)]), 0x3DFF_FC20); // max uimm12
     assert_eq!(enc("ldr", &[q(0), mr(None)]), 0x3CE2_6820);
     assert_eq!(enc("ldr", &[q(0), mr(Some(4))]), 0x3CE2_7820);
-    assert!(encode("ldr", &[q(0), mem(1, 8)]).is_err()); // not a multiple of 16
+    assert_eq!(enc("ldr", &[q(0), mem(1, 8)]), 0x3CC0_8020); // ldur q0, [x1, #8]
+    // The byte and half scalar views `bN`/`hN`; a written `lsl #0` on a byte
+    // access is the S = 1 form, as the assembler encodes it.
+    let b = |num: u8| Opnd::VScalar { num, size: 0 };
+    let h = |num: u8| Opnd::VScalar { num, size: 1 };
+    assert_eq!(enc("ldr", &[b(0), mem(1, 1)]), 0x3D40_0420);
+    assert_eq!(enc("str", &[b(0), mem(1, 3)]), 0x3D00_0C20);
+    assert_eq!(enc("ldr", &[h(0), mem(1, 2)]), 0x7D40_0420);
+    assert_eq!(enc("str", &[h(0), mem(1, 4)]), 0x7D00_0820);
+    assert_eq!(enc("ldr", &[b(0), mr(None)]), 0x3C62_6820);
+    assert_eq!(enc("ldr", &[b(0), mr(Some(0))]), 0x3C62_7820);
+    assert_eq!(enc("ldr", &[h(0), mr(Some(1))]), 0x7C62_7820);
+    assert_eq!(enc("str", &[h(0), mr(None)]), 0x7C22_6820);
+    assert_eq!(enc("ldr", &[h(0), mem(1, 1)]), 0x7C40_1020); // ldur h0, [x1, #1]
+}
+
+/// An FP/SIMD offset that is negative, misaligned, or beyond the scaled uimm12
+/// range takes the unscaled simm9 group, which `ldur`/`stur` also name
+/// directly. Words match GNU as.
+#[test]
+fn fp_load_store_unscaled() {
+    let q = Opnd::QReg;
+    let d = |num: u8| Opnd::VReg { num, is_d: true };
+    let s = |num: u8| Opnd::VReg { num, is_d: false };
+    let b = |num: u8| Opnd::VScalar { num, size: 0 };
+    let h = |num: u8| Opnd::VScalar { num, size: 1 };
+    let mem = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
+    // Negative offsets written as `ldr`/`str`.
+    assert_eq!(enc("ldr", &[q(0), mem(1, -16)]), 0x3CDF_0020); // ldr q0, [x1, #-16]
+    assert_eq!(enc("str", &[q(0), mem(1, -16)]), 0x3C9F_0020); // str q0, [x1, #-16]
+    assert_eq!(enc("ldr", &[q(0), mem(1, -1)]), 0x3CDF_F020); // ldr q0, [x1, #-1]
+    assert_eq!(enc("ldr", &[q(0), mem(1, -256)]), 0x3CD0_0020); // min simm9
+    assert_eq!(enc("ldr", &[d(0), mem(1, -8)]), 0xFC5F_8020); // ldr d0, [x1, #-8]
+    assert_eq!(enc("ldr", &[s(0), mem(1, -4)]), 0xBC5F_C020); // ldr s0, [x1, #-4]
+    assert_eq!(enc("str", &[s(0), mem(1, -4)]), 0xBC1F_C020); // str s0, [x1, #-4]
+    assert_eq!(enc("ldr", &[b(0), mem(1, -1)]), 0x3C5F_F020); // ldr b0, [x1, #-1]
+    assert_eq!(enc("ldr", &[h(0), mem(1, -2)]), 0x7C5F_E020); // ldr h0, [x1, #-2]
+    assert_eq!(enc("ldr", &[q(31), mem(31, -256)]), 0x3CD0_03FF); // ldr q31, [sp, #-256]
+    // A positive offset inside simm9 but not a multiple of the access size.
+    assert_eq!(enc("ldr", &[q(0), mem(1, 255)]), 0x3CCF_F020); // ldr q0, [x1, #255]
+    // The `ldur`/`stur` spellings name the same encoding, aligned or not.
+    assert_eq!(enc("ldur", &[q(0), mem(1, -16)]), 0x3CDF_0020);
+    assert_eq!(enc("ldur", &[q(0), mem(1, 16)]), 0x3CC1_0020);
+    assert_eq!(enc("stur", &[q(0), mem(1, 16)]), 0x3C81_0020);
+    assert_eq!(enc("ldur", &[b(3), mem(2, -3)]), 0x3C5F_D043);
+    assert_eq!(enc("ldur", &[h(4), mem(2, -6)]), 0x7C5F_A044);
+    assert_eq!(enc("stur", &[s(5), mem(2, -4)]), 0xBC1F_C045);
+    assert_eq!(enc("ldur", &[d(6), mem(2, -8)]), 0xFC5F_8046);
+    // An offset that fits neither form has no encoding.
+    assert!(encode("str", &[q(7), mem(0, 300)]).is_err());
+    assert!(encode("ldr", &[q(0), mem(1, 65536)]).is_err());
+    assert!(encode("ldr", &[d(0), mem(1, -257)]).is_err());
+    // `ldur`/`stur` have no register-offset or writeback form.
+    assert!(
+        encode(
+            "ldur",
+            &[
+                q(0),
+                Opnd::MemReg {
+                    base: 1,
+                    index: 2,
+                    option: 3,
+                    shift: None,
+                },
+            ],
+        )
+        .is_err()
+    );
+    assert!(
+        encode(
+            "stur",
+            &[
+                q(0),
+                Opnd::Mem {
+                    base: 1,
+                    off: 16,
+                    pre: true,
+                },
+            ],
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn fp_load_store_writeback() {
+    let q = Opnd::QReg;
+    let d = |num: u8| Opnd::VReg { num, is_d: true };
+    let s = |num: u8| Opnd::VReg { num, is_d: false };
+    let b = |num: u8| Opnd::VScalar { num, size: 0 };
+    let h = |num: u8| Opnd::VScalar { num, size: 1 };
+    // Post-index: the address operand carries no offset, the trailing
+    // immediate does. imm9 is an unscaled signed byte count.
+    let post = |base: u8| Opnd::Mem {
+        base,
+        off: 0,
+        pre: false,
+    };
+    let i = Opnd::Imm;
+    assert_eq!(enc("str", &[q(7), post(0), i(16)]), 0x3C81_0407); // str q7, [x0], #16
+    assert_eq!(enc("ldr", &[q(0), post(1), i(16)]), 0x3CC1_0420); // ldr q0, [x1], #16
+    assert_eq!(enc("str", &[q(7), post(0), i(-16)]), 0x3C9F_0407); // str q7, [x0], #-16
+    assert_eq!(enc("str", &[s(2), post(0), i(4)]), 0xBC00_4402); // str s2, [x0], #4
+    assert_eq!(enc("ldr", &[d(3), post(1), i(8)]), 0xFC40_8423); // ldr d3, [x1], #8
+    assert_eq!(enc("str", &[b(4), post(0), i(1)]), 0x3C00_1404); // str b4, [x0], #1
+    assert_eq!(enc("ldr", &[h(5), post(1), i(2)]), 0x7C40_2425); // ldr h5, [x1], #2
+    assert_eq!(enc("str", &[q(31), post(31), i(255)]), 0x3C8F_F7FF); // str q31, [sp], #255
+    // Pre-index: the offset rides the address operand and mode is 11.
+    let pre = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: true,
+    };
+    assert_eq!(enc("str", &[q(7), pre(0, 16)]), 0x3C81_0C07); // str q7, [x0, #16]!
+    assert_eq!(enc("ldr", &[q(0), pre(1, 16)]), 0x3CC1_0C20); // ldr q0, [x1, #16]!
+    assert_eq!(enc("ldr", &[q(31), pre(31, -256)]), 0x3CD0_0FFF); // ldr q31, [sp, #-256]!
+    assert_eq!(enc("str", &[s(0), pre(1, -4)]), 0xBC1F_CC20); // str s0, [x1, #-4]!
+    assert_eq!(enc("ldr", &[d(0), pre(1, -8)]), 0xFC5F_8C20); // ldr d0, [x1, #-8]!
+    assert_eq!(enc("ldr", &[h(0), pre(3, -2)]), 0x7C5F_EC60); // ldr h0, [x3, #-2]!
+    assert_eq!(enc("str", &[b(0), post(2), i(-1)]), 0x3C1F_F440); // str b0, [x2], #-1
+    // imm9 is unscaled and bounded; an offset inside the brackets of a
+    // post-index form has no encoding.
+    assert!(encode("ldr", &[q(31), post(31), i(256)]).is_err());
+    assert!(encode("str", &[q(0), post(1), i(-257)]).is_err());
+    assert!(encode("ldr", &[q(0), pre(1, 256)]).is_err());
+    let mem = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
+    assert!(encode("ldr", &[q(0), mem(1, 8), i(16)]).is_err());
 }
 
 #[test]
@@ -441,6 +693,58 @@ fn simd_vector() {
         enc("mul", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]),
         0x4EA2_9C20
     );
+    // `mov Vd.T, Vn.T` (vector ORR alias; reference-assembler words).
+    assert_eq!(enc("mov", &[v(0, 0, true), v(1, 0, true)]), 0x4EA1_1C20);
+    assert_eq!(enc("mov", &[v(5, 0, false), v(9, 0, false)]), 0x0EA9_1D25);
+    assert_eq!(enc("mov", &[v(31, 0, true), v(30, 0, true)]), 0x4EBE_1FDF);
+    assert!(encode("mov", &[v(0, 1, true), v(1, 1, true)]).is_err());
+    // Polynomial multiply (byte arrangement only; reference words from the
+    // reference assembler).
+    assert_eq!(
+        enc("pmul", &[v(0, 0, true), v(1, 0, true), v(2, 0, true)]),
+        0x6E22_9C20
+    );
+    assert_eq!(
+        enc("pmul", &[v(5, 0, false), v(6, 0, false), v(7, 0, false)]),
+        0x2E27_9CC5
+    );
+    assert_eq!(
+        enc("pmul", &[v(31, 0, true), v(30, 0, true), v(29, 0, true)]),
+        0x6E3D_9FDF
+    );
+    assert!(encode("pmul", &[v(0, 1, true), v(1, 1, true), v(2, 1, true)]).is_err());
+    // SHA3 eor3 (three-source xor, .16b only).
+    assert_eq!(
+        enc(
+            "eor3",
+            &[v(0, 0, true), v(1, 0, true), v(2, 0, true), v(3, 0, true)]
+        ),
+        0xCE02_0C20
+    );
+    assert_eq!(
+        enc(
+            "eor3",
+            &[
+                v(31, 0, true),
+                v(30, 0, true),
+                v(29, 0, true),
+                v(28, 0, true)
+            ]
+        ),
+        0xCE1D_73DF
+    );
+    assert!(
+        encode(
+            "eor3",
+            &[
+                v(0, 0, false),
+                v(1, 0, false),
+                v(2, 0, false),
+                v(3, 0, false)
+            ]
+        )
+        .is_err()
+    );
     // Compares and min/max (also three-same, on .4s here).
     let t = |m: &str| enc(m, &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]);
     assert_eq!(t("cmeq"), 0x6EA2_8C20);
@@ -448,6 +752,7 @@ fn simd_vector() {
     assert_eq!(t("cmge"), 0x4EA2_3C20);
     assert_eq!(t("cmhi"), 0x6EA2_3420);
     assert_eq!(t("cmhs"), 0x6EA2_3C20);
+    assert_eq!(t("cmtst"), 0x4EA2_8C20);
     assert_eq!(t("smax"), 0x4EA2_6420);
     assert_eq!(t("smin"), 0x4EA2_6C20);
     assert_eq!(t("umax"), 0x6EA2_6420);
@@ -474,6 +779,40 @@ fn simd_vector() {
     assert!(encode("and", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]).is_err());
     assert_eq!(enc("add", &[x(0), x(1), x(2)]), 0x8B02_0020);
     assert_eq!(enc("bic", &[x(0), x(1), x(2)]), 0x8A22_0020);
+}
+
+/// `cmtst Vd.T, Vn.T, Vm.T` is the U = 0 sibling of the register `cmeq` and
+/// covers every arrangement. Words match GNU as.
+#[test]
+fn simd_cmtst() {
+    let v = |num: u8, size: u8, q: bool| Opnd::VecReg { num, size, q };
+    assert_eq!(
+        enc("cmtst", &[v(0, 0, true), v(7, 0, true), v(8, 0, true)]),
+        0x4E28_8CE0 // cmtst v0.16b, v7.16b, v8.16b
+    );
+    assert_eq!(
+        enc("cmtst", &[v(0, 0, false), v(1, 0, false), v(2, 0, false)]),
+        0x0E22_8C20 // cmtst v0.8b, v1.8b, v2.8b
+    );
+    assert_eq!(
+        enc("cmtst", &[v(0, 1, false), v(1, 1, false), v(2, 1, false)]),
+        0x0E62_8C20 // cmtst v0.4h, v1.4h, v2.4h
+    );
+    assert_eq!(
+        enc("cmtst", &[v(3, 1, true), v(4, 1, true), v(5, 1, true)]),
+        0x4E65_8C83 // cmtst v3.8h, v4.8h, v5.8h
+    );
+    assert_eq!(
+        enc("cmtst", &[v(0, 2, false), v(1, 2, false), v(2, 2, false)]),
+        0x0EA2_8C20 // cmtst v0.2s, v1.2s, v2.2s
+    );
+    assert_eq!(
+        enc("cmtst", &[v(0, 3, true), v(1, 3, true), v(2, 3, true)]),
+        0x4EE2_8C20 // cmtst v0.2d, v1.2d, v2.2d
+    );
+    // `.1d` is reserved and mismatched arrangements have no encoding.
+    assert!(encode("cmtst", &[v(0, 3, false), v(1, 3, false), v(2, 3, false)]).is_err());
+    assert!(encode("cmtst", &[v(0, 2, true), v(1, 2, false), v(2, 2, true)]).is_err());
 }
 
 #[test]
@@ -619,6 +958,31 @@ fn vector_immediate() {
     assert!(encode("movi", &[v(0, 3, true), Opnd::Imm(0x1122)]).is_err());
     assert!(encode("movi", &[v(0, 2, true), Opnd::Imm(256)]).is_err());
     assert!(encode("movi", &[v(0, 2, true), Opnd::Imm(1), Opnd::Lsl(20)]).is_err());
+    // The logical immediates orr/bic share the group with the odd cmodes; bic
+    // sets op (bit 29).
+    let li = |m: &str, d: Opnd, imm: i64, sh: u32| {
+        if sh == 0 {
+            enc(m, &[d, Opnd::Imm(imm)])
+        } else {
+            enc(m, &[d, Opnd::Imm(imm), Opnd::Lsl(sh)])
+        }
+    };
+    assert_eq!(li("orr", v(27, 2, false), 1, 16), 0x0F00_543B); // orr v27.2s, #1, lsl #16
+    assert_eq!(li("orr", v(0, 2, true), 255, 0), 0x4F07_17E0); // orr v0.4s, #255
+    assert_eq!(li("orr", v(1, 1, false), 3, 8), 0x0F00_B461); // orr v1.4h, #3, lsl #8
+    assert_eq!(li("orr", v(2, 1, true), 3, 0), 0x4F00_9462); // orr v2.8h, #3
+    assert_eq!(li("orr", v(0, 2, true), 3, 24), 0x4F00_7460); // orr v0.4s, #3, lsl #24
+    assert_eq!(li("bic", v(27, 2, false), 1, 16), 0x2F00_543B); // bic v27.2s, #1, lsl #16
+    assert_eq!(li("bic", v(0, 2, true), 255, 0), 0x6F07_17E0); // bic v0.4s, #255
+    // Only the half and word arrangements have a logical-immediate form, and
+    // the half one shifts by 0 or 8.
+    assert!(encode("orr", &[v(0, 0, true), Opnd::Imm(3)]).is_err()); // .16b
+    assert!(encode("orr", &[v(0, 3, true), Opnd::Imm(3)]).is_err()); // .2d
+    assert!(encode("bic", &[v(0, 1, true), Opnd::Imm(3), Opnd::Lsl(16)]).is_err());
+    // The three-register vector logical forms keep their encoding.
+    let t = |m: &str| enc(m, &[v(0, 0, true), v(1, 0, true), v(2, 0, true)]);
+    assert_eq!(t("orr"), 0x4EA2_1C20); // orr v0.16b, v1.16b, v2.16b
+    assert_eq!(t("bic"), 0x4E62_1C20); // bic v0.16b, v1.16b, v2.16b
 }
 
 #[test]
@@ -899,7 +1263,11 @@ fn simd_ld_st_single_lane() {
 #[test]
 fn poly_multiply() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
-    let x = |n: u8| Opnd::Reg { num: n, is64: true };
+    let x = |n: u8| Opnd::Reg {
+        num: n,
+        is64: true,
+        sp: false,
+    };
     // Byte form widens .8b/.16b to .8h; pmull2 reads the upper 64-bit halves.
     assert_eq!(
         enc("pmull", &[v(0, 1, true), v(1, 0, false), v(2, 0, false)]),
@@ -1061,10 +1429,21 @@ fn crypto() {
     let q = Opnd::QReg;
     assert_eq!(enc("sha256h", &[q(0), q(1), v(2, 2)]), 0x5E02_4020);
     assert_eq!(enc("sha256h2", &[q(0), q(1), v(2, 2)]), 0x5E02_5020);
+    // SHA1 hash update: Qd, Sn, Vm.4s; the base word selects the round.
+    let s = |n: u8| Opnd::VReg {
+        num: n,
+        is_d: false,
+    };
+    assert_eq!(enc("sha1c", &[q(12), s(7), v(4, 2)]), 0x5E04_00EC); // sha1c q12, s7, v4.4s
+    assert_eq!(enc("sha1c", &[q(0), s(1), v(2, 2)]), 0x5E02_0020);
+    assert_eq!(enc("sha1p", &[q(0), s(1), v(2, 2)]), 0x5E02_1020);
+    assert_eq!(enc("sha1m", &[q(0), s(1), v(2, 2)]), 0x5E02_2020);
     // Wrong arrangements are rejected (AES needs .16b, SHA needs .4s).
     assert!(encode("aese", &[v(0, 2), v(1, 2)]).is_err());
     assert!(encode("sha256su0", &[v(0, 0), v(1, 0)]).is_err());
     assert!(encode("sha256h", &[q(0), q(1), v(2, 0)]).is_err());
+    assert!(encode("sha1c", &[q(0), s(1), v(2, 3)]).is_err()); // needs .4s
+    assert!(encode("sha1c", &[q(0), q(1), v(2, 2)]).is_err()); // the round value is Sn
 }
 
 #[test]
@@ -1155,9 +1534,51 @@ fn mov_alias() {
     // mov Rd, #imm is movz Rd, #imm for a 16-bit immediate.
     assert_eq!(enc("mov", &[x(0), Opnd::Imm(5)]), 0xD28000A0);
     assert_eq!(enc("mov", &[w(3), Opnd::Imm(42)]), 0x52800543);
-    // A wider immediate needs an explicit movz/movk/movn.
-    assert!(encode("mov", &[x(0), Opnd::Imm(0x10000)]).is_err());
+    // A 16-bit chunk at a higher position keeps the movz form, shifted.
+    assert_eq!(enc("mov", &[x(0), Opnd::Imm(0x10000)]), 0xD2A00020);
+    assert_eq!(enc("mov", &[w(2), Opnd::Imm(0x10000)]), 0x52A00022);
+    assert_eq!(enc("mov", &[x(1), Opnd::Imm(0x5_0000_0000)]), 0xD2C000A1);
+    // A value whose complement is a chunk is movn.
+    assert_eq!(enc("mov", &[w(0), Opnd::Imm(-14)]), 0x128001A0);
+    assert_eq!(enc("mov", &[x(0), Opnd::Imm(-1)]), 0x92800000);
+    // Neither: a bitmask immediate through orr Rd, ZR, #imm.
+    assert_eq!(enc("mov", &[x(0), Opnd::Imm(0xFFFF_FFFF)]), 0xB2407FE0);
+    assert_eq!(enc("mov", &[w(5), Opnd::Imm(0x3333_3333)]), 0x3200E7E5);
+    // A value that is none of the three has no `mov` form.
+    assert!(encode("mov", &[x(0), Opnd::Imm(0x1234567)]).is_err());
     // (mov Rd, sp / mov sp, Rd are rewritten to add ..., #0 by the parser.)
+}
+
+#[test]
+fn ror_immediate_is_the_extr_alias() {
+    // ror Rd, Rn, #n is extr Rd, Rn, Rn, #n; the register form stays rorv.
+    assert_eq!(enc("ror", &[x(0), x(0), Opnd::Imm(1)]), 0x93C00400);
+    assert_eq!(enc("ror", &[w(0), w(0), Opnd::Imm(16)]), 0x13804000);
+    assert_eq!(enc("ror", &[x(3), x(4), Opnd::Imm(63)]), 0x93C4FC83);
+    assert_eq!(enc("ror", &[x(0), x(1), x(2)]), 0x9AC22C20);
+    // The shift amount is bounded by the register width.
+    assert!(encode("ror", &[w(0), w(0), Opnd::Imm(32)]).is_err());
+}
+
+#[test]
+fn add_sub_immediate_picks_the_shift() {
+    // A 12-bit value encodes unshifted; a multiple of 4096 that does not fit
+    // takes the sh bit, as the assembler does.
+    assert_eq!(enc("add", &[w(1), w(0), Opnd::Imm(65536)]), 0x11404001);
+    assert_eq!(enc("add", &[x(1), x(0), Opnd::Imm(4095)]), 0x913FFC01);
+    assert_eq!(enc("sub", &[x(1), x(0), Opnd::Imm(4096)]), 0xD1400401);
+    // A written shift fixes it: the value is the raw field, not pre-shifted.
+    assert_eq!(
+        enc("add", &[w(1), w(0), Opnd::Imm(16), Opnd::Lsl(12)]),
+        0x11404001
+    );
+    assert_eq!(
+        enc("add", &[x(1), x(0), Opnd::Imm(1), Opnd::Lsl(0)]),
+        0x91000401
+    );
+    // Neither representable nor a legal written shift.
+    assert!(encode("add", &[x(1), x(0), Opnd::Imm(0x1001)]).is_err());
+    assert!(encode("add", &[x(1), x(0), Opnd::Imm(1), Opnd::Lsl(4)]).is_err());
 }
 
 #[test]
@@ -1238,12 +1659,18 @@ fn data_processing_registers() {
 
 #[test]
 fn system_register_move() {
-    // mrs Xt, <sysreg> = 0xD5300000 | field<<5 | Rt; msr <sysreg>, Xt =
-    // 0xD5100000 | field<<5 | Rt. CTR_EL0 field 0x5801 is cross-checked against
+    // mrs Xt, <sysreg> = 0xD5200000 | field<<5 | Rt; msr <sysreg>, Xt =
+    // 0xD5000000 | field<<5 | Rt. CTR_EL0 field 0xD801 is cross-checked against
     // the pattern-matched encoding 0xD53B0020.
-    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0x5801)]), 0xD53B0020);
-    assert_eq!(enc("mrs", &[x(5), Opnd::SysReg(0x5801)]), 0xD53B0025);
-    assert_eq!(enc("msr", &[Opnd::SysReg(0x5801), x(0)]), 0xD51B0020);
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0xD801)]), 0xD53B0020);
+    assert_eq!(enc("mrs", &[x(5), Opnd::SysReg(0xD801)]), 0xD53B0025);
+    assert_eq!(enc("msr", &[Opnd::SysReg(0xD801), x(0)]), 0xD51B0020);
+    // Named/family fields and the generic S-form (op0=0), full words per clang.
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0xC801)]), 0xD539_0020); // clidr_el1
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0x8004)]), 0xD530_0080); // dbgbvr0_el1
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0xDF40)]), 0xD53B_E800); // pmevcntr0_el0
+    assert_eq!(enc("mrs", &[x(0), Opnd::SysReg(0x1881)]), 0xD523_1020); // s0_3_c1_c0_1
+    assert_eq!(enc("msr", &[Opnd::SysReg(0x1881), x(0)]), 0xD503_1020); // msr s0_3_c1_c0_1, x0
 }
 
 #[test]
@@ -1275,6 +1702,19 @@ fn logical_immediate_encoder() {
     // Applied through `and`: `and x0, x1, #0xff`.
     assert_eq!(enc("and", &[x(0), x(1), Opnd::Imm(0xFF)]), 0x92401C20);
     assert_eq!(enc("orr", &[x(5), x(6), Opnd::Imm(0x1)]), 0xB24000C5); // orr x5, x6, #1
+}
+
+#[test]
+fn bic_immediate_is_and_of_complement() {
+    // `bic Rd, Rn, #imm` assembles as `and Rd, Rn, #~imm`, the complement taken
+    // at the operand width. Golden words from GNU as / clang.
+    // bic x0, x1, #(1<<55) == and x0, x1, #0xff7fffffffffffff
+    assert_eq!(enc("bic", &[x(0), x(1), Opnd::Imm(1 << 55)]), 0x9248F820);
+    // bic w0, w1, #0xf == and w0, w1, #0xfffffff0
+    assert_eq!(enc("bic", &[w(0), w(1), Opnd::Imm(0xF)]), 0x121C6C20);
+    // The complement of -1 is 0, which is not a valid bitmask (as GNU as also
+    // rejects `bic x0, x1, #-1`).
+    assert!(encode("bic", &[x(0), x(1), Opnd::Imm(-1)]).is_err());
 }
 
 /// Differential sweeps found seven database rows disagreeing with the
@@ -1330,19 +1770,93 @@ fn memory_and_positional_registers() {
     // Atomic memory ops share the Rs@16 / Rt@0 / base layout.
     assert_eq!(enc("swp", &[w(14), w(15), m(16)]), 0xB82E820F);
     assert_eq!(enc("ldadd", &[x(17), x(18), m(19)]), 0xF8310272);
+    // Compare-and-swap-pair: Rs@16, Rt@0, base@5; the 2nd/4th operands are the
+    // implied Rs+1 / Rt+1 (validated, not encoded). Bit 30 is the 64-bit form,
+    // bit 22 acquire, bit 15 release. Byte-identical to GNU as.
+    assert_eq!(enc("casp", &[x(0), x(1), x(2), x(3), m(4)]), 0x48207C82);
+    assert_eq!(enc("caspal", &[x(0), x(1), x(2), x(3), m(4)]), 0x4860FC82);
+    assert_eq!(enc("casp", &[w(0), w(1), w(2), w(3), m(4)]), 0x08207C82);
+    assert_eq!(enc("caspa", &[x(4), x(5), x(6), x(7), m(8)]), 0x48647D06);
+    assert_eq!(enc("caspl", &[w(2), w(3), w(4), w(5), m(6)]), 0x0822FCC4);
+    // A malformed pair -- odd base, non-consecutive, or mismatched width --
+    // cannot be encoded and is rejected, never silently mis-encoded.
+    assert!(encode("casp", &[x(1), x(2), x(3), x(4), m(5)]).is_err()); // odd Rs
+    assert!(encode("casp", &[x(0), x(3), x(2), x(3), m(4)]).is_err()); // gap
+    assert!(encode("casp", &[w(0), x(1), x(2), x(3), m(4)]).is_err()); // width
     // Store-exclusive: the status register is Rd at bit 16 (not bit 0); the
     // stored value may be wider than the status register.
     assert_eq!(enc("stlxr", &[w(20), w(21), m(22)]), 0x8814FED5);
     assert_eq!(enc("stlxr", &[w(23), x(24), m(25)]), 0xC817FF38);
+    // Exclusive load/store singles, the shapes the `Q` constraint
+    // substitution feeds. Words match clang.
+    assert_eq!(enc("ldxr", &[w(0), m(2)]), 0x885F7C40); // ldxr w0, [x2]
+    assert_eq!(enc("ldaxr", &[x(0), m(1)]), 0xC85FFC20); // ldaxr x0, [x1]
+    assert_eq!(enc("stxr", &[w(1), w(0), m(2)]), 0x88017C40); // stxr w1, w0, [x2]
+    assert_eq!(enc("stlxr", &[w(1), x(0), m(2)]), 0xC801FC40); // stlxr w1, x0, [x2]
     // Load/store exclusive pair: Rd2/Rs2 at bit 10.
     assert_eq!(enc("ldaxp", &[x(0), x(1), m(2)]), 0xC87F8440);
     assert_eq!(enc("stxp", &[w(3), w(4), w(5), m(6)]), 0x882314C4);
+    // Non-acquire load-exclusive pair `ldxp` (ldaxp with the acquire bit
+    // cleared), the load half of the pre-LSE cmpxchg128 loop. Words match
+    // clang: ldxp x1,x2,[x0]=0xC87F0801, ldxp w8,w9,[x10]=0x887F2548.
+    assert_eq!(enc("ldxp", &[x(0), x(1), m(2)]), 0xC87F0440);
+    assert_eq!(enc("ldxp", &[w(0), w(1), m(2)]), 0x887F0440);
+    assert_eq!(enc("ldxp", &[x(1), x(2), m(0)]), 0xC87F0801);
+    assert_eq!(enc("ldxp", &[w(8), w(9), m(10)]), 0x887F2548);
     // Register at written index 0 mapping to Rn (no Rd operand): relaxing the
     // fixed slot order.
     assert_eq!(enc("blr", &[x(9)]), 0xD63F0120);
     assert_eq!(enc("cmn", &[x(5), x(6)]), 0xAB0600BF);
     assert_eq!(enc("cmn", &[w(7), Opnd::Imm(10)]), 0x310028FF);
     assert_eq!(enc("cmpp", &[x(3), x(4)]), 0xBAC4007F);
+}
+
+/// FEAT_LSUI unprivileged atomics: the read-modify-write family in both widths
+/// and all four orderings, and the 64-bit-only compare-and-swap forms. Every
+/// word byte-compared against GNU as under `.arch armv9.6-a+lsui`. The
+/// architecture has no exclusive-or member, so the family stops at
+/// add/clear/set/swap.
+#[test]
+fn lsui_unprivileged_atomics() {
+    assert_eq!(enc("ldtadd", &[w(0), w(1), m(2)]), 0x19200441);
+    assert_eq!(enc("ldtadd", &[x(3), x(4), m(5)]), 0x592304A4);
+    assert_eq!(enc("ldtadda", &[w(6), w(7), m(8)]), 0x19A60507);
+    assert_eq!(enc("ldtadda", &[x(9), x(10), m(11)]), 0x59A9056A);
+    assert_eq!(enc("ldtaddl", &[w(12), w(13), m(14)]), 0x196C05CD);
+    assert_eq!(enc("ldtaddl", &[x(15), x(16), m(17)]), 0x596F0630);
+    assert_eq!(enc("ldtaddal", &[w(18), w(19), m(20)]), 0x19F20693);
+    assert_eq!(enc("ldtaddal", &[x(21), x(22), m(23)]), 0x59F506F6);
+    assert_eq!(enc("ldtclr", &[w(24), w(25), m(26)]), 0x19381759);
+    assert_eq!(enc("ldtclr", &[x(27), x(28), m(29)]), 0x593B17BC);
+    assert_eq!(enc("ldtclra", &[w(30), w(0), m(1)]), 0x19BE1420);
+    assert_eq!(enc("ldtclra", &[x(2), x(3), m(4)]), 0x59A21483);
+    assert_eq!(enc("ldtclrl", &[w(5), w(6), m(7)]), 0x196514E6);
+    assert_eq!(enc("ldtclrl", &[x(8), x(9), m(10)]), 0x59681549);
+    assert_eq!(enc("ldtclral", &[w(11), w(12), m(13)]), 0x19EB15AC);
+    assert_eq!(enc("ldtclral", &[x(14), x(15), m(16)]), 0x59EE160F);
+    assert_eq!(enc("ldtset", &[w(17), w(18), m(19)]), 0x19313672);
+    assert_eq!(enc("ldtset", &[x(20), x(21), m(22)]), 0x593436D5);
+    assert_eq!(enc("ldtseta", &[w(23), w(24), m(25)]), 0x19B73738);
+    assert_eq!(enc("ldtseta", &[x(26), x(27), m(28)]), 0x59BA379B);
+    assert_eq!(enc("ldtsetl", &[w(29), w(30), m(0)]), 0x197D341E);
+    assert_eq!(enc("ldtsetl", &[x(1), x(2), m(3)]), 0x59613462);
+    assert_eq!(enc("ldtsetal", &[w(4), w(5), m(6)]), 0x19E434C5);
+    assert_eq!(enc("ldtsetal", &[x(7), x(8), m(9)]), 0x59E73528);
+    assert_eq!(enc("swpt", &[w(10), w(11), m(12)]), 0x192A858B);
+    assert_eq!(enc("swpt", &[x(13), x(14), m(15)]), 0x592D85EE);
+    assert_eq!(enc("swpta", &[w(16), w(17), m(18)]), 0x19B08651);
+    assert_eq!(enc("swpta", &[x(19), x(20), m(21)]), 0x59B386B4);
+    assert_eq!(enc("swptl", &[w(22), w(23), m(24)]), 0x19768717);
+    assert_eq!(enc("swptl", &[x(25), x(26), m(27)]), 0x5979877A);
+    assert_eq!(enc("swptal", &[w(28), w(29), m(30)]), 0x19FC87DD);
+    assert_eq!(enc("swptal", &[x(0), x(1), m(2)]), 0x59E08441);
+    assert_eq!(enc("cast", &[x(3), x(4), m(5)]), 0xC9837CA4);
+    assert_eq!(enc("casat", &[x(6), x(7), m(8)]), 0xC9C67D07);
+    assert_eq!(enc("caslt", &[x(9), x(10), m(11)]), 0xC989FD6A);
+    assert_eq!(enc("casalt", &[x(12), x(13), m(14)]), 0xC9CCFDCD);
+    // The compare-and-swap forms have no 32-bit variant, as in GNU as.
+    assert!(encode("casalt", &[w(0), w(1), m(2)]).is_err());
+    assert!(encode("ldteor", &[x(0), x(1), m(2)]).is_err());
 }
 
 /// Memory operands carrying an immediate offset (the unscaled/unprivileged
@@ -1466,7 +1980,11 @@ mod differential {
     }
 
     fn xn(n: u8) -> Opnd {
-        Opnd::Reg { num: n, is64: true }
+        Opnd::Reg {
+            num: n,
+            is64: true,
+            sp: false,
+        }
     }
 
     fn cond_name(c: u8) -> &'static str {
@@ -1484,10 +2002,14 @@ mod differential {
             | Field::ScaledUImm { op, .. }
             | Field::ScaledSImm { op, .. }
             | Field::LogicalImm { op, .. }
+            | Field::LogicalImmNot { op, .. }
+            | Field::AddSubImm { op, .. }
             | Field::MovImm { op }
             | Field::MovHw { op }
             | Field::LslAlias { op, .. }
             | Field::ShrAlias { op }
+            | Field::Shift { op, .. }
+            | Field::Extend { op, .. }
             | Field::Cond { op, .. } => op as usize == idx,
             _ => false,
         })
@@ -1511,6 +2033,18 @@ mod differential {
     fn slot_cands(f: &Form, idx: usize) -> Vec<Option<(String, Opnd)>> {
         let is64 = matches!(f.ops.first(), Some(A64Op::X));
         let imm = |v: i64| Some((alloc::format!("#{v}"), Opnd::Imm(v)));
+        // The add/sub-immediate shift slot is named by its value field, not by
+        // a field of its own.
+        if f.fields
+            .iter()
+            .any(|fl| matches!(*fl, Field::AddSubImm { shift_op, .. } if shift_op as usize == idx))
+        {
+            return alloc::vec![
+                None,
+                Some((String::from("lsl #0"), Opnd::Lsl(0))),
+                Some((String::from("lsl #12"), Opnd::Lsl(12))),
+            ];
+        }
         match field_for(f, idx) {
             Some(Field::UImm { width, .. }) => {
                 let max = (1i64 << width) - 1;
@@ -1535,7 +2069,7 @@ mod differential {
                 let (max, scale) = ((1i64 << width) - 1, scale as i64);
                 [scale, max * scale].iter().map(|&v| imm(v)).collect()
             }
-            Some(Field::LogicalImm { is64, .. }) => if is64 {
+            Some(Field::LogicalImm { is64, .. } | Field::LogicalImmNot { is64, .. }) => if is64 {
                 &[
                     0xFFi64,
                     1,
@@ -1548,6 +2082,8 @@ mod differential {
             .iter()
             .map(|&v| imm(v))
             .collect(),
+            // 4096 has no 12-bit form: the encoder must pick the shifted one.
+            Some(Field::AddSubImm { .. }) => [1i64, 4095, 4096].iter().map(|&v| imm(v)).collect(),
             Some(Field::MovImm { .. }) => [0x1234i64, 0, 0xFFFF].iter().map(|&v| imm(v)).collect(),
             Some(Field::MovHw { .. }) => {
                 let lsl = |s: u32| Some((alloc::format!("lsl #{s}"), Opnd::Lsl(s)));
@@ -1565,6 +2101,50 @@ mod differential {
                 let w = if is64 { 64 } else { 32 };
                 [1i64, 4, w - 1].iter().map(|&v| imm(v)).collect()
             }
+            Some(Field::Shift { is64, ror, .. }) => {
+                let w = if is64 { 64 } else { 32 };
+                let mut vs = alloc::vec![
+                    None,
+                    Some((String::from("lsl #1"), Opnd::Lsl(1))),
+                    Some((String::from("lsr #3"), Opnd::Shift { kind: 1, amount: 3 },)),
+                    Some((
+                        alloc::format!("asr #{}", w - 1),
+                        Opnd::Shift {
+                            kind: 2,
+                            amount: w - 1,
+                        },
+                    )),
+                ];
+                if ror {
+                    vs.push(Some((
+                        String::from("ror #5"),
+                        Opnd::Shift { kind: 3, amount: 5 },
+                    )));
+                }
+                vs
+            }
+            // The extend is always written out: an absent one would leave an
+            // operand list the shifted-register form also expresses, and the
+            // assembler (like the encoder) prefers that form there.
+            Some(Field::Extend { is64, .. }) => {
+                let e = |t: &str, option: u8, amount: u8| {
+                    Some((String::from(t), Opnd::Extend { option, amount }))
+                };
+                let mut vs = alloc::vec![
+                    e("uxtb", 0, 0),
+                    e("uxth #1", 1, 1),
+                    e("uxtw #4", 2, 4),
+                    e("sxtb #2", 4, 2),
+                    e("sxth", 5, 0),
+                    e("sxtw #3", 6, 3),
+                    e("uxtx", 3, 0),
+                    e("sxtx #1", 7, 1),
+                ];
+                if is64 {
+                    vs.push(Some((String::from("lsl #2"), Opnd::Lsl(2))));
+                }
+                vs
+            }
             Some(Field::Cond { inv, .. }) => {
                 let mut cs = alloc::vec![1u8, 11];
                 if !inv {
@@ -1576,6 +2156,79 @@ mod differential {
             }
             _ => Vec::new(),
         }
+    }
+
+    /// Every name in the generated system-register table must encode as the
+    /// assembler does: `mrs x0, NAME` (or `msr NAME, x0` for a write-only
+    /// register) equals the base word with the table's 16-bit selector
+    /// spliced in. Names the local assembler does not know are skipped.
+    #[test]
+    fn sysreg_table_matches_assembler() {
+        if !enabled() {
+            return;
+        }
+        let (mut checked, mut skipped) = (0usize, 0usize);
+        for &(name, field) in super::super::super::sysreg_a64_table::SYSREGS {
+            let want_r = 0xD530_0000 | ((u32::from(field) & 0x7FFF) << 5);
+            let want_w = 0xD510_0000 | ((u32::from(field) & 0x7FFF) << 5);
+            let got = clang_word(&alloc::format!("mrs x0, {name}"))
+                .map(|w| (w, want_r))
+                .or_else(|| clang_word(&alloc::format!("msr {name}, x0")).map(|w| (w, want_w)));
+            match got {
+                Some((w, want)) => {
+                    assert_eq!(w, want, "sysreg `{name}` (selector {field:#06x})");
+                    assert_eq!(super::super::super::asm::sysreg_field(name), Some(field));
+                    checked += 1;
+                }
+                None => skipped += 1,
+            }
+        }
+        assert!(checked > 500, "only {checked} registers checked");
+        std::eprintln!("sysreg table: {checked} verified, {skipped} unknown to the assembler");
+    }
+
+    /// The same for the `dc` / `ic` / `at` / `tlbi` operation tables: each
+    /// name's word equals the `sys`-alias base with the table's selector.
+    #[test]
+    fn sysop_tables_match_assembler() {
+        if !enabled() {
+            return;
+        }
+        use super::super::super::sysreg_a64_table::{AT_OPS, DC_OPS, IC_OPS, TLBI_OPS};
+        let (mut checked, mut skipped) = (0usize, 0usize);
+        for (mnem, table) in [
+            ("dc", DC_OPS),
+            ("ic", IC_OPS),
+            ("at", AT_OPS),
+            ("tlbi", TLBI_OPS),
+        ] {
+            for &(name, sel) in table {
+                let sel = u32::from(sel);
+                let base = 0xD508_0000
+                    | ((sel >> 11) << 16)
+                    | (((sel >> 7) & 15) << 12)
+                    | (((sel >> 3) & 15) << 8)
+                    | ((sel & 7) << 5);
+                // The register-taking spelling covers both: an operation with
+                // no register operand encodes Rt = 31, which the assembler
+                // also accepts written as `xzr`.
+                let got = clang_word(&alloc::format!("{mnem} {name}, x0"))
+                    .map(|w| (w, base))
+                    .or_else(|| {
+                        clang_word(&alloc::format!("{mnem} {name}")).map(|w| (w, base | 31))
+                    });
+                match got {
+                    Some((w, want)) => {
+                        assert_eq!(w, want, "`{mnem} {name}` (selector {sel:#06x})");
+                        assert_eq!(super::super::super::asm::sysop_base(mnem, name), Some(base));
+                        checked += 1;
+                    }
+                    None => skipped += 1,
+                }
+            }
+        }
+        assert!(checked > 100, "only {checked} operations checked");
+        std::eprintln!("sysop tables: {checked} verified, {skipped} unknown to the assembler");
     }
 
     /// Sweep the catalogue itself: synthesize operands for every form from its
@@ -1591,53 +2244,87 @@ mod differential {
         }
         let regsets: [[u8; 4]; 3] = [[1, 2, 3, 4], [9, 10, 11, 12], [20, 21, 22, 23]];
         let mut cases: Vec<(String, Vec<Opnd>, &'static str)> = Vec::new();
+        let mut sp_cases: Vec<(String, Vec<Opnd>, &'static str)> = Vec::new();
         for f in isa_a64_table::FORMS {
             let cands: Vec<Vec<Option<(String, Opnd)>>> = f
                 .ops
                 .iter()
                 .enumerate()
                 .map(|(i, p)| match p {
-                    A64Op::X | A64Op::W | A64Op::Mem | A64Op::MemPre | A64Op::MemReg => Vec::new(),
+                    A64Op::X
+                    | A64Op::W
+                    | A64Op::RegAny
+                    | A64Op::Mem
+                    | A64Op::MemPre
+                    | A64Op::MemReg => Vec::new(),
                     _ => slot_cands(f, i),
                 })
                 .collect();
-            let build = |regs: &[u8; 4], slot: usize, pick: usize| {
+            let build = |regs: &[u8; 4], slot: usize, pick: usize, sp_slot: usize| {
                 let mut txt: Vec<String> = Vec::new();
                 let mut ops: Vec<Opnd> = Vec::new();
+                // The extended register's width follows the written extend.
+                let ext_is64 = f
+                    .ops
+                    .iter()
+                    .position(|p| matches!(p, A64Op::OptExt))
+                    .and_then(|e| cands[e].get(if e == slot { pick } else { 0 })?.as_ref())
+                    .is_some_and(|(_, o)| match o {
+                        Opnd::Extend { option, .. } => option & 3 == 3,
+                        _ => true, // `lsl` in an extended group is uxtx
+                    });
                 for (i, p) in f.ops.iter().enumerate() {
                     match p {
-                        A64Op::X | A64Op::W => {
-                            let is64 = matches!(p, A64Op::X);
-                            txt.push(alloc::format!(
-                                "{}{}",
-                                if is64 { 'x' } else { 'w' },
-                                regs[i]
-                            ));
-                            ops.push(Opnd::Reg { num: regs[i], is64 });
+                        A64Op::X | A64Op::W | A64Op::RegAny => {
+                            let is64 = match p {
+                                A64Op::X => true,
+                                A64Op::W => false,
+                                _ => ext_is64,
+                            };
+                            let sp = i == sp_slot;
+                            txt.push(match (sp, is64) {
+                                (true, true) => String::from("sp"),
+                                (true, false) => String::from("wsp"),
+                                (false, _) => {
+                                    alloc::format!("{}{}", if is64 { 'x' } else { 'w' }, regs[i])
+                                }
+                            });
+                            ops.push(Opnd::Reg {
+                                num: if sp { 31 } else { regs[i] },
+                                is64,
+                                sp,
+                            });
                         }
-                        A64Op::Mem => match mem_off(f, i) {
-                            Some(off) => {
-                                txt.push(alloc::format!("[x{}, #{off}]", regs[i]));
-                                ops.push(Opnd::Mem {
-                                    base: regs[i],
-                                    off,
-                                    pre: false,
-                                });
-                            }
-                            None => {
-                                txt.push(alloc::format!("[x{}]", regs[i]));
-                                ops.push(Opnd::Mem {
-                                    base: regs[i],
-                                    off: 0,
-                                    pre: false,
-                                });
-                            }
-                        },
-                        A64Op::MemPre => {
+                        A64Op::Mem => {
+                            let base = if i == sp_slot { 31 } else { regs[i] };
+                            let bt = if i == sp_slot {
+                                String::from("sp")
+                            } else {
+                                alloc::format!("x{}", regs[i])
+                            };
                             let off = mem_off(f, i).unwrap_or(0);
-                            txt.push(alloc::format!("[x{}, #{off}]!", regs[i]));
+                            txt.push(if off == 0 {
+                                alloc::format!("[{bt}]")
+                            } else {
+                                alloc::format!("[{bt}, #{off}]")
+                            });
                             ops.push(Opnd::Mem {
-                                base: regs[i],
+                                base,
+                                off,
+                                pre: false,
+                            });
+                        }
+                        A64Op::MemPre => {
+                            let base = if i == sp_slot { 31 } else { regs[i] };
+                            let bt = if i == sp_slot {
+                                String::from("sp")
+                            } else {
+                                alloc::format!("x{}", regs[i])
+                            };
+                            let off = mem_off(f, i).unwrap_or(0);
+                            txt.push(alloc::format!("[{bt}, #{off}]!"));
+                            ops.push(Opnd::Mem {
+                                base,
                                 off,
                                 pre: true,
                             });
@@ -1645,16 +2332,23 @@ mod differential {
                         // x7 is outside every regset, so the index never
                         // collides with a base or data register.
                         A64Op::MemReg => {
-                            txt.push(alloc::format!("[x{}, x7]", regs[i]));
+                            let base = if i == sp_slot { 31 } else { regs[i] };
+                            let bt = if i == sp_slot {
+                                String::from("sp")
+                            } else {
+                                alloc::format!("x{}", regs[i])
+                            };
+                            txt.push(alloc::format!("[{bt}, x7]"));
                             ops.push(Opnd::MemReg {
-                                base: regs[i],
+                                base,
                                 index: 7,
                                 option: 0b011,
                                 shift: None,
                             });
                         }
                         _ => {
-                            if let Some((t, o)) = &cands[i][if i == slot { pick } else { 0 }] {
+                            let c = cands[i].get(if i == slot { pick } else { 0 });
+                            if let Some(Some((t, o))) = c {
                                 txt.push(t.clone());
                                 ops.push(*o);
                             }
@@ -1668,13 +2362,32 @@ mod differential {
                 };
                 (txt, ops, f.mnemonic)
             };
-            let has_regs = f.ops.iter().any(|p| matches!(p, A64Op::X | A64Op::W));
+            let has_regs = f
+                .ops
+                .iter()
+                .any(|p| matches!(p, A64Op::X | A64Op::W | A64Op::RegAny));
             for regs in regsets.iter().take(if has_regs { 3 } else { 1 }) {
-                cases.push(build(regs, usize::MAX, 0));
+                cases.push(build(regs, usize::MAX, 0, usize::MAX));
             }
             for (i, c) in cands.iter().enumerate() {
                 for pick in 1..c.len() {
-                    cases.push(build(&regsets[0], i, pick));
+                    cases.push(build(&regsets[0], i, pick, usize::MAX));
+                }
+            }
+            // Every register and memory slot written as `sp`: the assembler
+            // and the encoder must agree on whether register 31 names the
+            // stack pointer there, and on the word when it does.
+            for (i, p) in f.ops.iter().enumerate() {
+                if matches!(
+                    p,
+                    A64Op::X
+                        | A64Op::W
+                        | A64Op::RegAny
+                        | A64Op::Mem
+                        | A64Op::MemPre
+                        | A64Op::MemReg
+                ) {
+                    sp_cases.push(build(&regsets[0], usize::MAX, 0, i));
                 }
             }
             // Register-offset extend variants: every option, both S encodings.
@@ -1691,7 +2404,7 @@ mod differential {
                     (String::from("x7, sxtx"), 0b111, None),
                 ];
                 for (itxt, option, shift) in variants {
-                    let (txt, mut ops, m) = build(&regsets[0], usize::MAX, 0);
+                    let (txt, mut ops, m) = build(&regsets[0], usize::MAX, 0, usize::MAX);
                     let txt = txt.replace("x7]", &alloc::format!("{itxt}]"));
                     ops[mi] = Opnd::MemReg {
                         base: regsets[0][mi],
@@ -1730,6 +2443,35 @@ mod differential {
                 }
             }
         }
+        // An `sp` operand must encode exactly where the assembler encodes one
+        // and be rejected exactly where the assembler rejects it; a silently
+        // zero-register encoding is the failure this guards.
+        let (mut sp_ok, mut sp_bad) = (0, 0);
+        for (txt, ops, m) in &sp_cases {
+            if skipped.contains(m) {
+                continue;
+            }
+            match (clang_word(txt), encode(m, ops)) {
+                (Some(want), Ok(got)) if got == want => sp_ok += 1,
+                (None, Err(_)) => sp_ok += 1,
+                (want, got) => {
+                    sp_bad += 1;
+                    if fails.len() < 40 {
+                        fails.push(alloc::format!(
+                            "{txt}: got {} want {}",
+                            match got {
+                                Ok(w) => alloc::format!("{w:08x}"),
+                                Err(e) => e,
+                            },
+                            match want {
+                                Some(w) => alloc::format!("{w:08x}"),
+                                None => String::from("(rejected)"),
+                            }
+                        ));
+                    }
+                }
+            }
+        }
         for f in &fails {
             std::eprintln!("  FAIL {f}");
         }
@@ -1737,15 +2479,18 @@ mod differential {
             std::eprintln!("  GAP {g}");
         }
         std::eprintln!(
-            "a64 differential_sweep: forms={} cases={} OK={ok} BAD={bad} GAP={gap} SKIP={skip}",
+            "a64 differential_sweep: forms={} cases={} OK={ok} BAD={bad} GAP={gap} SKIP={skip} \
+             sp_cases={} sp_OK={sp_ok} sp_BAD={sp_bad}",
             isa_a64_table::FORMS.len(),
-            cases.len()
+            cases.len(),
+            sp_cases.len()
         );
         if !skipped.is_empty() {
             let names: Vec<&str> = skipped.into_iter().collect();
             std::eprintln!("  skipped (assembler rejects): {}", names.join(" "));
         }
         assert_eq!(bad, 0, "A64 catalogue words disagree with the assembler");
+        assert_eq!(sp_bad, 0, "sp operands disagree with the assembler");
         assert_eq!(gap, 0, "synthesized catalogue operands failed to encode");
     }
 

@@ -13,4 +13,3 @@ Disassembly of section .text:
 <main>:
                	movl	$0x5, %eax
                	retq
-               	jmp	<addr>

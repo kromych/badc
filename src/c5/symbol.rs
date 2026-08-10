@@ -15,6 +15,23 @@ pub(crate) struct Symbol {
     /// reserves one element, so a larger initializer must allocate
     /// fresh storage rather than overrun the following globals.
     pub reserved_data_bytes: i64,
+    /// `(previous offset, previous reserved bytes)` when a defining
+    /// declaration moved the object out of the storage a tentative
+    /// definition had reserved. C99 6.9.2 makes both declarations
+    /// denote one object, so references that baked the old offset --
+    /// identifier snapshots in the AST and pointer initializers already
+    /// written into the data segment -- are rebased onto `val`.
+    pub relocated_from: Option<(i64, i64)>,
+    /// For a defined file-scope object, its byte size, filled at unit
+    /// finalize. The object writers emit it as the symbol size
+    /// (`st_size`); 0 means unknown and keeps the size unset.
+    pub data_byte_size: i64,
+    /// Bytes the object occupies past `sizeof` for a flexible array
+    /// member's initialized elements (C99 6.7.2.1p16 keeps the member
+    /// out of `sizeof`). Added to `data_byte_size`, so the object's
+    /// recorded size covers the tail and the named-section carve moves
+    /// all of it.
+    pub fam_init_bytes: i64,
     pub h_class: i64,
     pub h_type: i64,
     pub h_val: i64,
@@ -60,6 +77,77 @@ pub(crate) struct Symbol {
     /// __thread_data + __thread_vars. The VM treats the slot
     /// like a regular global (single-threaded execution).
     pub is_thread_local: bool,
+
+    /// GNU explicit-register variable: `register T name asm("reg")`
+    /// binds the local to a machine register. Stack- and frame-pointer
+    /// bindings compile reads into direct register moves; a
+    /// general-purpose binding keeps normal slot storage and pins the
+    /// variable's inline-asm operands to the named register.
+    pub asm_register: Option<AsmRegister>,
+    /// Shadow slot for `asm_register` (see `h_class`).
+    pub h_asm_register: Option<AsmRegister>,
+
+    /// File-scope `register T name asm("reg")` binding. Distinguishes
+    /// the unit-wide `Loc` binding from a function's own local so a
+    /// block-scope declaration of the same name shadows it instead of
+    /// tripping the duplicate-local check.
+    pub is_global_register: bool,
+    /// Shadow slot for `is_global_register` (see `h_class`).
+    pub h_is_global_register: bool,
+
+    /// GNU asm-label rename (`T name asm("label")`): the assembler
+    /// symbol name emitted for this entity. `name` stays the C
+    /// identifier -- it remains the lookup key, the redeclaration
+    /// match and the spelling diagnostics use -- while every emitted
+    /// symbol and relocation uses [`Symbol::link_name`].
+    ///
+    /// The label is the assembler name, taken as written: gcc and clang
+    /// emit it with no target user-label prefix. badc carries names
+    /// undecorated through the compiler and the linker, so ELF and PE
+    /// emit exactly the label. The Mach-O writer adds its leading
+    /// underscore where it decorates today -- the `--shared` dynamic
+    /// export table -- so a renamed symbol is exported there as
+    /// `_<label>`; nothing else on that path decorates.
+    pub asm_name: Option<String>,
+    /// Shadow slot for `asm_name` (see `h_class`). An inner binding
+    /// that reuses the name starts with no rename of its own.
+    pub h_asm_name: Option<String>,
+
+    /// `__attribute__((weak))`: the symbol binds STB_WEAK in the
+    /// object's symbol table, for a definition (a strong definition
+    /// elsewhere overrides it) and for a declaration (an unresolved
+    /// reference links to address 0 instead of failing).
+    pub is_weak: bool,
+
+    /// `__attribute__((used))`: keep the definition in the object even
+    /// when nothing in the unit references it.
+    pub is_used: bool,
+
+    /// `__attribute__((visibility("hidden")))` (or `"internal"`): the
+    /// symbol is not preemptible, so the object writer marks it STV_HIDDEN
+    /// and addresses it PC-relative directly rather than through the GOT.
+    /// An undefined hidden reference resolves within the linked image, to 0
+    /// when it stays undefined, with no GOT entry.
+    pub is_hidden: bool,
+
+    /// `__attribute__((section("name")))`: the named object section the
+    /// symbol's bytes go to instead of the default `.text` / `.data` /
+    /// `.bss` placement.
+    pub section_name: Option<String>,
+
+    /// Placement alignment of a `Token::Glo` object with storage: the
+    /// widest of the declarator's `aligned(N)` / `_Alignas` request, the
+    /// type's natural alignment, and a typedef's `aligned(N)` type
+    /// attribute. Zero when the object never went through storage
+    /// allocation. The relocatable writer lays named sections out with
+    /// it; the unified `.data` placement keeps its own 8-byte floor.
+    pub data_align: i64,
+
+    /// `__attribute__((alias("target")))`: this symbol is an additional
+    /// name for its target; `val` carries the target's entry / offset.
+    /// Excluded from the per-pc linkage join in the object writers so
+    /// it cannot clobber the target's own linkage.
+    pub is_alias: bool,
 
     /// For an array-typed local or global, the declared element
     /// count from `int xs[N]`. Zero means "not an array" (the
@@ -149,6 +237,18 @@ pub(crate) struct Symbol {
     /// `char buf[N * 2 + 1]` is a fixed array rather than a VLA.
     pub is_const_qualified: bool,
 
+    /// Folded initializer of a block-scope `const`-qualified scalar
+    /// arithmetic object with automatic storage. GCC (GNU mode, at -O)
+    /// folds a reference to such an object where a case label or
+    /// `static_assert` needs a constant; the value is recorded at the
+    /// declaration, already converted to the declared type, and consumed
+    /// by the constant-expression evaluator only in those contexts.
+    /// `None` for every other object shape (non-const, volatile,
+    /// aggregate, pointer, missing or non-constant initializer).
+    pub const_object_value: Option<ConstObjectValue>,
+    /// Shadow slot for `const_object_value`. See `h_array_size`.
+    pub h_const_object_value: Option<ConstObjectValue>,
+
     /// True for a file-scope array whose element type is `const`-qualified
     /// (`static const T x[]`). Its elements -- and their members -- cannot
     /// be written (C99 6.7.3), so a relocation the initializer planted in
@@ -165,6 +265,13 @@ pub(crate) struct Symbol {
     /// the storage. A second declaration that *also* carries an
     /// initializer is a real duplicate.
     pub has_initializer: bool,
+
+    /// True when the object's initial value comes from stores emitted at
+    /// its declaration point rather than from the data image, which is
+    /// left zeroed (a static array mixing a `&&label` element with one
+    /// that is not a link-time constant). A pass reading the image for
+    /// the object's value must skip it.
+    pub runtime_initialized: bool,
 
     /// Number of derefs from this variable's *loaded value* down
     /// to a function-pointer rvalue, plus 1, or 0 if the variable
@@ -231,6 +338,20 @@ pub(crate) struct Symbol {
     /// the unsigned (zero-extending) extraction.
     pub is_enum_typedef: bool,
 
+    /// Explicit alignment (bytes) a typedef's type carries from a GNU
+    /// `__attribute__((aligned(N)))` type attribute, or 0 for the
+    /// type's natural alignment. Unlike `_Alignas` on an object or
+    /// member (raise-only), a type attribute sets the alignment and may
+    /// lower it below the natural value (`typedef long long
+    /// __attribute__((aligned(4))) t;`). The scalar type tag cannot
+    /// record this, so a declaration through the typedef re-seeds
+    /// `pending.type_align` from here for struct-field layout,
+    /// `__alignof__`, and object placement.
+    pub type_align: i64,
+    /// Shadow slot for `type_align`. See `h_array_size`: a block-scope
+    /// typedef reusing an outer name saves the outer alignment here.
+    pub h_type_align: i64,
+
     /// C99 6.2.2 linkage class of a file-scope identifier.
     /// `Linkage::None` for block-scope names; `Linkage::Internal`
     /// for `static`-qualified file-scope names; `Linkage::External`
@@ -259,15 +380,30 @@ pub(crate) struct Symbol {
     /// waiting to resolve.
     pub is_extern_decl: bool,
 
-    /// Sticky across all file-scope declarations of a function in the
-    /// translation unit. `saw_noninline_decl` records that at least one
-    /// declaration omitted `inline`; `saw_static_decl` records `static`
-    /// on any declaration. C99 6.7.4p7: a function all of whose
-    /// declarations are `inline` without `extern` provides no external
-    /// definition in this unit (internal linkage); a single non-inline
-    /// or `extern` declaration makes the definition external.
+    /// Per-name census of the file-scope declarations of a function in
+    /// the translation unit, sticky across all of them. Each records
+    /// that at least one declaration had the named shape:
+    /// `saw_noninline_decl` no `inline`; `saw_static_decl` `static`;
+    /// `saw_plain_inline_decl` `inline` without `extern`;
+    /// `saw_extern_inline_decl` `inline` with `extern`. Together with
+    /// `is_gnu_inline` they decide, per [`InlineModel`], whether the
+    /// unit's definition is an inline definition; see
+    /// [`inline_definition`].
     pub saw_noninline_decl: bool,
     pub saw_static_decl: bool,
+    pub saw_plain_inline_decl: bool,
+    pub saw_extern_inline_decl: bool,
+
+    /// `__attribute__((gnu_inline))` on any declaration of this
+    /// function: the GNU89 inline model applies to it whatever the
+    /// unit's default model is.
+    pub is_gnu_inline: bool,
+
+    /// The definition in this unit is an inline definition and provides
+    /// no external definition (C99 6.7.4p6). Computed once per unit
+    /// after the last declaration is in; drives internal linkage and
+    /// suppresses the unused-function diagnostic.
+    pub is_inline_definition: bool,
 
     /// True while a block-scope `extern` declaration that shadows an
     /// enclosing local (or other bound name) holds this slot. The slot
@@ -294,6 +430,22 @@ pub(crate) struct Symbol {
     /// so the function-exit cleanup restores the shadowed outer
     /// binding even though the class is not `Loc`. Cleared on restore.
     pub is_scope_typedef: bool,
+
+    /// ent_pc of the enclosing function for a block-scope static's
+    /// emission record (the persistent `name.N` symbol; the scoped
+    /// binding itself is restored at function exit). A block-scope
+    /// static exists only in an emitted instance of its function, so
+    /// static DCE honors `is_used` / `section_name` on such a record
+    /// only while the owner survives. `None` for file-scope symbols.
+    pub owner_ent_pc: Option<u64>,
+
+    /// True for the synthetic internal symbol of an anonymous compound
+    /// literal staged in the data segment. Its initializer bytes are
+    /// final at parse time, so a constant subscript of the literal may
+    /// fold by reading them back (which is not extended to named
+    /// objects: `const int t[3]` indexed is not an integer constant
+    /// expression, matching gcc / clang).
+    pub is_compound_literal: bool,
 
     /// True once the parser has emitted any reference to this
     /// symbol after its declaration -- a read, a write, an
@@ -372,13 +524,31 @@ pub(crate) struct Symbol {
     /// and dead-store diagnostics for this symbol, matching the
     /// documented effect of the attribute.
     pub maybe_unused: bool,
+}
 
-    /// GCC `register T v asm("reg")`: the architectural number of the
-    /// named general register. GCC guarantees the binding only when
-    /// the variable is an `r`-class inline-asm operand; such an
-    /// operand's constraint resolves to `AsmConstraint::Fixed` with
-    /// this number. `None` for ordinary symbols.
-    pub asm_reg: Option<u8>,
+/// Recorded initializer value of a block-scope `const` scalar arithmetic
+/// object (see `Symbol::const_object_value`). Floats carry the f64 bit
+/// pattern so the type stays `Copy + Eq` for the shadow-slot machinery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConstObjectValue {
+    Int(i64),
+    FloatBits(u64),
+}
+
+/// The machine register a `register T name asm("reg")` declaration
+/// names, resolved against the compile target. The stack and frame
+/// pointers are singled out because reading them is the pervasive use
+/// and needs no allocator involvement; any other general-purpose
+/// register carries its architectural number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AsmRegister {
+    /// rsp / esp (x86-64), sp (aarch64).
+    StackPointer,
+    /// rbp / ebp (x86-64), x29 / fp (aarch64).
+    FramePointer,
+    /// Any other bindable general-purpose register, by architectural
+    /// number.
+    Gp(u8),
 }
 
 /// C99 6.2.2 linkage class. `None` is the default for block-scope
@@ -404,4 +574,167 @@ pub enum Linkage {
     /// references. Visible to other translation units through
     /// the link-unit symbol table.
     External,
+}
+
+/// Which set of rules decides whether a unit's `inline` definition
+/// also provides that function's external definition. The two are
+/// inverted with respect to each other, so the model in force has to
+/// be explicit at every decision point.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum InlineModel {
+    /// C99 6.7.4p6-p7. If every file-scope declaration of the function
+    /// includes `inline` and none includes `extern`, the definition is
+    /// an inline definition and provides no external definition;
+    /// otherwise it provides one. badc's default, reported to headers
+    /// as `__GNUC_STDC_INLINE__`.
+    #[default]
+    C99,
+    /// GNU89, selected by `-fgnu89-inline` for the whole unit or by
+    /// `__attribute__((gnu_inline))` per function. `extern inline` is
+    /// inline-only and never provides an external definition; a plain
+    /// `inline` does provide one. Reported as `__GNUC_GNU_INLINE__`.
+    Gnu89,
+}
+
+/// True when this function's definition is an inline definition -- it
+/// provides no external definition for the name in this unit.
+/// `static` never reaches here: internal linkage is decided first and
+/// is orthogonal to both models.
+pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
+    if !sym.saw_plain_inline_decl && !sym.saw_extern_inline_decl {
+        return false;
+    }
+    let gnu89 = sym.is_gnu_inline || model == InlineModel::Gnu89;
+    if gnu89 {
+        // GCC's `gnu_inline` contract: `extern inline` is used only for
+        // inlining, and a declaration spelling `inline` without
+        // `extern` cancels that back to a standalone definition.
+        sym.saw_extern_inline_decl && !sym.saw_plain_inline_decl
+    } else {
+        // C99 6.7.4p6: every declaration `inline`, none `extern`. A
+        // non-inline declaration sets `saw_noninline_decl`, so only the
+        // `extern inline` shape needs its own term.
+        !sym.saw_noninline_decl && !sym.saw_extern_inline_decl
+    }
+}
+
+impl Symbol {
+    /// Assembler symbol name: the GNU asm label when the declaration
+    /// set one, otherwise the C identifier. Every emitted symbol,
+    /// relocation and export uses this; `name` is the identifier.
+    pub fn link_name(&self) -> &str {
+        self.asm_name.as_deref().unwrap_or(&self.name)
+    }
+}
+
+impl crate::c5::layout::DataOffsets for Symbol {
+    /// `val` is a `Program::data` byte offset only for a file-scope object
+    /// this unit defines: a function symbol's `val` is an `ent_pc`, a
+    /// `_Thread_local` symbol's indexes the TLS image, and an undefined
+    /// `extern` reserves no storage here.
+    fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
+        let Self {
+            name: _,
+            token: _,
+            class,
+            type_: _,
+            val,
+            reserved_data_bytes: _, // a byte count, not an offset
+            relocated_from: _,      // the pre-relocation span, kept for diagnostics
+            data_byte_size: _,      // a byte count
+            fam_init_bytes: _,      // a byte count
+            h_class: _,
+            h_type: _,
+            h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
+            params: _,
+            is_variadic: _,
+            h_params: _,
+            h_is_variadic: _,
+            implicit_return_int: _,
+            is_noreturn: _,
+            is_thread_local,
+            asm_register: _,
+            h_asm_register: _,
+            is_global_register: _,
+            h_is_global_register: _,
+            asm_name: _,   // an assembler symbol name, not an offset
+            h_asm_name: _, // scope-restore shadow
+            is_weak: _,
+            is_used,
+            is_hidden: _,
+            section_name,
+            data_align: _, // an alignment, not an offset
+            is_alias: _,
+            array_size: _,
+            h_array_size: _,
+            inner_array_size: _,
+            h_inner_array_size: _,
+            array_dims: _,
+            h_array_dims: _,
+            is_vla: _,
+            vla_ptr_slot: _,  // frame slot
+            vla_size_slot: _, // frame slot
+            h_is_vla: _,
+            h_vla_ptr_slot: _,
+            h_vla_size_slot: _,
+            is_zero_len_array: _,
+            h_is_zero_len_array: _,
+            is_const_qualified: _,
+            const_object_value: _,
+            h_const_object_value: _, // scope-restore shadow
+            storage_is_const: _,
+            has_initializer: _,
+            runtime_initialized: _,
+            fn_ptr_indirection: _,
+            h_fn_ptr_indirection: _,
+            is_function_type: _,
+            returns_void: _,
+            is_void_typedef: _,
+            is_enum_typedef: _,
+            type_align: _,
+            h_type_align: _,
+            linkage: _,
+            defined_here,
+            is_extern_decl: _,
+            saw_noninline_decl: _,
+            saw_plain_inline_decl: _,  // linkage model input, not an offset
+            saw_extern_inline_decl: _, // linkage model input, not an offset
+            is_gnu_inline: _,          // linkage model selector
+            is_inline_definition: _,   // linkage model result
+            saw_static_decl: _,
+            block_extern_active: _,
+            is_scope_static: _,
+            is_scope_typedef: _,
+            owner_ent_pc: _, // code address space
+            is_compound_literal: _,
+            was_referenced: _,
+            was_read: _,
+            was_written: _,
+            address_escaped: _,
+            pending_stores: _,
+            decl_line: _,
+            decl_file: _,
+            decl_in_main_source: _,
+            maybe_unused: _,
+        } = self;
+        if *class != crate::c5::token::Token::Glo as i64
+            || !*defined_here
+            || *is_thread_local
+            || !r.in_data(*val)
+        {
+            return;
+        }
+        match r.remap(*val, *val) {
+            Some(new) => *val = new,
+            // The object was dropped. Retire the record in place -- removing
+            // it would shift the indices the AST references -- so no writer
+            // places or carves it.
+            None => {
+                *defined_here = false;
+                *is_used = false;
+                *section_name = None;
+                *val = 0;
+            }
+        }
+    }
 }

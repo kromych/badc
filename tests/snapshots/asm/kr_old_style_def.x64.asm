@@ -23,11 +23,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rax
-               	movsbq	(%rax), %rax
-               	cmpq	$0x5a, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	retq
                	xorq	%rax, %rax
                	retq

@@ -73,7 +73,8 @@ use super::super::error::C5Error;
 use super::aarch64;
 use super::dwarf;
 use super::x86_64;
-use super::{Build, Machine};
+use super::{AddrPart, Build, Machine};
+use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
 // ----------------------------------------------------------------
@@ -199,32 +200,19 @@ const NUM_DATA_DIRS: u32 = 16;
 /// them. Absolute VAs live in the TLS directory and in
 /// address-of-static initializers, so `.reloc` follows their
 /// presence.
-fn num_sections(
-    data_section_present: bool,
-    reloc_section_present: bool,
-    edata_section_present: bool,
-    dwarf_section_count: usize,
-) -> usize {
-    let mut n = 3; // .text, .pdata, .idata
-    if data_section_present {
-        n += 1;
+struct SectionPlan {
+    data: bool,
+    reloc: bool,
+    edata: bool,
+    dwarf: usize,
+}
+
+impl SectionPlan {
+    /// Headers the image carries: `.text`, `.pdata` and `.idata`
+    /// unconditionally, plus each optional section this plan names.
+    fn count(&self) -> usize {
+        3 + self.data as usize + self.reloc as usize + self.edata as usize + self.dwarf
     }
-    if reloc_section_present {
-        n += 1;
-    }
-    if edata_section_present {
-        n += 1;
-    }
-    // One section header per non-empty DWARF blob (info / abbrev /
-    // line / str / frame). The Windows image loader returns
-    // ERROR_BAD_EXE_FORMAT (193) when a SizeOfRawData == 0 section
-    // shares its VirtualAddress with the next one or sits at the
-    // SizeOfImage boundary, so empty blobs are dropped before they
-    // reach the section table. PE caps section names at 8 chars, so
-    // the leading dot is dropped (mingw-w64 convention) -- lldb /
-    // gdb / `llvm-dwarfdump` walk by content, not literal name.
-    n += dwarf_section_count;
-    n
 }
 
 const DOS_HEADER_AND_STUB: usize = 128; // 64 byte DOS header + 64 byte stub
@@ -236,23 +224,12 @@ const SECTION_HEADER_SIZE: usize = 40;
 /// Raw on-disk size of the PE headers (DOS + PE sig + COFF +
 /// Optional + section table), rounded up to FILE_ALIGNMENT.
 /// 3 sections fit in 0x200; 4 sections need 0x400.
-fn headers_raw_size(
-    data_section_present: bool,
-    reloc_section_present: bool,
-    edata_section_present: bool,
-    dwarf_section_count: usize,
-) -> usize {
+fn headers_raw_size(plan: &SectionPlan) -> usize {
     let unaligned = DOS_HEADER_AND_STUB
         + PE_SIG_SIZE
         + COFF_HEADER_SIZE
         + OPTIONAL64_HEADER_SIZE
-        + SECTION_HEADER_SIZE
-            * num_sections(
-                data_section_present,
-                reloc_section_present,
-                edata_section_present,
-                dwarf_section_count,
-            );
+        + SECTION_HEADER_SIZE * plan.count();
     (unaligned + FILE_ALIGNMENT as usize - 1) & !(FILE_ALIGNMENT as usize - 1)
 }
 
@@ -373,7 +350,17 @@ pub(super) fn write(
     //    build.text`; the program's `mprotect` calls go through
     //    the regular IAT lookup just like every other libc call.
     let stub_len = stub.bytes.len() as u32;
-    let text_prologue_len = stub_len;
+    // An asm alignment request above the section default pads past the
+    // stub so `build.text[0]` lands at that alignment within the
+    // SECTION_ALIGNMENT-aligned section and the section-relative
+    // padding holds absolutely; otherwise the established stub-relative
+    // placement stays.
+    let text_align = build.text_align.max(16) as u32;
+    let text_prologue_len = if text_align > 16 {
+        round_up(stub_len, text_align)
+    } else {
+        stub_len
+    };
 
     // The `.data` section is present when the c5 program has
     // initialized data OR any `_Thread_local` globals (the TLS
@@ -391,7 +378,8 @@ pub(super) fn write(
     // reloc.
     let reloc_section_present = !build.tls_data.is_empty()
         || !build.data_relocs.is_empty()
-        || !build.code_relocs.is_empty();
+        || !build.code_relocs.is_empty()
+        || !build.label_relocs.is_empty();
     // `.edata` is present whenever the image exports anything: a
     // `#pragma export` set (shared library or executable, matching the
     // ELF `.dynsym` behaviour) or an executable's `--export-all` /
@@ -470,7 +458,7 @@ pub(super) fn write(
     // Order matches the original `DWARF_LONG_NAMES` table below;
     // changing the order would change which section names land in
     // the COFF string table.
-    let dwarf_blobs: [(&'static str, Vec<u8>); 5] = [
+    let mut dwarf_blobs: [(&'static str, Vec<u8>); 5] = [
         (".debug_info", dwarf_sections_raw.debug_info.clone()),
         (".debug_abbrev", dwarf_sections_raw.debug_abbrev.clone()),
         (".debug_line", dwarf_sections_raw.debug_line.clone()),
@@ -482,15 +470,27 @@ pub(super) fn write(
     } else {
         0
     };
-    let headers_size = headers_raw_size(
-        data_section_present,
-        reloc_section_present,
-        edata_section_present,
-        dwarf_section_count,
-    ) as u32;
+    // One description of which sections this image carries. The header
+    // size, the COFF header's count and the emitted table all read it, so
+    // adding a section cannot leave one of the three behind.
+    let plan = SectionPlan {
+        data: data_section_present,
+        reloc: reloc_section_present,
+        edata: edata_section_present,
+        dwarf: dwarf_section_count,
+    };
+    let headers_size = headers_raw_size(&plan) as u32;
 
     let text_file_off: u32 = headers_size;
-    let text_size: u32 = text_prologue_len + build.text.len() as u32;
+    // The read-only blob (switch dispatch tables) rides at an
+    // 8-aligned tail of the code section; MEM_READ covers it and the
+    // loader needs no separate section.
+    let rodata_base_in_text: u32 = if build.rodata.bytes.is_empty() {
+        text_prologue_len + build.text.len() as u32
+    } else {
+        round_up(text_prologue_len + build.text.len() as u32, 8)
+    };
+    let text_size: u32 = rodata_base_in_text + build.rodata.bytes.len() as u32;
     let text_raw_size: u32 = round_up(text_size, FILE_ALIGNMENT);
 
     // 64-bit Windows requires a `.pdata` Exception Directory
@@ -564,6 +564,15 @@ pub(super) fn write(
             data_rva + data_size + (off - file_len)
         }
     };
+    // Data-targeting DWARF placeholders resolve here rather than with
+    // the text ones above: `.data`'s RVA is only settled now, and
+    // patching in place leaves every section size unchanged.
+    if let Some(md) = &build.merged_dwarf {
+        let to_vmaddr = |off: u64| -> u64 { IMAGE_BASE + data_off_to_rva(off as u32) as u64 };
+        for r in &md.debug_info_data_relocs {
+            super::apply_merged_dwarf_data_reloc(&mut dwarf_blobs[0].1, r, &to_vmaddr)?;
+        }
+    }
     let data_file_off: u32 = idata_file_off + idata_raw_size;
     let data_raw_size: u32 = if data_section_present {
         round_up(data_size, FILE_ALIGNMENT)
@@ -596,6 +605,7 @@ pub(super) fn write(
             !build.tls_data.is_empty(),
             &build.data_relocs,
             &build.code_relocs,
+            &build.label_relocs,
         )
     } else {
         Vec::new()
@@ -678,7 +688,7 @@ pub(super) fn write(
                             &format!("PE: data export `{}` without a .data section", d.name),
                         )));
                     }
-                    data_rva + d.offset as u32
+                    data_off_to_rva(d.offset as u32)
                 }
             };
             entries.push((d.name.clone(), rva));
@@ -900,7 +910,21 @@ pub(super) fn write(
     //    that references something outside the section.
     let mut text_bytes: Vec<u8> = Vec::with_capacity(text_size as usize);
     text_bytes.extend_from_slice(&stub.bytes);
+    // Alignment pad between the stub and `build.text`; never executed
+    // (the stub exits through its own tail).
+    text_bytes.resize(text_prologue_len as usize, 0xCC);
     text_bytes.extend_from_slice(&build.text);
+    if !build.rodata.bytes.is_empty() {
+        // The absolute-slot form is relocatable-only; an image build
+        // carries difference slots exclusively.
+        if !build.rodata.abs64.is_empty() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "PE: absolute table slots reached a final-image build",
+            )));
+        }
+        text_bytes.resize(rodata_base_in_text as usize, 0);
+        text_bytes.extend_from_slice(&build.rodata.bytes);
+    }
 
     // Stub-internal fixup: the direct call to main. Only
     // present in executable output; the DLL stub
@@ -937,7 +961,7 @@ pub(super) fn write(
     // mprotect resolves at all (POSIX targets bind it, Windows
     // doesn't, sources gate the call on `__BADC_WINDOWS__`).
     for f in &build.got_fixups {
-        let instr_off = (f.adrp_offset as u32) + text_prologue_len;
+        let instr_off = (f.instr_offset as u32) + text_prologue_len;
         let target_rva = idata_layout.iat_rva_for_import[f.import_index];
         // A data import has no call thunk: its reference reads the
         // IAT slot's value. On x86_64 that is a distinct instruction
@@ -946,28 +970,76 @@ pub(super) fn write(
         // `patch_aarch64_adrp_ldr` already loads the slot for both
         // call thunks and data references.
         if f.is_data_load && machine == Machine::X86_64 {
+            crate::c5::codegen::require_whole_addr(f.part, "PE: IAT data load")?;
             patch_iat_data_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
         } else {
-            patch_iat_lookup(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
+            patch_iat_lookup(
+                machine,
+                &mut text_bytes,
+                instr_off,
+                text_rva,
+                target_rva,
+                f.part,
+            )?;
         }
     }
     for f in &build.data_fixups {
-        let instr_off = (f.adrp_offset as u32) + text_prologue_len;
+        let instr_off = (f.instr_offset as u32) + text_prologue_len;
         patch_addr_load(
             machine,
             &mut text_bytes,
             instr_off,
             text_rva,
             data_off_to_rva(f.data_offset as u32),
+            f.part,
         )?;
     }
     for f in &build.func_fixups {
-        let instr_off = (f.adrp_offset as u32) + text_prologue_len;
+        let instr_off = (f.instr_offset as u32) + text_prologue_len;
         // Function-pointer literals point at offsets within
         // build.text -- shift by text_prologue_len to land in the
         // combined .text past the entry stub.
         let target_rva = text_rva + text_prologue_len + f.target_native_offset as u32;
-        patch_addr_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
+        patch_addr_load(
+            machine,
+            &mut text_bytes,
+            instr_off,
+            text_rva,
+            target_rva,
+            f.part,
+        )?;
+    }
+
+    // Read-only blob references (switch dispatch): the site
+    // materializes the table base at the code section's tail.
+    for f in &build.rodata.addr_fixups {
+        let instr_off = (f.code_offset as u32) + text_prologue_len;
+        let target_rva = text_rva + rodata_base_in_text + f.rodata_offset as u32;
+        patch_addr_load(
+            machine,
+            &mut text_bytes,
+            instr_off,
+            text_rva,
+            target_rva,
+            AddrPart::Whole,
+        )?;
+    }
+    // Table entries: `target - table_base`, both inside `.text`, so
+    // the value is a pure offset difference (ASLR-invariant, no
+    // `.reloc` entry).
+    for r in &build.rodata.rel32 {
+        let value = (text_prologue_len as i64 + r.text_offset as i64)
+            - (rodata_base_in_text as i64 + r.base_offset as i64);
+        let Ok(v) = i32::try_from(value) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "PE: rodata rel32 slot {:#x}: displacement {value:#x} exceeds 32 bits",
+                    r.slot_offset,
+                ),
+            )));
+        };
+        let off = (rodata_base_in_text + r.slot_offset as u32) as usize;
+        text_bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
     }
 
     // TLS-index fixups. Every `Inst::TlsAddr` lowering recorded
@@ -993,10 +1065,7 @@ pub(super) fn write(
         &mut out,
         OPTIONAL64_HEADER_SIZE,
         machine,
-        data_section_present,
-        reloc_section_present,
-        edata_section_present,
-        dwarf_section_count,
+        plan.count(),
         coff_symtab_file_off,
         n_coff_symbols,
         coff_strtab_file_off,
@@ -1063,12 +1132,7 @@ pub(super) fn write(
             subsystem,
         },
     );
-    let mut sections: Vec<SectionHeader> = Vec::with_capacity(num_sections(
-        data_section_present,
-        reloc_section_present,
-        edata_section_present,
-        dwarf_section_count,
-    ));
+    let mut sections: Vec<SectionHeader> = Vec::with_capacity(plan.count());
     sections.push(SectionHeader {
         name: *b".text\0\0\0",
         virtual_size: text_size,
@@ -1143,6 +1207,17 @@ pub(super) fn write(
                 | IMAGE_SCN_MEM_DISCARDABLE,
         });
     }
+    // The header size and the COFF count were both computed from `plan`
+    // before the table existed; the table is the ground truth.
+    if sections.len() != plan.count() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "PE: emitted {} section headers, layout reserved {}",
+                sections.len(),
+                plan.count()
+            ),
+        )));
+    }
     write_section_headers(&mut out, &sections);
     pad_to(&mut out, text_file_off as usize)?;
     out.extend_from_slice(&text_bytes);
@@ -1202,6 +1277,61 @@ pub(super) fn write(
                 )));
             }
             data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+        }
+        // `&&label` initializers: the label's text offset is already
+        // resolved, so the preferred VA is the text base plus it. The
+        // `.reloc` block lists the slot for the ASLR slide.
+        for r in &build.label_relocs {
+            let preferred_va =
+                IMAGE_BASE + (text_rva + text_prologue_len + r.text_offset as u32) as u64;
+            let off = r.data_offset as usize;
+            if off + 8 > data_with_relocs.len() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "PE: label reloc offset {off:#x} past end of .data ({})",
+                        data_with_relocs.len()
+                    ),
+                )));
+            }
+            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+        }
+        // Object-linked pc-relative slots in the data stream: each
+        // holds `target - slot` as RVAs (the image base cancels) at
+        // the recorded width, so ASLR needs no `.reloc` entry.
+        for r in &build.data_pcrel_relocs {
+            let target = if r.target_in_data {
+                // `.data` and its zero-fill tail are separated by the TLS
+                // blob, so an addend that moves the target out of the
+                // anchor's object is applied to the RVA, not the offset.
+                data_off_to_rva(r.target_anchor as u32) as i64
+                    + (r.target_offset as i64 - r.target_anchor as i64)
+            } else {
+                (text_rva + text_prologue_len) as i64 + r.target_offset as i64
+            };
+            let slot_rva = data_rva as i64 + r.slot_data_offset as i64;
+            let off = r.slot_data_offset as usize;
+            let width = r.width as usize;
+            if off + width > data_with_relocs.len() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "PE: data pcrel slot {off:#x} past end of .data ({})",
+                        data_with_relocs.len()
+                    ),
+                )));
+            }
+            let value = target - slot_rva;
+            if width == 8 {
+                data_with_relocs[off..off + 8].copy_from_slice(&value.to_le_bytes());
+                continue;
+            }
+            let Ok(v) = i32::try_from(value) else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "PE: data pcrel slot {off:#x}: displacement {value:#x} exceeds 32 bits"
+                    ),
+                )));
+            };
+            data_with_relocs[off..off + 4].copy_from_slice(&v.to_le_bytes());
         }
         out.extend_from_slice(&data_with_relocs);
         if !build.tls_data.is_empty() {
@@ -1454,6 +1584,7 @@ fn build_reloc_section(
     tls_present: bool,
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
+    label_relocs: &[crate::c5::codegen::LabelReloc],
 ) -> Vec<u8> {
     // Bucket every relocation target by the 4 KiB page it
     // lives in. Per-page entries within a bucket get one
@@ -1482,6 +1613,13 @@ fn build_reloc_section(
     // the slide. The kind of pointer (data vs code) doesn't
     // matter to PE's `.reloc`, so we use the same DIR64 entry.
     for r in code_relocs {
+        let target_rva = data_rva + r.data_offset as u32;
+        let page = target_rva & !0xFFF;
+        by_page.entry(page).or_default().push(target_rva & 0xFFF);
+    }
+    // `&&label` initializers hold a code pointer in the data segment,
+    // so they take the same DIR64 entry.
+    for r in label_relocs {
         let target_rva = data_rva + r.data_offset as u32;
         let page = target_rva & !0xFFF;
         by_page.entry(page).or_default().push(target_rva & 0xFFF);
@@ -1612,32 +1750,18 @@ fn patch_aarch64_adrp_ldr32(
     adrp_rva: u32,
     target_rva: u32,
 ) -> Result<(), C5Error> {
-    let adrp_page = (adrp_rva as u64) & !0xFFF;
-    let target_page = (target_rva as u64) & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("PE: aarch64 TLS-index adrp page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = target_rva & 0xFFF;
-    if !in_page.is_multiple_of(4) {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("PE: aarch64 TLS-index ldr offset {in_page:#x} not 4-aligned"),
-        )));
-    }
-    let off = adrp_offset_in_text as usize;
-    let adrp_word = u32::from_le_bytes([text[off], text[off + 1], text[off + 2], text[off + 3]]);
-    let ldr_word = u32::from_le_bytes([text[off + 4], text[off + 5], text[off + 6], text[off + 7]]);
-    let rd = (adrp_word & 0x1F) as u8;
-    let ldr_rt = (ldr_word & 0x1F) as u8;
-    let ldr_rn = ((ldr_word >> 5) & 0x1F) as u8;
-    let new_adrp = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
-    let new_ldr = aarch64::enc_ldr32_imm(aarch64::Reg(ldr_rt), aarch64::Reg(ldr_rn), in_page);
-    text[off..off + 4].copy_from_slice(&new_adrp.to_le_bytes());
-    text[off + 4..off + 8].copy_from_slice(&new_ldr.to_le_bytes());
-    Ok(())
+    aarch64::patch::patch_slot_load(
+        text,
+        adrp_offset_in_text as usize,
+        adrp_rva as i64,
+        target_rva as i64,
+        aarch64::patch::SlotWidth::W32,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe("PE: aarch64 TLS index"),
+        ))
+    })
 }
 
 // ----------------------------------------------------------------
@@ -1747,26 +1871,6 @@ struct SectionHeaderRaw {
 
 const _: () = assert!(core::mem::size_of::<SectionHeaderRaw>() == SECTION_HEADER_SIZE);
 
-/// Append a `#[repr(C)]` struct's raw bytes to `out`.
-///
-/// PE32+ is a little-endian byte format, and our hosts (x86_64 and
-/// AArch64) and targets are all little-endian, so a memcpy of the
-/// in-memory struct produces the right wire format. The structs in
-/// this module are explicit about field order and have const-asserted
-/// sizes that match the PE/COFF spec, so the only thing that could
-/// surprise is the host endianness -- and a const-time check guards
-/// that.
-fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
-    const _: () = assert!(
-        cfg!(target_endian = "little"),
-        "PE writer assumes a little-endian host; emit bytes manually if you need to cross-build from big-endian"
-    );
-    let bytes = unsafe {
-        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
-    };
-    out.extend_from_slice(bytes);
-}
-
 fn write_dos_header_and_stub(out: &mut Vec<u8>) {
     write_struct(
         out,
@@ -1788,10 +1892,7 @@ fn write_coff_header(
     out: &mut Vec<u8>,
     optional_header_size: usize,
     machine: Machine,
-    data_section_present: bool,
-    reloc_section_present: bool,
-    edata_section_present: bool,
-    dwarf_section_count: usize,
+    n_sections: usize,
     coff_symtab_file_off: u32,
     n_coff_symbols: u32,
     coff_strtab_file_off: u32,
@@ -1810,12 +1911,7 @@ fn write_coff_header(
         out,
         &CoffHeader {
             machine: machine_id,
-            number_of_sections: num_sections(
-                data_section_present,
-                reloc_section_present,
-                edata_section_present,
-                dwarf_section_count,
-            ) as u16,
+            number_of_sections: n_sections as u16,
             time_date_stamp: 0,
             // PE images carry a COFF strtab at the file
             // tail so the long DWARF section names ("/<offset>")
@@ -2082,7 +2178,7 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
     // shape (each descriptor is 20 bytes), so a 2-DLL setup ends
     // at offset 60 -- not 8-aligned. Pad here so the IAT starts at
     // an 8-byte boundary regardless of how many DLLs we have.
-    let iat_off = round_up_usize(import_dir_off + import_dir_size, 8);
+    let iat_off = round_up(import_dir_off + import_dir_size, 8);
     // IAT layout: per-DLL block of (n_members + 1) u64 entries (the
     // final entry per DLL is a NULL terminator).
     let iat_size = dlls
@@ -2280,9 +2376,9 @@ fn runtime_symbol_offset(build: &Build, name: &str) -> Result<u32, C5Error> {
         .iter()
         .position(|n| n == name)
         .ok_or_else(|| {
-            C5Error::Compile(format!(
+            C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
                 "PE entry stub references `{name}`, which the linked runtime does not define"
-            ))
+            )))
         })?;
     let ent_pc = build.func_ent_pcs[idx];
     Ok(build.pc_to_native[ent_pc] as u32)
@@ -2701,12 +2797,14 @@ fn patch_iat_lookup(
     instr_offset_in_text: u32,
     text_section_rva: u32,
     target_rva: u32,
+    part: AddrPart,
 ) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
             // `call qword [rip+disp32]`: 6 bytes. disp32 at +2;
             // RIP at the after-byte (+6).
+            crate::c5::codegen::require_whole_addr(part, "PE: IAT lookup")?;
             let after_rva = instr_rva + 6;
             patch_x86_64_disp32(
                 text,
@@ -2716,7 +2814,7 @@ fn patch_iat_lookup(
             )
         }
         Machine::Aarch64 => {
-            patch_aarch64_adrp_ldr(text, instr_offset_in_text, instr_rva, target_rva)
+            patch_aarch64_adrp_ldr(text, instr_offset_in_text, instr_rva, target_rva, part)
         }
     }
 }
@@ -2740,17 +2838,19 @@ fn patch_iat_data_load(
     match machine {
         Machine::X86_64 => {
             let opcode_off = (instr_offset_in_text + 1) as usize;
-            if text[opcode_off] != 0x8D {
+            if text[opcode_off] != 0x8D && text[opcode_off] != 0x8B {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                     &format!(
-                        "PE: data-import load expected lea opcode 0x8D at text+{opcode_off:#x}, \
-                         found {:#04x}",
+                        "PE: data-import load expected lea 0x8D or mov 0x8B at \
+                         text+{opcode_off:#x}, found {:#04x}",
                         text[opcode_off],
                     ),
                 )));
             }
-            // Flip lea (0x8D) to mov r64, [rip+disp32] (0x8B). The
-            // disp32 follows the same +3 offset and 7-byte length.
+            // The site is either the `lea` a relaxed GOT reference left
+            // behind or the unrelaxed `mov` itself; both end as a load of
+            // the slot. The disp32 follows at +3 in a 7-byte instruction
+            // either way.
             text[opcode_off] = 0x8B;
             let instr_rva = text_section_rva + instr_offset_in_text;
             let after_rva = instr_rva + (x86_64::LEA_RIP32_LEN as u32);
@@ -2780,12 +2880,14 @@ fn patch_addr_load(
     instr_offset_in_text: u32,
     text_section_rva: u32,
     target_rva: u32,
+    part: AddrPart,
 ) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
             // `lea r13, [rip+disp32]`: 7 bytes. disp32 at +3, RIP
             // at +7 (LEA_RIP32_LEN).
+            crate::c5::codegen::require_whole_addr(part, "PE: address load")?;
             let after_rva = instr_rva + (x86_64::LEA_RIP32_LEN as u32);
             patch_x86_64_disp32(
                 text,
@@ -2795,7 +2897,7 @@ fn patch_addr_load(
             )
         }
         Machine::Aarch64 => {
-            patch_aarch64_adrp_add(text, instr_offset_in_text, instr_rva, target_rva)
+            patch_aarch64_adrp_add(text, instr_offset_in_text, instr_rva, target_rva, part)
         }
     }
 }
@@ -2868,90 +2970,62 @@ fn patch_x86_64_disp32(
     Ok(())
 }
 
-/// Patch an aarch64 `adrp xd, _; ldr xd, [xd, #_]` pair to load
-/// the 64-bit value at `target_rva` into `xd`. The adrp's imm21
-/// is the diff between the target's page and the adrp's page,
-/// scaled by 4 KiB; the ldr's imm12 is the in-page byte offset
-/// (scaled by 8 for a 64-bit load).
+/// Patch an aarch64 reference to load the 64-bit value at `target_rva`
+/// into `xd`. `target_rva` names an IAT slot, so the in-page
+/// instruction ends up `ldr xd, [xd, #_]` whether the input carried
+/// a load (a call thunk) or the `add` an object spells for the
+/// address of an extern data symbol.
 fn patch_aarch64_adrp_ldr(
     text: &mut [u8],
-    adrp_offset_in_text: u32,
-    adrp_rva: u32,
+    instr_offset_in_text: u32,
+    instr_rva: u32,
     target_rva: u32,
+    part: AddrPart,
 ) -> Result<(), C5Error> {
-    let adrp_page = (adrp_rva as u64) & !0xFFF;
-    let target_page = (target_rva as u64) & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = target_rva & 0xFFF;
-    if !in_page.is_multiple_of(8) {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("PE: aarch64 ldr offset {in_page:#x} not 8-aligned"),
-        )));
-    }
-    let off = adrp_offset_in_text as usize;
-    let adrp_word = u32::from_le_bytes([text[off], text[off + 1], text[off + 2], text[off + 3]]);
-    let ldr_word = u32::from_le_bytes([text[off + 4], text[off + 5], text[off + 6], text[off + 7]]);
-    let rd = (adrp_word & 0x1F) as u8;
-    let ldr_rt = (ldr_word & 0x1F) as u8;
-    let ldr_rn = ((ldr_word >> 5) & 0x1F) as u8;
-    let new_adrp = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
-    let new_ldr = aarch64::enc_ldr_imm(aarch64::Reg(ldr_rt), aarch64::Reg(ldr_rn), in_page);
-    text[off..off + 4].copy_from_slice(&new_adrp.to_le_bytes());
-    text[off + 4..off + 8].copy_from_slice(&new_ldr.to_le_bytes());
-    Ok(())
+    aarch64::patch::patch_slot(
+        text,
+        instr_offset_in_text as usize,
+        instr_rva as i64,
+        target_rva as i64,
+        aarch64::patch::SlotWidth::W64,
+        part,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe("PE: aarch64"),
+        ))
+    })
 }
 
-/// Patch an aarch64 `adrp xd, _; add xd, xd, #_` pair to point at
-/// `target_rva`. The encoding is PC-relative: `adrp` takes the signed
-/// 4 KiB page delta from its own page and `add` the 12-bit in-page
-/// offset, so an ASLR slide moves the instruction and its target by
-/// the same delta and the pair needs no base relocation.
+/// Patch an aarch64 `adrp xd, _` / `add xd, xd, #_` reference to point
+/// at `target_rva`. The encoding is PC-relative: `adrp` takes the
+/// signed 4 KiB page delta from its own page and `add` the 12-bit
+/// in-page offset, so an ASLR slide moves the instruction and its
+/// target by the same delta and neither needs a base relocation.
 fn patch_aarch64_adrp_add(
     text: &mut [u8],
-    adrp_offset_in_text: u32,
-    adrp_rva: u32,
+    instr_offset_in_text: u32,
+    instr_rva: u32,
     target_rva: u32,
+    part: AddrPart,
 ) -> Result<(), C5Error> {
-    let adrp_page = (adrp_rva as u64) & !0xFFF;
-    let target_page = (target_rva as u64) & !0xFFF;
-    let page_diff = target_page as i64 - adrp_page as i64;
-    if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"),
-        )));
-    }
-    let imm21 = (page_diff >> 12) as i32;
-    let in_page = target_rva & 0xFFF;
-    let off = adrp_offset_in_text as usize;
-    let adrp_word = u32::from_le_bytes([text[off], text[off + 1], text[off + 2], text[off + 3]]);
-    let add_word = u32::from_le_bytes([text[off + 4], text[off + 5], text[off + 6], text[off + 7]]);
-    let rd = (adrp_word & 0x1F) as u8;
-    let add_rd = (add_word & 0x1F) as u8;
-    let add_rn = ((add_word >> 5) & 0x1F) as u8;
-    let new_adrp = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
-    let new_add = aarch64::enc_add_imm(aarch64::Reg(add_rd), aarch64::Reg(add_rn), in_page);
-    text[off..off + 4].copy_from_slice(&new_adrp.to_le_bytes());
-    text[off + 4..off + 8].copy_from_slice(&new_add.to_le_bytes());
-    Ok(())
+    aarch64::patch::patch_addr(
+        text,
+        instr_offset_in_text as usize,
+        instr_rva as i64,
+        target_rva as i64,
+        part,
+    )
+    .map_err(|e| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &e.describe("PE: aarch64"),
+        ))
+    })
 }
 
 // ----------------------------------------------------------------
 // Misc.
 // ----------------------------------------------------------------
-
-fn round_up(value: u32, align: u32) -> u32 {
-    (value + align - 1) & !(align - 1)
-}
-
-fn round_up_usize(value: usize, align: usize) -> usize {
-    (value + align - 1) & !(align - 1)
-}
 
 /// Zero-pad `out` to the precomputed file offset of the next section.
 /// A write cursor already past the target means the layout pass and
@@ -2998,14 +3072,6 @@ mod tests {
         let mut build = super::super::lower_for(program, target, options)?;
         inject_runtime_stub_symbols(&mut build);
         Ok(build)
-    }
-
-    #[test]
-    fn round_up_aligns_correctly() {
-        assert_eq!(round_up(0, 0x200), 0);
-        assert_eq!(round_up(1, 0x200), 0x200);
-        assert_eq!(round_up(0x200, 0x200), 0x200);
-        assert_eq!(round_up(0x201, 0x200), 0x400);
     }
 
     /// `pad_to` rejects a write cursor already past the layout's
@@ -3174,11 +3240,29 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        build.dynamic_exports = alloc::vec![crate::c5::codegen::DynamicExport {
-            name: "bump".to_string(),
-            section: super::super::DynamicExportSection::Text,
-            offset: 0,
-        }];
+        // A zero-init global is addressed by a data-byte offset past
+        // `build.data`, which names a byte in the `.data` section's
+        // zero-fill tail rather than in the file-backed prefix.
+        build.data = alloc::vec![0u8; 16];
+        build.bss_size = 8;
+        build.dynamic_exports = alloc::vec![
+            crate::c5::codegen::DynamicExport {
+                name: "bump".to_string(),
+                section: super::super::DynamicExportSection::Text,
+                offset: 0,
+                size: 0,
+                is_object: false,
+                weak: false,
+            },
+            crate::c5::codegen::DynamicExport {
+                name: "zero_global".to_string(),
+                section: super::super::DynamicExportSection::Data,
+                offset: 16,
+                size: 8,
+                is_object: true,
+                weak: false,
+            },
+        ];
         let bytes = write(
             &program,
             &build,
@@ -3192,6 +3276,10 @@ mod tests {
         assert!(
             bytes.windows(5).any(|w| w == b"bump\0"),
             "the export name must appear in the image"
+        );
+        assert!(
+            bytes.windows(12).any(|w| w == b"zero_global\0"),
+            "a zero-init global must reach the export directory"
         );
 
         // Without dynamic exports the executable carries no directory.

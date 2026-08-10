@@ -12,13 +12,14 @@
 //! per-line arena ([`Exp`]) and tokens hold indices, so splicing and
 //! rescanning move plain bytes with no reference-count traffic.
 
+use alloc::borrow::Cow;
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use hashbrown::HashMap;
 
-use super::text::{is_ident_byte, literal_prefix_len, pp_number_len};
+use super::text::{is_ident_byte, literal_prefix_len, pp_number_len, skip_literal};
 use super::{FnMacro, Preprocessor};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -90,92 +91,37 @@ fn hs_union(a: &Hideset, b: &Hideset) -> Hideset {
 pub(super) struct CachedBody {
     body: Rc<str>,
     toks: Rc<Vec<Tok>>,
+    /// A `##` occurs in the list, so expansion must run the paste pass.
+    has_paste: bool,
 }
+
+/// The C99 6.4.6 punctuators badc lexes, longest first. `punct_len` and
+/// the serializer's adjacency test both read this table, so a punctuator
+/// added here cannot be missed by either.
+const PUNCT3: [&[u8]; 3] = [b"<<=", b">>=", b"..."];
+const PUNCT2: [&[u8]; 20] = [
+    b"##", b"->", b"++", b"--", b"<<", b">>", b"<=", b">=", b"==", b"!=", b"&&", b"||", b"+=",
+    b"-=", b"*=", b"/=", b"%=", b"&=", b"^=", b"|=",
+];
+const PUNCT1: &[u8] = b"()[]{},;:?~!%^&*-+=<>|/.#";
+
+/// Byte pairs that are not badc punctuators yet still re-lex as one
+/// token when written adjacent: the C99 6.4.6 digraphs, the two comment
+/// openers (6.4.9), and the first two bytes of `...`. The serializer
+/// separates them; nothing else consults the set.
+const MERGE_ONLY2: [&[u8]; 8] = [b"<:", b":>", b"<%", b"%>", b"%:", b"//", b"/*", b".."];
 
 /// Length of the punctuator starting at `at`, longest match first
 /// (C99 6.4.6), or 0.
-fn punct_len(bytes: &[u8], at: usize) -> usize {
+pub(super) fn punct_len(bytes: &[u8], at: usize) -> usize {
     let rest = &bytes[at..];
-    for p in [b"<<=".as_slice(), b">>=", b"..."] {
-        if rest.starts_with(p) {
-            return 3;
-        }
+    if PUNCT3.iter().any(|p| rest.starts_with(p)) {
+        return 3;
     }
-    for p in [
-        b"##".as_slice(),
-        b"->",
-        b"++",
-        b"--",
-        b"<<",
-        b">>",
-        b"<=",
-        b">=",
-        b"==",
-        b"!=",
-        b"&&",
-        b"||",
-        b"+=",
-        b"-=",
-        b"*=",
-        b"/=",
-        b"%=",
-        b"&=",
-        b"^=",
-        b"|=",
-    ] {
-        if rest.starts_with(p) {
-            return 2;
-        }
+    if PUNCT2.iter().any(|p| rest.starts_with(p)) {
+        return 2;
     }
-    if matches!(
-        rest[0],
-        b'(' | b')'
-            | b'['
-            | b']'
-            | b'{'
-            | b'}'
-            | b','
-            | b';'
-            | b':'
-            | b'?'
-            | b'~'
-            | b'!'
-            | b'%'
-            | b'^'
-            | b'&'
-            | b'*'
-            | b'-'
-            | b'+'
-            | b'='
-            | b'<'
-            | b'>'
-            | b'|'
-            | b'/'
-            | b'.'
-            | b'#'
-    ) {
-        return 1;
-    }
-    0
-}
-
-/// Index just past a string / char literal starting at the quote,
-/// honoring `\` escapes; an unterminated literal runs to the end.
-fn skip_literal(bytes: &[u8], at: usize) -> usize {
-    let quote = bytes[at];
-    let mut i = at + 1;
-    while i < bytes.len() {
-        if bytes[i] == b'\\' && i + 1 < bytes.len() {
-            i += 2;
-            continue;
-        }
-        let closed = bytes[i] == quote;
-        i += 1;
-        if closed {
-            break;
-        }
-    }
-    i
+    if PUNCT1.contains(&rest[0]) { 1 } else { 0 }
 }
 
 fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>) {
@@ -437,24 +383,33 @@ impl<'a> Exp<'a> {
     }
 
     /// Render tokens back to text: one space where the source had
-    /// white space, plus a separating space wherever two adjacent
-    /// tokens would otherwise re-lex as one (C99 6.10.3.3 reserves
-    /// pasting for `##`).
-    fn serialize_into(&self, toks: &[Tok], out: &mut String) {
+    /// white space. With `relex_safe`, also a separating space
+    /// wherever two adjacent tokens would otherwise re-lex as one
+    /// (C99 6.10.3.3 reserves pasting for `##`): output that is lexed
+    /// again needs the separator, while a header-name operand keeps
+    /// the spellings verbatim (C99 6.10.2p4).
+    fn serialize_into(&self, toks: &[Tok], out: &mut String, relex_safe: bool) {
         let mut cap = toks.len();
         for &t in toks {
             cap += (t.end - t.start) as usize;
         }
         out.reserve(cap);
         let first_at = out.len();
+        let mut prev_kind = TokKind::Other;
         for &t in toks {
             if out.len() > first_at
                 && (t.space
-                    || pp_tokens_would_merge(*out.as_bytes().last().unwrap(), self.first_byte(t)))
+                    || (relex_safe
+                        && pp_tokens_would_merge(
+                            prev_kind,
+                            *out.as_bytes().last().unwrap(),
+                            self.first_byte(t),
+                        )))
             {
                 out.push(' ');
             }
             out.push_str(self.text(t));
+            prev_kind = t.kind;
         }
     }
 
@@ -474,6 +429,40 @@ impl<'a> Exp<'a> {
             f.space = left.space;
         }
         toks
+    }
+
+    /// C99 6.10.3.3p2 pasting over a replacement list with no
+    /// parameters: each `##` is deleted and the tokens either side are
+    /// concatenated, left to right. A `##` at either end of the list
+    /// violates 6.10.3.3p1 and has no operand to join, so it is
+    /// dropped.
+    fn paste_run(&mut self, toks: Vec<Tok>) -> Vec<Tok> {
+        let mut out: Vec<Tok> = self.take_vec();
+        out.reserve(toks.len());
+        let mut i = 0;
+        while i < toks.len() {
+            let t = toks[i];
+            if !self.is_punct(t, "##") {
+                out.push(t);
+                i += 1;
+                continue;
+            }
+            match (out.pop(), toks.get(i + 1).copied()) {
+                (Some(left), Some(right)) => {
+                    let mut glued = self.glue(left, right);
+                    out.append(&mut glued);
+                    i += 2;
+                }
+                (left, _) => {
+                    if let Some(l) = left {
+                        out.push(l);
+                    }
+                    i += 1;
+                }
+            }
+        }
+        self.put_vec(toks);
+        out
     }
 
     /// `#param` (C99 6.10.3.2): the argument's spelling as a string
@@ -593,14 +582,15 @@ impl<'a> Exp<'a> {
         Some((args, rp_hs))
     }
 
-    /// The macro body's tokens mapped into this arena.
-    fn body_toks(&mut self, name: &str, body: &str) -> Vec<Tok> {
-        let (bbuf, toks) = self.pp.cached_body(name, body);
+    /// The macro body's tokens mapped into this arena, and whether the
+    /// list contains a `##`.
+    fn body_toks(&mut self, name: &str, body: &str) -> (Vec<Tok>, bool) {
+        let (bbuf, toks, has_paste) = self.pp.cached_body(name, body);
         let bid = self.buf_id(&bbuf);
         let mut out = self.take_vec();
         out.reserve(toks.len());
         out.extend(toks.iter().map(|t| Tok { buf: bid, ..*t }));
-        out
+        (out, has_paste)
     }
 
     /// The C99 6.10.3.4 scan: pop the next token; a live macro name
@@ -627,7 +617,10 @@ impl<'a> Exp<'a> {
             // Dynamic predefines all start with `_`; then the registry
             // probe -- most identifiers are neither, and only macro
             // names need the hideset check.
-            if self.first_byte(tok) == b'_' && self.dynamic_predefine(tok, &mut out) {
+            if self.first_byte(tok) == b'_'
+                && (self.dynamic_predefine(tok, &mut out)
+                    || self.has_operator(tok, &mut rest, &mut out))
+            {
                 continue;
             }
             let (is_fn, is_obj) = {
@@ -672,7 +665,10 @@ impl<'a> Exp<'a> {
             }
             let body = pp.macros.get(name).unwrap();
             let hs = self.hs_with_name(tok.hs, name);
-            let mut btoks = self.body_toks(name, body);
+            let (mut btoks, has_paste) = self.body_toks(name, body);
+            if has_paste {
+                btoks = self.paste_run(btoks);
+            }
             self.hs_add_all(&mut btoks, hs);
             if let Some(f) = btoks.first_mut() {
                 f.space = tok.space;
@@ -687,8 +683,14 @@ impl<'a> Exp<'a> {
 
     /// C99 6.10.8 dynamic predefines (plus the `__COUNTER__`
     /// extension); true when `tok` was one and its expansion pushed.
+    /// Its name set is `is_dynamic_predefine`, which the pre-scan in
+    /// `line_mentions_macro` shares -- a name in one and not the other
+    /// would never reach the expander.
     fn dynamic_predefine(&mut self, tok: Tok, out: &mut Vec<Tok>) -> bool {
         let (line_no, filename) = (self.line_no, self.filename);
+        if !is_dynamic_predefine(self.text(tok)) {
+            return false;
+        }
         match self.text(tok) {
             "__LINE__" => {
                 let t = self.synth(format!("{line_no}"), TokKind::Number, tok.space);
@@ -698,6 +700,13 @@ impl<'a> Exp<'a> {
                 let t = self.synth(format!("\"{filename}\""), TokKind::Str, tok.space);
                 out.push(t);
             }
+            // The main input file, so it keeps its value inside an
+            // include where `__FILE__` names the header.
+            "__BASE_FILE__" => {
+                let base = self.pp.source_label.clone();
+                let t = self.synth(format!("\"{base}\""), TokKind::Str, tok.space);
+                out.push(t);
+            }
             // Extension: each use expands to the next integer.
             "__COUNTER__" => {
                 let n = self.pp.counter.get();
@@ -705,8 +714,41 @@ impl<'a> Exp<'a> {
                 let t = self.synth(format!("{n}"), TokKind::Number, tok.space);
                 out.push(t);
             }
-            _ => return false,
+            // `is_dynamic_predefine` already admitted the name, so a
+            // miss here means the two drifted.
+            other => unreachable!("no expansion for dynamic predefine `{other}`"),
         }
+        true
+    }
+
+    /// The `__has_*` feature-test operators, which expand wherever they
+    /// appear rather than only in a conditional, so an ordinary expression
+    /// can test a capability. `rest` is the reversed pending stream, so the
+    /// `( identifier )` that follows sits at its tail; an operator name not
+    /// followed by that shape is left alone for the caller to pass through.
+    /// The verdict is the one the conditional path reports.
+    fn has_operator(&mut self, tok: Tok, rest: &mut Vec<Tok>, out: &mut Vec<Tok>) -> bool {
+        let known: fn(&str) -> bool = match self.text(tok) {
+            "__has_builtin" => super::builtins::has_builtin,
+            "__has_attribute" => super::cond::is_known_attribute,
+            _ => return false,
+        };
+        let n = rest.len();
+        if n < 3 {
+            return false;
+        }
+        let (open, arg, close) = (rest[n - 1], rest[n - 2], rest[n - 3]);
+        if self.text(open) != "(" || arg.kind != TokKind::Ident || self.text(close) != ")" {
+            return false;
+        }
+        let verdict = known(self.text(arg));
+        rest.truncate(n - 3);
+        let t = self.synth(
+            (if verdict { "1" } else { "0" }).to_string(),
+            TokKind::Number,
+            tok.space,
+        );
+        out.push(t);
         true
     }
 
@@ -723,7 +765,7 @@ impl<'a> Exp<'a> {
         inv_hs: u32,
         depth: usize,
     ) -> Vec<Tok> {
-        let body = self.body_toks(name, &def.body);
+        let (mut body, _) = self.body_toks(name, &def.body);
         let nfixed = def.params.len();
 
         let raw_va: Vec<Tok> = if def.is_variadic {
@@ -731,6 +773,11 @@ impl<'a> Exp<'a> {
         } else {
             Vec::new()
         };
+        // Substring test first: it settles the question for every variadic
+        // macro that does not use the construct without tokenized comparisons.
+        if def.is_variadic && def.body.contains("__VA_OPT__") {
+            body = self.expand_va_opt(body, def, raw_args, &raw_va);
+        }
         let mut exp_args: Vec<Option<Vec<Tok>>> = raw_args.iter().map(|_| None).collect();
         let mut exp_va: Option<Vec<Tok>> = None;
 
@@ -777,20 +824,15 @@ impl<'a> Exp<'a> {
                     continue;
                 };
                 // GNU `, ## __VA_ARGS__`: an empty tail deletes the
-                // comma; a non-empty tail keeps comma and tail.
+                // comma; a non-empty tail keeps comma and tail. The
+                // tail is a `##` operand, so it is spliced unexpanded
+                // (C99 6.10.3.1p1) and the rescan expands whatever
+                // stays in a plain position.
                 if self.is_va(def, next) && out.last().is_some_and(|&p| self.is_punct(p, ",")) {
                     if raw_va.is_empty() {
                         out.pop();
                     } else {
-                        let va = match &exp_va {
-                            Some(v) => v.clone(),
-                            None => {
-                                let v = self.join_va(raw_args, nfixed, true, depth);
-                                exp_va = Some(v.clone());
-                                v
-                            }
-                        };
-                        splice(&mut out, va, true);
+                        splice(&mut out, raw_va.clone(), true);
                     }
                     i += 2;
                     continue;
@@ -871,6 +913,92 @@ impl<'a> Exp<'a> {
         out
     }
 
+    /// C23 6.10.5.2 `__VA_OPT__ ( content )` in a variadic replacement list:
+    /// the content when the variable arguments hold at least one token, a
+    /// placemarker otherwise. The construct is resolved over the replacement
+    /// list before substitution, so a surviving content goes through parameter
+    /// substitution, `#` and `##` exactly as if written in its place. A
+    /// placemarker is spelled by dropping an adjacent `##`, whose result is
+    /// then its other operand; a preceding `#` stringizes the content after
+    /// argument substitution, empty included.
+    fn expand_va_opt(
+        &mut self,
+        body: Vec<Tok>,
+        def: &FnMacro,
+        raw_args: &[Vec<Tok>],
+        raw_va: &[Tok],
+    ) -> Vec<Tok> {
+        if !body
+            .iter()
+            .any(|&t| t.kind == TokKind::Ident && self.text(t) == "__VA_OPT__")
+        {
+            return body;
+        }
+        let present = !raw_va.is_empty();
+        let mut out: Vec<Tok> = self.take_vec();
+        out.reserve(body.len());
+        let mut i = 0;
+        while i < body.len() {
+            let t = body[i];
+            if !(t.kind == TokKind::Ident
+                && self.text(t) == "__VA_OPT__"
+                && body.get(i + 1).is_some_and(|&n| self.is_punct(n, "(")))
+            {
+                out.push(t);
+                i += 1;
+                continue;
+            }
+            let mut depth = 0usize;
+            let mut close = i + 1;
+            while close < body.len() {
+                if self.is_punct(body[close], "(") {
+                    depth += 1;
+                } else if self.is_punct(body[close], ")") {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                close += 1;
+            }
+            if close >= body.len() {
+                // Unbalanced: leave the tokens for the parser to reject.
+                out.push(t);
+                i += 1;
+                continue;
+            }
+            let content = &body[i + 2..close];
+            let mut next = close + 1;
+            if out.last().is_some_and(|&p| self.is_punct(p, "#")) {
+                let mut raw: Vec<Tok> = Vec::new();
+                if present {
+                    for &c in content {
+                        match self.raw_of(def, raw_args, raw_va, c) {
+                            Some(r) => raw.extend(r),
+                            None => raw.push(c),
+                        }
+                    }
+                }
+                let s = self.stringize(&raw, t.space);
+                out.pop();
+                out.push(s);
+            } else if present {
+                let start = out.len();
+                out.extend_from_slice(content);
+                if let Some(first) = out.get_mut(start) {
+                    first.space = t.space;
+                }
+            } else if out.last().is_some_and(|&p| self.is_punct(p, "##")) {
+                out.pop();
+            } else if body.get(next).is_some_and(|&n| self.is_punct(n, "##")) {
+                next += 1;
+            }
+            i = next;
+        }
+        self.put_vec(body);
+        out
+    }
+
     fn param_index(&self, def: &FnMacro, t: Tok) -> Option<usize> {
         let name = self.text(t);
         def.params.iter().position(|p| p == name)
@@ -902,25 +1030,29 @@ impl Preprocessor {
     /// The body's buffer and token list, lexed on first use per
     /// definition (token `buf` ids are 0; callers remap into their
     /// arena).
-    fn cached_body(&self, name: &str, body: &str) -> (Rc<str>, Rc<Vec<Tok>>) {
+    fn cached_body(&self, name: &str, body: &str) -> (Rc<str>, Rc<Vec<Tok>>, bool) {
         let mut cache = self.body_toks.borrow_mut();
         if let Some(c) = cache.get(name)
             && &*c.body == body
         {
-            return (c.body.clone(), c.toks.clone());
+            return (c.body.clone(), c.toks.clone(), c.has_paste);
         }
         let buf: Rc<str> = Rc::from(body);
         let mut toks = Vec::new();
         lex_into(&buf, 0, &mut toks);
+        let has_paste = toks
+            .iter()
+            .any(|t| t.kind == TokKind::Punct && &buf[t.start as usize..t.end as usize] == "##");
         let toks = Rc::new(toks);
         cache.insert(
             name.to_string(),
             CachedBody {
                 body: buf.clone(),
                 toks: toks.clone(),
+                has_paste,
             },
         );
-        (buf, toks)
+        (buf, toks, has_paste)
     }
 
     /// The shared one-name hideset `{name}`.
@@ -939,9 +1071,40 @@ impl Preprocessor {
     /// Substitute every macro invocation in `line`. `filename` and
     /// `line_no` feed `__FILE__` / `__LINE__`, whose expansion changes
     /// per line and so can't live in the static macro table.
-    pub(super) fn substitute(&self, line: &str, filename: &str, line_no: usize) -> String {
+    pub(super) fn substitute<'l>(
+        &self,
+        line: &'l str,
+        filename: &str,
+        line_no: usize,
+    ) -> Cow<'l, str> {
+        self.substitute_serialized(line, filename, line_no, true)
+    }
+
+    /// [`Self::substitute`] for a header-name operand (`#include` /
+    /// `__has_include` with pp-token form): spellings joined with a
+    /// space only where the source had white space. The re-lex
+    /// separators `substitute` inserts would land in the header name:
+    /// a digit-leading file name such as `1x.h` arrives as the tokens
+    /// `1x` `.` `h`, and only their verbatim concatenation names the
+    /// file (C99 6.10.2p4).
+    pub(super) fn substitute_spelling<'l>(
+        &self,
+        line: &'l str,
+        filename: &str,
+        line_no: usize,
+    ) -> Cow<'l, str> {
+        self.substitute_serialized(line, filename, line_no, false)
+    }
+
+    fn substitute_serialized<'l>(
+        &self,
+        line: &'l str,
+        filename: &str,
+        line_no: usize,
+        relex_safe: bool,
+    ) -> Cow<'l, str> {
         if !self.line_mentions_macro(line) {
-            return line.to_string();
+            return Cow::Borrowed(line);
         }
         let mut scratch = self.exp_scratch.borrow_mut();
         let mut ex = Exp::new(self, filename, line_no, &mut scratch);
@@ -954,9 +1117,9 @@ impl Preprocessor {
         // output quote it.
         let indent = &line[..line.len() - line.trim_start().len()];
         let mut out = String::from(indent);
-        ex.serialize_into(&expanded, &mut out);
+        ex.serialize_into(&expanded, &mut out, relex_safe);
         ex.put_vec(expanded);
-        out
+        Cow::Owned(out)
     }
 
     /// Pre-scan: most lines name no macro at all, and copying them
@@ -987,7 +1150,8 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &line[start..i];
-                if matches!(ident, "__LINE__" | "__FILE__" | "__COUNTER__")
+                if is_dynamic_predefine(ident)
+                    || matches!(ident, "__has_builtin" | "__has_attribute")
                     || self.macros.contains_key(ident)
                     || self.fn_macros.contains_key(ident)
                 {
@@ -1037,6 +1201,37 @@ impl Preprocessor {
         ));
     }
 
+    /// C99 6.10.3.3p1: `##` shall not occur at the beginning or at the
+    /// end of a replacement list, for either form of macro definition.
+    /// A leading `##` spells `##` and a trailing one ends in `#`, so
+    /// the two text tests are necessary conditions and only a body
+    /// passing one of them is lexed.
+    pub(super) fn check_paste_placement(
+        &self,
+        name: &str,
+        body: &str,
+        filename: &str,
+        line_no: usize,
+    ) {
+        if !body.starts_with("##") && !body.ends_with('#') {
+            return;
+        }
+        let mut toks = Vec::new();
+        lex_into(body, 0, &mut toks);
+        let is_paste = |t: Option<&Tok>| {
+            t.is_some_and(|t| {
+                t.kind == TokKind::Punct && &body[t.start as usize..t.end as usize] == "##"
+            })
+        };
+        if !is_paste(toks.first()) && !is_paste(toks.last()) {
+            return;
+        }
+        let msg = format!("`##` cannot appear at either end of the replacement list of `{name}`");
+        self.record_pp_error(crate::c5::error::C5Error::Compile(
+            crate::c5::error::fmt_compile_err(filename, line_no, &msg),
+        ));
+    }
+
     /// Iteratively expand a single identifier through the macro
     /// table. Returns `None` if `name` isn't a macro at all -- this is
     /// the fast path for the common case (the source has way more
@@ -1075,33 +1270,44 @@ impl Preprocessor {
     }
 }
 
-/// True when `prev` directly followed by `next` would re-lex as part
-/// of a single preprocessing token even though the two bytes end and
-/// begin distinct tokens. The serializer inserts one space at such
-/// boundaries -- whitespace between tokens never changes phase-7
-/// semantics -- so substituted text cannot paste onto its neighbors
-/// (C99 6.10.3.3 reserves pasting for `##`).
-pub(super) fn pp_tokens_would_merge(prev: u8, next: u8) -> bool {
+/// Names `dynamic_predefine` expands from context rather than from the
+/// macro table.
+pub(super) fn is_dynamic_predefine(name: &str) -> bool {
+    matches!(
+        name,
+        "__LINE__" | "__FILE__" | "__BASE_FILE__" | "__COUNTER__"
+    )
+}
+
+/// True when the token ending in `prev` directly followed by a token
+/// starting with `next` would re-lex as one preprocessing token. The
+/// serializer inserts one space at such boundaries -- white space
+/// between tokens never changes phase-7 semantics -- so substituted text
+/// cannot paste onto its neighbours (C99 6.10.3.3 reserves pasting for
+/// `##`). `prev_kind` is the preceding token's kind, which decides
+/// whether the pp-number continuation rules apply.
+///
+/// Every case is read off a token-grammar rule rather than listed:
+/// identifier and pp-number continuation (6.4.2.1 / 6.4.8), the
+/// punctuator table `punct_len` matches, and the merge-only pairs.
+pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: u8, next: u8) -> bool {
     if is_ident_byte(prev) && is_ident_byte(next) {
         return true;
     }
-    (prev == b'.' && next.is_ascii_digit())
-        || matches!(
-            (prev, next),
-            (b'-', b'-' | b'>' | b'=')
-                | (b'+', b'+' | b'=')
-                | (b'<', b'<' | b'=' | b':' | b'%')
-                | (b'>', b'>' | b'=')
-                | (b'&', b'&' | b'=')
-                | (b'|', b'|' | b'=')
-                | (b'=' | b'!' | b'*' | b'^', b'=')
-                | (b'/', b'/' | b'*' | b'=')
-                | (b'%', b'=' | b'>' | b':')
-                | (b'#', b'#')
-                | (b':', b'>')
-                | (b'.', b'.')
-                | (b'e' | b'E' | b'p' | b'P', b'+' | b'-')
-        )
+    // 6.4.8: a pp-number runs on through `.` and through a sign after an
+    // exponent marker, so only a preceding pp-number merges with those.
+    if prev_kind == TokKind::Number
+        && (next == b'.'
+            || (matches!(prev, b'e' | b'E' | b'p' | b'P') && matches!(next, b'+' | b'-')))
+    {
+        return true;
+    }
+    let pair = [prev, next];
+    // A `.` before a digit opens a pp-number.
+    if prev == b'.' && pp_number_len(&pair, 0) == 2 {
+        return true;
+    }
+    punct_len(&pair, 0) == 2 || MERGE_ONLY2.iter().any(|p| *p == pair)
 }
 
 /// Incremental joiner state: decides whether the logical line still
@@ -1157,11 +1363,13 @@ impl JoinScan {
                 while i < bytes.len() {
                     let c = bytes[i];
                     if self.quote != 0 {
-                        if c == b'\\' && i + 1 < bytes.len() {
+                        // A literal is bounded by its line, as in `skip_literal`,
+                        // so an unterminated quote cannot swallow the `)`.
+                        if c == b'\\' && i + 1 < bytes.len() && bytes[i + 1] != b'\n' {
                             i += 2;
                             continue;
                         }
-                        if c == self.quote {
+                        if c == self.quote || c == b'\n' {
                             self.quote = 0;
                         }
                         i += 1;
@@ -1252,28 +1460,45 @@ impl JoinScan {
     }
 }
 
-/// A name that heads a joinable invocation: a function-like macro,
-/// or an object-like macro whose single-identifier body is one (the
-/// C99 6.10.3.4 rescan makes such an alias head a call whose
-/// argument list may close on a later line).
+/// A name that heads a joinable invocation: a function-like macro, or an
+/// object-like macro whose replacement list *ends* in one. C99 6.10.3.4p1
+/// rescans the replacement list together with the tokens that follow, so
+/// it is the name ending the list that meets the `(` -- which may be on a
+/// later line (`#define dprintk if (debug) printk`).
 fn join_head(
     name: &str,
     fn_macros: &HashMap<String, FnMacro>,
     obj_macros: &HashMap<String, String>,
 ) -> bool {
-    if fn_macros.contains_key(name) {
-        return true;
+    let mut name = name;
+    for _ in 0..MAX_MACRO_DEPTH {
+        if fn_macros.contains_key(name) {
+            return true;
+        }
+        let Some(tail) = obj_macros.get(name).and_then(|b| trailing_identifier(b)) else {
+            return false;
+        };
+        if tail == name {
+            return false;
+        }
+        name = tail;
     }
-    obj_macros
-        .get(name)
-        .map(|body| {
-            let t = body.trim();
-            !t.is_empty()
-                && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
-                && t.bytes().next().is_some_and(|b| !b.is_ascii_digit())
-                && fn_macros.contains_key(t)
-        })
-        .unwrap_or(false)
+    false
+}
+
+/// The identifier ending a macro replacement list, or `None` when the
+/// list is empty or ends in punctuation, a literal, or a pp-number.
+fn trailing_identifier(body: &str) -> Option<&str> {
+    let body = body.trim_end();
+    let bytes = body.as_bytes();
+    let mut start = bytes.len();
+    while start > 0 && is_ident_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    if start == bytes.len() || bytes[start].is_ascii_digit() {
+        return None;
+    }
+    Some(&body[start..])
 }
 
 /// Cap on the argument-expansion nesting depth. Generous: real code

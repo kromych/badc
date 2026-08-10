@@ -59,7 +59,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp

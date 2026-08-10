@@ -51,6 +51,16 @@ jobs:
       # full` so `main.rs` and the full-only targets are linted too.
       - name: cargo clippy (full)
         run: cargo clippy --all-targets --features full -- -D warnings
+      # The kernel gate's KASLR harness writes a device tree and reads the
+      # displacement back out of a boot log, and its banner reading decides
+      # whether the booted image names badc as compiler and linker; all are
+      # pure functions with a self-check, so they are verified here rather
+      # than in the kernel lane, which runs on a fraction of the pushes and
+      # takes an hour to say so.
+      - name: kernel gate harness self-tests
+        run: |
+          python3 demos/linux/kaslr.py
+          python3 demos/linux/verify.py --self-test
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
       # arrows tend to sneak in via copy-paste and rendered editor
       # autocorrect; keep them out at the gate. A fixture that exercises
@@ -83,7 +93,10 @@ jobs:
           - windows-latest
           - windows-11-arm
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    # The Linux and macOS lanes finish in about 7 minutes, the Windows ones in
+    # 9-10: process spawning dominates the per-fixture demos there. The cap is
+    # a hang backstop, so it sits above the slowest lane, not at it.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -952,8 +965,10 @@ jobs:
           - ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
     # quickjs_bench builds the full engine four times (badc, badc -O,
-    # clang -O0, clang -O2) and the CPython comparison builds the
-    # interpreter four more times; allow headroom over the lighter fixtures.
+    # clang -O0, clang -O2), the quickjs engine comparison four more and
+    # runs a microbench subset through each, and the CPython comparison
+    # builds the interpreter four more times; allow headroom over the
+    # lighter fixtures.
     timeout-minutes: 30
     # Don't gate CI on perf numbers -- a regression should surface in
     # the job summary but not block the merge. Hard failures from the
@@ -1003,6 +1018,17 @@ jobs:
         run: |
           python3 demos/python/compare_compilers.py | tee /tmp/cpython_cmp.md
           cat /tmp/cpython_cmp.md >> "$GITHUB_STEP_SUMMARY"
+      - name: quickjs engine comparison (badc/clang, -O0/-O)
+        # Builds the engine four times from the smoke's recipe and runs a
+        # bounded subset of QuickJS's own microbench through each, so the
+        # table separates interpreter paths (dispatch, calls, shapes,
+        # arrays, hashing, bigint, number/string conversion) that the
+        # single fib fixture in tests/perf does not. continue-on-error so a
+        # build/bench hiccup leaves the other tables in the summary.
+        continue-on-error: true
+        run: |
+          python3 demos/quickjs/bench.py | tee /tmp/qjs_cmp.md
+          cat /tmp/qjs_cmp.md >> "$GITHUB_STEP_SUMMARY"
 
   # Build the Tcl 8.6.14 interpreter with badc and run the upstream
   # test suite (tests/all.tcl). Isolated from the `test` job because the
@@ -1460,9 +1486,10 @@ jobs:
           - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "", optname: O0 }
           - { os: ubuntu-24.04,     label: ubuntu-x64,   optenv: "1", optname: O }
     runs-on: ${{ matrix.os }}
-    # badc build (warm cache) + full-unit compile + link. The compile is the
-    # long pole; 30 min is a backstop it must never approach.
-    timeout-minutes: 30
+    # badc build (warm cache) + full-unit compile + link. A green lane runs
+    # about 7 minutes end to end; the caps exist to kill hangs, not to fit
+    # slow work, so they stay close to the observed time.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -1508,6 +1535,9 @@ jobs:
       - name: qemu setup (fetch source + build config)
         run: python demos/qemu/setup.py
       - name: qemu smoke (badc build + self-link + boot)
+        # The step cap bounds a hang in the compile/link/boot chain well below
+        # the job cap; each boot is separately bounded by BADC_QEMU_BOOT_TIMEOUT.
+        timeout-minutes: 15
         # Two-stage gate. BADC_QEMU_REQUIRE_RUN=1 requires the linked emulator
         # to start (--version): the runner builds at a long path whose length
         # lands the init_array on the .data boundary, catching a boundary
@@ -1520,6 +1550,9 @@ jobs:
         env:
           BADC_QEMU_REQUIRE_RUN: "1"
           BADC_QEMU_BOOT: "gate"
+          # Explicit per-boot cap: a boot either reaches userspace in this
+          # window or the lane fails; it must never sit on the job budget.
+          BADC_QEMU_BOOT_TIMEOUT: "90"
           BADC_QEMU_OPT: ${{ matrix.optenv }}
           BADC_QEMU_BOOT_LOG: ${{ github.workspace }}/qemu-boot-${{ matrix.label }}-${{ matrix.optname }}.log
           # Both arches boot the EFI-stub kernel THROUGH the firmware the ovmf
@@ -1536,4 +1569,215 @@ jobs:
         with:
           name: qemu-boot-${{ matrix.label }}-${{ matrix.optname }}
           path: ${{ github.workspace }}/qemu-boot-${{ matrix.label }}-${{ matrix.optname }}.log
+          if-no-files-found: ignore
+      - name: publish the self-linked emulator
+        # The kernel lane boots its badc-built kernel under this binary, so
+        # the emulator under test there is badc's own build. Only the -O0
+        # lane publishes: one producer per (os, arch) keeps the artifact name
+        # unambiguous. Artifacts do not carry the executable bit; the consumer
+        # restores it.
+        if: matrix.optname == 'O0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-bin-${{ matrix.label }}
+          # The cache path carries the pinned QEMU version; glob it. The
+          # directory is dot-prefixed, which the upload action treats as
+          # hidden and skips unless told otherwise.
+          path: demos/qemu/.cache/qemu-*/objs/qemu-system-*
+          include-hidden-files: true
+          if-no-files-found: error
+
+  kernel:
+    needs: [qemu]
+    # Full-kernel gate. badc compiles every C translation unit of a Linux
+    # `defconfig` -- no fallback to the reference compiler -- and is also the
+    # tree's `LD`, so the kernel's own link-vmlinux.sh drives badc for the
+    # kallsyms passes, the `-r` merges and the final vmlinux, and that image
+    # boots under the emulator the qemu lane linked with badc's own linker.
+    # badc-built end to end: the compiler (this repo, built here), the kernel
+    # image and the link that produced it, and the emulator it runs on. Not
+    # badc-built: the reference compiler still assembles the .S units and
+    # builds kbuild's host tools, and GNU ld still takes the links ldshim.py
+    # routes to it -- x86's 16/32-bit boot and vDSO links, which need the i386
+    # target. The 64-bit vDSOs are badc's, dynamic metadata and symbol
+    # versions included, and so is kbuild's scriptless linker probe.
+    # `verify.py` names what was left to GNU ld one by one and fails on
+    # a link leaving badc for any other reason. The boot uses the emulator's
+    # -kernel loader rather than badc-built firmware; booting through
+    # OVMF/AAVMF is the qemu lane's dimension.
+    #
+    # `--linker badc` is spelled out rather than left to `verify.py`'s
+    # default, so what this lane proves does not move with the harness.
+    #
+    # x86_64 additionally needs the machine's ROM set: a self-linked emulator
+    # has no data directory, so `-L` points at the `pc-bios-x86` asset -- the
+    # firmware (SeaBIOS) and option ROMs upstream ships with the same QEMU
+    # release the emulator is built from, pinned by sha256 like every other
+    # vendor-deps asset. Those blobs are firmware data, not badc output; the
+    # emulator under test is still the one badc compiled and linked. aarch64
+    # -M virt loads no ROM.
+    #
+    # `verify.py` is the gate: it fails on any unit badc cannot compile, any
+    # unit that fell back, any link badc could not make, any link that left
+    # badc for a reason the shim does not route on, any undefined reference at
+    # link, a badc unit count below the floor, and any boot that does not print
+    # the marker or whose banner does not name badc as both compiler and
+    # linker. The tree is rebuilt from clean, so nothing passes vacuously. Each
+    # boot runs at a KASLR displacement the gate picked -- pinned per boot on
+    # aarch64, drawn by the machine on x86_64, which takes no seed -- and it
+    # also fails if a randomizing configuration produced no displaced boot.
+    #
+    # A red lane is attributable from that output alone, because compiling and
+    # linking are separate failure classes and each names what it stopped on.
+    # The exception is a build that succeeded and a boot that did not, which is
+    # a miscompile or a bad link and does not say which; a single
+    # `--linker reference` run separates those two, and the same contrast runs
+    # nightly (see below).
+    #
+    # The kernel source is the release `demos/linux/setup.py` pins, fetched
+    # from cdn.kernel.org and rejected unless its sha256 matches -- the same
+    # pin the sweep measures against, so the gate cannot drift from it. No
+    # vendor-deps mirror: the tarball is large, would have to be rotated on
+    # every pin bump, and cdn.kernel.org is not one of the hosts that made CI
+    # flaky.
+    #
+    # This is the kernel gate on the push path, and it is the badc-linked one.
+    # The reference-linked contrast is not a second `--linker` dimension here,
+    # because the two runs differ only in the links and share the compile,
+    # which is the whole cost. One clean run end to end -- build, displacement
+    # probe, four boots -- measured on the boxes at defconfig:
+    #
+    #                       --linker badc      --linker reference
+    #   aarch64,  8 cores   250 s (build 225)  249 s (build 224)
+    #   x86_64,  12 cores   319 s (build 220)  320 s (build 220)
+    #
+    # The two are within run-to-run noise of each other, x86_64's badc-linked
+    # run coming out the faster of the pair, so a second dimension would buy
+    # the link steps at the price of a second full compile per architecture on
+    # every push. `kernel-packages.yml` carries the contrast instead: same
+    # pinned release, same `make defconfig`, kbuild's default LD, nightly on
+    # both architectures, and booted into a stock distribution userspace
+    # rather than a marker initramfs. The distribution dimension -- deb/rpm
+    # packaging, install into a stock cloud image, boot into the installed
+    # kernel through its boot loader -- is that same workflow, which runs
+    # nightly and on demand because it needs a VM and GitHub-hosted runners
+    # have no KVM.
+    name: kernel (${{ matrix.label }} defconfig, badc-linked, badc-built qemu)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Measured on the pinned sweep release at defconfig: 4434 (aarch64)
+          # and 2921 (x86_64) units, 0 fallbacks, 0 undefined refs, every boot
+          # reaching the marker. Each floor sits just under its count, so a
+          # unit silently dropping out of the build fails the gate.
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, arch: aarch64, floor: 4400 }
+          - { os: ubuntu-24.04,     label: ubuntu-x64,   arch: x86_64,  floor: 2900 }
+    runs-on: ${{ matrix.os }}
+    # Measured on four 3.2 GHz aarch64 cores: fetch + configure 44 s, clean
+    # defconfig build 20 min (4177 units, 2153 CPU-s). Scaled by this runner's
+    # measured compile throughput that is 15-25 min of build. x86_64 measured
+    # on twelve 3.2 GHz cores: clean defconfig build 382 s (2847 units); on a
+    # four-core runner that is 15-20 min. The boot phase is four boots plus a
+    # displacement probe per distinct displacement: 25 s on aarch64 (eight
+    # emulator starts), 50 s on x86_64 (five, one probe covering them all).
+    # The sweep release since bumped to 4434 / 2921 units, within these caps.
+    # Linking with badc costs a second or so of the build on either
+    # architecture (table above), so the caps carry over unchanged.
+    # The caps are hang backstops just above that, not slack; tighten them once
+    # green runs have shown the real spread.
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: kernel-${{ matrix.label }}
+      - name: apt resilience (Linux arm64 runners)
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        # ports.ubuntu.com (the only default arm64 archive) has hour-long
+        # outages that fail the lane before any project code runs. Retry
+        # transient errors, and only when the index refresh itself fails
+        # swap to the Azure-hosted mirror (resolves to a runner-local pool
+        # on most arm64 pools) and refresh again.
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-badc-retries
+          if ! sudo apt-get update -y; then
+            sudo sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+              /etc/apt/sources.list /etc/apt/apt-mirrors.txt \
+              $(ls /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null) || true
+            sudo apt-get update -y
+          fi
+      - name: install kernel build deps + the emulator's shared libraries
+        # No qemu-system-* package: the only emulator on this runner is the one
+        # the qemu lane built, so the boot cannot silently use a distro build.
+        run: ./scripts/apt_resilient_install.sh flex bison bc libelf-dev libssl-dev libglib2.0-dev zlib1g-dev libfdt-dev
+      - name: fetch the badc-built emulator (qemu lane, -O0)
+        uses: actions/download-artifact@v4
+        with:
+          name: qemu-bin-${{ matrix.label }}
+          path: ${{ runner.temp }}/qemu
+      - name: fetch the x86 machine ROM set (pinned firmware blobs, no distro package)
+        if: matrix.arch == 'x86_64'
+        run: python demos/qemu/setup.py --pc-bios "$RUNNER_TEMP/pc-bios"
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: kernel setup (fetch the pinned release, verify sha256, configure)
+        run: python demos/linux/setup.py --arch ${{ matrix.arch }} --cache "$RUNNER_TEMP/lk"
+      - name: switch the tree to defconfig
+        # setup.py already configures the sweep release with its own defconfig;
+        # this re-runs it so the gate does not depend on that default. The tree
+        # path carries the pinned version, so it is globbed rather than spelled
+        # out -- matching directories only, since the tarball shares the prefix.
+        run: |
+          tree=$(find "$RUNNER_TEMP/lk" -maxdepth 1 -type d -name 'linux-*' | head -1)
+          test -n "$tree" || { echo "no kernel tree under $RUNNER_TEMP/lk"; exit 1; }
+          echo "KERNEL_TREE=$tree" >> "$GITHUB_ENV"
+          make -C "$tree" defconfig
+      - name: build the boot initramfs
+        run: python demos/linux/initramfs.py -o "$RUNNER_TEMP/initramfs.cpio.gz"
+      - name: kernel gate (badc compiles defconfig, links, boots)
+        # The step cap bounds a hang in the build below the job cap; each boot
+        # is separately bounded by --boot-timeout. The emulator is named
+        # explicitly, and `-nic none` drops the default NIC, whose boot ROM is
+        # not in the ROM set (and a boot smoke needs no network).
+        timeout-minutes: 40
+        env:
+          # The runner's reference compiler is not the one the pinned kernel
+          # was released against; its warnings are not the gate's subject.
+          KCFLAGS: -Wno-error
+          # x86_64's -M pc loads its firmware and option ROMs at run time; -L
+          # points at the set fetched above. aarch64 -M virt loads none.
+          ROMS: ${{ matrix.arch == 'x86_64' && format('-L {0}/pc-bios', runner.temp) || '' }}
+        run: |
+          # The upload preserved the path below its glob's fixed prefix, so the
+          # binary sits somewhere under the download dir rather than at its top.
+          emu=$(find "$RUNNER_TEMP/qemu" -type f -name 'qemu-system-${{ matrix.arch }}' | head -1)
+          test -n "$emu" || { echo "no emulator under $RUNNER_TEMP/qemu"; find "$RUNNER_TEMP/qemu"; exit 1; }
+          chmod +x "$emu"
+          python demos/linux/verify.py \
+            --kernel-dir "$KERNEL_TREE" --arch ${{ matrix.arch }} \
+            --linker badc \
+            --qemu "$emu" \
+            --qemu-args "$ROMS -nic none" \
+            --initramfs "$RUNNER_TEMP/initramfs.cpio.gz" \
+            --expect-units ${{ matrix.floor }} --boot-timeout 90 \
+            --workdir "$RUNNER_TEMP/verify" \
+            --report "$RUNNER_TEMP/verify/verify-${{ matrix.arch }}.json"
+      - name: publish the gate result and boot logs
+        # Both manifests go up: the per-unit one is the compiling claim's
+        # evidence, the per-link one the linking claim's.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-verify-${{ matrix.label }}
+          path: |
+            ${{ runner.temp }}/verify/verify-*.json
+            ${{ runner.temp }}/verify/boot-*.log
+            ${{ runner.temp }}/verify/probe-*.log
+            ${{ runner.temp }}/verify/manifest-*.txt
+            ${{ runner.temp }}/verify/ld-manifest-*.txt
           if-no-files-found: ignore

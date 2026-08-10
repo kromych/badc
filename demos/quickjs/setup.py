@@ -2,8 +2,8 @@
 """Fetch the QuickJS source from the badc vendor-deps mirror.
 
 After this runs, ``demos/quickjs/{quickjs.c, quickjs-libc.c, cutils.c,
-libregexp.c, libunicode.c, dtoa.c, qjs.c, ...}`` and ``demos/quickjs/tests/*.js``
-exist and are ready for badc to compile + run.
+libregexp.c, libunicode.c, dtoa.c, qjs.c, qjsc.c, repl.js, ...}`` and
+``demos/quickjs/tests/*.js`` exist and are ready for badc to compile + run.
 
 Pulls from the `kromych/badc` GitHub release mirror rather than
 github.com/bellard/quickjs directly: the release asset is a pinned copy of
@@ -28,12 +28,15 @@ sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
 VERSION = "20260604"  # bellard/quickjs release dated 2026-06-04
+UPSTREAM_VERSION = "2026-06-04"  # contents of the archive's VERSION file
 UPSTREAM_SHA = "3d5e064e9dd67c70f7962836505a7fa067bf0a4e"  # github bellard/quickjs commit
 ASSET = f"quickjs-{VERSION}-{UPSTREAM_SHA[:8]}.tar.gz"
 RELEASE_TAG = "vendor-deps-v1"
 SHA256 = "afccd11533e21a4e49af43e6909fc7236ed0b92f25e01e1061ceb0b47e15e05d"
 
-# Source files badc compiles, plus the headers they include.
+# Source files badc compiles, plus the headers they include. `qjsc.c` is the
+# bytecode compiler; `repl.js` is the script it turns into the REPL blob the
+# `qjs` CLI evaluates in interactive mode.
 SOURCES = (
     "quickjs.c",
     "quickjs.h",
@@ -50,9 +53,11 @@ SOURCES = (
     "dtoa.c",
     "dtoa.h",
     "qjs.c",
+    "qjsc.c",
     "list.h",
     "quickjs-atom.h",
     "quickjs-opcode.h",
+    "repl.js",
 )
 # The pure-JS test suite the smoke runs, plus the assert helper and the
 # module test_worker / test_cyclic_import import.
@@ -69,6 +74,7 @@ TESTS = (
     "test_std.js",
     "test_worker.js",
     "test_worker_module.js",
+    "microbench.js",
 )
 # Native extension modules and their test scripts, exercised by a runtime
 # dlopen of a badc-built shared object (POSIX only; the smoke skips them on

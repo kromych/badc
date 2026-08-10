@@ -9,15 +9,82 @@ use crate::c5::ir::FunctionSsa;
 use crate::c5::program::Program;
 use alloc::vec::Vec;
 
+/// Names that bind STB_WEAK as function definitions: `__attribute__((weak))`
+/// carriers and file-scope asm `.weak` names. Mirrors the set the object
+/// writers use to pick the symbol binding.
+fn weak_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> {
+    use crate::c5::token::Token;
+    program
+        .symbols
+        .iter()
+        .filter(|s| s.is_weak && s.class == Token::Fun as i64 && !s.name.is_empty())
+        .map(|s| s.link_name())
+        .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
+        .collect()
+}
+
+/// Explicit `__attribute__((section))` placement per defined function.
+fn function_sections(
+    program: &Program,
+) -> alloc::collections::BTreeMap<&str, &alloc::string::String> {
+    use crate::c5::token::Token;
+    program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && s.defined_here)
+        .filter_map(|s| Some((s.link_name(), s.section_name.as_ref()?)))
+        .collect()
+}
+
+/// Assembler name per function identifier the unit renames with a GNU
+/// asm label. Only renamed entries appear; every other function emits
+/// under its identifier.
+fn renamed_functions(
+    program: &Program,
+) -> alloc::collections::BTreeMap<&str, &alloc::string::String> {
+    use crate::c5::token::Token;
+    program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
+        .filter_map(|s| Some((s.name.as_str(), s.asm_name.as_ref()?)))
+        .collect()
+}
+
+/// Names of function definitions with internal linkage (C99 6.2.2).
+fn internal_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> {
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    program
+        .symbols
+        .iter()
+        .filter(|s| {
+            s.linkage == Linkage::Internal
+                && s.class == Token::Fun as i64
+                && s.defined_here
+                && !s.name.is_empty()
+        })
+        .map(|s| s.link_name())
+        .collect()
+}
+
 /// Walks every entry in `program.finished_functions` through
 /// [`crate::c5::ast::walk::walk_function`] and returns one
 /// `FunctionSsa` per source function in `ent_pc` order. Sys
 /// trampolines and the synthetic CRT entry don't go through
 /// the AST walker; the caller layers them on from
 /// `program.synthetic_ssa_funcs` after this returns.
-pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<FunctionSsa>, C5Error> {
+pub(crate) fn walk_program(
+    program: &Program,
+    target: Target,
+    optimize: bool,
+) -> Result<Vec<FunctionSsa>, C5Error> {
     // Walker entries from AST snapshots, keyed by ent_pc.
     let mut walker_pcs: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
+    let weak_names = weak_function_names(program);
+    let internal_names = internal_function_names(program);
+    let sections = function_sections(program);
+    let renamed = renamed_functions(program);
     let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
     let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
@@ -25,21 +92,11 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
         let f = &program.finished_functions[i];
         walker_pcs.insert(f.ent_pc);
         let mut func = crate::c5::ast::walk::walk_function(
-            &f.ast,
+            f,
             &program.symbols,
             &program.structs,
             target,
-            f.ent_pc,
-            f.end_pc,
-            f.n_params,
-            f.is_variadic,
-            f.n_locals,
-            &f.param_tys,
-            &f.param_local_slots,
-            f.returns_struct,
-            f.return_struct_size,
-            f.return_ty,
-            f.alloca_top_slot,
+            optimize,
         )
         .map_err(|e| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
@@ -49,10 +106,19 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
                 e,
             )))
         })?;
-        func.name = f.name.clone();
+        // `FunctionSsa::name` is the assembler name from here down: it feeds
+        // `Build::func_names`, every writer's symbol table, and the bare-name
+        // lookup an inline-asm `call`/`bl` resolves against. The identifier
+        // stays available through `Program::symbols` for DWARF.
+        func.name = renamed
+            .get(f.name.as_str())
+            .map_or_else(|| f.name.clone(), |n| (*n).clone());
         func.is_inline = f.is_inline;
         func.is_always_inline = f.is_always_inline;
         func.is_naked = f.is_naked;
+        func.is_weak = weak_names.contains(func.name.as_str());
+        func.is_internal = internal_names.contains(func.name.as_str());
+        func.section = sections.get(func.name.as_str()).map(|s| (*s).clone());
         // Seed declared multi-cell extents alongside the synthetic ones the
         // walker recorded. Slot coalescing reserves every interior cell.
         func.multi_cell_slots.extend_from_slice(&f.multi_cell_slots);
@@ -88,97 +154,55 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     }
     out.sort_by_key(|f| f.ent_pc);
     // Correctness cleanup at every optimization level, before the
-    // static DCE below reads the call graph: fold constant-condition
+    // caller's static DCE reads the call graph: fold constant-condition
     // branches the walker could not drop (constant loop conditions)
     // and delete the unreachable blocks they orphan -- including the
     // tails sealed off behind `noreturn` calls -- so a dead arm's
-    // calls neither pin a static function here nor lower into calls
+    // calls neither pin a static function nor lower into calls
     // and relocations against symbols the program never references.
     // The fixed point also resolves a merge phi that a pruned branch
     // collapses to one incoming. The -O pipeline reruns this post-inline.
     crate::c5::codegen::passes::simplify_branches::run(&mut out);
-    drop_unreachable_statics(&mut out, program);
     Ok(out)
 }
 
-/// Drop every `FunctionSsa` whose ent_pc is unreachable from the
-/// program's static-DCE roots. Roots are the entry point (`main`),
-/// every externally-linked function (`Linkage::External` /
-/// `Linkage::None`), and every name starting with `_` (the gcc /
-/// clang -Wunused-function convention -- treated as deliberately
-/// retained, matching what `warn_unused_static_functions`
-/// exempts). Anything transitively reachable from a root via
-/// `Inst::Call` or `Inst::ImmCode` survives. `Inst::CallIndirect`
-/// is handled conservatively: any function whose address appears
-/// in `Inst::ImmCode` is already marked reachable, so an indirect
-/// dispatch cannot reach a function the marker hasn't seen.
-pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
-    use crate::c5::ir::Inst;
-    use crate::c5::symbol::Linkage;
-    use crate::c5::token::Token;
+/// Bodies handed to a lowering in place of the AST walk, plus the frame
+/// slots the passes that produced them promoted out (the debug-info
+/// emitter drops those stale locations).
+#[derive(Debug, Default)]
+pub(crate) struct PrebuiltSsa {
+    pub funcs: Vec<FunctionSsa>,
+    pub promoted_local_slots: alloc::collections::BTreeMap<usize, Vec<i64>>,
+}
 
-    let mut linkage_by_name: alloc::collections::BTreeMap<&str, Linkage> =
-        alloc::collections::BTreeMap::new();
-    for sym in &program.symbols {
-        if sym.class == Token::Fun as i64 && !sym.name.is_empty() {
-            linkage_by_name.insert(sym.name.as_str(), sym.linkage);
-        }
-    }
+/// Data objects the post-inline bodies no longer reach, reported by
+/// [`drop_unreachable_statics`]: `.data` was compacted from the
+/// pre-inline call graph, so an object whose last reference the inliner
+/// removed is still in the image along with its relocations. The caller
+/// feeds this to [`recompact_after_inlining`] and lowers `ssa` against
+/// the result. It must lower `ssa` rather than re-walk: the ASTs describe
+/// the pre-inline program, which still materialises the address of the
+/// object the recompaction drops.
+#[derive(Debug)]
+pub(crate) struct OrphanedData {
+    pub sets: LiveSets,
+    pub ssa: PrebuiltSsa,
+}
 
-    let mut by_pc: alloc::collections::BTreeMap<usize, usize> = alloc::collections::BTreeMap::new();
-    for (i, f) in funcs.iter().enumerate() {
-        by_pc.insert(f.ent_pc, i);
-    }
-
-    let mut reachable: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
-    let mut queue: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
-
-    for f in funcs.iter() {
-        let is_root = f.name == "main"
-            || f.name.starts_with('_')
-            || matches!(
-                linkage_by_name.get(f.name.as_str()).copied(),
-                Some(Linkage::External) | Some(Linkage::None)
-            );
-        if is_root {
-            queue.push(f.ent_pc);
-        }
-    }
-    // Static initialisers of the form `int (*fp)(int) = some_fn;`
-    // park the target's ent_pc in `program.code_relocs` (the slot
-    // is patched at link / load time). Treat each entry as a root
-    // so the function whose address sits in the data segment
-    // survives DCE even when it has no in-text call site.
-    for r in &program.code_relocs {
-        queue.push(r.target_ent_pc as usize);
-    }
-    // Every export name binds a function. Treat as a root so
-    // `#pragma export(<name>)` keeps the body around when the
-    // user's source has no in-image call site.
-    for e in &program.exports {
-        queue.push(e.ent_pc);
-    }
-    // Constructors / destructors are referenced only through
-    // `.init_array` / `.fini_array`; keep them as roots even when
-    // `static` and never called in-image.
-    for f in &program.init_funcs {
-        queue.push(f.ent_pc);
-    }
-
-    while let Some(pc) = queue.pop() {
-        if !reachable.insert(pc) {
-            continue;
-        }
-        let Some(&idx) = by_pc.get(&pc) else { continue };
-        for_each_block_inst(&funcs[idx], |inst| match inst {
-            Inst::Call { target_pc, .. } => queue.push(*target_pc),
-            Inst::ImmCode(target_pc) => queue.push(*target_pc),
-            _ => {}
-        });
-    }
-
+/// Drop every `FunctionSsa` unreachable per [`compute_live_sets`].
+/// Runs after the function set was mutated (the -O pipeline's inliner
+/// and branch folds). The prune assumes every data object live: the
+/// `.data` image the caller lowers against is already fixed by
+/// compaction and its relocations must keep their targets. The second,
+/// joint pass reports the objects that assumption keeps alive, `None`
+/// when the compacted image is still exactly the reachable set.
+pub(crate) fn drop_unreachable_statics(
+    funcs: &mut Vec<FunctionSsa>,
+    program: &Program,
+) -> Option<OrphanedData> {
+    let live = compute_live_sets(funcs, program, true).func_pcs;
     funcs.retain(|f| {
-        let keep = reachable.contains(&f.ent_pc);
+        let keep = live.contains(&f.ent_pc);
         #[cfg(feature = "codegen_test")]
         if !keep && std::env::var("BADC_DEBUG_STATIC_DCE").is_ok() {
             std::eprintln!(
@@ -189,6 +213,25 @@ pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &P
         }
         keep
     });
+    let sets = compute_live_sets(funcs, program, false);
+    if sets.data_live.iter().all(|&l| l) {
+        return None;
+    }
+    // `funcs` is left alone: this build's `.data` still holds the orphaned
+    // objects, so their relocation targets must stay lowered. The reported
+    // copy carries only the bodies the recompacted lowering emits.
+    let kept: Vec<FunctionSsa> = funcs
+        .iter()
+        .filter(|f| sets.func_pcs.contains(&f.ent_pc))
+        .cloned()
+        .collect();
+    Some(OrphanedData {
+        sets,
+        ssa: PrebuiltSsa {
+            funcs: kept,
+            promoted_local_slots: alloc::collections::BTreeMap::new(),
+        },
+    })
 }
 
 /// SSA-source pick for the codegen backends and the Vm. Two
@@ -210,18 +253,19 @@ pub(crate) fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &P
 pub(crate) fn produce_ssa_funcs(
     program: &Program,
     target: Target,
+    optimize: bool,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
     if !program.finished_functions.is_empty() {
-        let mut funcs = walk_program(program, target)?;
+        let mut funcs = walk_program(program, target, optimize)?;
         // C99 6.2.2: a function with internal linkage that no reachable
         // code or data references is unobservable; drop it before codegen
         // so the unused `static inline` helpers headers pull into every
         // unit do not reach the image.
-        let live = compute_live_functions(&funcs, program);
+        let live = compute_live_sets(&funcs, program, false).func_pcs;
         funcs.retain(|f| live.contains(&f.ent_pc));
         #[cfg(feature = "std")]
         measure_dead_data(&funcs, program);
-        return Ok(funcs);
+        return Ok(order_by_section(funcs, program));
     }
     if !program.user_ssa_funcs.is_empty() || !program.synthetic_ssa_funcs.is_empty() {
         let mut covered: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
@@ -238,112 +282,60 @@ pub(crate) fn produce_ssa_funcs(
             }
         }
         out.sort_by_key(|f| f.ent_pc);
-        return Ok(out);
+        return Ok(order_by_section(out, program));
     }
     Ok(Vec::new())
 }
 
-/// Reachable user functions: the set of `ent_pc`s the program can reach.
-/// Roots are externally-visible functions (C99 6.2.2 external linkage --
-/// callable from another unit) and functions whose address is stored in
-/// the data segment (dispatch tables, via `code_relocs`). From the roots,
-/// a function's direct calls (`Inst::Call`) and address-of references
-/// (`Inst::ImmCode`) keep their targets reachable. A function absent from
-/// the result has internal linkage and no reference path, so it can be
-/// dropped before codegen.
-pub(crate) fn compute_live_functions(
-    funcs: &[FunctionSsa],
-    program: &Program,
-) -> alloc::collections::BTreeSet<usize> {
-    use crate::c5::ir::Inst;
-    use crate::c5::symbol::Linkage;
+/// Stable-partition the emission order so functions placed in a named
+/// section (`__attribute__((section("name")))`) come last, grouped by
+/// section name. The relocatable writer carves each group off the tail
+/// of `.text` into its section; grouping keeps intra-section direct
+/// branches at a fixed relative distance, so only cross-section
+/// references need relocations.
+fn order_by_section(mut funcs: Vec<FunctionSsa>, program: &Program) -> Vec<FunctionSsa> {
     use crate::c5::token::Token;
-    use alloc::collections::{BTreeMap, BTreeSet};
-
-    let by_ent: BTreeMap<usize, &FunctionSsa> = funcs.iter().map(|f| (f.ent_pc, f)).collect();
-    let mut live: BTreeSet<usize> = BTreeSet::new();
-    let mut work: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
-
-    for s in &program.symbols {
-        if s.class == Token::Fun as i64
-            && matches!(s.linkage, Linkage::External)
-            && by_ent.contains_key(&(s.val as usize))
-            && live.insert(s.val as usize)
-        {
-            work.push(s.val as usize);
-        }
+    let section_of: alloc::collections::BTreeMap<&str, &str> = program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && s.defined_here && s.section_name.is_some())
+        .map(|s| (s.link_name(), s.section_name.as_deref().unwrap_or("")))
+        .collect();
+    if section_of.is_empty() {
+        return funcs;
     }
-    for r in &program.code_relocs {
-        let ent = r.target_ent_pc as usize;
-        if by_ent.contains_key(&ent) && live.insert(ent) {
-            work.push(ent);
-        }
-    }
-    // A `__attribute__((constructor))` / `((destructor))` function is
-    // referenced only through `.init_array` / `.fini_array` (or the
-    // startup runtime), never by an in-image call, yet must survive DCE
-    // -- these are frequently `static` (the `type_init`-style idiom).
-    for f in &program.init_funcs {
-        if by_ent.contains_key(&f.ent_pc) && live.insert(f.ent_pc) {
-            work.push(f.ent_pc);
-        }
-    }
-    while let Some(ent) = work.pop() {
-        let Some(f) = by_ent.get(&ent) else { continue };
-        for_each_block_inst(f, |inst| {
-            let target = match inst {
-                Inst::Call { target_pc, .. } => Some(*target_pc),
-                Inst::ImmCode(t) => Some(*t),
-                _ => None,
-            };
-            if let Some(t) = target
-                && by_ent.contains_key(&t)
-                && live.insert(t)
-            {
-                work.push(t);
-            }
-        });
-    }
-    live
+    // `None` (default `.text`) sorts before every named group.
+    funcs.sort_by(|a, b| {
+        section_of
+            .get(a.name.as_str())
+            .cmp(&section_of.get(b.name.as_str()))
+    });
+    funcs
 }
 
-/// Visit the instructions belonging to a function's blocks. The
-/// unreachable-block prune drops a dead block from `blocks` but leaves
-/// its instructions in the flat `insts` array, so a liveness scan over
-/// `insts` would resurrect call targets only dead code names; the block
-/// ranges are the live view.
-fn for_each_block_inst(f: &FunctionSsa, mut visit: impl FnMut(&crate::c5::ir::Inst)) {
-    for blk in &f.blocks {
-        for v in blk.inst_range.clone() {
-            visit(&f.insts[v as usize]);
-        }
-    }
+/// Result of [`compute_live_sets`]: live function ent_pcs, the sorted
+/// data-object start offsets, and the per-object live flag (interval i
+/// spans `[starts[i], starts[i+1])`, the last running to the data end).
+#[derive(Debug)]
+pub(crate) struct LiveSets {
+    pub func_pcs: alloc::collections::BTreeSet<usize>,
+    pub starts: Vec<i64>,
+    pub data_live: Vec<bool>,
 }
 
-/// Sorted data-object start offsets and a per-object live flag, shared by
-/// the data-DCE measurement and the compaction prune so the two cannot
-/// disagree on what is reachable. Objects are the `[starts[i],
-/// starts[i+1])` intervals (the last running to `data_len`) of the sorted
-/// union of `Program::data_object_starts` (anonymous literals) and the
-/// named-global offsets (`symbols[..].val`).
-///
-/// `Inst::ImmData` in a surviving function is the only code->data edge
-/// (string literals, global addresses, and aggregate-initializer
-/// templates all lower through it); `data_relocs` are the data->data
-/// edges. Roots are those edges plus externally-linked globals,
-/// relocation slots, and the leading NULL guard (object 0). Marking is
-/// conservative: a referenced object is never reported dead.
-fn live_data_intervals(
-    funcs: &[FunctionSsa],
-    program: &Program,
-    data_len: i64,
-) -> (Vec<i64>, Vec<bool>) {
-    use crate::c5::ir::Inst;
-    use crate::c5::symbol::Linkage;
-    use crate::c5::token::Token;
-    use alloc::collections::BTreeSet;
+#[derive(Clone, Copy)]
+enum Node {
+    Func(usize),
+    Data(usize),
+}
 
-    let mut start_set: BTreeSet<i64> = BTreeSet::new();
+/// Sorted `.data` object boundaries: offset 0, every recorded object
+/// start, and every named-global offset. The single boundary model for
+/// both the liveness walk and the compaction that applies its result.
+fn data_object_starts(program: &Program) -> Vec<i64> {
+    use crate::c5::token::Token;
+    let data_len = program.data.len() as i64;
+    let mut start_set: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
     start_set.insert(0);
     for &s in &program.data_object_starts {
         if (0..data_len).contains(&s) {
@@ -354,7 +346,7 @@ fn live_data_intervals(
         // A `_Thread_local` symbol's `val` is an offset into the separate
         // TLS image, not `.data`; conflating it here would plant a spurious
         // `.data` object boundary at a coinciding low offset and split a
-        // real object. The symbol remap below skips them for the same reason.
+        // real object.
         if sym.class == Token::Glo as i64
             && sym.defined_here
             && !sym.is_thread_local
@@ -363,7 +355,36 @@ fn live_data_intervals(
             start_set.insert(sym.val);
         }
     }
-    let starts: Vec<i64> = start_set.into_iter().collect();
+    start_set.into_iter().collect()
+}
+
+/// Joint function + data reachability for one translation unit (C99
+/// 6.2.2: an unreferenced internal-linkage definition is unobservable
+/// and dropped from the object, as gcc -O does). Nodes are functions
+/// (by ent_pc) and data objects (intervals over the sorted union of
+/// `data_object_starts` and the named-global offsets; an unrecorded
+/// start glues an object to its predecessor, kept conservatively).
+/// Roots: external-linkage / `used` / alias / named-section
+/// definitions, constructors / destructors, exports, the entry, names
+/// spelled in file-scope asm, and the NULL guard. Edges: a live
+/// function keeps its callees, address-taken functions, addressed
+/// data, and symbols named in its asm templates; a live data object
+/// keeps its relocation targets. A relocation in a dead object keeps
+/// nothing -- neither its target nor an extern undefined reference
+/// reaches the emitted object. `assume_data_live` pre-marks all data
+/// live for callers running after the `.data` image is final.
+pub(crate) fn compute_live_sets(
+    funcs: &[FunctionSsa],
+    program: &Program,
+    assume_data_live: bool,
+) -> LiveSets {
+    use crate::c5::ir::Inst;
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    use alloc::collections::{BTreeMap, BTreeSet};
+
+    let data_len = program.data.len() as i64;
+    let starts = data_object_starts(program);
     let n = starts.len();
     let interval_of = |off: i64| -> usize {
         match starts.binary_search(&off) {
@@ -372,71 +393,258 @@ fn live_data_intervals(
         }
     };
 
-    let mut live = alloc::vec![false; n];
-    // The 8-byte NULL guard at offset 0 must stay at offset 0 so a data
-    // pointer is never confused with NULL.
-    if n > 0 {
-        live[0] = true;
-    }
-    for f in funcs {
-        for inst in &f.insts {
-            if let Inst::ImmData(off) = inst
-                && (0..data_len).contains(off)
-            {
-                live[interval_of(*off)] = true;
-            }
-        }
-    }
+    let by_ent: BTreeMap<usize, &FunctionSsa> = funcs.iter().map(|f| (f.ent_pc, f)).collect();
+
+    // Internal names an asm template can reference by spelling.
+    let mut named: BTreeMap<&str, Node> = BTreeMap::new();
     for sym in &program.symbols {
         if sym.class == Token::Glo as i64
             && sym.defined_here
             && !sym.is_thread_local
-            && matches!(sym.linkage, Linkage::External)
+            && !sym.name.is_empty()
             && (0..data_len).contains(&sym.val)
         {
-            live[interval_of(sym.val)] = true;
+            named.insert(sym.link_name(), Node::Data(interval_of(sym.val)));
         }
     }
-    for off in program
-        .code_relocs
-        .iter()
-        .map(|r| r.data_offset as i64)
-        .chain(
-            program
-                .extern_data_relocs
-                .iter()
-                .map(|r| r.data_offset as i64),
-        )
-    {
-        if (0..data_len).contains(&off) {
-            live[interval_of(off)] = true;
+    for f in funcs {
+        if !f.name.is_empty() {
+            named.insert(f.name.as_str(), Node::Func(f.ent_pc));
         }
     }
-    // The target interval is resolved via the anchor: a one-past-the-end
-    // target coincides with the next object's start and would mark the
-    // wrong object live.
-    let edges: Vec<(usize, usize)> = program
-        .data_relocs
-        .iter()
-        .filter(|r| (r.data_offset as i64) < data_len && (r.target_anchor as i64) < data_len)
-        .map(|r| {
-            (
-                interval_of(r.data_offset as i64),
-                interval_of(r.target_anchor as i64),
-            )
-        })
-        .collect();
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for &(src, dst) in &edges {
-            if live[src] && !live[dst] {
-                live[dst] = true;
-                changed = true;
+
+    // Relocation edges, keyed by the interval holding the slot.
+    let mut code_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
+    let mut data_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
+    if n > 0 {
+        for r in &program.code_relocs {
+            let off = r.data_offset as i64;
+            if (0..data_len).contains(&off) {
+                code_edges[interval_of(off)].push(r.target_ent_pc as usize);
+            }
+        }
+        // A `&&label` slot names a code location inside its function, so
+        // it holds that function live exactly as a function pointer does.
+        for (off, ent_pc) in program.label_data_slots() {
+            let off = off as i64;
+            if (0..data_len).contains(&off) {
+                code_edges[interval_of(off)].push(ent_pc);
+            }
+        }
+        // The target interval resolves via the anchor: a one-past-the-end
+        // target coincides with the next object's start and would mark
+        // the wrong object.
+        for r in &program.data_relocs {
+            let (off, anchor) = (r.data_offset as i64, r.target_anchor as i64);
+            if (0..data_len).contains(&off) && (0..data_len).contains(&anchor) {
+                data_edges[interval_of(off)].push(interval_of(anchor));
             }
         }
     }
-    (starts, live)
+
+    let mut func_pcs: BTreeSet<usize> = BTreeSet::new();
+    let mut data_live = alloc::vec![false; n];
+    let mut work: alloc::vec::Vec<Node> = alloc::vec::Vec::new();
+    // A block-scope static exists only in an emitted instance of its
+    // function, so its `used` / `section` intent keeps it only while
+    // the owner survives: an edge from the owner, not a root.
+    let mut owner_deps: BTreeMap<usize, alloc::vec::Vec<usize>> = BTreeMap::new();
+
+    for s in &program.symbols {
+        // A named section does not retain a function (gcc parity: the
+        // section-attributed `static inline` helpers headers pull in
+        // are dropped when unreferenced; a kept one is still placed in
+        // its section). `used` and alias do.
+        if s.class == Token::Fun as i64
+            && (matches!(s.linkage, Linkage::External) || s.is_used || s.is_alias)
+            && by_ent.contains_key(&(s.val as usize))
+        {
+            work.push(Node::Func(s.val as usize));
+        }
+        if s.class == Token::Glo as i64
+            && s.defined_here
+            && !s.is_thread_local
+            && (0..data_len).contains(&s.val)
+            && (matches!(s.linkage, Linkage::External) || s.is_used || s.section_name.is_some())
+        {
+            match s.owner_ent_pc {
+                Some(pc) => owner_deps
+                    .entry(pc as usize)
+                    .or_default()
+                    .push(interval_of(s.val)),
+                None => work.push(Node::Data(interval_of(s.val))),
+            }
+        }
+    }
+    // Constructors / destructors are referenced through `.init_array` /
+    // `.fini_array`, exports through the export table, the entry through
+    // the image header -- none has an in-image reference.
+    for f in &program.init_funcs {
+        work.push(Node::Func(f.ent_pc));
+    }
+    for e in &program.exports {
+        work.push(Node::Func(e.ent_pc));
+    }
+    if program.entry_name.is_some() {
+        work.push(Node::Func(program.entry_pc));
+    }
+    // The 8-byte NULL guard stays at offset 0 so a data pointer is never
+    // confused with NULL.
+    if n > 0 {
+        work.push(Node::Data(0));
+    }
+    for t in &program.file_asm {
+        push_asm_names(t.as_bytes(), &named, &mut work);
+    }
+    if assume_data_live {
+        for i in 0..n {
+            work.push(Node::Data(i));
+        }
+    }
+
+    while let Some(node) = work.pop() {
+        match node {
+            Node::Func(pc) => {
+                if !func_pcs.insert(pc) {
+                    continue;
+                }
+                if let Some(deps) = owner_deps.get(&pc) {
+                    for &d in deps {
+                        work.push(Node::Data(d));
+                    }
+                }
+                let Some(f) = by_ent.get(&pc) else { continue };
+                // Address edges come from exactly the materializations
+                // the emitters lower: the use counts driving the
+                // per-arch dead-code skip. An address whose last reader
+                // was folded or pruned away emits nothing, so following
+                // it would keep the object it names -- and everything
+                // that object references -- in the image; one a pure
+                // cycle still holds is emitted, so it must keep its
+                // referent.
+                let counts = super::reg_alloc::compute_use_counts(f);
+                for blk in &f.blocks {
+                    for i in blk.inst_range.clone() {
+                        match &f.insts[i as usize] {
+                            Inst::Call { target_pc, .. } => work.push(Node::Func(*target_pc)),
+                            Inst::ImmCode(t) if counts[i as usize] > 0 => {
+                                work.push(Node::Func(*t));
+                            }
+                            Inst::ImmData(off)
+                                if counts[i as usize] > 0 && (0..data_len).contains(off) =>
+                            {
+                                work.push(Node::Data(interval_of(*off)));
+                            }
+                            Inst::InlineAsm { asm, .. } => {
+                                push_asm_names(&asm.template, &named, &mut work);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            Node::Data(i) => {
+                if data_live[i] {
+                    continue;
+                }
+                data_live[i] = true;
+                for &t in &code_edges[i] {
+                    work.push(Node::Func(t));
+                }
+                for &d in &data_edges[i] {
+                    work.push(Node::Data(d));
+                }
+            }
+        }
+    }
+    LiveSets {
+        func_pcs,
+        starts,
+        data_live,
+    }
+}
+
+/// Push the nodes of internal symbols whose names appear as identifier
+/// tokens in an asm template. Conservative in the keep direction: any
+/// token spelled like a defined name counts as a reference.
+fn push_asm_names(
+    text: &[u8],
+    named: &alloc::collections::BTreeMap<&str, Node>,
+    work: &mut alloc::vec::Vec<Node>,
+) {
+    let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'$';
+    let mut i = 0;
+    while i < text.len() {
+        if !is_ident(text[i]) {
+            i += 1;
+            continue;
+        }
+        let s = i;
+        while i < text.len() && is_ident(text[i]) {
+            i += 1;
+        }
+        if text[s].is_ascii_digit() {
+            continue;
+        }
+        if let Ok(tok) = core::str::from_utf8(&text[s..i])
+            && let Some(node) = named.get(tok)
+        {
+            work.push(*node);
+        }
+    }
+}
+
+/// Where each data object landed in the packed image: the sorted object
+/// `starts`, each object's packed base (`new_base[i] < 0` for a dropped
+/// object) and length. Answers the compaction pass's offset surface.
+struct PackedData<'a> {
+    starts: &'a [i64],
+    new_base: &'a [i64],
+    obj_lens: &'a [i64],
+    data_len: i64,
+}
+
+impl PackedData<'_> {
+    fn interval_of(&self, off: i64) -> usize {
+        match self.starts.binary_search(&off) {
+            Ok(i) => i,
+            Err(i) => i.saturating_sub(1),
+        }
+    }
+}
+
+impl crate::c5::layout::DataRemap for PackedData<'_> {
+    fn in_data(&self, off: i64) -> bool {
+        (0..self.data_len).contains(&off)
+    }
+
+    fn remap(&self, off: i64, anchor: i64) -> Option<i64> {
+        if !self.in_data(anchor) {
+            // No object owns the offset; it passes through (the extern
+            // `ImmData(0)` sentinel and out-of-image values both land here).
+            return Some(remap_data_off(
+                off,
+                self.starts,
+                self.new_base,
+                self.data_len,
+            ));
+        }
+        let i = self.interval_of(anchor);
+        (self.new_base[i] >= 0).then(|| self.new_base[i] + (off - self.starts[i]))
+    }
+
+    fn remap_span(&self, lo: i64, hi: i64) -> Option<(i64, i64)> {
+        if !self.in_data(lo) || hi <= lo || hi > self.data_len {
+            return None;
+        }
+        let i = self.interval_of(lo);
+        // A span crossing into the next object would not stay contiguous.
+        if self.new_base[i] < 0 || hi > self.starts[i] + self.obj_lens[i] {
+            return None;
+        }
+        let delta = self.new_base[i] - self.starts[i];
+        Some((lo + delta, hi + delta))
+    }
 }
 
 /// New packed offset for a data byte at `off`, given the sorted object
@@ -459,6 +667,66 @@ fn remap_data_off(off: i64, starts: &[i64], new_base: &[i64], data_len: i64) -> 
     new_base[i] + (off - starts[i])
 }
 
+/// Where each object of the input image landed in the packed one.
+/// `new_base[i]` is the packed offset of the object at input offset
+/// `starts[i]`, `-1` when dropped; `kept` is the same relation sorted by
+/// packed base, for resolving a packed offset back.
+pub(crate) struct DataMap {
+    new_base: Vec<i64>,
+    /// `(packed base, length, input offset)`, ascending by packed base.
+    kept: Vec<(i64, i64, i64)>,
+}
+
+impl DataMap {
+    fn new(starts: &[i64], new_base: Vec<i64>, obj_len: &[i64]) -> DataMap {
+        let mut kept: Vec<(i64, i64, i64)> = (0..starts.len())
+            .filter(|&i| new_base[i] >= 0)
+            .map(|i| (new_base[i], obj_len[i], starts[i]))
+            .collect();
+        kept.sort_unstable();
+        DataMap { new_base, kept }
+    }
+
+    /// Input offset for a byte at packed offset `off`, `None` when no kept
+    /// object covers it. `.bss` objects resolve too: their packed base is
+    /// past the file image but still an offset in it.
+    fn to_input(&self, off: i64) -> Option<i64> {
+        let i = match self.kept.binary_search_by_key(&off, |&(base, _, _)| base) {
+            Ok(i) => i,
+            Err(0) => return None,
+            Err(i) => i - 1,
+        };
+        let (base, len, start) = self.kept[i];
+        (off < base + len).then_some(start + (off - base))
+    }
+
+    /// Packed base of the object at input offset `starts[i]`, `None` when
+    /// it was dropped.
+    fn packed_base(&self, i: usize) -> Option<i64> {
+        (self.new_base[i] >= 0).then_some(self.new_base[i])
+    }
+}
+
+/// The liveness a compaction applied and the offset map it produced, for
+/// a caller that may need to redo it with a sharper live set.
+pub(crate) struct CompactionPlan {
+    pub live: LiveSets,
+    pub map: DataMap,
+    /// Functions the pass kept in `finished_functions`. A redo applies the
+    /// same set: the ASTs are not walked again, but everything else derived
+    /// from them -- the import table above all -- must still see every
+    /// function the first pass did.
+    pub func_pcs: alloc::collections::BTreeSet<usize>,
+}
+
+/// What [`compact_program_data`] produced. `plan` is absent when the
+/// compaction was a no-op and there is nothing to redo.
+pub(crate) struct Compaction {
+    pub program: Program,
+    pub bss_size: i64,
+    pub plan: Option<CompactionPlan>,
+}
+
 /// C99 6.2.2 / 6.7.8: return a copy of `program` whose `.data` holds only
 /// the objects a surviving function or relocation can reach, every offset
 /// surface rewritten to the packed layout. The static function prune has
@@ -471,21 +739,100 @@ pub(crate) fn compact_program_data(
     program: &Program,
     target: Target,
     segregate: bool,
-) -> Result<(Program, i64), C5Error> {
-    use crate::c5::token::Token;
-
+    optimize: bool,
+) -> Result<Compaction, C5Error> {
+    let unchanged = || Compaction {
+        program: program.clone(),
+        bss_size: 0,
+        plan: None,
+    };
     let data_len = program.data.len() as i64;
     if data_len == 0 || program.finished_functions.is_empty() {
-        return Ok((program.clone(), 0));
+        return Ok(unchanged());
     }
     #[cfg(feature = "std")]
     if std::env::var("BADC_NO_DATA_DCE").is_ok() {
-        return Ok((program.clone(), 0));
+        return Ok(unchanged());
     }
-    let funcs = produce_ssa_funcs(program, target)?;
+    let funcs = produce_ssa_funcs(program, target, optimize)?;
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
-    let (starts, live) = live_data_intervals(&funcs, program, data_len);
+    let sets = compute_live_sets(&funcs, program, false);
+    let (out, bss_size, map) = apply_data_liveness(program, &sets, &live_func_pcs, segregate, None);
+    Ok(Compaction {
+        program: out,
+        bss_size,
+        plan: Some(CompactionPlan {
+            live: sets,
+            map,
+            func_pcs: live_func_pcs,
+        }),
+    })
+}
+
+/// Redo a compaction of `program` with the post-inline liveness the first
+/// pass reported. The report names objects of the packed image, so it is
+/// carried back onto `program`'s own objects through `plan`: compacting
+/// the packed image instead would lose its `.bss` region, whose objects
+/// sit past `data` and so outside the interval model. Those objects keep
+/// the liveness the first pass gave them, so this narrows `.data` only.
+pub(crate) fn recompact_after_inlining(
+    program: &Program,
+    plan: &CompactionPlan,
+    orphaned: &mut OrphanedData,
+    segregate: bool,
+) -> (Program, i64) {
+    let mut sets = LiveSets {
+        starts: plan.live.starts.clone(),
+        data_live: plan.live.data_live.clone(),
+        func_pcs: orphaned.sets.func_pcs.clone(),
+    };
+    let packed_starts = &orphaned.sets.starts;
+    for i in 0..sets.starts.len() {
+        let Some(base) = plan.map.packed_base(i) else {
+            continue;
+        };
+        // A base the packed image records no boundary for is a `.bss`
+        // object (its offset is past the file image).
+        if let Ok(j) = packed_starts.binary_search(&base) {
+            sets.data_live[i] = orphaned.sets.data_live[j];
+        }
+    }
+    let (out, bss_size, _) = apply_data_liveness(
+        program,
+        &sets,
+        &plan.func_pcs,
+        segregate,
+        Some((&mut orphaned.ssa.funcs, &plan.map)),
+    );
+    (out, bss_size)
+}
+
+/// Rewrite `program` to hold only the data objects `sets` marks live and
+/// only the functions in `live_func_pcs`, packing `.data` and mapping
+/// every offset surface -- symbol values, relocation slots, relocation
+/// targets and their anchors, AST data references, recorded padding and
+/// alignment marks, object starts -- onto the new layout. Split out of
+/// [`compact_program_data`] so a caller holding a later, sharper live set
+/// (post-inline reachability) applies it through the same code.
+///
+/// `ssa` are bodies the caller lowers instead of re-walking the ASTs,
+/// paired with the map of the image their offsets are in (itself produced
+/// from `program`). Their `Inst::ImmData` offsets -- the only `.data`
+/// offset the IR holds -- are carried back through that map and forward
+/// through this one here, so no consumer is left on a stale layout.
+pub(crate) fn apply_data_liveness(
+    program: &Program,
+    sets: &LiveSets,
+    live_func_pcs: &alloc::collections::BTreeSet<usize>,
+    segregate: bool,
+    ssa: Option<(&mut [FunctionSsa], &DataMap)>,
+) -> (Program, i64, DataMap) {
+    let data_len = program.data.len() as i64;
+    let starts = &sets.starts;
+    let live = &sets.data_live;
+    debug_assert_eq!(*starts, data_object_starts(program));
+    debug_assert_eq!(starts.len(), live.len());
     let n = starts.len();
 
     // Each kept object moves to a new base congruent to its old start
@@ -494,9 +841,10 @@ pub(crate) fn compact_program_data(
     // whose start the parser did not record glues onto its predecessor):
     // the relative layout inside the copied span is preserved, and a
     // congruent base preserves the absolute alignment of every object in
-    // it. badc lays `.data` out at 8-byte alignment; 16 covers any
-    // wider scalar without measurable padding cost.
-    const ALIGN: i64 = 16;
+    // it. `ALIGN` is the section's own alignment, which the writers place
+    // `.data` and `.bss` at, so preserving residues modulo it preserves
+    // each object's absolute alignment up to that of the whole section.
+    let align: i64 = crate::c5::layout::bss_image_align(program.data_align) as i64;
     let obj_end = |i: usize| -> i64 { if i + 1 < n { starts[i + 1] } else { data_len } };
     // A relocation writes a (generally non-zero) value into its slot at
     // link/write time, so the slot's object is initialised data even when
@@ -509,19 +857,42 @@ pub(crate) fn compact_program_data(
             Err(i) => i.saturating_sub(1),
         }
     };
-    let mut has_reloc_slot = alloc::vec![false; n];
-    for off in program
-        .data_relocs
-        .iter()
-        .map(|r| r.data_offset as i64)
-        .chain(program.code_relocs.iter().map(|r| r.data_offset as i64))
-        .chain(
-            program
-                .extern_data_relocs
-                .iter()
-                .map(|r| r.data_offset as i64),
-        )
+    // Storage nothing writes belongs on a read-only page: `const`-qualified
+    // objects (C99 6.7.3p5) and the anonymous immutable spans below. Only
+    // file-backed objects reach the writer's `.rodata` carve, so a wholly-zero
+    // one has to stay out of the zero-fill region and pay its file bytes.
+    let mut is_readonly = alloc::vec![false; n];
     {
+        use crate::c5::token::Token;
+        for sym in &program.symbols {
+            if sym.class == Token::Glo as i64
+                && sym.defined_here
+                && sym.storage_is_const
+                && !sym.is_thread_local
+                // Storage the declaration fills with stores is written
+                // during execution whatever its declared type says.
+                && !sym.runtime_initialized
+                && (0..data_len).contains(&sym.val)
+            {
+                is_readonly[interval_of(sym.val)] = true;
+            }
+        }
+        // The anonymous immutable spans -- string literals, `__func__`
+        // arrays, staged initializer templates. No symbol names them, so
+        // the loop above cannot see them.
+        for &(lo, hi) in &program.const_data_ranges {
+            if hi <= lo || !(0..data_len).contains(&lo) {
+                continue;
+            }
+            let mut i = interval_of(lo);
+            while i < n && starts[i] < hi {
+                is_readonly[i] = true;
+                i += 1;
+            }
+        }
+    }
+    let mut has_reloc_slot = alloc::vec![false; n];
+    for off in program.data_reloc_offsets() {
         if (0..data_len).contains(&off) {
             has_reloc_slot[interval_of(off)] = true;
         }
@@ -537,23 +908,36 @@ pub(crate) fn compact_program_data(
     // the `BADC_NO_BSS_SEGREGATE` opt-out or a target whose writer does
     // not support it), every live object (zero or not) is packed into the
     // file image as before and `bss_size` stays 0. The caller sets it.
+    //
+    // This predicate is the only place the question is decided. The
+    // layout it produces records the answer as a position -- everything
+    // at or past the file image is zero-fill -- and the object writer
+    // reads it back through that watershed rather than re-deriving it.
     let is_bss = |i: usize| -> bool {
         segregate
             && i != 0
             && live[i]
             && !has_reloc_slot[i]
+            && !is_readonly[i]
             && program.data[starts[i] as usize..obj_end(i) as usize]
                 .iter()
                 .all(|&b| b == 0)
     };
 
+    // The packed layout invalidates the parse-recorded padding ranges;
+    // rebuild them from the gaps this pass itself creates.
+    let mut new_pad_ranges: Vec<(i64, i64)> = Vec::new();
     let mut new_base = alloc::vec![-1i64; n];
     let mut new_data: Vec<u8> = Vec::with_capacity(program.data.len());
     for i in 0..n {
         if live[i] && !is_bss(i) {
-            let want = starts[i].rem_euclid(ALIGN);
-            while (new_data.len() as i64).rem_euclid(ALIGN) != want {
+            let want = starts[i].rem_euclid(align);
+            let pad_start = new_data.len() as i64;
+            while (new_data.len() as i64).rem_euclid(align) != want {
                 new_data.push(0);
+            }
+            if (new_data.len() as i64) > pad_start {
+                new_pad_ranges.push((pad_start, new_data.len() as i64));
             }
             new_base[i] = new_data.len() as i64;
             new_data.extend_from_slice(&program.data[starts[i] as usize..obj_end(i) as usize]);
@@ -567,97 +951,116 @@ pub(crate) fn compact_program_data(
     // object's bss-relative offset must carry the same alignment residue
     // as its `.data` offset, which only holds when the base is aligned.
     if (0..n).any(&is_bss) {
-        while (new_data.len() as i64).rem_euclid(ALIGN) != 0 {
+        let pad_start = new_data.len() as i64;
+        while (new_data.len() as i64).rem_euclid(align) != 0 {
             new_data.push(0);
+        }
+        if (new_data.len() as i64) > pad_start {
+            new_pad_ranges.push((pad_start, new_data.len() as i64));
         }
     }
     let bss_base = new_data.len() as i64;
     let mut bss_cursor = bss_base;
     for i in 0..n {
         if is_bss(i) {
-            let want = starts[i].rem_euclid(ALIGN);
-            while bss_cursor.rem_euclid(ALIGN) != want {
+            let want = starts[i].rem_euclid(align);
+            let pad_start = bss_cursor;
+            while bss_cursor.rem_euclid(align) != want {
                 bss_cursor += 1;
+            }
+            if bss_cursor > pad_start {
+                new_pad_ranges.push((pad_start, bss_cursor));
             }
             new_base[i] = bss_cursor;
             bss_cursor += obj_end(i) - starts[i];
         }
     }
     let bss_size = bss_cursor - bss_base;
-    let map = |off: i64| remap_data_off(off, &starts, &new_base, data_len);
+    // The one description of where every object went. Every stored offset
+    // -- symbol values, relocation slots and targets, AST references, IR
+    // immediates, padding spans, alignment marks, object starts -- is
+    // rewritten through it by `Program::remap_data_offsets`, whose
+    // implementations destructure their types exhaustively.
+    let obj_lens: Vec<i64> = (0..n).map(|i| obj_end(i) - starts[i]).collect();
+    let map_to = PackedData {
+        starts,
+        new_base: &new_base,
+        obj_lens: &obj_lens,
+        data_len,
+    };
+    let map = |off: i64| remap_data_off(off, starts, &new_base, data_len);
 
     let mut out = program.clone();
-    out.data = new_data;
+    // A relocation whose slot lies in a dropped object drops with it:
+    // emitting it would plant a reference -- for an extern target, an
+    // undefined symbol -- from an object the unit cannot reach.
+    let slot_live = |off: u64| {
+        let off = off as i64;
+        !(0..data_len).contains(&off) || live[interval_of(off)]
+    };
+    out.data_relocs.retain(|r| slot_live(r.data_offset));
+    out.code_relocs.retain(|r| slot_live(r.data_offset));
+    out.extern_data_relocs.retain(|r| slot_live(r.data_offset));
     out.finished_functions
         .retain(|f| live_func_pcs.contains(&f.ent_pc));
-    for sym in &mut out.symbols {
-        // A `_Thread_local` symbol's `val` is an offset into the separate
-        // TLS image, not `.data`, so it must not pass through the `.data`
-        // remap (mirrors `for_each_data_offset`, which skips them).
-        if sym.class == Token::Glo as i64
-            && sym.defined_here
-            && !sym.is_thread_local
-            && (0..data_len).contains(&sym.val)
-        {
-            sym.val = map(sym.val);
-        }
-    }
-    for r in &mut out.data_relocs {
-        r.data_offset = map(r.data_offset as i64) as u64;
-        // Rebase the target against its own object, resolved via the
-        // anchor: a one-past-the-end target (C99 6.5.6p8) lies on the
-        // next object's start and the raw offset would follow that
-        // object instead.
-        let anchor = r.target_anchor as i64;
-        if (0..data_len).contains(&anchor) {
-            let i = interval_of(anchor);
-            if new_base[i] >= 0 {
-                r.target_offset = (new_base[i] + (r.target_offset as i64 - starts[i])) as u64;
-            } else {
-                r.target_offset = 0;
+    crate::c5::layout::DataOffsets::remap_data_offsets(&mut out, &map_to);
+    out.data = new_data;
+    // The gaps this pass opened join the parse-recorded padding the remap
+    // above carried over.
+    out.data_pad_ranges.extend(new_pad_ranges);
+    out.data_pad_ranges.sort_unstable();
+    out.data_align_marks.sort_unstable();
+    // A dropped object is named only by address materialisations nothing
+    // consumes -- that is why it was dropped. Those become plain constants:
+    // `ImmData` is deduplicated by key, so parking them all on one
+    // placeholder offset would merge distinct dead materialisations into a
+    // single value with live-looking uses.
+    if let Some((funcs, space)) = ssa {
+        for f in funcs {
+            for inst in &mut f.insts {
+                let crate::c5::ir::Inst::ImmData(packed) = *inst else {
+                    continue;
+                };
+                // No covering object means the reference died in the
+                // earlier pass already. Every `ImmData` payload is an object
+                // base (an interior address is a separate `BinopI` add), so
+                // a live one always resolves.
+                let dead = match space.to_input(packed) {
+                    Some(off) => {
+                        if (0..data_len).contains(&off) && new_base[interval_of(off)] < 0 {
+                            true
+                        } else {
+                            *inst = crate::c5::ir::Inst::ImmData(map(off));
+                            false
+                        }
+                    }
+                    None => true,
+                };
+                if dead {
+                    *inst = crate::c5::ir::Inst::Imm(0);
+                }
             }
-            r.target_anchor = map(anchor) as u64;
-        } else {
-            r.target_offset = map(r.target_offset as i64) as u64;
-            r.target_anchor = r.target_offset;
+            // A `&&label` slot rides its object: it follows the new base,
+            // or goes with the object when that did not survive.
+            f.label_data_relocs
+                .retain_mut(|r| match space.to_input(r.data_offset as i64) {
+                    Some(off)
+                        if (0..data_len).contains(&off) && new_base[interval_of(off)] >= 0 =>
+                    {
+                        r.data_offset = map(off) as u64;
+                        true
+                    }
+                    _ => false,
+                });
         }
     }
-    for r in &mut out.code_relocs {
-        r.data_offset = map(r.data_offset as i64) as u64;
-    }
-    for r in &mut out.extern_data_relocs {
-        r.data_offset = map(r.data_offset as i64) as u64;
-    }
-    for f in &mut out.finished_functions {
-        f.ast.remap_data_offsets(&map);
-    }
-    out.data_object_starts.retain(|&s| {
-        (0..data_len).contains(&s) && {
-            let i = match starts.binary_search(&s) {
-                Ok(i) => i,
-                Err(i) => i.saturating_sub(1),
-            };
-            live[i]
-        }
-    });
-    for s in &mut out.data_object_starts {
-        *s = map(*s);
-    }
-    Ok((out, bss_size))
+    (out, bss_size, DataMap::new(starts, new_base, &obj_lens))
 }
 
 /// Read-only measurement of statically-dead data objects (no mutation,
 /// no effect on codegen). Emits one line per translation unit to the
 /// path in `BADC_DATA_DCE_LOG` when that variable is set, validating the
 /// object-boundary model and the achievable `.data` reduction.
-///
-/// Objects are the `[start, next_start)` intervals of the sorted union of
-/// `Program::data_object_starts` (anonymous literals) and the named-global
-/// offsets (`symbols[..].val`). An interval is live if reached from a root
-/// -- an `Inst::ImmData` in a surviving function, an externally-linked
-/// named global, or a relocation slot -- or, transitively, from a live
-/// object holding a data pointer (`data_relocs`). Marking is conservative:
-/// it never reports a referenced object dead.
 #[cfg(feature = "std")]
 fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
     use std::io::Write;
@@ -669,7 +1072,8 @@ fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
     if data_len == 0 {
         return;
     }
-    let (starts, live) = live_data_intervals(funcs, program, data_len);
+    let sets = compute_live_sets(funcs, program, false);
+    let (starts, live) = (sets.starts, sets.data_live);
     let n = starts.len();
 
     let mut dead_bytes: i64 = 0;
@@ -753,10 +1157,15 @@ mod tests {
                    int main(void) { return gp == &g[3] ? 0 : 1; }";
         let program = compile(src, target);
 
-        let (_, bss_off) = compact_program_data(&program, target, false).expect("compact");
+        let bss_off = compact_program_data(&program, target, false, false)
+            .expect("compact")
+            .bss_size;
         assert_eq!(bss_off, 0, "no bss region when segregation is off");
 
-        let (compacted, bss_size) = compact_program_data(&program, target, true).expect("compact");
+        let (compacted, bss_size) = {
+            let c = compact_program_data(&program, target, true, false).expect("compact");
+            (c.program, c.bss_size)
+        };
         assert!(bss_size > 0, "the zero global must occupy the bss region");
         assert_eq!(
             compacted.data.len() % 16,
@@ -792,7 +1201,9 @@ mod tests {
         let program = Compiler::with_target(src.to_string(), target)
             .compile()
             .expect("compile");
-        let (compacted, _) = compact_program_data(&program, target, true).expect("compact");
+        let compacted = compact_program_data(&program, target, true, false)
+            .expect("compact")
+            .program;
 
         // `arr` has external linkage, so its symbol survives with its remapped
         // `.data` offset. It must keep all 24 bytes, disjoint from the literal.

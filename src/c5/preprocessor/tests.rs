@@ -1,10 +1,21 @@
 use super::include::include_parent_dir;
-use super::text::ends_in_open_block_comment;
+use super::text::{
+    ends_in_open_block_comment_once, scan_steps_taken, strip_c_comments, strip_c_comments_ref,
+    unfold_line_continuations, unfold_ref,
+};
 use super::*;
 
 fn process(source: &str) -> String {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.process(source).expect("preprocessor failed")
+}
+
+/// The gcc `-H` trace for what `pp` recorded.
+fn trace_lines(pp: &Preprocessor) -> Vec<String> {
+    pp.include_records
+        .iter()
+        .map(IncludeRecord::trace_line)
+        .collect()
 }
 
 fn process_err(source: &str) -> String {
@@ -89,6 +100,19 @@ fn predefined_macros_expand() {
 }
 
 #[test]
+fn sizeof_int128_is_predefined() {
+    // Headers gate their own 128-bit typedefs on `__SIZEOF_INT128__`
+    // rather than probing for the type, so it is predefined
+    // unconditionally (not behind `--gnu`) and reads 16.
+    let probe = "#ifdef __SIZEOF_INT128__\nyes __SIZEOF_INT128__\n#else\nno\n#endif\n";
+    let out = process(probe);
+    assert!(
+        out.contains("yes 16"),
+        "expected __SIZEOF_INT128__ predefined as 16, got: {out}"
+    );
+}
+
+#[test]
 fn gnu_identity_macros_are_opt_in() {
     // `__GNUC__` and `__STRICT_ANSI__` are undefined by default.
     let probe = "#ifdef __GNUC__\nG yes\n#else\nG no\n#endif\n\
@@ -101,11 +125,54 @@ fn gnu_identity_macros_are_opt_in() {
 
     // `enable_gnu` (the `--gnu` flag) defines both.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    pp.enable_gnu();
+    pp.enable_gnu(false, true);
     let out = pp.process(probe).expect("preprocessor failed");
     assert!(
         out.contains("G yes") && out.contains("S yes"),
         "--gnu: {out}"
+    );
+
+    // `-std=gnu*` keeps `__GNUC__` and drops `__STRICT_ANSI__`, the
+    // combination gcc and clang produce for a GNU dialect. A header that
+    // gates a GNU declaration on the pair -- `<asm/xen/interface_64.h>`
+    // gates the anonymous union naming both `rip` and `eip` on it --
+    // then reaches the same declarations it gives gcc.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.enable_gnu(false, false);
+    let out = pp.process(probe).expect("preprocessor failed");
+    assert!(
+        out.contains("G yes") && out.contains("S no"),
+        "--gnu -std=gnu11: {out}"
+    );
+}
+
+#[test]
+fn gnu_identity_version_derives_from_the_shared_claim() {
+    // The `__GNUC__` triple and `__VERSION__` must state
+    // `GNU_COMPAT_VERSION` -- the same claim `--version` prints --
+    // and `__VERSION__` must name badc as the producer, as clang
+    // names itself in its "<dialect> Compatible <producer>" form.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.enable_gnu(false, true);
+    let out = pp
+        .process("maj __GNUC__\nmin __GNUC_MINOR__\npat __GNUC_PATCHLEVEL__\nver __VERSION__\n")
+        .expect("preprocessor failed");
+    let mut claim = crate::GNU_COMPAT_VERSION.split('.');
+    for label in ["maj", "min", "pat"] {
+        let want = format!("{label} {}", claim.next().expect("x.y.z"));
+        assert!(
+            out.contains(&want),
+            "expected {want:?} (GNU_COMPAT_VERSION component): {out}"
+        );
+    }
+    let want_ver = format!(
+        "ver \"{} Compatible badc {}\"",
+        crate::GNU_COMPAT_VERSION,
+        env!("CARGO_PKG_VERSION")
+    );
+    assert!(
+        out.contains(&want_ver),
+        "__VERSION__ does not identify badc: {out}"
     );
 }
 
@@ -135,6 +202,36 @@ fn vendor_and_stdc_pragmas_are_silent() {
     pp2.process("#pragma frobnicate widgets\nint y;\n")
         .expect("preprocessor failed");
     assert!(!pp2.warnings.is_empty(), "unknown pragma should warn");
+}
+
+#[test]
+fn builtin_expect_is_predefined() {
+    // `__builtin_expect(exp, c)` is available with no header and no
+    // auto-include; the expansion is the first operand.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process("int f(int v) { return __builtin_expect(v > 1, 1); }\n")
+        .expect("preprocessor failed");
+    assert!(
+        out.contains("(v > 1)") && !out.contains("__builtin_expect"),
+        "expected the predefined expansion, got: {out}"
+    );
+}
+
+#[test]
+fn va_builtins_are_preregistered() {
+    // The __builtin_va_* intrinsics are registered with no header, so
+    // freestanding code reaches them directly; <stdarg.h>'s
+    // `#pragma intrinsic` re-registration maps to the same ids.
+    let pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    for name in [
+        "__builtin_va_start",
+        "__builtin_va_arg",
+        "__builtin_va_end",
+        "__builtin_va_copy",
+    ] {
+        assert!(pp.intrinsics.contains_key(name), "{name} not preregistered");
+    }
 }
 
 #[test]
@@ -205,6 +302,61 @@ fn lp64_predefined_for_lp64_targets_only() {
         let out = pp.process(src).expect("preprocessor failed");
         assert!(!out.contains("int lp64;"), "{t:?} must not define __LP64__");
     }
+}
+
+/// `set_elf_class` re-selects the whole data-model group, so an ILP32
+/// unit carries no macro from the LP64 one and back again is exact.
+/// Values are gcc 16.1.1's for `-m32` / `-m64` on `linux-x64`.
+#[test]
+fn elf_class_selects_the_data_model_predefines() {
+    use crate::c5::ElfClass;
+    let probe = concat!(
+        "#ifdef __x86_64__\nx86_64\n#endif\n#ifdef __amd64__\namd64\n#endif\n",
+        "#ifdef __i386__\ni386\n#endif\n#ifdef __i386\ni386_bare\n#endif\n",
+        "#ifdef __LP64__\nlp64\n#endif\n#ifdef __ILP32__\nilp32\n#endif\n",
+        "#ifdef __SIZEOF_INT128__\nint128\n#endif\n",
+        "sizes __SIZEOF_POINTER__ __SIZEOF_LONG__ __SIZEOF_SIZE_T__ __SIZEOF_PTRDIFF_T__\n",
+        "types __SIZE_TYPE__ / __PTRDIFF_TYPE__\n",
+    );
+    let names64 = ["x86_64", "amd64", "lp64", "int128"];
+    let names32 = ["i386", "i386_bare", "ilp32"];
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    pp.set_elf_class(ElfClass::Elf32);
+    let out = pp.process(probe).expect("preprocessor failed");
+    for n in names32 {
+        assert!(out.contains(n), "ELFCLASS32 must define {n}: {out}");
+    }
+    for n in names64 {
+        assert!(!out.contains(n), "ELFCLASS32 must not define {n}: {out}");
+    }
+    assert!(out.contains("sizes 4 4 4 4"), "ILP32 widths: {out}");
+    assert!(
+        out.contains("types unsigned int / int"),
+        "ILP32 size_t / ptrdiff_t: {out}"
+    );
+    // Back to ELFCLASS64: no i386 macro survives the round trip.
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    pp.set_elf_class(ElfClass::Elf32);
+    pp.set_elf_class(ElfClass::Elf64);
+    let out = pp.process(probe).expect("preprocessor failed");
+    for n in names64 {
+        assert!(out.contains(n), "ELFCLASS64 must define {n}: {out}");
+    }
+    for n in names32 {
+        assert!(!out.contains(n), "ELFCLASS64 must not define {n}: {out}");
+    }
+    assert!(out.contains("sizes 8 8 8 8"), "LP64 widths: {out}");
+    assert!(
+        out.contains("types unsigned long / long"),
+        "LP64 size_t / ptrdiff_t: {out}"
+    );
+    // An ELFCLASS32 AArch64 object would be AArch32, which badc neither
+    // encodes nor describes; the target's own model stands.
+    let mut pp = Preprocessor::new(Target::LinuxAarch64.id_str(), Target::LinuxAarch64, "0.1.0");
+    pp.set_elf_class(ElfClass::Elf32);
+    let out = pp.process(probe).expect("preprocessor failed");
+    assert!(out.contains("lp64") && !out.contains("ilp32"), "{out}");
+    assert!(out.contains("sizes 8 8 8 8"), "{out}");
 }
 
 #[test]
@@ -280,11 +432,11 @@ fn macro_body_block_comment_spanning_lines() {
 
 #[test]
 fn block_comment_open_detector() {
-    assert!(ends_in_open_block_comment("foo /* bar"));
-    assert!(!ends_in_open_block_comment("foo /* bar */ baz"));
-    assert!(!ends_in_open_block_comment("foo // /* not open"));
-    assert!(!ends_in_open_block_comment("s = \"/*\""));
-    assert!(ends_in_open_block_comment("c = '/' ; /* open"));
+    assert!(ends_in_open_block_comment_once("foo /* bar"));
+    assert!(!ends_in_open_block_comment_once("foo /* bar */ baz"));
+    assert!(!ends_in_open_block_comment_once("foo // /* not open"));
+    assert!(!ends_in_open_block_comment_once("s = \"/*\""));
+    assert!(ends_in_open_block_comment_once("c = '/' ; /* open"));
 }
 
 #[test]
@@ -521,6 +673,121 @@ fn token_paste_joins_tokens() {
     );
 }
 
+// C99 6.10.3.3p2 applies `##` to both macro forms, so the object-like
+// replacement list pastes exactly as the function-like one does.
+#[test]
+fn token_paste_in_object_like_body() {
+    let out = process("#define CAT a ## b\n#define PRE NV ## 907D\nint CAT; int PRE;\n");
+    assert!(
+        out.contains("int ab; int NV907D;"),
+        "object-like ## should paste:\n{out}"
+    );
+}
+
+#[test]
+fn token_paste_chain_in_object_like_body() {
+    let out = process("#define CHAIN a ## b ## c\nint CHAIN;\n");
+    assert!(
+        out.contains("int abc;"),
+        "several ## in one list paste left to right:\n{out}"
+    );
+}
+
+// The paste result is not rescanned as part of the paste, but the
+// ordinary C99 6.10.3.4 rescan of the replacement list expands it.
+#[test]
+fn object_like_paste_result_is_rescanned() {
+    let out = process("#define FOO 42\n#define MK F ## OO\nint x = MK;\n");
+    assert!(
+        out.contains("int x = 42;"),
+        "a pasted macro name expands on rescan:\n{out}"
+    );
+}
+
+#[test]
+fn object_like_paste_through_function_like_argument() {
+    let src = "#define OBJ x ## y\n#define ID(a) a\n#define STR(a) #a\n#define XSTR(a) STR(a)\n\
+               int p = ID(OBJ); const char *s = XSTR(OBJ); const char *t = STR(OBJ);\n";
+    let out = process(src);
+    assert!(
+        out.contains("int p = xy;") && out.contains("\"xy\"") && out.contains("\"OBJ\""),
+        "object-like paste must survive argument expansion and stringizing:\n{out}"
+    );
+}
+
+// C99 6.10.3.2 gives `#` meaning only in a function-like replacement
+// list; in an object-like one it stays an ordinary punctuator.
+#[test]
+fn hash_is_not_stringize_in_object_like_body() {
+    let out = process("#define TWOHASH a # b\nint v = TWOHASH;\n");
+    assert!(
+        out.contains("int v = a # b;"),
+        "object-like # is literal:\n{out}"
+    );
+}
+
+// C99 6.10.3.3p1 constraint, stated for either form of definition.
+#[test]
+fn paste_at_replacement_list_end_is_an_error() {
+    for src in [
+        "#define LEAD ## b\n",
+        "#define TRAIL a ##\n",
+        "#define FL(a) ## a\n",
+        "#define FT(a) a ##\n",
+    ] {
+        let e = process_err(src);
+        assert!(
+            e.contains("`##` cannot appear at either end"),
+            "{src:?} must be diagnosed, got: {e}"
+        );
+    }
+}
+
+// `##` between the comma and the variadic tail is mid-list, so the
+// constraint above must not fire on it.
+#[test]
+fn paste_before_variadic_tail_is_accepted() {
+    let out = process("#define P(f, ...) pr(f, ## __VA_ARGS__)\nP(\"x\");\nP(\"x\", 1);\n");
+    assert!(
+        out.contains("pr(\"x\");") && out.contains("pr(\"x\", 1);"),
+        "mid-list ## stays legal:\n{out}"
+    );
+}
+
+// The variadic tail after `, ##` is a paste operand, so it substitutes
+// unexpanded (C99 6.10.3.1p1). A macro name in it must survive to the
+// rescan, where a further `##` operand keeps it and a plain position
+// expands it.
+#[test]
+fn comma_paste_tail_substitutes_unexpanded() {
+    let src = "#define FALSE (1 == 0)\n#define P(a, b) a ## _ ## b\n\
+               #define Q(A...) P(x, ##A)\n#define R(A...) f(0, ##A)\n\
+               int v = Q(FALSE); int w = R(FALSE);\n";
+    let out = process(src);
+    assert!(
+        out.contains("int v = x_FALSE;"),
+        "a ## operand must reach the paste unexpanded:\n{out}"
+    );
+    assert!(
+        out.contains("(1 == 0)"),
+        "a plain position still expands on rescan:\n{out}"
+    );
+}
+
+// Each `, ##` use substitutes the tail afresh, so a tail whose
+// expansion is not idempotent yields a separate result per use.
+#[test]
+fn comma_paste_tail_expands_once_per_use() {
+    let src = "#define P(a,b) a##b\n#define Q(a,b) P(a,b)\n#define U(p) Q(Q(id_, p), __COUNTER__)\n\
+               #define TWICE(f, ...) do { g(f, ##__VA_ARGS__); h(f, ##__VA_ARGS__); } while (0)\n\
+               TWICE(\"m\", U(x_));\n";
+    let out = process(src);
+    assert!(
+        out.contains("g(\"m\", id_x_0)") && out.contains("h(\"m\", id_x_1)"),
+        "each use must draw its own __COUNTER__:\n{out}"
+    );
+}
+
 #[test]
 fn variadic_macro_expands_va_args() {
     let out = process("#define CALL(...) f(__VA_ARGS__)\nCALL(1, 2, 3);\n");
@@ -592,6 +859,78 @@ fn if_string_comparison_keeps_slashes_inside_literal() {
     let out = process(src);
     assert!(out.contains("int yes;"), "{out:?}");
     assert!(!out.contains("int no;"), "{out:?}");
+}
+
+/// C99 6.4.4.4 and 6.4.5: a character constant or string literal is
+/// bounded by its line. Phase 3 used to scan an unterminated quote to
+/// the next matching quote or to end of file, so an apostrophe in an
+/// assembly `#` comment left every following comment unstripped and
+/// carried it into macro bodies.
+#[test]
+fn unterminated_quote_stops_at_end_of_line() {
+    let src = "# Don't do it\n\
+               #define XLF_KERNEL_64 (1<<0)\n\
+               # define XLF0 XLF_KERNEL_64\t/* 64-bit kernel */\n\
+               \t.word XLF0\n";
+    let out = process(src);
+    let last = out
+        .lines()
+        .rfind(|l| !l.trim().is_empty())
+        .expect("output has a content line");
+    assert_eq!(last, "\t.word (1<<0)", "{out}");
+    assert!(!out.contains("64-bit kernel"), "comment leaked: {out}");
+}
+
+/// The bound applies to the primitive: text after an unterminated quote
+/// is line-local, so the next line's comment is stripped as usual.
+#[test]
+fn strip_c_comments_bounds_literals_at_the_line() {
+    assert_eq!(strip_c_comments("a 'b\n/* c */ d\n"), "a 'b\n  d\n");
+    assert_eq!(strip_c_comments("a \"b\n// c\nd\n"), "a \"b\n \nd\n");
+    // A `\` at end of line escapes nothing; phase 2 already spliced
+    // every continuation away.
+    assert_eq!(strip_c_comments("'a\\\n/* c */ b\n"), "'a\\\n  b\n");
+}
+
+/// An unterminated quote runs to end of line and its text passes
+/// through verbatim: comments are not opened and macro names are not
+/// expanded behind it. Matches `gcc -E -x assembler-with-cpp`.
+#[test]
+fn unterminated_quote_shields_the_rest_of_its_line() {
+    let out = process("#define ONE (1<<0)\n\t.byte 'a /* c */ ONE\n\t.byte ONE\n");
+    assert!(out.contains("\t.byte 'a /* c */ ONE"), "{out}");
+    assert!(out.contains("\t.byte (1<<0)"), "{out}");
+}
+
+/// Terminated literals keep working in assembly text: a character
+/// constant in a macro body expands as one, and an apostrophe inside a
+/// string is literal content.
+#[test]
+fn char_constants_still_lex_in_assembly_text() {
+    let src = "#define STR 'q'\n\
+               #define ONE 1\n\
+               \t.byte 'a'\n\
+               \t.byte STR\n\
+               \t.ascii \"it's fine\"\n\
+               \t.byte ONE\n";
+    let out = process(src);
+    assert!(out.contains("\t.byte 'a'"), "{out}");
+    assert!(out.contains("\t.byte 'q'"), "{out}");
+    assert!(out.contains("\t.ascii \"it's fine\""), "{out}");
+    assert!(out.contains("\t.byte 1"), "{out}");
+}
+
+/// C sources are unaffected: a literal spliced across a `\`-newline is
+/// still one literal after phase 2, and an unterminated quote still
+/// reaches the lexer, which is what diagnoses it.
+#[test]
+fn c_literals_are_unaffected_by_the_line_bound() {
+    let out = process("#define S \"ab\\\ncd\"\nconst char *s = S;\n");
+    assert!(out.contains("const char *s = \"abcd\";"), "{out}");
+    let out = process("char c = 'a;\nint x = 1; /* note */\n");
+    assert!(out.contains("char c = 'a;"), "{out}");
+    assert!(out.contains("int x = 1;"), "{out}");
+    assert!(!out.contains("note"), "comment leaked: {out}");
 }
 
 #[test]
@@ -1052,16 +1391,16 @@ fn show_includes_records_resolution_trace() {
     // leading dots marking nesting depth. A missing header
     // emits a `! name (missing)` line in the same trace.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    pp.set_show_includes(true);
+    pp.set_track_includes(true);
     let _ = pp
         .process("#include <not-a-real-header.h>\nint main() { return 0; }\n")
         .expect_err("missing include must fail");
+    let trace = trace_lines(&pp);
     assert!(
-        pp.include_trace
+        trace
             .iter()
             .any(|l| l.starts_with("!") && l.contains("not-a-real-header.h")),
-        "trace should mark missing header: {:?}",
-        pp.include_trace
+        "trace should mark missing header: {trace:?}"
     );
 }
 
@@ -1221,6 +1560,60 @@ fn macro_args_split_across_an_enclosing_conditional() {
 }
 
 #[test]
+fn conditional_inside_macro_argument_list() {
+    // C99 6.10.3p11 leaves directives inside an argument list
+    // undefined; gcc and clang evaluate them and keep the surviving
+    // tokens as argument text. Output checked against gcc -E.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#if 1\n2\n#else\n3\n#endif\n); }\n";
+    let out = process(src);
+    assert!(out.contains("f(1,2)") || out.contains("f(1, 2)"), "{out}");
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#if 0\n2\n#else\n3\n#endif\n); }\n";
+    let out = process(src);
+    assert!(out.contains("f(1,3)") || out.contains("f(1, 3)"), "{out}");
+}
+
+#[test]
+fn define_inside_macro_argument_list() {
+    // gcc processes a `#define` between macro arguments; the new name
+    // expands in the argument text. Output checked against gcc -E.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#define TWO 2\nTWO\n); }\n";
+    let out = process(src);
+    assert!(out.contains("f(1,2)") || out.contains("f(1, 2)"), "{out}");
+    // The definition persists past the invocation.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(1,\n#define TWO 2\nTWO\n); }\nint t = TWO;\n";
+    let out = process(src);
+    assert!(out.contains("int t = 2;"), "{out}");
+}
+
+#[test]
+fn nested_conditionals_inside_macro_argument_list() {
+    // Output checked against gcc -E.
+    let src = "#define CALL(x,y) f(x,y)\nint g(void) { return CALL(CALL(1,\n#if 1\n9\n#endif\n),\n#if 1\n#if 0\n5\n#else\n2\n#endif\n#else\n3\n#endif\n); }\n";
+    let out = process(src);
+    assert!(
+        out.contains("f(f(1,9),2)") || out.contains("f(f(1, 9), 2)"),
+        "{out}"
+    );
+}
+
+#[test]
+fn macro_argument_list_closed_inside_conditional_arm() {
+    // The call's `)` sits inside a conditional arm, so argument
+    // collection ends while the `#if` is still open and the `#endif`
+    // arrives after the invocation. The conditional stack is shared
+    // with the top level, matching gcc; a private per-invocation
+    // stack loses the open frame and misreports the trailing
+    // `#endif` as unmatched. Output checked against gcc -E.
+    for (cond, picked) in [("#ifdef ZZZ", "3"), ("#ifndef ZZZ", "2")] {
+        let src = format!(
+            "#define M(a) f(a)\nint g(int c) {{ return M(c ? 1 :\n{cond}\n2);\n#else\n3);\n#endif\n}}\n"
+        );
+        let out = process(&src);
+        assert!(out.contains(&format!("f(c ? 1 : {picked})")), "{out}");
+    }
+}
+
+#[test]
 fn has_include_quoted_form_searches_the_including_dir() {
     // C99 6.10.2p2 via C23 6.10.1: the quoted `__has_include` form
     // probes the including file's directory exactly as the matching
@@ -1268,6 +1661,136 @@ fn has_include_next_resumes_after_the_current_entry() {
     let out = pp.process("#include <foo.h>\n").unwrap();
     std::fs::remove_dir_all(&base).ok();
     assert!(out.contains("NEXT_MISSING"), "{out}");
+}
+
+#[test]
+fn foreign_header_sharing_a_bundled_name_keeps_search_path_order() {
+    // An OS source tree carries its own `linux/cdrom.h` and
+    // `linux/fs.h`, names the embedded registry also has. The tree's
+    // cdrom.h is not part of the compiler's own header set, so its
+    // `#include <linux/fs.h>` must resolve through `-I` to the tree's
+    // fs.h, not be pulled into the embedded set by the closed-set
+    // rule. Classification is by the including file's provenance;
+    // a spelling collision with a bundled name must not reclassify it.
+    let base = std::env::temp_dir().join(format!("badc-ostree-{}", std::process::id()));
+    let lnx = base.join("linux");
+    std::fs::create_dir_all(&lnx).unwrap();
+    std::fs::write(
+        lnx.join("cdrom.h"),
+        "#ifndef _OS_CDROM_H\n#define _OS_CDROM_H\n#include <linux/fs.h>\n\
+         int os_tree_cdrom_marker;\n#endif\n",
+    )
+    .unwrap();
+    std::fs::write(
+        lnx.join("fs.h"),
+        "#ifndef _OS_FS_H\n#define _OS_FS_H\nint os_tree_fs_marker;\n#endif\n",
+    )
+    .unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    let out = pp.process("#include <linux/cdrom.h>\n").unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("os_tree_cdrom_marker"), "{out}");
+    assert!(
+        out.contains("os_tree_fs_marker"),
+        "the tree's cdrom.h must reach the tree's fs.h:\n{out}"
+    );
+    assert!(
+        !out.contains("file_clone_range"),
+        "the embedded linux/fs.h must stay out of a foreign tree's chain:\n{out}"
+    );
+}
+
+#[test]
+fn bundled_header_resolves_bundled_includes_over_search_paths() {
+    // The closed-set rule itself: a header served from the embedded
+    // set resolves the bundled names it includes within the set, even
+    // when a `-I` directory shadows one of them. The embedded
+    // `linux/fs.h` includes `<linux/ioctl.h>`; a poisoned copy on the
+    // search path must not be spliced into it. The direct include of a
+    // name the search path does not carry falls through to the
+    // embedded set as before.
+    let base = std::env::temp_dir().join(format!("badc-poison-{}", std::process::id()));
+    let lnx = base.join("linux");
+    std::fs::create_dir_all(&lnx).unwrap();
+    std::fs::write(lnx.join("ioctl.h"), "#error poisoned ioctl.h\n").unwrap();
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    let out = pp
+        .process("#include <linux/fs.h>\n")
+        .expect("the embedded fs.h must keep its own ioctl.h");
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("file_clone_range"), "{out}");
+}
+
+/// The computed-include macro chain of the tests below: the header
+/// name is assembled from a parameter inside `<dir/n.h>`, so a
+/// digit-leading argument substitutes as the tokens `1x` `.` `h`.
+const COMPUTED_ANGLE: &str = "#define NAME_D 1x\n#define NAME_A ab\n\
+                              #define ANGLE_(n) <ev/n.h>\n#define ANGLE(n) ANGLE_(n)\n";
+
+fn computed_include_dir(tag: &str) -> std::path::PathBuf {
+    let base = std::env::temp_dir().join(format!("badc-{tag}-{}", std::process::id()));
+    let ev = base.join("ev");
+    std::fs::create_dir_all(&ev).unwrap();
+    std::fs::write(ev.join("1x.h"), "int marker_1x;\n").unwrap();
+    std::fs::write(ev.join("ab.h"), "int marker_ab;\n").unwrap();
+    base
+}
+
+#[test]
+fn computed_include_combines_pp_number_spelling() {
+    // C99 6.10.2p4: the expanded operand is reparsed as a header
+    // name built from the token spellings, a space only where the
+    // source had white space. `1x` followed by `.h` must reassemble
+    // as `ev/1x.h` (gcc parity); a re-lex separator would misname
+    // the file.
+    let base = computed_include_dir("cinc");
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    let src = format!("{COMPUTED_ANGLE}#include ANGLE(NAME_A)\n#include ANGLE(NAME_D)\n");
+    let out = pp.process(&src).unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("marker_ab"), "{out}");
+    assert!(out.contains("marker_1x"), "{out}");
+}
+
+#[test]
+fn computed_has_include_combines_pp_number_spelling() {
+    // C23 6.10.1: a pp-token `__has_include` operand expands and
+    // reparses as a header name under the same spelling rule as the
+    // computed `#include`.
+    let base = computed_include_dir("chas");
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    let src = format!(
+        "{COMPUTED_ANGLE}#if __has_include(ANGLE(NAME_D))\nint FOUND;\n#else\nint MISSING;\n#endif\n"
+    );
+    let out = pp.process(&src).unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("FOUND"), "{out}");
+}
+
+#[test]
+fn stringize_and_expansion_spacing_around_pp_numbers() {
+    // gcc -E parity. `1x.h` is one pp-number (C99 6.4.8), so `#`
+    // spells it whole; the substitution-created `1x` `.` `h`
+    // adjacency stringizes with no space (C99 6.10.3.2 inserts one
+    // only where the argument had white space). Plain expanded text
+    // keeps the re-lex separator: `ND.h` prints as `1x .h`, which
+    // lexes back to the same three tokens.
+    let src = "#define STR_(x) #x\n#define STR(x) STR_(x)\n#define ND 1x\n\
+               STR_(1x.h)\nSTR(ND.h)\nSTR_(1x .h)\nSTR(tr/ND.h)\nND.h\n";
+    let out = process(src);
+    let lines: Vec<&str> = out
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+        .collect();
+    assert_eq!(
+        lines,
+        ["\"1x.h\"", "\"1x.h\"", "\"1x .h\"", "\"tr/1x.h\"", "1x .h"],
+        "{out}"
+    );
 }
 
 #[test]
@@ -1400,4 +1923,901 @@ fn cross_expansion_invocation_hideset_is_strict() {
         "#define TWICE(...) __VA_ARGS__ __VA_ARGS__\n#define R(a) a*S\n#define S(a) R(a)\nTWICE(R(()))\n",
     );
     assert!(out.contains("()*R()*S"), "{out}");
+}
+
+/// Recursively collect files under `dir` whose extension is in `exts`.
+fn collect_sources(dir: &std::path::Path, exts: &[&str], out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_sources(&path, exts, out);
+        } else if path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| exts.contains(&e))
+        {
+            out.push(path);
+        }
+    }
+}
+
+/// The incremental line-continuation collapse must match the full-rescan
+/// reference byte for byte on every C source and header in the tree.
+#[test]
+fn unfold_matches_reference_on_repo_sources() {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut files = Vec::new();
+    collect_sources(&root.join("tests/fixtures/c"), &["c"], &mut files);
+    collect_sources(&root.join("libc/include"), &["h"], &mut files);
+    let mut checked = 0usize;
+    for path in &files {
+        let Ok(bytes) = std::fs::read(path) else {
+            continue;
+        };
+        // unfold operates on &str; skip any file that is not UTF-8, as
+        // the preprocessor requires UTF-8 input in any case.
+        let Ok(src) = String::from_utf8(bytes) else {
+            continue;
+        };
+        assert_eq!(
+            unfold_line_continuations(&src),
+            unfold_ref(&src),
+            "unfold mismatch on {}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(checked > 900, "expected many sources, checked {checked}");
+}
+
+/// Differential fuzz: the incremental collapse must match the full-rescan
+/// reference on random inputs built from the tokens the scanner tracks
+/// (comment openers/closers, quotes, escapes, and CR/LF line endings)
+/// plus curated edge cases.
+#[test]
+fn unfold_matches_reference_fuzz() {
+    const CHUNKS: &[&[u8]] = &[
+        b"/", b"*", b"\"", b"'", b"\\", b"\n", b"\r", b"\r\n", b" ", b"a", b"b", b"x", b"/*",
+        b"*/", b"//", b"\\\n", b"\\\r\n", b"\"\\", b"'\\", b"**", b"*/*", b";",
+    ];
+    let curated: &[&str] = &[
+        "code\\",
+        "/* open",
+        "/* a\nb\n*/ c",
+        "\"str \\\nmore\"",
+        "'c' /* x */ y",
+        "a // /* \\\nnot open",
+        "\"\\\"/*\" real /* open",
+        "line1\\\r\nline2 /* c\r\n*/ end",
+        "x /*",
+        "*/",
+        "\\\n\\\n\\\n",
+        "/*/",
+    ];
+    for &c in curated {
+        assert_eq!(
+            unfold_line_continuations(c),
+            unfold_ref(c),
+            "unfold mismatch on curated case {c:?}"
+        );
+    }
+    // Deterministic xorshift64; fixed seed keeps failures reproducible.
+    let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let cases = 6000;
+    for _ in 0..cases {
+        let len = (next() % 48) as usize + 1;
+        let mut bytes = Vec::new();
+        for _ in 0..len {
+            bytes.extend_from_slice(CHUNKS[(next() as usize) % CHUNKS.len()]);
+        }
+        // Every chunk is ASCII, so the join is valid UTF-8.
+        let src = String::from_utf8(bytes).unwrap();
+        assert_eq!(
+            unfold_line_continuations(&src),
+            unfold_ref(&src),
+            "unfold mismatch on fuzz case {src:?}"
+        );
+    }
+}
+
+/// Scanner work must grow linearly with the size of a multi-line block
+/// comment. Contrast the incremental scanner (each byte visited once)
+/// with the full-rescan reference (quadratic) via the step counter, so
+/// the assertion is exact and cannot flake on timing.
+#[test]
+fn unfold_block_comment_scan_is_linear() {
+    let mk = |lines: usize| {
+        let mut s = String::from("/*\n");
+        for _ in 0..lines {
+            s.push_str("x comment line\n");
+        }
+        s.push_str("*/\ncode;\n");
+        s
+    };
+    let small = mk(1500);
+    let big = mk(3000);
+
+    assert_eq!(unfold_line_continuations(&small), unfold_ref(&small));
+    assert_eq!(unfold_line_continuations(&big), unfold_ref(&big));
+
+    let _ = scan_steps_taken();
+    unfold_line_continuations(&small);
+    let new_small = scan_steps_taken();
+    unfold_line_continuations(&big);
+    let new_big = scan_steps_taken();
+    // Doubling the comment doubles the work, not quadruples it.
+    assert!(
+        new_big < new_small * 3,
+        "incremental scan not linear: {new_small} -> {new_big}"
+    );
+
+    unfold_ref(&small);
+    let ref_small = scan_steps_taken();
+    unfold_ref(&big);
+    let ref_big = scan_steps_taken();
+    // The reference re-reads the growing buffer on each join, so doubling
+    // the comment quadruples its work: the quadratic being removed.
+    assert!(
+        ref_big > ref_small * 3,
+        "reference expected quadratic: {ref_small} -> {ref_big}"
+    );
+}
+
+/// A single very large block comment must collapse quickly. The
+/// pre-incremental full rescan did not finish this in minutes; the
+/// incremental scan handles it in milliseconds. The ceiling is generous
+/// so a slow machine does not flake while a return to quadratic still
+/// trips it.
+#[test]
+fn unfold_80k_line_block_comment_is_fast() {
+    let mut s = String::from("/*\n");
+    for _ in 0..80_000 {
+        s.push_str("comment\n");
+    }
+    s.push_str("*/\ncode;\n");
+    let start = std::time::Instant::now();
+    let out = unfold_line_continuations(&s);
+    let elapsed = start.elapsed();
+    assert!(elapsed.as_secs() < 20, "unfold too slow: {elapsed:?}");
+    // Total line count is preserved by blank padding, and the code past
+    // the comment survives.
+    assert_eq!(out.matches('\n').count(), s.lines().count());
+    assert!(out.contains("code;"));
+}
+
+/// Deterministic pseudo-random source generator for the phase-2 /
+/// phase-3 differential tests: emits the byte classes that drive the
+/// scanners (quotes, escapes, slashes, stars, newlines, backslash
+/// continuations, non-ASCII) at rates high enough to hit every state
+/// transition.
+fn fuzz_source(seed: u64, len: usize) -> String {
+    const ALPHABET: [&str; 20] = [
+        "a", " ", "\n", "/", "*", "\"", "'", "\\", "x", "\t", "/*", "*/", "//", "\\\n", ";", "#",
+        "define", "(", ")", "\u{e9}",
+    ];
+    let mut state = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
+    let mut s = String::with_capacity(len * 2);
+    while s.len() < len {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        s.push_str(ALPHABET[(state % ALPHABET.len() as u64) as usize]);
+    }
+    s
+}
+
+/// The span-copying `strip_c_comments` must agree byte for byte with
+/// the byte-at-a-time reference over every embedded libc header and
+/// over 6000 generated sources.
+#[test]
+fn strip_c_comments_matches_reference_over_corpus_and_fuzz() {
+    for (name, body) in crate::c5::headers::embedded_headers() {
+        assert_eq!(
+            strip_c_comments(body),
+            strip_c_comments_ref(body),
+            "strip_c_comments diverged on embedded header `{name}`"
+        );
+    }
+    for seed in 0..6000u64 {
+        let src = fuzz_source(seed, 200);
+        assert_eq!(
+            strip_c_comments(&src),
+            strip_c_comments_ref(&src),
+            "strip_c_comments diverged on seed {seed}: {src:?}"
+        );
+    }
+}
+
+/// `unfold_line_continuations` short-circuits lines that neither
+/// continue nor open a block comment; it must still agree with the
+/// full-rescan reference over the same corpus and generated sources.
+#[test]
+fn unfold_matches_reference_over_corpus_and_fuzz() {
+    for (name, body) in crate::c5::headers::embedded_headers() {
+        assert_eq!(
+            unfold_line_continuations(body),
+            unfold_ref(body),
+            "unfold diverged on embedded header `{name}`"
+        );
+    }
+    for seed in 0..6000u64 {
+        let src = fuzz_source(seed, 200);
+        assert_eq!(
+            unfold_line_continuations(&src),
+            unfold_ref(&src),
+            "unfold diverged on seed {seed}: {src:?}"
+        );
+    }
+}
+
+/// Phase 3 must not re-encode source bytes. A non-ASCII byte outside a
+/// string or char literal used to be widened from Latin-1 to UTF-8, so
+/// the identifier reaching the lexer no longer matched its definition.
+#[test]
+fn strip_c_comments_preserves_non_ascii_outside_literals() {
+    let src = "int \u{e9}v = 1; /* c */ char *s = \"\u{e9}k\";";
+    let out = strip_c_comments(src);
+    assert!(out.contains('\u{e9}'), "non-ASCII must survive: {out:?}");
+    assert_eq!(
+        out.matches('\u{e9}').count(),
+        2,
+        "both occurrences pass through unchanged: {out:?}"
+    );
+    assert_eq!(process(src).matches('\u{e9}').count(), 2);
+}
+
+/// C99 6.10: a directive name is one preprocessing token, so a
+/// keyword run together with what follows names no directive. Before
+/// the shared word-boundary check only `if`, `elif`, `else`, `endif`,
+/// `error` and `warning` enforced it, so `#undefX` silently undefined
+/// `X` and `#definex FOO 1` defined a macro named `x`.
+#[test]
+fn directive_keyword_requires_a_word_boundary() {
+    let out = process("#define X 1\n#undefX\nint a = X;\n");
+    assert!(
+        out.contains("int a = 1;"),
+        "`#undefX` must not undefine `X`: {out}"
+    );
+    let out = process("#definex FOO 1\nint b = x;\n");
+    assert!(
+        out.contains("int b = x;"),
+        "`#definex` must not define `x`: {out}"
+    );
+    // The boundary rule admits every operand form that is not an
+    // identifier continuation.
+    assert!(process("#define Y 2\n#if(Y)\nok\n#endif\n").contains("ok"));
+    assert!(process("#include<stddef.h>\n").contains("size_t"));
+    // And the real spellings still parse.
+    let out = process("#define Z 3\n#undef Z\nint c = Z;\n");
+    assert!(out.contains("int c = Z;"), "`#undef Z` must work: {out}");
+}
+
+/// One builtin table answers all three questions. The three predicates
+/// used to be separate hardcoded lists and disagreed: `#pragma
+/// intrinsic("__builtin_bswap64")` rejected a name badc lowers, and
+/// `__has_builtin(__builtin_trap)` reported 1 for a name that was
+/// unusable without <assert.h>. C23 6.10.1 makes `__has_builtin` 1 when
+/// the builtin is supported, so the no-header groups below report 1 --
+/// as gcc-16 and clang do for the same names -- and the library group,
+/// which badc supplies only through its header, reports 0.
+#[test]
+fn builtin_table_answers_all_three_roles() {
+    use super::builtins;
+    let pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    // Registry entries usable with no header are seeded, answer 1 to
+    // `__has_builtin`, and are accepted by `#pragma intrinsic`.
+    for name in [
+        "__builtin_clz",
+        "__builtin_clzl",
+        "__builtin_bswap16",
+        "__builtin_bswap32",
+        "__builtin_bswap64",
+        "__builtin_unreachable",
+        "__builtin_trap",
+        "__builtin_alloca",
+        "__builtin_frame_address",
+        "__builtin_va_start",
+    ] {
+        assert!(pp.intrinsics.contains_key(name), "`{name}` must be seeded");
+        assert!(
+            builtins::has_builtin(name),
+            "__has_builtin({name}) must be 1"
+        );
+        assert!(
+            builtins::intrinsic_id(name, Target::MacOSAarch64).is_some(),
+            "`#pragma intrinsic(\"{name}\")` must resolve"
+        );
+    }
+    // Builtins the parser handles have no registry id, yet `#pragma
+    // intrinsic` accepts them and `__has_builtin` reports 1.
+    for name in [
+        "__builtin_constant_p",
+        "__builtin_choose_expr",
+        "__builtin_types_compatible_p",
+        "__builtin_object_size",
+        "__builtin_add_overflow",
+        "__builtin_expect",
+        "__builtin_prefetch",
+    ] {
+        assert!(
+            builtins::has_builtin(name),
+            "__has_builtin({name}) must be 1"
+        );
+        assert!(
+            builtins::is_builtin(name),
+            "`{name}` must be a known builtin"
+        );
+        assert!(
+            builtins::intrinsic_id(name, Target::MacOSAarch64).is_none(),
+            "`{name}` has no registry id"
+        );
+    }
+    // Builtins equivalent to a library function: no registry id, and
+    // `__has_builtin` reports 1 as it does in gcc and clang. The
+    // library name they bind to is derived from the builtin spelling.
+    for (name, fn_name) in [
+        ("__builtin_strlen", "strlen"),
+        ("__builtin_memcmp", "memcmp"),
+        ("__builtin_abs", "abs"),
+        ("__builtin_malloc", "malloc"),
+    ] {
+        assert!(
+            builtins::has_builtin(name),
+            "__has_builtin({name}) must be 1"
+        );
+        assert_eq!(
+            builtins::library_alias(name),
+            Some(fn_name),
+            "`{name}` must bind to `{fn_name}`"
+        );
+        assert!(
+            builtins::intrinsic_id(name, Target::MacOSAarch64).is_none(),
+            "`{name}` has no registry id"
+        );
+        assert!(
+            !pp.intrinsics.contains_key(name),
+            "`{name}` must not be seeded into the registry"
+        );
+    }
+    assert_eq!(builtins::library_alias("__builtin_clz"), None);
+    assert_eq!(builtins::library_alias("strlen"), None);
+    // Library names a header binds: not seeded and not reported by
+    // `__has_builtin`, but `#pragma intrinsic` registers them.
+    for name in [
+        "alloca",
+        "sqrt",
+        "fma",
+        "atomic_load",
+        "__c5_aarch64_setjmp",
+    ] {
+        assert!(
+            !pp.intrinsics.contains_key(name),
+            "`{name}` must need its header"
+        );
+        assert!(
+            !builtins::has_builtin(name),
+            "__has_builtin({name}) must be 0"
+        );
+        assert!(
+            builtins::intrinsic_id(name, Target::MacOSAarch64).is_some(),
+            "`#pragma intrinsic(\"{name}\")` must resolve"
+        );
+    }
+    assert!(!builtins::is_builtin("__builtin_bitreverse32"));
+    assert!(!builtins::has_builtin("__builtin_bswap128"));
+}
+
+/// The `l`-suffixed bit builtins follow the target's `long` width, and
+/// the seeded id matches what `#pragma intrinsic` would record.
+#[test]
+fn long_width_builtins_track_the_target() {
+    use super::builtins;
+    use crate::c5::op::Intrinsic;
+    for (target, spec, want) in [
+        (Target::MacOSAarch64, "macos-aarch64", Intrinsic::Clzll),
+        (Target::WindowsX64, "windows-x64", Intrinsic::Clz),
+    ] {
+        let pp = Preprocessor::new(spec, target, "0.1.0");
+        assert_eq!(pp.intrinsics.get("__builtin_clzl"), Some(&(want as i64)));
+        assert_eq!(
+            builtins::intrinsic_id("__builtin_clzl", target),
+            Some(want as i64)
+        );
+    }
+}
+
+/// `#pragma intrinsic` accepts every name in the builtin table. The
+/// quoted form used to reject names badc lowers unconditionally.
+#[test]
+fn pragma_intrinsic_accepts_every_table_name() {
+    for name in [
+        "__builtin_bswap64",
+        "__builtin_unreachable",
+        "__builtin_clz",
+        "__builtin_expect",
+        "__builtin_object_size",
+    ] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.process(&format!("#pragma intrinsic(\"{name}\")\nint x;\n"))
+            .unwrap_or_else(|e| panic!("`#pragma intrinsic(\"{name}\")` rejected: {e}"));
+    }
+    // A name badc does not provide is still a hard error, so a typo is
+    // not a silent no-op.
+    let err = process_err("#pragma intrinsic(\"__builtin_nope\")\n");
+    assert!(err.contains("not a builtin"), "unexpected message: {err}");
+}
+
+/// `#ifdef X` and `defined(X)` answer the same question for every name,
+/// including the feature-test operators and function-like macros.
+#[test]
+fn ifdef_and_defined_agree_on_every_name() {
+    for name in [
+        "__has_include",
+        "__has_include_next",
+        "__has_builtin",
+        "__has_attribute",
+        "__builtin_expect",
+        "OBJ",
+        "FN",
+        "NOPE",
+    ] {
+        let src = format!(
+            "#define OBJ 1\n#define FN(a) a\n\
+             #ifdef {name}\nifdef_yes\n#endif\n\
+             #if defined({name})\ndefined_yes\n#endif\n"
+        );
+        let out = process(&src);
+        assert_eq!(
+            out.contains("ifdef_yes"),
+            out.contains("defined_yes"),
+            "`#ifdef {name}` and `defined({name})` disagree: {out}"
+        );
+    }
+}
+
+/// The `__has_*` and `defined` operand scanners are one scanner, so
+/// every spelling of the operand parses the same way.
+#[test]
+fn operator_operands_accept_the_same_spellings() {
+    for form in [
+        "__has_attribute(packed)",
+        "__has_attribute ( packed )",
+        "__has_attribute\t(packed)",
+    ] {
+        let out = process(&format!("#if {form}\nyes\n#endif\n"));
+        assert!(out.contains("yes"), "`{form}` must resolve to 1: {out}");
+    }
+    // A word-boundary violation is not the operator: the glued name is
+    // an ordinary undefined identifier, so the operand is left unparsed.
+    let err = process_err("#if x__has_attribute_y(packed)\nyes\n#endif\n");
+    assert!(err.contains("(packed)"), "glued name must not match: {err}");
+    // Reached through a macro alias, the operator still resolves --
+    // that path runs the same scanner after substitution.
+    let out = process("#define ALIAS __has_attribute\n#if ALIAS(packed)\nyes\n#endif\n");
+    assert!(out.contains("yes"), "alias must resolve: {out}");
+}
+
+/// C99 6.10.1p4: `#if` operands are integer constants. The token extent
+/// comes from `pp_number_len`, so a pp-number that is not one is
+/// diagnosed whole instead of splitting into a number and an identifier.
+#[test]
+fn if_rejects_non_integer_pp_numbers() {
+    for src in [
+        "#if 1.5\n#endif\n",
+        "#if 1e5\n#endif\n",
+        "#if 0x1p+3\n#endif\n",
+    ] {
+        let err = process_err(src);
+        assert!(
+            err.contains("not an integer constant") || err.contains("malformed integer"),
+            "unexpected diagnostic for {src:?}: {err}"
+        );
+    }
+    // `0x1e+5` is one pp-number, not `0x1e` `+` `5`; gcc-16 and clang
+    // both reject it ("invalid suffix `+5` on integer constant") rather
+    // than folding it to 35.
+    let err = process_err("#if 0x1e+5 == 35\nyes\n#endif\n");
+    assert!(err.contains("0x1e+5"), "unexpected diagnostic: {err}");
+    // Through a macro the operand is already three tokens, so the sum
+    // folds, as it does in both references.
+    assert!(process("#define M 0x1e\n#if M+5 == 35\nyes\n#endif\n").contains("yes"));
+    // The integer forms still parse, including the suffixes and the
+    // widest-unsigned case.
+    assert!(process("#if 0x10ULL == 16\nyes\n#endif\n").contains("yes"));
+    assert!(process("#if 18446744073709551615U > 0\nyes\n#endif\n").contains("yes"));
+    assert!(process("#if 1 << 4 == 16\nyes\n#endif\n").contains("yes"));
+}
+
+/// The serializer's adjacency test must cover every two-byte punctuator
+/// `punct_len` lexes; a punctuator added to the table without one used
+/// to paste silently across an expansion seam.
+#[test]
+fn merge_test_covers_every_punctuator_pair() {
+    use super::expand::pp_tokens_would_merge;
+    for a in 0u8..=255 {
+        for b in 0u8..=255 {
+            if super::expand::punct_len(&[a, b], 0) == 2 {
+                assert!(
+                    pp_tokens_would_merge(super::expand::TokKind::Punct, a, b),
+                    "punctuator {:?} is not separated by the serializer",
+                    core::str::from_utf8(&[a, b]).unwrap_or("<non-utf8>")
+                );
+            }
+        }
+    }
+}
+
+/// A pp-number must not absorb what follows it across an expansion seam:
+/// `0x10` then `...` re-lexes as one pp-number (C99 6.4.8) unless the
+/// serializer separates them. gcc-16 and clang both emit the space.
+/// An identifier ending in the same bytes needs no separation.
+#[test]
+fn serializer_separates_only_real_pastes() {
+    let out = process("#define LO 0x10\n#define HI 0x20\nint x[] = { LO...HI };\n");
+    assert!(
+        out.contains("0x10 ..."),
+        "a pp-number must not absorb `...`: {out}"
+    );
+    let out = process("#define P p\n#define E e\nint y = P->a + E->b + P++ + E++;\n");
+    assert!(
+        out.contains("p->a + e->b + p++ + e++"),
+        "identifiers need no separation before `-`/`+`: {out}"
+    );
+    // The paste-preventing spaces the byte-level rules do call for.
+    let out = process("#define PLUS +\nint z = PLUS+1;\n");
+    assert!(out.contains("+ +1"), "`+` `+` must not paste: {out}");
+}
+
+/// `__has_include` resolves through the same code path as `#include`,
+/// so the operator cannot answer differently from what the directive
+/// would find. The quoted form probes the including file's directory
+/// (C99 6.10.2p2); the angle form does not.
+#[test]
+fn has_include_matches_what_include_resolves() {
+    let base = std::env::temp_dir().join(format!("badc-hasincl-{}", std::process::id()));
+    let sub = base.join("sub");
+    std::fs::create_dir_all(&sub).unwrap();
+    std::fs::write(sub.join("beside.h"), "int beside;\n").unwrap();
+    std::fs::write(
+        sub.join("probe.h"),
+        "#if __has_include(\"beside.h\")\n#include \"beside.h\"\n#endif\n\
+         #if __has_include(<beside.h>)\nangle_found\n#endif\n",
+    )
+    .unwrap();
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    let out = pp.process("#include <sub/probe.h>\n").unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(
+        out.contains("int beside;"),
+        "quoted `__has_include` must agree with `#include \"...\"`: {out}"
+    );
+    assert!(
+        !out.contains("angle_found"),
+        "the angle form must not search the including file's directory: {out}"
+    );
+}
+
+#[test]
+fn compiler_owned_header_resolves_embedded_before_search_paths() {
+    // A compiler-owned intrinsic header (arm_neon.h) resolves to the
+    // embedded copy even when a `-I` directory holds a same-named file (a
+    // foreign toolchain's private include directory folded onto the search
+    // path). An ordinary embedded name (stdarg.h) keeps `-I`-shadows-
+    // embedded, as gcc and clang do.
+    use std::io::Write;
+    let dir = std::env::temp_dir().join(format!("badc-owned-hdr-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::File::create(dir.join("arm_neon.h"))
+        .unwrap()
+        .write_all(b"int foreign_neon_marker;\n")
+        .unwrap();
+    std::fs::File::create(dir.join("stdarg.h"))
+        .unwrap()
+        .write_all(b"int shadow_stdarg_marker;\n")
+        .unwrap();
+    let mut pp = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
+    pp.add_search_path(dir.to_str().unwrap());
+    let out = pp
+        .process("#include <arm_neon.h>\n#include <stdarg.h>\n")
+        .expect("owned + shadowed includes resolve");
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(
+        !out.contains("foreign_neon_marker"),
+        "arm_neon.h must resolve to the embedded copy: {out}"
+    );
+    assert!(
+        out.contains("vld1q_u8"),
+        "embedded arm_neon.h body expected: {}",
+        &out[..out.len().min(400)]
+    );
+    assert!(
+        out.contains("shadow_stdarg_marker"),
+        "a -I shadow of stdarg.h must win, as in gcc/clang"
+    );
+}
+
+/// Scratch directory holding the given (name, body) headers, on the
+/// search path of a fresh preprocessor. The caller removes it.
+fn pp_with_headers(tag: &str, files: &[(&str, &str)]) -> (Preprocessor, std::path::PathBuf) {
+    let base = std::env::temp_dir().join(format!(
+        "badc-{tag}-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    std::fs::create_dir_all(&base).unwrap();
+    for (name, body) in files {
+        std::fs::write(base.join(name), body).unwrap();
+    }
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.add_search_path(base.to_str().unwrap());
+    (pp, base)
+}
+
+/// A header wholly wrapped in `#ifndef G` / `#endif` contributes nothing
+/// on re-inclusion while `G` is defined, so the repeat `#include` is
+/// dropped without reading the file.
+#[test]
+fn guarded_header_is_included_once() {
+    let (mut pp, base) = pp_with_headers(
+        "mi-once",
+        &[("g.h", "#ifndef G_H\n#define G_H\nint g;\n#endif\n")],
+    );
+    let out = pp
+        .process("#include <g.h>\n#include <g.h>\nint main() {}\n")
+        .unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert_eq!(out.matches("int g;").count(), 1, "{out}");
+    assert!(out.contains("int main()"), "{out}");
+}
+
+/// `#undef` of the controlling macro puts the body back in play: the
+/// drop tracks whether the macro is defined, not whether the file has
+/// been seen.
+#[test]
+fn undefining_the_guard_reinstates_the_header() {
+    let (mut pp, base) = pp_with_headers(
+        "mi-undef",
+        &[("g.h", "#ifndef G_H\n#define G_H\nint g;\n#endif\n")],
+    );
+    let out = pp
+        .process("#include <g.h>\n#undef G_H\n#include <g.h>\nint main() {}\n")
+        .unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert_eq!(out.matches("int g;").count(), 2, "{out}");
+}
+
+/// Anything outside the guard would be lost by dropping the file, so
+/// only a wholly wrapped header qualifies.
+#[test]
+fn partially_guarded_headers_are_reprocessed() {
+    for (tag, body, marker, want) in [
+        (
+            "pre",
+            "int lead;\n#ifndef G\n#define G\nint g;\n#endif\n",
+            "int lead;",
+            2,
+        ),
+        (
+            "post",
+            "#ifndef G\n#define G\nint g;\n#endif\nint tail;\n",
+            "int tail;",
+            2,
+        ),
+        // Two sibling conditionals: neither wraps the file, and the
+        // second never defines `H`, so its body emits on every pass.
+        (
+            "two",
+            "#ifndef G\n#define G\n#endif\n#ifndef H\nint h;\n#endif\n",
+            "int h;",
+            2,
+        ),
+    ] {
+        let (mut pp, base) = pp_with_headers(&format!("mi-{tag}"), &[("g.h", body)]);
+        let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(out.matches(marker).count(), want, "{tag}: {out}");
+    }
+}
+
+/// The guard's own `#else` / `#elif` arm is what runs once the macro is
+/// defined, so such a file is not silent on re-inclusion.
+#[test]
+fn guard_with_an_else_arm_is_reprocessed() {
+    for (tag, body) in [
+        (
+            "else",
+            "#ifndef G\n#define G\nint g;\n#else\nint other;\n#endif\n",
+        ),
+        (
+            "elif",
+            "#ifndef G\n#define G\nint g;\n#elif 1\nint other;\n#endif\n",
+        ),
+    ] {
+        let (mut pp, base) = pp_with_headers(&format!("mi-{tag}"), &[("g.h", body)]);
+        let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(out.matches("int g;").count(), 1, "{tag}: {out}");
+        assert_eq!(out.matches("int other;").count(), 1, "{tag}: {out}");
+    }
+    // A nested `#else` inside the guarded body is not the guard's own
+    // arm and leaves the file skippable.
+    let (mut pp, base) = pp_with_headers(
+        "mi-nested-else",
+        &[(
+            "g.h",
+            "#ifndef G\n#define G\n#if 0\nint a;\n#else\nint b;\n#endif\n#endif\n",
+        )],
+    );
+    let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert_eq!(out.matches("int b;").count(), 1, "{out}");
+}
+
+/// A `#define` after the guard's `#endif` is a side effect the second
+/// inclusion still performs.
+#[test]
+fn trailing_directive_disqualifies_the_guard() {
+    let (mut pp, base) = pp_with_headers(
+        "mi-trail",
+        &[(
+            "g.h",
+            "#ifndef G\n#define G\n#endif\n#define N N_BODY\n#undef N\n",
+        )],
+    );
+    let out = pp.process("#include <g.h>\n#include <g.h>\nN\n").unwrap();
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("N"), "{out}");
+}
+
+/// `#if !defined(G)` is the other spelling of the same test.
+#[test]
+fn if_not_defined_guard_form_is_recognised() {
+    for open in [
+        "#if !defined(G_H)",
+        "#if !defined G_H",
+        "#if ! defined ( G_H )",
+        // A trailing comment becomes trailing white space in phase 3.
+        "#if !defined(G_H) /* guard */",
+    ] {
+        let (mut pp, base) = pp_with_headers(
+            "mi-ifnd",
+            &[("g.h", &format!("{open}\n#define G_H\nint g;\n#endif\n"))],
+        );
+        let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(out.matches("int g;").count(), 1, "{open}: {out}");
+    }
+    // Operands that are not the plain absence test must not be taken for
+    // a guard: the file is processed on every inclusion.
+    for open in ["#if !defined(A) && !defined(G_H)", "#if !G_H", "#ifdef G_H"] {
+        let (mut pp, base) = pp_with_headers(
+            "mi-ifnd-no",
+            &[(
+                "g.h",
+                &format!("{open}\n#define G_H 1\n#else\nint other;\n#endif\n"),
+            )],
+        );
+        let out = pp.process("#include <g.h>\n#include <g.h>\n").unwrap();
+        std::fs::remove_dir_all(&base).ok();
+        assert!(out.contains("int other;"), "{open}: {out}");
+    }
+}
+
+/// The cost of a unit that includes one guarded header n times must not
+/// scale with the header's size: the repeats are dropped rather than
+/// read and scanned. Counted off the include trace, which marks a
+/// dropped inclusion `(cached)`, so the claim holds exactly rather than
+/// to within timer noise: whatever n is, the body is read once.
+#[test]
+fn repeat_inclusion_cost_is_independent_of_header_size() {
+    let mut body = String::from("#ifndef BIG_H\n#define BIG_H\n");
+    for i in 0..500 {
+        body.push_str(&format!("int f{i}(void); /* decl {i} */\n"));
+    }
+    body.push_str("#endif\n");
+    let (_, base) = pp_with_headers("mi-cost", &[("big.h", &body)]);
+    let dir = base.to_str().unwrap().to_string();
+    let once = |n: usize| -> (usize, usize) {
+        let src = "#include <big.h>\n".repeat(n);
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(&dir);
+        pp.set_track_includes(true);
+        pp.process(&src).unwrap();
+        let trace = trace_lines(&pp);
+        let dropped = trace.iter().filter(|l| l.ends_with("(cached)")).count();
+        (trace.len() - dropped, dropped)
+    };
+    let small = once(4);
+    let large = once(16);
+    std::fs::remove_dir_all(&base).ok();
+    assert_eq!(
+        (small, large),
+        ((1, 3), (1, 15)),
+        "(read, dropped) inclusions: the repeats must be dropped, not \
+         re-read and re-scanned",
+    );
+}
+
+/// C23 6.10.5.2 `__VA_OPT__`: the content survives when the variable arguments
+/// hold at least one token and is a placemarker otherwise, including as a `##`
+/// operand and under `#`. Every expansion here matches gcc's, which accepts the
+/// construct in every language mode.
+#[test]
+fn va_opt_expands_on_a_non_empty_variadic_tail() {
+    let cases: &[(&str, &str, &str)] = &[
+        // (definition, invocation, expected tokens)
+        (
+            "#define TAIL(a, ...) f(a __VA_OPT__(,) __VA_ARGS__)",
+            "TAIL(1)",
+            "f(1)",
+        ),
+        (
+            "#define TAIL(a, ...) f(a __VA_OPT__(,) __VA_ARGS__)",
+            "TAIL(1, 2)",
+            "f(1 , 2)",
+        ),
+        // Present but holding no token: a placemarker, as when omitted.
+        (
+            "#define TAIL(a, ...) f(a __VA_OPT__(,) __VA_ARGS__)",
+            "TAIL(1, )",
+            "f(1)",
+        ),
+        ("#define LEAD(...) __VA_OPT__(x) y", "LEAD()", "y"),
+        ("#define LEAD(...) __VA_OPT__(x) y", "LEAD(1)", "x y"),
+        // A placemarker on either side of `##` leaves the other operand.
+        ("#define PL(a, ...) a##__VA_OPT__(b)", "PL(1)", "1"),
+        ("#define PL(a, ...) a##__VA_OPT__(b)", "PL(1, 2)", "1b"),
+        ("#define PR(a, ...) __VA_OPT__(b)##a", "PR(1)", "1"),
+        ("#define PR(a, ...) __VA_OPT__(b)##a", "PR(1, 2)", "b1"),
+        // `#` stringizes the content after argument substitution.
+        ("#define STR(...) #__VA_OPT__(a b)", "STR()", "\"\""),
+        ("#define STR(...) #__VA_OPT__(a b)", "STR(1)", "\"a b\""),
+        ("#define SA(...) #__VA_OPT__(__VA_ARGS__)", "SA()", "\"\""),
+        (
+            "#define SA(...) #__VA_OPT__(__VA_ARGS__)",
+            "SA(1 + 2)",
+            "\"1 + 2\"",
+        ),
+        // Parentheses inside the content are content, not the terminator.
+        ("#define PN(...) __VA_OPT__((a, b)) z", "PN()", "z"),
+        ("#define PN(...) __VA_OPT__((a, b)) z", "PN(9)", "(a, b) z"),
+        // The GNU named-rest spelling reaches the same tail.
+        ("#define NR(a, rest...) a __VA_OPT__(,) rest", "NR(1)", "1"),
+        (
+            "#define NR(a, rest...) a __VA_OPT__(,) rest",
+            "NR(1, 2, 3)",
+            "1 , 2, 3",
+        ),
+        (
+            "#define IN(...) __VA_OPT__(__VA_ARGS__ ,) end",
+            "IN()",
+            "end",
+        ),
+        (
+            "#define IN(...) __VA_OPT__(__VA_ARGS__ ,) end",
+            "IN(7, 8)",
+            "7, 8 , end",
+        ),
+        // Only special in a variadic replacement list.
+        ("#define PLAIN(a) a __VA_OPT__", "PLAIN(1)", "1 __VA_OPT__"),
+    ];
+    for (def, call, want) in cases {
+        let out = process(&format!("{def}\nMARK {call}\n"));
+        let got = out
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("MARK"))
+            .unwrap_or_else(|| panic!("no expansion line for {call}: {out}"))
+            .trim();
+        assert_eq!(got, *want, "{def} / {call}");
+    }
 }

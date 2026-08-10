@@ -21,8 +21,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rdx
                	cmpq	%rdi, %rdx
                	jl	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -35,7 +34,5 @@ Disassembly of section .text:
                	movslq	%ecx, %rdx
                	cmpq	$0xa, %rdx
                	jl	<addr>
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
                	movslq	%eax, %rax
                	retq

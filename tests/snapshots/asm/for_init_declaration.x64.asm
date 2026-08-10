@@ -87,9 +87,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	addq	$0xc, %rdx
                	cmpq	%rdx, %rax
-               	jl	<addr>
+               	jb	<addr>
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	leaq	<rip>, %rsi
@@ -108,9 +107,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	addq	$0xc, %rdx
                	cmpq	%rdx, %rax
-               	jl	<addr>
+               	jb	<addr>
                	movslq	%ecx, %rax
-               	movslq	%eax, %rax
                	movq	%rsi, %rdi
                	movq	%rax, %rsi
                	movb	$0x0, %al
@@ -126,5 +124,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
-               	jmp	<addr>

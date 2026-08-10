@@ -30,8 +30,9 @@
 //! `Imm`s made dead are reaped by the emit's use-count DCE.
 
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
 use crate::c5::vm::eval;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -53,6 +54,375 @@ pub(crate) fn run_one(func: &mut FunctionSsa) {
             return;
         }
     }
+}
+
+/// Node budget for one per-incoming evaluation. A shared operand is
+/// re-evaluated per use, so the budget caps a wide expression tree
+/// rather than its depth alone; it also terminates the recursion.
+const SELECT_EVAL_BUDGET: u32 = 96;
+
+/// Evaluate `v` with `pivot` bound to `bind`, over the same integer
+/// `Extend` / `BinopI` / `Binop` set [`fold_round`] folds. Any other
+/// def, and any operand the shared resolver cannot pin to an integer
+/// immediate, makes the value unknown.
+fn eval_with(
+    func: &FunctionSsa,
+    v: ValueId,
+    pivot: ValueId,
+    bind: i64,
+    budget: &mut u32,
+) -> Option<i64> {
+    *budget = budget.checked_sub(1)?;
+    if v == pivot {
+        return Some(bind);
+    }
+    if let Some(k) = imm_of(func, v) {
+        return Some(k);
+    }
+    if matches!(func.f32_values.get(v as usize), Some(true)) {
+        return None;
+    }
+    match *func.insts.get(v as usize)? {
+        Inst::Extend { value, kind } => Some(eval::eval_extend(
+            eval_with(func, value, pivot, bind, budget)?,
+            kind,
+        )),
+        Inst::BinopI { op, lhs, rhs_imm } => {
+            eval::fold_binop(op, eval_with(func, lhs, pivot, bind, budget)?, rhs_imm)
+        }
+        Inst::Binop { op, lhs, rhs } => {
+            let l = eval_with(func, lhs, pivot, bind, budget)?;
+            let r = eval_with(func, rhs, pivot, bind, budget)?;
+            eval::fold_binop(op, l, r)
+        }
+        _ => None,
+    }
+}
+
+/// Nesting budget and value-set cap for [`select_values`]. Nested `?:`
+/// merges a phi into a phi, so the walk crosses a few levels; the cap
+/// bounds the per-consumer evaluation count. The budget also terminates
+/// the walk over a loop phi, which reaches itself.
+const SELECT_SET_DEPTH: u32 = 4;
+const SELECT_SET_MAX: usize = 8;
+
+/// Accumulate the distinct integer constants `v` can produce: an
+/// immediate, or the union over a phi's incomings. False when any
+/// incoming is not one of those, when the set exceeds the cap, or on an
+/// FP-kind phi, whose incomings are bit patterns the integer evaluator
+/// must not compute on.
+fn collect_select_values(func: &FunctionSsa, v: ValueId, depth: u32, out: &mut Vec<i64>) -> bool {
+    if let Some(k) = imm_of(func, v) {
+        if !out.contains(&k) {
+            out.push(k);
+        }
+        return out.len() <= SELECT_SET_MAX;
+    }
+    let Some(Inst::Phi { incoming, kind }) = func.insts.get(v as usize) else {
+        return false;
+    };
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) || depth == 0 {
+        return false;
+    }
+    incoming
+        .iter()
+        .all(|&(_, iv)| collect_select_values(func, iv, depth - 1, out))
+}
+
+/// The set of integer constants a phi can produce, when it can produce
+/// more than one. An all-agreeing phi resolves through [`imm_of`]
+/// already, so it is left to [`fold_round`].
+fn select_values(func: &FunctionSsa, v: ValueId) -> Option<Vec<i64>> {
+    if !matches!(func.insts.get(v as usize), Some(Inst::Phi { .. })) {
+        return None;
+    }
+    let mut values = Vec::new();
+    if !collect_select_values(func, v, SELECT_SET_DEPTH, &mut values) {
+        return None;
+    }
+    (values.len() > 1).then_some(values)
+}
+
+/// Per-value list of the instruction indices that read it. Terminator
+/// and `exit_acc` references are left out: neither is a foldable
+/// consumer.
+fn user_lists(func: &FunctionSsa) -> Vec<Vec<ValueId>> {
+    let mut users: Vec<Vec<ValueId>> = vec![Vec::new(); func.insts.len()];
+    for (i, inst) in func.insts.iter().enumerate() {
+        for_each_operand(inst, |op| {
+            if let Some(slot) = users.get_mut(op as usize) {
+                slot.push(i as ValueId);
+            }
+        });
+    }
+    users
+}
+
+/// Fold a consumer of a select whose result is the same for every value
+/// the select can produce: `> 3ul` on a `c ? 1 : 0` is 0 either way, and
+/// so is a mask selecting none of the bits the incomings set. The
+/// condition stays unknown; the consumer does not depend on it. Walks
+/// forward from each select, so the cost tracks its use chain and a
+/// consumer folds at any distance down it -- an intermediate whose own
+/// value differs per incoming is walked through, not folded.
+///
+/// -O only: such a value is not a constant expression (C99 6.6), so this
+/// is the optimizer proving the consumer invariant, never the front end
+/// widening what it accepts.
+pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
+    let selects: Vec<(ValueId, Vec<i64>)> = (0..func.insts.len() as ValueId)
+        .filter_map(|v| select_values(func, v).map(|values| (v, values)))
+        .collect();
+    if selects.is_empty() {
+        return false;
+    }
+    let users = user_lists(func);
+    // Per-walk visited marks, stamped with the walk's index so the reset
+    // between selects is free rather than a scan of the whole tape.
+    let mut seen = vec![0u32; func.insts.len()];
+    let mut queue: Vec<ValueId> = Vec::new();
+    let mut changed = false;
+    for (walk, (pivot, values)) in selects.iter().enumerate() {
+        let stamp = walk as u32 + 1;
+        queue.clear();
+        queue.extend_from_slice(&users[*pivot as usize]);
+        while let Some(u) = queue.pop() {
+            if core::mem::replace(&mut seen[u as usize], stamp) == stamp {
+                continue;
+            }
+            if !matches!(
+                func.insts[u as usize],
+                Inst::Extend { .. } | Inst::BinopI { .. } | Inst::Binop { .. }
+            ) {
+                continue;
+            }
+            if !matches!(func.f32_values.get(u as usize), Some(true)) {
+                let mut uniform = None;
+                for &bind in values {
+                    let mut budget = SELECT_EVAL_BUDGET;
+                    match eval_with(func, u, *pivot, bind, &mut budget) {
+                        Some(k) if uniform.is_none_or(|prev| prev == k) => uniform = Some(k),
+                        _ => {
+                            uniform = None;
+                            break;
+                        }
+                    }
+                }
+                if let Some(k) = uniform {
+                    func.insts[u as usize] = Inst::Imm(k);
+                    changed = true;
+                }
+            }
+            queue.extend_from_slice(&users[u as usize]);
+        }
+    }
+    changed
+}
+
+/// Program-level facts for deciding that a symbol address is non-null:
+/// the referent must be defined in this unit and not weak. An undefined
+/// symbol may bind to address zero (a weak reference by ELF rule, any
+/// extern under a model that places objects at absolute addresses), and
+/// a weak definition is preemptible, so both stay out -- the behavior
+/// GCC keeps under `-fno-delete-null-pointer-checks`, which the
+/// affected kernel-style code is built with.
+pub(crate) struct AddrFacts {
+    /// Parser-symbol indices with a non-weak definition in this unit.
+    nonnull_syms: BTreeSet<u32>,
+    /// Entry PCs of non-weak functions defined in this unit. An extern
+    /// function referenced by address carries a placeholder ent_pc with
+    /// no body, so membership -- not the extern-ref table -- is what
+    /// separates the two.
+    nonnull_code_pcs: BTreeSet<usize>,
+    /// Data-segment `[lo, hi)` ranges of weak definitions; an `ImmData`
+    /// offset inside one is preemptible storage.
+    weak_data: Vec<(i64, i64)>,
+    /// As `weak_data`, for the TLS block.
+    weak_tls: Vec<(i64, i64)>,
+}
+
+pub(crate) fn addr_facts(program: &crate::c5::program::Program) -> AddrFacts {
+    use crate::c5::token::Token;
+    let mut facts = AddrFacts {
+        nonnull_syms: BTreeSet::new(),
+        nonnull_code_pcs: BTreeSet::new(),
+        weak_data: Vec::new(),
+        weak_tls: Vec::new(),
+    };
+    for (i, s) in program.symbols.iter().enumerate() {
+        if !s.defined_here {
+            continue;
+        }
+        if !s.is_weak {
+            facts.nonnull_syms.insert(i as u32);
+            if s.class == Token::Fun as i64 {
+                facts.nonnull_code_pcs.insert(s.val as usize);
+            }
+        } else if s.class == Token::Glo as i64 && s.reserved_data_bytes > 0 {
+            let range = (s.val, s.val + s.reserved_data_bytes);
+            if s.is_thread_local {
+                facts.weak_tls.push(range);
+            } else {
+                facts.weak_data.push(range);
+            }
+        }
+    }
+    facts
+}
+
+/// Recursion budget for the non-null address walk: a base behind a few
+/// collapsed merges.
+const NONNULL_DEPTH: u32 = 8;
+
+/// Whether `v` produces an address that cannot compare equal to a null
+/// pointer constant (C99 6.3.2.3p3, 6.5.9p6): a local slot, a block
+/// address, an import stub, or a code / data / TLS address whose
+/// referent has a non-weak definition in this unit per [`AddrFacts`].
+/// Degenerate phis are chased like the constant resolver does. A
+/// displacement chain on such a base is not walked through: the IR does
+/// not distinguish pointer arithmetic (in-bounds by C99 6.5.6p8) from
+/// integer arithmetic on a converted address, and the latter may wrap
+/// to zero.
+fn is_nonnull_addr(
+    func: &FunctionSsa,
+    extern_syms: &BTreeMap<u32, u32>,
+    facts: &AddrFacts,
+    v: ValueId,
+    depth: u32,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    // An extern-resolved instruction is judged by its symbol; its
+    // payload is a placeholder.
+    if let Some(sym) = extern_syms.get(&v) {
+        return facts.nonnull_syms.contains(sym);
+    }
+    let outside =
+        |ranges: &[(i64, i64)], off: i64| !ranges.iter().any(|&(lo, hi)| off >= lo && off < hi);
+    match func.insts.get(v as usize) {
+        Some(Inst::ImmCode(pc)) => facts.nonnull_code_pcs.contains(pc),
+        Some(Inst::ImmData(off)) => outside(&facts.weak_data, *off),
+        Some(Inst::TlsAddr(off)) => outside(&facts.weak_tls, *off),
+        Some(Inst::ImmExtCode(_) | Inst::LocalAddr(_) | Inst::BlockAddr(_)) => true,
+        Some(Inst::Phi { incoming, .. }) if incoming.len() == 1 => {
+            is_nonnull_addr(func, extern_syms, facts, incoming[0].1, depth - 1)
+        }
+        _ => false,
+    }
+}
+
+/// The identity of an address-constant producer, for deciding that two
+/// SSA values denote the same link-time address. Extern-resolved
+/// instructions are keyed by their parser symbol: their payload is a
+/// placeholder, and the first function's entry PC is also 0, so the
+/// payload alone cannot distinguish them.
+#[derive(PartialEq, Eq)]
+enum AddrIdent {
+    Code(usize),
+    Data(i64),
+    Tls(i64),
+    ExtCode(i64),
+    Local(i64),
+    ExternSym(u32),
+}
+
+/// Chase degenerate phis to the defining instruction's index.
+fn resolve_value(func: &FunctionSsa, mut v: ValueId) -> ValueId {
+    for _ in 0..NONNULL_DEPTH {
+        match func.insts.get(v as usize) {
+            Some(Inst::Phi { incoming, .. }) if incoming.len() == 1 => v = incoming[0].1,
+            _ => break,
+        }
+    }
+    v
+}
+
+fn addr_ident(
+    func: &FunctionSsa,
+    extern_syms: &BTreeMap<u32, u32>,
+    v: ValueId,
+) -> Option<AddrIdent> {
+    if let Some(&sym) = extern_syms.get(&v) {
+        return Some(AddrIdent::ExternSym(sym));
+    }
+    Some(match func.insts.get(v as usize)? {
+        Inst::ImmCode(pc) => AddrIdent::Code(*pc),
+        Inst::ImmData(off) => AddrIdent::Data(*off),
+        Inst::TlsAddr(off) => AddrIdent::Tls(*off),
+        Inst::ImmExtCode(idx) => AddrIdent::ExtCode(*idx),
+        Inst::LocalAddr(slot) => AddrIdent::Local(*slot),
+        _ => return None,
+    })
+}
+
+/// Fold the comparisons a compile-time assertion on a symbol address
+/// reduces to, so the branch fold can drop the arm that calls the
+/// assertion's never-defined helper:
+///
+///   * `addr == 0` / `addr != 0` where `addr` is non-null per
+///     [`is_nonnull_addr`];
+///   * `a OP b` where both operands resolve to the same value or to
+///     the same address constant (C99 6.5.9p6: pointers to the same
+///     object or function compare equal) -- the shape inlining leaves
+///     when a call site passes the same function the callee compares
+///     its parameter against, one operand spliced from the caller and
+///     one from the callee.
+///
+/// -O only: an address is not a constant expression (C99 6.6), so this
+/// is the optimizer proving the comparison invariant.
+pub(crate) fn fold_addr_compares(func: &mut FunctionSsa, facts: &AddrFacts) -> bool {
+    let extern_syms: BTreeMap<u32, u32> = func
+        .extern_imm_code_refs
+        .iter()
+        .chain(&func.extern_imm_data_refs)
+        .chain(&func.extern_tls_refs)
+        .copied()
+        .collect();
+    let mut changed = false;
+    for idx in 0..func.insts.len() {
+        let folded = match &func.insts[idx] {
+            Inst::BinopI {
+                op: op @ (BinOp::Eq | BinOp::Ne),
+                lhs,
+                rhs_imm: 0,
+            } if is_nonnull_addr(func, &extern_syms, facts, *lhs, NONNULL_DEPTH) => {
+                Some(i64::from(*op == BinOp::Ne))
+            }
+            Inst::Binop { op, lhs, rhs } => same_operand_compare(*op).filter(|_| {
+                let (l, r) = (resolve_value(func, *lhs), resolve_value(func, *rhs));
+                l == r
+                    || matches!(
+                        (
+                            addr_ident(func, &extern_syms, l),
+                            addr_ident(func, &extern_syms, r),
+                        ),
+                        (Some(a), Some(b)) if a == b
+                    )
+            }),
+            _ => None,
+        };
+        if let Some(k) = folded {
+            func.insts[idx] = Inst::Imm(k);
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// Resolve every remaining deferred `__builtin_constant_p` to 0. Called
+/// once the branch-fold fixed point stalls: no later pass discovers new
+/// constants, so an operand still not an immediate never becomes one.
+pub(crate) fn resolve_constant_p(func: &mut FunctionSsa) -> bool {
+    let kind_id = crate::c5::op::Intrinsic::ConstantP as i64;
+    let mut changed = false;
+    for inst in &mut func.insts {
+        if matches!(inst, Inst::Intrinsic { kind, .. } if *kind == kind_id) {
+            *inst = Inst::Imm(0);
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// Ops both per-arch emitters lower in `BinopI` form. The x86_64
@@ -116,6 +486,18 @@ fn imm_encodes_free(op: BinOp, imm: i64) -> bool {
     }
 }
 
+/// `x OP x` for the integer comparisons: reflexive ops yield 1, the
+/// strict ones 0 (C99 6.5.8p6, 6.5.9). These opcodes never carry
+/// floating operands -- the FP comparisons are the separate `Feq` /
+/// `Flt` / ... family -- so the NaN caveat does not arise.
+fn same_operand_compare(op: BinOp) -> Option<i64> {
+    Some(match op {
+        BinOp::Eq | BinOp::Le | BinOp::Ge | BinOp::Ule | BinOp::Uge => 1,
+        BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Ult | BinOp::Ugt => 0,
+        _ => return None,
+    })
+}
+
 /// `imm OP x` recast as `x OP' imm`: the op itself for commutative
 /// ops, the mirrored comparison for ordered compares. `None` for the
 /// non-commutative rest (Sub, shifts, division, FP).
@@ -138,17 +520,55 @@ fn mirror(op: BinOp) -> Option<BinOp> {
 /// `Inst::Imm` not flagged f32. Out-of-range ids (`NO_VALUE`) and
 /// address-bearing immediates resolve to `None`.
 fn imm_of(func: &FunctionSsa, v: ValueId) -> Option<i64> {
+    imm_through_phis(&func.insts, &func.f32_values, v)
+}
+
+/// Recursion budget for the multi-incoming phi merge. Each level
+/// multiplies by the operand count, so the bound keeps the walk cheap
+/// while still crossing the few merges a folded control-flow chain
+/// stacks up.
+const PHI_MERGE_DEPTH: u32 = 4;
+
+/// Shared constant resolver: names an `Inst::Imm`, or reaches one
+/// through phis. An empty `f32_values` accepts every `Imm`, for callers
+/// with no float-immediate distinction to make.
+pub(super) fn imm_through_phis(insts: &[Inst], f32_values: &[bool], v: ValueId) -> Option<i64> {
+    imm_through_phis_depth(insts, f32_values, v, PHI_MERGE_DEPTH)
+}
+
+fn imm_through_phis_depth(
+    insts: &[Inst],
+    f32_values: &[bool],
+    v: ValueId,
+    depth: u32,
+) -> Option<i64> {
     let mut i = v as usize;
     // Chase single-incoming (degenerate) phis to the constant they
     // collapse to: such a phi always takes its one predecessor's value.
     // prune_unreachable produces them when it drops a folded branch's
     // dead predecessor, so folding through them lets a chain built on the
     // survivor (an `Extend`, a `BinopI`) resolve on the next round.
-    for _ in 0..func.insts.len() {
-        match func.insts.get(i)? {
-            Inst::Imm(k) if !matches!(func.f32_values.get(i), Some(true)) => return Some(*k),
+    for _ in 0..insts.len() {
+        match insts.get(i)? {
+            Inst::Imm(k) if !matches!(f32_values.get(i), Some(true)) => return Some(*k),
             Inst::Phi { incoming, .. } if incoming.len() == 1 => {
                 i = incoming[0].1 as usize;
+            }
+            // Every predecessor supplying the same constant makes the
+            // merge that constant, whichever edge is taken. A `&&` / `||`
+            // whose arms decide the same way reaches the fold in this
+            // shape, as does any merge of equal constants an inline
+            // exposed. The depth bound also terminates a loop phi, whose
+            // back edge reaches itself.
+            Inst::Phi { incoming, .. } => {
+                if depth == 0 {
+                    return None;
+                }
+                let mut vals = incoming
+                    .iter()
+                    .map(|&(_, v)| imm_through_phis_depth(insts, f32_values, v, depth - 1));
+                let first = vals.next()??;
+                return vals.all(|k| k == Some(first)).then_some(first);
             }
             _ => return None,
         }
@@ -209,6 +629,9 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             Inst::BinopI { op, lhs, rhs_imm } => imm_of(func, *lhs)
                 .and_then(|l| eval::fold_binop(*op, l, *rhs_imm))
                 .map(Inst::Imm),
+            Inst::Binop { op, lhs, rhs } if lhs == rhs && same_operand_compare(*op).is_some() => {
+                same_operand_compare(*op).map(Inst::Imm)
+            }
             Inst::Binop { op, lhs, rhs } => match (imm_of(func, *lhs), imm_of(func, *rhs)) {
                 (Some(l), Some(r)) => eval::fold_binop(*op, l, r).map(Inst::Imm),
                 (None, Some(r)) if to_imm_form(*op, *rhs, r) => Some(Inst::BinopI {
@@ -227,6 +650,16 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                 }
                 _ => None,
             },
+            // Deferred `__builtin_constant_p`: the operand folded to an
+            // integer immediate, so the answer is 1. `imm_of` refuses
+            // address-bearing immediates, which are not constants here.
+            Inst::Intrinsic { kind, args }
+                if *kind == crate::c5::op::Intrinsic::ConstantP as i64 =>
+            {
+                args.first()
+                    .and_then(|&a| imm_of(func, a))
+                    .map(|_| Inst::Imm(1))
+            }
             _ => None,
         };
         if let Some(inst) = new_inst {
@@ -253,11 +686,16 @@ mod tests {
             locals: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             n_params: 0,
             is_variadic: false,
             is_inline: false,
             is_always_inline: false,
             is_naked: false,
+            section: None,
+            is_weak: false,
+            is_internal: false,
+            const_params: 0,
             inst_src: vec![(0, 0); n],
             f32_values: vec![false; n],
             param_fp_mask: 0,
@@ -269,9 +707,13 @@ mod tests {
             ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            label_data_relocs: Vec::new(),
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             insts,
             blocks: vec![Block {
                 start_pc: 0,
@@ -576,5 +1018,348 @@ mod tests {
         ]);
         run_one(&mut f);
         assert!(matches!(f.insts[1], Inst::Imm(-32768)));
+    }
+
+    /// `phi(1, 0)` at index 2, with `insts[3..]` as the consumers under test.
+    fn with_select(mut consumers: Vec<Inst>) -> FunctionSsa {
+        let mut insts = vec![
+            Inst::Imm(1),
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+        ];
+        insts.append(&mut consumers);
+        fresh(insts)
+    }
+
+    #[test]
+    fn select_invariant_comparison_folds() {
+        // Both incomings are <= 3, so `ugt 3` is 0 either way. The select
+        // itself is left alone: its value does depend on the condition.
+        let mut f = with_select(vec![Inst::BinopI {
+            op: BinOp::Ugt,
+            lhs: 2,
+            rhs_imm: 3,
+        }]);
+        assert!(fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::Imm(0)));
+        assert!(matches!(f.insts[2], Inst::Phi { .. }));
+    }
+
+    #[test]
+    fn select_variant_consumer_is_left_alone() {
+        // `+ 1` is 2 or 1: the consumer does depend on the condition.
+        let mut f = with_select(vec![Inst::BinopI {
+            op: BinOp::Add,
+            lhs: 2,
+            rhs_imm: 1,
+        }]);
+        assert!(!fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::BinopI { .. }));
+    }
+
+    #[test]
+    fn select_invariant_mask_folds_through_a_variant_chain() {
+        // The `or` intermediates differ per incoming (5 / 4), so they are
+        // walked through rather than folded; the mask over them selects
+        // no bit either can set, so it folds.
+        let mut f = with_select(vec![
+            Inst::BinopI {
+                op: BinOp::Or,
+                lhs: 2,
+                rhs_imm: 4,
+            },
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs: 3,
+                rhs_imm: 0x1_8000,
+            },
+        ]);
+        assert!(fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::BinopI { op: BinOp::Or, .. }));
+        assert!(matches!(f.insts[4], Inst::Imm(0)));
+    }
+
+    #[test]
+    fn nested_select_contributes_its_values_to_the_outer_set() {
+        // A nested `?:` merges a phi into a phi: the outer phi can produce
+        // 1, 2 or 3, so `ugt 3` is 0 for every one of them.
+        let mut f = fresh(vec![
+            Inst::Imm(1),
+            Inst::Imm(2),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+            Inst::Imm(3),
+            Inst::Phi {
+                incoming: vec![(0, 2), (1, 3)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 4,
+                rhs_imm: 3,
+            },
+        ]);
+        assert_eq!(select_values(&f, 4), Some(vec![1, 2, 3]));
+        assert!(fold_selects(&mut f));
+        assert!(matches!(f.insts[5], Inst::Imm(0)));
+    }
+
+    #[test]
+    fn loop_counter_phi_is_not_a_select() {
+        // `phi(0, phi + 1)`: the back edge is not an immediate, so the set
+        // of values is unknown and a comparison on it must survive.
+        let mut f = fresh(vec![
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 2)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 1,
+                rhs_imm: 1,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 1,
+                rhs_imm: 3,
+            },
+        ]);
+        assert_eq!(select_values(&f, 1), None);
+        assert!(!fold_selects(&mut f));
+    }
+
+    #[test]
+    fn select_with_a_non_constant_incoming_is_refused() {
+        // A loop-carried phi has an incoming that is not an immediate, so
+        // the set of values it can take is unknown.
+        let mut f = fresh(vec![
+            Inst::Imm(1),
+            Inst::Load {
+                addr: 0,
+                disp: 0,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 2,
+                rhs_imm: 3,
+            },
+        ]);
+        assert!(!fold_selects(&mut f));
+        assert!(matches!(f.insts[3], Inst::BinopI { .. }));
+    }
+
+    #[test]
+    fn fp_kind_select_is_refused() {
+        // An F64 phi merges bit patterns; the integer evaluator must not
+        // compute on them.
+        let mut f = fresh(vec![
+            Inst::Imm(1),
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::F64,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 2,
+                rhs_imm: 3,
+            },
+        ]);
+        assert!(!fold_selects(&mut f));
+    }
+
+    #[test]
+    fn same_operand_integer_compares_fold() {
+        for (op, want) in [
+            (BinOp::Eq, 1),
+            (BinOp::Le, 1),
+            (BinOp::Ge, 1),
+            (BinOp::Ule, 1),
+            (BinOp::Uge, 1),
+            (BinOp::Ne, 0),
+            (BinOp::Lt, 0),
+            (BinOp::Gt, 0),
+            (BinOp::Ult, 0),
+            (BinOp::Ugt, 0),
+        ] {
+            let mut f = fresh(vec![Inst::LocalAddr(0), Inst::Binop { op, lhs: 0, rhs: 0 }]);
+            run_one(&mut f);
+            assert!(
+                matches!(f.insts[1], Inst::Imm(k) if k == want),
+                "{op:?} -> {want}"
+            );
+        }
+        // Non-compare ops on a shared operand stay put.
+        let mut f = fresh(vec![
+            Inst::LocalAddr(0),
+            Inst::Binop {
+                op: BinOp::Sub,
+                lhs: 0,
+                rhs: 0,
+            },
+        ]);
+        run_one(&mut f);
+        assert!(matches!(f.insts[1], Inst::Binop { .. }));
+    }
+
+    fn facts(nonnull_pcs: &[usize]) -> AddrFacts {
+        AddrFacts {
+            nonnull_syms: BTreeSet::new(),
+            nonnull_code_pcs: nonnull_pcs.iter().copied().collect(),
+            weak_data: Vec::new(),
+            weak_tls: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn null_compare_of_defined_function_address_folds() {
+        // `addr == 0` on a defined function's address is 0; `!= 0` is 1.
+        let mut f = fresh(vec![
+            Inst::ImmCode(7),
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        assert!(fold_addr_compares(&mut f, &facts(&[7])));
+        assert!(matches!(f.insts[1], Inst::Imm(0)));
+        assert!(matches!(f.insts[2], Inst::Imm(1)));
+    }
+
+    #[test]
+    fn null_compare_of_extern_placeholder_pc_is_refused() {
+        // An extern function's placeholder ent_pc is not a defined pc,
+        // so its address may bind to zero.
+        let mut f = fresh(vec![
+            Inst::ImmCode(7),
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        assert!(!fold_addr_compares(&mut f, &facts(&[])));
+        assert!(matches!(f.insts[1], Inst::BinopI { .. }));
+    }
+
+    #[test]
+    fn null_compare_of_weak_or_extern_sym_ref_is_refused() {
+        // An extern-resolved instruction is judged by its symbol: sym 5
+        // has no non-weak definition here, so no fold.
+        let mut f = fresh(vec![
+            Inst::ImmCode(0),
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        f.extern_imm_code_refs.push((0, 5));
+        assert!(!fold_addr_compares(&mut f, &facts(&[0])));
+        assert!(matches!(f.insts[1], Inst::BinopI { .. }));
+        // The same sym with a non-weak definition folds.
+        let mut g = fresh(vec![
+            Inst::ImmCode(0),
+            Inst::BinopI {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        g.extern_imm_code_refs.push((0, 5));
+        let mut fx = facts(&[]);
+        fx.nonnull_syms.insert(5);
+        assert!(fold_addr_compares(&mut g, &fx));
+        assert!(matches!(g.insts[1], Inst::Imm(0)));
+    }
+
+    #[test]
+    fn null_compare_of_weak_data_range_is_refused() {
+        let mut fx = facts(&[]);
+        fx.weak_data.push((64, 72));
+        // Inside the weak definition's range: refused.
+        let mut f = fresh(vec![
+            Inst::ImmData(64),
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        assert!(!fold_addr_compares(&mut f, &fx));
+        // Outside it: this unit's non-weak storage, never null.
+        let mut g = fresh(vec![
+            Inst::ImmData(128),
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: 0,
+                rhs_imm: 0,
+            },
+        ]);
+        assert!(fold_addr_compares(&mut g, &fx));
+        assert!(matches!(g.insts[1], Inst::Imm(1)));
+    }
+
+    #[test]
+    fn identical_address_constant_operands_fold() {
+        // Two distinct defs of the same function address -- the shape
+        // inlining leaves -- compare as the same pointer.
+        let mut f = fresh(vec![
+            Inst::ImmCode(7),
+            Inst::ImmCode(7),
+            Inst::Binop {
+                op: BinOp::Ne,
+                lhs: 0,
+                rhs: 1,
+            },
+        ]);
+        assert!(fold_addr_compares(&mut f, &facts(&[])));
+        assert!(matches!(f.insts[2], Inst::Imm(0)));
+        // Two extern placeholders with the same payload but different
+        // symbols are different addresses: refused.
+        let mut g = fresh(vec![
+            Inst::ImmCode(0),
+            Inst::ImmCode(0),
+            Inst::Binop {
+                op: BinOp::Ne,
+                lhs: 0,
+                rhs: 1,
+            },
+        ]);
+        g.extern_imm_code_refs.push((0, 3));
+        g.extern_imm_code_refs.push((1, 4));
+        assert!(!fold_addr_compares(&mut g, &facts(&[])));
+        // The same extern symbol on both sides is one address.
+        let mut h = fresh(vec![
+            Inst::ImmCode(0),
+            Inst::ImmCode(0),
+            Inst::Binop {
+                op: BinOp::Eq,
+                lhs: 0,
+                rhs: 1,
+            },
+        ]);
+        h.extern_imm_code_refs.push((0, 3));
+        h.extern_imm_code_refs.push((1, 3));
+        assert!(fold_addr_compares(&mut h, &facts(&[])));
+        assert!(matches!(h.insts[2], Inst::Imm(1)));
     }
 }

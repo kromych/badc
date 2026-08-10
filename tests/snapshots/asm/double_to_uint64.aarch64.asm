@@ -6,10 +6,12 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x270              // =624
+               	mov	x1, <entry_off>
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
@@ -18,11 +20,11 @@ Disassembly of section .text:
                	movk	x0, #0x58e4, lsl #32
                	movk	x0, #0x43e1, lsl #48
                	fmov	d16, x0
-               	sub	x17, x29, #0x8
+               	sub	x17, x29, #0x28
                	str	d16, [x17]
                	mov	x0, #0x43e0000000000000 // =4890909195324358656
                	fmov	d16, x0
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x20
                	str	d16, [x17]
                	mov	x0, #0xa100             // =41216
                	movk	x0, #0x1438, lsl #16
@@ -33,12 +35,12 @@ Disassembly of section .text:
                	str	d16, [x17]
                	mov	x0, #0x4059000000000000 // =4636737291354636288
                	fmov	d16, x0
-               	sub	x17, x29, #0x20
+               	sub	x17, x29, #0x10
                	str	d16, [x17]
                	mov	x0, #0x4014000000000000 // =4617315517961601024
                	fmov	d16, x0
                	fneg	d0, d16
-               	sub	x16, x29, #0x8
+               	sub	x16, x29, #0x28
                	ldr	d1, [x16]
                	fcvtzu	x0, d1
                	mov	x17, #0x89e80000        // =2313682944
@@ -50,7 +52,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x20
                	ldr	d1, [x16]
                	fcvtzu	x0, d1
                	mov	x17, #-0x8000000000000000 // =-9223372036854775808
@@ -72,7 +74,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x20
+               	sub	x16, x29, #0x10
                	ldr	d1, [x16]
                	fcvtzu	x0, d1
                	cmp	x0, #0x64
@@ -92,7 +94,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x20
+               	sub	x16, x29, #0x10
                	ldr	d0, [x16]
                	fcvtzs	x0, d0
                	cmp	x0, #0x64

@@ -24,8 +24,7 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x2, %eax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	retq
                	jmp	<addr>
 
@@ -44,10 +43,14 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
                	movl	$0x2, %eax
-               	callq	<addr>
+               	movl	$0x1, %eax
+               	movl	%eax, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rax
+               	movslq	(%rax), %rax
                	addq	$0x9, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq

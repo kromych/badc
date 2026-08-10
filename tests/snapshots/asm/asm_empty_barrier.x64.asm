@@ -13,19 +13,23 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x20, %rsp
                	movl	$0x29, %eax
                	movl	%eax, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rax
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rax, -0x18(%rbp)
+               	movq	-0x18(%rbp), %rax
+               	movq	-0x20(%rbp), %rax
                	movslq	-0x8(%rbp), %rax
                	incq	%rax
                	movl	%eax, -0x8(%rbp)
                	leaq	<rip>, %rcx
-               	movslq	-0x8(%rbp), %rax
+               	movslq	%eax, %rax
                	movl	%eax, (%rcx)
                	movslq	%eax, %rax
                	subq	$0x2a, %rax
-               	movslq	%eax, %rcx
-               	movslq	%ecx, %rax
-               	addq	$0x10, %rsp
+               	movslq	%eax, %rax
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq

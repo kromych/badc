@@ -6,10 +6,12 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x270              // =624
+               	mov	x1, <entry_off>
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
+
+<dead_initializer>:
                	mov	x0, #0x1                // =1
                	ret
 
@@ -23,8 +25,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	ret
                	b	<addr>
 
@@ -43,10 +44,14 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	sub	sp, sp, #0x10
                	mov	x0, #0x2                // =2
-               	bl	<addr>
+               	mov	x0, #0x1                // =1
+               	stur	w0, [x29, #-0x8]
+               	sub	x0, x29, #0x8
+               	ldrsw	x0, [x0]
                	add	x0, x0, #0x9
-               	sxtw	x1, w0
-               	sxtw	x0, w1
+               	sxtw	x0, w0
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -25,27 +25,34 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_BIT, format_signature, is_decl_modifier, is_struct_ty, struct_id_of,
-    struct_ptr_depth,
+    apply_qual_bits, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
 impl Compiler {
-    /// Size of a deferred-size struct array (`struct T xs[] = { ... }`) that
-    /// may use array designators (`[N] = { ... }`). C99 6.7.8p22: the size is
-    /// one greater than the largest index initialized, whether reached
-    /// positionally or by a designator. The positional group count
-    /// (`fallback`) misses a designator that jumps past it, so peek the
-    /// element list -- evaluating each `[expr]` designator -- and track the
-    /// running index the same way the fill loop does. Snapshot-restored, with
-    /// any data / PC the constant-fold touched rewound, so the real fill
+    /// Size of a deferred-size array (`T xs[] = { ... }`) that may use
+    /// array designators (`[N] = ...`, GNU `[lo ... hi] = ...`). C99
+    /// 6.7.8p22: the size is one greater than the largest index
+    /// initialized, whether reached positionally or by a designator. The
+    /// positional group count (`fallback`) misses a designator that jumps
+    /// past it, so peek the element list -- evaluating each `[expr]`
+    /// designator -- and track the running index the same way the fill
+    /// loop does. `inner_span` > 1 makes a run of that many unbraced
+    /// values count as one entry (a flat row of a multi-dimensional
+    /// array); pass 1 to count every value. Snapshot-restored, with any
+    /// data / PC the constant-fold touched rewound, so the real fill
     /// re-parses from a clean state.
-    pub(super) fn designated_array_count(&mut self, fallback: i64) -> Result<i64, C5Error> {
+    pub(super) fn designated_array_count(
+        &mut self,
+        fallback: i64,
+        inner_span: i64,
+    ) -> Result<i64, C5Error> {
         let snap = self.lex.snapshot();
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;
-        let result = self.designated_array_count_inner(fallback);
-        self.lex.restore(snap);
-        self.data.truncate(saved_data);
+        let result = self.designated_array_count_inner(fallback, inner_span);
+        self.restore_lex(snap);
+        self.truncate_data(saved_data);
         self.next_ent_pc = saved_pc;
         // A non-constant designator (invalid, or a shape this peek can't
         // fold) falls back to the positional count; the real fill re-parses
@@ -60,20 +67,29 @@ impl Compiler {
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;
         let is_desig = self.next().is_ok() && self.lex.tk == Token::Brak;
-        self.lex.restore(snap);
-        self.data.truncate(saved_data);
+        self.restore_lex(snap);
+        self.truncate_data(saved_data);
         self.next_ent_pc = saved_pc;
         is_desig
     }
 
-    fn designated_array_count_inner(&mut self, fallback: i64) -> Result<i64, C5Error> {
+    fn designated_array_count_inner(
+        &mut self,
+        fallback: i64,
+        inner_span: i64,
+    ) -> Result<i64, C5Error> {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
         let mut max_count = fallback;
         while self.lex.tk != '}' && self.lex.tk != 0 {
             if self.lex.tk == Token::Brak {
                 self.next()?;
-                i = self.parse_constant_int()?;
+                i = self.parse_constant_int_folding_const_objects()?;
+                // GNU `[lo ... hi]`: the entry ends at the range high.
+                if self.lex.tk == Token::Ellipsis {
+                    self.next()?;
+                    i = i.max(self.parse_constant_int_folding_const_objects()?);
+                }
                 if self.lex.tk == ']' {
                     self.next()?;
                 }
@@ -81,7 +97,24 @@ impl Compiler {
                     self.next()?;
                 }
             }
-            self.skip_init_element_value()?;
+            if inner_span > 1 && self.lex.tk != '{' {
+                // A flat run of up to `inner_span` leaves fills one row,
+                // matching the runtime fill's brace-elision absorption.
+                let mut used: i64 = 0;
+                loop {
+                    self.skip_init_element_value()?;
+                    used += 1;
+                    if used >= inner_span || self.lex.tk != ',' {
+                        break;
+                    }
+                    self.next()?;
+                    if self.lex.tk == '}' {
+                        break;
+                    }
+                }
+            } else {
+                self.skip_init_element_value()?;
+            }
             if i + 1 > max_count {
                 max_count = i + 1;
             }
@@ -93,10 +126,21 @@ impl Compiler {
         Ok(max_count)
     }
 
+    /// Record that a defining declaration moved a file-scope object off the
+    /// storage its tentative definition reserved. C99 6.9.2 makes both
+    /// declarations denote one object, so the old placement is kept for the
+    /// finalize-time rebase of references that already baked it in.
+    fn note_global_relocated(&mut self, id_idx: usize, was_tentative: bool, fresh: i64) {
+        let s = &mut self.symbols[id_idx];
+        if was_tentative && s.reserved_data_bytes > 0 && s.val != fresh {
+            s.relocated_from = Some((s.val, s.reserved_data_bytes));
+        }
+    }
+
     /// Advance past one initializer element's value to the next top-level `,`
     /// or the closing `}`, tracking bracket depth so a comma nested inside a
     /// brace / paren / bracket group does not end the element early.
-    fn skip_init_element_value(&mut self) -> Result<(), C5Error> {
+    pub(super) fn skip_init_element_value(&mut self) -> Result<(), C5Error> {
         let mut depth: i32 = 0;
         while self.lex.tk != 0 {
             if depth == 0 && (self.lex.tk == ',' || self.lex.tk == '}') {
@@ -112,6 +156,129 @@ impl Compiler {
         Ok(())
     }
 
+    /// `asm("...");` at file scope. The template goes through the same
+    /// head parse as a function-body `asm` statement, then through the
+    /// section-directive engine: section blocks of data directives are
+    /// recorded for the object writers (references to C symbols become
+    /// relocations by name). Operands, clobbers, `goto`, and
+    /// instructions outside a named section are rejected.
+    /// TODO: top-level instruction emission.
+    fn parse_file_scope_asm(&mut self) -> Result<(), C5Error> {
+        let (template, tstart, _is_volatile, is_goto) = self.parse_asm_head()?;
+        self.truncate_data(tstart);
+        if is_goto {
+            return Err(self.compile_err("`asm goto` is not supported at file scope"));
+        }
+        if self.lex.tk == ':' {
+            return Err(self.compile_err("inline asm operands are not supported at file scope"));
+        }
+        self.consume(b')', "`)` expected after inline asm")?;
+        self.consume(b';', "`;` expected after file-scope `asm`")?;
+        let text = core::str::from_utf8(&template)
+            .map_err(|_| self.compile_err("file-scope asm template is not valid UTF-8"))?;
+        self.ingest_file_scope_asm(text, true)
+            .map_err(|m| self.compile_err(m))
+    }
+
+    /// Run one GNU-as source unit through the section-directive engine and
+    /// record it for the object writers. `globl_shortcut` routes a stream of
+    /// nothing but `.globl` at C symbols, which only a translation unit has.
+    ///
+    /// Shared by the file-scope `asm("...")` parse and the assembler driver so
+    /// both accept the same constructs and reject the rest identically.
+    pub(super) fn ingest_file_scope_asm(
+        &mut self,
+        text: &str,
+        globl_shortcut: bool,
+    ) -> Result<(), String> {
+        use crate::c5::codegen::ssa::emit_common as engine;
+        // Comment stripping, GNU as macro expansion, and the per-definition
+        // rename of redefined numeric labels, once; the stored text is the
+        // prepared form so the codegen materialization sees the same
+        // statements the validation below does.
+        let aarch64 = self.target.is_aarch64();
+        let comments = if aarch64 {
+            engine::AsmComments::A64
+        } else {
+            engine::AsmComments::X86
+        };
+        let prepared = engine::prepare_file_asm_text(text, comments)?;
+        let text = prepared.as_str();
+        // The stream outside pushed sections is either linkage directives only
+        // (`.globl name`, applied to a C symbol) or a trampoline body (labels +
+        // instructions in the default `.text` section). The first routes through
+        // `.globl` collection; the second is assembled as a `.text` section.
+        // The probe runs the function-scope extractor, which rejects forms
+        // only the file-scope one accepts (`.text` switches, `.subsection`),
+        // so its error falls through to the file-scope parse.
+        let mut blocks = match engine::extract_asm_sections(text, aarch64) {
+            Ok(Some(ex)) if globl_shortcut && ex.is_linkage_only() => {
+                for name in ex.globl_names() {
+                    self.pending_asm_globl.push(name.into());
+                }
+                ex.blocks
+            }
+            _ => engine::extract_file_scope_asm_sections(text, aarch64)?,
+        };
+        for b in &blocks {
+            for item in &b.items {
+                match item {
+                    engine::AsmSectionItem::Data { values, .. }
+                        if values
+                            .iter()
+                            .any(|v| matches!(v, engine::AsmSectionValue::OperandConst(_))) =>
+                    {
+                        return Err(
+                            "operand reference in file-scope asm (no operands at file scope)"
+                                .into(),
+                        );
+                    }
+                    // Unit-level symbol directives: `.weak name` binds the
+                    // symbol weak wherever it is defined; `.set name, target`
+                    // is an object-level alias emitted at the target's
+                    // definition.
+                    engine::AsmSectionItem::Weak(name) => {
+                        if !self.asm_weak_names.contains(name) {
+                            self.asm_weak_names.push(name.clone());
+                        }
+                    }
+                    engine::AsmSectionItem::Hidden(name) => {
+                        if !self.asm_hidden_names.contains(name) {
+                            self.asm_hidden_names.push(name.clone());
+                        }
+                    }
+                    engine::AsmSectionItem::SymSet { name, target } => {
+                        // A later assignment to the same name wins, as in
+                        // GNU as.
+                        match self.asm_sym_sets.iter_mut().find(|(n, _)| n == name) {
+                            Some(e) => e.1 = target.clone(),
+                            None => self.asm_sym_sets.push((name.clone(), target.clone())),
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // Assemble the section's instructions and materialize into the unit's
+        // validation sink now so directive and encoding errors are diagnosed at
+        // the source line; the codegen re-materializes into the object's
+        // sections under the emit target's conventions. The sink spans the unit
+        // so a template resolves the labels its predecessors defined, matching
+        // the codegen materialization, which shares one sink per unit.
+        crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target, self.elf_class)?;
+        engine::materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            aarch64,
+            &mut self.asm_validate_sink,
+        )?;
+        self.file_asm.push(prepared);
+        Ok(())
+    }
+
     pub(super) fn run_compile(&mut self) -> Result<(), C5Error> {
         self.next()?;
         while self.lex.tk != 0 {
@@ -121,6 +288,13 @@ impl Compiler {
             // the message verbatim through the standard error path.
             if self.lex.tk == Token::StaticAssert {
                 self.parse_static_assert()?;
+                continue;
+            }
+            // `asm("...");` between declarations (C99 J.5.10 common
+            // extension): the template's section data directives emit
+            // into named sections of the object.
+            if self.lex.tk == Token::Asm {
+                self.parse_file_scope_asm()?;
                 continue;
             }
             let mut bt = Ty::Int as i64;
@@ -143,6 +317,7 @@ impl Compiler {
             // leak its array count into this iteration's
             // declarator binding.
             self.pending.typedef_base_array_size = 0;
+            self.pending.typedef_base_zero_len = false;
             // Reset the const carrier so a prior declaration's `const`
             // base does not leak onto this iteration's declarators.
             self.pending.base_is_const = false;
@@ -175,13 +350,23 @@ impl Compiler {
             self.pending.attr_thread_local = false;
             self.pending.attr_dllexport = false;
             self.pending.attr_align = 0;
+            self.pending.type_align = 0;
             self.pending.attr_vector_size = 0;
             self.pending.attr_constructor = false;
             self.pending.attr_destructor = false;
             self.pending.attr_init_priority = None;
             self.pending.attr_cleanup = None;
+            self.pending.attr_weak = false;
+            self.pending.attr_used = false;
+            self.pending.attr_visibility = None;
+            self.pending.attr_section = None;
+            self.pending.attr_alias = None;
+            self.pending.saw_register_storage = false;
+            self.pending.auto_type_single_declarator = false;
             self.pending_is_inline = false;
             self.pending_is_always_inline = false;
+            self.pending_saw_inline_specifier = false;
+            self.pending_is_gnu_inline = false;
             self.pending_is_naked = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
@@ -216,6 +401,7 @@ impl Compiler {
                 } else if is_decl_modifier(self.lex.tk) {
                     if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                         self.pending_is_inline = true;
+                        self.pending_saw_inline_specifier = true;
                         if self.lex.tk == Token::ForceInline {
                             self.pending_is_always_inline = true;
                         }
@@ -223,9 +409,12 @@ impl Compiler {
                     if self.lex.tk == Token::Noreturn {
                         self.pending_noreturn = true;
                     }
+                    if self.lex_is_register_storage() {
+                        self.pending.saw_register_storage = true;
+                    }
                     // `volatile` qualifies the declared type (C99 6.7.3);
                     // `const` is recorded out-of-band for value folding.
-                    qual_bits |= self.lex_volatile_bit();
+                    qual_bits |= self.lex_qualifier_bits();
                     self.pending.base_is_const |= self.lex_is_const_qual();
                     self.next()?;
                 } else {
@@ -241,6 +430,11 @@ impl Compiler {
                 // (parse_decl_base_type) already routes through the same
                 // helper; handle it identically at file scope.
                 bt = self.parse_typeof_specifier()?;
+            } else if self.lex.tk == Token::AutoType {
+                // `__auto_type` at file scope: the initializer supplies
+                // the type, recovered by the same pre-scan the
+                // block-scope path uses.
+                bt = self.parse_auto_type_specifier()?;
             } else if let Some(scalar) = self.parse_scalar_base_specifier(&m)? {
                 bt = scalar;
             } else if self.lex.tk == Token::Enum {
@@ -257,8 +451,13 @@ impl Compiler {
             } else if self.is_lex_int128_spelling() {
                 // GCC `__int128` / `__uint128_t` at file scope: a 16-byte
                 // integer type, modeled as a 16-byte aggregate.
+                bt = self.lex_int128_tag(m.saw_unsigned);
                 self.next()?;
-                bt = self.builtin_int128_tag();
+            } else if self.is_lex_va_list_spelling() {
+                // GCC `__builtin_va_list` at file scope: the target's
+                // `va_list` representation, usable with no header.
+                self.next()?;
+                bt = self.builtin_va_list_tag();
             } else if self.is_lex_typedef_name() {
                 // Typedef-name as base type at file scope: `Foo bar;`
                 // where `Foo` was bound by a prior `typedef`.
@@ -294,6 +493,15 @@ impl Compiler {
                     self.pending.typedef_base_array_size = typedef_array;
                     self.pending.typedef_base_array_dims =
                         self.symbols[self.lex.curr_id_idx].array_dims.clone();
+                    self.pending.typedef_base_zero_len =
+                        self.symbols[self.lex.curr_id_idx].is_zero_len_array;
+                }
+                // Carry the typedef's explicit type alignment (GNU
+                // `aligned(N)`) so a declaration through it -- including a
+                // typedef of a typedef -- honors the requested boundary.
+                let typedef_align = self.symbols[self.lex.curr_id_idx].type_align;
+                if typedef_align > 0 {
+                    self.pending.type_align = typedef_align;
                 }
                 self.next()?;
             } else if m.saw_int_mod {
@@ -336,7 +544,10 @@ impl Compiler {
                     self.skip_attribute_specifiers()?;
                     continue;
                 }
-                qual_bits |= self.lex_volatile_bit();
+                if self.lex_is_register_storage() {
+                    self.pending.saw_register_storage = true;
+                }
+                qual_bits |= self.lex_qualifier_bits();
                 self.pending.base_is_const |= self.lex_is_const_qual();
                 self.next()?;
             }
@@ -345,6 +556,9 @@ impl Compiler {
             if self.pending.attr_vector_size > 0 {
                 let n = core::mem::take(&mut self.pending.attr_vector_size);
                 bt = self.make_vector_type(bt, n);
+            }
+            if let Some(m) = self.pending.attr_mode.take() {
+                bt = self.apply_mode_to_type(bt, m)?;
             }
 
             // C99 6.7.1: declaration specifiers may appear in any order, so a
@@ -364,6 +578,7 @@ impl Compiler {
                     self.next()?;
                 } else if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
                     self.pending_is_inline = true;
+                    self.pending_saw_inline_specifier = true;
                     if self.lex.tk == Token::ForceInline {
                         self.pending_is_always_inline = true;
                     }
@@ -372,7 +587,7 @@ impl Compiler {
                     self.pending_noreturn = true;
                     self.next()?;
                 } else if self.lex.tk == Token::TypeQual {
-                    qual_bits |= self.lex_volatile_bit();
+                    qual_bits |= self.lex_qualifier_bits();
                     self.pending.base_is_const |= self.lex_is_const_qual();
                     self.next()?;
                 } else if self.lex.tk == Token::Attribute
@@ -383,7 +598,7 @@ impl Compiler {
                     break;
                 }
             }
-            bt |= qual_bits;
+            bt = apply_qual_bits(bt, qual_bits);
 
             // A function-pointer typedef base type contributes its lineage
             // to every declarator in the list (`fn_t a, b;`). The
@@ -395,7 +610,18 @@ impl Compiler {
             let base_is_function_type = self.pending.base_is_function_type;
             let base_typedef_fn_proto = self.pending.typedef_fn_proto;
             let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
+            // A typedef-carried type alignment applies to every declarator;
+            // an initializer's own type parses (casts, `sizeof`) reset the
+            // pending carrier, so capture it once for the whole list.
+            let base_type_align = self.pending.type_align;
+            let mut declarator_count = 0usize;
             while self.lex.tk != ';' && self.lex.tk != '}' {
+                if self.pending.auto_type_single_declarator && declarator_count > 0 {
+                    return Err(
+                        self.compile_err("`__auto_type` declaration takes a single declarator")
+                    );
+                }
+                declarator_count += 1;
                 self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
                 self.pending.base_is_function_type = base_is_function_type;
                 self.pending.typedef_fn_proto = base_typedef_fn_proto;
@@ -405,10 +631,22 @@ impl Compiler {
                 // function body's opening brace parsed further below.
                 let signature_line = self.lex.line;
                 let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
-                // TODO: file-scope declarator `asm("name")` -- both the
-                // linkage-name rename and the global register variable.
                 if self.lex.tk == Token::Asm {
-                    return Err(self.compile_err("declarator `asm` is not supported at file scope"));
+                    // `register T name asm("reg")` at file scope is a GNU
+                    // global register variable; anything else is the
+                    // assembler-name label, which continues the ordinary
+                    // object declaration (initializer, attributes, `;`/`,`).
+                    if self.pending.saw_register_storage {
+                        self.parse_file_scope_register_binding(
+                            id_idx,
+                            ty,
+                            static_seen,
+                            extern_seen,
+                        )?;
+                        self.accept_declarator_separator()?;
+                        continue;
+                    }
+                    self.parse_declarator_asm_label(id_idx)?;
                 }
                 // `__declspec(dllexport)` on the declarator exports the name,
                 // the equivalent of `#pragma export(name)`. resolve_exports
@@ -431,6 +669,9 @@ impl Compiler {
                 if self.pending.attr_vector_size > 0 {
                     let n = core::mem::take(&mut self.pending.attr_vector_size);
                     ty = self.make_vector_type(ty, n);
+                }
+                if let Some(m) = self.pending.attr_mode.take() {
+                    ty = self.apply_mode_to_type(ty, m)?;
                 }
                 // Capture per this declarator before any nested parse can
                 // overwrite it (a later parameter of function type would
@@ -466,34 +707,45 @@ impl Compiler {
                 // the declarator (C99 6.7.7p3 + 6.7.6.1). Skip
                 // the carrier in that case.
                 let typedef_dim = self.pending.typedef_base_array_size;
+                // Declarator-added dimensions over an over-aligned element
+                // are rejected here for objects and typedef aliases alike.
+                self.check_array_elem_align(array_size, ty, typedef_dim, base_type_align)?;
                 // A fixed dimension (`> 0`) sizes the object; a deferred array
                 // typedef (`typedef T X[]`, carried as `-1`) makes the object
                 // a deferred array whose size the initializer fixes.
+                let mut zero_len_array = self.pending.declarator_zero_len_array;
                 if typedef_dim != 0
                     && array_size == 0
                     && self.pending.declarator_leading_ptr_count == 0
                 {
                     array_size = typedef_dim;
+                    zero_len_array = self.pending.typedef_base_zero_len;
                     self.apply_typedef_array_dims(id_idx);
                 }
                 self.ty = ty;
                 let prior_array_size = self.symbols[id_idx].array_size;
                 self.symbols[id_idx].array_size = array_size;
+                // A zero-length array (`T x[0]`, or an alias of one) is a
+                // complete type of size 0; the `-1` count it shares with
+                // the deferred `T x[]` form cannot tell them apart.
+                if array_size < 0 {
+                    self.symbols[id_idx].is_zero_len_array = zero_len_array;
+                }
                 // A `const`-qualified plain integer scalar folds its value
                 // in later constant expressions (read back from `.data`).
                 self.symbols[id_idx].is_const_qualified = self.pending.base_is_const
                     && array_size == 0
                     && super::types::is_integer_scalar_ty(ty);
-                // A `const`-element array (`static const T x[]`, sized or
-                // deferred: `array_size` is `> 0` or `-1` here, the
-                // initializer fixes a deferred count). Its elements and
-                // their members cannot be written (C99 6.7.3), so a
-                // relocation the initializer planted in the storage holds
-                // for the object's lifetime. Scalars (`array_size == 0`)
-                // stay excluded: a `const char *p` has a const pointee but
-                // a writable object, so its stored address is not fixed.
-                self.symbols[id_idx].storage_is_const =
-                    self.pending.base_is_const && array_size != 0;
+                // The declared object's own storage is const-qualified (C99
+                // 6.7.3p5 then makes modifying it undefined, so its
+                // initializer is its value for the whole execution). A
+                // declarator that adds pointer indirection points the
+                // qualifier at the pointee instead: `p` and `t[0]` of
+                // `const char *p` / `const char *t[2]` are writable. A
+                // `const` after the outermost `*` qualifies the object
+                // again: `char *const p`, `const char *const t[2]`.
+                self.symbols[id_idx].storage_is_const = self.pending.declarator_outer_const
+                    || (self.pending.base_is_const && !super::types::is_pointer_ty(ty));
                 if fn_ptr_indirection > 0 {
                     self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
                 }
@@ -506,7 +758,7 @@ impl Compiler {
                 // synthesising placeholder parameter types would feed the
                 // call-site argument type-check a spurious mismatch.
                 let fnptr_proto = self.pending.typedef_fn_proto.take();
-                let fnptr_param_types = self.pending.fn_ptr_param_types.take();
+                let mut fnptr_param_types = self.pending.fn_ptr_param_types.take();
                 // `fn_ptr_param_types` is the pointee signature of a
                 // fn-pointer typedef used as this declarator's type. It
                 // describes a fn-pointer OBJECT (`cb x;` -- a callback
@@ -516,8 +768,14 @@ impl Compiler {
                 // parameter list, installed below; a following `(` marks
                 // it, so the return type's pointee params must not stand
                 // in as the function's own.
-                if self.lex.tk != '(' {
-                    if let Some(types) = fnptr_param_types {
+                // A bare function-type declarator (`extern typeof(f) f;`)
+                // declares a function, so its list belongs to the function
+                // path below and installing it here would overwrite the prior
+                // signature that path compares against. A typedef alias of a
+                // function type has no function path and keeps this install.
+                let carrier_names_object = !bare_function_type || is_typedef;
+                if self.lex.tk != '(' && carrier_names_object {
+                    if let Some(types) = fnptr_param_types.take() {
                         self.symbols[id_idx].params = types;
                         self.symbols[id_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
                     } else if let Some((proto_fixed, true)) = fnptr_proto {
@@ -529,15 +787,10 @@ impl Compiler {
                 // declarator. `pending_base_was_void` was set if
                 // the base type spelled `void`; it stays valid
                 // for the FIRST declarator in a comma-separated
-                // group only -- subsequent ones see the flag
-                // and would mis-fire if the declarator added
-                // pointer levels in between. Gate on
-                // "no leading `*` added" by checking that the
-                // declarator's returned `ty` still equals the
-                // bare-void encoding. Any declarator that bumped
-                // `ty` by `Ty::Ptr` falls out.
-                let declarator_is_bare_void =
-                    self.pending.base_was_void && ty == (Ty::Char as i64 | UNSIGNED_BIT);
+                // group only. Gate on "no leading `*` added": any
+                // declarator that bumped `ty` by `Ty::Ptr` is no
+                // longer scalar `void` and falls out.
+                let declarator_is_bare_void = self.pending.base_was_void && is_void_ty(ty);
                 // Consume the flag so the next iteration of the
                 // declarator loop (`void *a, b;`) doesn't
                 // re-trigger on a different declarator's shape.
@@ -600,7 +853,9 @@ impl Compiler {
                             }
                             (ty, fn_ptr_indirection, Some(pp), false)
                         } else {
-                            (ty, fn_ptr_indirection, None, false)
+                            // An alias of a function-type typedef stays a
+                            // function type.
+                            (ty, fn_ptr_indirection, None, bare_function_type)
                         };
                     let prior_class = self.symbols[id_idx].class;
                     let prior_type = self.symbols[id_idx].type_;
@@ -622,29 +877,32 @@ impl Compiler {
                     self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
                     self.symbols[id_idx].is_enum_typedef = base_is_enum;
                     self.symbols[id_idx].is_function_type = typedef_is_fn_type;
+                    // A GNU `aligned(N)` type attribute on the typedef
+                    // (its own declaration's attribute, else propagated
+                    // from an aligned typedef base) becomes the alias's
+                    // type alignment.
+                    let alias_align = if self.pending.attr_align > 0 {
+                        self.pending.attr_align
+                    } else {
+                        base_type_align
+                    };
+                    if alias_align > 0 && !(alias_align as u64).is_power_of_two() {
+                        return Err(self.compile_err(format!(
+                            "requested alignment {alias_align} is not a power of two"
+                        )));
+                    }
+                    self.symbols[id_idx].type_align = alias_align;
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
                     }
+                    // The `typedef RET NAME(args)` / `typedef RET (*NAME)(args)`
+                    // spellings parse their own list; an alias of an existing
+                    // function type took the carrier install above.
                     if let Some(pp) = typedef_params {
                         self.symbols[id_idx].params = pp.types;
                         self.symbols[id_idx].is_variadic = pp.is_variadic;
-                    } else if let Some((proto_fixed, proto_variadic)) =
-                        self.pending.typedef_fn_proto.take()
-                    {
-                        // `typedef RET (*NAME)(args)`: the declarator
-                        // captured the pointee signature's prototype.
-                        // Record the parameter types (so a fn-pointer
-                        // variable declared through the typedef narrows
-                        // each argument to its declared type) and the
-                        // variadic-ness.
-                        self.symbols[id_idx].params = self
-                            .pending
-                            .fn_ptr_param_types
-                            .take()
-                            .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
-                        self.symbols[id_idx].is_variadic = proto_variadic;
                     }
-                    self.accept(',')?;
+                    self.accept_declarator_separator()?;
                     continue;
                 }
 
@@ -657,17 +915,16 @@ impl Compiler {
                 // than colliding as a duplicate global.
                 if bare_function_type && preconsumed_params.is_none() && self.lex.tk != '(' {
                     ty -= Ty::Ptr as i64;
-                    let types = self.pending.fn_ptr_param_types.take().unwrap_or_default();
-                    let is_variadic = self
-                        .pending
-                        .typedef_fn_proto
-                        .take()
-                        .map(|(_, variadic)| variadic)
-                        .unwrap_or(false);
+                    // From the capture above: `pending` is already drained.
+                    let types = fnptr_param_types.unwrap_or_default();
+                    let is_variadic = matches!(fnptr_proto, Some((_, true)));
                     preconsumed_params = Some(super::function::ParsedParams {
                         indices: alloc::vec::Vec::new(),
                         types,
                         is_variadic,
+                        // A function-type specifier supplies a parameter type
+                        // list; the empty-list spelling does not reach here.
+                        is_prototyped: true,
                     });
                 }
 
@@ -756,26 +1013,20 @@ impl Compiler {
                             self.symbols[id_idx].decl_line = self.lex.line;
                             self.symbols[id_idx].decl_in_main_source = self.in_main_source();
                         }
-                        // C99 6.2.2 / 6.7.4p7 linkage, recomputed from the
-                        // facts accumulated across every declaration of this
-                        // name. `static` is internal and sticky. A function
-                        // all of whose declarations are `inline` without
-                        // `extern` provides no external definition in this
-                        // unit, so it takes internal linkage (the out-of-line
-                        // copy stays private; the external definition, when
-                        // the program needs one, comes from a unit that
-                        // declares it `extern inline` or non-inline). A single
-                        // non-inline or `extern` declaration makes it external.
-                        if static_seen {
-                            self.symbols[id_idx].saw_static_decl = true;
-                        }
-                        if !self.pending_is_inline {
-                            self.symbols[id_idx].saw_noninline_decl = true;
-                        }
-                        // `static` is internal; an all-`inline`, never-`extern`
-                        // function is inline-only (also internal); anything
-                        // with a non-inline or `extern` declaration is external.
+                        // Census one file-scope declaration of this name for
+                        // the inline linkage models (C99 6.7.4p6-p7 and
+                        // GNU89); `resolve_inline_linkage` reads the totals
+                        // once the unit's last declaration is in. The
+                        // provisional linkage below keeps mid-parse state
+                        // consistent for a `static`-vs-external decision that
+                        // does not depend on the inline model.
                         let sym = &mut self.symbols[id_idx];
+                        sym.saw_static_decl |= static_seen;
+                        match (self.pending_saw_inline_specifier, extern_seen) {
+                            (false, _) => sym.saw_noninline_decl = true,
+                            (true, false) => sym.saw_plain_inline_decl = true,
+                            (true, true) => sym.saw_extern_inline_decl = true,
+                        }
                         let internal = sym.saw_static_decl
                             || (!sym.saw_noninline_decl && !extern_seen && !sym.is_extern_decl);
                         sym.linkage = if internal {
@@ -826,10 +1077,30 @@ impl Compiler {
                     // before the prototype's `;` or the body's `{`
                     // (`RET name(args) __attribute__((noreturn));`).
                     self.skip_attribute_specifiers()?;
+                    // A GNU asm-label rename (`RET name(args) asm("name");`)
+                    // may sit between the declarator and the terminator, on
+                    // either side of the attributes.
+                    if self.lex.tk == Token::Asm {
+                        self.parse_declarator_asm_label(id_idx)?;
+                        self.skip_attribute_specifiers()?;
+                    }
 
                     // Stash the signature on the function symbol so
                     // call sites can type-check arguments later. For
                     // both prototypes and bodied definitions.
+                    //
+                    // C99 6.7.5.3p14: an empty list outside a definition
+                    // supplies no parameter information, so the composite type
+                    // (6.2.7p4) keeps the prior list. In a definition the same
+                    // spelling does specify "no parameters".
+                    let is_defining_declarator = self.lex.tk != ';' && self.lex.tk != ',';
+                    let keeps_prior_list = !params.is_prototyped
+                        && !is_defining_declarator
+                        && !prior_params.is_empty();
+                    if keeps_prior_list {
+                        params.types = prior_params.clone();
+                        params.is_variadic = prior_is_variadic;
+                    }
                     self.symbols[id_idx].params = params.types.clone();
                     self.symbols[id_idx].is_variadic = params.is_variadic;
                     // C11 6.7.4: `_Noreturn` on any declaration of the
@@ -844,6 +1115,10 @@ impl Compiler {
                     if self.pending_noreturn {
                         self.symbols[id_idx].is_noreturn = true;
                     }
+                    // `weak` / `used` / `section("name")` collected for
+                    // this declarator (leading or trailing) mark the
+                    // symbol; the object writers read them off it.
+                    self.apply_symbol_attributes(id_idx);
                     // Carry the bare-`void` return marker onto the
                     // symbol so the body-emit path zeroes the
                     // accumulator before the trailing return, and so a
@@ -941,6 +1216,38 @@ impl Compiler {
                     }
 
                     if self.lex.tk == ';' || self.lex.tk == ',' {
+                        // `alias("target")` on a bodyless declarator: the
+                        // declared name becomes an additional symbol for a
+                        // function already defined in this unit, and calls
+                        // through it resolve to the target's entry.
+                        if let Some(target) = self.pending.attr_alias.take() {
+                            let tgt = self.symbols.iter().position(|s| {
+                                s.link_name() == target
+                                    && s.class == Token::Fun as i64
+                                    && s.defined_here
+                            });
+                            let Some(tgt) = tgt else {
+                                // The target may be defined later in the unit;
+                                // retry once the unit is complete.
+                                self.pending_aliases.push((id_idx, target, false));
+                                self.symbols[id_idx].is_alias = true;
+                                let bound = self.take_scope_bound();
+                                self.unwind_scope_bound(bound);
+                                self.accept_declarator_separator()?;
+                                continue;
+                            };
+                            self.symbols[tgt].was_referenced = true;
+                            self.symbols[id_idx].val = self.symbols[tgt].val;
+                            // Defined-through-the-target: keeps the TU-end
+                            // extern-import pass from re-assigning a
+                            // placeholder pc over the resolved entry.
+                            self.symbols[id_idx].defined_here = true;
+                            self.symbols[id_idx].is_alias = true;
+                            let name = self.symbols[id_idx].link_name().into();
+                            let weak = self.symbols[id_idx].is_weak;
+                            self.function_aliases
+                                .push(crate::c5::program::FunctionAlias { name, target, weak });
+                        }
                         // Function prototype, not a definition. C99 6.7
                         // permits several declarators in one declaration,
                         // so a prototype can be followed by `,` and more
@@ -950,15 +1257,12 @@ impl Compiler {
                         // marked them as `Loc`) so subsequent declarations
                         // of the same names don't trip the
                         // duplicate-global check.
-                        for sym in self.symbols.iter_mut() {
-                            if sym.class == Token::Loc as i64 {
-                                Self::restore_shadowed_symbol(sym);
-                            }
-                        }
+                        let bound = self.take_scope_bound();
+                        self.unwind_scope_bound(bound);
                         // On `,` consume it and let the outer loop parse
                         // the next declarator; on `;` the outer loop exits
                         // and `self.next()` after it consumes the `;`.
-                        self.accept(',')?;
+                        self.accept_declarator_separator()?;
                         continue;
                     }
 
@@ -994,7 +1298,7 @@ impl Compiler {
                             || self.lex.tk == Token::Extern
                             || self.lex.tk == Token::TypeQual
                         {
-                            qual_bits |= self.lex_volatile_bit();
+                            qual_bits |= self.lex_qualifier_bits();
                             self.next()?;
                             saw_specifier = true;
                         }
@@ -1076,8 +1380,11 @@ impl Compiler {
                     self.committed_loc_offs = 0;
                     self.max_loc_offs = 0;
                     self.multi_cell_temps.clear();
+                    self.func_over_aligned.clear();
                     self.labels.clear();
                     self.unresolved_gotos.clear();
+                    self.local_label_scopes.clear();
+                    self.local_label_seq = 0;
                     self.uses_alloca_in_current_fn = false;
                     self.func_vla_decls = 0;
                     self.ast_reset();
@@ -1186,7 +1493,7 @@ impl Compiler {
                     // float-typed code expects, and the load/store
                     // semantics stay consistent.
                     for &idx in params.indices.iter() {
-                        let pty = self.symbols[idx].type_ & !(UNSIGNED_BIT | VOLATILE_BIT);
+                        let pty = strip_unsigned(self.symbols[idx].type_);
                         if pty != Ty::Float as i64 {
                             continue;
                         }
@@ -1231,7 +1538,21 @@ impl Compiler {
                     // `__attribute__((cleanup))` variables; cleaned on
                     // fall-through (below) and on every `return`.
                     self.cleanup_scopes.push(alloc::vec::Vec::new());
+                    // GCC local labels declared by the body's top-level
+                    // block; see `Compiler::resolve_label_name`.
+                    self.local_label_scopes.push(alloc::vec::Vec::new());
+                    let mut at_block_start = true;
                     while self.lex.tk != '}' {
+                        if self.lex.tk == Token::LocalLabel {
+                            if !at_block_start {
+                                return Err(self.compile_err(
+                                    "`__label__` must appear at the start of its block",
+                                ));
+                            }
+                            self.parse_local_label_decl()?;
+                            continue;
+                        }
+                        at_block_start = false;
                         // C23 6.7.13 / 6.8: an attribute-specifier-
                         // sequence may lead either a declaration or a
                         // statement at the function-body top level.
@@ -1266,7 +1587,10 @@ impl Compiler {
                             self.parse_block_typedef(None)?;
                         } else if self.lex_is_type_start() {
                             let item_before = self.ast_stmts_snapshot();
-                            self.parse_function_body_local_decl(leading_maybe_unused)?;
+                            self.parse_local_decl(
+                                leading_maybe_unused,
+                                &mut super::locals::DeclScope::FunctionBody,
+                            )?;
                             let item_after = self.ast.stmts.len();
                             // Skip any statement-expression sub-statements
                             // interleaved by an initializer; they are
@@ -1297,7 +1621,7 @@ impl Compiler {
                     // top-level `__attribute__((cleanup))` functions in
                     // reverse declaration order before the synthetic return.
                     if self.cleanup_scopes.last().is_some_and(|s| !s.is_empty()) {
-                        let pairs: alloc::vec::Vec<(usize, usize)> = self
+                        let pending: alloc::vec::Vec<_> = self
                             .cleanup_scopes
                             .last()
                             .unwrap()
@@ -1305,9 +1629,9 @@ impl Compiler {
                             .rev()
                             .cloned()
                             .collect();
-                        for (var_sym, fn_sym) in pairs {
+                        for cv in pending {
                             let before = self.ast.stmts.len();
-                            self.push_cleanup_call(var_sym, fn_sym);
+                            self.push_cleanup_call(&cv);
                             for id in before..self.ast.stmts.len() {
                                 top_level_ids.push(id as super::super::ast::StmtId);
                             }
@@ -1315,6 +1639,7 @@ impl Compiler {
                     }
                     self.cleanup_scopes.pop();
                     self.tag_scopes.pop();
+                    self.local_label_scopes.pop();
                     // Wrap the function's top-level stmts into a
                     // Compound and pin it as `ast.body` so the
                     // walker has a single tree root to descend
@@ -1362,8 +1687,7 @@ impl Compiler {
                         })
                         .collect();
                     let ret_ty_for_finish = self.current_func_return_ty;
-                    let returns_struct_finish =
-                        is_struct_ty(ret_ty_for_finish) && struct_ptr_depth(ret_ty_for_finish) == 0;
+                    let returns_struct_finish = is_struct_value_ty(ret_ty_for_finish);
                     let return_struct_size_finish = if returns_struct_finish {
                         self.size_of_type(ret_ty_for_finish) as i64
                     } else {
@@ -1405,7 +1729,10 @@ impl Compiler {
 
                     for name in &self.unresolved_gotos {
                         if !self.labels.iter().any(|n| n == name) {
-                            return Err(self.compile_err(format!("unresolved label: {}", name)));
+                            return Err(self.compile_err(format!(
+                                "unresolved label: {}",
+                                super::emit::label_display_name(name)
+                            )));
                         }
                     }
 
@@ -1423,7 +1750,13 @@ impl Compiler {
                     // local (val < 0).
                     let param_set: alloc::collections::BTreeSet<usize> =
                         params.indices.iter().copied().collect();
-                    for (i, sym) in self.symbols.iter().enumerate() {
+                    let bound = self.take_scope_bound();
+                    // `variables` accumulates over the whole unit; this
+                    // function owns exactly the entries appended from here on.
+                    let vars_start = self.variables.len();
+                    for &bi in &bound {
+                        let i = bi as usize;
+                        let sym = &self.symbols[i];
                         if sym.class == Token::Loc as i64
                             && sym.val != 0
                             && sym.val != 1
@@ -1448,6 +1781,14 @@ impl Compiler {
                                 decl_line: sym.decl_line as u32,
                                 array_size,
                                 decl_file: sym.decl_file,
+                                fn_ptr_indirection: sym.fn_ptr_indirection,
+                                params: sym.params.clone(),
+                                is_variadic: sym.is_variadic,
+                                array_dims: if is_parameter {
+                                    Vec::new()
+                                } else {
+                                    sym.array_dims.clone()
+                                },
                             });
                         }
                     }
@@ -1459,6 +1800,11 @@ impl Compiler {
                     for mut bl in core::mem::take(&mut self.pending_block_locals) {
                         bl.function_bc_pc = ent_pc as u64;
                         self.variables.push(bl);
+                    }
+                    // Stamp the owner on each block-scope static's
+                    // emission record for the same reason.
+                    for i in core::mem::take(&mut self.pending_block_static_syms) {
+                        self.symbols[i].owner_ent_pc = Some(ent_pc as u64);
                     }
                     // Record declared multi-cell locals (aggregates and
                     // multi-cell scalars) for slot coalescing. A declared
@@ -1475,8 +1821,8 @@ impl Compiler {
                     // `fp_slot < 0` -- not `!is_parameter` -- selects every
                     // local that needs its interior cells reserved.
                     let mut multi_cell: Vec<(i64, i64)> = Vec::new();
-                    for v in &self.variables {
-                        if v.function_bc_pc == ent_pc as u64 && v.fp_slot < 0 {
+                    for v in &self.variables[vars_start..] {
+                        if v.fp_slot < 0 {
                             let cells = self.local_storage_slots(v.type_tag, v.array_size as i64);
                             if cells > 1 {
                                 multi_cell.push((v.fp_slot, cells));
@@ -1487,8 +1833,22 @@ impl Compiler {
                     // symbol (struct call results, parameter copies, compound
                     // literals); these never appear in the variable list.
                     multi_cell.extend_from_slice(&self.multi_cell_temps);
+                    let over_aligned = core::mem::take(&mut self.func_over_aligned);
+                    // C11 6.7.5 + C99 6.7.6.2: the over-aligned region is
+                    // reserved by moving sp in the prologue, which `alloca` and
+                    // a variable-length array also do, so the two cannot share
+                    // a frame. Diagnosed here, where both facts are known, so
+                    // the combination reads as a source-level rejection rather
+                    // than reaching the walker's internal error.
+                    if !over_aligned.is_empty() && self.uses_alloca_in_current_fn {
+                        return Err(self.compile_err(
+                            "an over-aligned automatic object cannot share a function \
+                             with `alloca` or a variable-length array; use static storage",
+                        ));
+                    }
                     if let Some(ff) = self.finished_functions.last_mut() {
                         ff.multi_cell_slots = multi_cell;
+                        ff.over_aligned_slots = over_aligned;
                     }
                     // Collect unused-parameter and unused-local
                     // diagnostics for the function's top-level
@@ -1506,7 +1866,9 @@ impl Compiler {
                         ValueSet,
                     }
                     let mut unused: Vec<(usize, String, UnusedKind)> = Vec::new();
-                    for (i, sym) in self.symbols.iter().enumerate() {
+                    for &bi in &bound {
+                        let i = bi as usize;
+                        let sym = &self.symbols[i];
                         if sym.class != Token::Loc as i64
                             || !sym.decl_in_main_source
                             || sym.address_escaped
@@ -1561,20 +1923,21 @@ impl Compiler {
                     // reaches function exit without an intervening
                     // read or branch is unambiguously dead.
                     self.emit_dead_stores_and_flush();
-                    for sym in self.symbols.iter_mut() {
-                        // Block-scope locals (`Loc`) and `static` locals
-                        // (promoted to `Glo` but block-scoped) both unbind
-                        // at function exit so a file-scope object of the
-                        // same name reappears.
-                        if sym.class == Token::Loc as i64
-                            || sym.is_scope_static
-                            || sym.is_scope_typedef
-                        {
-                            Self::restore_shadowed_symbol(sym);
-                        }
-                    }
+                    // Block-scope locals (`Loc`), `static` locals
+                    // (promoted to `Glo` but block-scoped) and an
+                    // `extern` that converted a bound file-scope name
+                    // all unbind at function exit so the outer binding
+                    // of the same name reappears.
+                    self.unwind_scope_bound(bound);
                 } else {
                     self.symbols[id_idx].class = Token::Glo as i64;
+                    // First declaration wins the source position, as it does
+                    // for functions; it feeds DW_AT_decl_file / decl_line.
+                    if self.symbols[id_idx].decl_line == 0 {
+                        self.symbols[id_idx].decl_line = self.lex.line;
+                        self.symbols[id_idx].decl_file = self.intern_source_file() as u32;
+                        self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+                    }
                     if !was_tentative_glo {
                         self.symbols[id_idx].is_thread_local = thread_local;
                     }
@@ -1589,6 +1952,48 @@ impl Compiler {
                         self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::Internal;
                     } else if self.symbols[id_idx].linkage != crate::c5::symbol::Linkage::Internal {
                         self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
+                    }
+                    self.apply_symbol_attributes(id_idx);
+                    // `alias("target")` on an object declarator: the name
+                    // is an additional symbol at the target object's
+                    // offset. It reserves no storage of its own; the
+                    // regular data-symbol emission picks it up with the
+                    // shared offset.
+                    if let Some(target) = self.pending.attr_alias.take() {
+                        let tgt = self.symbols.iter().position(|s| {
+                            s.name == target && s.class == Token::Glo as i64 && s.defined_here
+                        });
+                        // `has_initializer` marks the alias as carrying a
+                        // value: a later `= init` trips the duplicate-
+                        // definition check like any second initializer.
+                        let Some(tgt) = tgt else {
+                            // The target may be defined later in the unit.
+                            self.pending_aliases.push((id_idx, target, true));
+                            self.symbols[id_idx].class = Token::Glo as i64;
+                            self.symbols[id_idx].type_ = ty;
+                            self.symbols[id_idx].is_alias = true;
+                            self.symbols[id_idx].has_initializer = true;
+                            self.accept_declarator_separator()?;
+                            continue;
+                        };
+                        self.symbols[id_idx].class = Token::Glo as i64;
+                        self.symbols[id_idx].type_ = ty;
+                        self.symbols[id_idx].val = self.symbols[tgt].val;
+                        self.symbols[id_idx].array_size = self.symbols[tgt].array_size;
+                        self.symbols[id_idx].defined_here = true;
+                        self.symbols[id_idx].is_extern_decl = false;
+                        self.symbols[id_idx].is_alias = true;
+                        self.symbols[id_idx].has_initializer = true;
+                        self.accept_declarator_separator()?;
+                        continue;
+                    }
+                    // A later no-initializer declaration of an alias-defined
+                    // object redeclares it (C99 6.9.2p2). The alias owns no
+                    // storage, so the merge-or-allocate paths below would
+                    // give it fresh zero bytes and break the binding.
+                    if self.symbols[id_idx].is_alias && self.lex.tk != Token::Assign {
+                        self.accept_declarator_separator()?;
+                        continue;
                     }
                     // C11 6.7.5: a requested alignment is honored on
                     // file-scope objects -- the object writer aligns the
@@ -1609,17 +2014,63 @@ impl Compiler {
                             super::MAX_STATIC_ALIGN
                         )));
                     }
-                    let decl_align: usize = if req_align > 8 {
-                        if thread_local {
+                    // The object's alignment is the wider of what this
+                    // declarator asked for and what its type already
+                    // requires: an `aligned(64)` member raises its whole
+                    // aggregate, so `struct S g;` needs a 64-aligned slot
+                    // with no attribute in sight.
+                    // A GNU `aligned(N)` type attribute on the object's
+                    // typedef base raises its placement like an explicit
+                    // request; a reducing one is absorbed by the type's
+                    // natural alignment. A pointer object keeps pointer
+                    // alignment.
+                    let type_align = if is_pointer_ty(ty) {
+                        0
+                    } else {
+                        base_type_align.max(0) as usize
+                    };
+                    let want_align = core::cmp::max(
+                        core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
+                        type_align,
+                    );
+                    // Declarations of one object combine to the strictest
+                    // alignment (C11 6.7.5, GNU attribute practice): an
+                    // attribute-free redeclaration must not lower the
+                    // recorded placement.
+                    self.symbols[id_idx].data_align = self.symbols[id_idx]
+                        .data_align
+                        .max(want_align.max(1) as i64);
+                    // Declared object alignment for `__alignof__` on the
+                    // name: a declarator attribute replaces a typedef-carried
+                    // value, else raises the natural alignment; the typedef
+                    // value alone stands as given (it may lower). Distinct
+                    // from the placement above, which never lowers.
+                    let obj_align = if req_align > 0 && type_align > 0 {
+                        req_align
+                    } else if req_align > 0 {
+                        req_align.max(self.align_of_type(ty) as i64)
+                    } else {
+                        type_align as i64
+                    };
+                    self.symbols[id_idx].type_align =
+                        self.symbols[id_idx].type_align.max(obj_align);
+                    let decl_align: usize = if want_align > 8 {
+                        if thread_local && (req_align > 8 || want_align > 16) {
                             return Err(self.compile_err(
                                 "alignment above 8 is not supported for `_Thread_local` objects",
                             ));
                         }
-                        self.data_align = self.data_align.max(req_align as usize);
-                        req_align as usize
+                        self.data_align = self.data_align.max(want_align);
+                        want_align
                     } else {
                         8
                     };
+                    // Align the data cursor before any of the branches
+                    // below reserve storage, so a tentative or zero-init
+                    // definition starts on the object's boundary.
+                    if decl_align > 8 {
+                        self.align_data_to(decl_align);
+                    }
                     let was_extern_only_decl =
                         extern_seen && self.lex.tk != Token::Assign && array_size != -1;
                     // `extern struct S s;` whose `struct S` has no fixed
@@ -1634,19 +2085,23 @@ impl Compiler {
                     // wrong-sized slot, and either the next global overlaps
                     // it (fixed part too small) or the definition allocating
                     // fresh strands references emitted against the slot.
+                    // C99 6.2.2p4: after a prior definition (tentative or
+                    // initialized) the extern redeclares the same object;
+                    // flipping it undefined here would drop the symbol.
                     if was_extern_only_decl
-                        && is_struct_ty(ty)
-                        && struct_ptr_depth(ty) == 0
+                        && !self.symbols[id_idx].defined_here
+                        && is_struct_value_ty(ty)
                         && (self.structs[struct_id_of(ty)].fields.is_empty()
-                            || self.structs[struct_id_of(ty)]
-                                .fields
-                                .iter()
-                                .any(|f| f.array_size < 0))
+                            || self.flexible_array_member(struct_id_of(ty)).is_some())
                     {
-                        self.symbols[id_idx].is_extern_decl = true;
-                        self.symbols[id_idx].defined_here = false;
-                        self.symbols[id_idx].type_ = ty;
-                        self.accept(',')?;
+                        // C99 6.2.2p4 + 6.9.2p2: after a prior definition in
+                        // this unit the extern redeclaration is a pure
+                        // redeclaration; the definition and its storage stand.
+                        if !self.symbols[id_idx].defined_here {
+                            self.symbols[id_idx].is_extern_decl = true;
+                            self.symbols[id_idx].type_ = ty;
+                        }
+                        self.accept_declarator_separator()?;
                         continue;
                     }
                     if was_extern_only_decl {
@@ -1692,21 +2147,24 @@ impl Compiler {
                                     self.symbols[id_idx].is_extern_decl = true;
                                     self.symbols[id_idx].defined_here = false;
                                 }
-                                self.accept(',')?;
+                                self.accept_declarator_separator()?;
                                 continue;
                             }
-                            // C99 6.9.2: a file-scope `T x[];` with no
+                            // C99 6.9.2p2: a file-scope `T x[];` with no
                             // `extern` and no initializer is a tentative
-                            // definition. An array type left incomplete at
-                            // the end of the unit is completed to one
-                            // element, so reserve a single zero-filled
-                            // element here.
-                            self.symbols[id_idx].array_size = 1;
+                            // definition, and an array type left incomplete
+                            // at the end of the unit is completed to one
+                            // element. A GNU `T x[0]` is complete already and
+                            // holds no elements, so it keeps the zero count.
+                            let zero_len = self.pending.declarator_zero_len_array;
+                            let count = if zero_len { 0 } else { 1 };
+                            self.symbols[id_idx].array_size = count;
+                            self.symbols[id_idx].is_zero_len_array = zero_len;
                             if let Some(first) = self.symbols[id_idx].array_dims.first_mut() {
-                                *first = 1;
+                                *first = count;
                             }
                             let elem = self.size_of_type(ty) as i64;
-                            let aligned = ((elem + 7) / 8) * 8;
+                            let aligned = (((elem + 7) / 8) * 8).max(8);
                             if decl_align > 8 {
                                 self.align_data_to(decl_align);
                             } else if self.size_of_type(ty) > 1 {
@@ -1719,7 +2177,7 @@ impl Compiler {
                                 self.data.push(0);
                             }
                             self.symbols[id_idx].defined_here = true;
-                            self.accept(',')?;
+                            self.accept_declarator_separator()?;
                             continue;
                         }
                         if thread_local {
@@ -1728,7 +2186,7 @@ impl Compiler {
                             ));
                         }
                         self.next()?;
-                        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                        if self.is_traversable_aggregate_ty(ty) {
                             // `struct T xs[] = { {...}, {...}, ... };`
                             // Pre-scan the source to count elements so
                             // every element's storage is pre-reserved
@@ -1763,7 +2221,7 @@ impl Compiler {
                                 // ... }`) per element. A `[N]` designator may
                                 // raise the size past the positional count
                                 // (C99 6.7.8p22), so peek the designators.
-                                self.designated_array_count(groups as i64)?
+                                self.designated_array_count(groups as i64, 1)?
                             } else {
                                 // Brace-elided: the flat value list fills
                                 // consecutive elements, each consuming the
@@ -1776,29 +2234,30 @@ impl Compiler {
                                 // to the highest designated index + 1 (C99
                                 // 6.7.8p22), which the positional count misses.
                                 if self.array_first_element_is_designator() {
-                                    self.designated_array_count(positional)?
+                                    self.designated_array_count(positional, 1)?
                                 } else {
                                     positional
                                 }
                             };
-                            self.next()?;
                             // C99 6.9.2: a prior tentative definition already
                             // reserved storage; reuse it so references emitted
                             // before this definition -- which baked in the
                             // tentative's offset -- observe the initialized
                             // object, not the tentative's separate zero copy.
-                            // Reuse only when the initializer fits the reserved
-                            // bytes: a deferred-size tentative (`T x[];`)
-                            // reserves one element, so a larger initializer must
-                            // allocate fresh rather than overrun later globals.
+                            // A deferred-size tentative (`T x[];`) reserves one
+                            // element, so a larger initializer takes fresh
+                            // storage and records the move for rebasing.
                             let needed = count * inner_dim * elem_size as i64;
+                            let obj_align = self.symbols[id_idx].data_align.max(1);
                             let off = if was_tentative_glo
                                 && needed <= self.symbols[id_idx].reserved_data_bytes
+                                && self.symbols[id_idx].val % obj_align == 0
                             {
                                 self.symbols[id_idx].val
                             } else {
-                                self.align_data_to(decl_align);
+                                self.align_data_to(decl_align.max(obj_align as usize));
                                 let fresh = self.data.len() as i64;
+                                self.note_global_relocated(id_idx, was_tentative_glo, fresh);
                                 self.symbols[id_idx].reserved_data_bytes = needed;
                                 for _ in 0..needed {
                                     self.data.push(0);
@@ -1806,52 +2265,24 @@ impl Compiler {
                                 fresh
                             };
                             self.symbols[id_idx].val = off;
-                            // 2D struct array `T xs[][M] = { { {...}, ... }, ...
-                            // }`: each top-level brace is a row of `inner_dim`
-                            // structs. The 1D loop below fills one struct per
-                            // top-level brace, so a row would be misread; walk
-                            // the rows here instead. (Fully-braced rows, which
-                            // is how nested aggregates are written.)
+                            // Reserve before consuming `{`: lexing the first
+                            // element token may append a string literal's
+                            // bytes, whose parser-added NUL must land right
+                            // after them.
+                            self.next()?;
+                            // Multi-dimensional struct array `T xs[][M]... = {
+                            // ... }`: fill the rows below the deferred outer
+                            // dimension through the shared struct-array walker
+                            // (designators at every level).
                             if inner_dim > 1 {
-                                let mut row: i64 = 0;
-                                while self.lex.tk != '}' {
-                                    if self.lex.tk != '{' {
-                                        return Err(self.compile_err(
-                                            "row of a 2D struct array must be brace-enclosed",
-                                        ));
-                                    }
-                                    self.next()?; // row `{`
-                                    let mut j: i64 = 0;
-                                    while self.lex.tk != '}' {
-                                        if j >= inner_dim {
-                                            return Err(self.compile_err(
-                                                "too many initializers in struct-array row",
-                                            ));
-                                        }
-                                        let here = off + (row * inner_dim + j) * elem_size as i64;
-                                        self.skip_opt_compound_literal_cast()?;
-                                        let cl_parens = core::mem::take(
-                                            &mut self.pending.compound_lit_close_parens,
-                                        );
-                                        if self.lex.tk == '{' {
-                                            self.collect_struct_initializer(sid, here)?;
-                                        } else {
-                                            self.fill_struct_fields(sid, here, false)?;
-                                        }
-                                        for _ in 0..cl_parens {
-                                            self.accept(')')?;
-                                        }
-                                        j += 1;
-                                        self.accept(',')?;
-                                    }
-                                    self.next()?; // row `}`
-                                    row += 1;
-                                    self.accept(',')?;
-                                }
-                                self.next()?; // outer `}`
+                                let mut dims = alloc::vec::Vec::new();
+                                dims.push(count);
+                                dims.extend_from_slice(&self.symbols[id_idx].array_dims[1..]);
+                                self.collect_struct_array_entries(ty, off, &dims)?;
                                 let total = count * inner_dim;
                                 self.symbols[id_idx].array_size = total;
                                 self.symbols[id_idx].is_zero_len_array = total == 0;
+                                self.reserve_zero_length_array_slot(id_idx);
                                 if let Some(first) = self.symbols[id_idx].array_dims.first_mut()
                                     && *first == 0
                                 {
@@ -1862,79 +2293,20 @@ impl Compiler {
                                 }
                                 self.symbols[id_idx].has_initializer = true;
                                 self.symbols[id_idx].defined_here = true;
-                                self.accept(',')?;
+                                self.accept_declarator_separator()?;
                                 continue;
                             }
-                            let mut i: i64 = 0;
-                            while self.lex.tk != '}' {
-                                // C99 6.7.8p7 array designator on a
-                                // struct-array element: `[N] = {field, ...}`
-                                // jumps the cursor and writes the
-                                // brace list there.
-                                if self.lex.tk == Token::Brak {
-                                    self.next()?;
-                                    let idx = self.parse_constant_int()?;
-                                    if idx < 0 || idx >= count {
-                                        return Err(self.compile_err(format!(
-                                            "array designator index {idx} out of bounds [0, {count})"
-                                        )));
-                                    }
-                                    if self.lex.tk != ']' {
-                                        return Err(self.compile_err(
-                                            "`]` expected after array designator index",
-                                        ));
-                                    }
-                                    self.next()?;
-                                    if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
-                                        // C99 6.7.8p7 compound designator
-                                        // `[N].field... = v`: override one field
-                                        // of a (zero-initialized) element.
-                                        let here = off + idx * elem_size as i64;
-                                        self.fill_element_field_designator(sid, ty, here)?;
-                                        i = idx + 1;
-                                        self.accept(',')?;
-                                        continue;
-                                    }
-                                    if self.lex.tk != Token::Assign {
-                                        return Err(
-                                            self.compile_err("`=` expected after `[N]` designator")
-                                        );
-                                    }
-                                    self.next()?;
-                                    i = idx;
-                                }
-                                if i >= count {
-                                    return Err(self.compile_err(format!("struct array element count miscount (parser scanned {count}, parsed past)")));
-                                }
-                                let here = off + i * elem_size as i64;
-                                // A struct-array element may be written as a
-                                // compound literal `(T){ ... }` naming the
-                                // element type (C99 6.5.2.5); drop the
-                                // redundant cast and fill the brace list.
-                                self.skip_opt_compound_literal_cast()?;
-                                let cl_parens =
-                                    core::mem::take(&mut self.pending.compound_lit_close_parens);
-                                if self.lex.tk == '{' {
-                                    self.collect_struct_initializer(sid, here)?;
-                                } else {
-                                    // Brace-elided element: fill the
-                                    // struct's fields from the flat list
-                                    // until it is full, leaving the rest
-                                    // for the next element.
-                                    self.fill_struct_fields(sid, here, false)?;
-                                }
-                                for _ in 0..cl_parens {
-                                    self.accept(')')?;
-                                }
-                                i += 1;
-                                self.accept(',')?;
-                            }
-                            self.next()?; // consume `}`
+                            // Same walker the multi-dimensional case above
+                            // uses, so designators read identically at either
+                            // rank: `[N]`, the GCC range `[lo ... hi]`, and a
+                            // `.field` continuation.
+                            self.collect_struct_array_entries(ty, off, &[count])?;
                             self.symbols[id_idx].array_size = count;
                             // `struct T xs[] = {}` resolves to zero elements.
                             // Keep the array-ness (the `array_size == 0`
                             // scalar encoding would otherwise lose it).
                             self.symbols[id_idx].is_zero_len_array = count == 0;
+                            self.reserve_zero_length_array_slot(id_idx);
                             // Pad data to 8-byte alignment so the next
                             // global doesn't land on an odd offset.
                             while !self.data.len().is_multiple_of(8) {
@@ -1942,7 +2314,7 @@ impl Compiler {
                             }
                             self.symbols[id_idx].has_initializer = true;
                             self.symbols[id_idx].defined_here = true;
-                            self.accept(',')?;
+                            self.accept_declarator_separator()?;
                             continue;
                         }
                         self.pending.init_inner_dims = self.inner_dims_of(id_idx);
@@ -1953,6 +2325,7 @@ impl Compiler {
                         // array-ness that the scalar `array_size == 0`
                         // encoding would otherwise drop.
                         self.symbols[id_idx].is_zero_len_array = final_size == 0;
+                        self.reserve_zero_length_array_slot(id_idx);
                         // Patch the deferred-outer placeholder in
                         // `array_dims[0]` to the resolved row count.
                         // Layout: total elements = outer * inner-dims-product,
@@ -1972,22 +2345,25 @@ impl Compiler {
                         // C99 6.9.2: a prior tentative definition already
                         // reserved storage; reuse it so references emitted
                         // before this definition observe the initialized object,
-                        // not the tentative's separate zero copy. Reuse only
-                        // when the initializer fits the reserved bytes: a
+                        // not the tentative's separate zero copy. A
                         // deferred-size tentative (`T x[];`) reserves one
-                        // element, so a larger initializer must allocate fresh
-                        // rather than overrun later globals.
+                        // element, so a larger initializer takes fresh storage
+                        // and records the move for rebasing.
+                        let obj_align = self.symbols[id_idx].data_align.max(1);
                         let off = if was_tentative_glo
                             && aligned <= self.symbols[id_idx].reserved_data_bytes
+                            && self.symbols[id_idx].val % obj_align == 0
                         {
                             self.symbols[id_idx].val
                         } else {
-                            if decl_align > 8 {
-                                self.align_data_to(decl_align);
+                            let eff = decl_align.max(obj_align as usize);
+                            if eff > 8 {
+                                self.align_data_to(eff);
                             } else if self.size_of_type(ty) > 1 {
                                 self.align_data_to_8();
                             }
                             let fresh = self.data.len() as i64;
+                            self.note_global_relocated(id_idx, was_tentative_glo, fresh);
                             self.symbols[id_idx].reserved_data_bytes = aligned;
                             for _ in 0..aligned {
                                 self.data.push(0);
@@ -1999,11 +2375,14 @@ impl Compiler {
                         self.symbols[id_idx].has_initializer = true;
                         self.symbols[id_idx].defined_here = true;
                     } else {
+                        // A zero-sized object (empty struct, GNU) still
+                        // reserves one slot so no two objects share a
+                        // start offset (mirrors the block-scope allocator).
                         let mut bytes = if array_size > 0 {
                             let total = (self.size_of_type(ty) as i64) * array_size;
-                            ((total + 7) / 8) * 8
+                            (((total + 7) / 8) * 8).max(8)
                         } else {
-                            self.slots_of_type(ty) * 8
+                            (self.slots_of_type(ty) * 8).max(8)
                         };
                         // A flexible array member initialized via `.<fam> =
                         // {...}` needs its element bytes reserved now, before
@@ -2012,25 +2391,10 @@ impl Compiler {
                         // member's data). Only the defining `= {` form
                         // reserves extra; a bare / tentative declaration keeps
                         // the fixed size.
-                        if is_struct_ty(ty)
-                            && struct_ptr_depth(ty) == 0
-                            && self.lex.tk == Token::Assign
-                        {
-                            let sid = struct_id_of(ty);
-                            let fam_elem_ty = self.structs[sid]
-                                .fields
-                                .iter()
-                                .find(|f| f.array_size < 0)
-                                .map(|f| f.ty);
-                            if let Some(elem_ty) = fam_elem_ty {
-                                let elem = self.size_of_type(elem_ty) as i64;
-                                let snap = self.lex.snapshot();
-                                self.next()?; // `=`
-                                let count = self.flexible_array_init_count(sid)? as i64;
-                                self.lex.restore(snap);
-                                bytes += count * elem;
-                                bytes = ((bytes + 7) / 8) * 8;
-                            }
+                        let fam_tail = self.flexible_array_init_tail_bytes(ty)?;
+                        if fam_tail > 0 {
+                            self.symbols[id_idx].fam_init_bytes = fam_tail;
+                            bytes = ((bytes + fam_tail + 7) / 8) * 8;
                         }
                         // `extern T x;` -- C99 6.9.2 says no
                         // tentative definition. We still
@@ -2060,8 +2424,19 @@ impl Compiler {
                         // fresh zeroed storage would discard its value.
                         // The two-initializer case already errored at the
                         // duplicate-definition check above.
-                        let reuse_prior_storage = was_tentative_glo
+                        let obj_align = self.symbols[id_idx].data_align.max(1);
+                        let reuse_eligible = was_tentative_glo
                             || (self.symbols[id_idx].defined_here && self.lex.tk != Token::Assign);
+                        // Prior storage is reusable only when it sits on the
+                        // object's (merged) alignment and spans every byte the
+                        // object now needs -- a tentative definition reserves
+                        // `sizeof`, which a flexible array member's initializer
+                        // outgrows. Otherwise the object moves to a fresh slot
+                        // below, as the deferred-size array paths do, and the
+                        // references already emitted are rebased onto it.
+                        let reuse_prior_storage = reuse_eligible
+                            && self.symbols[id_idx].val % obj_align == 0
+                            && bytes <= self.symbols[id_idx].reserved_data_bytes;
                         // `extern _Thread_local T x;` (no initializer) is a
                         // pure reference, not a definition: it must not
                         // reserve TLS storage. The defining unit owns the
@@ -2085,16 +2460,30 @@ impl Compiler {
                             }
                             off
                         } else {
-                            if decl_align > 8 {
-                                self.align_data_to(decl_align);
+                            let eff = decl_align.max(obj_align as usize);
+                            if eff > 8 {
+                                self.align_data_to(eff);
                             } else if self.size_of_type(ty) > 1 {
                                 self.align_data_to_8();
                             }
                             let off = self.data.len() as i64;
+                            self.note_global_relocated(id_idx, reuse_eligible, off);
+                            let prior = (
+                                self.symbols[id_idx].val,
+                                self.symbols[id_idx].reserved_data_bytes,
+                            );
                             self.symbols[id_idx].val = off;
                             self.symbols[id_idx].reserved_data_bytes = bytes;
                             for _ in 0..bytes {
                                 self.data.push(0);
+                            }
+                            // A move off a misaligned slot keeps the bytes a
+                            // prior defining declaration wrote there.
+                            if reuse_eligible && prior.1 > 0 {
+                                let n = prior.1.min(bytes) as usize;
+                                for k in 0..n {
+                                    self.data[off as usize + k] = self.data[prior.0 as usize + k];
+                                }
                             }
                             off
                         };
@@ -2120,10 +2509,24 @@ impl Compiler {
                             // compound literal naming its own type (C99
                             // 6.5.2.5): `static T g = (T){ ... };`. Drop the
                             // redundant `(T)` so the brace dispatch below sees
-                            // `{ ... }`. A scalar `(int){5}` falls through to
-                            // parse_global_initializer's single-value path.
-                            self.skip_opt_compound_literal_cast()?;
-                            if array_size > 0 && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                            // `{ ... }`. Only for an aggregate object: the
+                            // cast is not redundant when the object is a
+                            // scalar, where `T *p = (T[]){ ... }` decays to
+                            // the address of an anonymous array and
+                            // `int x = (int){ v }` converts a value. Both are
+                            // the constant evaluator's, which needs the type.
+                            if array_size > 0 || self.is_traversable_aggregate_ty(ty) {
+                                self.skip_opt_compound_literal_cast()?;
+                            }
+                            // The two array branches below finish at the
+                            // literal's `}`; the grouping parens the strip
+                            // left behind close after it.
+                            let array_cl_parens = if array_size > 0 {
+                                core::mem::take(&mut self.pending.compound_lit_close_parens)
+                            } else {
+                                0
+                            };
+                            if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
                                 if thread_local {
                                     return Err(self.compile_err(
                                         "array `_Thread_local` initialisers are not supported",
@@ -2159,10 +2562,12 @@ impl Compiler {
                                     let mut range_hi: Option<i64> = None;
                                     if self.lex.tk == Token::Brak {
                                         self.next()?;
-                                        let desig = self.parse_constant_int()?;
+                                        let desig =
+                                            self.parse_constant_int_folding_const_objects()?;
                                         if self.lex.tk == Token::Ellipsis {
                                             self.next()?;
-                                            let hi = self.parse_constant_int()?;
+                                            let hi =
+                                                self.parse_constant_int_folding_const_objects()?;
                                             if hi < desig || hi >= array_size {
                                                 return Err(self.compile_err(format!(
                                                     "array designator range [{desig} ... {hi}] out of bounds [0, {array_size})"
@@ -2203,7 +2608,8 @@ impl Compiler {
                                             let mut d = 0usize;
                                             while self.lex.tk == Token::Brak {
                                                 self.next()?; // `[`
-                                                let n = self.parse_constant_int()?;
+                                                let n = self
+                                                    .parse_constant_int_folding_const_objects()?;
                                                 if self.lex.tk != ']' {
                                                     return Err(self.compile_err(
                                                         "`]` expected after array designator index",
@@ -2242,18 +2648,7 @@ impl Compiler {
                                                     ));
                                                 }
                                                 self.next()?;
-                                                self.skip_opt_compound_literal_cast()?;
-                                                let cl_parens = core::mem::take(
-                                                    &mut self.pending.compound_lit_close_parens,
-                                                );
-                                                if self.lex.tk == '{' {
-                                                    self.collect_struct_initializer(sid, here)?;
-                                                } else {
-                                                    self.fill_struct_fields(sid, here, false)?;
-                                                }
-                                                for _ in 0..cl_parens {
-                                                    self.accept(')')?;
-                                                }
+                                                self.init_struct_array_element(sid, here)?;
                                             }
                                             idx = desig + 1;
                                             self.accept(',')?;
@@ -2298,41 +2693,26 @@ impl Compiler {
                                     let mut k = idx;
                                     loop {
                                         if let Some(snap) = value_snap {
-                                            self.lex.restore(snap);
+                                            self.restore_lex(snap);
                                         }
                                         let here = var_offset + k * group_stride;
-                                        // C99 6.7.8p20: the braces around each
-                                        // struct element may be elided; a
-                                        // multi-dimensional element is itself an
-                                        // array of structs.
-                                        // A compound-literal element `(T){...}`
-                                        // naming the element type: drop the
-                                        // redundant cast (a multi-dim element
-                                        // is an array, never a compound
-                                        // literal, so skip only the scalar
-                                        // case).
-                                        let cl_parens = if inner_dims.is_empty() {
-                                            self.skip_opt_compound_literal_cast()?;
-                                            core::mem::take(
-                                                &mut self.pending.compound_lit_close_parens,
-                                            )
+                                        // A multi-dimensional element is an
+                                        // array of structs, never a compound
+                                        // literal.
+                                        if inner_dims.is_empty() {
+                                            self.init_struct_array_element(sid, here)?;
+                                        } else if self.lex.tk == '{' {
+                                            self.collect_struct_array_data(ty, here, &inner_dims)?;
                                         } else {
-                                            0
-                                        };
-                                        if !inner_dims.is_empty() {
-                                            self.collect_struct_array_data(
-                                                sid,
+                                            // C99 6.7.9p20: a row whose braces are
+                                            // elided takes its elements from this
+                                            // list and leaves the rest.
+                                            self.collect_struct_array_entries_braced(
+                                                ty,
                                                 here,
                                                 &inner_dims,
-                                                elem_size as i64,
+                                                false,
                                             )?;
-                                        } else if self.lex.tk == '{' {
-                                            self.collect_struct_initializer(sid, here)?;
-                                        } else {
-                                            self.fill_struct_fields(sid, here, false)?;
-                                        }
-                                        for _ in 0..cl_parens {
-                                            self.accept(')')?;
                                         }
                                         if k >= last {
                                             break;
@@ -2343,6 +2723,9 @@ impl Compiler {
                                     self.accept(',')?;
                                 }
                                 self.next()?; // consume `}`
+                                for _ in 0..array_cl_parens {
+                                    self.accept(')')?;
+                                }
                             } else if array_size > 0 {
                                 if thread_local {
                                     return Err(self.compile_err(
@@ -2361,27 +2744,133 @@ impl Compiler {
                                     )));
                                 }
                                 self.write_array_init_into_data(var_offset, ty, &elements);
-                            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                                for _ in 0..array_cl_parens {
+                                    self.accept(')')?;
+                                }
+                            } else if self.is_traversable_aggregate_ty(ty) {
                                 if thread_local {
                                     return Err(self.compile_err(
                                         "struct `_Thread_local` initialisers are not supported",
                                     ));
                                 }
                                 let sid = struct_id_of(ty);
+                                // A parenthesized compound literal `((T){...})`
+                                // left grouping parens for the brace list to
+                                // close (C99 6.5.2.5).
+                                let cl_parens =
+                                    core::mem::take(&mut self.pending.compound_lit_close_parens);
                                 self.collect_struct_initializer(sid, var_offset)?;
+                                for _ in 0..cl_parens {
+                                    self.accept(')')?;
+                                }
                             } else {
+                                let cl_parens =
+                                    core::mem::take(&mut self.pending.compound_lit_close_parens);
                                 self.parse_global_initializer(ty, var_offset, thread_local)?;
+                                for _ in 0..cl_parens {
+                                    self.accept(')')?;
+                                }
                             }
                             self.symbols[id_idx].has_initializer = true;
                         }
                     }
                 }
-                self.accept(',')?;
+                self.accept_declarator_separator()?;
             }
             self.next()?;
         }
+        self.resolve_pending_aliases()?;
+        // Before the asm `.globl` sweep: that directive is an explicit
+        // request to export the name and outranks the inline model.
+        self.resolve_inline_linkage();
+        self.resolve_file_scope_asm_globl();
         self.warn_unused_static_functions();
         Ok(())
+    }
+
+    /// Give external linkage to the names a file-scope `asm(".globl name");`
+    /// declared. Applied once the unit is complete: the directive may precede
+    /// the definition it names.
+    fn resolve_file_scope_asm_globl(&mut self) {
+        for name in core::mem::take(&mut self.pending_asm_globl) {
+            for s in self.symbols.iter_mut() {
+                if s.name == name && s.defined_here {
+                    s.linkage = crate::c5::symbol::Linkage::External;
+                }
+            }
+        }
+    }
+
+    /// Bind aliases whose target had not been defined when the declarator was
+    /// parsed. The target must be defined in this unit: an alias to an
+    /// undefined symbol has no address to share.
+    fn resolve_pending_aliases(&mut self) -> Result<(), C5Error> {
+        for (id_idx, target, is_object) in core::mem::take(&mut self.pending_aliases) {
+            let want = if is_object { Token::Glo } else { Token::Fun } as i64;
+            let tgt = self
+                .symbols
+                .iter()
+                .position(|s| s.link_name() == target && s.class == want && s.defined_here);
+            let Some(tgt) = tgt else {
+                let kind = if is_object { "an object" } else { "a function" };
+                return Err(self.compile_err(format!(
+                    "alias target `{target}` is not {kind} defined in this unit"
+                )));
+            };
+            self.symbols[tgt].was_referenced = true;
+            self.symbols[id_idx].val = self.symbols[tgt].val;
+            self.symbols[id_idx].defined_here = true;
+            self.symbols[id_idx].is_extern_decl = false;
+            if is_object {
+                self.symbols[id_idx].array_size = self.symbols[tgt].array_size;
+            } else {
+                let name = self.symbols[id_idx].link_name().into();
+                let weak = self.symbols[id_idx].is_weak;
+                self.function_aliases
+                    .push(crate::c5::program::FunctionAlias { name, target, weak });
+            }
+        }
+        Ok(())
+    }
+
+    /// Settle every function's inline linkage once the unit's last
+    /// file-scope declaration has been censused.
+    ///
+    /// C99 6.7.4p6: when all of a function's file-scope declarations
+    /// include `inline` without `extern`, the definition here is an
+    /// inline definition and provides no external definition; the
+    /// program's external definition, if it needs one, comes from
+    /// another unit. GNU89 inverts that: `extern inline` is the
+    /// inline-only form and a plain `inline` provides the external
+    /// definition. `static` is internal in both and is decided first.
+    ///
+    /// An inline definition takes internal linkage, so it is neither
+    /// exported nor a dead-code root: an unreferenced one drops, and a
+    /// reference the inliner did not absorb binds to the unit-local
+    /// copy rather than to an undefined symbol. C99 6.7.4p6 states that
+    /// choice outright ("provides an alternative to an external
+    /// definition, which a translator may use to implement any call to
+    /// the function in the same translation unit"); under GNU89 it is
+    /// narrower than gcc, which leaves an external reference instead.
+    fn resolve_inline_linkage(&mut self) {
+        use crate::c5::symbol::{Linkage, inline_definition};
+        let model = self.inline_model;
+        for sym in self.symbols.iter_mut() {
+            // Only names this unit declared at file scope; the census
+            // bits are the record of that, and symbols the parser
+            // synthesizes keep whatever linkage they were built with.
+            let declared =
+                sym.saw_noninline_decl || sym.saw_plain_inline_decl || sym.saw_extern_inline_decl;
+            if sym.class != Token::Fun as i64 || sym.saw_static_decl || !declared {
+                continue;
+            }
+            sym.is_inline_definition = inline_definition(sym, model);
+            sym.linkage = if sym.is_inline_definition {
+                Linkage::Internal
+            } else {
+                Linkage::External
+            };
+        }
     }
 
     /// Emit one `unused function` diagnostic per defined-here
@@ -2408,11 +2897,15 @@ impl Compiler {
             if sym.class != Token::Fun as i64
                 || !sym.defined_here
                 || sym.linkage != Linkage::Internal
+                // An inline definition is internal but externally
+                // declared; another unit may still call the name.
+                || sym.is_inline_definition
                 || sym.was_referenced
                 || !sym.decl_in_main_source
                 || sym.name.is_empty()
                 || sym.name.starts_with('_')
                 || sym.name == "main"
+                || sym.is_used
                 || init_names.contains(sym.name.as_str())
             {
                 continue;
@@ -2421,6 +2914,37 @@ impl Compiler {
         }
         for (line, name) in unused {
             self.warn_at(line, alloc::format!("unused function `{name}`"));
+        }
+    }
+
+    /// Move the `weak` / `used` / `visibility` / `section("name")` attribute
+    /// carriers collected for the current declarator onto its symbol. Shared
+    /// by the function and file-scope-object paths; the object writers read
+    /// the fields off the symbol.
+    pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) {
+        if self.pending.attr_weak {
+            self.symbols[id_idx].is_weak = true;
+        }
+        if self.pending.attr_used {
+            self.symbols[id_idx].is_used = true;
+        }
+        // Sticky like the rest: `gnu_inline` on any declaration selects
+        // the GNU89 model for the name, whichever side of the declarator
+        // the attribute was written on.
+        if self.pending_is_gnu_inline {
+            self.symbols[id_idx].is_gnu_inline = true;
+        }
+        // An explicit `visibility` attribute states the answer; without one
+        // the enclosing `#pragma GCC visibility` extent supplies it.
+        let hidden = self
+            .pending
+            .attr_visibility
+            .unwrap_or_else(|| self.lex.visibility_hidden());
+        if hidden {
+            self.symbols[id_idx].is_hidden = true;
+        }
+        if let Some(sec) = self.pending.attr_section.take() {
+            self.symbols[id_idx].section_name = Some(sec);
         }
     }
 }

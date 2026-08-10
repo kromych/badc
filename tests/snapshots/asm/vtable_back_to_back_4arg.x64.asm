@@ -28,16 +28,42 @@ Disassembly of section .text:
 <driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	subq	$0x30, %rsp
+               	movq	%rbx, (%rsp)
+               	leaq	-0x10(%rbp), %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x8(%rax)
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
+               	leaq	-0x10(%rbp), %rdi
+               	leaq	<rip>, %rsi
+               	movl	$0x1, %ebx
+               	movl	$0x64, %ecx
+               	movq	%rbx, %rdx
+               	callq	*%rax
+               	leaq	-0x10(%rbp), %rax
+               	movq	(%rax), %rax
+               	movq	0x8(%rax), %rax
+               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x18(%rbp), %rsi
+               	movq	%rbx, %rdx
+               	callq	*%rax
+               	movslq	-0x18(%rbp), %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x30, %rsp
+               	popq	%rbp
+               	retq
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
                	subq	$0x70, %rsp
                	movq	%rbx, (%rsp)
                	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	popq	%rdx
+               	xorq	%rcx, %rcx
+               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x8(%rax)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	leaq	-0x10(%rbp), %rdi
@@ -56,13 +82,5 @@ Disassembly of section .text:
                	movslq	-0x40(%rbp), %rax
                	movq	(%rsp), %rbx
                	addq	$0x70, %rsp
-               	popq	%rbp
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq

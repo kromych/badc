@@ -13,7 +13,11 @@ static int clamp_low(int x) {
 }
 
 int main(void) {
-    if (clamp_low(7) != 7) return 1;
-    if (clamp_low(0) != 0) return 2;
+    // `volatile` keeps the argument a runtime value so the trap is
+    // emitted; the trap path is still never taken at run time.
+    volatile int v = 7;
+    if (clamp_low(v) != 7) return 1;
+    v = 0;
+    if (clamp_low(v) != 0) return 2;
     return 0;
 }

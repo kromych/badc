@@ -34,6 +34,21 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
         .find_map(|&(n, body)| if n == name { Some(body) } else { None })
 }
 
+/// Header names whose contents are part of the compiler implementation:
+/// intrinsic wrappers built on badc's own inline-asm encoders. Another
+/// compiler's copy of such a header is written against that compiler's
+/// builtins and can never compile here, so when a build line puts a foreign
+/// toolchain's private include directory on the search path (kernel-style
+/// `-isystem $(cc -print-file-name=include)` folded into `-I`), these names
+/// must still resolve to the embedded copy. Ordinary headers keep the usual
+/// order (`-I` shadows the embedded set, as it does in gcc and clang).
+pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &["arm_neon.h"];
+
+/// Whether `name` is a compiler-owned intrinsic header.
+pub(super) fn compiler_owned_header(name: &str) -> bool {
+    COMPILER_OWNED_HEADERS.contains(&name)
+}
+
 /// All bundled headers, as a `(name, body)` slice. Public so the
 /// CLI's `--dump-headers` flag can iterate the registry without
 /// reaching into the preprocessor.
@@ -51,6 +66,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "_builtins.h",
         include_str!("../../libc/include/_builtins.h"),
     ),
+    ("arm_neon.h", include_str!("../../libc/include/arm_neon.h")),
     ("stdalign.h", include_str!("../../libc/include/stdalign.h")),
     ("stddef.h", include_str!("../../libc/include/stddef.h")),
     ("stdint.h", include_str!("../../libc/include/stdint.h")),
@@ -81,6 +97,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("signal.h", include_str!("../../libc/include/signal.h")),
     ("errno.h", include_str!("../../libc/include/errno.h")),
     ("endian.h", include_str!("../../libc/include/endian.h")),
+    ("byteswap.h", include_str!("../../libc/include/byteswap.h")),
     (
         "sys/endian.h",
         include_str!("../../libc/include/sys/endian.h"),
@@ -337,6 +354,8 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("libgen.h", include_str!("../../libc/include/libgen.h")),
     ("util.h", include_str!("../../libc/include/util.h")),
     ("glob.h", include_str!("../../libc/include/glob.h")),
+    ("fnmatch.h", include_str!("../../libc/include/fnmatch.h")),
+    ("regex.h", include_str!("../../libc/include/regex.h")),
     ("pthread.h", include_str!("../../libc/include/pthread.h")),
     (
         "semaphore.h",

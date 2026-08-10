@@ -35,8 +35,7 @@
 //!   interpretation of the header condition and latch step over the
 //!   shared VM evaluator (`vm::eval`), starting from constant phi
 //!   inits;
-//! * the loop is at most `MAX_LOOP_INSTS` instructions and the
-//!   expansion at most `MAX_REGION_INSTS`.
+//! * the expansion is at most `MAX_REGION_INSTS` instructions.
 //!
 //! Functions with a computed goto or a `BlockAddr` (block ids shift),
 //! or a returns-twice call (cloned call sites would multiply the
@@ -47,7 +46,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::ssa::mem2reg::{dominators, predecessors};
-use super::inline::{map_v, remap_caller_inst, remap_terminator};
+use super::inline::{map_v, remap_inst_operands, remap_terminator};
 use super::layout::{natural_loops, rpo_numbers};
 use crate::c5::ir::{Block, BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 use crate::c5::vm::eval;
@@ -57,9 +56,10 @@ const MAX_TRIP: usize = 16;
 /// Iteration bound while counting trips; a condition still true past
 /// this is treated as unknown.
 const COUNT_CAP: usize = 64;
-/// Largest loop (header + chain instructions) that unrolls.
-const MAX_LOOP_INSTS: usize = 40;
-/// Cap on the expanded region: `(trip + 1) * loop_insts`.
+/// Cap on the expanded region: `(trip + 1) * loop_insts`, an upper
+/// bound on what the copies emit. Growth is the only size axis; the
+/// rolled body size is not a separate gate, since a large body that
+/// iterates a few times expands by almost nothing.
 const MAX_REGION_INSTS: usize = 600;
 /// Per-function bounds: loops expanded, and the instruction count
 /// past which no further loop is attempted.
@@ -138,10 +138,7 @@ fn find_unrollable(func: &FunctionSsa) -> Option<LoopShape> {
     let loops = natural_loops(func, &idom, &preds, &rpo);
     loops.iter().find_map(|l| {
         try_shape(func, l.header, &l.body, &preds).filter(|s| {
-            s.trip <= MAX_TRIP && {
-                let loop_insts = shape_inst_count(func, s);
-                loop_insts <= MAX_LOOP_INSTS && (s.trip + 1) * loop_insts <= MAX_REGION_INSTS
-            }
+            s.trip <= MAX_TRIP && (s.trip + 1) * shape_inst_count(func, s) <= MAX_REGION_INSTS
         })
     })
 }
@@ -446,7 +443,7 @@ fn expand(func: &mut FunctionSsa, shape: &LoopShape) {
                             new_inst_src: &mut Vec<(u32, u32)>,
                             new_f32: &mut Vec<bool>| {
                 let mut inst = func.insts[pc as usize].clone();
-                remap_caller_inst(&mut inst, cur);
+                remap_inst_operands(&mut inst, cur);
                 let id = new_insts.len() as u32;
                 cur[pc as usize] = id;
                 if let Some(k) = copy {
@@ -804,6 +801,71 @@ mod tests {
             );
             assert_eq!(f.blocks.len(), 5);
         }
+    }
+
+    /// `two_phi_loop` with `pad` extra body instructions, so the body
+    /// size can be set independently of the loop's shape.
+    fn padded_loop(bound: i64, pad: usize) -> FunctionSsa {
+        let mut f = two_phi_loop(0, bound);
+        let body = f.blocks[2].inst_range.clone();
+        for k in 0..pad {
+            f.insts.insert(
+                body.end as usize + k,
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 2,
+                    rhs_imm: k as i64,
+                },
+            );
+        }
+        // Ids at or past the insertion point shift by `pad`.
+        let bump = |v: &mut ValueId| {
+            if *v >= body.end {
+                *v += pad as u32;
+            }
+        };
+        for inst in &mut f.insts {
+            if let Inst::Phi { incoming, .. } = inst {
+                for (_, v) in incoming.iter_mut() {
+                    bump(v);
+                }
+            }
+        }
+        for b in &mut f.blocks {
+            if b.inst_range.start >= body.end {
+                b.inst_range.start += pad as u32;
+            }
+            if b.inst_range.end >= body.end {
+                b.inst_range.end += pad as u32;
+            }
+            if let Terminator::Return(v) = &mut b.terminator {
+                bump(v);
+            }
+        }
+        f.inst_src = vec![(0, 0); f.insts.len()];
+        f.f32_values = vec![false; f.insts.len()];
+        f
+    }
+
+    #[test]
+    fn body_size_gates_on_the_expansion_not_the_rolled_loop() {
+        // A 75-instruction body at trip 3 expands to 4 * 75, under the
+        // region cap, so it unrolls however large the rolled loop is.
+        let mut f = padded_loop(3, 70);
+        let rolled = f.blocks.len();
+        run_one(&mut f);
+        assert_well_formed(&f);
+        assert!(f.blocks.len() < rolled, "large body, trip 3 must unroll");
+        assert!(!f.insts.iter().any(|i| matches!(i, Inst::Phi { .. })));
+        // The same body at trip 8 expands to 9 * 75, past the cap, and
+        // stays rolled: growth, not body size, is what the cap bounds.
+        let mut f = padded_loop(8, 70);
+        run_one(&mut f);
+        assert_eq!(
+            f.blocks.len(),
+            rolled,
+            "expansion past the cap stays rolled"
+        );
     }
 
     #[test]

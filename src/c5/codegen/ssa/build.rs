@@ -32,7 +32,7 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
+    AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
     StoreKind, Terminator, ValueId,
 };
 
@@ -162,6 +162,10 @@ impl SsaBuilder {
             is_inline: false,
             is_always_inline: false,
             is_naked: false,
+            is_weak: false,
+            is_internal: false,
+            section: None,
+            const_params: 0,
             insts: Vec::new(),
             inst_src: Vec::new(),
             blocks: Vec::new(),
@@ -179,11 +183,16 @@ impl SsaBuilder {
             ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            label_data_relocs: Vec::new(),
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Vec::new(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
         };
         let mut b = Self {
             func,
@@ -218,6 +227,15 @@ impl SsaBuilder {
     /// counter post-walk.
     pub(crate) fn set_end_pc(&mut self, end_pc: usize) {
         self.func.end_pc = end_pc;
+    }
+
+    /// Record the prologue-realigned region for over-aligned automatic
+    /// objects: the `(slot_off, region_off)` placements, the region alignment,
+    /// and its byte size. Consumed by the per-arch frame layout and the VM.
+    pub(crate) fn set_realign(&mut self, placed: Vec<(i64, i64)>, align: i64, region_bytes: i64) {
+        self.func.over_aligned = placed;
+        self.func.frame_align = align;
+        self.func.realign_region_bytes = region_bytes;
     }
 
     /// Set the source-level function name. Codegen consumers use
@@ -489,6 +507,19 @@ impl SsaBuilder {
         self.push(Inst::BlockAddr(block))
     }
 
+    /// Bind a static-initializer data slot to `block`'s code address
+    /// (GCC `&&label` in a static initializer). The block joins the
+    /// computed-goto target set: its address escapes into memory, so
+    /// every `goto *` may reach it and the block must stay live.
+    pub(crate) fn label_data_block(&mut self, data_offset: u64, block: BlockId) {
+        if !self.func.computed_goto_targets.contains(&block) {
+            self.func.computed_goto_targets.push(block);
+        }
+        self.func
+            .label_data_relocs
+            .push(crate::c5::ir::LabelDataReloc { data_offset, block });
+    }
+
     /// Close the current block with `Terminator::GotoIndirect`
     /// (GCC `goto *expr`); `target` holds the destination code
     /// address.
@@ -627,6 +658,48 @@ impl SsaBuilder {
             value,
             kind,
             volatile,
+        })
+    }
+
+    /// `Inst::SegLoad` -- a load through an x86 `__seg_gs` / `__seg_fs`
+    /// pointer, riding a segment-override prefix. `seg` is `Gs` or `Fs`.
+    pub(crate) fn seg_load(
+        &mut self,
+        addr: ValueId,
+        kind: LoadKind,
+        seg: AsmSeg,
+        volatile: bool,
+    ) -> ValueId {
+        let v = self.push(Inst::SegLoad {
+            addr,
+            kind,
+            volatile,
+            seg,
+        });
+        if matches!(kind, LoadKind::F32) {
+            self.mark_f32(v);
+        }
+        v
+    }
+
+    /// `Inst::SegStore` -- the store companion to [`Self::seg_load`]. A
+    /// segment store names memory disjoint from any local slot, but the
+    /// local-load cache is cleared conservatively as for [`Self::store_vol`].
+    pub(crate) fn seg_store(
+        &mut self,
+        addr: ValueId,
+        value: ValueId,
+        kind: StoreKind,
+        seg: AsmSeg,
+        volatile: bool,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::SegStore {
+            addr,
+            value,
+            kind,
+            volatile,
+            seg,
         })
     }
 
@@ -1140,11 +1213,17 @@ impl SsaBuilder {
     /// `Inst::Mcpy` -- whole-struct / aggregate memory copy of
     /// `size` bytes from `src` to `dst`. Used by the AST walker's
     /// `LocalInit::Aggregate` lowering when a brace-list
-    /// initializer's bytes were staged in `.data`. dst may alias
-    /// any escaped local; invalidate the CSE cache.
-    pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64) {
+    /// initializer's bytes were staged in `.data`. `align` is the
+    /// alignment both endpoints satisfy. dst may alias any escaped
+    /// local; invalidate the CSE cache.
+    pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64, align: u32) {
         self.local_cache.clear();
-        self.push(Inst::Mcpy { dst, src, size });
+        self.push(Inst::Mcpy {
+            dst,
+            src,
+            size,
+            align,
+        });
     }
 
     /// `Inst::AtomicRmw` -- atomic read-modify-write on the `width`-byte

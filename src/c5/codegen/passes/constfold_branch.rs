@@ -1,9 +1,12 @@
-//! Fold conditional branches whose condition is a known immediate.
+//! Fold conditional branches whose outcome is already decided.
 //!
 //! Walks every block's terminator. When the condition of a
-//! `Terminator::Bz` or `Terminator::Bnz` resolves to an
-//! `Inst::Imm(k)`, replace the terminator with an unconditional
-//! `Terminator::Jmp` to whichever successor the constant selects.
+//! `Terminator::Bz` or `Terminator::Bnz` is known zero or known
+//! non-zero, replace the terminator with an unconditional
+//! `Terminator::Jmp` to whichever successor that selects. An
+//! `Inst::Imm` decides directly; a phi decides when every predecessor
+//! agrees, counting the edge a short-circuit operand arrives on (see
+//! `truthy`), which needs no constant to be materialised.
 //!
 //! The per-arch emit otherwise materialises the constant condition
 //! into a register and emits a conditional branch; when the
@@ -25,12 +28,6 @@ use crate::c5::ir::{BlockId, FunctionSsa, Inst, Terminator};
 /// Fold every constant-condition terminator in `func`. Returns whether
 /// any terminator changed, so a driver can iterate with the prune.
 pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
-    // Skip computed-goto functions: branch folding may drop or
-    // renumber blocks, invalidating `Inst::BlockAddr` / the
-    // computed_goto_targets block ids.
-    if !func.computed_goto_targets.is_empty() {
-        return false;
-    }
     let mut changed = false;
     // Out-edges the fold deletes: (source block, successor it no longer
     // reaches). Folding a Bz/Bnz/JumpTable to a Jmp drops the not-taken
@@ -41,19 +38,30 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     // real predecessor set and can collapse to a single incoming, which
     // `fold` then resolves.
     let mut removed_edges: alloc::vec::Vec<(BlockId, BlockId)> = alloc::vec::Vec::new();
+    let block_of = block_index(func);
+    let decided = |cond| truthy(func, &block_of, cond, TRUTH_DEPTH);
+    let decisions: alloc::vec::Vec<Option<bool>> = func
+        .blocks
+        .iter()
+        .map(|b| match b.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => decided(cond),
+            _ => None,
+        })
+        .collect();
     for (bidx, block) in func.blocks.iter_mut().enumerate() {
         let self_id = bidx as BlockId;
         let mut dropped: alloc::vec::Vec<BlockId> = alloc::vec::Vec::new();
+        let nonzero = decisions[bidx];
         let new_term = match block.terminator {
             Terminator::Bz {
-                cond,
                 target,
                 fall_through,
-            } => fold(func.insts.as_slice(), cond).map(|k| {
-                let (taken, not_taken) = if k == 0 {
-                    (target, fall_through)
-                } else {
+                ..
+            } => nonzero.map(|nz| {
+                let (taken, not_taken) = if nz {
                     (fall_through, target)
+                } else {
+                    (target, fall_through)
                 };
                 if not_taken != taken {
                     dropped.push(not_taken);
@@ -61,11 +69,11 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
                 Terminator::Jmp(taken)
             }),
             Terminator::Bnz {
-                cond,
                 target,
                 fall_through,
-            } => fold(func.insts.as_slice(), cond).map(|k| {
-                let (taken, not_taken) = if k != 0 {
+                ..
+            } => nonzero.map(|nz| {
+                let (taken, not_taken) = if nz {
                     (target, fall_through)
                 } else {
                     (fall_through, target)
@@ -117,24 +125,111 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     changed
 }
 
-/// Resolve `v` to a constant. Names an `Inst::Imm` directly, or reaches
-/// one through a chain of single-incoming phis: a phi with one
-/// predecessor always takes that value, so the constant reaches the
-/// condition. The chase is bounded by the instruction count so a phi
-/// cycle cannot loop. Returns `None` for any other producer or for
-/// `NO_VALUE`.
+/// Resolve `v` to a constant: an `Inst::Imm`, or one reached through
+/// phis -- a single-incoming phi always takes that value, and a merge
+/// whose predecessors all supply the same constant is that constant.
+/// Returns `None` for any other producer or for `NO_VALUE`.
 fn fold(insts: &[Inst], v: crate::c5::ir::ValueId) -> Option<i64> {
-    let mut v = v as usize;
-    for _ in 0..insts.len() {
-        match insts.get(v)? {
-            Inst::Imm(k) => return Some(*k),
-            Inst::Phi { incoming, .. } if incoming.len() == 1 => {
-                v = incoming[0].1 as usize;
+    super::constfold::imm_through_phis(insts, &[], v)
+}
+
+/// Recursion budget for the truthiness merge, bounding the operand
+/// fan-out the same way the constant merge does.
+const TRUTH_DEPTH: u32 = 4;
+
+/// Whether `v` is zero or non-zero wherever it is used as a branch
+/// condition, when that is decidable without knowing its value.
+///
+/// A constant decides directly. A phi decides when every predecessor
+/// agrees, and an incoming that arrives from a block which branched on
+/// that very value is decided by the edge it came in on: `a && b` and
+/// `a || b` merge the deciding operand itself on the short-circuit edge,
+/// where the branch just taken fixes its truthiness. Recording the
+/// operand rather than a fresh 0 / 1 keeps the non-folding case one
+/// instruction shorter, so the fold reconstructs the fact here.
+fn truthy(
+    func: &FunctionSsa,
+    block_of: &[BlockId],
+    v: crate::c5::ir::ValueId,
+    depth: u32,
+) -> Option<bool> {
+    let idx = v as usize;
+    match func.insts.get(idx)? {
+        Inst::Imm(k) => Some(*k != 0),
+        Inst::Phi { incoming, .. } => {
+            if depth == 0 || incoming.is_empty() {
+                return None;
             }
-            _ => return None,
+            // A phi no block contains has no incoming edges to reason
+            // about; `block_index` marks it with the sentinel.
+            let here = *block_of.get(idx)?;
+            if here == BlockId::MAX {
+                return None;
+            }
+            let mut merged: Option<bool> = None;
+            for &(pred, val) in incoming {
+                let decided = edge_truth(func, pred, here, val)
+                    .or_else(|| truthy(func, block_of, val, depth - 1))?;
+                match merged {
+                    Some(m) if m != decided => return None,
+                    _ => merged = Some(decided),
+                }
+            }
+            merged
+        }
+        _ => None,
+    }
+}
+
+/// The truthiness `val` must have on the edge `pred -> here`, when
+/// `pred` ended in a branch on `val` itself. A branch with both arms at
+/// the same block decides nothing.
+fn edge_truth(
+    func: &FunctionSsa,
+    pred: BlockId,
+    here: BlockId,
+    val: crate::c5::ir::ValueId,
+) -> Option<bool> {
+    let (cond, zero_edge, nonzero_edge) = match func.blocks.get(pred as usize)?.terminator {
+        // `Bz` takes `target` when the condition is zero.
+        Terminator::Bz {
+            cond,
+            target,
+            fall_through,
+        } => (cond, target, fall_through),
+        // `Bnz` takes `target` when it is non-zero.
+        Terminator::Bnz {
+            cond,
+            target,
+            fall_through,
+        } => (cond, fall_through, target),
+        _ => return None,
+    };
+    if cond != val || zero_edge == nonzero_edge {
+        return None;
+    }
+    if here == zero_edge {
+        Some(false)
+    } else if here == nonzero_edge {
+        Some(true)
+    } else {
+        None
+    }
+}
+
+/// `block_of[inst] = owning block id`, for the edge lookup above.
+/// `BlockId::MAX` marks an instruction no block contains -- what a
+/// folded-away arm leaves behind in the flat array.
+fn block_index(func: &FunctionSsa) -> alloc::vec::Vec<BlockId> {
+    let mut of = alloc::vec![BlockId::MAX; func.insts.len()];
+    for (b, blk) in func.blocks.iter().enumerate() {
+        for i in blk.inst_range.clone() {
+            if let Some(slot) = of.get_mut(i as usize) {
+                *slot = b as BlockId;
+            }
         }
     }
-    None
+    of
 }
 
 #[cfg(test)]
@@ -154,6 +249,10 @@ mod tests {
             is_inline: false,
             is_always_inline: false,
             is_naked: false,
+            section: None,
+            is_weak: false,
+            is_internal: false,
+            const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
@@ -165,11 +264,16 @@ mod tests {
             ret_type_tag: 0,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
+            label_data_relocs: Vec::new(),
             jump_tables: Vec::new(),
             synthetic_base: 0,
             multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
             has_returns_twice_call: false,
             did_unroll: false,
+            did_inline: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

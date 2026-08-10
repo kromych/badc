@@ -13,6 +13,10 @@ struct hdr {
     unsigned snaplen;
 };
 
+// A volatile pointer keeps the object in memory, so the initializer's
+// stores are emitted and read back rather than forwarded to the checks.
+static void *opaque(void *p) { void *volatile q = p; return q; }
+
 static int check_struct(int seed) {
     // .magic and .version are constant; .snaplen is a statement expression
     // that declares locals. .magic must survive.
@@ -21,9 +25,10 @@ static int check_struct(int seed) {
         .version = 2,
         .snaplen = MAX(seed, 256) + 48,
     };
-    if (h.magic != 0xa1b2c3d4) return 1;
-    if (h.version != 2) return 2;
-    if (h.snaplen != (unsigned) (seed > 256 ? seed : 256) + 48) return 3;
+    struct hdr *r = opaque(&h);
+    if (r->magic != 0xa1b2c3d4) return 1;
+    if (r->version != 2) return 2;
+    if (r->snaplen != (unsigned) (seed > 256 ? seed : 256) + 48) return 3;
     return 0;
 }
 
@@ -31,9 +36,10 @@ static int check_array(int r) {
     // The first element is a runtime value; the second is a statement
     // expression that declares a local. Element 0 must survive.
     int a[3] = {r, ({ int x = 20; x + 1; }), 30};
-    if (a[0] != r) return 4;
-    if (a[1] != 21) return 5;
-    if (a[2] != 30) return 6;
+    int *v = opaque(a);
+    if (v[0] != r) return 4;
+    if (v[1] != 21) return 5;
+    if (v[2] != 30) return 6;
     return 0;
 }
 
@@ -45,16 +51,22 @@ static int check_nested_aggregate(int r) {
         7,
         ({ struct hdr w = {r + 1, r + 2, r + 3}; w.magic + w.version + w.snaplen; }),
     };
-    if (v.magic != (unsigned) r) return 7;
-    if (v.version != 7) return 8;
-    if (v.snaplen != (unsigned) (3 * r + 6)) return 9;
+    struct hdr *o = opaque(&v);
+    if (o->magic != (unsigned) r) return 7;
+    if (o->version != 7) return 8;
+    if (o->snaplen != (unsigned) (3 * r + 6)) return 9;
     return 0;
 }
 
 int main(void) {
     int rc;
-    if ((rc = check_struct(4096)) != 0) return rc;
-    if ((rc = check_array(5)) != 0) return rc;
-    if ((rc = check_nested_aggregate(9)) != 0) return rc;
+    // `volatile` keeps the seeds runtime values, so the aggregates are
+    // really initialized at runtime rather than folded to the checks.
+    volatile int seed = 4096;
+    if ((rc = check_struct(seed)) != 0) return rc;
+    seed = 5;
+    if ((rc = check_array(seed)) != 0) return rc;
+    seed = 9;
+    if ((rc = check_nested_aggregate(seed)) != 0) return rc;
     return 0;
 }

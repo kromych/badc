@@ -13,6 +13,8 @@
 #pragma binding(libc::strcasecmp,  "_strcasecmp")
 #pragma binding(libc::strncasecmp, "_strncasecmp")
 #pragma binding(libc::bzero,       "_bzero")
+#pragma binding(libc::bcmp,        "_bcmp")
+#pragma binding(libc::bcopy,       "_bcopy")
 #endif
 
 #ifdef __linux__
@@ -20,6 +22,8 @@
 #pragma binding(libc::strcasecmp,  "strcasecmp")
 #pragma binding(libc::strncasecmp, "strncasecmp")
 #pragma binding(libc::bzero,       "bzero")
+#pragma binding(libc::bcmp,        "bcmp")
+#pragma binding(libc::bcopy,       "bcopy")
 #endif
 
 #ifdef _WIN32
@@ -34,6 +38,11 @@
 int strcasecmp(char *a, char *b);
 int strncasecmp(char *a, char *b, int n);
 #if defined(__APPLE__) || defined(__linux__)
-// Legacy zero-fill (POSIX, marked obsolescent in favor of memset).
+// The legacy memory routines POSIX.1-2001 kept in <strings.h> and
+// marked obsolescent in favour of <string.h>'s memset / memcmp /
+// memmove. Still exported by both C libraries, so source that predates
+// the replacement keeps building.
 void bzero(void *s, unsigned long n);
+int bcmp(const void *a, const void *b, unsigned long n);
+void bcopy(const void *src, void *dst, unsigned long n);
 #endif

@@ -3,10 +3,12 @@
 //! `enum [Tag] [{ A, B = 5, C, ... }]` registers each constant as a
 //! `Token::Num` symbol so subsequent references (in expressions, in
 //! array dimensions via `parse_constant_int`, etc.) resolve to the
-//! enumerated value. The enum's tag itself is consumed without
-//! registration -- in c5 every enum collapses to plain `int`, so the
-//! tag carries no semantic weight; the implicit "shared scope" of
-//! the constants stands in for it.
+//! enumerated value. A tagged definition also records an `EnumDef`
+//! carrying the underlying integer type -- `int` when every value fits,
+//! wider / unsigned otherwise, a narrower type for
+//! `__attribute__((packed))` -- so a later bare `enum Tag` reference
+//! resolves the same size. Anonymous enums skip registration; their
+//! constants stay reachable as `Token::Num` symbols typed by the range.
 //!
 //! Lives next to `compiler/mod.rs` because the cluster is
 //! self-contained and the pair (`parse_enum_decl` -> `parse_enum_body`)
@@ -20,9 +22,49 @@ use super::super::token::{Token, Ty};
 use super::types::UNSIGNED_BIT;
 use super::{Compiler, EnumDef};
 
+/// `(min, max, constants)` from a parsed enum body: the enumerator value
+/// range that drives the packed underlying-type choice, plus the captured
+/// name/value pairs the caller records for DWARF.
+type EnumBody = (i64, i64, alloc::vec::Vec<(String, i64)>);
+
+/// The integer type compatible with an enum whose values span
+/// `[min, max]`. C99 6.7.2.2p4 leaves the choice to the
+/// implementation; GCC picks `unsigned int` whenever no enumerator is
+/// negative (widening to a 64-bit type when a value exceeds it) and
+/// `int` otherwise, so an all-non-negative enum compares, divides,
+/// and converts as an unsigned type.
+fn enum_compatible_ty(min: i64, max: i64) -> i64 {
+    if min < 0 {
+        if min >= i32::MIN as i64 && max <= i32::MAX as i64 {
+            Ty::Int as i64
+        } else {
+            Ty::LongLong as i64
+        }
+    } else if max <= u32::MAX as i64 {
+        Ty::Int as i64 | UNSIGNED_BIT
+    } else {
+        Ty::LongLong as i64 | UNSIGNED_BIT
+    }
+}
+
+/// The type of one enumerator constant. Within a 32-bit enum GCC
+/// types each constant by its own value -- `int` when it fits (C99
+/// 6.7.2.2p3), `unsigned int` for the wider extension values -- while
+/// every constant of an enum needing a 64-bit type takes that type.
+fn enumerator_constant_ty(v: i64, enum_ty: i64) -> i64 {
+    if (enum_ty & !UNSIGNED_BIT) == Ty::LongLong as i64 {
+        enum_ty
+    } else if v >= i32::MIN as i64 && v <= i32::MAX as i64 {
+        Ty::Int as i64
+    } else {
+        Ty::Int as i64 | UNSIGNED_BIT
+    }
+}
+
 impl Compiler {
     /// Parse an `enum` type reference / definition and return its underlying
-    /// integer type. A plain enum is `int` (C99 6.7.2.2p4); an
+    /// integer type. A plain enum takes `enum_compatible_ty` (C99
+    /// 6.7.2.2p4 leaves the choice open; `int` when every value fits); an
     /// `enum __attribute__((packed))` (per-enum `-fshort-enums`) uses the
     /// smallest integer type holding its enumerators, which changes the
     /// layout of any struct that embeds it, so the size is honored here.
@@ -46,13 +88,46 @@ impl Compiler {
         };
         packed = self.skip_attribute_specifiers()? || packed;
         if self.lex.tk == '{' {
-            let (min, max) = self.parse_enum_body(&tag_name)?;
-            if packed {
-                return Ok(Self::packed_enum_underlying_ty(min, max));
+            let (min, max, captured) = self.parse_enum_body()?;
+            // An attribute after the closing brace binds to the enum type
+            // (`enum E { ... } __attribute__((packed))`), the position GCC
+            // and Clang accept most often.
+            packed = self.skip_attribute_specifiers()? || packed;
+            let underlying = if let Some(m) = self.pending.attr_mode.take() {
+                // `mode(M)` fixes the enum's width outright; the
+                // enumerators must fit, as GCC requires.
+                let ty = self.apply_mode_to_type(enum_compatible_ty(min, max), m)?;
+                let bits = self.size_of_type(ty) as u32 * 8;
+                let fits = if min < 0 {
+                    bits >= 64 || (min >= -(1i64 << (bits - 1)) && max < (1i64 << (bits - 1)))
+                } else {
+                    bits >= 64 || max < (1i64 << bits)
+                };
+                if !fits {
+                    return Err(self.compile_err("specified mode too small for enumerated values"));
+                }
+                ty
+            } else if packed {
+                Self::packed_enum_underlying_ty(min, max)
+            } else {
+                enum_compatible_ty(min, max)
+            };
+            if !tag_name.is_empty() && !captured.is_empty() {
+                self.enums.push(EnumDef {
+                    name: tag_name.to_string(),
+                    constants: captured,
+                    underlying_ty: underlying,
+                });
             }
+            return Ok(underlying);
         }
-        // A bare `enum Tag` reference to a packed enum defined elsewhere
-        // falls back to int (its underlying size is not tracked on the tag).
+        // A bare `enum Tag` reference reuses the underlying type recorded at
+        // the tag's definition, so a packed enum keeps its sub-int width for
+        // sizeof / _Alignof and struct-field layout. Only tagged definitions
+        // are recorded, so an empty tag never matches.
+        if let Some(def) = self.enums.iter().rev().find(|e| e.name == tag_name) {
+            return Ok(def.underlying_ty);
+        }
         Ok(Ty::Int as i64)
     }
 
@@ -87,10 +162,11 @@ impl Compiler {
     /// `Token::Num`-class symbol with `val` set to its enumerated
     /// value, so subsequent uses (including in array dimensions
     /// via `parse_constant_int`) resolve correctly.
-    pub(super) fn parse_enum_body(&mut self, tag_name: &str) -> Result<(i64, i64), C5Error> {
+    pub(super) fn parse_enum_body(&mut self) -> Result<EnumBody, C5Error> {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
         let mut captured: alloc::vec::Vec<(String, i64)> = alloc::vec::Vec::new();
+        let mut sym_indexes: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
         while self.lex.tk != '}' {
             if self.lex.tk != Token::Id {
                 return Err(self.compile_err("bad enum identifier"));
@@ -108,22 +184,29 @@ impl Compiler {
                 i = self.parse_constant_int()?;
             }
             self.symbols[idx].class = Token::Num as i64;
-            self.symbols[idx].type_ = Ty::Int as i64;
+            // During the body the constant carries its value's own type
+            // so a reference from a later enumerator converts correctly;
+            // the whole list is restamped below once the range is known.
+            self.symbols[idx].type_ = enumerator_constant_ty(i, enum_compatible_ty(i, i));
             self.symbols[idx].val = i;
             captured.push((name, i));
+            sym_indexes.push(idx);
             i += 1;
             self.accept(',')?;
         }
         self.next()?; // consume `}`
-        // Value range drives the packed-enum underlying-type choice.
+        // Value range drives the packed-enum underlying-type choice; the
+        // caller records the resulting EnumDef once packedness is known.
         let min = captured.iter().map(|&(_, v)| v).min().unwrap_or(0);
         let max = captured.iter().map(|&(_, v)| v).max().unwrap_or(0);
-        if !tag_name.is_empty() && !captured.is_empty() {
-            self.enums.push(EnumDef {
-                name: tag_name.to_string(),
-                constants: captured,
-            });
+        // On completion each constant is restamped against the whole
+        // range: per-value within a 32-bit enum, the enum's own 64-bit
+        // type otherwise (GCC). `packed` narrows only the enum type,
+        // never the constants.
+        let compatible = enum_compatible_ty(min, max);
+        for (&idx, &(_, v)) in sym_indexes.iter().zip(&captured) {
+            self.symbols[idx].type_ = enumerator_constant_ty(v, compatible);
         }
-        Ok((min, max))
+        Ok((min, max, captured))
     }
 }

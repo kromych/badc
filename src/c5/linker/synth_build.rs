@@ -36,15 +36,21 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::c5::codegen::{
-    Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, FuncFixup, GotFixup,
-    OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target,
+    AddrPart, Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, EmitStream,
+    EmittedFinalReloc, FuncFixup, GotFixup, OutputKind, ResolvedDylib, ResolvedImport,
+    ResolvedImports, Target,
 };
 use crate::c5::error::C5Error;
+use crate::c5::object::elf_reloc_types::{
+    R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
+    R_AARCH64_CALL26, R_AARCH64_LD64_GOT_LO12_NC, R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PLT32,
+    R_X86_64_REX_GOTPCRELX, aarch64_ldst_lo12_scale,
+};
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
-use super::link::{MergedNative, PltTrampoline};
-use super::object::{NativeMachine, NativeSymSection};
+use super::link::{MergedNative, MergedTarget, PltTrampoline};
+use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT, STV_DEFAULT};
 
 /// Synthesize a Program + Build for `merged` against `target` and
 /// produce the per-format native image bytes. `entry_name` resolves
@@ -70,6 +76,7 @@ pub fn write_native_image_from_merged(
         shared_lib_name,
         false,
         false,
+        false,
     )
 }
 
@@ -88,6 +95,7 @@ pub fn write_native_image_from_merged_ex(
     shared_lib_name: Option<&str>,
     export_all: bool,
     export_data: bool,
+    emit_relocs: bool,
 ) -> Result<Vec<u8>, C5Error> {
     let (program, build) = synth_program_and_build(
         merged,
@@ -99,6 +107,7 @@ pub fn write_native_image_from_merged_ex(
         shared_lib_name,
         export_all,
         export_data,
+        emit_relocs,
     )?;
     write_native_image(&program, &build, target)
 }
@@ -114,6 +123,7 @@ fn synth_program_and_build(
     shared_lib_name: Option<&str>,
     export_all: bool,
     export_data: bool,
+    emit_relocs: bool,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
     // A shared library has no process entry point (ELF ET_DYN sets
@@ -129,7 +139,7 @@ fn synth_program_and_build(
         got: got_fixups,
         data: data_fixups,
         func: func_fixups,
-    } = synth_fixups(merged, plt)?;
+    } = synth_fixups(merged, plt, TextAbsolute::for_output(target, output_kind))?;
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt)?;
     let exports = synth_exports(merged, export_all, output_kind);
@@ -137,8 +147,14 @@ fn synth_program_and_build(
 
     let program = Program {
         data: Vec::new(),
+        file_asm: Vec::new(),
+        asm_weak_names: Vec::new(),
+        asm_hidden_names: Vec::new(),
         data_align: 8,
         data_object_starts: Vec::new(),
+        const_data_ranges: Vec::new(),
+        data_pad_ranges: Vec::new(),
+        data_align_marks: Vec::new(),
         entry_pc: 0,
         warnings: Vec::new(),
         tls_data: merged.tls_data.clone(),
@@ -164,6 +180,7 @@ fn synth_program_and_build(
         user_ssa_funcs: Vec::new(),
         extern_function_imports: Vec::new(),
         init_funcs: Vec::new(),
+        function_aliases: Vec::new(),
     };
 
     // Surface every Text-section defined symbol as a "function"
@@ -178,10 +195,10 @@ fn synth_program_and_build(
     // byte offset (identity on the merged path -- merged.text already
     // holds the final native bytes).
     //
-    // For each function the writer also drops a synthetic
-    // `.Lc5_prologue_end_<name>` STB_LOCAL anchor that the linker
-    // surfaces via `MergedNative::prologue_ends`. The synth path
-    // records it in `func_prologue_native` (keyed by `ent_pc`) so
+    // For each function the writer also records a post-prologue anchor
+    // in its `NT_BADC_PROLOGUE_END` note, which the linker surfaces via
+    // `MergedNative::prologue_ends`. The synth path copies it into
+    // `func_prologue_native` (keyed by `ent_pc`) so
     // `dwarf::prologue_size_for` returns the true byte count and
     // the FDE's `DW_CFA_advance_loc` lands at the post-prologue
     // boundary.
@@ -315,24 +332,38 @@ fn synth_program_and_build(
             .defined
             .iter()
             .filter_map(|(name, sym)| {
-                if name.is_empty() {
+                if name.is_empty() || sym.visibility != STV_DEFAULT {
                     return None;
                 }
-                let section = match sym.section {
-                    NativeSymSection::Text if export_funcs => DynamicExportSection::Text,
-                    NativeSymSection::Data if export_data_globals => DynamicExportSection::Data,
-                    // TODO: a zero-init (Bss) global is not dynamically
-                    // exportable. Its `value` here is the pre-compaction data
-                    // offset; bss compaction (codegen) later relocates the
-                    // storage past the file image, so the export would bind to
-                    // a stale address. A fix must remap export offsets through
-                    // compaction and tag the bss section in each writer.
+                // A `.bss` definition rides the same data-byte offset
+                // space as `.data`, biased past the file image.
+                let (section, offset) = match sym.section {
+                    NativeSymSection::Text if export_funcs => {
+                        (DynamicExportSection::Text, sym.value)
+                    }
+                    NativeSymSection::Data if export_data_globals => {
+                        (DynamicExportSection::Data, sym.value)
+                    }
+                    NativeSymSection::Bss if export_data_globals => (
+                        DynamicExportSection::Data,
+                        merged.data.len() as u64 + sym.value,
+                    ),
                     _ => return None,
                 };
                 Some(DynamicExport {
                     name: name.clone(),
                     section,
-                    offset: sym.value,
+                    offset,
+                    size: sym.size,
+                    is_object: match sym.kind {
+                        STT_OBJECT => true,
+                        STT_FUNC => false,
+                        // Untyped (a linker boundary symbol, an
+                        // assembly label with no `.type`): the section
+                        // it landed in decides.
+                        _ => section == DynamicExportSection::Data,
+                    },
+                    weak: sym.weak,
                 })
             })
             .collect()
@@ -340,17 +371,124 @@ fn synth_program_and_build(
         Vec::new()
     };
 
+    // `--emit-relocs`: every resolved relocation carried into the
+    // final image. Import-bound sites are omitted -- they patch to
+    // PLT stubs the writer lays out, and a PLT32-class entry is
+    // position-independent anyway.
+    let emitted_relocs: Vec<EmittedFinalReloc> = if emit_relocs {
+        let (abs64, prel32) = match merged.machine {
+            NativeMachine::X86_64 => (
+                crate::c5::object::elf_reloc_types::R_X86_64_64,
+                R_X86_64_PC32,
+            ),
+            NativeMachine::Aarch64 => (
+                crate::c5::object::elf_reloc_types::R_AARCH64_ABS64,
+                crate::c5::object::elf_reloc_types::R_AARCH64_PREL32,
+            ),
+        };
+        let target_of = |t: MergedTarget| -> (EmitStream, i64) {
+            match t {
+                MergedTarget::Text(o) => (EmitStream::Text, o),
+                MergedTarget::Data(o) => (EmitStream::Data, o),
+            }
+        };
+        let mut v = Vec::new();
+        for r in &merged.applied_text_relocs {
+            v.push(EmittedFinalReloc {
+                site: EmitStream::Text,
+                site_offset: r.text_offset,
+                rtype: r.rtype,
+                target: EmitStream::Text,
+                addend: r.target_text_offset,
+            });
+        }
+        for p in &merged.pending_imports {
+            if p.import_index != usize::MAX {
+                continue;
+            }
+            let target = match p.target_section {
+                NativeSymSection::Text => EmitStream::Text,
+                _ => EmitStream::Data,
+            };
+            v.push(EmittedFinalReloc {
+                site: EmitStream::Text,
+                site_offset: p.text_offset,
+                rtype: p.rtype,
+                target,
+                addend: p.addend,
+            });
+        }
+        for d in &merged.data_abs_relocs {
+            let (target, addend) = target_of(d.target);
+            v.push(EmittedFinalReloc {
+                site: EmitStream::Data,
+                site_offset: d.slot_offset,
+                rtype: abs64,
+                target,
+                addend,
+            });
+        }
+        for d in &merged.data_pcrel_relocs {
+            let (target, addend) = target_of(d.target);
+            v.push(EmittedFinalReloc {
+                site: EmitStream::Data,
+                site_offset: d.slot_offset,
+                rtype: prel32,
+                target,
+                addend,
+            });
+        }
+        v
+    } else {
+        Vec::new()
+    };
     let build = Build {
+        emitted_relocs,
+        orphaned_data: None,
+        stopped_at_data_liveness: false,
+        ssa_dump: alloc::string::String::new(),
+        asm_sections: Vec::new(),
+        asm_section_text_refs: Vec::new(),
+        asm_text_abs_refs: Vec::new(),
+        asm_text_labels: Vec::new(),
+        asm_sym_decls: Vec::new(),
         copy_relocs,
         dynamic_exports,
         text: merged.text.clone(),
+        text_align: merged.text_align,
         data: merged.data.clone(),
+        data_ro_len: merged.data_ro_len,
+        pic: false,
+        code_model: Default::default(),
+        elf_class: Default::default(),
         data_align: merged.data_align,
         bss_size: merged.bss_size as i64,
         init_fini_arrays: merged.init_fini_arrays,
         entry_offset,
         got_fixups,
         data_fixups,
+        // Object-linked jump tables ride in the merged data stream
+        // (input `.rodata` folds into it); the direct-lowering rodata
+        // blob stays empty on this path.
+        rodata: Default::default(),
+        data_pcrel_relocs: merged
+            .data_pcrel_relocs
+            .iter()
+            .map(|r| {
+                let (target_offset, target_in_data) = match r.target {
+                    MergedTarget::Text(off) => (off as u64, false),
+                    MergedTarget::Data(off) => (off as u64, true),
+                };
+                let (MergedTarget::Text(anchor) | MergedTarget::Data(anchor)) = r.anchor;
+                crate::c5::codegen::DataPcRelReloc {
+                    slot_data_offset: r.slot_offset,
+                    target_offset,
+                    target_anchor: anchor as u64,
+                    target_in_data,
+                    width: r.width,
+                }
+            })
+            .collect(),
         func_fixups,
         pc_to_native,
         func_ent_pcs,
@@ -398,6 +536,9 @@ fn synth_program_and_build(
         data_relocs,
         extern_data_relocs: Vec::new(),
         code_relocs,
+        // A synthesized link image resolves every label address at
+        // write time; no unresolved label slot survives into the Build.
+        label_relocs: Vec::new(),
         exports: exports.clone(),
         output_kind,
         shared_lib_name: if output_kind == OutputKind::SharedLibrary {
@@ -440,6 +581,15 @@ fn synth_program_and_build(
                     .map(|r| crate::c5::codegen::DwarfTextReloc {
                         byte_offset: r.byte_offset,
                         merged_text_offset: r.merged_text_offset,
+                        width: r.width,
+                    })
+                    .collect(),
+                debug_info_data_relocs: merged
+                    .debug_info_data_relocs
+                    .iter()
+                    .map(|r| crate::c5::codegen::DwarfDataReloc {
+                        byte_offset: r.byte_offset,
+                        merged_data_offset: r.merged_data_offset,
                         width: r.width,
                     })
                     .collect(),
@@ -555,6 +705,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             },
             dylib_index,
             flat_lookup,
+            is_object: merged.object_imports.contains(&i),
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
@@ -610,11 +761,11 @@ fn linux_libc_path(target: Target) -> String {
 /// trampoline list into the per-arch fixup streams the writer
 /// consumes.
 ///
-/// aarch64 address-of-symbol sequences are two relocations on
-/// consecutive instructions: R_AARCH64_ADR_PREL_PG_HI21 at
-/// `text_offset` and R_AARCH64_ADD_ABS_LO12_NC at `text_offset + 4`.
-/// `patch_adrp_add` patches both halves from a single fixup, so the
-/// synthesizer keys on the ADRP entry and drops the ADD entry.
+/// One input relocation becomes one fixup record naming its own site.
+/// The AArch64 ELF ABI relocates the page and in-page halves of an
+/// address reference independently -- one `adrp` may serve any number
+/// of in-page references, and an in-page reference may precede its
+/// `adrp` -- so neither half's site can be derived from the other's.
 ///
 /// PLT trampolines emit_*_plt produced are at the tail of
 /// `merged.text`. Each is `adrp x16, 0; ldr x16, [x16]; br x16`
@@ -628,14 +779,19 @@ struct SynthFixups {
     func: Vec<FuncFixup>,
 }
 
-fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFixups, C5Error> {
+fn synth_fixups(
+    merged: &MergedNative,
+    plt: &[PltTrampoline],
+    text_abs: TextAbsolute,
+) -> Result<SynthFixups, C5Error> {
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
 
     for tramp in plt {
         got_fixups.push(GotFixup {
-            adrp_offset: tramp.text_offset,
+            instr_offset: tramp.text_offset,
+            part: AddrPart::Whole,
             import_index: tramp.import_index,
             // Trampolines are branched to via the IAT, not read as
             // data; the writer patches them with an IAT lookup.
@@ -643,12 +799,13 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
         });
     }
 
-    let data_imports = &merged.data_import_indices;
     for reloc in &merged.pending_imports {
         match merged.machine {
             NativeMachine::Aarch64 => {
                 project_aarch64_pending(
+                    merged,
                     reloc,
+                    text_abs,
                     &mut got_fixups,
                     &mut data_fixups,
                     &mut func_fixups,
@@ -656,8 +813,9 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
             }
             NativeMachine::X86_64 => {
                 project_x86_64_pending(
+                    merged,
                     reloc,
-                    data_imports,
+                    text_abs,
                     &mut got_fixups,
                     &mut data_fixups,
                     &mut func_fixups,
@@ -673,102 +831,152 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
     })
 }
 
-// Reloc kind constants. Match the values link.rs uses (it keeps its
-// own private copies); duplicated here so the synthesizer doesn't
-// reach across the module boundary for a private constant.
-const R_X86_64_PC32: u32 = 2;
-const R_X86_64_PLT32: u32 = 4;
-const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
-const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
-const R_AARCH64_CALL26: u32 = 283;
-const R_AARCH64_LDST8_ABS_LO12_NC: u32 = 284;
-const R_AARCH64_LDST16_ABS_LO12_NC: u32 = 285;
-const R_AARCH64_LDST32_ABS_LO12_NC: u32 = 286;
-const R_AARCH64_LDST64_ABS_LO12_NC: u32 = 287;
-
 fn project_aarch64_pending(
+    merged: &MergedNative,
     reloc: &super::link::PendingImportReloc,
+    text_abs: TextAbsolute,
     got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
-    match reloc.rtype {
-        R_AARCH64_ADD_ABS_LO12_NC
-        | R_AARCH64_LDST8_ABS_LO12_NC
-        | R_AARCH64_LDST16_ABS_LO12_NC
-        | R_AARCH64_LDST32_ABS_LO12_NC
-        | R_AARCH64_LDST64_ABS_LO12_NC => {
-            // The matching ADRP entry owns the fixup; patch_adrp_add writes
-            // both halves -- the `add` or the scaled load/store low-12 -- from
-            // one DataFixup / FuncFixup / GotFixup record.
+    // Which field of the reference the relocation names, and whether it
+    // addresses the GOT slot rather than the symbol itself.
+    let (part, got_slot) = match reloc.rtype {
+        R_AARCH64_ADR_PREL_PG_HI21 => (AddrPart::Page, false),
+        R_AARCH64_ADR_GOT_PAGE => (AddrPart::Page, true),
+        R_AARCH64_ADD_ABS_LO12_NC => (AddrPart::InPage, false),
+        R_AARCH64_LD64_GOT_LO12_NC => (AddrPart::InPage, true),
+        // The PLT pass drains every import call; one still here is a
+        // broken invariant. A parked *section* reference is not: it
+        // reached a target whose runtime address only the writer
+        // knows, and this writer has no fixup that carries it, so it
+        // falls through to the declined arm.
+        R_AARCH64_CALL26 if reloc.target_section == NativeSymSection::Undef => {
+            return Err(synth_err(
+                "synthesizer: R_AARCH64_CALL26 still pending after PLT pass \
+                 -- emit_aarch64_plt should have drained it",
+            ));
+        }
+        rtype if aarch64_ldst_lo12_scale(rtype).is_some() => (AddrPart::InPage, false),
+        rtype => return Err(declined_reloc(merged, reloc, rtype, text_abs)),
+    };
+    // A GOT-slot relocation describes a reference resolved through a
+    // slot; against a defined symbol there is no slot to name.
+    if got_slot && reloc.target_section != NativeSymSection::Undef {
+        return Err(declined_reloc(merged, reloc, reloc.rtype, text_abs));
+    }
+    match reloc.target_section {
+        NativeSymSection::Data | NativeSymSection::Bss => {
+            data_fixups.push(DataFixup {
+                instr_offset: reloc.text_offset as usize,
+                data_offset: reloc.addend as u64,
+                part,
+            });
             Ok(())
         }
-        R_AARCH64_CALL26 => Err(synth_err(
-            "synthesizer: R_AARCH64_CALL26 still pending after PLT pass \
-             -- emit_aarch64_plt should have drained it",
-        )),
-        R_AARCH64_ADR_PREL_PG_HI21 => match reloc.target_section {
-            NativeSymSection::Data | NativeSymSection::Bss => {
-                data_fixups.push(DataFixup {
-                    adrp_offset: reloc.text_offset as usize,
-                    data_offset: reloc.addend as u64,
-                });
-                Ok(())
+        NativeSymSection::Text => {
+            func_fixups.push(FuncFixup {
+                instr_offset: reloc.text_offset as usize,
+                target_native_offset: reloc.addend as usize,
+                part,
+            });
+            Ok(())
+        }
+        NativeSymSection::Undef => {
+            // aarch64 loads the slot via adrp + ldr for both call
+            // thunks and data references, so the data-load flag is
+            // irrelevant here.
+            got_fixups.push(GotFixup {
+                instr_offset: reloc.text_offset as usize,
+                part,
+                import_index: reloc.import_index,
+                is_data_load: false,
+            });
+            Ok(())
+        }
+        _ => Err(declined_reloc(merged, reloc, reloc.rtype, text_abs)),
+    }
+}
+
+/// Whether the image a target and output kind produce can hold an
+/// absolute reference from an executable section. The merge pass parks
+/// every such reference (`link.rs::needs_image_base`) because its value
+/// is an address; the output kind, known only here, decides whether an
+/// address exists to write.
+#[derive(Clone, Copy)]
+enum TextAbsolute {
+    /// PE: `.reloc` base relocations cover every section, so the
+    /// reference is representable and only a carrier is missing.
+    Representable,
+    /// ELF `ET_DYN` and Mach-O `MH_PIE`: the loader picks the base and
+    /// neither format admits a relocation against an executable
+    /// section. `shared` picks the output kind GNU ld names.
+    RejectedInPie { shared: bool },
+}
+
+impl TextAbsolute {
+    fn for_output(target: Target, output_kind: OutputKind) -> Self {
+        if target.is_windows() {
+            TextAbsolute::Representable
+        } else {
+            TextAbsolute::RejectedInPie {
+                shared: output_kind == OutputKind::SharedLibrary,
             }
-            NativeSymSection::Text => {
-                func_fixups.push(FuncFixup {
-                    adrp_offset: reloc.text_offset as usize,
-                    target_native_offset: reloc.addend as usize,
-                });
-                Ok(())
-            }
-            NativeSymSection::Undef => {
-                // aarch64 loads the slot via adrp + ldr for both
-                // call thunks and data references, so the data-load
-                // flag is irrelevant here.
-                got_fixups.push(GotFixup {
-                    adrp_offset: reloc.text_offset as usize,
-                    import_index: reloc.import_index,
-                    is_data_load: false,
-                });
-                Ok(())
-            }
-            other => Err(synth_err(&alloc::format!(
-                "synthesizer: aarch64 ADR_PREL_PG_HI21 targeting {other:?} not supported"
-            ))),
-        },
-        other => Err(synth_err(&alloc::format!(
-            "synthesizer: aarch64 rtype {other} not supported"
-        ))),
+        }
+    }
+}
+
+/// A relocation the writer declines. An absolute form the output
+/// format cannot express at all is reported as that constraint; every
+/// other form is unsupported input -- badc's invariants are intact,
+/// the object is simply outside the supported set.
+fn declined_reloc(
+    merged: &MergedNative,
+    reloc: &super::link::PendingImportReloc,
+    rtype: u32,
+    text_abs: TextAbsolute,
+) -> C5Error {
+    use super::object::RelocOrigin;
+    let name = reloc
+        .sym_name
+        .as_deref()
+        .unwrap_or_else(|| super::link::import_name(merged, reloc.import_index));
+    let (source, section, offset) = merged
+        .section_map
+        .locate_text(reloc.text_offset)
+        .unwrap_or(("", ".text", reloc.text_offset));
+    let site =
+        RelocOrigin::in_named_section(source, section).at(merged.machine, rtype, name, offset);
+    let absolute = super::image::abs_field(merged.machine, rtype).is_some();
+    match text_abs {
+        TextAbsolute::RejectedInPie { shared } if absolute => site.absolute_in_pie(shared),
+        // TODO: carry a plain N-byte absolute field through a
+        // writer-side fixup, for the formats that admit one.
+        _ => site.unsupported(),
     }
 }
 
 fn project_x86_64_pending(
+    merged: &MergedNative,
     reloc: &super::link::PendingImportReloc,
-    data_imports: &alloc::collections::BTreeSet<usize>,
+    text_abs: TextAbsolute,
     got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
-    if reloc.rtype != R_X86_64_PC32 && reloc.rtype != R_X86_64_PLT32 {
-        return Err(synth_err(&alloc::format!(
-            "synthesizer: x86_64 rtype {} not supported",
-            reloc.rtype
-        )));
-    }
     // Per SysV AMD64 psABI ch. 4.4 the `r_offset` of R_X86_64_PC32
     // and R_X86_64_PLT32 names the byte location of the 32-bit
     // displacement field, not the instruction start. The writer's
     // `patch_addr_load` / `patch_iat_lookup` / function-pointer
-    // patchers take the instruction start (`adrp_offset` is the
-    // aarch64 ADRP analogue) so each x86_64 form steps back from
-    // the displacement to the instruction's first byte:
+    // patchers take the instruction start, so each x86_64 form steps
+    // back from the displacement to the instruction's first byte:
     //   * `lea reg, [rip + disp32]`  -- 7-byte REX form, disp32 at +3
+    //   * `mov reg, [rip + disp32]`  -- same shape, unrelaxed GOT load
     //   * `call rel32`                -- 5-byte form,    disp32 at +1
     let instr_back_off = match reloc.rtype {
-        R_X86_64_PC32 => 3,
+        R_X86_64_PC32 | R_X86_64_GOTPCREL | R_X86_64_REX_GOTPCRELX => 3,
         R_X86_64_PLT32 => 1,
-        _ => unreachable!(),
+        other => return Err(declined_reloc(merged, reloc, other, text_abs)),
     };
     let instr_offset = (reloc.text_offset as usize)
         .checked_sub(instr_back_off)
@@ -789,29 +997,31 @@ fn project_x86_64_pending(
     match reloc.target_section {
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {
-                adrp_offset: instr_offset,
+                instr_offset,
                 data_offset: target_byte_offset as u64,
+                part: AddrPart::Whole,
             });
             Ok(())
         }
         NativeSymSection::Text => {
             func_fixups.push(FuncFixup {
-                adrp_offset: instr_offset,
+                instr_offset,
                 target_native_offset: target_byte_offset as usize,
+                part: AddrPart::Whole,
             });
             Ok(())
         }
         NativeSymSection::Undef => {
-            // A data import re-parked by `emit_x86_64_plt` reaches
-            // here with no call thunk; its `lea reg, [rip+disp32]`
-            // must become a `mov reg, [rip+disp32]` loading the IAT
-            // slot's value. A function import flows through its
-            // trampoline GotFixup and takes the IAT-lookup form.
-            let is_data_load = data_imports.contains(&reloc.import_index);
+            // A slot-read site re-parked by `emit_x86_64_plt` reaches
+            // here with no call thunk; it ends as a
+            // `mov reg, [rip+disp32]` loading the IAT slot's value. A
+            // branch flows through its trampoline GotFixup instead and
+            // takes the IAT-lookup form.
             got_fixups.push(GotFixup {
-                adrp_offset: instr_offset,
+                instr_offset,
+                part: AddrPart::Whole,
                 import_index: reloc.import_index,
-                is_data_load,
+                is_data_load: reloc.slot_load,
             });
             Ok(())
         }
@@ -825,32 +1035,23 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
     let mut data_relocs: Vec<DataReloc> = Vec::new();
     let mut code_relocs: Vec<CodeReloc> = Vec::new();
     for r in &merged.data_abs_relocs {
-        match r.target_section {
-            NativeSymSection::Data => {
+        // `MergedTarget::Data` is already the unified data-byte offset
+        // the per-format writers' data-offset-to-vaddr map takes, zero-
+        // fill tail included; no per-section bias is applied here.
+        match r.target {
+            MergedTarget::Data(off) => {
                 data_relocs.push(DataReloc {
                     data_offset: r.slot_offset,
-                    target_offset: r.target_offset,
-                    target_anchor: r.target_offset,
+                    target_offset: off as u64,
+                    target_anchor: off as u64,
                 });
             }
-            NativeSymSection::Bss => {
-                // Bss sits past `.data` at runtime; the per-format writer
-                // maps a data offset >= data length into the zero-fill
-                // tail, so shift the bss-relative target by the merged
-                // data length (mirrors image::patch_data_abs_relocs).
-                data_relocs.push(DataReloc {
-                    data_offset: r.slot_offset,
-                    target_offset: merged.data.len() as u64 + r.target_offset,
-                    target_anchor: merged.data.len() as u64 + r.target_offset,
-                });
-            }
-            NativeSymSection::Text => {
+            MergedTarget::Text(off) => {
                 code_relocs.push(CodeReloc {
                     data_offset: r.slot_offset,
-                    target_ent_pc: r.target_offset,
+                    target_ent_pc: off as u64,
                 });
             }
-            _ => {}
         }
     }
     (data_relocs, code_relocs)
@@ -864,6 +1065,11 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
 /// maximum PC actually referenced; entries outside the referenced
 /// set stay `usize::MAX` and surface as a "missing ent_pc" error
 /// if the writer reaches them.
+///
+/// TODO: the table spans the whole merged `.text`, so a large link
+/// allocates and fills eight bytes per code byte for a map that is the
+/// identity. Removing it needs `Build::pc_to_native` to express the
+/// identity case, which the direct-lowering path shares.
 fn synth_pc_to_native(
     text: &[u8],
     code_relocs: &[CodeReloc],
@@ -913,14 +1119,14 @@ fn synth_exports(
     // Promote the source-declared `#pragma export` names (unioned by
     // the linker into `merged.exports`) to export-table records,
     // resolving each to its `.text`-defined entry. Names that resolve
-    // to a non-text or undefined symbol are skipped. The per-format
-    // writers consume this only for shared-library output; an
-    // executable's export list is ignored.
+    // to a non-text or undefined symbol are skipped, as is any
+    // definition whose visibility keeps it out of the dynamic scope.
     let mut exports: Vec<ExportedFunction> = Vec::new();
     let mut seen: alloc::collections::BTreeSet<String> = alloc::collections::BTreeSet::new();
     for name in &merged.exports {
         if let Some(sym) = merged.defined.get(name)
             && matches!(sym.section, NativeSymSection::Text)
+            && sym.visibility == STV_DEFAULT
             && seen.insert(name.clone())
         {
             exports.push(ExportedFunction {
@@ -936,6 +1142,7 @@ fn synth_exports(
         for (name, sym) in &merged.defined {
             if !name.is_empty()
                 && matches!(sym.section, NativeSymSection::Text)
+                && sym.visibility == STV_DEFAULT
                 && seen.insert(name.clone())
             {
                 exports.push(ExportedFunction {
@@ -987,18 +1194,25 @@ mod tests {
                 section: NativeSymSection::Text,
                 value: 0,
                 size: 8,
+                kind: crate::c5::linker::object::STT_FUNC,
+                visibility: 0,
+                weak: false,
             },
         );
         MergedNative {
+            applied_text_relocs: Vec::new(),
+            text_align: 16,
             // aarch64: `mov w0, #42; ret`.
             text: alloc::vec![0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6],
             data: alloc::vec![],
+            data_ro_len: 0,
             data_align: 8,
             bss_size: 0,
             defined,
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
+            data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
@@ -1008,7 +1222,7 @@ mod tests {
             macho_tlv_descriptors: alloc::vec![],
             macho_tlv_fixups: alloc::vec![],
             copy_relocs: alloc::vec![],
-            data_import_indices: alloc::collections::BTreeSet::new(),
+            object_imports: alloc::collections::BTreeSet::new(),
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
@@ -1023,12 +1237,14 @@ mod tests {
             unit_for_debug_info_reloc: alloc::vec![],
             unit_for_debug_line_reloc: alloc::vec![],
             debug_info_text_relocs: alloc::vec![],
+            debug_info_data_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
-            prologue_ends: alloc::collections::BTreeMap::new(),
+            prologue_ends: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
             init_fini_arrays: Default::default(),
+            section_map: Default::default(),
         }
     }
 
@@ -1166,6 +1382,9 @@ mod tests {
                 section: NativeSymSection::Text,
                 value: 0x40,
                 size: 16,
+                kind: crate::c5::linker::object::STT_FUNC,
+                visibility: 0,
+                weak: false,
             },
         );
         merged.defined.insert(
@@ -1174,6 +1393,9 @@ mod tests {
                 section: NativeSymSection::Data,
                 value: 0,
                 size: 4,
+                kind: crate::c5::linker::object::STT_OBJECT,
+                visibility: 0,
+                weak: false,
             },
         );
         // `main` is defined but not exported; `helper` and `g_count`
@@ -1209,6 +1431,9 @@ mod tests {
                 section: NativeSymSection::Text,
                 value: 0x40,
                 size: 16,
+                kind: crate::c5::linker::object::STT_FUNC,
+                visibility: 0,
+                weak: false,
             },
         );
         merged.defined.insert(
@@ -1217,6 +1442,9 @@ mod tests {
                 section: NativeSymSection::Data,
                 value: 0,
                 size: 4,
+                kind: crate::c5::linker::object::STT_OBJECT,
+                visibility: 0,
+                weak: false,
             },
         );
         // No `#pragma export` at all; `--export-all` carries them.
@@ -1230,5 +1458,105 @@ mod tests {
             synth_exports(&merged, true, OutputKind::Executable).is_empty(),
             "export-all populates the export list only for a shared library"
         );
+    }
+
+    /// A merged image with `n` functions, each 8 bytes of aarch64
+    /// `mov w0, #42; ret`, with `main` first, plus one flat import and
+    /// its trampoline so the writer emits the static symbol table.
+    fn merged_with_functions(n: usize) -> (MergedNative, alloc::vec::Vec<PltTrampoline>) {
+        let mut merged = tiny_aarch64_main();
+        merged.text = alloc::vec::Vec::with_capacity(n * 8 + 12);
+        for _ in 0..n {
+            merged
+                .text
+                .extend_from_slice(&[0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6]);
+        }
+        for i in 1..n {
+            merged.defined.insert(
+                alloc::format!("f{i:07}"),
+                MergedSymbol {
+                    section: NativeSymSection::Text,
+                    value: (i * 8) as u64,
+                    size: 8,
+                    kind: crate::c5::linker::object::STT_FUNC,
+                    visibility: 0,
+                    weak: false,
+                },
+            );
+        }
+        let tramp = merged.text.len();
+        // adrp x16, 0 ; ldr x16, [x16] ; br x16 -- the shape
+        // `emit_aarch64_plt` lays down and the writer patches.
+        merged.text.extend_from_slice(&0x9000_0010u32.to_le_bytes());
+        merged.text.extend_from_slice(&0xF940_0210u32.to_le_bytes());
+        merged.text.extend_from_slice(&0xD61F_0200u32.to_le_bytes());
+        merged.imports.push("host_fn".to_string());
+        merged.flat_imports.insert("host_fn".to_string());
+        (
+            merged,
+            alloc::vec![PltTrampoline {
+                text_offset: tramp,
+                import_index: 0,
+            }],
+        )
+    }
+
+    /// The static `.symtab` gives each function the span to the next
+    /// code boundary. Locating that boundary must be a search over the
+    /// sorted boundary list, not a scan from its front.
+    ///
+    /// One image of `SPLIT * N` functions is compared against `SPLIT`
+    /// images of `N`: the two sides carry the same number of functions,
+    /// so a per-function cost makes them equal, while a per-function
+    /// scan makes the single large image `SPLIT` times dearer. Equal
+    /// work per side also means equal exposure to the scheduler -- the
+    /// suite runs its tests in parallel -- and the whole comparison is
+    /// retried, since a complexity change exceeds the bound on every
+    /// attempt and a load excursion does not.
+    #[test]
+    fn image_write_cost_is_subquadratic_in_function_count() {
+        const N: usize = 5_000;
+        const SPLIT: usize = 8;
+        let once = |n: usize| {
+            let (merged, plt) = merged_with_functions(n);
+            let bytes = write_native_image_from_merged(
+                &merged,
+                &plt,
+                "main",
+                None,
+                OutputKind::Executable,
+                Target::LinuxAarch64,
+                None,
+            )
+            .expect("image writes");
+            assert!(!bytes.is_empty(), "image is non-empty");
+        };
+        let timed = |f: &dyn Fn()| -> f64 {
+            let t = std::time::Instant::now();
+            f();
+            t.elapsed().as_secs_f64()
+        };
+        for attempt in 0..3 {
+            let (mut split, mut whole) = (f64::MAX, f64::MAX);
+            for _ in 0..3 {
+                split = split.min(timed(&|| {
+                    for _ in 0..SPLIT {
+                        once(N)
+                    }
+                }));
+                whole = whole.min(timed(&|| once(SPLIT * N)));
+            }
+            assert!(split > 0.0, "no measurable image-write cost to compare");
+            if whole < split * 2.5 {
+                return;
+            }
+            assert!(
+                attempt < 2,
+                "one image of {} functions cost {:.1}x {SPLIT} images of {N} \
+                 ({split:.3e}s -> {whole:.3e}s)",
+                SPLIT * N,
+                whole / split,
+            );
+        }
     }
 }

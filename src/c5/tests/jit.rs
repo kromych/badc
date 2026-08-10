@@ -21,6 +21,7 @@
     all(target_os = "macos", target_arch = "aarch64"),
 ))]
 
+use super::fixture_tables::JIT_FIXTURES;
 use crate::{Compiler, NativeOptions, jit_run, jit_run_with_options};
 
 /// Compile `src` and run it through the JIT with `args` as argv.
@@ -99,6 +100,424 @@ fn dead_branch_call_to_undefined_symbol_is_pruned() {
         jit_exit_native_optimized(src, &["jit-dead-branch-prune"]),
         7
     );
+}
+
+#[test]
+fn struct_returning_always_inline_folds_parameter_guards() {
+    // A struct-returning always_inline helper is spliced at every call
+    // site, so its parameter-dependent guard folds per site and the
+    // never-taken call to the undefined `bug` leaves no reference. The
+    // returned fields then reach the caller as constants -- including
+    // `r.reg`, read past an intervening call and a branch, which decides
+    // a switch whose default arm also calls `bug`. Without either fold
+    // the JIT loader would fail to resolve `bug`.
+    let src = "
+        extern void bug(void);
+        struct R { unsigned function; int reg; };
+        static const struct R table[2] = { {1u, 3}, {7u, 1} };
+        static __attribute__((always_inline)) struct R reg_of(unsigned f) {
+            unsigned leaf = f / 32u;
+            if (leaf >= 2u) bug();
+            if (table[leaf].function == 0u) bug();
+            return table[leaf];
+        }
+        int pick(const int *e, int reg);
+        int pick(const int *e, int reg) { return e[reg & 3]; }
+        static __attribute__((always_inline)) int probe(const int *e, unsigned f) {
+            const struct R r = reg_of(f);
+            int slot = pick(e, (int)r.function);
+            if (slot < 0) return -1;
+            switch (r.reg) {
+            case 1: return slot + 1;
+            case 3: return slot + 3;
+            default: bug(); return 0;
+            }
+        }
+        int main(void) {
+            static const int e[4] = {10, 20, 30, 40};
+            return probe(e, 0u) + probe(e, 32u) == (20 + 3) + (40 + 1) ? 5 : 1;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-struct-ret-guard"]), 5);
+}
+
+#[test]
+fn always_inline_callee_passing_an_aggregate_by_value_is_spliced() {
+    // A body that hands a structure to another function by value is
+    // still inlinable: the argument address is one more value operand
+    // and the callee's aggregate layout re-interns into the caller. The
+    // request here is mandatory, and honouring it is what folds the
+    // per-site guards on the constant `sr` -- the undefined `bug` would
+    // otherwise fail the JIT load.
+    //
+    // The nested call takes both a register-class aggregate and one the
+    // System V AMD64 classification puts in memory, which the caller
+    // copies to its outgoing argument area. Only the callee's own
+    // parameters have to pass by value in registers for the splice to
+    // redirect their frame copies; what a nested call marshals is the
+    // per-arch call plan's business, out of line or inlined alike. Both
+    // must arrive at `sink` intact.
+    let src = "
+        extern void bug(void);
+        struct resx { unsigned long lo, hi; };
+        struct wide { unsigned long w[5]; };
+        struct ctx { unsigned long v[4]; };
+        static unsigned long seen_lo, seen_hi, seen_w;
+        void sink(struct ctx *c, int sr, struct resx r, struct wide w);
+        void sink(struct ctx *c, int sr, struct resx r, struct wide w) {
+            c->v[sr] = r.lo + r.hi + (unsigned long) sr;
+            seen_lo = r.lo;
+            seen_hi = r.hi;
+            seen_w = w.w[0] + w.w[1] + w.w[2] + w.w[3] + w.w[4];
+        }
+        static __attribute__((always_inline))
+        void set_masks(struct ctx *c, int sr, struct resx r,
+                       const struct wide *wp) {
+            if (!__builtin_constant_p(sr)) bug();
+            if (sr < 0 || sr >= 4) bug();
+            sink(c, sr, r, *wp);
+        }
+        int main(void) {
+            struct ctx c = {{0, 0, 0, 0}};
+            struct resx r = {10ul, 20ul};
+            struct wide w = {{1ul, 2ul, 3ul, 4ul, 5ul}};
+            set_masks(&c, 0, r, &w);
+            set_masks(&c, 1, r, &w);
+            set_masks(&c, 2, r, &w);
+            set_masks(&c, 3, r, &w);
+            if (seen_lo != 10ul || seen_hi != 20ul || seen_w != 15ul) return 1;
+            for (int i = 0; i < 4; i++)
+                if (c.v[i] != 30ul + (unsigned long) i) return 2;
+            return 9;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-agg-arg-inline"]), 9);
+}
+
+#[test]
+fn always_inline_callee_returning_a_large_struct_is_spliced() {
+    // A callee returning an aggregate too large for the return registers
+    // gets a caller-provided destination -- the hidden out-pointer
+    // argument (System V AMD64 MEMORY class, Win64 over the by-value
+    // size) or the indirect-result register (AAPCS64 above 16 bytes).
+    // Both are mandatory-request shapes the splice has to reproduce.
+    //
+    // `mk_state` also reaches its result through another function, which
+    // has to see the redirected destination, and `wrap` returns the
+    // result of a second by-address callee -- the nested shape whose
+    // whole-object copy the splice drops.
+    //
+    // The guards call a defined `bug` rather than an undefined one so the
+    // values are checked at whatever register budget is in effect: which
+    // of them fold is the scalar-promotion budget's business (see the
+    // linker test), while the value each field carries is not.
+    let src = "
+        static int bug_calls;
+        static void bug(void) { bug_calls++; }
+        struct state { void *base; void *table; unsigned long span;
+                       unsigned long off; unsigned int level;
+                       unsigned short idx; unsigned char kind; };
+        static void tag(struct state *s, unsigned char k) { s->kind = k; }
+        static __attribute__((always_inline))
+        struct state mk_state(void *base, unsigned int level) {
+            struct state s = { .base = base, .level = level, .span = 4096ul };
+            tag(&s, 7);
+            return s;
+        }
+        static __attribute__((always_inline))
+        struct state wrap(void *base) { return mk_state(base, 0u); }
+        static unsigned long sink;
+        int main(void) {
+            struct state a = mk_state(&sink, 3u);
+            if (a.level != 3u) bug();
+            if (a.kind != 7) bug();
+            if (a.span != 4096ul) bug();
+            if (a.table != 0 || a.off != 0ul || a.idx != 0) bug();
+            struct state b = wrap(&sink);
+            if (b.level != 0u) bug();
+            if (b.base != (void *) &sink) bug();
+            sink = a.span + b.span + a.level + a.kind;
+            if (sink != 4096ul + 4096ul + 3ul + 7ul) bug();
+            return bug_calls == 0 ? 6 : 2;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-sret-inline"]), 6);
+}
+
+#[test]
+fn a_dominating_condition_decides_the_comparison_it_implies() {
+    // Three shapes whose answer follows from the condition guarding the
+    // block rather than from any immediate: a loop guard settling the
+    // sign of the induction variable (the query a widely used min()/max()
+    // macro set puts to `__builtin_constant_p`), a masked switch operand
+    // whose value set the labels cover, and an enumerated state the loop
+    // condition excludes. The undefined `bug` fails the JIT load if any
+    // guarded arm survives.
+    let src = "
+        extern void bug(void);
+        #define statically_true(x) (__builtin_constant_p(x) && (x))
+        #define is_signed_type(type) (((type)(-1)) < (type)1)
+        #define __is_nonneg(ux) statically_true((long long)(ux) >= 0)
+        #define __sign_use(ux) (is_signed_type(typeof(ux)) ? \
+            (2 + __is_nonneg(ux)) : (1 + 2 * (sizeof(ux) < 4)))
+        #define __types_ok(ux, uy) (__sign_use(ux) & __sign_use(uy))
+        #define MIN(x, y) ({                    \
+            __auto_type ux = (x);               \
+            __auto_type uy = (y);               \
+            if (!__types_ok(ux, uy)) bug();     \
+            ux < uy ? ux : uy;                  \
+        })
+        static unsigned long chunks;
+        static void drain(int len) {
+            while (len > 0) {
+                unsigned int n = MIN(len, 4096UL);
+                chunks += n;
+                len -= n;
+            }
+        }
+        static int masked(unsigned int flags) {
+            switch (flags & 3u) {
+            case 0: return 10;
+            case 1: return 20;
+            case 2: return 30;
+            case 3: return 40;
+            default: bug(); return 0;
+            }
+        }
+        static int stage(int v) {
+            if (v > 4) {
+                if (v <= 4) bug();
+                if (v < 0) bug();
+                return 1;
+            }
+            if (v > 4) bug();
+            return 0;
+        }
+        int main(void) {
+            drain(10000);
+            if (chunks != 10000ul) return 1;
+            if (masked(0u) != 10 || masked(5u) != 20) return 2;
+            if (masked(6u) != 30 || masked(7u) != 40) return 3;
+            if (stage(9) != 1 || stage(4) != 0) return 4;
+            return 7;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-implied-cmp"]), 7);
+}
+
+#[test]
+fn a_taken_branch_says_its_condition_is_nonzero_not_one() {
+    // A branch tests its condition against zero, so the taken edge says
+    // only that the value is not zero. Reading it as 1 would decide the
+    // comparisons below wrongly -- a masked flag word arrives holding
+    // the mask, and a subtraction arrives holding whatever it computed.
+    let src = "
+        static int sink;
+        static volatile unsigned int in_u;
+        static volatile int in_a, in_b;
+        int flags(void);
+        int flags(void) {
+            unsigned int m = in_u & 0x24u;
+            if (m) {
+                if (m == 1u) sink |= 1;
+                if (m > 0x24u) sink |= 2;
+                return (int) m;
+            }
+            return 0;
+        }
+        int spread(void);
+        int spread(void) {
+            int d = in_a - in_b;
+            if (d) {
+                if (d == 1) sink |= 4;
+                if (d < -100 || d > 100) return 99;
+                return d;
+            }
+            return 0;
+        }
+        int main(void) {
+            in_u = 0xffu; if (flags() != 0x24) return 1;
+            in_u = 0x20u; if (flags() != 0x20) return 2;
+            in_u = 0x04u; if (flags() != 4) return 3;
+            in_u = 0x08u; if (flags() != 0) return 4;
+            in_a = 10; in_b = 3;   if (spread() != 7) return 5;
+            in_a = 3;  in_b = 10;  if (spread() != -7) return 6;
+            in_a = 5;  in_b = 5;   if (spread() != 0) return 7;
+            in_a = 500; in_b = 1;  if (spread() != 99) return 8;
+            if (sink != 0) return 9;
+            return 6;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-nonzero-cond"]), 6);
+}
+
+#[test]
+fn select_of_two_constants_folds_its_guard() {
+    // A value produced by a runtime `?:` between two constants keeps a
+    // guard on it live unless the guard is evaluated per incoming: the
+    // comparison `> 3ul` is false for both 1 and 0, and the mask selects
+    // neither the bit the two arms differ in nor any bit either sets, so
+    // the build-time asserts are unreachable whichever arm runs -- also
+    // through a nested `?:`, whose value set is the union of both levels.
+    // The undefined `bug` would fail the JIT load if any survived.
+    let src = "
+        extern void bug(void);
+        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        static __attribute__((always_inline)) unsigned long
+        encode(unsigned long page, unsigned long flags) {
+            BUILD_BUG_ON(flags > 3ul);
+            return flags | page;
+        }
+        static int delay_rmap;
+        unsigned long add_page(unsigned long page);
+        unsigned long add_page(unsigned long page) {
+            return encode(page, delay_rmap ? 1ul : 0ul);
+        }
+        static unsigned long personality;
+        #define DATA_FLAGS (0x1ul | 0x2ul | ((personality & 0x400000ul) ? 0x4ul : 0ul) \
+                            | 0x10ul | 0x20ul | 0x40ul)
+        #define STACK_FLAGS (0x100ul | DATA_FLAGS | 0x100000ul)
+        static unsigned long stack_flags(void) {
+            BUILD_BUG_ON(STACK_FLAGS & (0x10000ul | 0x8000ul));
+            return STACK_FLAGS;
+        }
+        static int tier;
+        static unsigned long tier_bits(void) {
+            unsigned long v = tier ? (delay_rmap ? 1ul : 2ul) : 3ul;
+            BUILD_BUG_ON(v > 3ul);
+            BUILD_BUG_ON(v == 0ul);
+            return v;
+        }
+        int main(void) {
+            delay_rmap = 0;
+            if (add_page(0x1000ul) != 0x1000ul) return 1;
+            delay_rmap = 1;
+            if (add_page(0x1000ul) != 0x1001ul) return 2;
+            personality = 0ul;
+            if (stack_flags() != 0x100173ul) return 3;
+            personality = 0x400000ul;
+            if (stack_flags() != 0x100177ul) return 4;
+            tier = 1;
+            if (tier_bits() != 1ul) return 5;
+            delay_rmap = 0;
+            if (tier_bits() != 2ul) return 7;
+            tier = 0;
+            if (tier_bits() != 3ul) return 8;
+            return 6;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-select-guard"]), 6);
+}
+
+#[test]
+fn const_trip_loop_unrolls_so_its_index_folds_a_guard() {
+    // A counted loop with a constant trip count hands its induction
+    // variable to an always_inline helper that asserts the index is in
+    // range. The guard resolves only once each iteration's index is a
+    // literal, which full unrolling produces. The body is wide enough
+    // (five member stores through an array-of-struct subscript reached
+    // via a pointer parameter, plus two calls) that gating on the
+    // rolled body size instead of on the expansion keeps it rolled and
+    // leaves the undefined `bug`, which would fail the JIT load. The
+    // exit code checks the values the copies compute, including the
+    // rolled loop's over a runtime bound.
+    let src = "
+        extern void bug(void);
+        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        #define NR_FIXED 3
+        #define BASE_IDX 32
+        struct counter {
+            unsigned int kind; unsigned int idx; unsigned long long count;
+            unsigned long long eventsel; void *event; void *owner;
+            unsigned long long config;
+        };
+        struct bank { struct counter fixed[NR_FIXED]; };
+        static const int event_ids[NR_FIXED] = { 11, 22, 33 };
+        static __attribute__((always_inline)) unsigned long long sel_of(unsigned int i) {
+            BUILD_BUG_ON(i >= NR_FIXED);
+            return (unsigned long long)event_ids[i] << 8;
+        }
+        static __attribute__((always_inline)) unsigned int slot_of(unsigned int i) {
+            BUILD_BUG_ON(BASE_IDX + i >= 64u);
+            return i + BASE_IDX;
+        }
+        static void bank_init(struct bank *b, void *owner) {
+            int i;
+            for (i = 0; i < NR_FIXED; i++) {
+                b->fixed[i].kind = 2;
+                b->fixed[i].owner = owner;
+                b->fixed[i].idx = slot_of((unsigned int)i);
+                b->fixed[i].config = 0;
+                b->fixed[i].eventsel = sel_of((unsigned int)i);
+            }
+        }
+        static int runtime_bound = NR_FIXED;
+        static struct bank the_bank;
+        int main(void) {
+            int i; unsigned long long acc = 0, rolled = 0; static char token;
+            bank_init(&the_bank, &token);
+            for (i = 0; i < NR_FIXED; i++) {
+                if (the_bank.fixed[i].kind != 2) return 1;
+                if (the_bank.fixed[i].owner != &token) return 2;
+                if (the_bank.fixed[i].idx != (unsigned int)(i + BASE_IDX)) return 3;
+                if (the_bank.fixed[i].config != 0) return 4;
+                acc += the_bank.fixed[i].eventsel;
+            }
+            if (acc != ((11ull + 22ull + 33ull) << 8)) return 5;
+            for (i = 0; i < runtime_bound; i++)
+                rolled += (unsigned long long)event_ids[i] << 8;
+            if (rolled != acc) return 6;
+            return 9;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-unroll-guard"]), 9);
+}
+
+#[test]
+fn const_scalar_load_folds_to_its_initializer() {
+    // C99 6.7.3p5: modifying an object defined with a const-qualified
+    // type is undefined, so a file-scope `const` scalar's load folds to
+    // its initializer and a guard on it resolves -- including the
+    // zero-initialized flag, whose object the data compaction moves to
+    // the zero-filled bss region, and a block-scope static, whose object
+    // model is the same. The qualifier must reach the object:
+    // `const char *names[2]` has writable elements, so `names[0]` keeps
+    // its load and observes the store. The undefined `bug` would fail
+    // the JIT load if any guard survived.
+    let src = "
+        extern void bug(void);
+        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        static const _Bool is_conditional = 1;
+        static const _Bool is_unconditional = 0;
+        static const int depth = 3;
+        static const unsigned char kind = 200;
+        static const long mask = -4;
+        static int guard(void) {
+            BUILD_BUG_ON(!is_conditional);
+            BUILD_BUG_ON(is_unconditional);
+            BUILD_BUG_ON(depth != 3);
+            BUILD_BUG_ON(kind != 200);
+            BUILD_BUG_ON(mask >= 0);
+            return depth;
+        }
+        static int block_guard(void) {
+            static const _Bool outer = 1;
+            { static const int inner = 5; BUILD_BUG_ON(inner != 5); }
+            BUILD_BUG_ON(!outer);
+            return 5;
+        }
+        static const char *names[2] = {(const char *)1, (const char *)2};
+        static long first(void) { return (long)names[0]; }
+        int main(void) {
+            if (guard() != 3) return 1;
+            if (block_guard() != 5) return 2;
+            if (first() != 1) return 3;
+            names[0] = (const char *)99;
+            if (first() != 99) return 4;
+            return 8;
+        }
+    ";
+    assert_eq!(jit_exit_native_optimized(src, &["jit-const-scalar"]), 8);
 }
 
 #[test]
@@ -213,7 +632,8 @@ fn while_loop_promotes_counter_through_phi_under_phi_promote() {
         let program = Compiler::new(super::with_prelude(src))
             .compile()
             .expect("compile failed");
-        let mut funcs = produce_ssa_funcs(&program, Target::host()).expect("produce_ssa_funcs");
+        let mut funcs =
+            produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
         for f in &mut funcs {
             crate::c5::codegen::ssa::mem2reg::run(f);
         }
@@ -538,6 +958,109 @@ fn inline_asm_operands_under_pressure() {
 }
 
 #[test]
+fn register_asm_variable_pinned_to_staging_scratch_neighbor() {
+    // A local register variable bound to the register neighboring the
+    // emitter's asm-staging scratch (x86-64 r11, next to r10; AArch64 x0,
+    // used through GCC's `r0` spelling) must be honored as a `+r` operand:
+    // the value loads into the named register and the store-back reads it
+    // there, so the staging cannot use that register as its own scratch.
+    // Run under a 2-register cap so the operands spill and the staging
+    // exercises the scratch path.
+    let src = r#"
+        static long rt(long a, long b) {
+        #if defined(__aarch64__)
+            register long v asm("r0") = a;
+            __asm__ volatile("add %0, %0, %1" : "+r"(v) : "r"(b));
+        #elif defined(__x86_64__)
+            register long v asm("r11") = a;
+            __asm__ volatile("addq %1, %0" : "+r"(v) : "r"(b) : "cc");
+        #else
+            long v = a + b;
+        #endif
+            return v;
+        }
+        int main(void) { return rt(40, 2) == 42 ? 0 : 1; }
+    "#;
+    assert_eq!(
+        jit_exit(src, &["reg-asm-scratch-neighbor"]),
+        0,
+        "bound register not honored across asm staging"
+    );
+    assert_eq!(
+        jit_exit_native_optimized(src, &["reg-asm-scratch-neighbor-opt"]),
+        0,
+        "bound register not honored across asm staging (-O)"
+    );
+    // Under a 2-register cap the operands spill, so the staging exercises
+    // the scratch path that must not reuse the bound register.
+    let capped = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit(src, &["reg-asm-scratch-neighbor-cap"])
+    });
+    assert_eq!(
+        capped, 0,
+        "bound register not honored under register pressure"
+    );
+    let capped_opt = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit_native_optimized(src, &["reg-asm-scratch-neighbor-cap-opt"])
+    });
+    assert_eq!(
+        capped_opt, 0,
+        "bound register not honored under pressure (-O)"
+    );
+}
+
+#[test]
+fn inline_asm_memory_output_to_local_under_pressure() {
+    // Four memory outputs to locals (`=m`, aarch64 `=Q`) and four register
+    // inputs: eight operands. Under a 2-register cap the operands spill to
+    // sp-relative slots, and a memory output carries its destination address
+    // as the operand. Reading a spilled place unshifted let a later operand
+    // capture the block's own scratch, corrupting an output address: a wrong
+    // store at -O0, a store through a bad pointer (SIGSEGV) at -O. The sibling
+    // above covers register outputs; this covers the memory-output address.
+    let src = r#"
+        static int asm_store4(int a, int b, int c, int d) {
+            int p = 0, q = 0, r = 0, s = 0;
+        #if defined(__aarch64__)
+            __asm__("str %w4, %0\n\t"
+                    "str %w5, %1\n\t"
+                    "str %w6, %2\n\t"
+                    "str %w7, %3"
+                    : "=Q"(p), "=Q"(q), "=Q"(r), "=Q"(s)
+                    : "r"(a), "r"(b), "r"(c), "r"(d));
+        #elif defined(__x86_64__)
+            __asm__("movl %4, %0\n\t"
+                    "movl %5, %1\n\t"
+                    "movl %6, %2\n\t"
+                    "movl %7, %3"
+                    : "=m"(p), "=m"(q), "=m"(r), "=m"(s)
+                    : "r"(a), "r"(b), "r"(c), "r"(d));
+        #else
+            p = a; q = b; r = c; s = d;
+        #endif
+            return p + q * 10 + r * 100 + s * 1000;
+        }
+        int main(void) {
+            return asm_store4(6, 7, 8, 9) == 9876 ? 0 : 1;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit(src, &["asm-mem-output-pressure"])
+    });
+    assert_eq!(
+        result, 0,
+        "inline-asm memory output captured a corrupt destination address under pressure"
+    );
+    let result = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+        jit_exit_native_optimized(src, &["asm-mem-output-pressure-opt"])
+    });
+    assert_eq!(
+        result, 0,
+        "inline-asm memory output address read a corrupt place through the moved sp under -O"
+    );
+}
+
+#[test]
 fn division_with_spilled_dividend_under_pressure() {
     // On x86_64 the divmod lowering stages the dividend into the
     // destination register; when the allocator reuses the divisor's
@@ -822,6 +1345,42 @@ fn long_lived_base_pointer_survives_shift_count_and_store_scratch() {
     assert_eq!(
         optimized, expected,
         "a long-lived base pointer was clobbered by a shift-count or store scratch under pressure"
+    );
+}
+
+/// `always_inline` is a mandatory request -- gcc and clang report a
+/// diagnostic when they cannot honour one rather than declining -- so the
+/// inliner's size and frame budgets do not apply to it, and the splice
+/// relocates the callee's own slots into the caller's frame. Every
+/// relocated slot must still address correctly past the single-instruction
+/// and scaled-immediate reaches. The index comes from the parameter so the
+/// buffer survives store forwarding; the frame stays under the guest main
+/// thread's 8 MiB stack. Reach past the 24-bit immediate form is covered by
+/// the encoder and image tests.
+#[test]
+fn always_inline_frame_growth_runs_correctly() {
+    const COPIES: usize = 20;
+    let mut src = String::from(
+        "static __attribute__((always_inline)) inline long helper(long n) {\n\
+             char buf[300000];\n\
+             long i = n & 0xffff;\n\
+             buf[i] = (char)n;\n\
+             if (n > 0) { buf[i + 1] = 2; } else { buf[i + 1] = 0; }\n\
+             return (long)buf[i] + (long)buf[i + 1];\n\
+         }\n\
+         int main(void) {\n\
+             long s = 0;\n",
+    );
+    for _ in 0..COPIES {
+        src.push_str("    s += helper(1);\n");
+    }
+    src.push_str("    return (int)s;\n}\n");
+    // helper(1) == 1 + 2.
+    let want = (COPIES * 3) as i32;
+    assert_eq!(
+        jit_exit_native_optimized(&src, &["always-inline-frame"]),
+        want,
+        "an always_inline chain that grew the caller frame miscomputed"
     );
 }
 
@@ -1195,576 +1754,6 @@ fn jit_fixture(name: &str) -> i32 {
     jit_exit(&src, &[name])
 }
 
-const JIT_FIXTURES: &[(&str, i32)] = &[
-    ("mem2reg_cross_block.c", 42),
-    ("mem2reg_addr_taken_neighbor.c", 42),
-    ("mem2reg_i64_local.c", 84),
-    ("mem2reg_narrow_store_trunc.c", 0),
-    ("mem2reg_unsigned_narrow.c", 0),
-    ("mem2reg_value_across_call.c", 33),
-    ("mem2reg_param_promoted.c", 0),
-    ("inline_forward_ref_value.c", 0),
-    ("inline_phi_caller_leaf_helper.c", 0),
-    ("inline_phi_narrow_param_return.c", 0),
-    ("natural_width_local.c", 0),
-    ("arithmetic.c", 60),
-    ("goto.c", 5),
-    ("switch_statement.c", 25),
-    ("switch_binary_search.c", 0),
-    ("switch_jump_table_dense.c", 0),
-    ("switch_jump_table_sparse_kept.c", 0),
-    ("switch_jumptable_dead_branch_prune.c", 12),
-    ("switch_jump_table_phi_join.c", 0),
-    ("switch_case_label_promoted.c", 0),
-    ("int_literal_boundary_types.c", 0),
-    ("const_expr_unsigned_fold.c", 0),
-    ("shift_result_promoted_type.c", 0),
-    ("ternary_arith_common_type.c", 0),
-    ("compound_assign_unsigned_div.c", 0),
-    ("decl_specifier_any_order.c", 0),
-    ("branch_relaxation.c", 21),
-    ("float_register_resident.c", 45),
-    ("variadic_struct_arg.c", 18),
-    ("variadic_struct_arg_16b.c", 51),
-    ("libc_div.c", 0),
-    ("strtof_parses_float.c", 0),
-    ("snprintf_truncation_c99.c", 0),
-    ("strength_reduce_pow2_divmod.c", 0),
-    ("return_callee_saved_value.c", 0),
-    ("spill_slot_reuse_disjoint_calls.c", 0),
-    ("rotate_variable_count.c", 0),
-    ("rotate_inline_const_count.c", 0),
-    ("constfold_post_inline.c", 0),
-    ("bitwise_not_mvn.c", 0),
-    ("add_three_operand_lea.c", 0),
-    ("add_sub_negative_imm.c", 0),
-    ("assign_expr_value_narrowed.c", 0),
-    ("struct_copy_comma_side_effect.c", 0),
-    ("inline_two_reg_struct_param.c", 0),
-    ("struct_param_stack_spill.c", 0),
-    ("struct_stack_arg_then_scalar.c", 0),
-    ("call_sp_adjust_imm12_overflow.c", 0),
-    ("indirect_call_target_scratch_exhausted.c", 0),
-    ("fp_load_folded_disp.c", 0),
-    ("mixed_struct_gpr_abi.c", 0),
-    ("unary_plus_preserves_type.c", 0),
-    ("local_multidim_aggregate_array_init.c", 0),
-    ("nested_aggregate_brace_elision.c", 0),
-    ("const_addr_multidim_array_elem.c", 0),
-    ("unsigned_signed_relational_compare.c", 0),
-    ("wide_string_literal_alignment.c", 0),
-    ("va_arg_through_pointer.c", 0),
-    ("pthread_key_once_width.c", 0),
-    ("dev_t_width.c", 0),
-    ("libc_int_arith.c", 0),
-    // Data binding (environ) read through the fake GOT; the site
-    // patching is the JIT counterpart of the AOT flat-lookup import.
-    ("environ_single_tu.c", 0),
-    ("switch_default_routing.c", 100),
-    ("control_flow.c", 1),
-    ("do_while.c", 5),
-    ("break_continue.c", 4),
-    ("for_loop.c", 10),
-    ("for_init_stmt_expr_nested_stmt.c", 6),
-    ("layout_bottom_test_loop.c", 45),
-    ("layout_nested_loops.c", 27),
-    ("layout_goto_block_addr.c", 16),
-    ("unroll_const_trip_copy.c", 0),
-    ("unroll_trip_17_stays_rolled.c", 0),
-    ("unroll_volatile_stays_rolled.c", 0),
-    ("sroa_const_index_local_array.c", 0),
-    ("sroa_runtime_index_stays_memory.c", 0),
-    ("recursion_factorial.c", 120),
-    ("return_value_in_callee_saved.c", 7),
-    ("divmod_preserves_rdx.c", 0),
-    ("commutative_imm_lhs_swap.c", 0),
-    ("comparison_imm_lhs_swap.c", 0),
-    ("binop_imm_chain_fold.c", 0),
-    ("binop_spill_lhs_rhs_in_dst.c", 59),
-    // Entry ParamRef placement must be a parallel copy when the
-    // allocator's chosen home registers cycle with the incoming
-    // argument registers (a parameter swap). The independent per-inst
-    // `mov dst, arg_reg` order clobbered a source before it was read.
-    ("param_reg_swap.c", 77),
-    ("mul_pow2_to_shift.c", 0),
-    ("pointers.c", 200),
-    ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
-    ("expression_precedence.c", 1),
-    ("variable_shadowing.c", 10),
-    ("pointer_arithmetic.c", 3),
-    ("predefined_constants.c", 0),
-    ("c99_qualifiers.c", 0),
-    ("integer_suffixes.c", 0),
-    ("int32_sign_extend_elision.c", 0),
-    ("arg_register_cycle.c", 0),
-    ("indirect_call_six_args_spilled_target.c", 0),
-    ("predefined_macros.c", 0),
-    ("macro_multiline_comment_body.c", 0),
-    ("compound_literal_paren_init.c", 0),
-    ("alignof_operator.c", 0),
-    ("return_void_expression.c", 0),
-    ("macro_operators.c", 0),
-    ("typedef_basic.c", 0),
-    ("ptr_to_array_typedef.c", 42),
-    ("local_init_and_block_scope.c", 0),
-    ("arrays_basic.c", 0),
-    ("function_pointer_typedefs.c", 0),
-    ("unions_basic.c", 0),
-    ("array_initializers.c", 0),
-    ("local_array_partial_init_zero.c", 0),
-    ("ssa_call_result_spill.c", 0),
-    ("struct_field_assign_from_call.c", 0),
-    ("struct_byval_param_followed_by_ptr.c", 0),
-    ("tail_call_no_address_escape.c", 0),
-    ("fib.c", 0),
-    ("tailrec_narrow_param.c", 0),
-    ("tailrec_void_accumulate.c", 0),
-    ("queens.c", 0),
-    ("inline_keyword_uncaps.c", 0),
-    ("ssa_bail_fixup_rollback.c", 0),
-    ("ssa_fp_routing.c", 0),
-    ("ssa_callee_saved_x19.c", 0),
-    ("ssa_va_arg_loop.c", 0),
-    ("ssa_variadic_fp_arg.c", 0),
-    ("sysv_variadic_host_abi.c", 0),
-    ("aapcs64_variadic_host_abi.c", 0),
-    ("param_fp_before_int_pressure.c", 0),
-    ("ssa_fp_compare_nan.c", 0),
-    ("ssa_c5_internal_fp_arg.c", 0),
-    ("struct_initializers.c", 0),
-    ("enum_tag_types.c", 0),
-    ("bitfields.c", 0),
-    ("bound_import_arg_narrowing.c", 0),
-    ("block_extern_shadows_local.c", 0),
-    ("win64_xmm_scratch_callee_save.c", 0),
-    ("variadic_fnptr_proto_erased.c", 0),
-    ("union_bitfield_layout.c", 0),
-    ("init_float_to_int.c", 0),
-    ("global_init_midexpr_cast_narrow.c", 0),
-    ("init_brace_intermediate_cast.c", 0),
-    ("dead_local_load_frame_elide.c", 0),
-    ("narrow_param_entry_extend.c", 0),
-    ("qsort_scan_extend_dedup.c", 0),
-    ("tailcall_return_extension.c", 0),
-    ("fnptr_array_call.c", 0),
-    ("call_arg_extend_drop.c", 0),
-    ("indirect_call_narrow_scalar_args.c", 0),
-    ("indirect_call_ten_scalar_args.c", 0),
-    ("indirect_call_mixed_fp_int_args.c", 0),
-    ("float_param_stack_overflow.c", 0),
-    ("indirect_call_variadic_fp_control.c", 0),
-    ("ternary_arith_conversion.c", 0),
-    ("struct_layout.c", 0),
-    ("const_expr_conditional.c", 27),
-    ("comma_operator_in_loops.c", 3),
-    ("size_t_via_stdio.c", 3),
-    ("ndebug_optimize_predefine.c", 100),
-    ("leading_dot_float_literal.c", 7),
-    ("libc_fp_return_value.c", 11),
-    ("libc_fp_classify.c", 0),
-    ("libc_math_fdim_scalbn.c", 0),
-    ("libc_fileno_isblank.c", 0),
-    ("libc_math_minmax.c", 0),
-    ("libc_math_round.c", 0),
-    ("libc_math_libm.c", 0),
-    ("libc_math_hyperbolic.c", 0),
-    ("libc_math_special.c", 0),
-    ("libc_math_nextafter.c", 0),
-    ("pragma_entrypoint.c", 23),
-    ("struct_field_enum_type.c", 13),
-    ("compound_assign_fp_int_rhs.c", 17),
-    ("optimizer_fp_arg_mask_remap.c", 19),
-    ("many_args_host_stack_overflow.c", 0),
-    ("variadic_optimizer_survives.c", 0),
-    ("struct_2d_array_field.c", 27),
-    ("anonymous_aggregates.c", 0),
-    ("static_locals.c", 0),
-    ("large_stack_frame.c", 42),
-    ("octal_literal.c", 42),
-    ("short_types.c", 42),
-    ("long_long_distinct.c", 0),
-    ("signed_cast_extends.c", 0),
-    ("fn_ptr_struct_return.c", 0),
-    ("static_init_cast_funcptr.c", 0),
-    ("static_init_struct_fp_call.c", 0),
-    ("libc_data_globals.c", 0),
-    ("stdint_widths.c", 0),
-    ("fd_set_macros.c", 0),
-    ("fn_ptr_explicit_deref.c", 42),
-    ("fn_ptr_decay_inside_block.c", 0),
-    ("switch_nested_case_in_compound.c", 0),
-    ("ternary_middle_comma.c", 0),
-    ("local_init_int_to_float.c", 0),
-    ("sys_addr_in_static_init.c", 42),
-    ("sys_addr_zero_arg.c", 42),
-    ("libc_struct_buf_size.c", 42),
-    ("libc_basic.c", 0),
-    ("memset_mcmp.c", 42),
-    ("memcpy_basic.c", 'A' as i32),
-    ("struct_basic.c", 25),
-    ("struct_linked_list.c", 10),
-    ("global_initializer_int.c", 141),
-    ("global_initializer_pointer.c", 0),
-    ("static_linked_list.c", 0),
-    ("struct_sizeof.c", 0),
-    ("memory_ops.c", 0),
-    ("linked_list.c", 10),
-    ("double_pointers.c", 0),
-    ("printf.c", 0),
-    ("shebang.c", 7),
-    ("adjacent_strings.c", 'f' as i32),
-    ("sizeof_with_write.c", 16), // 4 + 4 + 8
-    ("function_pointers.c", 150),
-    ("nested_function_calls.c", 100),
-    ("quicksort.c", 0),
-    ("loop_iv_spill_priority.c", 40),
-    ("binary_search_tree.c", 0),
-    ("bst_free.c", 0),
-    ("cast_to_struct_pointer.c", 42),
-    ("argc.c", 1),
-    ("argv_first_char.c", 0),
-    ("sizeof_basic.c", 0),
-    ("sizeof_expr.c", 0),
-    ("write_stdout.c", 0),
-    ("ir_translation_simple.c", 42),
-    ("ir_translation_if.c", 2),
-    ("ir_translation_while.c", 0),
-    ("type_warning_int_to_ptr.c", 0),
-    ("type_warning_return.c", 0),
-    ("type_warning_silenced_by_cast.c", 0),
-    ("type_warning_arity.c", 0),
-    // dlopen+dlsym+blr finds libc atoi and the indirect call passes
-    // "123" in the System V argument register.
-    ("dlopen_atoi.c", 123),
-    ("dlopen_strlen.c", 13),
-    // Multi-arg dlsym call path: pthread_create + pthread_join.
-    // POSIX-only fixture; the JIT is gated to POSIX hosts already.
-    ("pthread_create.c", 11),
-    ("pthread_cond_timedwait.c", 0),
-    ("posix_os_headers.c", 0),
-    ("dirent_readdir.c", 0),
-    ("ftw_walk.c", 0),
-    ("stat_timespec.c", 0),
-    ("malloc_size.c", 0),
-    // sprintf 2-fixed + 4-variadic; the JIT shares the lowering
-    // with the AOT backends so this guards both at once.
-    ("variadic_sprintf.c", 0),
-    // Float / double scalars parse, sizeof reports 8, pointer
-    // arithmetic and indexed loads/stores work.
-    ("float_pointer_basics.c", 0),
-    // Full FP arithmetic: add/sub/mul/div, comparisons, casts,
-    // unary negation. Routes through Fadd/.../Fcvtfi opcodes the
-    // VM and both codegens implement.
-    ("float_arithmetic.c", 0),
-    ("float_single_precision.c", 0),
-    ("float_literal_f_suffix.c", 0),
-    ("float_literal_arith_single_precision.c", 0),
-    ("fp_direct_width_cast.c", 0),
-    ("fp_const_fold_cast.c", 0),
-    ("float_literal_variadic_printf.c", 0),
-    ("fp_arg_passed_in_fp_reg.c", 0),
-    ("fp_param_float_before_double.c", 0),
-    ("float_arg_single_precision.c", 0),
-    ("fp_return_value.c", 0),
-    ("global_addr_multidim_index.c", 0),
-    ("global_addr_struct_member.c", 0),
-    ("local_array_runtime_nested_init.c", 0),
-    ("many_fp_args.c", 0),
-    ("fp_param_after_int_overflow.c", 0),
-    ("float_double_mix.c", 0),
-    ("fma_contraction.c", 0),
-    ("hex_float_literal.c", 0),
-    ("bool_normalize_c99.c", 0),
-    ("compound_literal_block.c", 0),
-    ("scalar_compound_literal_lvalue.c", 0),
-    ("struct_arg_in_registers.c", 0),
-    ("struct_arg_by_stack.c", 0),
-    ("wide_char_utf8.c", 0),
-    ("local_aggregate_runtime_init.c", 0),
-    ("aggregate_init_struct_member_copy.c", 0),
-    ("computed_goto.c", 0),
-    ("label_addr_array_init.c", 0),
-    ("static_init_once_guard.c", 0),
-    ("computed_goto_static_table.c", 0),
-    ("sieve_of_eratosthenes.c", 0),
-    ("static_neg_infinity_init.c", 0),
-    ("sub_word_return_narrow.c", 0),
-    ("fp_const_return.c", 0),
-    ("struct_array_init_from_lvalue.c", 0),
-    ("shift_result_type_signedness.c", 0),
-    ("integer_negate_shift_overflow.c", 0),
-    ("case_label_declaration.c", 0),
-    ("char_constant_signedness.c", 0),
-    ("func_name_in_initializer.c", 0),
-    ("anon_union_braced_init.c", 0),
-    ("array_2d_struct_init.c", 0),
-    ("cast_abstract_fn_ptr.c", 0),
-    ("decl_trailing_attribute.c", 0),
-    ("winsock_netdb_protoent.c", 0),
-    ("slot_coalesce_disjoint_temps.c", 0),
-    ("alloca_alignment.c", 0),
-    ("alloca_arena_in_bounds.c", 0),
-    ("alloca_large.c", 42),
-    ("alloca_spill_arith.c", 42),
-    ("alloca_call_args.c", 42),
-    ("vla_large_runtime.c", 42),
-    ("vla_loop_stack_restore.c", 42),
-    ("slot_coalesce_declared.c", 0),
-    ("slot_coalesce_alloca.c", 0),
-    ("fn_arg_decay_then_deref_assign.c", 0),
-    ("array_range_designator.c", 0),
-    ("bitfield_mixed_base_packing.c", 0),
-    ("flex_array_member_sizing.c", 0),
-    ("variadic_struct_return.c", 0),
-    ("variadic_union_struct_return.c", 0),
-    ("union_fp_member_regs_return.c", 0),
-    ("fn_ptr_float_return.c", 0),
-    ("fn_ptr_float_arg.c", 0),
-    ("variadic_fn_ptr_init.c", 0),
-    ("static_function_pointer_identity.c", 0),
-    ("flexible_array_member.c", 0),
-    ("wmem_functions.c", 0),
-    ("posix_module_headers.c", 0),
-    ("mmap_anonymous.c", 0),
-    ("struct_tm_tm_zone_offset.c", 0),
-    ("for_init_multiple_declarators.c", 0),
-    ("compound_literal_member_operand.c", 0),
-    ("signal_nsig.c", 0),
-    ("flex_array_member_static_init.c", 0),
-    ("attribute_cleanup.c", 0),
-    ("array_compound_literal_static_init.c", 0),
-    ("const_address_cast_and_arith.c", 0),
-    ("const_conditional_address_init.c", 0),
-    ("sizeof_array_type_and_binding.c", 0),
-    ("sizeof_abstract_fn_ptr.c", 0),
-    ("pragma_operator.c", 0),
-    ("variadic_macro_named_rest.c", 0),
-    ("stdatomic_c11.c", 0),
-    ("atomic_rmw_ops.c", 0),
-    ("fn_ptr_typedef_multi_declarator.c", 0),
-    ("hfa_struct_return.c", 0),
-    ("bitfield_assign_value.c", 0),
-    ("struct_arg_indirect_subscript.c", 0),
-    ("out_pointer_return_float_args.c", 0),
-    ("compound_literal_tagged_address.c", 0),
-    ("function_typed_parameter.c", 0),
-    ("static_init_braced_scalar.c", 0),
-    ("paren_string_char_array_init.c", 0),
-    ("static_init_paren_relocation.c", 0),
-    ("do_while_zero_returns.c", 0),
-    ("self_referential_macro.c", 0),
-    ("logical_not_float.c", 0),
-    ("designator_override_and_braced_string.c", 0),
-    ("multidim_array_init.c", 0),
-    ("macro_paste_stringize_unexpanded.c", 0),
-    ("line_directive.c", 0),
-    ("float_global_init.c", 0),
-    ("func_name_array.c", 0),
-    ("unary_plus_init_and_param_shadow.c", 0),
-    ("fn_ptr_multi_deref.c", 0),
-    ("stringize_whitespace.c", 0),
-    ("kr_old_style_def.c", 0),
-    ("fn_ptr_return_type.c", 0),
-    ("fn_returning_fn_ptr.c", 0),
-    ("duff_switch_into_loop.c", 0),
-    ("empty_macro_arg_and_string_rows.c", 0),
-    ("inline_arg_count_mismatch.c", 0),
-    ("inline_into_computed_goto.c", 0),
-    ("inline_one_word_struct.c", 0),
-    ("inline_one_word_struct_return.c", 0),
-    ("inline_struct_return_reg.c", 0),
-    ("inline_two_word_struct_return.c", 0),
-    ("struct_return_reg_computed_goto.c", 0),
-    ("store_forward_local_slot.c", 0),
-    ("inline_struct_return_escape.c", 0),
-    ("inline_struct_param_mutated.c", 0),
-    ("block_scope_extern.c", 0),
-    ("extern_incomplete_struct_completion.c", 0),
-    ("const_member_address_init.c", 0),
-    ("const_float_div_zero.c", 0),
-    ("array_of_struct_brace_elision.c", 0),
-    ("local_struct_array_runtime_init.c", 0),
-    ("scanf_fscanf_binding.c", 0),
-    ("builtin_bit_count.c", 0),
-    ("typeof_operator.c", 0),
-    ("file_scope_typeof.c", 0),
-    ("attribute_packed.c", 0),
-    ("attribute_positions.c", 0),
-    ("attribute_declspec.c", 0),
-    ("attribute_c23.c", 0),
-    ("static_assert_in_struct.c", 0),
-    ("gnu_extension_keyword.c", 0),
-    ("variadic_struct_by_value_arg.c", 0),
-    ("fn_ptr_ternary_call_return.c", 0),
-    ("float_condition_negative_zero.c", 0),
-    ("tentative_array_definition.c", 0),
-    ("tentative_array_use_before_init.c", 0),
-    ("tentative_deferred_array_grows.c", 0),
-    ("directive_in_macro_argument.c", 0),
-    ("builtin_bswap_expect.c", 0),
-    ("builtin_frame_address.c", 0),
-    ("zero_length_array.c", 0),
-    ("nested_compound_literal.c", 0),
-    ("indirect_struct_return.c", 0),
-    ("indirect_struct_return_outptr.c", 0),
-    ("bitfield_incdec.c", 0),
-    ("c11_atomic_specifier.c", 0),
-    ("c11_atomic_ops.c", 0),
-    ("inline_asm_hint.c", 0),
-    ("compound_assign_int_fp.c", 0),
-    ("signal_sig_t.c", 0),
-    ("math_classify.c", 0),
-    ("switch_unsigned_negative_case.c", 0),
-    ("enum_bitfield_unsigned.c", 0),
-    ("addr_of_intrinsic_math.c", 0),
-    ("libc_struct_arg_by_value.c", 0),
-    ("posix_unix_headers.c", 0),
-    ("socket_headers_abi.c", 0),
-    ("posix_utime_errno_headers.c", 0),
-    ("cast_fn_typedef_ptr_in_initializer.c", 0),
-    ("global_init_paren_operand.c", 0),
-    ("function_type_typedef_declaration.c", 0),
-    ("float_increment_decrement.c", 0),
-    ("compound_assign_float_register_resident.c", 0),
-    ("addr_of_libm_import.c", 0),
-    ("addr_of_libc_strcmp.c", 0),
-    ("libc_pread64_pwrite64.c", 0),
-    ("struct_stat_abi_size.c", 0),
-    ("block_scope_extern_forward_ref.c", 0),
-    ("uint64_to_float.c", 0),
-    ("double_to_uint64.c", 0),
-    ("sysconf_pagesize.c", 0),
-    ("strtoul_64bit_return.c", 0),
-    ("libc_time_widths.c", 0),
-    ("errno_socket_constants.c", 0),
-    ("fts_and_fd_set_headers.c", 0),
-    ("addr_of_intrinsic_math_float.c", 0),
-    ("fn_ptr_float_arg_narrow.c", 0),
-    ("struct_array_elided_runtime.c", 0),
-    ("fn_type_typedef_field.c", 0),
-    ("fn_type_typedef_local.c", 0),
-    ("fn_type_typedef_cast.c", 0),
-    ("nested_runtime_init.c", 0),
-    ("anon_union_init.c", 0),
-    ("packed_anon_union_layout.c", 0),
-    ("packed_member_alignment.c", 0),
-    ("builtin_trap.c", 0),
-    ("struct_multi_byval.c", 0),
-    ("struct_arg_two_eightbyte.c", 0),
-    ("struct_return_by_value.c", 0),
-    ("struct_return_to_global.c", 0),
-    ("cast_fn_ptr_call.c", 0),
-    ("fma_numeric_kernels.c", 0),
-    ("fp_unary_intrinsic.c", 0),
-    ("param_incoming_reg_clobber.c", 0),
-    ("indexed_load_store.c", 0),
-    ("struct_field_displacement.c", 0),
-    ("indexed_swap_shared_addr.c", 0),
-    ("store_to_load_forward.c", 0),
-    ("inc_dec_step_one.c", 0),
-    ("logical_op_normalize.c", 0),
-    // Struct-value locals + `.` field access.
-    ("struct_value_basics.c", 0),
-    // Whole-struct copy via Inst::Mcpy. The walker emits it
-    // for `a = b` where both are struct values; the VM and both
-    // codegens unroll the byte-level copy at compile time.
-    ("struct_value_copy.c", 0),
-    // Struct passed by value: callee's prologue copies the
-    // struct out of the caller's slot into a local so callee
-    // mutations don't leak.
-    ("struct_by_value_param.c", 0),
-    // Struct returned by value via the hidden out-pointer ABI.
-    ("struct_by_value_return.c", 0),
-    // Unsigned-integer comparisons: pin that comparing a u32 / u64 /
-    // u8 against a value with the high bit set uses unsigned
-    // semantics (the dialect emits BinOp::Ult/Ugt/Ule/Uge for
-    // those operands and reaches them through every backend).
-    ("unsigned_compare.c", 0),
-    // `static const unsigned char arr[]` with 1-byte stride. The
-    // size_of_type / pointee scaling helpers strip the unsigned bit
-    // before classifying, so indexing scales by 1 not 8.
-    ("unsigned_char_array.c", 0),
-    // Plain `char` follows the target's implementation-defined
-    // signedness (C99 6.2.5p15) and the widening load agrees with the
-    // `__CHAR_UNSIGNED__` predefine.
-    ("plain_char_signedness.c", 0),
-    // <limits.h> CHAR_MIN/CHAR_MAX agree with that signedness (C99 5.2.4.2.1).
-    ("char_limits_consistency.c", 0),
-    // Brace-wrapped string literal initializing a char-array struct
-    // member (C99 6.7.9p14): copy the bytes, not the pointer.
-    ("struct_member_brace_wrapped_string.c", 0),
-    // `&`/`^`/`|` result type is the common type (C99 6.5.10-12) so a
-    // cast of `unsigned | int` to signed sign-extends on widening.
-    ("bitop_common_type_sign_extend.c", 0),
-    // `~` result keeps the promoted operand type (C99 6.5.3.3p4):
-    // `~(unsigned long)` stays unsigned so a following `>>` is logical.
-    ("complement_preserves_type.c", 0),
-    // A decimal constant past the widest signed type takes the
-    // unsigned type at that rank (C99 6.4.4.1p5 + gcc/clang practice).
-    ("decimal_literal_over_signed_max.c", 0),
-    // Block-scope function declaration resolves to the file-scope
-    // definition (C99 6.7p1 / 6.2.2p5).
-    ("block_scope_function_declaration.c", 0),
-    // A struct tag in a function body has block scope (C99 6.2.1).
-    ("block_scope_struct_tag.c", 0),
-    // Compound assignment (`+=`, `-=`) on unsigned int / long /
-    // char: must NOT scale the RHS by element size (the
-    // `lhs_ty > Ty::Ptr` heuristic tripped on the unsigned bit).
-    ("unsigned_compound_assign.c", 0),
-    // Exhaustive coverage of integer ops across char/int/long
-    // widths and signed/unsigned. Catches regressions in the
-    // type-tag plumbing at one fixture.
-    ("integer_ops_exhaustive.c", 0),
-    // VaArg rd/ap register-aliasing fix: the dst register and the
-    // `&ap` source register can land on the same physical reg;
-    // without the fix the second and later va_arg reads return the
-    // same garbage. `show` prints `first n=3 v[0]=11 v[1]=22
-    // v[2]=33`, which the fixture's main does not check directly --
-    // pin via the exit status (0).
-    ("va_arg_int_seq.c", 0),
-    // VaStart + VaCopy emit shapes where the allocator places
-    // `&last` (VaStart) or `&src` / `&dst` (VaCopy) on r10. The
-    // prior emit used SCRATCH_R10 as the staging register and
-    // produced a load through a stale operand when r10 aliased
-    // an operand; the fix routes through r13 (outside both
-    // `caller_gprs` and `callee_gprs`).
-    ("ssa_va_start_va_copy_aliasing.c", 0),
-    // C99 6.7.3p6 / 5.1.2.3p2 volatile access preservation (the
-    // setjmp variant lives only in the native lists; setjmp is not
-    // wired for the JIT lane).
-    ("volatile_ptr_alias_loop.c", 0),
-    ("volatile_unused_read.c", 0),
-    ("volatile_param_classes.c", 0),
-    // `thread_local_*.c` aren't here -- the JIT path's host is
-    // macOS arm64 in this repo, where TLS lowering isn't
-    // implemented yet (Mach-O __thread_data + dyld
-    // __tlv_bootstrap is future work). The native_elf and
-    // native_elf_x64 runners validate the Linux paths once the
-    // built ELF lands on the orb VMs.
-    ("packed_bitfield_repack.c", 0),
-    ("nested_designator_string_member.c", 0),
-    ("union_member_unbraced_init.c", 0),
-    ("inline_multi_block_result_forward.c", 10),
-    ("inline_multi_block_only_caller.c", 42),
-    ("inline_nonleaf_const_switch.c", 0),
-    ("inline_multi_block_phi_caller.c", 16),
-    ("inline_const_array_field_nonnull.c", 43),
-    ("inline_noreturn_branch_single_return.c", 42),
-    ("sxtw_fold_source_liveness.c", 18),
-    ("data_reloc_one_past_end.c", 10),
-    ("variadic_libc_fnptr_static_init.c", 0),
-    ("block_scope_typedef_variadic_fnptr.c", 0),
-    ("atomic_operand_in_working_regs.c", 0),
-    ("setjmp_value_live_across.c", 0),
-    ("setjmp_spill_slots_unshared.c", 0),
-    ("mixed_sse_int_aggregate_args.c", 0),
-    ("variadic_agg_return_classes.c", 0),
-    ("va_copy_under_pressure.c", 0),
-    ("variable_shift_rcx_loop.c", 0),
-    ("va_arg_composite_straddle.c", 0),
-    ("variadic_cast_fnptr_dispatch.c", 0),
-];
-
 #[test]
 fn fixture_parity() {
     let mut failures: Vec<String> = Vec::new();
@@ -1939,7 +1928,7 @@ fn dead_strip_drops_unused_static_function() {
     let program = Compiler::new(src.to_string())
         .compile()
         .expect("compile failed");
-    let funcs = produce_ssa_funcs(&program, Target::host()).expect("produce_ssa_funcs");
+    let funcs = produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
     let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
     assert!(names.contains(&"main"), "entry must survive: {names:?}");
     assert!(
@@ -2067,4 +2056,145 @@ fn atexit_handlers_run_on_libc_exit() {
     let contents = std::fs::read_to_string(&marker).expect("atexit handler must write the marker");
     let _ = std::fs::remove_file(&marker);
     assert_eq!(contents, "ran");
+}
+
+/// A file-scope address constant cast to a pointer-width integer slot is a
+/// link-time relocation, not a compile-time integer (C99 6.6 / 6.3.2.3):
+/// an object address, a bare array name, a `&arr[i]` element designator, and
+/// a function name must each resolve to the same value the runtime `&` /
+/// array decay yields.
+#[test]
+fn addr_constant_cast_to_integer_slot() {
+    let src = "static int obj;\n\
+               static int arr[4];\n\
+               static int callee(void) { return 7; }\n\
+               unsigned long p_obj = (unsigned long)&obj;\n\
+               unsigned long p_arr = (unsigned long)arr;\n\
+               unsigned long p_elt = (unsigned long)&arr[2];\n\
+               unsigned long p_fn = (unsigned long)callee;\n\
+               int main(void) {\n\
+                   if (p_obj != (unsigned long)&obj) return 1;\n\
+                   if (p_arr != (unsigned long)arr) return 2;\n\
+                   if (p_elt != (unsigned long)&arr[2]) return 3;\n\
+                   if (p_fn != (unsigned long)callee) return 4;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-addr-const"]), 0);
+}
+
+/// A string literal is a static-storage array whose address is a link-time
+/// constant (C99 6.4.5p6 / 6.6p9), so `&"..."` and `&"..."[i]` are valid
+/// static initializers. Each must resolve to the string's runtime address
+/// with its bytes intact -- as a struct member (via a constant `?:`), as an
+/// array element, and cast to a pointer-width integer.
+#[test]
+fn addr_of_string_literal_static_init() {
+    let src = "typedef unsigned long uptr;\n\
+               struct e { int a; uptr d; };\n\
+               static struct e t = { 5, (0 ? 0 : (uptr)&\"example\") };\n\
+               static const char *arr[] = { &\"abc\"[1], \"xy\" };\n\
+               static int eq(const char *a, const char *b) {\n\
+                   while (*a && *a == *b) { a++; b++; }\n\
+                   return *a == *b;\n\
+               }\n\
+               int main(void) {\n\
+                   if (t.a != 5) return 1;\n\
+                   if (!eq((const char *)t.d, \"example\")) return 2;\n\
+                   if (!eq(arr[0], \"bc\")) return 3;\n\
+                   if (!eq(arr[1], \"xy\")) return 4;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-addr-str"]), 0);
+}
+
+/// A label may carry an attribute-specifier (C23 6.9 / GNU:
+/// `L: __attribute__((unused)) stmt;`). The attribute appertains to the
+/// label and must be discarded without disturbing the labeled statement,
+/// which still runs when reached by fallthrough or `goto`.
+#[test]
+fn attribute_specifier_on_label() {
+    let src = "int main(void) {\n\
+                   int x = 0;\n\
+                   goto skip;\n\
+                   x = 100;\n\
+               skip: __attribute__((__unused__)) x += 7;\n\
+               done: __attribute__((unused)) __attribute__((cold)) x += 35;\n\
+                   return x;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-label-attr"]), 42);
+}
+
+/// C99 6.7.8p6: a designator list may chain a `[i]` / `.sub` step onto a
+/// `.member` designator (`.extent[0] = { ... }`), including when the member
+/// lives in an anonymous struct nested in an anonymous union. Each addressed
+/// sub-object must receive its value.
+#[test]
+fn member_then_index_designator_in_anon_group() {
+    let src = "struct ext { int first; unsigned count; };\n\
+               struct map { union { struct { struct ext extent[4]; unsigned nr; }; \
+                                     struct { void *f; void *r; }; }; };\n\
+               static struct map m = { { .extent[0] = { .first = 7, .count = 4294967295U }, \
+                                         .nr = 1, }, };\n\
+               int main(void) {\n\
+                   if (m.extent[0].first != 7) return 1;\n\
+                   if (m.extent[0].count != 4294967295U) return 2;\n\
+                   if (m.nr != 1) return 3;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-desig-chain"]), 0);
+}
+
+/// C99 6.5.2.5: an array-of-struct member may take compound-literal
+/// elements (`.hook = { (struct call){...}, (struct call){...} }`), the same
+/// as a top-level array of struct. Each element's fields land at its stride,
+/// and an omitted field zero-fills.
+#[test]
+fn struct_array_member_compound_literal_elements() {
+    let src = "struct call { int key; int tramp; };\n\
+               struct table { struct call hook[2]; int n; };\n\
+               static struct table t = { .hook = { (struct call){ .key = 11, .tramp = 22 }, \
+                                                   (struct call){ .key = 33 } }, .n = 5 };\n\
+               int main(void) {\n\
+                   if (t.hook[0].key != 11) return 1;\n\
+                   if (t.hook[0].tramp != 22) return 2;\n\
+                   if (t.hook[1].key != 33) return 3;\n\
+                   if (t.hook[1].tramp != 0) return 4;\n\
+                   if (t.n != 5) return 5;\n\
+                   return 0;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["jit-cl-array-member"]), 0);
+}
+
+/// GCC evaluates a non-constant `__builtin_constant_p` operand late
+/// under `-O`: after inlining and constant propagation a parameter fed
+/// a literal answers 1, while a runtime value still answers 0. Without
+/// `-O` the early conservative 0 stands (gcc -O0 parity). Locks the
+/// deferred `Intrinsic::ConstantP` resolution through the whole
+/// pipeline: walker -> inliner substitution -> constant fold -> the
+/// branch-fold fixed point's resolve-to-0.
+#[test]
+fn constant_p_defers_to_post_inline_fold() {
+    let src = "static inline int is_const(int x) { return __builtin_constant_p(x); }\n\
+               static inline int is_const2(int x) { return is_const(x); }\n\
+               static inline int arith_const(int x) { return __builtin_constant_p(x + 1); }\n\
+               int main(void) {\n\
+                   volatile int rt = 5;\n\
+                   int lit = __builtin_constant_p(3);\n\
+                   int run = __builtin_constant_p(rt);\n\
+                   int se = 1;\n\
+                   int sideeff = __builtin_constant_p(se++);\n\
+                   int local = 7;\n\
+                   return is_const(9) | (arith_const(9) << 1) | (is_const2(9) << 2)\n\
+                        | (__builtin_constant_p(local) << 3) | (lit << 4) | (run << 5)\n\
+                        | (sideeff << 6) | ((se == 1) << 7) | (is_const(rt) << 8);\n\
+               }\n";
+    // Unoptimized: only the literal answers 1; the operand of the
+    // side-effecting form is never evaluated (se stays 1).
+    assert_eq!(jit_exit(src, &["jit-constp-O0"]), (1 << 4) | (1 << 7));
+    // Optimized: the inlined parameters and the propagated local fold
+    // to 1; runtime and side-effecting operands stay 0 and unevaluated.
+    assert_eq!(
+        jit_exit_native_optimized(src, &["jit-constp-O"]),
+        1 | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 7)
+    );
 }

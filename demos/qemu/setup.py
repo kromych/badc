@@ -10,7 +10,9 @@ meson's generated config, so the asset ships it: per target a captured
 header/source. The smoke reads those directly; no ``meson``/``ninja`` run is
 needed. The source is trimmed of the git history, the test suite, docs, ROM
 blobs, firmware, and meson subprojects -- none are compile inputs for the
-emulator.
+emulator. The x86 machines' run-time ROM set is a separate small asset
+(``--pc-bios DIR``) for callers that boot a self-linked emulator, which has no
+data directory to load those blobs from.
 
 Pulls from the ``kromych/badc`` GitHub release rather than gitlab.com to avoid
 network-flake noise in CI. The asset name embeds the upstream version and the
@@ -68,6 +70,16 @@ KERNEL_BUNDLES = {
     },
 }
 
+# Run-time ROM set for QEMU's x86 machines: the machine firmware (SeaBIOS) plus
+# the option ROMs a `pc` / `q35` boot loads (APIC helper, -kernel loader, VGA
+# BIOS). Prebuilt blobs shipped by the same upstream release the emulator is
+# built from -- firmware data, not a compile input, which is why the source
+# asset is trimmed of them. An emulator linked without a data directory needs
+# `-L <this directory>`. The sha suffix is the upstream release tarball's
+# sha256; `scripts/vendor_deps/build_qemu_bundle.py --pack-pc-bios` packs it.
+PC_BIOS_ASSET = f"pc-bios-x86-{VERSION}-3745f6ea.tar.xz"
+PC_BIOS_SHA256 = "963aa66595c91d1f585157c3d5a28cf628460ad2a0a0070a045c0d890fe2f2cd"
+
 QEMU_DIR = Path(__file__).resolve().parent
 
 
@@ -112,16 +124,34 @@ def fetch_kernel(cache: Path, arch: str, log=lambda _m: None) -> tuple[Path, Pat
     return (image, initrd)
 
 
+def fetch_pc_bios(cache: Path, dst: Path, log=lambda _m: None) -> Path:
+    """Fetch + verify + extract the x86 ROM set into `dst`, and return it. The
+    files land flat, so `dst` is what the emulator's -L takes."""
+    cache.mkdir(parents=True, exist_ok=True)
+    tar_path = cache / PC_BIOS_ASSET
+    _fetch.fetch_and_verify(RELEASE_TAG, PC_BIOS_ASSET, tar_path, PC_BIOS_SHA256, log)
+    dst.mkdir(parents=True, exist_ok=True)
+    log(f"extracting {PC_BIOS_ASSET} -> {dst}")
+    with tarfile.open(tar_path, "r:xz") as tf:
+        _extractall(tf, dst)
+    return dst
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--kernel", action="store_true",
                     help="also fetch the boot kernel bundle for the host arch")
+    ap.add_argument("--pc-bios", type=Path, metavar="DIR",
+                    help="fetch only the x86 ROM set into DIR (for -L) and exit")
     args = ap.parse_args(argv)
     log = (lambda m: print(f"qemu setup: {m}")) if args.verbose else (lambda _m: None)
 
     cache = QEMU_DIR / ".cache"
     cache.mkdir(exist_ok=True)
+    if args.pc_bios:
+        print(f"qemu setup: ROM set ready at {fetch_pc_bios(cache, args.pc_bios, log)}")
+        return 0
     tar_path = cache / ASSET
     _fetch.fetch_and_verify(RELEASE_TAG, ASSET, tar_path, SHA256, log)
 

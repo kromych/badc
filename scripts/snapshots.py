@@ -14,6 +14,13 @@ for cosmetic reasons. Cross-arch ELFs are produced via `badc
 (llvm-objdump on macOS, GNU objdump on Linux, both handle either ELF
 class).
 
+A fixture may pin extra badc flags for its snapshots with a leading
+`// snapshot-flags: ...` comment (e.g. `-c -mcmodel=kernel` for a form
+only a relocatable object shows). The flags apply to the SSA and every
+asm emission; a target that rejects them drops that snapshot. With `-c`
+the object is disassembled with relocations shown (`-r`), which is where
+the addressing form of an unresolved reference is visible.
+
 Fixtures that fail to compile (missing headers in the stripped fixture
 form, etc.) are logged but don't fail the run.
 """
@@ -40,25 +47,28 @@ def repo_root() -> Path:
 
 
 def ensure_badc(root: Path) -> Path:
+    # Always rebuild: a stale binary compiles a fixture it does not
+    # understand as a skip, and a skip unlinks that fixture's snapshots,
+    # so the run reports no drift while removing content. The CLI needs
+    # `full`; without it the build leaves whatever binary was there.
     badc = root / "target" / "release" / "badc"
-    if not badc.is_file():
-        print("[snapshots] building badc release...", flush=True)
-        subprocess.run(
-            ["cargo", "build", "--release", "--quiet"],
-            cwd=root,
-            check=True,
-        )
+    print("[snapshots] building badc release...", flush=True)
+    subprocess.run(
+        ["cargo", "build", "--release", "--quiet", "--features", "full"],
+        cwd=root,
+        check=True,
+    )
     return badc
 
 
 TARGETS = [("x64", "linux-x64"), ("aarch64", "linux-aarch64")]
 OBJDUMP_FLAGS = ["--disassemble", "--no-show-raw-insn", "--no-addresses"]
 
-# badc appends a `BADC\n\tv<version>...` marker to the tail of every
-# emitted `.text` section. The bytes after the marker bake in the
-# current git commit, so disassembling them would churn the snapshot
-# on every push. Truncate the objdump output at the marker.
-BUILD_INFO_MARKER = b"BADC\n\tv"
+# badc appends its version-line marker (`badc <version> ...`, see
+# OUTPUT_MARKER in src/lib.rs) to the tail of every emitted `.text`
+# section. Disassembled, those bytes would churn the snapshot on
+# every release bump. Truncate the objdump output at the marker.
+BUILD_INFO_MARKER = b"badc "
 
 # objdump's disassembly bakes in several forms of absolute addresses
 # that shift on any earlier-code reflow even when the local emit is
@@ -68,14 +78,17 @@ BUILD_INFO_MARKER = b"BADC\n\tv"
 ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # `callq 0x4002dc <.text+0xbc>` and similar: branch / call operand
     # followed by an `<symbol+offset>` annotation. Both halves shift in
-    # lock-step on any earlier reflow.
-    (re.compile(r"0x[0-9a-fA-F]+\s+<[^>]+>"), "<addr>"),
+    # lock-step on any earlier reflow. Both halves sit on one line: the
+    # separator must not cross a newline, or an immediate at the end of
+    # one instruction plus the `<symbol>:` label opening the next
+    # function match as a pair and the label is dropped.
+    (re.compile(r"0x[0-9a-fA-F]+[ \t]+<[^>\n]+>"), "<addr>"),
     # `callq *0xfe89(%rip)           # 0x4100c0`: trailing absolute
     # annotation appended after a RIP-relative computation. objdump
-    # tab-aligns the `#` past column 40, so 4-plus whitespace before
-    # `#` distinguishes the x86_64 comment form from aarch64's
-    # `, #0x8` immediate syntax.
-    (re.compile(r"\s{4,}#\s*0x[0-9a-fA-F]+\s*$", re.MULTILINE), ""),
+    # writes a space after the `#` of a comment and none after the `#`
+    # of an aarch64 immediate, which separates the two forms whatever
+    # column the operands leave the comment in.
+    (re.compile(r"\s+#\s+0x[0-9a-fA-F]+\s*$", re.MULTILINE), ""),
     # `0xfe89(%rip)`: x86_64 RIP-relative addressing. The offset is
     # measured from the next instruction's address and shifts whenever
     # any earlier code or .rodata moves.
@@ -98,6 +111,16 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         ),
         r"\1<lo12>",
     ),
+    # aarch64 ADRP / LDR slot load: `adrp x0, <page>` then
+    # `ldr x0, [x0, #0xd0]`. Same argument as the `add` form -- the
+    # offset is the low 12 bits of the address the ADRP names, so it
+    # shifts with any earlier reflow and carries no codegen signal.
+    (
+        re.compile(
+            r"(adrp\s+(\w+),\s+<page>\n\s*ldr\s+\2,\s+\[\2,\s+)#0x[0-9a-fA-F]+(\])"
+        ),
+        r"\1<lo12>\3",
+    ),
     # The x86_64 runtime entry stub passes the image-base-relative offset
     # of `__c5_entry` to the startup helper through `movl $off, %esi`,
     # right after `movq %rsp, %rdi`. That offset is a whole-image layout
@@ -110,6 +133,18 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r"(movq\s+%rsp,\s+%rdi\n\s+movl\s+)\$0x[0-9a-fA-F]+(,\s+%esi).*"),
         r"\1$<entry_off>\2",
     ),
+    # The aarch64 stub passes the same offset in `x1`, right after `mov
+    # x0, sp`, as a `mov`/`movk` pair. Same layout value, same absence of
+    # codegen signal. `mov x0, sp` alone also starts ordinary sequences
+    # that load `x1` with a real constant, so the trailing `movk` is part
+    # of the anchor.
+    (
+        re.compile(
+            r"(mov\s+x0,\s+sp\n\s+mov\s+x1,\s+)#0x[0-9a-fA-F]+.*"
+            r"(\n\s+movk\s+x1,\s+#0x0,\s+lsl\s+#16)"
+        ),
+        r"\1<entry_off>\2",
+    ),
 )
 
 
@@ -117,6 +152,14 @@ def normalise_asm(text: str) -> str:
     for pattern, replacement in ASM_NORMALISATION_RULES:
         text = pattern.sub(replacement, text)
     return text
+
+
+SNAPSHOT_FLAGS_RE = re.compile(r"^//\s*snapshot-flags:\s*(.+?)\s*$", re.MULTILINE)
+
+
+def fixture_flags(src: Path) -> list[str]:
+    m = SNAPSHOT_FLAGS_RE.search(src.read_text(errors="replace"))
+    return m.group(1).split() if m else []
 
 
 def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> bool:
@@ -138,6 +181,7 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> boo
             "-O",
             "--target=linux-x64",
             "--dump-ssa",
+            *fixture_flags(src),
             "-o",
             str(tmp_bin),
             str(rel),
@@ -210,8 +254,9 @@ def build_info_stop_address(binary: Path) -> int | None:
 def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root: Path) -> bool:
     # Relative source path + cwd=root: keep `__FILE__` checkout-independent
     # (see emit_ssa).
+    flags = fixture_flags(src)
     proc = subprocess.run(
-        [str(badc), "-q", "-O", f"--target={target}", "-o", str(tmp_bin),
+        [str(badc), "-q", "-O", f"--target={target}", *flags, "-o", str(tmp_bin),
          str(src.relative_to(root))],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -223,6 +268,8 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root:
     extra: list[str] = []
     if stop is not None:
         extra.append(f"--stop-address=0x{stop:x}")
+    if "-c" in flags:
+        extra.append("-r")
     # llvm-objdump's output text differs from GNU objdump's enough that
     # snapshots taken with one cannot match the other (mnemonic spelling,
     # operand syntax, header line shape). Prefer llvm-objdump everywhere
@@ -259,16 +306,26 @@ def regenerate(root: Path, only: list[str] | None) -> int:
 
     written = 0
     skipped: list[str] = []
+    regressed: list[str] = []
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td) / "bin"
         for src in sources:
             name = src.stem
             ssa_path = snap_root / "ssa" / f"{name}.ssa"
+            asm_paths = [snap_root / "asm" / f"{name}.{suffix}.asm" for suffix, _ in TARGETS]
+            had_snapshots = ssa_path.exists() or any(p.exists() for p in asm_paths)
             ok = emit_ssa(badc, src, ssa_path, tmp, root)
             if not ok:
+                # A fixture that never had snapshots cannot build here --
+                # a negative test, or asm for another architecture. One
+                # that HAD them and now fails is a regression, and
+                # unlinking would report it as no drift at all.
+                if had_snapshots:
+                    regressed.append(name)
+                    continue
                 ssa_path.unlink(missing_ok=True)
-                for suffix, _ in TARGETS:
-                    (snap_root / "asm" / f"{name}.{suffix}.asm").unlink(missing_ok=True)
+                for p in asm_paths:
+                    p.unlink(missing_ok=True)
                 skipped.append(name)
                 continue
             for suffix, target in TARGETS:
@@ -281,6 +338,10 @@ def regenerate(root: Path, only: list[str] | None) -> int:
     if skipped:
         for s in skipped:
             print(f"[snapshots] skip {s}")
+    if regressed:
+        for r in regressed:
+            print(f"[snapshots] ERROR {r}: had snapshots and no longer compiles")
+        raise SystemExit(1)
     return 0
 
 

@@ -1,0 +1,75 @@
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=read_jiffies
+fn ent_pc=0 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmData(0)                                       -> x0
+    v2   Load { addr=v1, disp=0, kind=I64 }               -> x0
+    terminator Return(v2)   (exit_acc=v2)
+; --- SSA dump (ok=true) ent_pc=1 ---
+; name=jiffies_addr
+fn ent_pc=1 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmData(0)                                       -> x0
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=2 ---
+; name=net_index
+fn ent_pc=2 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmData(0)                                       -> x0
+    v2   Load { addr=v1, disp=0, kind=I32 }               -> x0
+    v3   BinopI { op=shl, lhs=v2, rhs_imm=32 }            -> x1
+    v4   Extend { value=v2, kind=I32 }                    -> x1
+    terminator Return(v2)   (exit_acc=v2)
+; --- SSA dump (ok=true) ent_pc=3 ---
+; name=family
+fn ent_pc=3 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmData(0)                                       -> x0
+    v2   Load { addr=v1, disp=0, kind=U8 }                -> x0
+    terminator Return(v2)   (exit_acc=v2)
+; --- SSA dump (ok=true) ent_pc=4 ---
+; name=pcpu_base
+fn ent_pc=4 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ImmData(0)                                       -> x0
+    v4   LoadLocal { off=2, kind=I32 }                    -> x1
+    v5   BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x1
+    v6   Binop { op=add, lhs=v3, rhs=v5 }                 -> x1
+    v7   LoadIndexed { base=v3, index=v1, scale=8, kind=I64 } -> x0
+    terminator Return(v7)   (exit_acc=v7)
+; --- SSA dump (ok=true) ent_pc=5 ---
+; name=ctype_class
+fn ent_pc=5 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ImmData(0)                                       -> x0
+    v4   LoadLocal { off=2, kind=I32 }                    -> x1
+    v5   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x1
+    v6   Binop { op=add, lhs=v3, rhs=v5 }                 -> x0
+    v7   Load { addr=v6, disp=0, kind=U8 }                -> x0
+    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
+    v9   Extend { value=v7, kind=I32 }                    -> x1
+    terminator Return(v7)   (exit_acc=v7)
+; --- SSA dump (ok=true) ent_pc=6 ---
+; name=cmp_fn
+fn ent_pc=6 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmCode(ent_pc=8)                                -> x0
+    terminator Return(v1)   (exit_acc=v1)

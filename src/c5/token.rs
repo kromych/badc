@@ -391,6 +391,33 @@ pub(crate) enum Token {
     /// expression yielding the byte offset of the member as an integer
     /// constant. The standard `offsetof` macro may expand to it.
     BuiltinOffsetof,
+    /// GCC `__auto_type`: a type specifier that takes the declared
+    /// variable's type from its initializer, as if spelled
+    /// `typeof(initializer)`. Added at the end so the operator
+    /// ordinals are unchanged.
+    AutoType,
+    /// GCC `__label__ name, ...;`: a declaration at the start of a block
+    /// giving each name a label scoped to that block rather than to the
+    /// whole function. Added at the end so the operator ordinals are
+    /// unchanged.
+    LocalLabel,
+}
+
+/// True when a token can end an operand, so a following `&&` is the binary
+/// logical AND rather than the GNU `&&label` block-address prefix. The
+/// identifier classes cover names the symbol table has already typed
+/// (`Glo`/`Loc`/`Fun`/`Sys`, and `Num` for an enumerator).
+pub(crate) fn ends_operand(tk: Tok) -> bool {
+    tk == Token::Id
+        || tk == Token::Num
+        || tk == Token::FloatNum
+        || tk == Token::Glo
+        || tk == Token::Loc
+        || tk == Token::Fun
+        || tk == Token::Sys
+        || tk == '"'
+        || tk == ')'
+        || tk == ']'
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a
@@ -461,6 +488,7 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::Break as i64 => "`break`",
         x if x == Token::Continue as i64 => "`continue`",
         x if x == Token::Goto as i64 => "`goto`",
+        x if x == Token::LocalLabel as i64 => "`__label__`",
         x if x == Token::Switch as i64 => "`switch`",
         x if x == Token::Case as i64 => "`case`",
         x if x == Token::Default as i64 => "`default`",
@@ -487,7 +515,14 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::Generic as i64 => "`_Generic`",
         x if x == Token::BuiltinTypesCompatible as i64 => "`__builtin_types_compatible_p`",
         x if x == Token::BuiltinOffsetof as i64 => "`__builtin_offsetof`",
+        x if x == Token::AutoType as i64 => "`__auto_type`",
         x if x == Token::Void as i64 => "`void`",
+        x if x == Token::Inline as i64 => "`inline`",
+        x if x == Token::ForceInline as i64 => "`__forceinline`",
+        x if x == Token::Noreturn as i64 => "`_Noreturn`",
+        x if x == Token::Typeof as i64 => "`typeof`",
+        x if x == Token::Attribute as i64 => "attribute specifier (`__attribute__` / `__declspec`)",
+        x if x == Token::Extension as i64 => "`__extension__`",
         _ => return format!("token id {tk}"),
     };
     name.to_string()

@@ -64,9 +64,10 @@ static int sum_wraps(void) {
 static int shift_to_the_top(void) {
     unsigned long x = uopaque;      // 0x100
     if (x != 0) {
-        // Bit 8 shifted left by 55 lands on the sign bit, so the result
-        // read as signed is negative.
-        if ((long)(x << 55) >= 0)
+        // Bit 8 shifted onto the sign bit, so the result read as signed
+        // is negative. The count is taken from the type's width, which
+        // is 64 under LP64 and 32 under LLP64.
+        if ((long)(x << (sizeof(long) * 8 - 9)) >= 0)
             return 5;
     }
     return 0;

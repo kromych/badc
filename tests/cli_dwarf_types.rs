@@ -24,6 +24,7 @@ const DW_TAG_BASE_TYPE: u64 = 0x24;
 const DW_TAG_MEMBER: u64 = 0x0d;
 const DW_TAG_VARIABLE: u64 = 0x34;
 const DW_TAG_FORMAL_PARAMETER: u64 = 0x05;
+const DW_TAG_SUBPROGRAM: u64 = 0x2e;
 
 const DW_AT_LOCATION: u64 = 0x02;
 const DW_AT_NAME: u64 = 0x03;
@@ -37,6 +38,8 @@ const DW_AT_PROTOTYPED: u64 = 0x27;
 const DW_AT_DECL_LINE: u64 = 0x3b;
 
 const DW_OP_ADDR: u8 = 0x03;
+const DW_OP_CONST8U: u8 = 0x0e;
+const DW_OP_GNU_PUSH_TLS_ADDRESS: u8 = 0xe0;
 
 // ---- driver ----
 
@@ -836,4 +839,223 @@ fn no_member_is_dropped_and_enums_survive() {
     assert_eq!(names, ["w", "z"]);
     let color = u.named(DW_TAG_ENUMERATION_TYPE, "color");
     assert_eq!(u.children(color).len(), 2);
+}
+
+/// C11 6.7.2.1p13 promotes an anonymous struct's or union's members
+/// into the enclosing aggregate's namespace. The description keeps the
+/// nesting: an unnamed `DW_TAG_member` whose type is the anonymous
+/// aggregate, at the offset the promoted members start from.
+#[test]
+fn anonymous_members_nest_under_an_unnamed_member() {
+    let u = compile_unit(
+        "anon-member",
+        "struct outer2 {\n\
+           int head;\n\
+           union { int a; long b; };\n\
+           struct { int c; int d; };\n\
+           int tail;\n\
+         };\n\
+         struct outer2 g_outer;\n\
+         int use(void) { return g_outer.a + g_outer.c; }\n",
+    );
+    let outer = u.named(DW_TAG_STRUCTURE_TYPE, "outer2");
+    let members = u.members(outer);
+    let shape: Vec<(Option<&str>, u64)> = members
+        .iter()
+        .map(|m| {
+            (
+                m.name(),
+                m.at(DW_AT_DATA_MEMBER_LOCATION).unwrap().as_uint(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shape,
+        [(Some("head"), 0), (None, 8), (None, 16), (Some("tail"), 24)]
+    );
+    let anon_union = u.type_of(members[1]);
+    assert_eq!(anon_union.tag, DW_TAG_UNION_TYPE);
+    assert_eq!(anon_union.name(), None);
+    assert_eq!(anon_union.at(DW_AT_BYTE_SIZE).unwrap().as_uint(), 8);
+    let names: Vec<_> = u
+        .members(anon_union)
+        .iter()
+        .map(|m| m.name().unwrap())
+        .collect();
+    assert_eq!(names, ["a", "b"]);
+    let anon_struct = u.type_of(members[2]);
+    assert_eq!(anon_struct.tag, DW_TAG_STRUCTURE_TYPE);
+    assert_eq!(anon_struct.name(), None);
+    let placed: Vec<(&str, u64)> = u
+        .members(anon_struct)
+        .iter()
+        .map(|m| {
+            (
+                m.name().unwrap(),
+                m.at(DW_AT_DATA_MEMBER_LOCATION).unwrap().as_uint(),
+            )
+        })
+        .collect();
+    assert_eq!(placed, [("c", 0), ("d", 4)]);
+}
+
+/// One anonymous aggregate nested in another keeps both levels, in
+/// either tag order, with each level's members placed against the
+/// level that holds them.
+#[test]
+fn nested_anonymous_members_keep_every_level() {
+    let u = compile_unit(
+        "anon-nested",
+        "struct nest { int head; struct { union { int x; long y; }; int z; }; int tail; };\n\
+         struct unest { int head; union { struct { int p; int q; }; long r; }; int tail; };\n\
+         struct nest g_nest;\n\
+         struct unest g_unest;\n\
+         int use(void) { return g_nest.x + g_nest.z + g_unest.p + (int)g_unest.r; }\n",
+    );
+    let nest = u.members(u.named(DW_TAG_STRUCTURE_TYPE, "nest"));
+    assert_eq!(nest.len(), 3);
+    assert_eq!(nest[1].at(DW_AT_DATA_MEMBER_LOCATION).unwrap().as_uint(), 8);
+    let inner = u.type_of(nest[1]);
+    assert_eq!(inner.tag, DW_TAG_STRUCTURE_TYPE);
+    let inner_members = u.members(inner);
+    assert_eq!(inner_members.len(), 2);
+    assert_eq!(inner_members[0].name(), None);
+    assert_eq!(
+        inner_members[0]
+            .at(DW_AT_DATA_MEMBER_LOCATION)
+            .unwrap()
+            .as_uint(),
+        0
+    );
+    assert_eq!(inner_members[1].name(), Some("z"));
+    let deepest = u.type_of(inner_members[0]);
+    assert_eq!(deepest.tag, DW_TAG_UNION_TYPE);
+    let names: Vec<_> = u
+        .members(deepest)
+        .iter()
+        .map(|m| m.name().unwrap())
+        .collect();
+    assert_eq!(names, ["x", "y"]);
+
+    let unest = u.members(u.named(DW_TAG_STRUCTURE_TYPE, "unest"));
+    assert_eq!(unest.len(), 3);
+    let arm = u.type_of(unest[1]);
+    assert_eq!(arm.tag, DW_TAG_UNION_TYPE);
+    let arms = u.members(arm);
+    assert_eq!(arms.len(), 2);
+    assert_eq!(arms[0].name(), None);
+    assert_eq!(arms[1].name(), Some("r"));
+    assert_eq!(u.type_of(arms[0]).tag, DW_TAG_STRUCTURE_TYPE);
+}
+
+/// `DW_AT_external` says the name is visible outside the compilation
+/// unit (DWARF 4 3.3.1), which C99 6.2.2p3 denies a `static`
+/// definition.
+#[test]
+fn static_function_has_no_external_attribute() {
+    let u = compile_unit(
+        "linkage",
+        "static int stat_fn(void) { return 1; }\n\
+         static int stat_local(int n) { int t = n; return t; }\n\
+         int touch(void) { return stat_fn() + stat_local(2); }\n",
+    );
+    for name in ["stat_fn", "stat_local"] {
+        assert!(
+            u.named(DW_TAG_SUBPROGRAM, name)
+                .at(DW_AT_EXTERNAL)
+                .is_none(),
+            "`{name}` has internal linkage, so no DW_AT_external"
+        );
+    }
+    assert!(
+        u.named(DW_TAG_SUBPROGRAM, "touch")
+            .at(DW_AT_EXTERNAL)
+            .is_some(),
+        "`touch` has external linkage"
+    );
+}
+
+/// A function-pointer parameter or local is a pointer to a
+/// `DW_TAG_subroutine_type`, not a pointer to the return type, and a
+/// multidimensional local array carries one subrange per dimension.
+#[test]
+fn function_pointer_locals_have_a_subroutine_type() {
+    let u = compile_unit(
+        "fnptr-local",
+        "int apply(int (*fn)(int, long), int x) {\n\
+           int (*g)(int, long) = fn;\n\
+           int m[3][4];\n\
+           m[2][3] = x;\n\
+           return g(x, 1) + m[2][3];\n\
+         }\n",
+    );
+    let apply = u.named(DW_TAG_SUBPROGRAM, "apply");
+    let child = |tag: u64, name: &str| {
+        u.children(apply)
+            .into_iter()
+            .find(|d| d.tag == tag && d.name() == Some(name))
+            .unwrap_or_else(|| panic!("`apply` has no child `{name}`"))
+    };
+    let fn_param = child(DW_TAG_FORMAL_PARAMETER, "fn");
+    let local = child(DW_TAG_VARIABLE, "g");
+    assert_eq!(
+        fn_param.at(DW_AT_TYPE).unwrap().as_ref(),
+        local.at(DW_AT_TYPE).unwrap().as_ref(),
+        "the parameter and the local have one type"
+    );
+    let ptr = u.type_of(fn_param);
+    assert_eq!(ptr.tag, DW_TAG_POINTER_TYPE);
+    let sub = u.type_of(ptr);
+    assert_eq!(sub.tag, DW_TAG_SUBROUTINE_TYPE);
+    assert!(sub.at(DW_AT_PROTOTYPED).is_some());
+    assert_eq!(u.type_of(sub).name(), Some("int"), "return type");
+    let params: Vec<&str> = u
+        .children(sub)
+        .into_iter()
+        .filter(|d| d.tag == DW_TAG_FORMAL_PARAMETER)
+        .map(|d| u.type_of(d).name().unwrap())
+        .collect();
+    assert_eq!(params, ["int", "long"]);
+
+    let arr = u.type_of(child(DW_TAG_VARIABLE, "m"));
+    assert_eq!(arr.tag, DW_TAG_ARRAY_TYPE);
+    let bounds: Vec<u64> = u
+        .children(arr)
+        .into_iter()
+        .filter(|d| d.tag == DW_TAG_SUBRANGE_TYPE)
+        .map(|d| d.at(DW_AT_UPPER_BOUND).unwrap().as_uint())
+        .collect();
+    assert_eq!(bounds, [2, 3]);
+}
+
+/// A `_Thread_local` object (C11 6.2.4p4) gets a compile-unit-scope
+/// `DW_TAG_variable` like any other object with static storage
+/// duration. On the ELF x86_64 surface its location pushes the
+/// thread-block offset and lets the consumer add the thread pointer.
+#[test]
+fn thread_local_objects_get_a_variable_die() {
+    let u = compile_unit(
+        "tls",
+        "_Thread_local int tls_v = 3;\n\
+         static _Thread_local long tls_s;\n\
+         int touch(void) { return tls_v + (int)tls_s; }\n",
+    );
+    let v = u.named(DW_TAG_VARIABLE, "tls_v");
+    assert_eq!(v.depth, 1, "a file-scope object is a child of the CU");
+    assert!(v.at(DW_AT_EXTERNAL).is_some());
+    assert_eq!(u.type_of(v).name(), Some("int"));
+    let loc = match v.at(DW_AT_LOCATION).unwrap() {
+        Val::Block(b) => b.clone(),
+        other => panic!("expected an exprloc location, got {other:?}"),
+    };
+    assert_eq!(loc.len(), 10);
+    assert_eq!(loc[0], DW_OP_CONST8U);
+    assert_eq!(loc[9], DW_OP_GNU_PUSH_TLS_ADDRESS);
+
+    let s = u.named(DW_TAG_VARIABLE, "tls_s");
+    assert!(
+        s.at(DW_AT_EXTERNAL).is_none(),
+        "`static` has internal linkage, so no DW_AT_external"
+    );
+    assert_eq!(u.type_of(s).name(), Some("long"));
 }

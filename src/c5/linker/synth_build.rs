@@ -139,7 +139,7 @@ fn synth_program_and_build(
         got: got_fixups,
         data: data_fixups,
         func: func_fixups,
-    } = synth_fixups(merged, plt)?;
+    } = synth_fixups(merged, plt, TextAbsolute::for_output(target, output_kind))?;
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt)?;
     let exports = synth_exports(merged, export_all, output_kind);
@@ -778,7 +778,11 @@ struct SynthFixups {
     func: Vec<FuncFixup>,
 }
 
-fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFixups, C5Error> {
+fn synth_fixups(
+    merged: &MergedNative,
+    plt: &[PltTrampoline],
+    text_abs: TextAbsolute,
+) -> Result<SynthFixups, C5Error> {
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
@@ -799,6 +803,7 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
                 project_aarch64_pending(
                     merged,
                     reloc,
+                    text_abs,
                     &mut got_fixups,
                     &mut data_fixups,
                     &mut func_fixups,
@@ -808,6 +813,7 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
                 project_x86_64_pending(
                     merged,
                     reloc,
+                    text_abs,
                     &mut got_fixups,
                     &mut data_fixups,
                     &mut func_fixups,
@@ -826,6 +832,7 @@ fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFix
 fn project_aarch64_pending(
     merged: &MergedNative,
     reloc: &super::link::PendingImportReloc,
+    text_abs: TextAbsolute,
     got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
@@ -891,18 +898,47 @@ fn project_aarch64_pending(
             });
             Ok(())
         }
-        rtype => Err(unsupported_reloc(merged, reloc, rtype)),
+        rtype => Err(declined_reloc(merged, reloc, rtype, text_abs)),
     }
 }
 
-/// An input object carrying a relocation form no writer can
-/// materialize is a link error naming the type and the symbol, not an
-/// internal error: badc's invariants are intact, the object is simply
-/// outside the supported set.
-fn unsupported_reloc(
+/// Whether the image a target and output kind produce can hold an
+/// absolute reference from an executable section. The merge pass parks
+/// every such reference (`link.rs::needs_image_base`) because its value
+/// is an address; the output kind, known only here, decides whether an
+/// address exists to write.
+#[derive(Clone, Copy)]
+enum TextAbsolute {
+    /// PE: `.reloc` base relocations cover every section, so the
+    /// reference is representable and only a carrier is missing.
+    Representable,
+    /// ELF `ET_DYN` and Mach-O `MH_PIE`: the loader picks the base and
+    /// neither format admits a relocation against an executable
+    /// section. `shared` picks the output kind GNU ld names.
+    RejectedInPie { shared: bool },
+}
+
+impl TextAbsolute {
+    fn for_output(target: Target, output_kind: OutputKind) -> Self {
+        if target.is_windows() {
+            TextAbsolute::Representable
+        } else {
+            TextAbsolute::RejectedInPie {
+                shared: output_kind == OutputKind::SharedLibrary,
+            }
+        }
+    }
+}
+
+/// A relocation the writer declines. An absolute form the output
+/// format cannot express at all is reported as that constraint; every
+/// other form is unsupported input -- badc's invariants are intact,
+/// the object is simply outside the supported set.
+fn declined_reloc(
     merged: &MergedNative,
     reloc: &super::link::PendingImportReloc,
     rtype: u32,
+    text_abs: TextAbsolute,
 ) -> C5Error {
     use super::object::RelocOrigin;
     let name = reloc
@@ -913,14 +949,21 @@ fn unsupported_reloc(
         .section_map
         .locate_text(reloc.text_offset)
         .unwrap_or(("", ".text", reloc.text_offset));
-    RelocOrigin::in_named_section(source, section)
-        .at(merged.machine, rtype, name, offset)
-        .unsupported()
+    let site =
+        RelocOrigin::in_named_section(source, section).at(merged.machine, rtype, name, offset);
+    let absolute = super::image::abs_field(merged.machine, rtype).is_some();
+    match text_abs {
+        TextAbsolute::RejectedInPie { shared } if absolute => site.absolute_in_pie(shared),
+        // TODO: carry a plain N-byte absolute field through a
+        // writer-side fixup, for the formats that admit one.
+        _ => site.unsupported(),
+    }
 }
 
 fn project_x86_64_pending(
     merged: &MergedNative,
     reloc: &super::link::PendingImportReloc,
+    text_abs: TextAbsolute,
     got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
@@ -938,7 +981,7 @@ fn project_x86_64_pending(
     let instr_back_off = match reloc.rtype {
         R_X86_64_PC32 | R_X86_64_GOTPCREL | R_X86_64_REX_GOTPCRELX => 3,
         R_X86_64_PLT32 => 1,
-        other => return Err(unsupported_reloc(merged, reloc, other)),
+        other => return Err(declined_reloc(merged, reloc, other, text_abs)),
     };
     let instr_offset = (reloc.text_offset as usize)
         .checked_sub(instr_back_off)

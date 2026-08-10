@@ -440,6 +440,25 @@ impl RelocSite<'_> {
         ))
     }
 
+    /// An absolute relocation in an image the loader places at an
+    /// address of its choosing: `S + A` is not a link-time constant,
+    /// and neither ELF `ET_DYN` nor Mach-O `MH_PIE` admits a relocation
+    /// against an executable section. GNU ld declines the same input
+    /// for the same reason, naming the output kind.
+    pub(crate) fn absolute_in_pie(&self, shared: bool) -> C5Error {
+        let kind = if shared {
+            "a shared object"
+        } else {
+            "a position-independent executable"
+        };
+        self.rejected(&format!(
+            "{} against symbol `{}` can not be used when making {kind}: the reference \
+             needs an absolute address, which no load address supplies",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
     /// A resolved value the relocation's field cannot hold. GNU ld
     /// makes this a link error rather than truncating, and so does
     /// badc: a silently narrowed address is a miscompile.
@@ -465,6 +484,17 @@ impl RelocSite<'_> {
     /// `<location>: <msg>` under the unsupported-input prefix.
     fn located(&self, msg: &str) -> C5Error {
         C5Error::Compile(crate::c5::error::fmt_unsupported_err(&format!(
+            "{}: {msg}",
+            self.locate()
+        )))
+    }
+
+    /// `<location>: <msg>` under the link-error prefix, for a reference
+    /// the output format admits no encoding of. Unlike [`Self::located`]
+    /// the refusal follows from the reference and the output kind, so
+    /// implementing more of badc does not lift it.
+    fn rejected(&self, msg: &str) -> C5Error {
+        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
             "{}: {msg}",
             self.locate()
         )))

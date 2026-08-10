@@ -69,23 +69,60 @@ import _fetch  # noqa: E402
 # distribution publishes for it, so the mirrored bytes stay auditable.
 IMAGE_RELEASE_TAG = "vendor-deps-v1"
 
+# The packaging format and the cloud image are the distribution's, not the
+# architecture's. `DISTROS[d]["images"][a]` is the image distribution `d`
+# publishes for architecture `a`; an architecture the distribution has no
+# image for is simply absent.
+DISTROS = {
+    "debian": {
+        "pkg": "deb",
+        "images": {
+            "x86_64": {
+                "asset": "debian-13-genericcloud-amd64-20260803-2559.qcow2",
+                "sha256": "d4c515da9031f6e79851de7ddbf50ec9320427f91a7ae99bd0c910d3676be9e1",
+                "upstream": "https://cloud.debian.org/images/cloud/trixie/"
+                            "20260803-2559/"
+                            "debian-13-genericcloud-amd64-20260803-2559.qcow2",
+                "upstream_digest":
+                    "sha512:769562604ecaac26b661167891ef922f71f4d87d50a11423fc0"
+                    "4e51444fda0d882c87996dd1181170d233627f4728e6722db2695c0ef7"
+                    "53dad762c4ac4ed32e1",
+            },
+            "aarch64": {
+                "asset": "debian-13-genericcloud-arm64-20260803-2559.qcow2",
+                "sha256": "37f7b60e4128c33f5b4a94e30b9c4034e0aa2c567550b4d5cca2cf0437e9588f",
+                "upstream": "https://cloud.debian.org/images/cloud/trixie/"
+                            "20260803-2559/"
+                            "debian-13-genericcloud-arm64-20260803-2559.qcow2",
+                "upstream_digest":
+                    "sha512:fa3c6a469deb88835871c04fa4ac5865de7947806c09bb49045"
+                    "f4427ddf8e7a8763ba018526f380958784f6bcdc2786cc55fe58775fe1"
+                    "b066f8ae7f3d9f9de6f",
+            },
+        },
+    },
+    "fedora": {
+        "pkg": "rpm",
+        "images": {
+            "aarch64": {
+                "asset": "Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2",
+                "sha256": "55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b",
+                "upstream": "https://dl.fedoraproject.org/pub/fedora/linux/"
+                            "releases/44/Cloud/aarch64/images/"
+                            "Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2",
+                "upstream_digest":
+                    "sha256:55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e400"
+                    "2a41a72fa0d5b",
+            },
+        },
+    },
+}
+
 ARCHES = {
     "x86_64": {
         "target": "linux-x64",
         "make_target": "bzImage",
-        "pkg": "deb",
         "qemu": "qemu-system-x86_64",
-        "image": {
-            "asset": "debian-13-genericcloud-amd64-20260803-2559.qcow2",
-            "sha256": "d4c515da9031f6e79851de7ddbf50ec9320427f91a7ae99bd0c910d3676be9e1",
-            "upstream": "https://cloud.debian.org/images/cloud/trixie/"
-                        "20260803-2559/"
-                        "debian-13-genericcloud-amd64-20260803-2559.qcow2",
-            "upstream_digest":
-                "sha512:769562604ecaac26b661167891ef922f71f4d87d50a11423fc04e"
-                "51444fda0d882c87996dd1181170d233627f4728e6722db2695c0ef753da"
-                "d762c4ac4ed32e1",
-        },
         "distro": "debian",
         # The corpus defconfig builds these as modules; sit pulls ip_tunnel
         # and tunnel4, so the load also exercises depmod dependency data.
@@ -98,23 +135,29 @@ ARCHES = {
     "aarch64": {
         "target": "linux-aarch64",
         "make_target": "Image",
-        "pkg": "rpm",
         "qemu": "qemu-system-aarch64",
-        "image": {
-            "asset": "Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2",
-            "sha256": "55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b",
-            "upstream": "https://dl.fedoraproject.org/pub/fedora/linux/"
-                        "releases/44/Cloud/aarch64/images/"
-                        "Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2",
-            "upstream_digest":
-                "sha256:55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a"
-                "41a72fa0d5b",
-        },
         "distro": "fedora",
         "modprobe": ["fuse", "btrfs"],
         "expect_units": 10000,
     },
 }
+
+
+def resolve_arch(name: str, distro: str | None) -> dict:
+    """The architecture's settings with the distribution's folded in, so
+    every consumer keeps reading `arch["pkg"]` / `arch["image"]` /
+    `arch["distro"]`. Without `--distro` the result is the architecture's
+    own default distribution."""
+    arch = dict(ARCHES[name])
+    if distro:
+        arch["distro"] = distro
+    images = DISTROS[arch["distro"]]["images"]
+    if name not in images:
+        die(f"{arch['distro']} publishes no {name} cloud image "
+            f"(have: {', '.join(sorted(images))})")
+    arch["pkg"] = DISTROS[arch["distro"]]["pkg"]
+    arch["image"] = images[name]
+    return arch
 
 # aarch64 EFI firmware, first match wins: (code, vars) pflash pair, or a
 # single -bios image.
@@ -541,7 +584,9 @@ def build_deb(args, arch, tree) -> list[Path]:
     elif shutil.which("dh_listpackages") is None:
         # `debian/rules` enumerates and assembles packages with debhelper.
         # Without it the kernel's own target cannot run at all, so the deb is
-        # built from the same staging by hand.
+        # built from the same staging by hand. Reachable on Linux by design,
+        # not only on macOS: a Linux host with dpkg-dev but no debhelper used
+        # to fail inside bindeb-pkg and now takes this route.
         log("no debhelper: building the linux-image deb without it")
         return build_deb_without_debhelper(args, arch, tree)
     admindir = (args.deb_tools / "var/lib/dpkg") if args.deb_tools else None
@@ -1215,6 +1260,10 @@ def main() -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arch", choices=sorted(ARCHES), default=host_arch())
+    ap.add_argument("--distro", choices=sorted(DISTROS),
+                    help="distribution to install into (default: the "
+                         "architecture's own); selects the cloud image and "
+                         "the packaging format")
     ap.add_argument("--badc", type=Path,
                     default=os.environ.get("BADC",
                                            REPO_ROOT / "target/release/badc"))
@@ -1294,7 +1343,7 @@ def main() -> int:
     ap.add_argument("--report", type=Path)
     args = ap.parse_args()
 
-    arch = ARCHES[args.arch]
+    arch = resolve_arch(args.arch, args.distro)
     phases = set(args.phases.split(","))
     if unknown := phases - {"config", "tree", "build", "package", "vm"}:
         die(f"unknown phases: {sorted(unknown)}")

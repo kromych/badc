@@ -411,8 +411,24 @@ make -C <tree> ARCH=arm64 CROSS_COMPILE=aarch64-linux-musl- \
 
 `DEPMOD=true` covers `modules_install`: macOS has no `depmod`, and without it
 `scripts/depmod.sh` warns and continues, so the installed tree carries modules
-but no `modules.dep` / `modules.alias`. A package built this way has to run
-`depmod` on the target machine before its modules resolve.
+but no `modules.dep` / `modules.alias`. Both packaging formats build them on
+the target instead -- the rpm's `%post` runs `depmod` directly, the deb's
+`postinst` reaches it through `/etc/kernel/postinst.d` -- so the missing host
+`depmod` costs nothing.
+
+`packages.py` runs here too, with the same variables in the environment
+(`shim_env` inherits it) and `readelf` on PATH from Homebrew's binutils,
+placed after `/usr/bin` so its `strip` and `ar` do not shadow Apple's:
+
+```sh
+python3 demos/linux/packages.py --arch aarch64 [--distro debian] \
+    --real-cc aarch64-linux-musl-gcc --real-ld aarch64-linux-musl-ld \
+    --linker badc --tarball <linux-7.1.6.tar.xz>
+```
+
+It selects `hvf`, which is what makes the gate usable on a Mac: booting the
+stock cloud image to ssh takes 20 s under `hvf` against 91 s under `tcg`, and
+the install-and-reboot cycle carries the same factor.
 
 ## Regression gate
 

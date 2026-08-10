@@ -144,12 +144,14 @@ Compile knobs:
                            checked against what it implements rather
                            than passed on; an option it does not
                            implement is refused by name.
-  -m16 / -m32 / -m64       Code model. `-m16` and `-m32` put an
-                           assembly unit's object out as ELFCLASS32 /
-                           EM_386, as gcc's `as --32` does; `.code16` /
-                           `.code32` in the source select the encoding.
-                           badc generates no i386 machine code, so a
-                           `.c` source under either is refused.
+  -m16 / -m32 / -m64       Code model, x86 targets only. `-m16` and
+                           `-m32` preprocess the unit as i386 (`__i386__`
+                           defined, `__x86_64__` not, ILP32 widths) and
+                           put its object out as ELFCLASS32 / EM_386, as
+                           gcc's `as --32` does; `.code16` / `.code32`
+                           in the source select the encoding. badc
+                           generates no i386 machine code, so a `.c`
+                           source under either is refused unless -E.
   -Wp,-MD,file             The preprocessor spellings of -MD / -MMD,
   -Wp,-MMD,file            which take the output path as an operand.
                            kbuild passes dependency generation this
@@ -1725,22 +1727,38 @@ fn run() {
     // badc generates no i386 machine code, so `-m16` / `-m32` reach
     // only the assembler, whose encoder already follows `.code16` /
     // `.code32`. A C source under either is refused by name rather
-    // than compiled as x86-64 into an EM_386 container.
+    // than compiled as x86-64 into an EM_386 container. The
+    // preprocess-only modes are exempt from both restrictions, as they
+    // are in gcc: they emit no code, and their output is a function of
+    // the predefine set the flag selects.
     if let Some(flag) = &code_model_flag {
-        if let Some(src) = sources.iter().find(|s| !SourceKind::of(s).is_asm()) {
+        // The flags name an x86 code model. gcc's AArch64 driver has no
+        // `-m32`, and badc has no AArch32 encoder or predefine set.
+        if !target.is_x86_64() {
             eprint_diagnostic(format!(
-                "badc: error: `{flag}` applies to assembly units only; `{src}` is a C source \
-                 and badc emits no 32-bit code"
+                "badc: error: `{flag}` selects an x86 code model; target is `{}`",
+                target.id_str()
             ));
             std::process::exit(1);
         }
-        // The class reaches the `-c` object only: badc writes no 32-bit
-        // image, and its own linker reads ELFCLASS64 objects.
-        if !compile_only && mode != Mode::BuildArchive {
-            eprint_diagnostic(format!(
-                "badc: error: `{flag}` applies to `-c` output; badc links no 32-bit image"
-            ));
-            std::process::exit(1);
+        let preprocess_only =
+            mode == Mode::DumpPp || dep_kind == Some(DepKind::Only) && !compile_only;
+        if !preprocess_only {
+            if let Some(src) = sources.iter().find(|s| !SourceKind::of(s).is_asm()) {
+                eprint_diagnostic(format!(
+                    "badc: error: `{flag}` applies to assembly units only; `{src}` is a C source \
+                     and badc emits no 32-bit code"
+                ));
+                std::process::exit(1);
+            }
+            // The class reaches the `-c` object only: badc writes no
+            // 32-bit image, and its own linker reads ELFCLASS64 objects.
+            if !compile_only && mode != Mode::BuildArchive {
+                eprint_diagnostic(format!(
+                    "badc: error: `{flag}` applies to `-c` output; badc links no 32-bit image"
+                ));
+                std::process::exit(1);
+            }
         }
     }
     let object_elf_class = match code_model_flag {
@@ -1835,7 +1853,8 @@ fn run() {
                 .with_own_header_roots(own_header_roots.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(src.clone())
-                .with_track_includes(true);
+                .with_track_includes(true)
+                .with_elf_class(object_elf_class);
             let compiler = badc::Compiler::with_options(contents, target, copts);
             let mut log = TuLog::default();
             if show_includes {
@@ -1997,7 +2016,8 @@ fn run() {
                 .with_system_include_paths(system_include_paths.clone())
                 .with_own_header_roots(own_header_roots.clone())
                 .with_force_includes(force_includes.clone())
-                .with_source_label(label.clone());
+                .with_source_label(label.clone())
+                .with_elf_class(object_elf_class);
             match Compiler::preprocess(contents, target, opts) {
                 Ok(s) => {
                     if multi_tu {

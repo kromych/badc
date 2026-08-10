@@ -785,6 +785,174 @@ fn code16_same_section_branches_resolve_in_place() {
     );
 }
 
+/// Contents of the first non-empty `.text`, from an object of either
+/// ELF class.
+fn text_bytes(b: &[u8]) -> Vec<u8> {
+    if b[4] == 1 {
+        let t = elf32_sections(b)
+            .into_iter()
+            .find(|s| s.0 == ".text" && s.3 != 0)
+            .expect(".text");
+        return b[t.2..t.2 + t.3].to_vec();
+    }
+    let u16at = |o: usize| u16::from_le_bytes([b[o], b[o + 1]]) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap()) as usize;
+    let (shoff, shentsize) = (u64at(0x28), u16at(0x3a));
+    let (off, size) = section_names(b)
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| *n == ".text")
+        .map(|(i, _)| {
+            let sh = shoff + i * shentsize;
+            (u64at(sh + 0x18), u64at(sh + 0x20))
+        })
+        .find(|(_, size)| *size != 0)
+        .expect(".text");
+    b[off..off + size].to_vec()
+}
+
+/// gcc selects the preprocessor's predefines from the code model:
+/// `-m16` and `-m32` are i386 units, so `__i386__` is defined and
+/// `__x86_64__` is not. `-m16` is `-m32` code generation with a 16-bit
+/// default operand size, and gcc gives the two the same predefines.
+#[test]
+fn m16_and_m32_preprocess_as_i386() {
+    const SRC: &str = concat!(
+        "\t.text\n",
+        "#ifndef __x86_64__\n\t.byte 0x11\n#endif\n",
+        "#ifdef __i386__\n\t.byte 0x22\n#endif\n",
+        "#ifdef __x86_64__\n\t.byte 0x33\n#endif\n",
+    );
+    let d = dir("m16-predefines");
+    write(&d, "pp.S", SRC);
+    for (flag, want) in [
+        ("-m16", &[0x11u8, 0x22][..]),
+        ("-m32", &[0x11, 0x22][..]),
+        ("-m64", &[0x33][..]),
+    ] {
+        let obj = format!("pp{}.o", &flag[2..]);
+        run_ok(
+            &d,
+            &["-q", "-c", "--target=linux-x64", flag, "pp.S", "-o", &obj],
+        );
+        let b = std::fs::read(d.join(&obj)).expect("object");
+        assert_eq!(text_bytes(&b), want, "{flag}: predefine set");
+    }
+}
+
+/// The data-model predefines follow the code model as well: an i386
+/// unit is ILP32, with a 32-bit pointer and `long` and no `__int128`.
+/// Values are gcc 16.1.1's for `-m32 -dM -E -x assembler-with-cpp`.
+#[test]
+fn m32_predefines_the_ilp32_data_model() {
+    const SRC: &str = concat!(
+        "#define Q(x) #x\n#define S(x) Q(x)\n",
+        "__SIZEOF_POINTER__ __SIZEOF_LONG__ __SIZEOF_SIZE_T__ __SIZEOF_PTRDIFF_T__\n",
+        "S(__SIZE_TYPE__) S(__PTRDIFF_TYPE__)\n",
+        "#if defined(__ILP32__) && defined(_ILP32) && !defined(__LP64__) && !defined(_LP64)\n",
+        "ilp32-ok\n#endif\n",
+        "#ifndef __SIZEOF_INT128__\nno-int128\n#endif\n",
+        "#ifdef __GCC_ASM_FLAG_OUTPUTS__\ncc-outputs\n#endif\n",
+    );
+    let d = dir("m32-data-model");
+    write(&d, "dm.S", SRC);
+    let out = run_ok(
+        &d,
+        &["-q", "-E", "--gnu", "--target=linux-x64", "-m32", "dm.S"],
+    );
+    let body: String = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(body.contains("4 4 4 4"), "ILP32 widths: {body}");
+    assert!(
+        body.contains(r#""unsigned int" "int""#),
+        "ILP32 size_t / ptrdiff_t: {body}"
+    );
+    for want in ["ilp32-ok", "no-int128", "cc-outputs"] {
+        assert!(body.contains(want), "missing {want}: {body}");
+    }
+}
+
+/// Which headers a unit opens depends on the predefine set, so the
+/// preprocess-only modes take the code model too, as gcc does. Refusing
+/// them would leave `-MM` describing a unit nobody builds.
+#[test]
+fn the_dependency_scan_follows_the_code_model() {
+    let d = dir("m32-deps");
+    write(&d, "i386.h", "");
+    write(&d, "x64.h", "");
+    write(
+        &d,
+        "dep.S",
+        "#ifdef __i386__\n#include \"i386.h\"\n#else\n#include \"x64.h\"\n#endif\n\t.text\n",
+    );
+    for (flag, want) in [("-m32", "i386.h"), ("-m64", "x64.h")] {
+        let out = run_ok(&d, &["-MM", "-I", ".", "--target=linux-x64", flag, "dep.S"]);
+        assert_eq!(out, format!("dep.o: dep.S {want}\n"), "{flag}");
+    }
+}
+
+/// `arch/x86/kernel/verify_cpu.S` guards its CPUID-presence probe with
+/// `#ifndef __x86_64__`, and the realmode units that include it are
+/// built `-m16`. Preprocessing that unit with `__x86_64__` defined drops
+/// the probe, leaving a `cpuid` on a CPU never established to have one.
+/// Bytes are GNU as 2.46.1's for the same source.
+#[test]
+fn m16_selects_the_realmode_cpuid_check() {
+    const SRC: &str = concat!(
+        "\t.code16\n\t.text\nverify_cpu:\n\tpushf\n\tpush\t$0\n\tpopf\n",
+        "#ifndef __x86_64__\n",
+        "\tpushfl\n\tpopl\t%eax\n\tmovl\t%eax,%ebx\n\txorl\t$0x200000,%eax\n",
+        "\tpushl\t%eax\n\tpopfl\n\tpushfl\n\tpopl\t%eax\n\tcmpl\t%eax,%ebx\n",
+        "#endif\n\tmovl\t$0x0,%eax\n\tcpuid\n",
+    );
+    // pushf; push $0; popf
+    const PROLOGUE: &[u8] = &[0x9c, 0x6a, 0x00, 0x9d];
+    // pushfl; popl %eax; movl %eax,%ebx; xorl $0x200000,%eax; pushl
+    // %eax; popfl; pushfl; popl %eax; cmpl %eax,%ebx
+    const CPUID_CHECK: &[u8] = &[
+        0x66, 0x9c, 0x66, 0x58, 0x66, 0x89, 0xc3, 0x66, 0x35, 0x00, 0x00, 0x20, 0x00, 0x66, 0x50,
+        0x66, 0x9d, 0x66, 0x9c, 0x66, 0x58, 0x66, 0x39, 0xc3,
+    ];
+    // movl $0x0,%eax; cpuid
+    const LEAF0: &[u8] = &[0x66, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x0f, 0xa2];
+    let d = dir("m16-verify-cpu");
+    write(&d, "vc.S", SRC);
+    run_ok(
+        &d,
+        &[
+            "-q",
+            "-c",
+            "--target=linux-x64",
+            "-m16",
+            "vc.S",
+            "-o",
+            "vc.o",
+        ],
+    );
+    let b = std::fs::read(d.join("vc.o")).expect("object");
+    let mut want = PROLOGUE.to_vec();
+    want.extend_from_slice(CPUID_CHECK);
+    want.extend_from_slice(LEAF0);
+    assert_eq!(text_bytes(&b), want, "the -m16 arm is the i386 one");
+}
+
+/// `-m16` / `-m32` name an x86 code model. gcc's AArch64 driver has no
+/// such option, and badc has neither an AArch32 encoder nor an AArch32
+/// predefine set, so the flag is refused rather than producing an
+/// ELFCLASS32 AArch64 object.
+#[test]
+fn the_x86_code_models_are_refused_on_a_non_x86_target() {
+    let d = dir("m32-aarch64");
+    write(&d, "leaf.s", "\t.text\n\t.globl leaf\nleaf:\n\tret\n");
+    for flag in ["-m16", "-m32"] {
+        let (ok, text) = run(&d, &["-q", "-c", "--target=linux-aarch64", flag, "leaf.s"]);
+        assert!(!ok, "{flag} must be refused on an AArch64 target");
+        assert!(
+            text.contains(flag) && text.contains("linux-aarch64"),
+            "the diagnostic must name the flag and the target: {text}"
+        );
+    }
+}
+
 #[test]
 fn non_64_bit_abis_are_refused_by_name() {
     let d = dir("m31");
@@ -822,26 +990,20 @@ fn non_64_bit_abis_are_refused_by_name() {
 fn m32_outside_a_c_assembly_unit_is_refused_by_name() {
     let d = dir("m32-c");
     write(&d, "u.c", "int f(void) { return 1; }\n");
-    let (ok, text) = run(
-        &d,
-        &["-q", "-c", &format!("--target={TARGET}"), "-m32", "u.c"],
-    );
+    let (ok, text) = run(&d, &["-q", "-c", "--target=linux-x64", "-m32", "u.c"]);
     assert!(!ok, "a C source under -m32 must be refused");
     assert!(
         text.contains("-m32") && text.contains("u.c"),
         "the diagnostic must name the flag and the source: {text}"
     );
-    write(&d, "leaf.s", LEAF);
+    write(
+        &d,
+        "leaf.s",
+        "\t.text\n\t.globl leaf\n\t.type leaf, @function\nleaf:\n\tmovl $7, %eax\n\tret\n",
+    );
     let (ok, text) = run(
         &d,
-        &[
-            "-q",
-            &format!("--target={TARGET}"),
-            "-m32",
-            "leaf.s",
-            "-o",
-            "prog",
-        ],
+        &["-q", "--target=linux-x64", "-m32", "leaf.s", "-o", "prog"],
     );
     assert!(!ok, "a link under -m32 must be refused");
     assert!(

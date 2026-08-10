@@ -23,7 +23,7 @@ use super::types::{
     UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_value_ty, round_up, struct_id_of,
     struct_ty_for,
 };
-use super::{AnonBitfield, Compiler, StructDef, StructField};
+use super::{AnonBitfield, AnonMember, Compiler, StructDef, StructField};
 
 impl Compiler {
     /// Parse a `struct Name { ... }` / `union Name { ... }` body.
@@ -111,6 +111,7 @@ impl Compiler {
                     explicit_align: 0,
                     fields: Vec::new(),
                     anon_bitfields: Vec::new(),
+                    anon_members: Vec::new(),
                     is_union,
                     is_complete: false,
                     is_vector: false,
@@ -443,6 +444,14 @@ impl Compiler {
                     // conflict between reading `self.structs[inner_id]`
                     // and mutating `self.structs[struct_id]`.
                     let inner_fields = self.structs[inner_id].fields.clone();
+                    // The promoted entries are one member for layout.
+                    let first = self.structs[struct_id].fields.len() as u32;
+                    self.structs[struct_id].anon_members.push(AnonMember {
+                        first,
+                        count: inner_fields.len() as u32,
+                        offset: base_offset,
+                        size: inner_size,
+                    });
                     for inner_field in inner_fields {
                         // Reject name collisions early -- C11
                         // says the merged namespace must be
@@ -987,8 +996,10 @@ impl Compiler {
         let mut bitfields: Vec<(usize, usize)> = Vec::new();
         let anon = self.structs[struct_id].anon_bitfields.clone();
         let mut anon_pos = 0usize;
+        let members = self.structs[struct_id].anon_members.clone();
+        let mut mem_pos = 0usize;
         let mut i = 0usize;
-        while i < n {
+        loop {
             // Replay the unnamed bit-fields declared before this member
             // so the packed layout reserves the same bits the natural
             // one did (C99 6.7.2.1p11).
@@ -996,54 +1007,22 @@ impl Compiler {
                 bit_cursor = Self::repack_anon_bitfield(bit_cursor, &anon[anon_pos]);
                 anon_pos += 1;
             }
-            // Fields promoted from one anonymous union (C11 6.7.2.1p13)
-            // keep the relative offsets the natural layout already gave
-            // them (union arms overlap; a nested anonymous struct's members
-            // stay at their in-arm offsets) and shift as a block to the
-            // packed cursor. Re-laying them sequentially would break the
-            // overlap; recomputing their offsets would wrongly repack a
-            // nested aggregate type, since `packed` applies to this
-            // struct's own members, not to a nested struct/union type.
-            // Consecutive members carrying the same group id form the union.
-            let ug = self.structs[struct_id].fields[i].anon_union_group;
-            if ug != 0 {
-                let mut j = i;
-                while j < n && self.structs[struct_id].fields[j].anon_union_group == ug {
-                    j += 1;
-                }
-                let old_base = (i..j)
-                    .map(|k| self.structs[struct_id].fields[k].offset)
-                    .min()
-                    .unwrap_or(0);
-                // The group's extent is the anonymous union's own size:
-                // `packed` on this struct removes the padding between its
-                // members, not the padding inside a member's type. The
-                // group id is the inner aggregate's index plus one; fall
-                // back to the promoted members' span if it does not
-                // resolve to a laid-out aggregate.
-                let inner_size = self
-                    .structs
-                    .get(ug as usize - 1)
-                    .filter(|s| s.is_complete)
-                    .map(|s| s.size);
-                let group_span = inner_size.unwrap_or_else(|| {
-                    (i..j)
-                        .map(|k| {
-                            self.structs[struct_id].fields[k].offset
-                                + self.packed_member_storage(struct_id, k)
-                                - old_base
-                        })
-                        .max()
-                        .unwrap_or(0)
-                });
-                let new_base = bit_cursor.div_ceil(8);
-                for k in i..j {
-                    let off = self.structs[struct_id].fields[k].offset;
-                    self.structs[struct_id].fields[k].offset = off - old_base + new_base;
-                }
-                bit_cursor = (new_base + group_span) * 8;
-                i = j;
+            // A member promoted from an anonymous struct/union moves as a
+            // block: packing removes the padding between this aggregate's
+            // members, not the padding inside a member's type, so the
+            // entries keep their relative offsets, the cursor advances by
+            // the member type's size, and the entries' own alignment
+            // requests do not reach this aggregate.
+            if mem_pos < members.len() && members[mem_pos].first as usize <= i {
+                let m = members[mem_pos];
+                let base = bit_cursor.div_ceil(8);
+                bit_cursor = self.move_anon_member(struct_id, mem_pos, base) * 8;
+                mem_pos += 1;
+                i = i.max(m.first as usize + m.count as usize);
                 continue;
+            }
+            if i >= n {
+                break;
             }
 
             let (ty, array_size, bit_width, explicit_align) = {
@@ -1122,9 +1101,24 @@ impl Compiler {
     /// carrying an explicit `aligned(N)` keeps raising the union.
     fn repack_union(&mut self, struct_id: usize) {
         let n = self.structs[struct_id].fields.len();
+        let members = self.structs[struct_id].anon_members.clone();
+        let mut mem_pos = 0usize;
         let mut max_explicit_align = 1usize;
         let mut size = 0usize;
-        for i in 0..n {
+        let mut i = 0usize;
+        loop {
+            // A promoted anonymous member spans its own type's size, tail
+            // padding included.
+            if mem_pos < members.len() && members[mem_pos].first as usize <= i {
+                let m = members[mem_pos];
+                mem_pos += 1;
+                size = size.max(m.offset + m.size);
+                i = i.max(m.first as usize + m.count as usize);
+                continue;
+            }
+            if i >= n {
+                break;
+            }
             let f = &self.structs[struct_id].fields[i];
             let (offset, bit_end, explicit_align) = (
                 f.offset,
@@ -1138,6 +1132,7 @@ impl Compiler {
                 self.packed_member_storage(struct_id, i)
             };
             size = size.max(offset + storage);
+            i += 1;
         }
         // An unnamed bit-field is a union member too: it occupies its
         // own storage from offset 0.
@@ -1180,6 +1175,19 @@ impl Compiler {
         } else {
             bit_cursor + a.width as usize
         }
+    }
+
+    /// Rebase promoted anonymous member `idx` and its entries onto `base`,
+    /// preserving the entries' offsets relative to the member's start, and
+    /// return the byte just past it.
+    fn move_anon_member(&mut self, struct_id: usize, idx: usize, base: usize) -> usize {
+        let m = self.structs[struct_id].anon_members[idx];
+        for k in m.first as usize..(m.first + m.count) as usize {
+            let off = self.structs[struct_id].fields[k].offset;
+            self.structs[struct_id].fields[k].offset = off - m.offset + base;
+        }
+        self.structs[struct_id].anon_members[idx].offset = base;
+        base + m.size
     }
 
     /// Byte storage a non-bitfield member occupies in a packed layout:

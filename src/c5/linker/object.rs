@@ -297,6 +297,179 @@ pub(crate) fn reloc_desc(machine: NativeMachine, rtype: u32) -> String {
     }
 }
 
+/// Where a relocation entry came from. Held by a [`RelocSite`] so a
+/// diagnostic can name the containing object and the input section;
+/// the section lookup runs only when a diagnostic is formatted.
+#[derive(Clone, Copy)]
+pub(crate) struct RelocOrigin<'a> {
+    /// [`NativeObject::source`] of the containing input. Empty for
+    /// content the link has already merged, which has no single origin.
+    pub source: &'a str,
+    /// [`NativeObject::sections`] of the containing input, empty when
+    /// the origin names its section directly.
+    pub sections: &'a [InputSection],
+    /// Family blob the site's offset is measured in, for the section
+    /// lookup. `None` when `label` already names the section.
+    family: Option<SectionFamily>,
+    /// Section name to print when no input section covers the offset.
+    label: &'a str,
+}
+
+impl<'a> RelocOrigin<'a> {
+    /// Origin of a relocation applying to `family` within `obj`.
+    pub(crate) fn in_object(obj: &'a NativeObject, family: SectionFamily) -> Self {
+        Self::in_input(&obj.source, &obj.sections, family)
+    }
+
+    /// As [`Self::in_object`], for a caller holding the input's origin
+    /// label and section list separately.
+    pub(crate) fn in_input(
+        source: &'a str,
+        sections: &'a [InputSection],
+        family: SectionFamily,
+    ) -> Self {
+        RelocOrigin {
+            source,
+            sections,
+            family: Some(family),
+            label: family_name(family),
+        }
+    }
+
+    /// Origin of a relocation applying to a named section of `obj`
+    /// that the family classification does not name, such as a DWARF
+    /// section the parse keeps outside the image families.
+    pub(crate) fn in_object_section(obj: &'a NativeObject, section: &'a str) -> Self {
+        Self::in_named_section(&obj.source, section)
+    }
+
+    /// Origin of a relocation the caller has already located to an
+    /// input and a section by name.
+    pub(crate) fn in_named_section(source: &'a str, section: &'a str) -> Self {
+        RelocOrigin {
+            source,
+            sections: &[],
+            family: None,
+            label: section,
+        }
+    }
+
+    /// Origin of a relocation applying to a merged stream, which has
+    /// no single input to name.
+    pub(crate) fn merged(section: &'a str) -> Self {
+        RelocOrigin {
+            source: "",
+            sections: &[],
+            family: None,
+            label: section,
+        }
+    }
+
+    pub(crate) fn at(
+        &self,
+        machine: NativeMachine,
+        rtype: u32,
+        symbol: &'a str,
+        offset: u64,
+    ) -> RelocSite<'a> {
+        RelocSite {
+            origin: *self,
+            machine,
+            rtype,
+            symbol,
+            offset,
+        }
+    }
+}
+
+/// Placeholder family name for an origin that names no input section.
+fn family_name(family: SectionFamily) -> &'static str {
+    match family {
+        SectionFamily::Text => ".text",
+        SectionFamily::RoData => ".rodata",
+        SectionFamily::Data => ".data",
+        SectionFamily::Bss => ".bss",
+        SectionFamily::Tdata => ".tdata",
+        SectionFamily::Tbss => ".tbss",
+        SectionFamily::Discard => "<section>",
+    }
+}
+
+/// One relocation entry, located for a diagnostic. Every place that
+/// declines a relocation reports through this so the wording, the ABI
+/// name and the located-at fields are the same wherever the refusal
+/// comes from.
+pub(crate) struct RelocSite<'a> {
+    pub origin: RelocOrigin<'a>,
+    pub machine: NativeMachine,
+    pub rtype: u32,
+    /// Referenced symbol, or a stand-in when the entry names a section.
+    pub symbol: &'a str,
+    /// Offset within the origin's family blob.
+    pub offset: u64,
+}
+
+impl RelocSite<'_> {
+    /// `<object>(<section>+<offset>)`, the way GNU ld locates a site.
+    pub(crate) fn locate(&self) -> String {
+        let obj = if self.origin.source.is_empty() {
+            "<merged image>"
+        } else {
+            self.origin.source
+        };
+        let sec = self
+            .origin
+            .sections
+            .iter()
+            .find(|s| {
+                Some(s.family) == self.origin.family
+                    && self.offset >= s.offset
+                    && self.offset < s.offset + s.size.max(1)
+            })
+            .map_or(self.origin.label, |s| s.name.as_str());
+        format!("{obj}({sec}+{:#x})", self.offset)
+    }
+
+    /// An input carrying a relocation form the linker has no patcher
+    /// for is unsupported input, not a broken invariant.
+    pub(crate) fn unsupported(&self) -> C5Error {
+        self.link_err(&format!(
+            "unsupported {} against symbol `{}`",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
+    /// A resolved value the relocation's field cannot hold. GNU ld
+    /// makes this a link error rather than truncating, and so does
+    /// badc: a silently narrowed address is a miscompile.
+    pub(crate) fn truncated(&self, value: i64) -> C5Error {
+        self.link_err(&format!(
+            "relocation truncated to fit: {} against symbol `{}` ({value:#x})",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
+    /// A resolved value whose alignment the relocation's field cannot
+    /// represent, e.g. an odd displacement in a word-scaled immediate.
+    pub(crate) fn misaligned(&self, value: i64, scale: u32) -> C5Error {
+        self.link_err(&format!(
+            "misaligned relocation: {} against symbol `{}` resolves to {value:#x}, not a \
+             multiple of {scale}",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
+    fn link_err(&self, msg: &str) -> C5Error {
+        C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+            "{}: {msg}",
+            self.locate()
+        )))
+    }
+}
+
 /// Which section a symbol's value lives in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeSymSection {

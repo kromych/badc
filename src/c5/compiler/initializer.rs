@@ -2294,28 +2294,33 @@ impl Compiler {
     /// named or anonymous -- contributes its first member's count
     /// only (6.7.8p17: one initializer, for the first named member).
     pub(super) fn struct_flat_init_slots(&self, struct_id: usize) -> usize {
-        let fields = self.structs[struct_id].fields.clone();
         let is_union = self.structs[struct_id].is_union;
+        let n = self.structs[struct_id].fields.len();
         let mut total = 0usize;
-        let mut i = 0;
-        while i < fields.len() && (!is_union || i == 0) {
-            let f = &fields[i];
-            let elem = if self.is_traversable_aggregate_ty(f.ty) {
-                self.struct_flat_init_slots(struct_id_of(f.ty))
+        let mut i = 0usize;
+        while i < n {
+            // A promoted anonymous member is one member of this aggregate,
+            // however many entries it contributed, and its own type says how
+            // many slots it takes.
+            if let Some(m) = self.anon_member_starting_at(struct_id, i) {
+                total += self.struct_flat_init_slots(m.inner);
+                i = m.first as usize + m.count as usize;
             } else {
-                1
-            };
-            total += if f.array_size > 0 {
-                (f.array_size as usize) * elem
-            } else {
-                elem
-            };
-            let group = f.anon_union_group;
-            i += 1;
-            if group != 0 {
-                while i < fields.len() && fields[i].anon_union_group == group {
-                    i += 1;
-                }
+                let f = &self.structs[struct_id].fields[i];
+                let elem = if self.is_traversable_aggregate_ty(f.ty) {
+                    self.struct_flat_init_slots(struct_id_of(f.ty))
+                } else {
+                    1
+                };
+                total += if f.array_size > 0 {
+                    (f.array_size as usize) * elem
+                } else {
+                    elem
+                };
+                i += 1;
+            }
+            if is_union {
+                break;
             }
         }
         total

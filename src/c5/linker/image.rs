@@ -935,7 +935,9 @@ fn patch_data_refs(
         // `text_offset` derives from an untrusted object's r_offset, so
         // validate the field's byte range before indexing rather than
         // panicking on the slice bound.
-        let width = abs_field(machine, r.rtype).map_or(4, |(w, _)| w as usize);
+        let width = abs_field(machine, r.rtype)
+            .or_else(|| super::link::pcrel_data_field(machine, r.rtype))
+            .map_or(4, |(w, _)| w as usize);
         if site.checked_add(width).is_none_or(|end| end > text.len()) {
             return Err(err(&format!(
                 "data-ref reloc patch offset {site:#x} past end of text (len {})",
@@ -975,6 +977,17 @@ fn patch_data_refs(
             let mut w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
             w = (w & !mask) | (((units as u32) << lsb) & mask);
             text[site..site + 4].copy_from_slice(&w.to_le_bytes());
+            continue;
+        }
+        // A `.long x - .` / `.quad x - .` word in an executable
+        // section: `S + A - P` once both ends have runtime addresses.
+        if let Some((bytes, check)) = super::link::pcrel_data_field(machine, r.rtype) {
+            let disp = target_vaddr - site_vaddr as i64;
+            if !check.admits(disp, bytes) {
+                return Err(fail(&|rs| rs.truncated(disp)));
+            }
+            let n = bytes as usize;
+            text[site..site + n].copy_from_slice(&disp.to_le_bytes()[..n]);
             continue;
         }
         // The absolute forms: `S + A` as a runtime address, which this

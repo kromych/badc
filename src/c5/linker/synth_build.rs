@@ -842,7 +842,11 @@ fn project_aarch64_pending(
         return Ok(());
     }
     match reloc.rtype {
-        R_AARCH64_CALL26 => Err(synth_err(
+        // The PLT pass drains every import call; one still here is a
+        // broken invariant. A parked *section* reference is not: it
+        // reached a target whose runtime address only the writer
+        // knows, and this writer has no fixup that carries it.
+        R_AARCH64_CALL26 if reloc.target_section == NativeSymSection::Undef => Err(synth_err(
             "synthesizer: R_AARCH64_CALL26 still pending after PLT pass \
              -- emit_aarch64_plt should have drained it",
         )),

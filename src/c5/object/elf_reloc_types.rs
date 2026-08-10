@@ -136,6 +136,28 @@ impl AbsCheck {
     }
 }
 
+/// Byte width and overflow rule of the plain data field a
+/// PC-relative relocation writes `S + A - P` into -- the `.long x - .`
+/// / `.quad x - .` forms, as opposed to an instruction immediate.
+/// AAELF64 checks `PREL32` the way it checks `ABS32`.
+pub(crate) fn aarch64_pcrel_data_field(rtype: u32) -> Option<(u32, AbsCheck)> {
+    match rtype {
+        R_AARCH64_PREL64 => Some((8, AbsCheck::None)),
+        R_AARCH64_PREL32 => Some((4, AbsCheck::SignedOrUnsigned)),
+        _ => None,
+    }
+}
+
+/// x86_64 counterpart of [`aarch64_pcrel_data_field`]. `R_X86_64_PC32`
+/// is an instruction displacement rather than a data word, so it keeps
+/// its own patcher.
+pub(crate) fn x86_64_pcrel_data_field(rtype: u32) -> Option<(u32, AbsCheck)> {
+    match rtype {
+        R_X86_64_PC64 => Some((8, AbsCheck::None)),
+        _ => None,
+    }
+}
+
 /// Byte width and overflow rule of the field an absolute x86_64
 /// relocation writes `S + A` into. `None` for every other type.
 /// SysV AMD64 psABI table 4.10: `R_X86_64_32` zero-extends,

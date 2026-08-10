@@ -35,13 +35,15 @@ use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // `R_X86_64_REX_GOTPCRELX` is the relaxable variant of GOTPCREL marking
 // a `REX mov reg, [rip+disp32]` GOT load (psABI B.2); emitted by c5's
 // writer and other toolchains.
+use crate::c5::object::elf_reloc_types::AbsCheck;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
     R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC,
     R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12,
     R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF64,
     R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
-    R_X86_64_TPOFF32, aarch64_ldst_lo12_scale, aarch64_pcrel_imm_field, x86_64_abs_field,
+    R_X86_64_TPOFF32, aarch64_ldst_lo12_scale, aarch64_pcrel_data_field, aarch64_pcrel_imm_field,
+    x86_64_abs_field, x86_64_pcrel_data_field,
 };
 
 /// A relocation whose site reads a GOT slot: the value it wants is the
@@ -2568,6 +2570,14 @@ fn apply_reloc(
     if site.machine == NativeMachine::Aarch64 && aarch64_pcrel_imm_field(site.rtype).is_some() {
         return patch_aarch64_pcrel(text, patch_offset, target, site);
     }
+    // A `.long x - .` / `.quad x - .` word inside an executable
+    // section. Its value is a distance, so the merged offsets it is
+    // computed from carry it without the image base.
+    if let Some((width, check)) = pcrel_data_field(site.machine, site.rtype) {
+        check_patch_bounds(text, patch_offset, width as usize)?;
+        let disp = target - patch_offset as i64;
+        return write_pcrel_field(&mut text[patch_offset..], disp, width, check, site);
+    }
     match (site.machine, site.rtype) {
         (NativeMachine::X86_64, R_X86_64_PLT32) | (NativeMachine::X86_64, R_X86_64_PC32) => {
             patch_x86_64_pc32(text, patch_offset, target, site)
@@ -2582,6 +2592,32 @@ fn apply_reloc(
         // patcher for is an unsupported input, not a broken invariant.
         _ => Err(site.unsupported()),
     }
+}
+
+/// Width and overflow rule of the plain data field a PC-relative
+/// relocation writes `S + A - P` into, for either machine.
+pub(crate) fn pcrel_data_field(machine: NativeMachine, rtype: u32) -> Option<(u32, AbsCheck)> {
+    match machine {
+        NativeMachine::X86_64 => x86_64_pcrel_data_field(rtype),
+        NativeMachine::Aarch64 => aarch64_pcrel_data_field(rtype),
+    }
+}
+
+/// Store a PC-relative displacement into a `width`-byte field,
+/// rejecting one the field's overflow rule does not admit.
+pub(crate) fn write_pcrel_field(
+    dst: &mut [u8],
+    disp: i64,
+    width: u32,
+    check: AbsCheck,
+    site: &RelocSite<'_>,
+) -> Result<(), C5Error> {
+    if !check.admits(disp, width) {
+        return Err(site.truncated(disp));
+    }
+    let n = width as usize;
+    dst[..n].copy_from_slice(&disp.to_le_bytes()[..n]);
+    Ok(())
 }
 
 /// Write `(target - offset) / scale` into the contiguous signed
@@ -2675,6 +2711,7 @@ fn needs_image_base(machine: NativeMachine, rtype: u32) -> bool {
 /// then only fire when a badc invariant broke.
 fn parked_reloc_supported(machine: NativeMachine, rtype: u32) -> bool {
     needs_image_base(machine, rtype)
+        || pcrel_data_field(machine, rtype).is_some()
         || match machine {
             NativeMachine::Aarch64 => aarch64_pcrel_imm_field(rtype).is_some(),
             NativeMachine::X86_64 => matches!(rtype, R_X86_64_PC32 | R_X86_64_PLT32),
@@ -2862,6 +2899,27 @@ mod tests {
             patch_aarch64_pcrel(&mut text, 0, 2, &s)
                 .expect_err("an unaligned displacement has no encoding");
         }
+    }
+
+    /// A `.long x - .` / `.quad x - .` word inside `.text`. GNU ld
+    /// 2.46.1 wrote `2c 00 10 00` and `28 00 10 00 00 00 00 00` for
+    /// `gdata` at 0x500030 with the words at 0x400004 and 0x400008.
+    #[test]
+    fn aarch64_pcrel_data_words_match_gnu_ld() {
+        use crate::c5::object::elf_reloc_types::{R_AARCH64_PREL32, R_AARCH64_PREL64};
+        let mut text = alloc::vec![0u8; 0x20];
+        let s32 = site(NativeMachine::Aarch64, R_AARCH64_PREL32, 4);
+        apply_reloc(&mut text, 4, 0x10_0030, &s32).expect("PREL32 in text applies");
+        assert_eq!(text[4..8], [0x2c, 0x00, 0x10, 0x00]);
+        let s64 = site(NativeMachine::Aarch64, R_AARCH64_PREL64, 8);
+        apply_reloc(&mut text, 8, 0x10_0030, &s64).expect("PREL64 in text applies");
+        assert_eq!(
+            text[8..16],
+            [0x28, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00]
+        );
+        // AAELF64 checks PREL32 as `-2^31 <= X < 2^32`.
+        apply_reloc(&mut text, 4, 0x1_0000_0004, &s32)
+            .expect_err("a displacement past 32 bits is a link error");
     }
 
     /// An unsupported type names the ABI type, the symbol and the

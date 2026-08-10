@@ -2037,6 +2037,7 @@ pub(crate) fn expand_asm_gas_macros(
         .collect();
     let mut st = GasExpandState {
         exported: gas_exported_names(&stmts),
+        forward_set: gas_forward_set_names(&stmts),
         ..Default::default()
     };
     let mut out = alloc::string::String::with_capacity(text.len());
@@ -2059,15 +2060,43 @@ struct GasExpandState {
     /// defines the absolute symbol the declaration promises; folding it
     /// away would leave the declaration naming nothing.
     exported: alloc::collections::BTreeSet<alloc::string::String>,
+    /// Names a `.set` assigns after an earlier statement already used them.
+    /// Folding such an assignment away would leave the earlier use naming
+    /// nothing, so it stays in the stream for the section layer to define.
+    forward_set: alloc::collections::BTreeSet<alloc::string::String>,
 }
 
 impl GasExpandState {
-    /// Re-emit a folded assignment when its name carries external linkage.
+    /// Re-emit a folded assignment whose name a reader still needs: one with
+    /// external linkage, or one an earlier statement already referenced.
     fn keep_exported_set(&self, name: &str, value: i64, out: &mut alloc::string::String) {
-        if self.exported.contains(name) {
+        if self.exported.contains(name) || self.forward_set.contains(name) {
             out.push_str(&alloc::format!(".set {name}, {value}\n"));
         }
     }
+}
+
+/// Names a `.set` / `.equ` assigns after an earlier statement referenced
+/// them. GNU as resolves such a reference against the later assignment;
+/// folding the assignment away would leave the reference undefined.
+fn gas_forward_set_names(
+    stmts: &[alloc::string::String],
+) -> alloc::collections::BTreeSet<alloc::string::String> {
+    let ident = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$');
+    let mut used: alloc::collections::BTreeSet<&str> = alloc::collections::BTreeSet::new();
+    let mut out = alloc::collections::BTreeSet::new();
+    for s in stmts {
+        let (_, body) = split_leading_labels(s);
+        let (tok, rest) = split_first_token(body);
+        if matches!(tok, ".equ" | ".set" | ".equiv")
+            && let Some((sym, _)) = rest.split_once(',')
+            && used.contains(sym.trim())
+        {
+            out.insert(alloc::string::String::from(sym.trim()));
+        }
+        used.extend(body.split(|c: char| !ident(c)).filter(|t| !t.is_empty()));
+    }
+    out
 }
 
 /// The `.globl` / `.global` / `.weak` names a statement list declares.
@@ -9763,6 +9792,25 @@ mod asm_section_tests {
         // A character constant is one argument, separators included, and
         // binds as its value: `SHOW 'r', ' ', ':'` measures `[114][32][58]`.
         assert_eq!(go("SHOW 'r', ' ', ':'"), ".ascii \"[114][32][58]\"\n");
+    }
+
+    /// A `.set` folds into the expander's symbol table, which substitutes it
+    /// into what follows. A statement that referenced the name earlier is
+    /// already past, so the assignment stays in the stream for the section
+    /// layer to define -- `arch/x86/boot/header.S` reads `textsize` in its PE
+    /// header and assigns it further down.
+    #[test]
+    fn a_set_referenced_before_its_assignment_stays_in_the_stream() {
+        let out = rept(".long textsize\n.set textsize, 0x1234\n.long textsize\n").unwrap();
+        assert_eq!(
+            out, ".long textsize\n.set textsize, 4660\n.long 4660\n",
+            "{out}"
+        );
+        // One referenced only after its assignment still folds away.
+        assert_eq!(
+            rept(".set only_after, 7\n.long only_after\n").unwrap(),
+            ".long 7\n"
+        );
     }
 
     /// A macro body is re-scanned after substitution, so a `;` that arrives

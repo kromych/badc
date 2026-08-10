@@ -11120,6 +11120,36 @@ mod code_mode_tests {
         );
     }
 
+    /// Which same-section references keep a relocation, measured against GNU
+    /// as 2.46.1. A local name resolves in place; a global or weak one keeps
+    /// the relocation so the link binds the definition that wins. The relaxed
+    /// jump is the one exception: `jmp` / `jcc` to a same-section target
+    /// resolves unless the symbol is weak.
+    #[test]
+    fn same_section_binding_decides_the_relocation_like_gnu_as() {
+        let defs = ".text\n.Lloc:\nret\n.globl glob\nglob:\nret\n.weak wk\nwk:\nret\n";
+        let relocs_of = |body: &str| assemble_relocs(&alloc::format!("{defs}{body}")).1;
+        let names = |body: &str| -> alloc::vec::Vec<alloc::string::String> {
+            relocs_of(body).into_iter().map(|r| r.3).collect()
+        };
+        // A local target resolves in place, whatever the form.
+        assert!(names("call .Lloc\n").is_empty());
+        assert!(names("jmp .Lloc\n").is_empty());
+        assert!(names("lea .Lloc(%rip), %rax\n").is_empty());
+        // A call or an address-of naming a global or weak symbol relocates.
+        assert_eq!(names("call glob\n"), ["glob"]);
+        assert_eq!(names("call wk\n"), ["wk"]);
+        assert_eq!(names("lea glob(%rip), %rax\n"), ["glob"]);
+        // The relaxed jump resolves a global target and relocates a weak one.
+        assert!(names("jmp glob\n").is_empty());
+        assert!(names("je glob\n").is_empty());
+        assert_eq!(names("jmp wk\n"), ["wk"]);
+        // A difference of two symbols folds whatever the binding, as GNU as
+        // folds it: `.long glob - .` deposits a constant.
+        assert!(names(".long glob - .\n").is_empty());
+        assert!(names(".long wk - .\n").is_empty());
+    }
+
     /// `. = expr` moves the location counter, as `.org` does; the kernel's
     /// kexec exception-vector table places its 6-byte entries that way.
     #[test]

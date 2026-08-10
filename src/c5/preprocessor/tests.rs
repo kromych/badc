@@ -806,6 +806,78 @@ fn if_string_comparison_keeps_slashes_inside_literal() {
     assert!(!out.contains("int no;"), "{out:?}");
 }
 
+/// C99 6.4.4.4 and 6.4.5: a character constant or string literal is
+/// bounded by its line. Phase 3 used to scan an unterminated quote to
+/// the next matching quote or to end of file, so an apostrophe in an
+/// assembly `#` comment left every following comment unstripped and
+/// carried it into macro bodies.
+#[test]
+fn unterminated_quote_stops_at_end_of_line() {
+    let src = "# Don't do it\n\
+               #define XLF_KERNEL_64 (1<<0)\n\
+               # define XLF0 XLF_KERNEL_64\t/* 64-bit kernel */\n\
+               \t.word XLF0\n";
+    let out = process(src);
+    let last = out
+        .lines()
+        .rfind(|l| !l.trim().is_empty())
+        .expect("output has a content line");
+    assert_eq!(last, "\t.word (1<<0)", "{out}");
+    assert!(!out.contains("64-bit kernel"), "comment leaked: {out}");
+}
+
+/// The bound applies to the primitive: text after an unterminated quote
+/// is line-local, so the next line's comment is stripped as usual.
+#[test]
+fn strip_c_comments_bounds_literals_at_the_line() {
+    assert_eq!(strip_c_comments("a 'b\n/* c */ d\n"), "a 'b\n  d\n");
+    assert_eq!(strip_c_comments("a \"b\n// c\nd\n"), "a \"b\n \nd\n");
+    // A `\` at end of line escapes nothing; phase 2 already spliced
+    // every continuation away.
+    assert_eq!(strip_c_comments("'a\\\n/* c */ b\n"), "'a\\\n  b\n");
+}
+
+/// An unterminated quote runs to end of line and its text passes
+/// through verbatim: comments are not opened and macro names are not
+/// expanded behind it. Matches `gcc -E -x assembler-with-cpp`.
+#[test]
+fn unterminated_quote_shields_the_rest_of_its_line() {
+    let out = process("#define ONE (1<<0)\n\t.byte 'a /* c */ ONE\n\t.byte ONE\n");
+    assert!(out.contains("\t.byte 'a /* c */ ONE"), "{out}");
+    assert!(out.contains("\t.byte (1<<0)"), "{out}");
+}
+
+/// Terminated literals keep working in assembly text: a character
+/// constant in a macro body expands as one, and an apostrophe inside a
+/// string is literal content.
+#[test]
+fn char_constants_still_lex_in_assembly_text() {
+    let src = "#define STR 'q'\n\
+               #define ONE 1\n\
+               \t.byte 'a'\n\
+               \t.byte STR\n\
+               \t.ascii \"it's fine\"\n\
+               \t.byte ONE\n";
+    let out = process(src);
+    assert!(out.contains("\t.byte 'a'"), "{out}");
+    assert!(out.contains("\t.byte 'q'"), "{out}");
+    assert!(out.contains("\t.ascii \"it's fine\""), "{out}");
+    assert!(out.contains("\t.byte 1"), "{out}");
+}
+
+/// C sources are unaffected: a literal spliced across a `\`-newline is
+/// still one literal after phase 2, and an unterminated quote still
+/// reaches the lexer, which is what diagnoses it.
+#[test]
+fn c_literals_are_unaffected_by_the_line_bound() {
+    let out = process("#define S \"ab\\\ncd\"\nconst char *s = S;\n");
+    assert!(out.contains("const char *s = \"abcd\";"), "{out}");
+    let out = process("char c = 'a;\nint x = 1; /* note */\n");
+    assert!(out.contains("char c = 'a;"), "{out}");
+    assert!(out.contains("int x = 1;"), "{out}");
+    assert!(!out.contains("note"), "comment leaked: {out}");
+}
+
 #[test]
 fn ifdef_keeps_active_branch() {
     let src = "#define FOO 1\n#ifdef FOO\nint a;\n#else\nint b;\n#endif\n";

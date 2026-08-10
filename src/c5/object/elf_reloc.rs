@@ -1497,9 +1497,10 @@ pub(super) fn write_relocatable(
             STB_GLOBAL
         }
     };
-    // `__attribute__((visibility("hidden")))` symbols: not preemptible, so
-    // the symtab entry carries STV_HIDDEN and, on x86_64, address-of sites
-    // resolve PC-relative directly instead of through the GOT (below).
+    // `__attribute__((visibility("hidden")))` symbols and asm `.hidden`
+    // names: not preemptible, so the symtab entry carries STV_HIDDEN and, on
+    // x86_64, address-of sites resolve PC-relative directly instead of
+    // through the GOT (below).
     let hidden_names: alloc::collections::BTreeSet<&str> = {
         use crate::c5::token::Token;
         program
@@ -1511,6 +1512,7 @@ pub(super) fn write_relocatable(
                     && !s.name.is_empty()
             })
             .map(|s| s.link_name())
+            .chain(program.asm_hidden_names.iter().map(|s| s.as_str()))
             .collect()
     };
     let vis_for = |name: &str| -> u8 {
@@ -1770,6 +1772,20 @@ pub(super) fn write_relocatable(
             {
                 asm_extern_names.push(n);
             }
+        }
+    }
+    // A `.hidden` name that surfaces nowhere else still gets an undefined
+    // global entry carrying the visibility, as GNU as emits one.
+    for n in program.asm_hidden_names.iter().map(|s| s.as_str()) {
+        if !defined_fn_names.contains(n)
+            && !program.function_aliases.iter().any(|a| a.name == n)
+            && !defined_data_by_name.contains_key(n)
+            && !asm_defined_labels.contains(n)
+            && !user_extern_names.contains(&n)
+            && !user_extern_data_names.contains(&n)
+            && !asm_extern_names.contains(&n)
+        {
+            asm_extern_names.push(n);
         }
     }
     // A `.weak` name that surfaces nowhere else still gets a weak undefined
@@ -2111,10 +2127,10 @@ pub(super) fn write_relocatable(
         symbols.push(Elf64Sym {
             st_name: name_offs[asm_label_names_start + j],
             st_info: pack_sym_info(STB_LOCAL, l.st_type),
+            st_other: vis_for(l.name),
             st_shndx: l.shndx,
             st_value: l.value,
             st_size: l.st_size,
-            ..Default::default()
         });
     }
     // Main-stream inline-asm labels a directive left local; a same-name C
@@ -2196,10 +2212,10 @@ pub(super) fn write_relocatable(
         symbols.push(Elf64Sym {
             st_name: name_offs[asm_label_names_start + j],
             st_info: pack_sym_info(if l.weak { STB_WEAK } else { STB_GLOBAL }, l.st_type),
+            st_other: vis_for(l.name),
             st_shndx: l.shndx,
             st_value: l.value,
             st_size: l.st_size,
-            ..Default::default()
         });
     }
     // Main-stream labels a `.globl` / `.weak` rebound.
@@ -2948,7 +2964,7 @@ pub(super) fn write_relocatable(
                 };
                 use crate::c5::codegen::ssa::emit_common::AsmRelocKind as RK;
                 let rtype = match r.kind {
-                    RK::Data => match (abi, r.pcrel, r.width) {
+                    RK::Data | RK::JumpRel => match (abi, r.pcrel, r.width) {
                         // A replacement instruction's direct `call` / `jmp` to a
                         // symbol reaches it through the PLT slot, like a compiler-
                         // emitted call: `R_X86_64_PLT32`, not a data `PC32`.
@@ -2996,6 +3012,7 @@ pub(super) fn write_relocatable(
                     RK::A64AdrpPage21 => R_AARCH64_ADR_PREL_PG_HI21,
                     RK::A64AddLo12 => R_AARCH64_ADD_ABS_LO12_NC,
                     RK::A64LdrLit19 => R_AARCH64_LD_PREL_LO19,
+                    RK::Explicit(t) => t,
                     RK::A64LdstLo12(sz) => match sz {
                         1 => R_AARCH64_LDST8_ABS_LO12_NC,
                         2 => R_AARCH64_LDST16_ABS_LO12_NC,
@@ -4667,6 +4684,7 @@ mod tests {
             data: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
+            asm_hidden_names: Vec::new(),
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),

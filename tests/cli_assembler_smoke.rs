@@ -195,11 +195,7 @@ fn a_dot_s_unit_answers_dash_mm_without_assembling() {
 #[test]
 fn an_unimplemented_construct_is_named_and_no_object_is_written() {
     let d = dir("diagnosed");
-    write(
-        &d,
-        "bad.s",
-        "\t.text\n\t.reloc 0, R_X86_64_NONE, foo\n\tnop\n",
-    );
+    write(&d, "bad.s", "\t.text\n\t.symver foo, foo@VERS_1\n\tnop\n");
     let (ok, text) = run(
         &d,
         &[
@@ -213,10 +209,153 @@ fn an_unimplemented_construct_is_named_and_no_object_is_written() {
     );
     assert!(!ok, "an unimplemented directive must fail the unit: {text}");
     assert!(
-        text.contains(".reloc"),
+        text.contains(".symver"),
         "the diagnostic must name the construct: {text}"
     );
     assert!(!d.join("bad.o").exists(), "no object on a failed unit");
+}
+
+/// `st_other` visibility of a symbol, or `None` when it is absent.
+fn visibility(bytes: &[u8], want: &str) -> Option<u8> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum) = (u16at(0x3a), u16at(0x3c));
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        if u32at(sh + 4) != 2 {
+            continue;
+        }
+        let off = u64at(sh + 0x18) as usize;
+        let size = u64at(sh + 0x20) as usize;
+        let stroff = u64at(shoff + u32at(sh + 0x28) * shentsize + 0x18) as usize;
+        for e in (0..size).step_by(24) {
+            let sym = off + e;
+            let n = stroff + u32at(sym);
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+            if &bytes[n..n + end] == want.as_bytes() {
+                return Some(bytes[sym + 5] & 3);
+            }
+        }
+    }
+    None
+}
+
+#[test]
+fn hidden_visibility_reaches_the_symbol_table() {
+    // GNU as 2.46.1 on the same source: `_bss` and `_ebss` are
+    // `GLOBAL HIDDEN UND`, and a defined `.hidden` symbol keeps its
+    // definition with STV_HIDDEN. The kernel's boot decompressor marks its
+    // linker-script symbols this way.
+    let d = dir("hidden");
+    write(
+        &d,
+        "vis.s",
+        "\t.text\n\t.hidden _bss\n\t.hidden _ebss\n\t.globl vis\n\t.hidden vis\nvis:\n\
+         \t.long _bss - .\n",
+    );
+    run_ok(
+        &d,
+        &[
+            "-q",
+            "-c",
+            &format!("--target={TARGET}"),
+            "vis.s",
+            "-o",
+            "vis.o",
+        ],
+    );
+    let bytes = std::fs::read(d.join("vis.o")).unwrap();
+    const STV_HIDDEN: u8 = 2;
+    assert_eq!(visibility(&bytes, "vis"), Some(STV_HIDDEN));
+    assert_eq!(visibility(&bytes, "_bss"), Some(STV_HIDDEN));
+    // A `.hidden` name that surfaces nowhere else still gets an undefined
+    // entry carrying the visibility, as GNU as emits one.
+    assert_eq!(visibility(&bytes, "_ebss"), Some(STV_HIDDEN));
+}
+
+#[test]
+fn reloc_directive_places_a_relocation_of_the_named_type() {
+    // `.reloc offset, TYPE, expr` measures the offset from the section
+    // start, not the location counter, and takes the addend literally.
+    // GNU as 2.46.1 on this source emits, in `.rela.myrel`, PC32 at 0 with
+    // addend 0x10, PC32 at 4 with 0x20, 32 at 8, and 64 at 12 with 1. The
+    // arm64 hypervisor relocation table is built entirely out of this.
+    let d = dir("reloc");
+    let (kind32, kind64) = if cfg!(target_arch = "aarch64") {
+        ("R_AARCH64_PREL32", "R_AARCH64_ABS64")
+    } else {
+        ("R_X86_64_PC32", "R_X86_64_64")
+    };
+    write(
+        &d,
+        "rel.s",
+        &format!(
+            "\t.section .myrel, \"a\"\n\t.globl tgt\n\t.word 0\n\
+             \t.reloc 0, {kind32}, tgt + 0x10\n\t.word 0\n\
+             \t.reloc 4, {kind32}, tgt + 0x20\n\t.quad 0\n\
+             \t.reloc 8, {kind64}, tgt + 1\n"
+        ),
+    );
+    run_ok(
+        &d,
+        &[
+            "-q",
+            "-c",
+            &format!("--target={TARGET}"),
+            "rel.s",
+            "-o",
+            "rel.o",
+        ],
+    );
+    let bytes = std::fs::read(d.join("rel.o")).unwrap();
+    let want32 = if cfg!(target_arch = "aarch64") {
+        261
+    } else {
+        2
+    };
+    let want64 = if cfg!(target_arch = "aarch64") {
+        257
+    } else {
+        1
+    };
+    assert_eq!(
+        relocs(&bytes, ".rela.myrel"),
+        [(0, want32, 0x10), (4, want32, 0x20), (8, want64, 1)]
+    );
+}
+
+/// `(offset, type, addend)` of every entry of a named RELA section.
+fn relocs(bytes: &[u8], want: &str) -> Vec<(u64, u32, i64)> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum, shstrndx) = (u16at(0x3a), u16at(0x3c), u16at(0x3e));
+    let names = u64at(shoff + shstrndx * shentsize + 0x18) as usize;
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let n = names + u32at(sh);
+        let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+        if &bytes[n..n + end] != want.as_bytes() {
+            continue;
+        }
+        let off = u64at(sh + 0x18) as usize;
+        let size = u64at(sh + 0x20) as usize;
+        return (0..size)
+            .step_by(24)
+            .map(|e| {
+                let r = off + e;
+                (
+                    u64at(r),
+                    (u64at(r + 8) & 0xffff_ffff) as u32,
+                    u64at(r + 16) as i64,
+                )
+            })
+            .collect();
+    }
+    Vec::new()
 }
 
 #[test]

@@ -242,6 +242,11 @@ impl Compiler {
                             self.asm_weak_names.push(name.clone());
                         }
                     }
+                    engine::AsmSectionItem::Hidden(name) => {
+                        if !self.asm_hidden_names.contains(name) {
+                            self.asm_hidden_names.push(name.clone());
+                        }
+                    }
                     engine::AsmSectionItem::SymSet { name, target } => {
                         // A later assignment to the same name wins, as in
                         // GNU as.

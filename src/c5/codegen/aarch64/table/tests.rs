@@ -516,17 +516,152 @@ fn fp_load_store() {
     };
     assert_eq!(enc("ldr", &[d(0), mr(None)]), 0xFC62_6820);
     assert_eq!(enc("str", &[d(0), mr(Some(3))]), 0xFC22_7820);
-    // A misaligned immediate offset is rejected.
-    assert!(encode("ldr", &[d(0), mem(1, 4)]).is_err());
+    // A misaligned offset falls back to the unscaled form.
+    assert_eq!(enc("ldr", &[d(0), mem(1, 4)]), 0xFC40_4020); // ldur d0, [x1, #4]
     // The 128-bit `qN` register: immediate offset scaled by 16, register offset
     // with the size-4 shift.
     let q = Opnd::QReg;
     assert_eq!(enc("ldr", &[q(0), mem(1, 0)]), 0x3DC0_0020);
     assert_eq!(enc("ldr", &[q(0), mem(1, 16)]), 0x3DC0_0420);
     assert_eq!(enc("str", &[q(0), mem(1, 32)]), 0x3D80_0820);
+    assert_eq!(enc("ldr", &[q(0), mem(1, 65520)]), 0x3DFF_FC20); // max uimm12
     assert_eq!(enc("ldr", &[q(0), mr(None)]), 0x3CE2_6820);
     assert_eq!(enc("ldr", &[q(0), mr(Some(4))]), 0x3CE2_7820);
-    assert!(encode("ldr", &[q(0), mem(1, 8)]).is_err()); // not a multiple of 16
+    assert_eq!(enc("ldr", &[q(0), mem(1, 8)]), 0x3CC0_8020); // ldur q0, [x1, #8]
+    // The byte and half scalar views `bN`/`hN`; a written `lsl #0` on a byte
+    // access is the S = 1 form, as the assembler encodes it.
+    let b = |num: u8| Opnd::VScalar { num, size: 0 };
+    let h = |num: u8| Opnd::VScalar { num, size: 1 };
+    assert_eq!(enc("ldr", &[b(0), mem(1, 1)]), 0x3D40_0420);
+    assert_eq!(enc("str", &[b(0), mem(1, 3)]), 0x3D00_0C20);
+    assert_eq!(enc("ldr", &[h(0), mem(1, 2)]), 0x7D40_0420);
+    assert_eq!(enc("str", &[h(0), mem(1, 4)]), 0x7D00_0820);
+    assert_eq!(enc("ldr", &[b(0), mr(None)]), 0x3C62_6820);
+    assert_eq!(enc("ldr", &[b(0), mr(Some(0))]), 0x3C62_7820);
+    assert_eq!(enc("ldr", &[h(0), mr(Some(1))]), 0x7C62_7820);
+    assert_eq!(enc("str", &[h(0), mr(None)]), 0x7C22_6820);
+    assert_eq!(enc("ldr", &[h(0), mem(1, 1)]), 0x7C40_1020); // ldur h0, [x1, #1]
+}
+
+/// An FP/SIMD offset that is negative, misaligned, or beyond the scaled uimm12
+/// range takes the unscaled simm9 group, which `ldur`/`stur` also name
+/// directly. Words match GNU as.
+#[test]
+fn fp_load_store_unscaled() {
+    let q = Opnd::QReg;
+    let d = |num: u8| Opnd::VReg { num, is_d: true };
+    let s = |num: u8| Opnd::VReg { num, is_d: false };
+    let b = |num: u8| Opnd::VScalar { num, size: 0 };
+    let h = |num: u8| Opnd::VScalar { num, size: 1 };
+    let mem = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
+    // Negative offsets written as `ldr`/`str`.
+    assert_eq!(enc("ldr", &[q(0), mem(1, -16)]), 0x3CDF_0020); // ldr q0, [x1, #-16]
+    assert_eq!(enc("str", &[q(0), mem(1, -16)]), 0x3C9F_0020); // str q0, [x1, #-16]
+    assert_eq!(enc("ldr", &[q(0), mem(1, -1)]), 0x3CDF_F020); // ldr q0, [x1, #-1]
+    assert_eq!(enc("ldr", &[q(0), mem(1, -256)]), 0x3CD0_0020); // min simm9
+    assert_eq!(enc("ldr", &[d(0), mem(1, -8)]), 0xFC5F_8020); // ldr d0, [x1, #-8]
+    assert_eq!(enc("ldr", &[s(0), mem(1, -4)]), 0xBC5F_C020); // ldr s0, [x1, #-4]
+    assert_eq!(enc("str", &[s(0), mem(1, -4)]), 0xBC1F_C020); // str s0, [x1, #-4]
+    assert_eq!(enc("ldr", &[b(0), mem(1, -1)]), 0x3C5F_F020); // ldr b0, [x1, #-1]
+    assert_eq!(enc("ldr", &[h(0), mem(1, -2)]), 0x7C5F_E020); // ldr h0, [x1, #-2]
+    assert_eq!(enc("ldr", &[q(31), mem(31, -256)]), 0x3CD0_03FF); // ldr q31, [sp, #-256]
+    // A positive offset inside simm9 but not a multiple of the access size.
+    assert_eq!(enc("ldr", &[q(0), mem(1, 255)]), 0x3CCF_F020); // ldr q0, [x1, #255]
+    // The `ldur`/`stur` spellings name the same encoding, aligned or not.
+    assert_eq!(enc("ldur", &[q(0), mem(1, -16)]), 0x3CDF_0020);
+    assert_eq!(enc("ldur", &[q(0), mem(1, 16)]), 0x3CC1_0020);
+    assert_eq!(enc("stur", &[q(0), mem(1, 16)]), 0x3C81_0020);
+    assert_eq!(enc("ldur", &[b(3), mem(2, -3)]), 0x3C5F_D043);
+    assert_eq!(enc("ldur", &[h(4), mem(2, -6)]), 0x7C5F_A044);
+    assert_eq!(enc("stur", &[s(5), mem(2, -4)]), 0xBC1F_C045);
+    assert_eq!(enc("ldur", &[d(6), mem(2, -8)]), 0xFC5F_8046);
+    // An offset that fits neither form has no encoding.
+    assert!(encode("str", &[q(7), mem(0, 300)]).is_err());
+    assert!(encode("ldr", &[q(0), mem(1, 65536)]).is_err());
+    assert!(encode("ldr", &[d(0), mem(1, -257)]).is_err());
+    // `ldur`/`stur` have no register-offset or writeback form.
+    assert!(
+        encode(
+            "ldur",
+            &[
+                q(0),
+                Opnd::MemReg {
+                    base: 1,
+                    index: 2,
+                    option: 3,
+                    shift: None,
+                },
+            ],
+        )
+        .is_err()
+    );
+    assert!(
+        encode(
+            "stur",
+            &[
+                q(0),
+                Opnd::Mem {
+                    base: 1,
+                    off: 16,
+                    pre: true,
+                },
+            ],
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn fp_load_store_writeback() {
+    let q = Opnd::QReg;
+    let d = |num: u8| Opnd::VReg { num, is_d: true };
+    let s = |num: u8| Opnd::VReg { num, is_d: false };
+    let b = |num: u8| Opnd::VScalar { num, size: 0 };
+    let h = |num: u8| Opnd::VScalar { num, size: 1 };
+    // Post-index: the address operand carries no offset, the trailing
+    // immediate does. imm9 is an unscaled signed byte count.
+    let post = |base: u8| Opnd::Mem {
+        base,
+        off: 0,
+        pre: false,
+    };
+    let i = Opnd::Imm;
+    assert_eq!(enc("str", &[q(7), post(0), i(16)]), 0x3C81_0407); // str q7, [x0], #16
+    assert_eq!(enc("ldr", &[q(0), post(1), i(16)]), 0x3CC1_0420); // ldr q0, [x1], #16
+    assert_eq!(enc("str", &[q(7), post(0), i(-16)]), 0x3C9F_0407); // str q7, [x0], #-16
+    assert_eq!(enc("str", &[s(2), post(0), i(4)]), 0xBC00_4402); // str s2, [x0], #4
+    assert_eq!(enc("ldr", &[d(3), post(1), i(8)]), 0xFC40_8423); // ldr d3, [x1], #8
+    assert_eq!(enc("str", &[b(4), post(0), i(1)]), 0x3C00_1404); // str b4, [x0], #1
+    assert_eq!(enc("ldr", &[h(5), post(1), i(2)]), 0x7C40_2425); // ldr h5, [x1], #2
+    assert_eq!(enc("str", &[q(31), post(31), i(255)]), 0x3C8F_F7FF); // str q31, [sp], #255
+    // Pre-index: the offset rides the address operand and mode is 11.
+    let pre = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: true,
+    };
+    assert_eq!(enc("str", &[q(7), pre(0, 16)]), 0x3C81_0C07); // str q7, [x0, #16]!
+    assert_eq!(enc("ldr", &[q(0), pre(1, 16)]), 0x3CC1_0C20); // ldr q0, [x1, #16]!
+    assert_eq!(enc("ldr", &[q(31), pre(31, -256)]), 0x3CD0_0FFF); // ldr q31, [sp, #-256]!
+    assert_eq!(enc("str", &[s(0), pre(1, -4)]), 0xBC1F_CC20); // str s0, [x1, #-4]!
+    assert_eq!(enc("ldr", &[d(0), pre(1, -8)]), 0xFC5F_8C20); // ldr d0, [x1, #-8]!
+    assert_eq!(enc("ldr", &[h(0), pre(3, -2)]), 0x7C5F_EC60); // ldr h0, [x3, #-2]!
+    assert_eq!(enc("str", &[b(0), post(2), i(-1)]), 0x3C1F_F440); // str b0, [x2], #-1
+    // imm9 is unscaled and bounded; an offset inside the brackets of a
+    // post-index form has no encoding.
+    assert!(encode("ldr", &[q(31), post(31), i(256)]).is_err());
+    assert!(encode("str", &[q(0), post(1), i(-257)]).is_err());
+    assert!(encode("ldr", &[q(0), pre(1, 256)]).is_err());
+    let mem = |base: u8, off: i64| Opnd::Mem {
+        base,
+        off,
+        pre: false,
+    };
+    assert!(encode("ldr", &[q(0), mem(1, 8), i(16)]).is_err());
 }
 
 #[test]
@@ -613,6 +748,7 @@ fn simd_vector() {
     assert_eq!(t("cmge"), 0x4EA2_3C20);
     assert_eq!(t("cmhi"), 0x6EA2_3420);
     assert_eq!(t("cmhs"), 0x6EA2_3C20);
+    assert_eq!(t("cmtst"), 0x4EA2_8C20);
     assert_eq!(t("smax"), 0x4EA2_6420);
     assert_eq!(t("smin"), 0x4EA2_6C20);
     assert_eq!(t("umax"), 0x6EA2_6420);
@@ -639,6 +775,40 @@ fn simd_vector() {
     assert!(encode("and", &[v(0, 2, true), v(1, 2, true), v(2, 2, true)]).is_err());
     assert_eq!(enc("add", &[x(0), x(1), x(2)]), 0x8B02_0020);
     assert_eq!(enc("bic", &[x(0), x(1), x(2)]), 0x8A22_0020);
+}
+
+/// `cmtst Vd.T, Vn.T, Vm.T` is the U = 0 sibling of the register `cmeq` and
+/// covers every arrangement. Words match GNU as.
+#[test]
+fn simd_cmtst() {
+    let v = |num: u8, size: u8, q: bool| Opnd::VecReg { num, size, q };
+    assert_eq!(
+        enc("cmtst", &[v(0, 0, true), v(7, 0, true), v(8, 0, true)]),
+        0x4E28_8CE0 // cmtst v0.16b, v7.16b, v8.16b
+    );
+    assert_eq!(
+        enc("cmtst", &[v(0, 0, false), v(1, 0, false), v(2, 0, false)]),
+        0x0E22_8C20 // cmtst v0.8b, v1.8b, v2.8b
+    );
+    assert_eq!(
+        enc("cmtst", &[v(0, 1, false), v(1, 1, false), v(2, 1, false)]),
+        0x0E62_8C20 // cmtst v0.4h, v1.4h, v2.4h
+    );
+    assert_eq!(
+        enc("cmtst", &[v(3, 1, true), v(4, 1, true), v(5, 1, true)]),
+        0x4E65_8C83 // cmtst v3.8h, v4.8h, v5.8h
+    );
+    assert_eq!(
+        enc("cmtst", &[v(0, 2, false), v(1, 2, false), v(2, 2, false)]),
+        0x0EA2_8C20 // cmtst v0.2s, v1.2s, v2.2s
+    );
+    assert_eq!(
+        enc("cmtst", &[v(0, 3, true), v(1, 3, true), v(2, 3, true)]),
+        0x4EE2_8C20 // cmtst v0.2d, v1.2d, v2.2d
+    );
+    // `.1d` is reserved and mismatched arrangements have no encoding.
+    assert!(encode("cmtst", &[v(0, 3, false), v(1, 3, false), v(2, 3, false)]).is_err());
+    assert!(encode("cmtst", &[v(0, 2, true), v(1, 2, false), v(2, 2, true)]).is_err());
 }
 
 #[test]
@@ -784,6 +954,31 @@ fn vector_immediate() {
     assert!(encode("movi", &[v(0, 3, true), Opnd::Imm(0x1122)]).is_err());
     assert!(encode("movi", &[v(0, 2, true), Opnd::Imm(256)]).is_err());
     assert!(encode("movi", &[v(0, 2, true), Opnd::Imm(1), Opnd::Lsl(20)]).is_err());
+    // The logical immediates orr/bic share the group with the odd cmodes; bic
+    // sets op (bit 29).
+    let li = |m: &str, d: Opnd, imm: i64, sh: u32| {
+        if sh == 0 {
+            enc(m, &[d, Opnd::Imm(imm)])
+        } else {
+            enc(m, &[d, Opnd::Imm(imm), Opnd::Lsl(sh)])
+        }
+    };
+    assert_eq!(li("orr", v(27, 2, false), 1, 16), 0x0F00_543B); // orr v27.2s, #1, lsl #16
+    assert_eq!(li("orr", v(0, 2, true), 255, 0), 0x4F07_17E0); // orr v0.4s, #255
+    assert_eq!(li("orr", v(1, 1, false), 3, 8), 0x0F00_B461); // orr v1.4h, #3, lsl #8
+    assert_eq!(li("orr", v(2, 1, true), 3, 0), 0x4F00_9462); // orr v2.8h, #3
+    assert_eq!(li("orr", v(0, 2, true), 3, 24), 0x4F00_7460); // orr v0.4s, #3, lsl #24
+    assert_eq!(li("bic", v(27, 2, false), 1, 16), 0x2F00_543B); // bic v27.2s, #1, lsl #16
+    assert_eq!(li("bic", v(0, 2, true), 255, 0), 0x6F07_17E0); // bic v0.4s, #255
+    // Only the half and word arrangements have a logical-immediate form, and
+    // the half one shifts by 0 or 8.
+    assert!(encode("orr", &[v(0, 0, true), Opnd::Imm(3)]).is_err()); // .16b
+    assert!(encode("orr", &[v(0, 3, true), Opnd::Imm(3)]).is_err()); // .2d
+    assert!(encode("bic", &[v(0, 1, true), Opnd::Imm(3), Opnd::Lsl(16)]).is_err());
+    // The three-register vector logical forms keep their encoding.
+    let t = |m: &str| enc(m, &[v(0, 0, true), v(1, 0, true), v(2, 0, true)]);
+    assert_eq!(t("orr"), 0x4EA2_1C20); // orr v0.16b, v1.16b, v2.16b
+    assert_eq!(t("bic"), 0x4E62_1C20); // bic v0.16b, v1.16b, v2.16b
 }
 
 #[test]
@@ -1230,10 +1425,21 @@ fn crypto() {
     let q = Opnd::QReg;
     assert_eq!(enc("sha256h", &[q(0), q(1), v(2, 2)]), 0x5E02_4020);
     assert_eq!(enc("sha256h2", &[q(0), q(1), v(2, 2)]), 0x5E02_5020);
+    // SHA1 hash update: Qd, Sn, Vm.4s; the base word selects the round.
+    let s = |n: u8| Opnd::VReg {
+        num: n,
+        is_d: false,
+    };
+    assert_eq!(enc("sha1c", &[q(12), s(7), v(4, 2)]), 0x5E04_00EC); // sha1c q12, s7, v4.4s
+    assert_eq!(enc("sha1c", &[q(0), s(1), v(2, 2)]), 0x5E02_0020);
+    assert_eq!(enc("sha1p", &[q(0), s(1), v(2, 2)]), 0x5E02_1020);
+    assert_eq!(enc("sha1m", &[q(0), s(1), v(2, 2)]), 0x5E02_2020);
     // Wrong arrangements are rejected (AES needs .16b, SHA needs .4s).
     assert!(encode("aese", &[v(0, 2), v(1, 2)]).is_err());
     assert!(encode("sha256su0", &[v(0, 0), v(1, 0)]).is_err());
     assert!(encode("sha256h", &[q(0), q(1), v(2, 0)]).is_err());
+    assert!(encode("sha1c", &[q(0), s(1), v(2, 3)]).is_err()); // needs .4s
+    assert!(encode("sha1c", &[q(0), q(1), v(2, 2)]).is_err()); // the round value is Sn
 }
 
 #[test]

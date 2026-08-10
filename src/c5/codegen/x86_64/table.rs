@@ -190,6 +190,11 @@ pub(crate) enum Opnd {
         num: u8,
         width: u8,
     },
+    /// A legacy high-byte register `%ah` / `%ch` / `%dh` / `%bh`, held as its
+    /// ModRM field value 4..8. The same field values name `spl` / `bpl` /
+    /// `sil` / `dil` when a REX prefix is present, so an encoding that needs
+    /// one cannot name a high-byte register and is rejected below.
+    HighByteReg(u8),
     Mem {
         base: u8,
         index: Option<u8>,
@@ -231,6 +236,7 @@ impl Opnd {
             | Opnd::RipRel { width, .. }
             | Opnd::AbsMem { width, .. }
             | Opnd::IndexMem { width, .. } => Some(width),
+            Opnd::HighByteReg(_) => Some(1),
             Opnd::Imm(_) => None,
         }
     }
@@ -322,6 +328,7 @@ fn pat_matches(p: OpPat, o: Opnd, opw: u8, opw_known: bool) -> bool {
     match (p, o) {
         (OpPat::Reg(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
         (OpPat::Rm(w), Opnd::Reg { width, .. }) => wbytes(w, opw) == Some(width),
+        (OpPat::Reg(w) | OpPat::Rm(w), Opnd::HighByteReg(_)) => wbytes(w, opw) == Some(1),
         (OpPat::Rm(w), Opnd::Mem { width, .. }) => wbytes(w, opw) == Some(width),
         (
             OpPat::Rm(w),
@@ -499,6 +506,7 @@ fn emit_modrm_mem16(
 fn reg_num(o: Opnd) -> u8 {
     match o {
         Opnd::Reg { num, .. } => num,
+        Opnd::HighByteReg(num) => num,
         Opnd::Mem { base, .. } => base,
         // RIP-relative / absolute / no-base scaled index have no base
         // register: no REX.B (REX.X for the index is computed separately).
@@ -577,6 +585,7 @@ fn describe_operands(ops: &[Opnd]) -> String {
         }
         match *o {
             Opnd::Reg { num, width } => out.push_str(&format!("r{num}:{width}")),
+            Opnd::HighByteReg(num) => out.push_str(&format!("rh{num}:1")),
             Opnd::Mem { width, .. } => out.push_str(&format!("mem:{width}")),
             Opnd::RipRel { width, .. } => out.push_str(&format!("riprel:{width}")),
             Opnd::AbsMem { width, .. } => out.push_str(&format!("absmem:{width}")),
@@ -713,6 +722,202 @@ fn encode_best(
 /// compilers emit `invlpga %rax, %ecx` (Intel-ordered `ecx, rax` here); like
 /// `vmsave` the registers are not named in the opcode.
 static FORMS_SUPPLEMENT: &[Form] = &[
+    Form {
+        mnem: Mnem::Lsl,
+        mnemonic: "lsl",
+        ops: &[OpPat::Reg(W::Q), OpPat::Rm(W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x03],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lsl,
+        mnemonic: "lsl",
+        ops: &[OpPat::Reg(W::Q), OpPat::Rm(W::Wd)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x03],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lar,
+        mnemonic: "lar",
+        ops: &[OpPat::Reg(W::Q), OpPat::Rm(W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x02],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Lar,
+        mnemonic: "lar",
+        ops: &[OpPat::Reg(W::Q), OpPat::Rm(W::Wd)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x02],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verr,
+        mnemonic: "verr",
+        ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(4),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verr,
+        mnemonic: "verr",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(4),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verr,
+        mnemonic: "verr",
+        ops: &[OpPat::Rm(W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(4),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verw,
+        mnemonic: "verw",
+        ops: &[OpPat::MemAny],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(5),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verw,
+        mnemonic: "verw",
+        ops: &[OpPat::Rm(W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(5),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Verw,
+        mnemonic: "verw",
+        ops: &[OpPat::Rm(W::Q)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x00],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(5),
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ud0,
+        mnemonic: "ud0",
+        ops: &[],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0xFF],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ud0,
+        mnemonic: "ud0",
+        ops: &[OpPat::Reg(W::V), OpPat::Rm(W::V)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0xFF],
+        plus_r: false,
+        rexw: RexW::ByWidth,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ud1,
+        mnemonic: "ud1",
+        ops: &[],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0xB9],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Ud1,
+        mnemonic: "ud1",
+        ops: &[OpPat::Reg(W::V), OpPat::Rm(W::V)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0xB9],
+        plus_r: false,
+        rexw: RexW::ByWidth,
+        reg: RegField::FromOp(0),
+        rm: 1,
+        imm: None,
+        imm_op: 255,
+    },
     Form {
         mnem: Mnem::Lsl,
         mnemonic: "lsl",
@@ -913,7 +1118,13 @@ fn encode_form(
     let byte_reg =
         |o: Option<Opnd>| matches!(o, Some(Opnd::Reg { num, width: 1 }) if (4..8).contains(&num));
     let byte_rex = byte_reg(reg_op) || byte_reg(rm_op);
+    let high_byte = |o: Option<Opnd>| matches!(o, Some(Opnd::HighByteReg(_)));
     if w || reg_hi || rm_hi || index_hi || byte_rex {
+        if high_byte(reg_op) || high_byte(rm_op) {
+            return Err(String::from(
+                "inline asm: `%ah`/`%ch`/`%dh`/`%bh` has no encoding under a REX prefix",
+            ));
+        }
         // REX exists only in long mode, so a 64-bit operand, an `r8`..`r15`
         // register, and the uniform byte registers have no encoding elsewhere.
         if mode != Mode::Bits64 {
@@ -949,7 +1160,9 @@ fn encode_form(
     // A `+r` form embeds its register in the opcode and has no ModRM byte.
     if !f.plus_r && (f.reg != RegField::NoReg || f.rm != 255) {
         match rm_op {
-            Some(Opnd::Reg { num, .. }) => code.push(modrm_reg(regfield, num)),
+            Some(Opnd::Reg { num, .. }) | Some(Opnd::HighByteReg(num)) => {
+                code.push(modrm_reg(regfield, num))
+            }
             Some(Opnd::Mem {
                 base,
                 index,

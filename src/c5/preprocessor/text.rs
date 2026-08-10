@@ -355,14 +355,14 @@ pub(super) fn strip_c_comments_ref(source: &str) -> String {
         if c == b'"' || c == b'\'' {
             let lit_start = i;
             i += 1;
-            while i < bytes.len() && bytes[i] != c {
-                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+            while i < bytes.len() && bytes[i] != c && bytes[i] != b'\n' {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() && bytes[i + 1] != b'\n' {
                     i += 2;
                 } else {
                     i += 1;
                 }
             }
-            if i < bytes.len() {
+            if i < bytes.len() && bytes[i] == c {
                 i += 1;
             }
             out.push_str(&source[lit_start..i]);
@@ -449,15 +449,17 @@ pub(super) fn literal_prefix_len(bytes: &[u8], at: usize) -> Option<usize> {
 }
 
 /// Index just past a string or character literal starting at the quote
-/// at `at`, honoring `\` escapes; an unterminated literal runs to the
-/// end of the buffer. The single literal skipper: every phase-2 / -3 /
-/// expansion / pragma scanner that must step over a literal calls it, so
-/// they cannot disagree about escapes or the end-of-buffer bound.
+/// at `at`, honoring `\` escapes. A literal never spans a newline (C99
+/// 6.4.4.4, 6.4.5); phase 2 has already spliced away every `\`-newline,
+/// so an unterminated literal ends at the end of its line and its text
+/// passes through verbatim. The single literal skipper: every phase-2 /
+/// -3 / expansion / pragma scanner that steps over a literal calls it,
+/// so they cannot disagree about escapes or the end bound.
 pub(super) fn skip_literal(bytes: &[u8], at: usize) -> usize {
     let quote = bytes[at];
     let mut i = at + 1;
-    while i < bytes.len() {
-        if bytes[i] == b'\\' && i + 1 < bytes.len() {
+    while i < bytes.len() && bytes[i] != b'\n' {
+        if bytes[i] == b'\\' && bytes.get(i + 1).is_some_and(|&b| b != b'\n') {
             i += 2;
             continue;
         }

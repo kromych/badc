@@ -6507,6 +6507,17 @@ pub(crate) fn encode_x86_file_asm_section_code(
     })
 }
 
+/// Opcode of a branch whose displacement field is rel8 only.
+pub(crate) fn short_branch_opcode(mnem: &str) -> Option<u8> {
+    Some(match mnem {
+        "loopne" | "loopnz" => 0xE0,
+        "loope" | "loopz" => 0xE1,
+        "loop" => 0xE2,
+        "jrcxz" | "jecxz" | "jcxz" => 0xE3,
+        _ => return None,
+    })
+}
+
 /// Address size of an instruction's memory operand in bytes: the width of the
 /// base or index register it names, or the mode default when the operand names
 /// no register or the register comes from a template operand (always 64-bit).
@@ -6674,6 +6685,34 @@ fn encode_one_x86_section_insn(
             relocs: alloc::vec![reloc],
         });
     }
+    // The count- and rcx-conditional branches take a rel8 field only, so a
+    // label target resolves to a one-byte displacement rather than the
+    // mode-width one the other branches take.
+    if let Some(op) = short_branch_opcode(mnem) {
+        let target = if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
+            Some(alloc::format!("{num}{}", if forward { 'f' } else { 'b' }))
+        } else {
+            insn.sym_exprs
+                .first()
+                .filter(|n| insn.operands.is_empty() && !n.contains('%'))
+                .cloned()
+        };
+        if let Some(name) = target {
+            return Ok(AsmSectionItem::CodeBytes {
+                bytes: alloc::vec![op, 0],
+                relocs: alloc::vec![AsmSectionReloc {
+                    offset: 1,
+                    width: 1,
+                    kind: AsmRelocKind::JumpRel,
+                    pcrel: true,
+                    branch: false,
+                    signed: false,
+                    target: AsmSectionTarget::Symbol(name),
+                    addend: -1,
+                }],
+            });
+        }
+    }
     let is_call = mnem.starts_with("call");
     let is_jmp = matches!(mnem, "jmp" | "jmpq");
     if is_call || is_jmp {
@@ -6715,7 +6754,11 @@ fn encode_one_x86_section_insn(
             let reloc = AsmSectionReloc {
                 offset,
                 width: rel,
-                kind: AsmRelocKind::Data,
+                kind: if is_call {
+                    AsmRelocKind::Data
+                } else {
+                    AsmRelocKind::JumpRel
+                },
                 pcrel: true,
                 // Only long mode reaches a call target through a PLT slot.
                 branch: mode == super::table::Mode::Bits64,
@@ -6760,7 +6803,7 @@ fn encode_one_x86_section_insn(
             let reloc = AsmSectionReloc {
                 offset,
                 width: rel,
-                kind: AsmRelocKind::Data,
+                kind: AsmRelocKind::JumpRel,
                 pcrel: true,
                 branch: mode == super::table::Mode::Bits64,
                 signed: false,
@@ -6846,6 +6889,7 @@ fn encode_one_x86_section_insn(
                 concrete.push(Concrete::Imm(IMM_PROBE[0].1));
             }
             AsmOpnd::Reg { reg, size } => concrete.push(Concrete::Reg { reg, size }),
+            AsmOpnd::HighReg(n) => concrete.push(Concrete::HighReg(n)),
             AsmOpnd::Ref { idx, size } => {
                 // A memory-constraint (`m`) operand holds its address in the
                 // assigned register; `%N` is the register-indirect reference
@@ -8081,6 +8125,7 @@ fn emit_inline_asm(
         for o in &insn.operands {
             let c = match *o {
                 AsmOpnd::Imm(val) => Concrete::Imm(val),
+                AsmOpnd::HighReg(n) => Concrete::HighReg(n),
                 // `%cN` / `%PN` with a compile-time constant (the address
                 // case was handled above): a bare immediate.
                 AsmOpnd::RefConst { idx, .. } => match const_of(idx) {
@@ -10947,6 +10992,197 @@ mod code_mode_tests {
                 "{src}"
             );
         }
+    }
+
+    /// The legacy high-byte registers are a distinct operand class: their
+    /// ModRM field values 4..8 name `spl`/`bpl`/`sil`/`dil` under a REX
+    /// prefix, so no encoding carrying one can reach them. Bytes measured
+    /// with GNU as 2.46.1.
+    #[test]
+    fn high_byte_registers_match_gnu_as() {
+        for (src, want) in [
+            ("xchg %al, %ah\n", &[0x86u8, 0xc4][..]),
+            ("xchg %ah, %al\n", &[0x86, 0xe0]),
+            ("xchg %ah, %bh\n", &[0x86, 0xe7]),
+            ("xchg %ah, %dl\n", &[0x86, 0xe2]),
+            ("mov %ah, %bl\n", &[0x88, 0xe3]),
+            ("mov %bl, %ah\n", &[0x88, 0xdc]),
+            ("movb %ch, (%rax)\n", &[0x88, 0x28]),
+            ("movb (%rax), %dh\n", &[0x8a, 0x30]),
+            ("addb %bh, %ah\n", &[0x00, 0xfc]),
+            ("cmpb $1, %ah\n", &[0x80, 0xfc, 0x01]),
+            ("incb %ah\n", &[0xfe, 0xc4]),
+            ("shrb $4, %ah\n", &[0xc0, 0xec, 0x04]),
+            ("movzbl %ah, %ecx\n", &[0x0f, 0xb6, 0xcc]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+        // A REX prefix and a high-byte register cannot appear together, so
+        // no form of these encodes.
+        for src in ["xchg %ah, %r8b\n", "mov %ah, %sil\n", "movzbq %ah, %rcx\n"] {
+            let e = assemble_err(src);
+            assert!(e.contains("rh4:1"), "{src}: {e}");
+        }
+    }
+
+    /// Undefined-opcode and descriptor-table forms the kernel entry code
+    /// writes. `lsl` / `lar` take no REX.W: GNU as encodes a 64-bit
+    /// destination as the 32-bit form. `ud2a` / `ud2b` are its spellings of
+    /// `ud2` / `ud1`, and both `ud0` and `ud1` have an operandless form.
+    #[test]
+    fn undefined_opcode_and_descriptor_forms_match_gnu_as() {
+        for (src, want) in [
+            ("ud1 (%edx), %rdi\n", &[0x67u8, 0x48, 0x0f, 0xb9, 0x3a][..]),
+            ("ud1 (%rdx), %rdi\n", &[0x48, 0x0f, 0xb9, 0x3a]),
+            ("ud1 %eax, %ecx\n", &[0x0f, 0xb9, 0xc8]),
+            ("ud1 %ax, %cx\n", &[0x66, 0x0f, 0xb9, 0xc8]),
+            ("ud1\n", &[0x0f, 0xb9]),
+            ("ud0\n", &[0x0f, 0xff]),
+            ("ud0 %rax, %rcx\n", &[0x48, 0x0f, 0xff, 0xc8]),
+            ("ud2\n", &[0x0f, 0x0b]),
+            ("ud2a\n", &[0x0f, 0x0b]),
+            ("ud2b\n", &[0x0f, 0xb9]),
+            ("lsl %rax, %rax\n", &[0x0f, 0x03, 0xc0]),
+            ("lsl %ax, %ax\n", &[0x66, 0x0f, 0x03, 0xc0]),
+            ("lsl %r12, %r13\n", &[0x45, 0x0f, 0x03, 0xec]),
+            ("lsl (%rbx), %rax\n", &[0x0f, 0x03, 0x03]),
+            ("lar %rax, %rax\n", &[0x0f, 0x02, 0xc0]),
+            ("verw %rax\n", &[0x0f, 0x00, 0xe8]),
+            ("verw (%rax)\n", &[0x0f, 0x00, 0x28]),
+            ("verw 8(%rbx)\n", &[0x0f, 0x00, 0x6b, 0x08]),
+            ("verr (%rax)\n", &[0x0f, 0x00, 0x20]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// `vmovd` / `vmovq` between an xmm lane and a general register or
+    /// memory. VEX.W selects the width of a general-register transfer; the
+    /// xmm and memory forms are W-ignored and take the two-byte VEX.
+    #[test]
+    fn vex_lane_moves_match_gnu_as() {
+        for (src, want) in [
+            ("vmovd %edi, %xmm0\n", &[0xc5u8, 0xf9, 0x6e, 0xc7][..]),
+            ("vmovd %xmm0, %edi\n", &[0xc5, 0xf9, 0x7e, 0xc7]),
+            ("vmovd (%rax), %xmm3\n", &[0xc5, 0xf9, 0x6e, 0x18]),
+            ("vmovd %xmm5, (%rcx)\n", &[0xc5, 0xf9, 0x7e, 0x29]),
+            ("vmovd %xmm11, %r9d\n", &[0xc4, 0x41, 0x79, 0x7e, 0xd9]),
+            ("vmovd %r10d, %xmm12\n", &[0xc4, 0x41, 0x79, 0x6e, 0xe2]),
+            ("vmovq %rdi, %xmm0\n", &[0xc4, 0xe1, 0xf9, 0x6e, 0xc7]),
+            ("vmovq %xmm0, %rdi\n", &[0xc4, 0xe1, 0xf9, 0x7e, 0xc7]),
+            ("vmovq %xmm0, %xmm1\n", &[0xc5, 0xfa, 0x7e, 0xc8]),
+            ("vmovq (%rax), %xmm0\n", &[0xc5, 0xfa, 0x7e, 0x00]),
+            ("vmovq %xmm0, (%rax)\n", &[0xc5, 0xf9, 0xd6, 0x00]),
+            ("vmovq %r9, %xmm10\n", &[0xc4, 0x41, 0xf9, 0x6e, 0xd1]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// A character constant is an expression leaf wherever a number is, with
+    /// the C escapes plus GNU as's octal and hex forms.
+    #[test]
+    fn character_constants_match_gnu_as() {
+        for (src, want) in [
+            ("addb $('a' - '0' - 10), %al\n", &[0x04u8, 0x27][..]),
+            ("movl $'A', %eax\n", &[0xb8, 0x41, 0x00, 0x00, 0x00]),
+            ("movb $'\\n', %al\n", &[0xb0, 0x0a]),
+            ("movb $'\\'', %al\n", &[0xb0, 0x27]),
+            ("movb $'\\\\', %al\n", &[0xb0, 0x5c]),
+            ("movb $'\\x41', %al\n", &[0xb0, 0x41]),
+            ("movb $'\\101', %al\n", &[0xb0, 0x41]),
+            (".byte 'x'\n", &[0x78]),
+            (".byte 'a', 'b'\n", &[0x61, 0x62]),
+            (".long 'a' + 1\n", &[0x62, 0x00, 0x00, 0x00]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// The encoding mode is assembler state over the linear input, not a
+    /// property of a section: a `.code64` written in one section is still in
+    /// effect when the stream returns to an earlier one. GNU as encodes the
+    /// `lea` below 64-bit (`48 8d 3d`), not 32-bit.
+    #[test]
+    fn code_mode_carries_across_section_switches_like_gnu_as() {
+        let (bytes, relocs) = assemble_relocs(
+            ".code32\n.text\nnop\n.section \".head.text\",\"ax\"\n.code32\nnop\n\
+             .code64\nnop\n.text\nleaq _bss(%rip), %rdi\n",
+        );
+        assert_eq!(
+            bytes,
+            [0x90, 0x48, 0x8d, 0x3d, 0, 0, 0, 0, 0x90, 0x90],
+            "{bytes:x?}"
+        );
+        assert_eq!(
+            relocs,
+            [(4, 4, false, alloc::string::String::from("_bss"), -4)]
+        );
+    }
+
+    /// Which same-section references keep a relocation, measured against GNU
+    /// as 2.46.1. A local name resolves in place; a global or weak one keeps
+    /// the relocation so the link binds the definition that wins. The relaxed
+    /// jump is the one exception: `jmp` / `jcc` to a same-section target
+    /// resolves unless the symbol is weak.
+    #[test]
+    fn same_section_binding_decides_the_relocation_like_gnu_as() {
+        let defs = ".text\n.Lloc:\nret\n.globl glob\nglob:\nret\n.weak wk\nwk:\nret\n";
+        let relocs_of = |body: &str| assemble_relocs(&alloc::format!("{defs}{body}")).1;
+        let names = |body: &str| -> alloc::vec::Vec<alloc::string::String> {
+            relocs_of(body).into_iter().map(|r| r.3).collect()
+        };
+        // A local target resolves in place, whatever the form.
+        assert!(names("call .Lloc\n").is_empty());
+        assert!(names("jmp .Lloc\n").is_empty());
+        assert!(names("lea .Lloc(%rip), %rax\n").is_empty());
+        // A call or an address-of naming a global or weak symbol relocates.
+        assert_eq!(names("call glob\n"), ["glob"]);
+        assert_eq!(names("call wk\n"), ["wk"]);
+        assert_eq!(names("lea glob(%rip), %rax\n"), ["glob"]);
+        // The relaxed jump resolves a global target and relocates a weak one.
+        assert!(names("jmp glob\n").is_empty());
+        assert!(names("je glob\n").is_empty());
+        assert_eq!(names("jmp wk\n"), ["wk"]);
+        // A difference of two symbols folds whatever the binding, as GNU as
+        // folds it: `.long glob - .` deposits a constant.
+        assert!(names(".long glob - .\n").is_empty());
+        assert!(names(".long wk - .\n").is_empty());
+    }
+
+    /// `. = expr` moves the location counter, as `.org` does; the kernel's
+    /// kexec exception-vector table places its 6-byte entries that way.
+    #[test]
+    fn location_counter_assignment_places_like_org() {
+        assert_eq!(
+            assemble("base:\n.byte 1\n. = base + 4\n.byte 2\n"),
+            [1, 0, 0, 0, 2]
+        );
+        assert_eq!(
+            assemble("base:\n.byte 1\n.set ., base + 4\n.byte 2\n"),
+            [1, 0, 0, 0, 2]
+        );
+        // Moving backwards is rejected, as GNU as rejects it.
+        assert!(
+            assemble_err("base:\n.byte 1, 2, 3\n. = base + 1\n").contains("backwards"),
+            "a backward move must be diagnosed"
+        );
+    }
+
+    /// The count- and rcx-conditional branches take a rel8 field only. A
+    /// same-section target resolves to the byte displacement with no
+    /// relocation, as GNU as emits it.
+    #[test]
+    fn short_branches_match_gnu_as() {
+        assert_eq!(
+            assemble("1:\nnop\nloop 1b\n"),
+            [0x90, 0xe2, 0xfd],
+            "loop backward"
+        );
+        assert_eq!(assemble(".Lx:\nnop\nloop .Lx\n"), [0x90, 0xe2, 0xfd]);
+        assert_eq!(assemble(".Lx:\nnop\njrcxz .Lx\n"), [0x90, 0xe3, 0xfd]);
+        assert_eq!(assemble(".Lx:\nnop\nloope .Lx\n"), [0x90, 0xe1, 0xfd]);
+        assert_eq!(assemble(".Lx:\nnop\nloopne .Lx\n"), [0x90, 0xe0, 0xfd]);
     }
 
     /// A `.code16` stub's symbol immediate takes the 16-bit field, and the

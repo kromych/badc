@@ -953,6 +953,9 @@ pub(crate) enum AsmSectionItem {
     /// `.local name`: force local binding. A section label is local by
     /// default, so this only cancels a `.globl` on the same name.
     Local(alloc::string::String),
+    /// `.hidden name`: `STV_HIDDEN` in `st_other`. Visibility is a unit-level
+    /// property of the name, independent of which section defines it.
+    Hidden(alloc::string::String),
     /// `.type name, @function|@object`: set the named label's ELF symbol
     /// type. The label must be defined in this section.
     Type {
@@ -1019,6 +1022,14 @@ pub(crate) enum AsmSectionItem {
     /// outcome. Evaluated after layout; the first arm whose condition holds
     /// raises its `.error`.
     CondDiag(alloc::vec::Vec<AsmCondArm>),
+    /// `.reloc offset, TYPE, sym + addend`: a relocation of a named ELF type
+    /// at a section-relative offset, deposited without a field of its own.
+    Reloc {
+        offset: u32,
+        rtype: u32,
+        target: alloc::string::String,
+        addend: i64,
+    },
 }
 
 /// One branch of a deferred conditional. `tok` is the `.if`-family directive
@@ -1114,6 +1125,14 @@ pub(crate) enum AsmRelocKind {
     A64LdstLo12(u8),
     /// `ldr Rt, label` 19-bit literal load displacement.
     A64LdrLit19,
+    /// A relaxable x86 jump displacement (`jmp` / `jcc`). GNU as computes it
+    /// while relaxing the branch, which resolves a target defined in the same
+    /// section whatever its binding, unless the symbol is weak; every other
+    /// field keeps the relocation for a symbol that is not local.
+    JumpRel,
+    /// `.reloc`: the ELF relocation type is named in the source, and the
+    /// section deposits no field for it.
+    Explicit(u32),
 }
 
 impl AsmRelocKind {
@@ -1240,6 +1259,26 @@ pub(crate) struct AsmExprValue {
     add: i64,
     pos: Option<AsmExprTerm>,
     neg: Option<AsmExprTerm>,
+}
+
+impl AsmExprValue {
+    /// The symbol this value names when it is a single term with nothing
+    /// subtracted from it -- the shape whose PC-relativity comes from the
+    /// encoding rather than from a difference written in the source.
+    fn lone_symbol(&self) -> Option<&str> {
+        match (&self.pos, &self.neg) {
+            (Some(t), None) => match &t.target {
+                AsmSectionTarget::Symbol(n) => Some(n.as_str()),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// The constant part of the value.
+    fn constant(&self) -> i64 {
+        self.add
+    }
 }
 
 /// A resolved leaf of an expression: an absolute value (a literal, an
@@ -1444,7 +1483,7 @@ pub(crate) fn patch_asm_insn_field(
         // width the field is: 2 bytes for a `.code16` near branch, 1 for a
         // short one. Leaving it to a relocation would work but would put
         // one in the object for a distance the assembler already knows.
-        AsmRelocKind::Data if pcrel && matches!(width, 1 | 2 | 4) => {
+        AsmRelocKind::Data | AsmRelocKind::JumpRel if pcrel && matches!(width, 1 | 2 | 4) => {
             let w = width as usize;
             let lim = 1i64 << (8 * w - 1);
             if !(-lim..lim).contains(&disp) {
@@ -1455,7 +1494,7 @@ pub(crate) fn patch_asm_insn_field(
             buf[at..at + w].copy_from_slice(&disp.to_le_bytes()[..w]);
             Ok(true)
         }
-        AsmRelocKind::Data => Ok(false),
+        AsmRelocKind::Data | AsmRelocKind::JumpRel => Ok(false),
         AsmRelocKind::A64Branch26 { .. } => {
             or_word(buf, words(26)?);
             Ok(true)
@@ -1478,9 +1517,12 @@ pub(crate) fn patch_asm_insn_field(
             or_word(buf, ((d & 3) << 29) | (((d >> 2) & 0x7_FFFF) << 5));
             Ok(true)
         }
-        AsmRelocKind::A64AdrpPage21 | AsmRelocKind::A64AddLo12 | AsmRelocKind::A64LdstLo12(_) => {
-            Ok(false)
-        }
+        // `.reloc` names no field, so there is nothing to patch and the
+        // relocation always reaches the object writer.
+        AsmRelocKind::A64AdrpPage21
+        | AsmRelocKind::A64AddLo12
+        | AsmRelocKind::A64LdstLo12(_)
+        | AsmRelocKind::Explicit(_) => Ok(false),
     }
 }
 
@@ -1955,7 +1997,8 @@ struct GasMacro {
 const GAS_MACRO_DEPTH_LIMIT: usize = 64;
 
 /// Expand the GNU as macro directives an inline-asm block uses to generate
-/// instructions: `.rept`/`.irp`/`.endr` (repeat), `.macro`/`.endm`/`.purgem`
+/// instructions: `.rept`/`.rep`/`.irp`/`.irpc`/`.endr` (repeat),
+/// `.macro`/`.endm`/`.purgem`
 /// (local macro definition, invocation, removal), `.equ`/`.set` (symbol
 /// assignment), and `.inst` (emit an `inst_width`-byte instruction word).
 /// `.inst` expressions fold to a `.byte` run, macro invocations to their
@@ -1975,7 +2018,7 @@ pub(crate) fn expand_asm_gas_macros(
     subst: &dyn Fn(&str) -> Option<alloc::string::String>,
 ) -> Result<Option<alloc::string::String>, alloc::string::String> {
     if !(text.contains(".irp")
-        || text.contains(".rept")
+        || text.contains(".rep")
         || text.contains(".macro")
         || text.contains(".inst")
         || text.contains(".equ")
@@ -1994,6 +2037,7 @@ pub(crate) fn expand_asm_gas_macros(
         .collect();
     let mut st = GasExpandState {
         exported: gas_exported_names(&stmts),
+        forward_set: gas_forward_set_names(&stmts),
         ..Default::default()
     };
     let mut out = alloc::string::String::with_capacity(text.len());
@@ -2016,15 +2060,43 @@ struct GasExpandState {
     /// defines the absolute symbol the declaration promises; folding it
     /// away would leave the declaration naming nothing.
     exported: alloc::collections::BTreeSet<alloc::string::String>,
+    /// Names a `.set` assigns after an earlier statement already used them.
+    /// Folding such an assignment away would leave the earlier use naming
+    /// nothing, so it stays in the stream for the section layer to define.
+    forward_set: alloc::collections::BTreeSet<alloc::string::String>,
 }
 
 impl GasExpandState {
-    /// Re-emit a folded assignment when its name carries external linkage.
+    /// Re-emit a folded assignment whose name a reader still needs: one with
+    /// external linkage, or one an earlier statement already referenced.
     fn keep_exported_set(&self, name: &str, value: i64, out: &mut alloc::string::String) {
-        if self.exported.contains(name) {
+        if self.exported.contains(name) || self.forward_set.contains(name) {
             out.push_str(&alloc::format!(".set {name}, {value}\n"));
         }
     }
+}
+
+/// Names a `.set` / `.equ` assigns after an earlier statement referenced
+/// them. GNU as resolves such a reference against the later assignment;
+/// folding the assignment away would leave the reference undefined.
+fn gas_forward_set_names(
+    stmts: &[alloc::string::String],
+) -> alloc::collections::BTreeSet<alloc::string::String> {
+    let ident = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$');
+    let mut used: alloc::collections::BTreeSet<&str> = alloc::collections::BTreeSet::new();
+    let mut out = alloc::collections::BTreeSet::new();
+    for s in stmts {
+        let (_, body) = split_leading_labels(s);
+        let (tok, rest) = split_first_token(body);
+        if matches!(tok, ".equ" | ".set" | ".equiv")
+            && let Some((sym, _)) = rest.split_once(',')
+            && used.contains(sym.trim())
+        {
+            out.insert(alloc::string::String::from(sym.trim()));
+        }
+        used.extend(body.split(|c: char| !ident(c)).filter(|t| !t.is_empty()));
+    }
+    out
 }
 
 /// The `.globl` / `.global` / `.weak` names a statement list declares.
@@ -2085,10 +2157,16 @@ fn expand_gas_statements(
             continue;
         }
         let (tok, rest) = split_first_token(s);
-        // A macro-generated `.inst(expr)` has no space before the operand;
-        // split at the parenthesis so the directive matches.
+        // GNU as ends a directive or macro name at the first character that
+        // cannot be part of one, so no space is needed before a parenthesized
+        // operand list: `.inst(expr)`, and a macro invoked in the C-macro
+        // spelling (`STACK_FRAME_NON_STANDARD(func)`).
         let (tok, rest) = match tok.find('(') {
-            Some(p) if tok.starts_with(".inst") && p >= 5 => (&tok[..p], &s[p..]),
+            Some(p)
+                if (tok.starts_with(".inst") && p >= 5) || st.macros.contains_key(&tok[..p]) =>
+            {
+                (&tok[..p], &s[p..])
+            }
             _ => (tok, rest),
         };
         // Conditional directives are tracked whether or not the enclosing
@@ -2163,7 +2241,7 @@ fn expand_gas_statements(
             // `.endm` / `.endr` does not leak into the enclosing stream.
             match tok {
                 ".macro" => i = collect_gas_body(stmts, i, ".macro", ".endm")?.1,
-                ".irp" | ".rept" => i = collect_gas_repeat_body(stmts, i)?.1,
+                ".irp" | ".irpc" | ".rept" | ".rep" => i = collect_gas_repeat_body(stmts, i)?.1,
                 _ => {}
             }
             continue;
@@ -2196,21 +2274,18 @@ fn expand_gas_statements(
             // interpreted; the mode carries into nested expansions, which is
             // where an invocation written inside a macro body reads it.
             ".altmacro" | ".noaltmacro" => st.altmacro = tok == ".altmacro",
-            ".irp" => {
-                let (var, values) = parse_gas_irp_header(rest)?;
+            ".irp" | ".irpc" => {
+                let (var, values) = parse_gas_irp_header(rest, tok == ".irpc")?;
                 let (body, next) = collect_gas_repeat_body(stmts, i)?;
                 i = next;
                 for val in &values {
                     let mut map = alloc::collections::BTreeMap::new();
                     map.insert(var.clone(), val.clone());
-                    let expanded: alloc::vec::Vec<alloc::string::String> = body
-                        .iter()
-                        .map(|l| subst_gas_params(l, &map, None))
-                        .collect();
+                    let expanded = subst_gas_body(&body, &map, None);
                     expand_gas_statements(&expanded, st, out, inst_width, depth + 1)?;
                 }
             }
-            ".rept" => {
+            ".rept" | ".rep" => {
                 let table = &st.equ;
                 let (body, next) = collect_gas_repeat_body(stmts, i)?;
                 i = next;
@@ -2329,10 +2404,7 @@ fn expand_gas_statements(
                     let body = def.body.clone();
                     let map = bind_gas_macro_args(&params, rest, st.altmacro);
                     let inst = next_asm_instance();
-                    let expanded: alloc::vec::Vec<alloc::string::String> = body
-                        .iter()
-                        .map(|l| subst_gas_params(l, &map, Some(inst)))
-                        .collect();
+                    let expanded = subst_gas_body(&body, &map, Some(inst));
                     expand_gas_statements(&expanded, st, out, inst_width, depth + 1)?;
                 } else {
                     // A pass-through line. Resolve any `.equ` symbol and
@@ -2502,6 +2574,30 @@ fn gas_ifc_taken(tok: &str, rest: &str) -> bool {
     (a == b) == (tok == ".ifc")
 }
 
+/// Replace each character constant in a macro argument with its numeric
+/// value, as GNU as does when it binds one (`m 'r'` binds `114`).
+fn fold_char_consts(a: &str) -> alloc::string::String {
+    if !a.contains('\'') {
+        return alloc::string::String::from(a);
+    }
+    let b = a.as_bytes();
+    let mut out = alloc::string::String::with_capacity(a.len());
+    let mut i = 0usize;
+    while i < b.len() {
+        match parse_asm_char_const(b, i) {
+            Some((v, next)) => {
+                out.push_str(&alloc::format!("{v}"));
+                i = next;
+            }
+            None => {
+                out.push(b[i] as char);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
 /// Strip one level of enclosing double quotes from a macro / `.irp`
 /// argument, as GNU as does when binding it.
 fn unquote_gas_arg(a: &str) -> &str {
@@ -2530,7 +2626,7 @@ fn bind_gas_macro_args(
             Some(v) => alloc::format!("{v}"),
             None => alloc::string::String::from(unquote_gas_arg(a)),
         },
-        None => alloc::string::String::from(unquote_gas_arg(a)),
+        None => fold_char_consts(unquote_gas_arg(a)),
     };
     let is_keyword = |a: &str| {
         a.split_once('=')
@@ -2625,7 +2721,7 @@ fn collect_gas_repeat_body(
     let mut i = start;
     while i < stmts.len() {
         match stmt_directive(stmts[i].as_str()) {
-            ".rept" | ".irp" => depth += 1,
+            ".rept" | ".rep" | ".irp" | ".irpc" => depth += 1,
             ".endr" => {
                 depth -= 1;
                 if depth == 0 {
@@ -2678,9 +2774,11 @@ fn parse_gas_macro_header(
 }
 
 /// Parse a `.irp` header `VAR,v1,v2,...`; with no values the body expands once
-/// with the symbol empty (GNU as convention).
+/// with the symbol empty (GNU as convention). `per_char` selects `.irpc`,
+/// whose values are the individual characters of the operands.
 fn parse_gas_irp_header(
     rest: &str,
+    per_char: bool,
 ) -> Result<
     (
         alloc::string::String,
@@ -2698,15 +2796,45 @@ fn parse_gas_irp_header(
         ));
     }
     let var = alloc::string::String::from(&rest[..end]);
-    let mut values: alloc::vec::Vec<alloc::string::String> = rest[end..]
-        .split(|c: char| c == ',' || c.is_whitespace())
-        .filter(|t| !t.is_empty())
-        .map(alloc::string::String::from)
-        .collect();
+    let items = rest[end..].split(|c: char| c == ',' || c.is_whitespace());
+    let mut values: alloc::vec::Vec<alloc::string::String> = if per_char {
+        items.flat_map(|t| t.chars()).map(Into::into).collect()
+    } else {
+        items
+            .filter(|t| !t.is_empty())
+            .map(alloc::string::String::from)
+            .collect()
+    };
     if values.is_empty() {
         values.push(alloc::string::String::new());
     }
     Ok((var, values))
+}
+
+/// Substitute a macro / `.irp` body's parameters and re-split the result into
+/// statements. An argument may itself hold `;`-separated statements (the
+/// kernel's ALTERNATIVE macros pass a whole instruction sequence as one
+/// argument), and GNU as re-scans the expansion, so a separator that arrives
+/// through a parameter separates.
+fn subst_gas_body(
+    body: &[alloc::string::String],
+    map: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
+    instance: Option<u32>,
+) -> alloc::vec::Vec<alloc::string::String> {
+    let mut out = alloc::vec::Vec::with_capacity(body.len());
+    for line in body {
+        let line = subst_gas_params(line, map, instance);
+        if line.contains(';') {
+            out.extend(
+                split_asm_statements(&line)
+                    .into_iter()
+                    .map(|s| alloc::string::String::from(s.trim())),
+            );
+        } else {
+            out.push(line);
+        }
+    }
+    out
 }
 
 /// Substitute `\param` in a macro / `.irp` body with its bound value. `\()`
@@ -2804,10 +2932,12 @@ fn subst_asm_operands(
 /// an empty one (`m 1,,3` binds three), so only whitespace runs collapse.
 fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
     let b = s.as_bytes();
+    // `%` is not one of them: GNU as splits `m 1 % 2` into three arguments,
+    // and an AT&T register operand leads with it (`m %r8 %r9` is two).
     let is_op = |c: u8| {
         matches!(
             c,
-            b'+' | b'-' | b'*' | b'/' | b'%' | b'|' | b'&' | b'^' | b'~' | b'<' | b'>' | b'='
+            b'+' | b'-' | b'*' | b'/' | b'|' | b'&' | b'^' | b'~' | b'<' | b'>' | b'='
         )
     };
     let mut parts: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
@@ -2820,7 +2950,19 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
     // this one is its separator rather than an empty argument.
     let mut ws_terminated = false;
     let mut last_comma = false;
-    for (i, &c) in b.iter().enumerate() {
+    let mut i = 0usize;
+    while i < b.len() {
+        let c = b[i];
+        // A character constant is one token, separators included: GNU as
+        // binds `m 'r', ' ', ':'` as three arguments.
+        if !quoted
+            && c == b'\''
+            && let Some((_, next)) = parse_asm_char_const(b, i)
+        {
+            in_arg = true;
+            i = next;
+            continue;
+        }
         if !in_arg && !c.is_ascii_whitespace() {
             in_arg = true;
             paren_led = c == b'(';
@@ -2863,6 +3005,7 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
             start = i + 1;
             in_arg = false;
         }
+        i += 1;
     }
     let p = s[start..].trim();
     if !p.is_empty() || last_comma {
@@ -3034,12 +3177,87 @@ pub(crate) fn extract_file_scope_asm_sections(
         .blocks)
 }
 
+/// ELF relocation type number for a `.reloc` type name. The names are
+/// architecture-qualified, so one table serves every target.
+fn elf_reloc_type_by_name(name: &str) -> Option<u32> {
+    Some(match name {
+        "R_X86_64_NONE" | "R_386_NONE" | "R_AARCH64_NONE" => 0,
+        "R_X86_64_64" | "R_386_32" => 1,
+        "R_X86_64_PC32" | "R_386_PC32" => 2,
+        "R_X86_64_GOT32" | "R_386_GOT32" => 3,
+        "R_X86_64_PLT32" | "R_386_PLT32" => 4,
+        "R_X86_64_GOTPCREL" => 9,
+        "R_X86_64_32" | "R_386_GOTPC" => 10,
+        "R_X86_64_32S" => 11,
+        "R_X86_64_16" => 12,
+        "R_X86_64_PC16" => 13,
+        "R_X86_64_8" => 14,
+        "R_X86_64_PC8" => 15,
+        "R_386_16" => 20,
+        "R_386_PC16" => 21,
+        "R_386_8" => 22,
+        "R_386_PC8" => 23,
+        "R_X86_64_PC64" => 24,
+        "R_AARCH64_ABS64" => 257,
+        "R_AARCH64_ABS32" => 258,
+        "R_AARCH64_ABS16" => 259,
+        "R_AARCH64_PREL64" => 260,
+        "R_AARCH64_PREL32" => 261,
+        "R_AARCH64_PREL16" => 262,
+        _ => return None,
+    })
+}
+
+/// Parse `.reloc offset, TYPE[, expression]`. The offset is measured from the
+/// start of the section the directive sits in, not from the location counter;
+/// the expression is a symbol with an optional constant addend, a bare
+/// constant (the section itself), or absent. The directive deposits no bytes.
+fn parse_reloc_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
+    let bad = || alloc::format!("inline asm: `.reloc {rest}` is not `offset, TYPE[, expr]`");
+    let mut args = split_top_commas(rest).into_iter();
+    let (Some(off), Some(ty)) = (args.next(), args.next()) else {
+        return Err(bad());
+    };
+    let offset = eval_const_expr(off).filter(|&v| (0..=u32::MAX as i64).contains(&v));
+    let (Some(offset), Some(rtype)) = (offset, elf_reloc_type_by_name(ty)) else {
+        return Err(bad());
+    };
+    let expr = args.next().unwrap_or("").trim();
+    if args.next().is_some() {
+        return Err(bad());
+    }
+    // `sym`, `sym +/- <const expr>`, or a bare constant.
+    let split = expr
+        .char_indices()
+        .skip(1)
+        .find(|&(_, c)| c == '+' || c == '-');
+    let (name, addend) = match split {
+        Some((i, sign)) => {
+            let a = eval_const_expr(&expr[i + 1..]).ok_or_else(bad)?;
+            (expr[..i].trim(), if sign == '-' { -a } else { a })
+        }
+        None => (expr, 0),
+    };
+    let (target, addend) = match eval_const_expr(name) {
+        Some(v) => (alloc::string::String::new(), v + addend),
+        None if is_asm_symbol_name(name) => (alloc::string::String::from(name), addend),
+        None if name.is_empty() => (alloc::string::String::new(), addend),
+        None => return Err(bad()),
+    };
+    Ok(AsmSectionItem::Reloc {
+        offset: offset as u32,
+        rtype,
+        target,
+        addend,
+    })
+}
+
 /// Directives GNU as resolves against the unit's symbol table rather than
 /// against the section they sit in.
 fn is_asm_sym_directive(tok: &str) -> bool {
     matches!(
         tok,
-        ".globl" | ".global" | ".weak" | ".local" | ".type" | ".size"
+        ".globl" | ".global" | ".weak" | ".local" | ".hidden" | ".type" | ".size"
     )
 }
 
@@ -3050,6 +3268,7 @@ fn asm_text_has_sym_directive(text: &str) -> bool {
     if !(text.contains(".glob")
         || text.contains(".weak")
         || text.contains(".local")
+        || text.contains(".hidden")
         || text.contains(".type")
         || text.contains(".size"))
     {
@@ -3072,7 +3291,7 @@ fn push_sym_directive_items(
     is_aarch64: bool,
     out: &mut alloc::vec::Vec<AsmSectionItem>,
 ) -> Result<(), alloc::string::String> {
-    if matches!(tok, ".globl" | ".global" | ".weak" | ".local") && rest.contains(',') {
+    if matches!(tok, ".globl" | ".global" | ".weak" | ".local" | ".hidden") && rest.contains(',') {
         for name in rest.split(',') {
             out.push(parse_section_item(tok, name.trim(), is_aarch64)?);
         }
@@ -3205,6 +3424,11 @@ fn extract_asm_sections_impl(
     // so a `.section` / `.previous` pair nested inside a pushed region returns
     // to the pushed section rather than unwinding the stack.
     let mut prev_top: Option<Option<usize>> = None;
+    // Encoding mode over the linear input, and the mode each block was
+    // last told about.
+    let mut code_mode: Option<&str> = None;
+    let mut block_code_mode: alloc::collections::BTreeMap<usize, &str> =
+        alloc::collections::BTreeMap::new();
     // Open `.rept` bodies of the current section; items nest into the top
     // until `.endr` closes it into a `Rept` item.
     let mut rept_stack: alloc::vec::Vec<(alloc::string::String, alloc::vec::Vec<AsmSectionItem>)> =
@@ -3263,7 +3487,7 @@ fn extract_asm_sections_impl(
                         },
                     }
                 }
-                ".rept" => {
+                ".rept" | ".rep" => {
                     rept_stack.push((alloc::string::String::from(rest), alloc::vec::Vec::new()))
                 }
                 ".pushsection" | ".section" | ".popsection" | ".previous" | ".subsection" => {
@@ -3330,7 +3554,7 @@ fn extract_asm_sections_impl(
             }]);
             continue;
         }
-        if tok == ".rept" && (*stack.last().unwrap()).is_some() {
+        if matches!(tok, ".rept" | ".rep") && (*stack.last().unwrap()).is_some() {
             rept_stack.push((alloc::string::String::from(rest), alloc::vec::Vec::new()));
             continue;
         }
@@ -3447,6 +3671,21 @@ fn extract_asm_sections_impl(
             // `.rodata`); the section flags set the object section's
             // attributes, not whether code is admitted.
             Some(idx) => {
+                // `.code16` / `.code32` / `.code64` is assembler state over the
+                // linear input, not a property of a section: GNU as keeps it
+                // across section switches. Blocks accumulate per section name,
+                // so re-entering one re-asserts the mode in effect.
+                if is_code_mode_directive(tok) {
+                    code_mode = Some(tok);
+                    block_code_mode.insert(idx, tok);
+                } else if let Some(m) = code_mode
+                    && block_code_mode.get(&idx) != Some(&m)
+                {
+                    blocks[idx]
+                        .items
+                        .push(AsmSectionItem::Code(alloc::string::String::from(m)));
+                    block_code_mode.insert(idx, m);
+                }
                 push_sym_directive_items(tok, rest, is_aarch64, &mut blocks[idx].items)?;
             }
         }
@@ -3461,6 +3700,11 @@ fn extract_asm_sections_impl(
         blocks,
         sym_items,
     }))
+}
+
+/// Whether a directive selects the x86 encoding mode.
+fn is_code_mode_directive(tok: &str) -> bool {
+    matches!(tok, ".code16" | ".code32" | ".code64")
 }
 
 /// Parse the argument list of `.pushsection` / `.section`:
@@ -3603,7 +3847,12 @@ fn scan_local_label_tokens(text: &str) -> alloc::vec::Vec<LocalLabelTok<'_>> {
                 continue;
             }
         }
-        if i < n && b[i] == b':' {
+        // GNU as allows horizontal whitespace between a label and its colon.
+        let mut c = i;
+        while c < n && (b[c] == b' ' || b[c] == b'\t') {
+            c += 1;
+        }
+        if c < n && b[c] == b':' {
             out.push(LocalLabelTok {
                 start: ds,
                 end: de,
@@ -3841,11 +4090,26 @@ fn parse_section_item(
             }
             Ok(AsmSectionItem::Local(alloc::string::String::from(name)))
         }
+        ".hidden" => {
+            let name = rest.trim();
+            if !is_asm_symbol_name(name) {
+                return Err(alloc::format!("inline asm: bad `{tok}` operand `{rest}`"));
+            }
+            Ok(AsmSectionItem::Hidden(alloc::string::String::from(name)))
+        }
+        ".reloc" => parse_reloc_directive(rest),
         // A `.set` / `.equ` names a symbol (`.set alias, target`, a unit-level
         // alias), an absolute value (a constant the expander re-emitted for a
         // name with external linkage), or an expression over section-local
         // locations (`.set .Lsz, . - f`).
         ".set" | ".equ" => {
+            // `.set ., expr` moves the location counter, as `.org` does; the
+            // kernel's exception-vector table places its entries that way.
+            if let Some(v) = rest.trim_start().strip_prefix('.')
+                && let Some(v) = v.trim_start().strip_prefix(',')
+            {
+                return parse_section_item(".org", v.trim(), is_aarch64);
+            }
             let (name, value) = rest
                 .split_once(',')
                 .map(|(n, t)| (n.trim(), t.trim()))
@@ -4867,6 +5131,10 @@ impl SectionLabelOffsets {
 /// same-space terms fold, anything symbolic is rejected. GNU as also gives a
 /// location-valued assignment a section-relative symbol, which a referencing
 /// field takes a relocation against. TODO location-valued section symbols.
+/// Longest `.set name, symbol` chain followed when valuing an expression.
+const ASM_ALIAS_DEPTH_LIMIT: usize = 16;
+
+#[allow(clippy::too_many_arguments)]
 fn eval_section_set_expr(
     name: &str,
     expr: &str,
@@ -4874,6 +5142,7 @@ fn eval_section_set_expr(
     at: i64,
     labels: &alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)>,
     syms: &alloc::collections::BTreeMap<alloc::string::String, i64>,
+    aliases: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     const_of: &dyn Fn(u8) -> Option<i64>,
 ) -> Result<i64, alloc::string::String> {
     let resolve = |t: &str| -> Option<AsmExprLeaf> {
@@ -4886,14 +5155,20 @@ fn eval_section_set_expr(
         if let Some(v) = syms.get(t) {
             return Some(AsmExprLeaf::Abs(*v));
         }
-        labels
-            .get(numeric_label_digits(t).unwrap_or(t))
-            .map(|(sk, off)| {
-                AsmExprLeaf::Loc(AsmExprTerm {
-                    space: Some((AsmSpace::Section(sk.clone()), *off)),
-                    target: AsmSectionTarget::Symbol(alloc::string::String::from(t)),
-                })
-            })
+        // Follow a `.set name, symbol` chain to the label it names.
+        let mut t = t;
+        for _ in 0..ASM_ALIAS_DEPTH_LIMIT {
+            match labels.get(numeric_label_digits(t).unwrap_or(t)) {
+                Some((sk, off)) => {
+                    return Some(AsmExprLeaf::Loc(AsmExprTerm {
+                        space: Some((AsmSpace::Section(sk.clone()), *off)),
+                        target: AsmSectionTarget::Symbol(alloc::string::String::from(t)),
+                    }));
+                }
+                None => t = aliases.get(t)?.as_str(),
+            }
+        }
+        None
     };
     let ctx = AsmExprCtx {
         resolve: &resolve,
@@ -5206,6 +5481,10 @@ fn measure_round_inner(
         alloc::string::String,
         i64,
     )> = alloc::vec::Vec::new();
+    // `.set name, symbol` aliases: an expression over one reads the target's
+    // location, as GNU as resolves the chain.
+    let mut aliases: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> =
+        alloc::collections::BTreeMap::new();
     for &bi in &subsection_order(blocks) {
         let b = &blocks[bi];
         let key = section_key(b);
@@ -5227,8 +5506,12 @@ fn measure_round_inner(
                 | AsmSectionItem::Size { .. }
                 | AsmSectionItem::Weak(_)
                 | AsmSectionItem::Local(_)
+                | AsmSectionItem::Hidden(_)
                 | AsmSectionItem::CondDiag(_)
-                | AsmSectionItem::SymSet { .. } => {}
+                | AsmSectionItem::Reloc { .. } => {}
+                AsmSectionItem::SymSet { name, target } => {
+                    aliases.insert(name.clone(), target.clone());
+                }
                 AsmSectionItem::SetExpr { name, expr } => {
                     sets.push((name.clone(), expr.clone(), key.clone(), at));
                 }
@@ -5376,9 +5659,23 @@ fn measure_round_inner(
     }
     let mut syms: alloc::collections::BTreeMap<alloc::string::String, i64> =
         alloc::collections::BTreeMap::new();
+    // An assignment this round cannot value is deferred while a fill count
+    // still needs a second round: aborting here would discard the label
+    // offsets that round measures from. It is reported once the layout has
+    // settled, or straight away when nothing is pending.
+    let mut set_err = None;
     for (name, expr, key, at) in &sets {
-        let v = eval_section_set_expr(name, expr, key, *at, &map, &syms, const_of)?;
-        syms.insert(name.clone(), v);
+        match eval_section_set_expr(name, expr, key, *at, &map, &syms, &aliases, const_of) {
+            Ok(v) => {
+                syms.insert(name.clone(), v);
+            }
+            Err(e) => set_err = set_err.or(Some(e)),
+        }
+    }
+    if let Some(e) = set_err
+        && (prev.is_some() || !*unresolved_fill)
+    {
+        return Err(e);
     }
     Ok(SectionLabelOffsets { map, syms })
 }
@@ -5447,6 +5744,53 @@ pub(crate) fn materialize_asm_sections(
     // sink lengths so the offsets are the materialized ones.
     let measured = measure_asm_section_offsets(blocks, const_of, align_is_p2, sink)?;
     let mut defined: alloc::vec::Vec<MaterializedLabel> = alloc::vec::Vec::new();
+    // Names the unit gives external or weak binding, taken from the whole
+    // stream (a `.globl` may follow the reference) and from the directives
+    // earlier statements recorded. A same-section reference to one keeps its
+    // relocation so the link binds the definition that wins; only a local
+    // name resolves in place, as GNU as resolves it.
+    let weak_bound: alloc::collections::BTreeSet<alloc::string::String> = blocks
+        .iter()
+        .flat_map(|b| &b.items)
+        .filter_map(|it| match it {
+            AsmSectionItem::Weak(n) => Some(n.clone()),
+            _ => None,
+        })
+        .chain(
+            sink.sym_decls
+                .iter()
+                .filter(|d| d.bind == AsmSymBind::Weak)
+                .map(|d| d.name.clone()),
+        )
+        .chain(
+            sink.sections
+                .iter()
+                .flat_map(|s| &s.labels)
+                .filter(|l| l.weak)
+                .map(|l| l.name.clone()),
+        )
+        .collect();
+    let non_local: alloc::collections::BTreeSet<alloc::string::String> = blocks
+        .iter()
+        .flat_map(|b| &b.items)
+        .filter_map(|it| match it {
+            AsmSectionItem::Global(n) | AsmSectionItem::Weak(n) => Some(n.clone()),
+            _ => None,
+        })
+        .chain(
+            sink.sym_decls
+                .iter()
+                .filter(|d| matches!(d.bind, AsmSymBind::Global | AsmSymBind::Weak))
+                .map(|d| d.name.clone()),
+        )
+        .chain(
+            sink.sections
+                .iter()
+                .flat_map(|s| &s.labels)
+                .filter(|l| l.global || l.weak)
+                .map(|l| l.name.clone()),
+        )
+        .collect();
     let mut weak_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
     // `.globl` is a unit-level declaration in GNU as: the name it binds
     // external may be defined in any section of the unit, before or after.
@@ -5745,6 +6089,30 @@ pub(crate) fn materialize_asm_sections(
                 // out. `.set name, sym` is a unit-level alias; the file-scope
                 // parse records both, the operand emit paths reject them.
                 AsmSectionItem::Weak(name) => weak_names.push(name.clone()),
+                // Visibility is carried by name to the object writer, which
+                // sets `st_other` wherever the symbol is emitted.
+                AsmSectionItem::Hidden(_) => {}
+                // `.reloc`: the offset is section-relative and independent of
+                // the location counter, and no field is deposited.
+                AsmSectionItem::Reloc {
+                    offset,
+                    rtype,
+                    target,
+                    addend,
+                } => sec.relocs.push(AsmSectionReloc {
+                    offset: *offset,
+                    width: 0,
+                    kind: AsmRelocKind::Explicit(*rtype),
+                    pcrel: false,
+                    branch: false,
+                    signed: false,
+                    target: if target.is_empty() {
+                        AsmSectionTarget::OwnSection(0)
+                    } else {
+                        AsmSectionTarget::Symbol(target.clone())
+                    },
+                    addend: *addend,
+                }),
                 // `.set name, sym` is a unit-level alias; a `.set` over
                 // section-local locations was valued during measurement.
                 AsmSectionItem::SymSet { .. } => {}
@@ -6168,50 +6536,73 @@ pub(crate) fn materialize_asm_sections(
                             let mut v = eval_asm_value(text, &ctx)
                                 .and_then(|v| v.combine(AsmExprValue::abs(r.addend), false))
                                 .map_err(named)?;
-                            if r.pcrel || r.kind.self_relative() {
-                                v = v
-                                    .combine(
-                                        AsmExprValue::from_term(AsmExprTerm {
-                                            space: Some((space.clone(), place)),
-                                            target: AsmSectionTarget::OwnSection(place as u32),
-                                        }),
-                                        true,
-                                    )
-                                    .map_err(named)?;
-                            }
-                            match resolve_asm_value(v, Some((&space, place))).map_err(named)? {
-                                AsmResolved::Abs(c) => {
-                                    store_asm_insn_const(&mut buf, r.offset as usize, &r, c)
+                            // GNU as folds a difference of symbols whatever
+                            // their binding, but a PC-relativity the encoding
+                            // supplies keeps the relocation unless the symbol
+                            // is local. Naming the symbol hands the reference
+                            // to the shared path below.
+                            let external = v
+                                .lone_symbol()
+                                .filter(|n| non_local.contains(*n))
+                                .map(|n| (alloc::string::String::from(n), v.constant()));
+                            if let Some((n, add)) = external {
+                                r.target = AsmSectionTarget::Symbol(n);
+                                r.addend = add;
+                            } else {
+                                if r.pcrel || r.kind.self_relative() {
+                                    v = v
+                                        .combine(
+                                            AsmExprValue::from_term(AsmExprTerm {
+                                                space: Some((space.clone(), place)),
+                                                target: AsmSectionTarget::OwnSection(place as u32),
+                                            }),
+                                            true,
+                                        )
                                         .map_err(named)?;
-                                    continue;
                                 }
-                                AsmResolved::Reloc {
-                                    target,
-                                    addend,
-                                    pcrel,
-                                } => {
-                                    r.target = target;
-                                    r.addend = addend;
-                                    // A data field's PC-relativity rides the
-                                    // relocation; an instruction field's is
-                                    // its kind's and stays as encoded.
-                                    if r.kind == AsmRelocKind::Data {
-                                        r.pcrel = pcrel;
+                                match resolve_asm_value(v, Some((&space, place))).map_err(named)? {
+                                    AsmResolved::Abs(c) => {
+                                        store_asm_insn_const(&mut buf, r.offset as usize, &r, c)
+                                            .map_err(named)?;
+                                        continue;
+                                    }
+                                    AsmResolved::Reloc {
+                                        target,
+                                        addend,
+                                        pcrel,
+                                    } => {
+                                        r.target = target;
+                                        r.addend = addend;
+                                        // A data field's PC-relativity rides
+                                        // the relocation; an instruction
+                                        // field's is its kind's and stays as
+                                        // encoded.
+                                        if matches!(
+                                            r.kind,
+                                            AsmRelocKind::Data | AsmRelocKind::JumpRel
+                                        ) {
+                                            r.pcrel = pcrel;
+                                        }
                                     }
                                 }
                             }
                         }
-                        let leaf = match &r.target {
-                            AsmSectionTarget::Symbol(n) => section_expr_leaf(
-                                n,
-                                &key,
-                                0,
-                                &measured,
-                                sink_labels,
-                                &num_unique,
-                                label_off,
+                        let (leaf, local) = match &r.target {
+                            AsmSectionTarget::Symbol(n) => (
+                                section_expr_leaf(
+                                    n,
+                                    &key,
+                                    0,
+                                    &measured,
+                                    sink_labels,
+                                    &num_unique,
+                                    label_off,
+                                ),
+                                !non_local.contains(n.as_str())
+                                    || (r.kind == AsmRelocKind::JumpRel
+                                        && !weak_bound.contains(n.as_str())),
                             ),
-                            _ => None,
+                            _ => (None, true),
                         };
                         match leaf {
                             Some(AsmExprLeaf::Loc(t)) => {
@@ -6225,6 +6616,7 @@ pub(crate) fn materialize_asm_sections(
                                 };
                                 let place = base as i64 + r.offset as i64;
                                 if same
+                                    && local
                                     && patch_asm_insn_field(
                                         &mut buf,
                                         r.offset as usize,
@@ -6312,10 +6704,23 @@ pub(crate) fn materialize_asm_sections(
     // (a forward `.type` before its label was filled in by the definition).
     // Only this call's sections can hold a pending entry: every call drops
     // its own below, so none survives into the next.
+    // A `.set name, symbol` alias is a symbol of the unit with no label of
+    // its own, so a `.type` / `.size` over one stays pending here; the alias
+    // takes its target's attributes.
+    let aliased: alloc::collections::BTreeSet<&str> = blocks
+        .iter()
+        .flat_map(|b| &b.items)
+        .filter_map(|it| match it {
+            AsmSectionItem::SymSet { name, .. } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
     for &(sec_idx, _) in &touched {
         let s = &mut sink.sections[sec_idx];
         if let Some(l) = s.labels.iter().find(|l| {
-            l.offset == PENDING_LABEL && (l.sym_type != AsmSymType::NoType || l.size.is_some())
+            l.offset == PENDING_LABEL
+                && (l.sym_type != AsmSymType::NoType || l.size.is_some())
+                && !aliased.contains(l.name.as_str())
         }) {
             return Err(alloc::format!(
                 "inline asm: `.type`/`.size` names undefined label `{}`",
@@ -7188,6 +7593,10 @@ fn val_leaf(
     ctx: &AsmExprCtx,
 ) -> Result<AsmExprValue, alloc::string::String> {
     skip_ws(b, i);
+    if let Some((v, next)) = parse_asm_char_const(b, *i) {
+        *i = next;
+        return Ok(AsmExprValue::abs(v));
+    }
     let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
     let start = *i;
     while *i < b.len() && ident(b[*i]) {
@@ -7236,6 +7645,64 @@ fn val_leaf(
             .ok_or_else(|| alloc::format!("bad numeric literal `{tok}`"));
     }
     leaf_of(tok)
+}
+
+/// Parse a GNU as character constant `'c'` at `at`, returning its value and
+/// the index past it. The escapes are C's plus GNU as's octal and hex forms.
+/// GNU as also accepts the unterminated `'c` spelling.
+fn parse_asm_char_const(b: &[u8], at: usize) -> Option<(i64, usize)> {
+    if b.get(at) != Some(&b'\'') {
+        return None;
+    }
+    let mut i = at + 1;
+    let c = *b.get(i)?;
+    i += 1;
+    let v = if c != b'\\' {
+        c as i64
+    } else {
+        let e = *b.get(i)?;
+        i += 1;
+        match e {
+            b'n' => 10,
+            b't' => 9,
+            b'r' => 13,
+            b'b' => 8,
+            b'f' => 12,
+            b'v' => 11,
+            b'a' => 7,
+            b'e' => 27,
+            b'x' | b'X' => {
+                let start = i;
+                let mut v: i64 = 0;
+                while let Some(d) = b.get(i).and_then(|c| (*c as char).to_digit(16)) {
+                    v = (v << 4) | d as i64;
+                    i += 1;
+                }
+                if i == start {
+                    return None;
+                }
+                v & 0xff
+            }
+            b'0'..=b'7' => {
+                let mut v = (e - b'0') as i64;
+                for _ in 0..2 {
+                    match b.get(i) {
+                        Some(d @ b'0'..=b'7') => {
+                            v = (v << 3) | (d - b'0') as i64;
+                            i += 1;
+                        }
+                        _ => break,
+                    }
+                }
+                v & 0xff
+            }
+            other => other as i64,
+        }
+    };
+    if b.get(i) == Some(&b'\'') {
+        i += 1;
+    }
+    Some((v, i))
 }
 
 /// Parse an assembler integer literal: decimal, `0x` hex, `0b` binary, or
@@ -9274,6 +9741,95 @@ mod asm_section_tests {
 
     fn rept(text: &str) -> Result<alloc::string::String, alloc::string::String> {
         Ok(expand_asm_gas_macros(text, 4, &|_| None)?.expect("`.rept` triggers the pass"))
+    }
+
+    /// GNU as spells the repeat directive `.rept` or `.rep`, and iterates the
+    /// characters of an operand with `.irpc`. Bytes measured with GNU as
+    /// 2.46.1: `.rep 3 / .byte 0xaa / .endr` deposits `aa aa aa`;
+    /// `.irpc l, 0123 / .byte \l / .endr` deposits `00 01 02 03`; an empty
+    /// `.irpc` operand still expands the body once.
+    #[test]
+    fn rep_and_irpc_match_gnu_as() {
+        assert_eq!(
+            rept(".rep 3\n.byte 0xaa\n.endr\n")
+                .unwrap()
+                .matches(".byte 0xaa")
+                .count(),
+            3
+        );
+        let out = rept(".irpc l, 0123\n.byte \\l\n.endr\n").unwrap();
+        assert_eq!(out, ".byte 0\n.byte 1\n.byte 2\n.byte 3\n", "{out}");
+        let out = rept(".irpc c, ab\n.ascii \"[\\c]\"\n.endr\n").unwrap();
+        assert_eq!(out, ".ascii \"[a]\"\n.ascii \"[b]\"\n", "{out}");
+        assert_eq!(
+            rept(".irpc n,\n.byte 0xff\n.endr\n").unwrap(),
+            ".byte 0xff\n"
+        );
+        // The dead branch of a conditional consumes both spellings' bodies,
+        // so neither `.endr` leaks.
+        assert_eq!(
+            rept(".if 0\n.rep 2\nnop\n.endr\n.endif\nret\n").unwrap(),
+            "ret\n"
+        );
+        assert_eq!(
+            rept(".if 0\n.irpc l,ab\nnop\n.endr\n.endif\nret\n").unwrap(),
+            "ret\n"
+        );
+    }
+
+    /// GNU as separates a macro invocation's arguments by commas or by
+    /// whitespace, and `%` is not one of the operators that keeps whitespace
+    /// from separating: measured, `m 1 % 2` binds three arguments and
+    /// `m %r8 %r9` binds two, while `m sym + 24` stays one.
+    #[test]
+    fn macro_arguments_split_on_whitespace_like_gnu_as() {
+        let show = ".macro SHOW a b c\n.ascii \"[\\a][\\b][\\c]\"\n.endm\n";
+        let go = |call: &str| rept(&alloc::format!("{show}{call}\n")).unwrap();
+        assert_eq!(go("SHOW %r8 %r9"), ".ascii \"[%r8][%r9][]\"\n");
+        assert_eq!(go("SHOW 1 % 2"), ".ascii \"[1][%][2]\"\n");
+        assert_eq!(go("SHOW p q, r"), ".ascii \"[p][q][r]\"\n");
+        assert_eq!(go("SHOW sym + 24"), ".ascii \"[sym + 24][][]\"\n");
+        // A character constant is one argument, separators included, and
+        // binds as its value: `SHOW 'r', ' ', ':'` measures `[114][32][58]`.
+        assert_eq!(go("SHOW 'r', ' ', ':'"), ".ascii \"[114][32][58]\"\n");
+    }
+
+    /// A `.set` folds into the expander's symbol table, which substitutes it
+    /// into what follows. A statement that referenced the name earlier is
+    /// already past, so the assignment stays in the stream for the section
+    /// layer to define -- `arch/x86/boot/header.S` reads `textsize` in its PE
+    /// header and assigns it further down.
+    #[test]
+    fn a_set_referenced_before_its_assignment_stays_in_the_stream() {
+        let out = rept(".long textsize\n.set textsize, 0x1234\n.long textsize\n").unwrap();
+        assert_eq!(
+            out, ".long textsize\n.set textsize, 4660\n.long 4660\n",
+            "{out}"
+        );
+        // One referenced only after its assignment still folds away.
+        assert_eq!(
+            rept(".set only_after, 7\n.long only_after\n").unwrap(),
+            ".long 7\n"
+        );
+    }
+
+    /// A macro body is re-scanned after substitution, so a `;` that arrives
+    /// through an argument separates statements -- the x86 ALTERNATIVE macros
+    /// pass a whole instruction sequence as one argument, and the macros it
+    /// names have to be recognized inside it. GNU as also ends a macro name
+    /// at the first character that cannot be part of one, so the C-macro
+    /// invocation spelling works.
+    #[test]
+    fn macro_expansion_rescans_substituted_statements() {
+        let defs = ".macro INNER t\n.byte \\t\n.endm\n.macro OUTER body\n\\body\n.endm\n";
+        assert_eq!(
+            rept(&alloc::format!("{defs}OUTER \"nop; INNER t=2; ret\"\n")).unwrap(),
+            "nop\n.byte 2\nret\n"
+        );
+        assert_eq!(
+            rept(&alloc::format!("{defs}INNER(7)\n")).unwrap(),
+            ".byte (7)\n"
+        );
     }
 
     #[test]

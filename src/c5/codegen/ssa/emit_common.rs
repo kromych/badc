@@ -5598,15 +5598,23 @@ fn measure_round_inner(
     }
     let mut syms: alloc::collections::BTreeMap<alloc::string::String, i64> =
         alloc::collections::BTreeMap::new();
+    // An assignment this round cannot value is deferred while a fill count
+    // still needs a second round: aborting here would discard the label
+    // offsets that round measures from. It is reported once the layout has
+    // settled, or straight away when nothing is pending.
+    let mut set_err = None;
     for (name, expr, key, at) in &sets {
-        // An assignment this round cannot value leaves the symbol unbound;
-        // the round's label offsets stand, and a reader of the symbol
-        // reports it. Aborting here would discard the layout the fill
-        // counts of the next round need.
-        if let Ok(v) = eval_section_set_expr(name, expr, key, *at, &map, &syms, &aliases, const_of)
-        {
-            syms.insert(name.clone(), v);
+        match eval_section_set_expr(name, expr, key, *at, &map, &syms, &aliases, const_of) {
+            Ok(v) => {
+                syms.insert(name.clone(), v);
+            }
+            Err(e) => set_err = set_err.or(Some(e)),
         }
+    }
+    if let Some(e) = set_err
+        && (prev.is_some() || !*unresolved_fill)
+    {
+        return Err(e);
     }
     Ok(SectionLabelOffsets { map, syms })
 }

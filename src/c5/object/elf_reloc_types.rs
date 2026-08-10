@@ -24,6 +24,7 @@ pub(crate) const R_X86_64_32S: u32 = 11;
 pub(crate) const R_X86_64_16: u32 = 12;
 pub(crate) const R_X86_64_8: u32 = 14;
 pub(crate) const R_X86_64_PC16: u32 = 13;
+pub(crate) const R_X86_64_DTPOFF64: u32 = 17;
 pub(crate) const R_X86_64_TPOFF32: u32 = 23;
 pub(crate) const R_X86_64_PC64: u32 = 24;
 pub(crate) const R_X86_64_REX_GOTPCRELX: u32 = 42;
@@ -70,6 +71,7 @@ pub(crate) const R_AARCH64_COPY: u32 = 1024;
 pub(crate) const R_AARCH64_GLOB_DAT: u32 = 1025;
 pub(crate) const R_AARCH64_JUMP_SLOT: u32 = 1026;
 pub(crate) const R_AARCH64_RELATIVE: u32 = 1027;
+pub(crate) const R_AARCH64_TLS_DTPREL64: u32 = 1029;
 
 /// Access size in bytes that an `R_AARCH64_LDST<n>_ABS_LO12_NC`
 /// relocation scales its immediate by, or `None` for any other type.

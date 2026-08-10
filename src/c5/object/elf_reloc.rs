@@ -60,11 +60,11 @@ use super::elf_reloc_types::{
     R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_CONDBR19, R_AARCH64_JUMP26,
     R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_LDST8_ABS_LO12_NC,
     R_AARCH64_LDST16_ABS_LO12_NC, R_AARCH64_LDST32_ABS_LO12_NC, R_AARCH64_LDST64_ABS_LO12_NC,
-    R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
+    R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64,
     R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_AARCH64_TSTBR14,
-    R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_PC16, R_X86_64_PC32,
-    R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, i386_field_width,
-    i386_reloc_desc,
+    R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF64,
+    R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
+    R_X86_64_TPOFF32, i386_field_width, i386_reloc_desc,
 };
 
 // ELF64 constants (Elf.h subset).
@@ -1633,6 +1633,11 @@ pub(super) fn write_relocatable(
     // `.data` symbol table -- their value is a TLS-block offset, not a
     // `.data` offset, and merging them as `.data` symbols would collide).
     let mut defined_tls_globals: Vec<(&str, i64, u64)> = Vec::new();
+    // Internal-linkage `_Thread_local` objects. They resolve nothing
+    // across units, so they bind STB_LOCAL and stay out of the note
+    // channel, which is name-keyed; a symbol still has to name them or
+    // their storage carries no description. Same shape gcc emits.
+    let mut defined_tls_locals: Vec<(&str, i64, u64)> = Vec::new();
     {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
@@ -1648,10 +1653,13 @@ pub(super) fn write_relocatable(
                 Linkage::External => {
                     defined_data_globals.push((sym.link_name(), sym.val, size));
                 }
-                // An alias names another object's storage and a
-                // thread-local static's value is a TLS-block offset, which
-                // `DataPlan::map` would read as a `.data` offset.
-                Linkage::Internal if !sym.is_thread_local && !sym.is_alias => {
+                // A thread-local's value is a TLS-block offset, which
+                // `DataPlan::map` would read as a `.data` offset. An
+                // alias names another object's storage.
+                Linkage::Internal if sym.is_thread_local && !sym.is_alias => {
+                    defined_tls_locals.push((sym.link_name(), sym.val, size));
+                }
+                Linkage::Internal if !sym.is_alias => {
                     defined_data_locals.push((sym.link_name(), sym.val, size));
                 }
                 _ => {}
@@ -1669,6 +1677,9 @@ pub(super) fn write_relocatable(
             .chain(asm_defined_labels.iter().copied())
             .collect();
         defined_data_locals.retain(|(n, _, _)| seen.insert(n));
+        let mut seen_tls: alloc::collections::BTreeSet<&str> =
+            defined_tls_globals.iter().map(|(n, _, _)| *n).collect();
+        defined_tls_locals.retain(|(n, _, _)| seen_tls.insert(n));
     }
 
     // Unique cross-TU user-data names referenced by
@@ -1830,6 +1841,12 @@ pub(super) fn write_relocatable(
     let defined_tls_globals_start = all_names.len();
     if elf_tls_interop {
         for (name, _, _) in &defined_tls_globals {
+            all_names.push(*name);
+        }
+    }
+    let defined_tls_locals_start = all_names.len();
+    if elf_tls_interop {
+        for (name, _, _) in &defined_tls_locals {
             all_names.push(*name);
         }
     }
@@ -2042,6 +2059,37 @@ pub(super) fn write_relocatable(
             st_shndx: shndx,
             st_value: value,
             st_size: *size,
+        });
+    }
+    // `_Thread_local` objects: STT_TLS against `.tdata` / `.tbss` with a
+    // section-relative value, so a sibling unit's local-exec relocation
+    // and this unit's debug info resolve through the merged TLS block.
+    // The unit's block is `.tdata` bytes then `.tbss` zero fill; an
+    // offset past the initialized bytes is `.tbss`-relative.
+    let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
+    let tls_home = |off: i64| {
+        if off >= tls_init_len {
+            (SHIDX_TBSS, off - tls_init_len)
+        } else {
+            (SHIDX_TDATA, off)
+        }
+    };
+    let mut defined_tls_symidx: alloc::collections::BTreeMap<&str, u64> =
+        alloc::collections::BTreeMap::new();
+    for (i, (name, off, size)) in defined_tls_locals
+        .iter()
+        .enumerate()
+        .take_while(|_| elf_tls_interop)
+    {
+        let (shndx, value) = tls_home(*off);
+        defined_tls_symidx.insert(name, symbols.len() as u64);
+        symbols.push(Elf64Sym {
+            st_name: name_offs[defined_tls_locals_start + i],
+            st_info: pack_sym_info(STB_LOCAL, STT_TLS),
+            st_shndx: shndx,
+            st_value: value as u64,
+            st_size: *size,
+            ..Default::default()
         });
     }
     let first_global = symbols.len() as u32;
@@ -2287,22 +2335,15 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // Defined `_Thread_local` globals: STB_GLOBAL + STT_TLS against
-    // `.tdata` / `.tbss` with a section-relative value, so sibling
-    // units' local-exec relocations resolve through the merged TLS
-    // block. The unit's block is `.tdata` bytes then `.tbss` zero
-    // fill; an offset past the initialized bytes is `.tbss`-relative.
-    let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
-    for (i, (_, off, size)) in defined_tls_globals
+    // Defined `_Thread_local` globals: the local form's shape under
+    // STB_GLOBAL.
+    for (i, (name, off, size)) in defined_tls_globals
         .iter()
         .enumerate()
         .take_while(|_| elf_tls_interop)
     {
-        let (shndx, value) = if *off >= tls_init_len {
-            (SHIDX_TBSS, off - tls_init_len)
-        } else {
-            (SHIDX_TDATA, *off)
-        };
+        let (shndx, value) = tls_home(*off);
+        defined_tls_symidx.insert(name, symbols.len() as u64);
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_tls_globals_start + i],
             st_info: pack_sym_info(STB_GLOBAL, STT_TLS),
@@ -3021,13 +3062,15 @@ pub(super) fn write_relocatable(
     };
     // `DW_OP_addr` in a variable's location names the object by its
     // link name; both linkage classes carry a symbol-table entry, and an
-    // inline-asm label may have claimed the name first.
+    // inline-asm label may have claimed the name first. A thread-local
+    // resolves against the unit's own STT_TLS entry.
     let dwarf_obj_sym_idx = |name: &str| -> Option<u64> {
         defined_data_symidx
             .get(name)
             .copied()
             .or_else(|| defined_data_local_symidx.get(name).copied())
             .or_else(|| asm_label_symidx.get(name).map(|&i| i as u64))
+            .or_else(|| defined_tls_symidx.get(name).copied())
     };
     let mut rela_debug_info_bytes: Vec<u8> =
         Vec::with_capacity(dwarf.info_relocs.len() * ELF64_RELA_SIZE);
@@ -4049,7 +4092,9 @@ fn build_badc_note(
 /// caller pre-resolved when laying out the symbol table; a
 /// `DW_OP_addr` slot resolves through `obj_sym_idx` instead, and
 /// yields no entry when the name reached no symbol, leaving the
-/// address null rather than pointing it somewhere else.
+/// address null rather than pointing it somewhere else. A
+/// thread-local's slot takes a thread-block offset, so it uses the
+/// module-relative TLS reloc rather than an absolute one.
 fn dwarf_reloc_to_elf_rela(
     r: &DwarfReloc,
     machine: Machine,
@@ -4059,19 +4104,20 @@ fn dwarf_reloc_to_elf_rela(
     reloc_symbols: &[String],
     obj_sym_idx: &dyn Fn(&str) -> Option<u64>,
 ) -> Option<Elf64Rela> {
+    let named = |i: u32| obj_sym_idx(reloc_symbols.get(i as usize).map(|s| s.as_str())?);
     let sym_idx = match r.target {
         DwarfRelocTarget::Text => text_sym_idx,
         DwarfRelocTarget::DebugLine => debug_line_sym_idx,
         DwarfRelocTarget::DebugAbbrev => debug_abbrev_sym_idx,
-        DwarfRelocTarget::Symbol(i) => {
-            obj_sym_idx(reloc_symbols.get(i as usize).map(|s| s.as_str())?)?
-        }
+        DwarfRelocTarget::Symbol(i) | DwarfRelocTarget::ThreadLocalSymbol(i) => named(i)?,
     };
-    let rtype = match (r.width, machine) {
-        (DwarfRelocWidth::W8, Machine::X86_64) => R_X86_64_64,
-        (DwarfRelocWidth::W4, Machine::X86_64) => R_X86_64_32,
-        (DwarfRelocWidth::W8, Machine::Aarch64) => R_AARCH64_ABS64,
-        (DwarfRelocWidth::W4, Machine::Aarch64) => R_AARCH64_ABS32,
+    let rtype = match (r.target, r.width, machine) {
+        (DwarfRelocTarget::ThreadLocalSymbol(_), _, Machine::X86_64) => R_X86_64_DTPOFF64,
+        (DwarfRelocTarget::ThreadLocalSymbol(_), _, Machine::Aarch64) => R_AARCH64_TLS_DTPREL64,
+        (_, DwarfRelocWidth::W8, Machine::X86_64) => R_X86_64_64,
+        (_, DwarfRelocWidth::W4, Machine::X86_64) => R_X86_64_32,
+        (_, DwarfRelocWidth::W8, Machine::Aarch64) => R_AARCH64_ABS64,
+        (_, DwarfRelocWidth::W4, Machine::Aarch64) => R_AARCH64_ABS32,
     };
     Some(Elf64Rela {
         r_offset: r.offset,

@@ -447,6 +447,9 @@ struct Subprog {
     /// turns each into a `DW_TAG_variable` /
     /// `DW_TAG_formal_parameter` child of the subprogram DIE.
     variables: Vec<SubprogVar>,
+    /// False for a definition with internal linkage (C99 6.2.2p3), so
+    /// the DIE drops `DW_AT_external`.
+    external: bool,
 }
 
 /// One PLT-trampoline subprogram. Mirrors `Subprog` but
@@ -652,6 +655,21 @@ fn collect_subprograms(
             .map(|s| (s.val as usize, &s.name))
             .collect()
     };
+    // A `static` definition's name is not visible outside the
+    // compilation unit (C99 6.2.2p3), so its DIE drops
+    // DW_AT_external. Keyed by entry pc, which is a defined
+    // function symbol's `val`.
+    let internal_pcs: alloc::collections::BTreeSet<usize> = {
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.class == Token::Fun as i64 && s.linkage == crate::c5::symbol::Linkage::Internal
+            })
+            .map(|s| s.val as usize)
+            .collect()
+    };
     let func_name_by_pc: BTreeMap<usize, alloc::string::String> = build
         .func_ent_pcs
         .iter()
@@ -770,6 +788,7 @@ fn collect_subprograms(
             high_pc: code_vmaddr + hi as u64,
             prologue_size: prologue_size_for(ent_pc, lo, build),
             variables,
+            external: !internal_pcs.contains(&ent_pc),
         });
     }
 
@@ -1232,6 +1251,7 @@ const ABBREV_ARRAY_TYPE: u64 = 15;
 const ABBREV_SUBRANGE_TYPE: u64 = 16;
 const ABBREV_ENUMERATION_TYPE: u64 = 17;
 const ABBREV_ENUMERATOR: u64 = 18;
+const ABBREV_SUBPROGRAM_INTERNAL: u64 = 19;
 
 /// One `.debug_abbrev` declaration: the abbreviation code, its DWARF
 /// tag, whether the DIE has children, and the ordered (attribute,
@@ -1266,6 +1286,10 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
     // resolves DW_OP_fbreg references against c5's frame pointer.
     // DW_AT_prototyped is always set: c5 rejects K&R declarators per
     // C99 6.7.6.3p14. DW_AT_calling_convention pins DW_CC_normal.
+    // DW_AT_external marks the name visible outside the compilation
+    // unit (DWARF 4 3.3.1), which C99 6.2.2p3 denies a `static`
+    // definition; the internal-linkage form drops it. Both are
+    // DW_FORM_flag_present, so the two DIEs are the same size.
     AbbrevDecl {
         code: ABBREV_SUBPROGRAM,
         tag: DW_TAG_SUBPROGRAM,
@@ -1275,6 +1299,19 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+            (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
+        ],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBPROGRAM_INTERNAL,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
@@ -1694,7 +1731,14 @@ fn build_debug_info(
     // Subprogram children, each with its own variable /
     // formal_parameter children.
     for s in subs {
-        write_uleb128(&mut body, ABBREV_SUBPROGRAM);
+        write_uleb128(
+            &mut body,
+            if s.external {
+                ABBREV_SUBPROGRAM
+            } else {
+                ABBREV_SUBPROGRAM_INTERNAL
+            },
+        );
         body.extend_from_slice(&s.name_off.to_le_bytes());
         body.extend_from_slice(&s.low_pc.to_le_bytes());
         body.extend_from_slice(&(s.high_pc - s.low_pc).to_le_bytes());
@@ -2769,12 +2813,12 @@ mod tests {
         assert_eq!(
             hex,
             "011101250e130b030e1b0e1101120710170000022e01030e110112073f192719360b\
-             40180000032400030e0b0b3e0b0000043400030e491302183a0f3b0f000005050003\
-             0e491302183a0f3b0f0000060f000b0b49130000071301030e0b06000008170103\
-             0e0b060000090d00030e4913380600000a0d00030e491338060b0b0c0b0d0b00000b\
-             2e01030e110112073f19491300000c0500030e491300000d180000000e0500030e49\
-             13021800000f0101491300001021002f0f000011040103080b0b000012280003081c\
-             0d000000"
+             40180000132e01030e110112072719360b40180000032400030e0b0b3e0b00000434\
+             00030e491302183a0f3b0f0000050500030e491302183a0f3b0f0000060f000b0b49\
+             130000071301030e0b060000081701030e0b060000090d00030e4913380600000a0d\
+             00030e491338060b0b0c0b0d0b00000b2e01030e110112073f19491300000c050003\
+             0e491300000d180000000e0500030e4913021800000f0101491300001021002f0f00\
+             0011040103080b0b000012280003081c0d000000"
         );
     }
 
@@ -3195,6 +3239,7 @@ mod info_golden {
             high_pc: 0x1010,
             prologue_size: 4,
             variables: alloc::vec![],
+            external: true,
         }];
         let plt_subs: alloc::vec::Vec<PltSub> = alloc::vec![];
         let structs: alloc::vec::Vec<StructDef> = alloc::vec![];

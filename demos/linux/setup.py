@@ -41,6 +41,7 @@ import re
 import subprocess
 import sys
 import tarfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -61,6 +62,7 @@ ARCHES = sorted(MINIMAL_KERNELS)
 CONFIGS = ("defconfig", "minimal")
 
 CDN = "https://cdn.kernel.org/pub/linux/kernel"
+MIRROR = "https://github.com/kromych/badc/releases/download/vendor-deps-v1"
 
 
 def log(m: str) -> None:
@@ -76,8 +78,14 @@ def host_arch() -> str:
     return m
 
 
-def tarball_url(version: str) -> str:
-    return f"{CDN}/v{version.split('.', 1)[0]}.x/linux-{version}.tar.xz"
+def tarball_urls(version: str, sha: str) -> list[str]:
+    """Vendor-deps mirror first (the asset name embeds the sha256 prefix,
+    scripts/vendor_deps convention), cdn.kernel.org as the fallback for
+    versions the release does not carry."""
+    return [
+        f"{MIRROR}/linux-{version}-{sha[:8]}.tar.xz",
+        f"{CDN}/v{version.split('.', 1)[0]}.x/linux-{version}.tar.xz",
+    ]
 
 
 def sha256_of(path: Path) -> str:
@@ -88,23 +96,33 @@ def sha256_of(path: Path) -> str:
     return h.hexdigest()
 
 
-def fetch(url: str, dst: Path, want_sha: str) -> None:
+def fetch(urls: list[str], dst: Path, want_sha: str) -> None:
+    """Download dst from the first reachable URL. An unreachable source
+    falls through to the next one; a sha256 mismatch is fatal on any."""
     if dst.is_file() and sha256_of(dst) == want_sha:
         log(f"cached: {dst.name}")
         return
-    log(f"fetching {url}")
-    tmp = dst.with_suffix(dst.suffix + ".part")
-    with urllib.request.urlopen(url) as r, open(tmp, "wb") as f:
-        while True:
-            chunk = r.read(1 << 20)
-            if not chunk:
-                break
-            f.write(chunk)
-    got = sha256_of(tmp)
-    if got != want_sha:
-        tmp.unlink()
-        sys.exit(f"linux setup: sha256 mismatch for {dst.name}: got {got}, want {want_sha}")
-    tmp.rename(dst)
+    for url in urls:
+        log(f"fetching {url}")
+        tmp = dst.with_suffix(dst.suffix + ".part")
+        try:
+            with urllib.request.urlopen(url) as r, open(tmp, "wb") as f:
+                while True:
+                    chunk = r.read(1 << 20)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+        except urllib.error.URLError as e:
+            tmp.unlink(missing_ok=True)
+            log(f"unavailable ({e}), trying next source")
+            continue
+        got = sha256_of(tmp)
+        if got != want_sha:
+            tmp.unlink()
+            sys.exit(f"linux setup: sha256 mismatch for {dst.name}: got {got}, want {want_sha}")
+        tmp.rename(dst)
+        return
+    sys.exit(f"linux setup: no source could provide {dst.name}")
 
 
 def extract(tar_path: Path, dst: Path) -> None:
@@ -150,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     cache = args.cache
     cache.mkdir(parents=True, exist_ok=True)
     tar_path = cache / f"linux-{version}.tar.xz"
-    fetch(tarball_url(version), tar_path, sha)
+    fetch(tarball_urls(version, sha), tar_path, sha)
     if args.fetch_only:
         log(f"tarball ready at {tar_path}")
         return 0

@@ -2,16 +2,19 @@
 """Run the pre-push validation suite on a caller-specified set of
 remote boxes in parallel and bail on the first lane that goes red.
 The point is to catch lane-specific regressions before paying the
-GitHub Actions runtime cost: each remote box runs the same
-release-mode lib test + four gating demos that CI exercises, so a
+GitHub Actions runtime cost: each remote box runs the release-mode
+test suite over every target -- the library plus the integration
+suites under `tests/` -- and the gating demos CI exercises, so a
 green run here is a solid proxy for a green run in the cloud.
+Building and running the integration targets adds ~1.5 min to a lane
+with a warm release build (measured on an idle linux-x64 box).
 
 Each lane:
   1. Rsync (Linux) or tar+scp (Windows) the working tree, excluding
      `target/` and the vendored demo caches so the remote side
      builds + fetches its own caches.
   2. Build release with `cargo build --release --locked`.
-  3. Run `cargo test --release --lib`.
+  3. Run `cargo test --release` (all test targets).
   4. On Linux lanes, rerun the suite under the register-pressure caps
      (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--features "codegen_test full"`)
      as CI's pressure matrix does.
@@ -207,12 +210,12 @@ def kernel_steps() -> list[str]:
 def remote_run_linux(box: Box, github_token: str, kernel: bool) -> int:
     steps = [
         "step cargo build --release --locked --features full",
-        "step cargo test --release --lib --features full",
+        "step cargo test --release --features full",
         # CI additionally runs the suite under register-pressure caps
         # (BADC_MAX_GPR / BADC_MAX_FPR over several N); N=2 is the value
         # that has caught spill-interaction bugs the default banks hide.
         "step env BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
-        'cargo test --release --lib --features "codegen_test full"',
+        'cargo test --release --features "codegen_test full"',
     ] + [f"step python3 {d}" for d in GATING_DEMOS]
     # Last: the most expensive step, so the cheaper ones report first.
     if kernel:
@@ -302,7 +305,7 @@ def remote_run_windows(box: Box, github_token: str, _kernel: bool) -> int:
         f"cd /d {remote_path} && "
         f"set GITHUB_TOKEN={github_token} && "
         f"cargo build --release --locked --features full && "
-        f"cargo test --release --lib --features full && "
+        f"cargo test --release --features full && "
         f"{demo_cmd}"
     )
     # Quote the entire command so the outer ssh-side cmd /c treats the

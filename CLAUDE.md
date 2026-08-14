@@ -28,7 +28,9 @@ and costs money. Be frugal. Before any `git push`, the following must pass on th
 boxes using `./scripts/validate_local_boxes.py`:
 
   * `cargo test`
-  * `cargo test --release --lib` (release exercises the JIT + native fixture-parity paths that debug builds skip)
+  * `cargo test --release` over all test targets (release exercises the JIT + native
+    fixture-parity paths that debug builds skip; the integration suites under
+    `tests/` are part of the gate)
   * the same run again under the register-pressure caps (`BADC_MAX_GPR=2
     BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's pressure matrix does
   * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,

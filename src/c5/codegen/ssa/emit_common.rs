@@ -6537,8 +6537,9 @@ pub(crate) fn materialize_asm_sections(
                                 // an absolute relocation against it.
                                 None => {
                                     let (target, add) = operand_sym(*idx).ok_or_else(|| {
-                                        alloc::string::String::from(
-                                            "inline asm: non-constant section data value",
+                                        alloc::format!(
+                                            "inline asm: section data value `%c{idx}` is neither \
+                                             a constant nor a link-time address"
                                         )
                                     })?;
                                     if !matches!(width, 1 | 2 | 4 | 8) {

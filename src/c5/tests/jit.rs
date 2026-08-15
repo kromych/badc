@@ -1945,6 +1945,32 @@ fn dead_strip_drops_unused_static_function() {
     );
 }
 
+#[test]
+fn asm_template_leading_token_is_not_a_reference() {
+    // A statement's leading token is a label, mnemonic or directive, so it
+    // does not reference a same-named static; a name in operand position
+    // does. `8:` covers the mnemonic that leads its statement behind a label.
+    use crate::Target;
+    use crate::c5::codegen::ssa::shadow::produce_ssa_funcs;
+    let src = "static int nop(int x){return x+1;}\n\
+               static int target(int x){return x+2;}\n\
+               void user(void){__asm__ __volatile__(\"nop\\n8: nop\\ncall target\\n\");}\n\
+               int main(void){user();return 0;}";
+    let program = Compiler::new(src.to_string())
+        .compile()
+        .expect("compile failed");
+    let funcs = produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
+    let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
+    assert!(
+        !names.contains(&"nop"),
+        "a leading mnemonic must not keep a same-named static: {names:?}"
+    );
+    assert!(
+        names.contains(&"target"),
+        "a name in operand position must keep its definition: {names:?}"
+    );
+}
+
 // A pointer-to-extern-data initializer (`&extern_g`) must resolve to the
 // symbol's runtime address under --jit, not be left NULL. `environ` is a
 // libc data export reachable via dlsym in the host process. POSIX-only:

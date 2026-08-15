@@ -1702,14 +1702,16 @@ fn static_fnptr_table_read_by_live_code_keeps_callee() {
 
 #[test]
 fn asm_named_statics_survive_dce() {
-    // A static function named only inside a live function's asm
-    // template and a static object named only in file-scope asm are
-    // referenced by the emitted sections; both must survive.
+    // A static function named in a live function's asm template and a
+    // static object named only in file-scope asm are referenced by the
+    // emitted sections; both must survive. The name has to sit in operand
+    // position: a statement's leading token is a mnemonic, and `//` opens
+    // an aarch64 comment, so neither spelling is a reference.
     let src = "\
         static int asm_fn(int x) { return x + 2; }\n\
         static long asm_blob[2] = { 0x1122334455667788L, 0 };\n\
         asm(\".pushsection .keepme,\\\"a\\\"\\n.quad asm_blob\\n.popsection\");\n\
-        void keep(void) { __asm__ volatile(\"// asm_fn\" ::: \"memory\"); }\n";
+        void keep(void) { __asm__ volatile(\"bl asm_fn\" ::: \"memory\"); }\n";
     let bytes = reloc_tu(src, crate::c5::Target::LinuxAarch64, false);
     assert!(
         bytes.windows(6).any(|w| w == b"asm_fn"),

@@ -666,8 +666,10 @@ pub(crate) fn compute_live_sets(
 }
 
 /// Push the nodes of internal symbols whose names appear as identifier
-/// tokens in an asm template. Conservative in the keep direction: any
-/// token spelled like a defined name counts as a reference.
+/// tokens in an asm template. Conservative in the keep direction, except
+/// in a statement's leading position: that is a label, mnemonic or
+/// directive, never an operand. Statements separate on newline and `;`;
+/// `/* */` is skipped so a newline inside one does not open a statement.
 fn push_asm_names(
     text: &[u8],
     named: &alloc::collections::BTreeMap<&str, Node>,
@@ -675,7 +677,21 @@ fn push_asm_names(
 ) {
     let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'$';
     let mut i = 0;
+    let mut leading = true;
     while i < text.len() {
+        if text[i] == b'/' && text.get(i + 1) == Some(&b'*') {
+            i += 2;
+            while i < text.len() && !(text[i] == b'*' && text.get(i + 1) == Some(&b'/')) {
+                i += 1;
+            }
+            i = i.saturating_add(2).min(text.len());
+            continue;
+        }
+        if text[i] == b'\n' || text[i] == b';' {
+            leading = true;
+            i += 1;
+            continue;
+        }
         if !is_ident(text[i]) {
             i += 1;
             continue;
@@ -683,6 +699,15 @@ fn push_asm_names(
         let s = i;
         while i < text.len() && is_ident(text[i]) {
             i += 1;
+        }
+        if leading {
+            // A label definition leaves the next token still leading.
+            let mut j = i;
+            while matches!(text.get(j), Some(b' ' | b'\t')) {
+                j += 1;
+            }
+            leading = text.get(j) == Some(&b':');
+            continue;
         }
         if text[s].is_ascii_digit() {
             continue;

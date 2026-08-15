@@ -1217,13 +1217,14 @@ fn a_relocated_branch_keeps_the_long_form() {
         "\t.text\nf:\n\tjmp o\n\t.section .other,\"ax\"\no:\n\tnop\n",
     );
     assert_eq!(&t[..5], [0xe9, 0, 0, 0, 0], "target in another section");
-    // A global definition in the same section is resolved in place, as GNU
-    // as resolves it, so it does relax.
+    // A global definition in the same section keeps its relocation too:
+    // GNU as resolves in place only for names local to the unit, so the
+    // link binds the definition that wins.
     let t = text_of(
         "relax-glob",
         "\t.text\n\t.globl g\nf:\n\tjmp g\n\tnop\ng:\n\tnop\n",
     );
-    assert_eq!(&t[..2], [0xeb, 0x01], "global target in this section");
+    assert_eq!(&t[..5], [0xe9, 0, 0, 0, 0], "global target in this section");
 }
 
 /// `call` has no `rel8` form, so it keeps `e8 rel32` at any distance.

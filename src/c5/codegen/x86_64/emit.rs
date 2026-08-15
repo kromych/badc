@@ -8856,6 +8856,13 @@ fn emit_inline_asm(
         if name.starts_with(".L") {
             continue;
         }
+        // One definition per name across the unit, as in GNU as.
+        if asm_text_labels.iter().any(|l| l.name == name) {
+            bail_msg(&alloc::format!(
+                "inline asm: symbol `{name}` is already defined"
+            ));
+            return false;
+        }
         asm_text_labels.push(super::AsmTextLabel {
             name: alloc::string::String::from(name),
             text_offset: off,

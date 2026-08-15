@@ -1184,8 +1184,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         }
         None => text,
     };
-    // `%=` expands to a per-instance number (shared helper). TODO: named
-    // local-label definitions / references (the x86-64 parser has them).
+    // `%=` expands to a per-instance number (shared helper).
     let expanded;
     let text = match emit_common::expand_template_uniq(text) {
         Some(t) => {
@@ -1194,21 +1193,36 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         }
         None => text,
     };
+    // Pre-scan the label definitions so an operand naming one resolves to a
+    // template label rather than a symbol; named labels intern in definition
+    // order.
+    let names = emit_common::scan_label_names(text);
+    if let Some(dup) = emit_common::duplicate_label_name(text) {
+        return Err(format!("inline asm: symbol `{dup}` is already defined"));
+    }
+    let label_num = |name: &str| -> Option<u32> {
+        names
+            .iter()
+            .position(|&n| n == name)
+            .map(|i| emit_common::NAMED_LABEL_BASE + i as u32)
+    };
     let mut insns = Vec::new();
     for piece in emit_common::split_asm_statements(text) {
         let mut piece = piece.trim();
         if piece.is_empty() {
             continue;
         }
-        // A leading `N:` defines a local label at this point; the rest of the
+        // Leading `name:` / `N:` definitions mark this point; the rest of the
         // statement (possibly empty) follows on the same line.
-        if let Some(colon) = piece.find(':')
-            && colon > 0
-            && piece.as_bytes()[..colon].iter().all(u8::is_ascii_digit)
-        {
-            let num: u32 = piece[..colon]
-                .parse()
-                .map_err(|_| format!("inline asm: bad label `{piece}`"))?;
+        while let Some((name, rest)) = emit_common::split_label_def(piece) {
+            let num = if name.as_bytes()[0].is_ascii_digit() {
+                name.parse::<u32>()
+                    .ok()
+                    .filter(|&n| n < emit_common::NAMED_LABEL_BASE)
+                    .ok_or_else(|| format!("inline asm: bad label `{piece}`"))?
+            } else {
+                label_num(name).expect("the pre-scan interned every named definition")
+            };
             insns.push(AsmInsnA64 {
                 mnemonic: String::new(),
                 operands: Vec::new(),
@@ -1216,10 +1230,10 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 label_def: Some(num),
                 sym_target: None,
             });
-            piece = piece[colon + 1..].trim();
-            if piece.is_empty() {
-                continue;
-            }
+            piece = rest.trim();
+        }
+        if piece.is_empty() {
+            continue;
         }
         // `.arch` / `.arch_extension` / `.cpu` select the assembler's target
         // architecture or an ISA extension. The encoder admits every form its
@@ -1508,6 +1522,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         // so the text is kept verbatim here.
         if matches!(mnem, "bl" | "b") {
             let is_symbol_target = !rest.is_empty()
+                && label_num(rest).is_none()
                 && super::super::ssa::emit_common::is_asm_symbol_template(rest)
                 && parse_reg(rest).is_none();
             if is_symbol_target {
@@ -1530,7 +1545,17 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         let mut operands = Vec::new();
         if !rest.is_empty() {
             for op in split_operands(rest) {
-                operands.push(parse_operand(op)?);
+                // A template label named as an operand is a branch / `adr`
+                // target this stream resolves; direction does not apply, a
+                // name has one definition. Register names stay registers.
+                let tok = op.trim();
+                match label_num(tok).filter(|_| parse_reg(tok).is_none()) {
+                    Some(num) => operands.push(AsmOpndA64::Label {
+                        num,
+                        forward: false,
+                    }),
+                    None => operands.push(parse_operand(op)?),
+                }
             }
         }
         insns.push(AsmInsnA64 {
@@ -2588,6 +2613,47 @@ mod tests {
                 forward: true
             }
         );
+    }
+
+    #[test]
+    fn parse_named_labels() {
+        use super::super::super::ssa::emit_common::NAMED_LABEL_BASE;
+        // A name interns in definition order; a branch to one resolves to the
+        // template label, not to a symbol. Two definitions may share a line,
+        // and a spelling that collides with a mnemonic is still a label.
+        let insns = parse_template(b"lp: nop\n\tb lp\n\ta: nop: nop\n\tcbz %0, nop").unwrap();
+        assert_eq!(insns[0].label_def, Some(NAMED_LABEL_BASE));
+        assert_eq!(insns[1].mnemonic, "nop");
+        assert_eq!(insns[2].mnemonic, "b");
+        assert_eq!(insns[2].sym_target, None);
+        assert_eq!(
+            insns[2].operands[0],
+            AsmOpndA64::Label {
+                num: NAMED_LABEL_BASE,
+                forward: false
+            }
+        );
+        assert_eq!(insns[3].label_def, Some(NAMED_LABEL_BASE + 1));
+        assert_eq!(insns[4].label_def, Some(NAMED_LABEL_BASE + 2));
+        assert_eq!(
+            insns[6].operands[1],
+            AsmOpndA64::Label {
+                num: NAMED_LABEL_BASE + 2,
+                forward: false
+            }
+        );
+        // A name the template does not define stays a symbol branch.
+        let insns = parse_template(b"b schedule").unwrap();
+        assert_eq!(insns[0].sym_target.as_deref(), Some("schedule"));
+    }
+
+    #[test]
+    fn parse_rejects_a_duplicate_named_label() {
+        // GNU as rejects a second definition of a name; a numeric local may
+        // repeat, and each reference binds by direction.
+        let err = parse_template(b"dup:\n\tnop\n\tdup:\n\tnop").unwrap_err();
+        assert!(err.contains("`dup` is already defined"), "{err}");
+        parse_template(b"1:\n\tnop\n\t1:\n\tb 1b").unwrap();
     }
 
     #[test]

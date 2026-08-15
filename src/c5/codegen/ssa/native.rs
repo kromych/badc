@@ -69,6 +69,7 @@ pub(crate) fn compile_function_to_bytes(
             let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
             let mut macho_tlv_fixups: Vec<super::MachoTlvFixup> = Vec::new();
             let mut macho_tlv_descriptors: Vec<super::MachoTlvDescriptor> = Vec::new();
+            let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
             // Single-unit in-memory emit: TLS accesses keep the baked
             // offset, so the recorded fixups are unused here.
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
@@ -111,6 +112,7 @@ pub(crate) fn compile_function_to_bytes(
                     &mut macho_tlv_descriptors,
                     &alloc::collections::BTreeMap::new(),
                     &alloc::collections::BTreeMap::new(),
+                    &mut asm_text_labels,
                     false,
                     false,
                     super::super::Hardening::NONE,
@@ -126,6 +128,7 @@ pub(crate) fn compile_function_to_bytes(
                 + tls_index_fixups.len()
                 + macho_tlv_fixups.len()
                 + macho_tlv_descriptors.len()
+                + asm_text_labels.len()
                 + asm_sym_fixups.len();
             if outer != 0 {
                 return Err(format!(

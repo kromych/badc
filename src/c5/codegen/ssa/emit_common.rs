@@ -3619,6 +3619,66 @@ fn split_leading_labels(s: &str) -> (alloc::vec::Vec<&str>, &str) {
     (labels, s[end..].trim_start())
 }
 
+/// Label numbers at and above this mark are interned named labels
+/// (`name:` definitions); below it, GNU-as numeric locals (`1:`).
+pub(crate) const NAMED_LABEL_BASE: u32 = 1 << 31;
+
+/// Peel one leading label definition off a statement, returning the label
+/// name and the remainder. A name is a GNU as identifier; an all-digit name
+/// is a numeric local.
+pub(crate) fn split_label_def(piece: &str) -> Option<(&str, &str)> {
+    let colon = piece.find(':')?;
+    if colon == 0 {
+        return None;
+    }
+    let name = &piece.as_bytes()[..colon];
+    let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
+    let named = !name[0].is_ascii_digit() && ident(name[0]) && name.iter().all(|&c| ident(c));
+    if named || name.iter().all(u8::is_ascii_digit) {
+        Some((&piece[..colon], &piece[colon + 1..]))
+    } else {
+        None
+    }
+}
+
+/// Named labels defined in a template's code text, in definition order --
+/// the intern order the `NAMED_LABEL_BASE + index` label numbers use. Both
+/// arch parsers and the emitters' section materialization read this, so a
+/// reference resolves a name to the same number everywhere.
+pub(crate) fn scan_label_names(text: &str) -> alloc::vec::Vec<&str> {
+    let mut names: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
+    for piece in split_asm_statements(text) {
+        let mut p = piece.trim();
+        while let Some((name, rest)) = split_label_def(p) {
+            if !name.as_bytes()[0].is_ascii_digit() && !names.contains(&name) {
+                names.push(name);
+            }
+            p = rest.trim();
+        }
+    }
+    names
+}
+
+/// The first named label a template's code text defines twice. A name has
+/// one definition in GNU as, which rejects a second; a numeric local may
+/// repeat, and each reference binds by direction.
+pub(crate) fn duplicate_label_name(text: &str) -> Option<&str> {
+    let mut seen: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
+    for piece in split_asm_statements(text) {
+        let mut p = piece.trim();
+        while let Some((name, rest)) = split_label_def(p) {
+            if !name.as_bytes()[0].is_ascii_digit() {
+                if seen.contains(&name) {
+                    return Some(name);
+                }
+                seen.push(name);
+            }
+            p = rest.trim();
+        }
+    }
+    None
+}
+
 /// Split a template into statements at `;` and newlines, with `;` inside a
 /// double-quoted run kept (a quoted macro argument carries whole
 /// instruction sequences: `ALTERNATIVE "a; b", ...`). A newline always

@@ -481,10 +481,6 @@ pub(crate) enum AsmMemBase {
     Ref(u8),
 }
 
-/// Label numbers at and above this mark are interned named labels
-/// (`name:` definitions); below it, GNU-as numeric locals (`1:`).
-pub(crate) const NAMED_LABEL_BASE: u32 = 1 << 31;
-
 /// One instruction of a parsed template, in AT&T operand order.
 #[derive(Debug, Clone)]
 pub(crate) struct AsmInsn {
@@ -2385,42 +2381,7 @@ fn parse_raw_bytes(piece: &str) -> Option<Result<Vec<u8>, String>> {
     None
 }
 
-/// Split a leading `name:` / `N:` local-label definition off `piece`,
-/// returning the label text and the remainder. Names use the assembler
-/// identifier charset (`.` and `$` included); a `%`-prefixed token (a
-/// segment override like `%fs:0x0`) never matches.
-fn split_label_def(piece: &str) -> Option<(&str, &str)> {
-    let colon = piece.find(':')?;
-    if colon == 0 {
-        return None;
-    }
-    let name = &piece.as_bytes()[..colon];
-    let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
-    let named = !name[0].is_ascii_digit() && ident(name[0]) && name.iter().all(|&c| ident(c));
-    if named || name.iter().all(u8::is_ascii_digit) {
-        Some((&piece[..colon], &piece[colon + 1..]))
-    } else {
-        None
-    }
-}
-
-/// Named local labels defined in the template's code text, in definition
-/// order (the intern order the `NAMED_LABEL_BASE + index` label numbers
-/// use). Shared with the emitter's section materialization so a section
-/// reference resolves a name to the same number.
-pub(crate) fn scan_label_names(text: &str) -> Vec<&str> {
-    let mut names: Vec<&str> = Vec::new();
-    for piece in super::ssa::emit_common::split_asm_statements(text) {
-        let mut p = piece.trim();
-        while let Some((name, rest)) = split_label_def(p) {
-            if !name.as_bytes()[0].is_ascii_digit() && !names.contains(&name) {
-                names.push(name);
-            }
-            p = rest.trim();
-        }
-    }
-    names
-}
+pub(crate) use super::ssa::emit_common::{NAMED_LABEL_BASE, scan_label_names, split_label_def};
 
 /// Parse an AT&T inline-asm template into its instruction sequence.
 /// Instructions are separated by `;` or newlines; operands by commas.
@@ -2449,6 +2410,9 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
     // Pre-scan the label definitions so operand parsing can tell a local
     // label from a symbol; named labels intern in definition order.
     let names = scan_label_names(text);
+    if let Some(dup) = super::super::ssa::emit_common::duplicate_label_name(text) {
+        return Err(format!("inline asm: symbol `{dup}` is already defined"));
+    }
     let mut insns = Vec::new();
     for piece in super::ssa::emit_common::split_asm_statements(text) {
         let mut piece = piece.trim();

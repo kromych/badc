@@ -2060,6 +2060,7 @@ pub(crate) fn lower(
     let mut text_align: usize = 16;
     let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
     let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
@@ -2141,6 +2142,7 @@ pub(crate) fn lower(
                 &mut macho_tlv_descriptors,
                 &name2entpc,
                 &data_sym_offsets,
+                &mut asm_text_labels,
                 native.no_fp_regs,
                 native.strict_align,
                 native.hardening,
@@ -2364,9 +2366,7 @@ pub(crate) fn lower(
         // No aarch64 form takes a label address as an absolute immediate.
         asm_text_abs_refs: Vec::new(),
         asm_sym_fixups,
-        // The A64 template parser accepts numeric local labels only, so no
-        // main-stream label can carry a name a C reference spells.
-        asm_text_labels: Vec::new(),
+        asm_text_labels,
         copy_relocs: Vec::new(),
         text: code,
         text_align,

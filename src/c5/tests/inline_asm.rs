@@ -1397,3 +1397,134 @@ fn wide_operand_memory_and_split_spellings_stay_accepted() {
             .unwrap_or_else(|e| panic!("{target:?}: {e}"));
     }
 }
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_named_label_in_a_code_stream_defines_a_symbol() {
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    // GNU as makes a named label in an asm code stream a definition of the
+    // unit: a `.text` NOTYPE symbol at the label's offset, local unless a
+    // directive on the name rebinds it. A `.L`-prefixed name is
+    // assembler-local and reaches no symbol table. Goldens from GNU as 2.46.1
+    // (aarch64).
+    let src = "\
+        void f(void) { __asm__ volatile(\"plain:\\n\\tnop\\n\\t.Lhidden:\\n\\tnop\"); }\n\
+        void g(void) { __asm__ volatile(\".globl gl\\n\\tgl:\\n\\tnop\"); }\n\
+        void h(void) { __asm__ volatile(\".weak wk\\n\\twk:\\n\\tnop\"); }\n\
+        void i(void) { __asm__ volatile(\".globl fx\\n\\t.type fx,%function\\n\\tfx:\\n\\tnop\"); }\n";
+    let program = crate::Compiler::with_options(
+        src.to_string(),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let sym = |n: &str| obj.symbols.iter().find(|s| s.name == n);
+    // (binding, type): STB_LOCAL / GLOBAL / WEAK, STT_NOTYPE / FUNC.
+    for (name, bind, kind) in [
+        ("plain", 0u8, 0u8),
+        ("gl", 1, 0),
+        ("wk", 2, 0),
+        ("fx", 1, 2),
+    ] {
+        let s = sym(name).unwrap_or_else(|| panic!("`{name}` must be defined"));
+        assert_eq!(s.binding, bind, "`{name}` binding");
+        assert_eq!(s.kind, kind, "`{name}` type");
+        assert!(
+            matches!(s.section, NativeSymSection::Text),
+            "`{name}` must be defined in `.text`: {:?}",
+            s.section
+        );
+    }
+    assert!(
+        sym(".Lhidden").is_none(),
+        "a `.L`-prefixed label is assembler-local and defines no symbol"
+    );
+    assert_eq!(
+        sym("plain").unwrap().value,
+        sym("f").expect("f").value,
+        "`plain:` stands at the offset it was written at"
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_branch_to_a_named_label_resolves_in_the_code_stream() {
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    // A branch whose target the same template defines resolves to a
+    // displacement and carries no relocation, as GNU as does; `b` back one
+    // word encodes 0x17FFFFFF.
+    let src = "void f(void) { __asm__ volatile(\"lp:\\n\\tnop\\n\\tb lp\"); }\n";
+    let program = crate::Compiler::with_options(
+        src.to_string(),
+        Target::LinuxAarch64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let lp = obj.symbols.iter().find(|s| s.name == "lp").expect("lp");
+    let at = lp.value as usize + 4;
+    let word = u32::from_le_bytes([
+        obj.text[at],
+        obj.text[at + 1],
+        obj.text[at + 2],
+        obj.text[at + 3],
+    ]);
+    assert_eq!(word, 0x17FF_FFFF, "`b lp` must encode the in-stream branch");
+    assert!(
+        !obj.text_relocs.iter().any(|r| r.offset == at as u64),
+        "a branch to a template label carries no relocation"
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_duplicate_named_label_in_a_code_stream_is_rejected() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    // GNU as rejects a second definition of a name, within one template and
+    // across the unit's templates alike; both targets must agree.
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        for src in [
+            "void f(void) { __asm__ volatile(\"dup:\\n\\tnop\\n\\tdup:\\n\\tnop\"); }\n",
+            "void f(void) { __asm__ volatile(\"dup:\\n\\tnop\"); \
+                __asm__ volatile(\"dup:\\n\\tnop\"); }\n",
+        ] {
+            let program = crate::Compiler::with_options(
+                src.to_string(),
+                target,
+                crate::CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let e = emit_native_with_options(&program, target, opts)
+                .err()
+                .unwrap_or_else(|| panic!("{target:?}: a duplicate definition must be rejected"));
+            assert!(
+                alloc::format!("{e}").contains("`dup` is already defined"),
+                "{target:?}: {e}"
+            );
+        }
+    }
+}

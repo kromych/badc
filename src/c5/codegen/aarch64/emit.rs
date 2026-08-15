@@ -875,6 +875,7 @@ pub(crate) fn emit_function(
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
+    asm_text_labels: &mut Vec<super::AsmTextLabel>,
     no_fp_regs: bool,
     strict_align: bool,
     hardening: super::Hardening,
@@ -1236,6 +1237,7 @@ pub(crate) fn emit_function(
                     asm_sym_fixups,
                     &mut deferred_regions,
                     text_data_ranges,
+                    asm_text_labels,
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
                         branch_fixups: &mut branch_fixups,
@@ -1304,6 +1306,7 @@ pub(crate) fn emit_function(
                     macho_tlv_fixups,
                     macho_tlv_descriptors,
                     &mut deferred_regions,
+                    asm_text_labels,
                 )
             };
             if !inst_ok {
@@ -3172,6 +3175,7 @@ fn emit_inline_asm_aarch64(
     asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
     deferred_regions: &mut Vec<DeferredAsmRegion>,
     text_data_ranges: &mut Vec<(usize, usize)>,
+    asm_text_labels: &mut Vec<super::AsmTextLabel>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
     use super::super::ir::AsmConstraint;
@@ -3927,8 +3931,11 @@ fn emit_inline_asm_aarch64(
         }
     }
     // Patch the label branches now that every definition's offset is known.
+    // A named label has exactly one definition, so direction does not apply.
     for &(site, ref kind, num, forward) in &label_fixups {
-        let target = if forward {
+        let target = if num >= super::super::ssa::emit_common::NAMED_LABEL_BASE {
+            label_defs.iter().find(|&&(n, _)| n == num).map(|&(_, o)| o)
+        } else if forward {
             label_defs
                 .iter()
                 .find(|&&(n, off)| n == num && off > site)
@@ -3962,6 +3969,36 @@ fn emit_inline_asm_aarch64(
                 bail_msg(&m);
                 return false;
             }
+        }
+    }
+    // A named label defined in the main stream is a definition of the unit,
+    // as it is for GNU as: record it so the writers emit a `.text` symbol and
+    // bind a same-name C reference to it. `.L`-prefixed names are
+    // assembler-local, so no C reference spells one.
+    {
+        let names = super::super::ssa::emit_common::scan_label_names(code_text);
+        for &(num, off) in &label_defs {
+            let Some(idx) = num.checked_sub(super::super::ssa::emit_common::NAMED_LABEL_BASE)
+            else {
+                continue;
+            };
+            let Some(&name) = names.get(idx as usize) else {
+                continue;
+            };
+            if name.starts_with(".L") {
+                continue;
+            }
+            // One definition per name across the unit, as in GNU as.
+            if asm_text_labels.iter().any(|l| l.name == name) {
+                bail_msg(&alloc::format!(
+                    "inline asm: symbol `{name}` is already defined"
+                ));
+                return false;
+            }
+            asm_text_labels.push(super::AsmTextLabel {
+                name: alloc::string::String::from(name),
+                text_offset: off,
+            });
         }
     }
     // Resolve a numeric main-stream template label (`661b` / `662b`) to its
@@ -4264,6 +4301,7 @@ fn emit_inst(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     deferred_regions: &mut Vec<DeferredAsmRegion>,
+    asm_text_labels: &mut Vec<super::AsmTextLabel>,
 ) -> bool {
     // Unpack the read-only per-function context into the per-field names the
     // lowering below uses, so the body is unchanged.
@@ -4905,6 +4943,7 @@ fn emit_inst(
             asm_sym_fixups,
             deferred_regions,
             text_data_ranges,
+            asm_text_labels,
             None,
         ),
         // `BlockAddr` is materialized in `emit_function`'s block loop and
@@ -11951,6 +11990,7 @@ mod tests {
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
+                &mut Vec::new(),
                 false,
                 false,
                 super::super::Hardening::NONE,
@@ -12135,6 +12175,7 @@ mod tests {
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
+                &mut Vec::new(),
                 false,
                 false,
                 super::super::Hardening::NONE,
@@ -12218,6 +12259,7 @@ mod tests {
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
+                &mut Vec::new(),
                 false,
                 false,
                 super::super::Hardening::NONE,

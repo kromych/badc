@@ -1178,7 +1178,7 @@ pub(super) fn write_relocatable(
                         .range(val..val.saturating_add(size.extent))
                         .next()
                         .is_some();
-                    if holds_reloc && build.pic {
+                    if holds_reloc && build.pic_link {
                         (DATA_REL_RO_SECTION, SHF_ALLOC | SHF_WRITE)
                     } else {
                         (RODATA_SECTION, SHF_ALLOC)
@@ -5345,7 +5345,7 @@ mod tests {
             data: Vec::new(),
             data_ro_len: 0,
             data_relro_len: 0,
-            pic: false,
+            pic_link: false,
             code_model: Default::default(),
             elf_class: Default::default(),
             rodata: Default::default(),

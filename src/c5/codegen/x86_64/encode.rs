@@ -2555,7 +2555,7 @@ pub(crate) fn lower(
         exports: Vec::new(),
         dynamic_exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
-        pic: native.pic,
+        pic_link: native.pic || native.pic_link,
         code_model: native.code_model,
         elf_class: native.elf_class,
         shared_lib_name: None,

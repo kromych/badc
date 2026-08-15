@@ -473,7 +473,7 @@ fn synth_program_and_build(
         data: merged.data.clone(),
         data_ro_len: merged.data_ro_len,
         data_relro_len: merged.data_relro_len,
-        pic: false,
+        pic_link: false,
         code_model: Default::default(),
         elf_class: Default::default(),
         data_align: merged.data_align,

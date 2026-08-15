@@ -1721,12 +1721,15 @@ pub(crate) struct Build {
     /// on this to pick filetype, entry-point machinery, and
     /// export-table layout.
     pub output_kind: OutputKind,
-    /// Mirror of [`NativeOptions::pic`]. The relocatable writer reads it
-    /// to place `const` storage whose initializer carries a relocation:
-    /// `.rodata` without it (the absolute relocations resolve at link
-    /// time), `.data.rel.ro` with it (the load-time fixup needs a
-    /// writable page until the relocation is applied).
-    pub pic: bool,
+    /// [`NativeOptions::pic`] or [`NativeOptions::pic_link`]. The
+    /// relocatable writer reads it to place `const` storage whose
+    /// initializer carries a relocation: `.rodata` without it (the
+    /// relocation resolves at link time and nothing writes the storage
+    /// afterwards), `.data.rel.ro` with it (the load-time fixup needs a
+    /// writable page until the relocation is applied). Keeping the two
+    /// apart lets `.rodata` stay pure, so the pure `const` objects of
+    /// the same unit hold the read-only prefix.
+    pub pic_link: bool,
     /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
     /// reads it to pick the external-address form; see [`CodeModel`].
     pub code_model: CodeModel,
@@ -2563,6 +2566,17 @@ pub struct NativeOptions {
     /// targets directly, which unwind-data discovery requires. Final
     /// images are position-independent either way.
     pub pic: bool,
+    /// The object is compiled for a link that applies its relocations
+    /// after mapping -- every image this toolchain writes does (ELF
+    /// `ET_DYN`, PE base relocations, Mach-O dyld rebases). `const`
+    /// storage carrying a relocation then goes to `.data.rel.ro`
+    /// instead of `.rodata`, so the linker places only that storage in
+    /// the re-protected region and leaves the unit's pure `const`
+    /// objects in the read-only prefix. [`Self::pic`] implies it;
+    /// unlike `pic` it does not change the switch-table form. A `-c`
+    /// object for a link that resolves the relocation statically
+    /// leaves it clear and keeps such storage in `.rodata`.
+    pub pic_link: bool,
     /// Code model (`-mcmodel=`); see [`CodeModel`]. Like [`Self::pic`]
     /// it chooses the `-c` object's relocation shapes; final images are
     /// unaffected.
@@ -2704,6 +2718,7 @@ impl NativeOptions {
             no_fp_regs: false,
             strict_align: false,
             pic: false,
+            pic_link: false,
             code_model: CodeModel::Small,
             elf_class: ElfClass::Elf64,
             hardening: Hardening::NONE,

@@ -2100,6 +2100,12 @@ fn run() {
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.pic = fpic;
+        // These objects are linked into an image below, and every image
+        // this toolchain writes takes its data relocations at load time
+        // (ELF ET_DYN, PE base relocations, Mach-O dyld rebases), so a
+        // relocated `const` cannot ride the read-only prefix and must
+        // not cost the unit's pure `const` objects their place in it.
+        reloc_opts.pic_link = true;
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         reloc_opts.elf_class = object_elf_class;

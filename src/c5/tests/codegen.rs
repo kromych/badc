@@ -553,6 +553,156 @@ fn relocated_const_lands_in_relro_region_in_every_target() {
     }
 }
 
+/// A relocatable object compiled for a link that applies its
+/// relocations after mapping keeps `.rodata` pure: only the
+/// relocation-carrying `const` goes to `.data.rel.ro`. A section is the
+/// atom of placement, so a `.rodata` carrying relocations forces the
+/// link to move the whole section -- and with it the unit's pure
+/// `const` objects -- into the relro region, which is the placement
+/// this separation recovers. Without the flag the object keeps such
+/// storage in `.rodata`, as gcc does for a link that resolves the
+/// relocation statically.
+#[test]
+fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{
+        Compiler, NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
+        emit_x86_64_plt,
+    };
+    const PT_GNU_RELRO: u32 = 0x6474_E552;
+    const MEM_WRITE: u32 = 0x8000_0000;
+    // One unit mixing a pure `const` with a relocation-carrying one.
+    // `mixer.tag` is the probe for the relocated object itself; the
+    // literal it points at is a pure `const` of its own and rides the
+    // prefix, so it cannot stand in for it.
+    let src = "\
+        const char pure_tab[16] = \"PURETABPURETAB\";\n\
+        static int probe(void) { return 1; }\n\
+        struct ops { int (*p)(void); char tag[8]; };\n\
+        const struct ops mixer = { probe, \"MIXTAG\" };\n\
+        int wglob = 5;\n\
+        void __c5_entry(void *sp, long off) {\n\
+            (void)sp; (void)off; wglob += mixer.p() + pure_tab[0] + mixer.tag[0];\n\
+        }\n";
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let object = |pic_link: bool| {
+            let copts = CompileOptions::default().with_no_entry_point(true);
+            let program = Compiler::with_options(alloc::string::String::from(src), target, copts)
+                .compile()
+                .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                pic_link,
+                ..Default::default()
+            };
+            emit_native_with_options(&program, target, opts).expect("emit")
+        };
+
+        // A link that resolves the relocation statically keeps gcc's
+        // assignment: both objects in `.rodata`, relocated through
+        // `.rela.rodata`.
+        let objs = super::linker::elf_data_objects(&object(false));
+        assert_eq!(objs["pure_tab"].0, ".rodata", "{target:?}: pure const");
+        assert_eq!(objs["mixer"].0, ".rodata", "{target:?}: static link form");
+
+        let bytes = object(true);
+        let objs = super::linker::elf_data_objects(&bytes);
+        assert_eq!(
+            objs["pure_tab"].0, ".rodata",
+            "{target:?}: pure const must not follow the relocated one out of .rodata"
+        );
+        assert_eq!(
+            objs["mixer"].0, ".data.rel.ro",
+            "{target:?}: relocated const belongs in .data.rel.ro"
+        );
+
+        let mut merged =
+            link_native_objects(&[parse_native_elf(&bytes).expect("parse")]).expect("link");
+        assert!(
+            merged.data_ro_len > 0 && merged.data_relro_len > merged.data_ro_len,
+            "{target:?}: the link must keep a read-only prefix and a relro region"
+        );
+        let plt = match merged.machine {
+            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        }
+        .expect("plt");
+        let image = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "__c5_entry",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let holds =
+            |off: usize, len: usize, needle: &[u8]| contains(&image[off..off + len], needle);
+        match target {
+            Target::LinuxAarch64 | Target::LinuxX64 => {
+                let loads = elf_load_file_ranges(&image);
+                assert!(
+                    loads
+                        .iter()
+                        .any(|&(f, o, l)| f == 4 && contains(&image[o..o + l], b"PURETAB")),
+                    "{target:?}: pure const outside every PF_R-only load"
+                );
+                let (_, roff, rlen) =
+                    elf_phdr_file_range(&image, PT_GNU_RELRO).expect("PT_GNU_RELRO");
+                assert!(
+                    holds(roff, rlen, b"MIXTAG"),
+                    "{target:?}: relocated const outside PT_GNU_RELRO"
+                );
+                assert!(
+                    !holds(roff, rlen, b"PURETAB"),
+                    "{target:?}: pure const demoted into PT_GNU_RELRO"
+                );
+            }
+            Target::MacOSAarch64 => {
+                let (off, len) =
+                    macho_section_range(&image, "__TEXT", "__const").expect("__TEXT,__const");
+                assert!(
+                    holds(off, len, b"PURETAB"),
+                    "pure const not in __TEXT,__const"
+                );
+                let (croff, crlen) = macho_section_range(&image, "__DATA_CONST", "__const")
+                    .expect("__DATA_CONST,__const");
+                assert!(
+                    holds(croff, crlen, b"MIXTAG"),
+                    "relocated const not in __DATA_CONST,__const"
+                );
+                assert!(
+                    !holds(croff, crlen, b"PURETAB"),
+                    "pure const demoted into __DATA_CONST"
+                );
+            }
+            Target::WindowsX64 | Target::WindowsAarch64 => {
+                let (chars, off, len) = pe_section(&image, ".rdata").expect(".rdata section");
+                assert_eq!(chars & MEM_WRITE, 0, "{target:?}: .rdata is writable");
+                assert!(
+                    holds(off, len, b"PURETAB") && holds(off, len, b"MIXTAG"),
+                    "{target:?}: const storage not in .rdata"
+                );
+                let (_, doff, dlen) = pe_section(&image, ".data").expect(".data section");
+                assert!(
+                    !holds(doff, dlen, b"PURETAB") && !holds(doff, dlen, b"MIXTAG"),
+                    "{target:?}: const storage also present in .data"
+                );
+            }
+        }
+    }
+}
+
 /// The direct single-TU image segregates `.data` into the same three
 /// regions the multi-object link produces: `const` storage with no
 /// relocated slot forms the read-only prefix, `const` storage whose

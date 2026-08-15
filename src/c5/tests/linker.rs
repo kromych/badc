@@ -12994,7 +12994,9 @@ fn asm_section_local_label_reloc_reduces_to_section_symbol() {
 /// Section name, symbol binding, value and size for every named data
 /// object in a `-c` object, keyed by symbol name.
 #[cfg(feature = "native-emit")]
-fn elf_data_objects(bytes: &[u8]) -> alloc::collections::BTreeMap<String, (String, u8, u64, u64)> {
+pub(super) fn elf_data_objects(
+    bytes: &[u8],
+) -> alloc::collections::BTreeMap<String, (String, u8, u64, u64)> {
     const STT_OBJECT: u8 = 1;
     let sections = elf_sections(bytes);
     elf_symbols(bytes)

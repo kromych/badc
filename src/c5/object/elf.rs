@@ -4017,7 +4017,7 @@ mod tests {
             data: Vec::new(),
             data_ro_len: 0,
             data_relro_len: 0,
-            pic: false,
+            pic_link: false,
             code_model: Default::default(),
             elf_class: Default::default(),
             rodata: Default::default(),

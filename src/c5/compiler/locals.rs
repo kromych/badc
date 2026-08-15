@@ -2550,48 +2550,57 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         debug_assert!(self.lex.tk == '{');
         self.next()?; // consume `{`
-        let count = dims[0];
-        let sub_span: i64 = dims[1..].iter().product();
-        let sub_bytes = sub_span * elem_size;
-        let mut i: i64 = 0;
+        let child = &dims[1..];
+        let total: i64 = dims.iter().product();
+        // Flat element cursor; designators and entries move it the same
+        // way as in `collect_array_initializer`.
+        let mut cursor: i64 = 0;
         while self.lex.tk != '}' {
-            // C99 6.7.8p6 array designator `[N] = ...` (or the GNU range
-            // `[lo ... hi] = ...`): reposition the write cursor;
-            // subsequent positional entries continue from there (after the
-            // range end). Mirrors the constant path in
-            // `collect_array_initializer`.
-            let mut range_hi = i;
-            if self.lex.tk == Token::Brak {
-                self.next()?; // consume `[`
-                let n = self.parse_constant_int_folding_const_objects()?;
-                if n < 0 {
-                    return Err(self.compile_err(format!(
-                        "array designator index must be non-negative (got {n})"
-                    )));
+            let desig = self.take_chained_array_designator(child)?;
+            let mut range_end: i64 = 0;
+            // The level the entry fills: the chain's depth for a
+            // designated entry; for a positional one the outermost level
+            // whose row boundary the cursor sits on (C99 6.7.8p17 resumes
+            // at the subobject after the designated one).
+            let level = match &desig {
+                Some(d) => {
+                    cursor = d.base;
+                    range_end = d.range_end;
+                    d.depth
                 }
-                range_hi = n;
-                if self.lex.tk == Token::Ellipsis {
-                    self.next()?; // consume `...`
-                    let hi = self.parse_constant_int_folding_const_objects()?;
-                    if hi < n {
-                        return Err(self.compile_err(format!(
-                            "array range designator high {hi} below low {n}"
-                        )));
+                None => (0..=child.len())
+                    .find(|&k| {
+                        let s: i64 = child[k..].iter().product();
+                        s > 0 && cursor % s == 0
+                    })
+                    .unwrap_or(child.len()),
+            };
+            let sub = &child[level..];
+            let span: i64 = sub.iter().product::<i64>().max(1);
+            let end = if range_end > 0 {
+                range_end
+            } else {
+                cursor + span
+            };
+            if end > total {
+                return Err(self.compile_err(format!(
+                    "too many initializers for array `{var_name}` (> {total})"
+                )));
+            }
+            // C99 6.7.8p7: the designator list may continue into the
+            // element (`[i][j].field... = v`), naming a sub-object of a
+            // fully indexed element; a range re-parses the chain and value
+            // per element.
+            if desig.as_ref().is_some_and(|d| d.element_chain) {
+                if level != child.len() || !self.is_traversable_aggregate_ty(ty) {
+                    return Err(self.compile_err("`=` expected after `[N]` designator"));
+                }
+                let value = self.lex.snapshot();
+                for e in cursor..end {
+                    if e > cursor {
+                        self.restore_lex(value);
                     }
-                    range_hi = hi;
-                }
-                if self.lex.tk != ']' {
-                    return Err(self.compile_err("`]` expected after array designator index"));
-                }
-                self.next()?; // consume `]`
-                // C99 6.7.8p7: the designator list may continue into the
-                // element (`[N].field... = v`), which names a sub-object of
-                // the element rather than the whole element.
-                if (self.lex.tk == Token::Dot || self.lex.tk == Token::Brak)
-                    && dims.len() == 1
-                    && self.is_traversable_aggregate_ty(ty)
-                {
-                    let here = base + n * sub_bytes;
+                    let here = base + e * elem_size;
                     self.fill_element_field_designator_t(
                         struct_id_of(ty),
                         ty,
@@ -2601,35 +2610,17 @@ impl Compiler {
                             base: here,
                         },
                     )?;
-                    i = n + 1;
-                    self.accept(',')?;
-                    continue;
                 }
-                if self.lex.tk != Token::Assign {
-                    return Err(self.compile_err("`=` expected after `[N]` designator"));
-                }
-                self.next()?; // consume `=`
-                i = n;
+                cursor = end;
+                self.accept(',')?;
+                continue;
             }
-            if range_hi >= count {
-                return Err(self.compile_err(format!(
-                    "too many initializers for array `{}` (> {})",
-                    var_name, count
-                )));
-            }
-            let off = base + i * sub_bytes;
-            if dims.len() > 1 {
+            let off = base + cursor * elem_size;
+            if level < child.len() {
                 if self.lex.tk == '{' {
-                    self.fill_array_init_runtime(
-                        local_val,
-                        off,
-                        &dims[1..],
-                        ty,
-                        elem_size,
-                        var_name,
-                    )?;
+                    self.fill_array_init_runtime(local_val, off, sub, ty, elem_size, var_name)?;
                 } else {
-                    self.fill_array_leaves_runtime(local_val, off, sub_span, ty, elem_size)?;
+                    self.fill_array_leaves_runtime(local_val, off, span, ty, elem_size)?;
                 }
             } else if self.is_traversable_aggregate_ty(ty) {
                 // Array-of-struct element (C99 6.7.8p17): recurse into the
@@ -2639,16 +2630,29 @@ impl Compiler {
                 // runtime path by a non-constant element value (e.g.
                 // `&mms->field[0]`); braces may be elided (6.7.8p20).
                 self.emit_struct_array_element_runtime(local_val, off, struct_id_of(ty))?;
+            } else if self.lex.tk == '{' {
+                // C99 6.7.8p11: a scalar leaf may be brace-wrapped.
+                self.next()?;
+                self.emit_array_leaf_runtime(local_val, off, ty)?;
+                self.accept(',')?;
+                if self.lex.tk != '}' {
+                    return Err(self.compile_err("`}` expected after braced scalar initializer"));
+                }
+                self.next()?;
             } else {
                 self.emit_array_leaf_runtime(local_val, off, ty)?;
             }
-            // GNU range: the entry was evaluated once into element `i`;
-            // the rest of the range copies its bytes.
-            if range_hi > i {
-                self.push_runtime_range_copies(off, sub_bytes, range_hi - i, ty);
-                i = range_hi;
+            // GNU range: the entry was evaluated once into the span at
+            // `cursor`; the rest of the range copies its bytes.
+            if end > cursor + span {
+                self.push_runtime_range_copies(
+                    off,
+                    span * elem_size,
+                    (end - cursor) / span - 1,
+                    ty,
+                );
             }
-            i += 1;
+            cursor = end;
             self.accept(',')?;
         }
         self.next()?; // consume `}`

@@ -3189,6 +3189,15 @@ fn designator_multidim_scalar_array() {
 }
 
 #[test]
+fn designator_chain_runtime_multidim() {
+    // A chained `[i][j]... =` designator on the per-element runtime
+    // store path takes the constant collector's grammar, member chains
+    // and ranges included, and positional entries resume at the
+    // designated rank.
+    assert_eq!(run_fixture("designator_chain_runtime_multidim.c"), 0);
+}
+
+#[test]
 fn macro_alias_tail_invocation() {
     // C99 6.10.3.4p1: a function-like macro name ending an object-like
     // macro's body takes its arguments from the source that follows,

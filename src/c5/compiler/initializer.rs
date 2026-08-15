@@ -45,6 +45,19 @@ use super::types::{
     strip_unsigned, struct_id_of, struct_ptr_depth,
 };
 
+/// A resolved chained array designator `[i][j]...`: `base` and
+/// `range_end` are flat element indices at the level the run started
+/// (`range_end == 0` for the single form), `depth` the levels it
+/// descended below that level, and `element_chain` an unconsumed
+/// `[` / `.` continuation into the element (the `=` was consumed
+/// otherwise).
+pub(super) struct ArrayDesignator {
+    pub(super) base: i64,
+    pub(super) range_end: i64,
+    pub(super) depth: usize,
+    pub(super) element_chain: bool,
+}
+
 /// Relocation kind for one initializer-element value. Tracks
 /// whether the bytes need to be patched at link / load time so
 /// the per-format writer can emit the right rebase entry.
@@ -444,6 +457,75 @@ impl Compiler {
         })
     }
 
+    /// Consume a chained array designator `[a][b]...` at a brace level
+    /// whose dimensions below are `inner_dims` (C99 6.7.8p6; the GNU
+    /// `[lo ... hi]` range only on the last subscript). Subscript `d`
+    /// scales by the product of `inner_dims[d..]`; at most
+    /// `inner_dims.len() + 1` subscripts index dimensions, a further
+    /// `[` / `.` step belongs to the element and is left unconsumed
+    /// with `element_chain` set. The trailing `=` is consumed
+    /// otherwise. `None` when the entry carries no designator.
+    pub(super) fn take_chained_array_designator(
+        &mut self,
+        inner_dims: &[i64],
+    ) -> Result<Option<ArrayDesignator>, C5Error> {
+        if self.lex.tk != Token::Brak {
+            return Ok(None);
+        }
+        let mut base: i64 = 0;
+        let mut range_end: i64 = 0;
+        let mut depth: usize = 0;
+        loop {
+            self.next()?; // consume `[`
+            let n = self.parse_constant_int_folding_const_objects()?;
+            if n < 0 {
+                return Err(self.compile_err(format!(
+                    "array designator index must be non-negative (got {n})"
+                )));
+            }
+            let scale: i64 = inner_dims.iter().skip(depth).product::<i64>().max(1);
+            let mut hi = n;
+            if self.lex.tk == Token::Ellipsis {
+                self.next()?;
+                hi = self.parse_constant_int_folding_const_objects()?;
+                if hi < n {
+                    return Err(
+                        self.compile_err(format!("array range designator high {hi} below low {n}"))
+                    );
+                }
+            }
+            if self.lex.tk != ']' {
+                return Err(self.compile_err("`]` expected after array designator index"));
+            }
+            self.next()?; // consume `]`
+            base += n * scale;
+            if hi > n {
+                range_end = base + (hi - n) * scale + scale;
+            }
+            depth += 1;
+            if self.lex.tk == Token::Brak && depth <= inner_dims.len() {
+                if range_end > 0 {
+                    return Err(self.compile_err("range designator must be the last subscript"));
+                }
+                continue;
+            }
+            break;
+        }
+        let desig = ArrayDesignator {
+            base,
+            range_end,
+            depth: depth - 1,
+            element_chain: self.lex.tk == Token::Brak || self.lex.tk == Token::Dot,
+        };
+        if !desig.element_chain {
+            if self.lex.tk != Token::Assign {
+                return Err(self.compile_err("`=` expected after `[N]` designator"));
+            }
+            self.next()?;
+        }
+        Ok(Some(desig))
+    }
+
     fn collect_array_initializer_inner(
         &mut self,
         elem_ty: i64,
@@ -604,66 +686,21 @@ impl Compiler {
             // Array designator `[N] = ...`, optionally a GCC range
             // `[a ... b] = ...`, and optionally chained for a
             // multi-dimensional array (`[i][j] = value`, C99 6.7.8p6).
-            // Each subscript at chained depth `d` scales by the product
-            // of the dimensions below it (`child_span` at `d == 0`, 1 at
-            // the innermost). A `.field` step is still unsupported and
-            // falls through to a parse error.
-            let entry_designated = self.lex.tk == Token::Brak;
-            if self.lex.tk == Token::Brak {
-                let mut base: usize = 0;
-                let mut range_end: usize = 0;
-                let mut depth: usize = 0;
-                loop {
-                    self.next()?; // consume `[`
-                    let n = self.parse_constant_int_folding_const_objects()?;
-                    if n < 0 {
-                        return Err(self.compile_err(format!(
-                            "array designator index must be non-negative (got {n})"
-                        )));
-                    }
-                    let scale = inner_dims
-                        .iter()
-                        .skip(depth)
-                        .map(|&d| d as usize)
-                        .product::<usize>()
-                        .max(1);
-                    // GCC range designator `[a ... b] = value`.
-                    let mut hi = n;
-                    if self.lex.tk == Token::Ellipsis {
-                        self.next()?;
-                        hi = self.parse_constant_int_folding_const_objects()?;
-                        if hi < n {
-                            return Err(self.compile_err(format!(
-                                "array range designator high {hi} below low {n}"
-                            )));
-                        }
-                    }
-                    if self.lex.tk != ']' {
-                        return Err(self.compile_err("`]` expected after array designator index"));
-                    }
-                    self.next()?; // consume `]`
-                    base += n as usize * scale;
-                    if hi > n {
-                        range_end = base + (hi - n) as usize * scale + scale;
-                    }
-                    depth += 1;
-                    if self.lex.tk == Token::Brak {
-                        if range_end > 0 {
-                            return Err(
-                                self.compile_err("range designator must be the last subscript")
-                            );
-                        }
-                        continue;
-                    }
-                    break;
-                }
-                if self.lex.tk != Token::Assign {
+            // A `.field` step names a member the scalar element does not
+            // have.
+            let mut entry_designated = false;
+            if let Some(d) = self.take_chained_array_designator(&inner_dims)? {
+                if d.element_chain {
                     return Err(self.compile_err("`=` expected after `[N]` designator"));
                 }
-                self.next()?;
-                cursor = base;
-                desig_range_end = if range_end > 0 { Some(range_end) } else { None };
-                desig_depth = depth - 1;
+                entry_designated = true;
+                cursor = d.base as usize;
+                desig_range_end = if d.range_end > 0 {
+                    Some(d.range_end as usize)
+                } else {
+                    None
+                };
+                desig_depth = d.depth;
             }
             // The level the entry that follows belongs to: one deeper per
             // extra chained subscript for a designated entry. C99 6.7.8p17

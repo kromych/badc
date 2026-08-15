@@ -157,6 +157,15 @@ impl Compiler {
             sym.has_initializer = false;
             sym.is_compound_literal = false;
         }
+        // The retired `__func__` storage is gone, so a later reference
+        // must materialise it again rather than resolve to the offset.
+        while self
+            .func_name_objects
+            .last()
+            .is_some_and(|&(.., o)| o >= end)
+        {
+            self.func_name_objects.pop();
+        }
         debug_assert!(self.data_object_starts.iter().all(|&s| s < end));
         debug_assert!(self.data_pad_ranges.iter().all(|r| r.0 < r.1 && r.1 <= end));
         debug_assert!(
@@ -166,6 +175,7 @@ impl Compiler {
         );
         debug_assert!(self.data_align_marks.iter().all(|&(off, _)| off < end));
         debug_assert!(self.staged_literal_syms.iter().all(|&(off, _)| off < end));
+        debug_assert!(self.func_name_objects.iter().all(|&(.., o)| o < end));
     }
 
     /// Skip tokens until the matching close paren. Caller has

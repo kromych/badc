@@ -1892,6 +1892,14 @@ pub struct Compiler {
     /// and the data-object model identifies an object by its start.
     staged_literal_syms: Vec<(i64, usize)>,
 
+    /// `(function, spelling, data offset)` of every `__func__` object
+    /// already materialised. C99 6.4.2.2 declares one object per
+    /// function, so a second reference resolves to the same storage.
+    func_name_objects: Vec<(String, String, i64)>,
+    /// Per-TU counter for the `__func__.<n>` backing symbols, shared
+    /// across the three spellings as gcc's is.
+    next_func_name_id: usize,
+
     /// Symbol indices of block-scope statics' emission records pushed
     /// while the current function body parses. Function close stamps
     /// each record's `owner_ent_pc` (mirrors `pending_block_locals`).
@@ -2295,6 +2303,8 @@ impl Compiler {
             init_reloc_slots: alloc::collections::BTreeSet::new(),
             next_compound_literal_id: 0,
             staged_literal_syms: Vec::new(),
+            func_name_objects: Vec::new(),
+            next_func_name_id: 0,
             pending_block_static_syms: Vec::new(),
             next_block_static_id: 0,
             retry_state: None,

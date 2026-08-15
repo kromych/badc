@@ -331,17 +331,59 @@ impl Compiler {
 
     /// Materialise the enclosing function's name as the bytes of an implicit
     /// `static const char[]` (C99 6.4.2.2) in the data segment and return the
-    /// offset of the first byte. The caller advances past the identifier.
+    /// offset of the first byte. The caller advances past the identifier,
+    /// which must be the one `is_func_name_ident` accepted.
+    ///
+    /// C99 6.4.2.2 declares one object per function, so a second reference to
+    /// the same spelling in the same function reuses the storage rather than
+    /// staging a copy: `__func__ == __func__` compares equal.
     pub(super) fn intern_func_name(&mut self) -> i64 {
+        let spelling = self.symbols[self.lex.curr_id_idx].name.clone();
+        let func = self.current_function_name.clone();
+        if let Some(&(_, _, off)) = self
+            .func_name_objects
+            .iter()
+            .find(|(f, s, _)| *f == func && *s == spelling)
+        {
+            return off;
+        }
         let offset = self.data.len() as i64;
-        let name = self.current_function_name.clone();
-        self.data.extend_from_slice(name.as_bytes());
+        self.data.extend_from_slice(func.as_bytes());
         self.data.push(0);
         self.data_object_starts.push(offset);
         // A `static const char[]` (C99 6.4.2.2): its image is its value.
         self.const_data_ranges
             .push((offset, self.data.len() as i64));
+        self.intern_func_name_symbol(offset, &spelling, func.len() as i64 + 1);
+        self.func_name_objects.push((func, spelling, offset));
         offset
+    }
+
+    /// Internal-linkage symbol naming the `__func__` storage at `off`, as
+    /// `<spelling>.<n>`. Registered against its storage like a compound
+    /// literal, so a rolled-back speculative parse retires it.
+    fn intern_func_name_symbol(&mut self, off: i64, spelling: &str, bytes: i64) {
+        let counter = self.next_func_name_id;
+        self.next_func_name_id += 1;
+        let sym_name = alloc::format!("{spelling}.{counter}");
+        let new_idx = self.symbols.len();
+        let hash = crate::c5::lexer::hash_name(sym_name.as_bytes());
+        self.symbols.push(crate::c5::symbol::Symbol {
+            name: sym_name,
+            token: Token::Id as i64,
+            class: Token::Glo as i64,
+            type_: Ty::Char as i64,
+            val: off,
+            data_byte_size: bytes.max(0),
+            array_size: bytes.max(0),
+            linkage: crate::c5::symbol::Linkage::Internal,
+            defined_here: true,
+            has_initializer: true,
+            ..Default::default()
+        });
+        self.symbol_index.record(hash);
+        let at = self.staged_literal_syms.partition_point(|&(v, _)| v <= off);
+        self.staged_literal_syms.insert(at, (off, new_idx));
     }
 
     /// Convert an initializer element's `(value, reloc)` to the

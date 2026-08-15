@@ -481,6 +481,7 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             family,
             offset: base,
             size: s.size,
+            align: 1 << s.align,
         });
     }
 

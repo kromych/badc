@@ -682,6 +682,9 @@ pub struct InputSection {
     /// or the TLS block).
     pub offset: u64,
     pub size: u64,
+    /// `sh_addralign`, needed where the linker re-places the section
+    /// away from the offset its family blob gave it.
+    pub align: u64,
 }
 
 /// Result of parsing one native ELF ET_REL object.
@@ -1153,6 +1156,22 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
         Ok((out, out_align, base_per_shndx))
     };
+    // A section the merge can still place as a unit sorts to the end of
+    // its family blob, so the blob splits into a prefix the linker
+    // appends whole and a suffix it regroups by name across units.
+    // Stable, so anything not named this way keeps its order.
+    for list in [
+        &mut rodata_section_indices,
+        &mut relro_section_indices,
+        &mut data_section_indices,
+        &mut bss_section_indices,
+    ] {
+        list.sort_by_key(|&i| {
+            strtab_str(shstrtab_bytes, shdrs[i].sh_name as usize)
+                .map(is_c_identifier)
+                .unwrap_or(false)
+        });
+    }
     let (rodata_bytes, rodata_align, rodata_base_per_shndx) =
         concat_progbits(&rodata_section_indices, "rodata")?;
     let (relro_bytes, relro_align, relro_base_per_shndx) =
@@ -1233,6 +1252,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                 family,
                 offset: base,
                 size: shdrs[sh_i].sh_size,
+                align: shdrs[sh_i].sh_addralign.max(1),
             });
         }
     }
@@ -1248,6 +1268,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             family,
             offset: base,
             size: shdrs[sh_i].sh_size,
+            align: shdrs[sh_i].sh_addralign.max(1),
         });
     }
 
@@ -1881,6 +1902,13 @@ fn parse_init_array_section_name(name: &str) -> Option<(bool, Option<u32>)> {
         Ok(p) if p <= 65535 => Some((is_dtor, Some(p))),
         _ => Some((is_dtor, None)),
     }
+}
+
+/// bfd's test for a section name a `__start_` / `__stop_` pair can be
+/// spliced onto: every byte alphanumeric or `_`, so no standard family
+/// name qualifies -- each carries a `.`.
+pub fn is_c_identifier(name: &str) -> bool {
+    !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 /// Standard family for a section name, `None` when the name carries

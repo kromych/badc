@@ -482,6 +482,139 @@ pub struct PendingImportReloc {
     pub sym_name: Option<Box<str>>,
 }
 
+/// Where one unit's family blob landed in the merged stream. Blob
+/// offsets below `prefix_len` sit at `base`; the named sections above
+/// it were moved out to group by name and carry their own offsets.
+struct BlobMap {
+    base: u64,
+    prefix_len: u64,
+    /// `(blob offset, size, merged offset)`, ascending by blob offset.
+    moved: Vec<(u64, u64, u64)>,
+}
+
+impl BlobMap {
+    fn new(base: u64, prefix_len: u64) -> BlobMap {
+        BlobMap {
+            base,
+            prefix_len,
+            moved: Vec::new(),
+        }
+    }
+
+    /// Merged-stream offset for a blob offset. An offset past the
+    /// prefix that no moved section covers keeps the prefix mapping,
+    /// which is where a blob-length offset (an end marker) belongs.
+    fn at(&self, off: u64) -> u64 {
+        if off < self.prefix_len {
+            return self.base + off;
+        }
+        match self
+            .moved
+            .iter()
+            .find(|&&(o, sz, _)| off >= o && off < o + sz)
+        {
+            Some(&(o, _, merged)) => merged + (off - o),
+            None => self.base + off,
+        }
+    }
+}
+
+/// Blob length below which this unit's `fam` sections stay in place.
+/// The parse sorted C-identifier-named sections last, so they form a
+/// suffix starting at the lowest such section's offset.
+fn named_prefix_len(obj: &NativeObject, fam: SectionFamily, blob_len: u64) -> u64 {
+    obj.sections
+        .iter()
+        .filter(|s| s.family == fam && super::object::is_c_identifier(&s.name))
+        .map(|s| s.offset)
+        .min()
+        .unwrap_or(blob_len)
+}
+
+/// Every unit's C-identifier-named `fam` sections, grouped by name.
+/// Name order, then link order within a name, so the merge is a
+/// function of its inputs.
+fn named_group_order(
+    objs: &[NativeObject],
+    fam: SectionFamily,
+) -> Vec<(usize, &super::object::InputSection)> {
+    let mut v: Vec<(usize, &super::object::InputSection)> = objs
+        .iter()
+        .enumerate()
+        .flat_map(|(i, o)| o.sections.iter().map(move |s| (i, s)))
+        .filter(|(_, s)| s.family == fam && super::object::is_c_identifier(&s.name))
+        .collect();
+    v.sort_by(|a, b| a.1.name.cmp(&b.1.name).then(a.0.cmp(&b.0)));
+    v
+}
+
+/// Record `name`'s merged extent, widening the entry an earlier
+/// contribution opened.
+fn note_extent(
+    extents: &mut Vec<(String, NativeSymSection, u64, u64)>,
+    name: &str,
+    sec: NativeSymSection,
+    start: u64,
+    end: u64,
+) {
+    match extents.iter_mut().find(|e| e.0 == name) {
+        Some(e) => {
+            e.2 = e.2.min(start);
+            e.3 = e.3.max(end);
+        }
+        None => extents.push((name.to_string(), sec, start, end)),
+    }
+}
+
+/// Append the grouped named sections of `fam` to the merged data
+/// stream, recording each one's new offset in its unit's map.
+fn group_named_bytes(
+    data: &mut Vec<u8>,
+    objs: &[NativeObject],
+    fam: SectionFamily,
+    blob: impl Fn(&NativeObject) -> &Vec<u8>,
+    maps: &mut [BlobMap],
+    sec: NativeSymSection,
+    extents: &mut Vec<(String, NativeSymSection, u64, u64)>,
+) {
+    let order = named_group_order(objs, fam);
+    let any = !order.is_empty();
+    for (i, s) in order {
+        align_up(data, s.align.max(1) as usize);
+        let at = data.len() as u64;
+        let src = blob(&objs[i]);
+        data.extend_from_slice(&src[s.offset as usize..(s.offset + s.size) as usize]);
+        maps[i].moved.push((s.offset, s.size, at));
+        note_extent(extents, &s.name, sec, at, at + s.size);
+    }
+    // An offset equal to a region's end names the next region's first
+    // byte, so the last group keeps a byte of slack behind it.
+    if any {
+        data.push(0);
+    }
+}
+
+/// The zero-fill counterpart: bss carries sizes, not bytes.
+fn group_named_zerofill(
+    bss_size: &mut usize,
+    objs: &[NativeObject],
+    maps: &mut [BlobMap],
+    extents: &mut Vec<(String, NativeSymSection, u64, u64)>,
+) {
+    let order = named_group_order(objs, SectionFamily::Bss);
+    let any = !order.is_empty();
+    for (i, s) in order {
+        *bss_size = align_usize(*bss_size, s.align.max(1) as usize);
+        let at = *bss_size as u64;
+        *bss_size += s.size as usize;
+        maps[i].moved.push((s.offset, s.size, at));
+        note_extent(extents, &s.name, NativeSymSection::Bss, at, at + s.size);
+    }
+    if any {
+        *bss_size += 1;
+    }
+}
+
 /// Merge `objs` into a single [`MergedNative`]. Per-unit
 /// section bases stack in the order the caller supplies; a
 /// future linker can pick a different layout (sorted by
@@ -628,10 +761,6 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // parked data reference carries one kind of offset no matter
     // which region it hits.
     let mut text_bases: Vec<usize> = Vec::with_capacity(objs.len());
-    let mut rodata_bases: Vec<usize> = Vec::with_capacity(objs.len());
-    let mut relro_bases: Vec<usize> = Vec::with_capacity(objs.len());
-    let mut data_bases: Vec<usize> = Vec::with_capacity(objs.len());
-    let mut bss_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut text: Vec<u8> = Vec::new();
     let mut data: Vec<u8> = Vec::new();
     let mut bss_size: usize = 0;
@@ -639,6 +768,15 @@ pub fn link_native_objects_with_shared_libs<'a>(
     let mut rodata_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
     let mut relro_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
     let mut text_align: usize = 16;
+    // Sections whose name is a C identifier keep their identity: the
+    // parse sorted them to the end of their family blob, and the merge
+    // moves that suffix out to group every unit's contribution to one
+    // name together, so `__start_` / `__stop_` can bound it.
+    let mut ro_map: Vec<BlobMap> = Vec::with_capacity(objs.len());
+    let mut relro_map: Vec<BlobMap> = Vec::with_capacity(objs.len());
+    let mut rw_map: Vec<BlobMap> = Vec::with_capacity(objs.len());
+    let mut bss_map: Vec<BlobMap> = Vec::with_capacity(objs.len());
+    let mut named_extents: Vec<(String, NativeSymSection, u64, u64)> = Vec::new();
     for obj in objs {
         align_up(&mut text, obj.text_align.max(16));
         text_align = text_align.max(obj.text_align);
@@ -650,10 +788,20 @@ pub fn link_native_objects_with_shared_libs<'a>(
         );
         rodata_align = rodata_align.max(obj.rodata_align);
         relro_align = relro_align.max(obj.relro_align);
-        rodata_bases.push(data.len());
-        data.extend_from_slice(&obj.rodata);
+        let keep = named_prefix_len(obj, SectionFamily::RoData, obj.rodata.len() as u64);
+        ro_map.push(BlobMap::new(data.len() as u64, keep));
+        data.extend_from_slice(&obj.rodata[..keep as usize]);
         data_align = data_align.max(obj.data_align);
     }
+    group_named_bytes(
+        &mut data,
+        objs,
+        SectionFamily::RoData,
+        |o| &o.rodata,
+        &mut ro_map,
+        NativeSymSection::Data,
+        &mut named_extents,
+    );
     // One alignment covers the whole data image: the writers place
     // every region from it, and each region starts at a multiple of it
     // so a unit's data base keeps the residue its `sh_addralign` asked
@@ -666,9 +814,19 @@ pub fn link_native_objects_with_shared_libs<'a>(
             &mut data,
             crate::c5::layout::data_image_align(obj.relro_align),
         );
-        relro_bases.push(data.len());
-        data.extend_from_slice(&obj.relro);
+        let keep = named_prefix_len(obj, SectionFamily::RelRo, obj.relro.len() as u64);
+        relro_map.push(BlobMap::new(data.len() as u64, keep));
+        data.extend_from_slice(&obj.relro[..keep as usize]);
     }
+    group_named_bytes(
+        &mut data,
+        objs,
+        SectionFamily::RelRo,
+        |o| &o.relro,
+        &mut relro_map,
+        NativeSymSection::Data,
+        &mut named_extents,
+    );
     align_up(&mut data, data_align);
     let data_relro_len = data.len();
     for obj in objs {
@@ -676,15 +834,38 @@ pub fn link_native_objects_with_shared_libs<'a>(
             &mut data,
             crate::c5::layout::data_image_align(obj.data_align),
         );
-        data_bases.push(data.len());
-        data.extend_from_slice(&obj.data);
+        let keep = named_prefix_len(obj, SectionFamily::Data, obj.data.len() as u64);
+        rw_map.push(BlobMap::new(data.len() as u64, keep));
+        data.extend_from_slice(&obj.data[..keep as usize]);
         // Each unit's bss offsets carry an alignment residue modulo the
         // widest `.bss` sh_addralign the unit claims; a unit base aligned
         // to the same value preserves it.
         bss_size = align_usize(bss_size, crate::c5::layout::bss_image_align(obj.bss_align));
-        bss_bases.push(bss_size);
-        bss_size += obj.bss_size;
+        let keep = named_prefix_len(obj, SectionFamily::Bss, obj.bss_size as u64);
+        bss_map.push(BlobMap::new(bss_size as u64, keep));
+        bss_size += keep as usize;
     }
+    group_named_bytes(
+        &mut data,
+        objs,
+        SectionFamily::Data,
+        |o| &o.data,
+        &mut rw_map,
+        NativeSymSection::Data,
+        &mut named_extents,
+    );
+    group_named_zerofill(&mut bss_size, objs, &mut bss_map, &mut named_extents);
+    // One `__start_` / `__stop_` pair per grouped name, in the merged
+    // offset space its family uses.
+    let start_stop_bounds: Vec<(String, NativeSymSection, u64)> = named_extents
+        .iter()
+        .flat_map(|(n, sec, s, e)| {
+            [
+                (format!("__start_{n}"), *sec, *s),
+                (format!("__stop_{n}"), *sec, *e),
+            ]
+        })
+        .collect();
 
     // Per-input-section placement: each record's stream offset is the
     // owning unit's family base plus the section's offset within that
@@ -697,21 +878,21 @@ pub fn link_native_objects_with_shared_libs<'a>(
             section_map.discarded.push((i, name.clone(), *size));
         }
         for s in &obj.sections {
-            let (list, base) = match s.family {
-                SectionFamily::Text => (&mut section_map.text, text_bases[i] as u64),
-                SectionFamily::RoData => (&mut section_map.data, rodata_bases[i] as u64),
-                SectionFamily::RelRo => (&mut section_map.data, relro_bases[i] as u64),
-                SectionFamily::Data => (&mut section_map.data, data_bases[i] as u64),
-                SectionFamily::Bss => (&mut section_map.bss, bss_bases[i] as u64),
+            let (list, offset) = match s.family {
+                SectionFamily::Text => (&mut section_map.text, text_bases[i] as u64 + s.offset),
+                SectionFamily::RoData => (&mut section_map.data, ro_map[i].at(s.offset)),
+                SectionFamily::RelRo => (&mut section_map.data, relro_map[i].at(s.offset)),
+                SectionFamily::Data => (&mut section_map.data, rw_map[i].at(s.offset)),
+                SectionFamily::Bss => (&mut section_map.bss, bss_map[i].at(s.offset)),
                 SectionFamily::Tdata | SectionFamily::Tbss => {
-                    (&mut section_map.tls, tls_bases[i] as u64)
+                    (&mut section_map.tls, tls_bases[i] as u64 + s.offset)
                 }
                 SectionFamily::Discard => continue,
             };
             list.push(SectionContribution {
                 input: Some(i),
                 name: s.name.clone(),
-                offset: base + s.offset,
+                offset,
                 size: s.size,
             });
         }
@@ -831,12 +1012,14 @@ pub fn link_native_objects_with_shared_libs<'a>(
             // payloads into the data-byte space, so their offsets are
             // already data-byte offsets and the merged table speaks
             // one space.
-            let (section, base) = match sym.section {
-                NativeSymSection::Text => (NativeSymSection::Text, text_bases[i]),
-                NativeSymSection::RoData => (NativeSymSection::Data, rodata_bases[i]),
-                NativeSymSection::RelRo => (NativeSymSection::Data, relro_bases[i]),
-                NativeSymSection::Data => (NativeSymSection::Data, data_bases[i]),
-                NativeSymSection::Bss => (NativeSymSection::Bss, bss_bases[i]),
+            let (section, value) = match sym.section {
+                NativeSymSection::Text => {
+                    (NativeSymSection::Text, text_bases[i] as u64 + sym.value)
+                }
+                NativeSymSection::RoData => (NativeSymSection::Data, ro_map[i].at(sym.value)),
+                NativeSymSection::RelRo => (NativeSymSection::Data, relro_map[i].at(sym.value)),
+                NativeSymSection::Data => (NativeSymSection::Data, rw_map[i].at(sym.value)),
+                NativeSymSection::Bss => (NativeSymSection::Bss, bss_map[i].at(sym.value)),
                 // A `_Thread_local` definition reaches the merged image
                 // through the TLS symbol table, a DWARF section symbol
                 // through the debug-section rebasing; neither belongs in
@@ -852,7 +1035,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             };
             let merged = MergedSymbol {
                 section,
-                value: base as u64 + sym.value,
+                value,
                 size: sym.size,
                 kind: sym.kind,
                 visibility: sym.visibility,
@@ -986,6 +1169,27 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 // A boundary address, not an object: the same
                 // `STT_NOTYPE` the reference toolchain gives `_edata`
                 // and `__bss_start`.
+                kind: super::object::STT_NOTYPE,
+                visibility: super::object::STV_DEFAULT,
+                weak: false,
+            },
+        );
+    }
+
+    // Boundary symbols for the named sections Pass 1 grouped. bfd
+    // defines these only where nothing else does, so an object that
+    // already defines the name keeps its definition -- `__start_tty`
+    // is an ordinary function in one such tree.
+    for (sym, section, value) in &start_stop_bounds {
+        if defined.contains_key(sym.as_str()) {
+            continue;
+        }
+        defined.insert(
+            sym.as_str(),
+            MergedSymbol {
+                section: *section,
+                value: *value,
+                size: 0,
                 kind: super::object::STT_NOTYPE,
                 visibility: super::object::STV_DEFAULT,
                 weak: false,
@@ -1147,19 +1351,14 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 | NativeSymSection::RelRo
                 | NativeSymSection::Data
                 | NativeSymSection::Bss => {
-                    let base = match sym_section {
-                        NativeSymSection::Text => text_bases[i],
-                        NativeSymSection::RoData => rodata_bases[i],
-                        NativeSymSection::RelRo => relro_bases[i],
-                        NativeSymSection::Data => data_bases[i],
-                        _ => bss_bases[i],
+                    let at = match sym_section {
+                        NativeSymSection::Text => text_bases[i] as u64 + sym.value,
+                        NativeSymSection::RoData => ro_map[i].at(sym.value),
+                        NativeSymSection::RelRo => relro_map[i].at(sym.value),
+                        NativeSymSection::Data => rw_map[i].at(sym.value),
+                        _ => bss_map[i].at(sym.value),
                     };
-                    let target = merged_target(
-                        sym_section,
-                        base as i64 + sym.value as i64,
-                        reloc.addend,
-                        data.len(),
-                    )?;
+                    let target = merged_target(sym_section, at as i64, reloc.addend, data.len())?;
                     resolve_merged_target(
                         &mut text,
                         &mut pending_imports,
@@ -1474,12 +1673,14 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // into a stub-targeting `DataAbsReloc` (see `data_import_refs`).
     let mut data_import_refs: Vec<(u64, usize)> = Vec::new();
     for (i, obj) in objs.iter().enumerate() {
+        // A relocation site is a blob offset, so it moves with the
+        // section that carries it.
         let sited = obj
             .data_relocs
             .iter()
-            .map(|r| (r, data_bases[i]))
-            .chain(obj.relro_relocs.iter().map(|r| (r, relro_bases[i])));
-        for (reloc, site_base) in sited {
+            .map(|r| (r, &rw_map[i]))
+            .chain(obj.relro_relocs.iter().map(|r| (r, &relro_map[i])));
+        for (reloc, site_map) in sited {
             if reloc.sym_idx >= obj.symbols.len() {
                 return Err(err(&format!(
                     "link_native_objects: .rela.data sym_idx {} out of range in object {i}",
@@ -1487,7 +1688,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 )));
             }
             let sym = &obj.symbols[reloc.sym_idx];
-            let slot_offset = site_base as u64 + reloc.offset;
+            let slot_offset = site_map.at(reloc.offset);
             // A pc-relative slot in the data stream (a switch dispatch
             // table in folded `.rodata`, an assembler `label - .`
             // record in a folded named section): the value is
@@ -1515,16 +1716,10 @@ pub fn link_native_objects_with_shared_libs<'a>(
                     NativeSymSection::Text => {
                         (sym.section, text_bases[i] as i64 + sym.value as i64)
                     }
-                    NativeSymSection::RoData => {
-                        (sym.section, rodata_bases[i] as i64 + sym.value as i64)
-                    }
-                    NativeSymSection::RelRo => {
-                        (sym.section, relro_bases[i] as i64 + sym.value as i64)
-                    }
-                    NativeSymSection::Data => {
-                        (sym.section, data_bases[i] as i64 + sym.value as i64)
-                    }
-                    NativeSymSection::Bss => (sym.section, bss_bases[i] as i64 + sym.value as i64),
+                    NativeSymSection::RoData => (sym.section, ro_map[i].at(sym.value) as i64),
+                    NativeSymSection::RelRo => (sym.section, relro_map[i].at(sym.value) as i64),
+                    NativeSymSection::Data => (sym.section, rw_map[i].at(sym.value) as i64),
+                    NativeSymSection::Bss => (sym.section, bss_map[i].at(sym.value) as i64),
                     other => {
                         return Err(err(&format!(
                             "pc-relative data slot targets {other:?} symbol `{}`",
@@ -1614,10 +1809,10 @@ pub fn link_native_objects_with_shared_libs<'a>(
                     .get(sym.name.as_str())
                     .map(|d| d.value as i64)
                     .unwrap(),
-                NativeSymSection::RoData => rodata_bases[i] as i64 + sym.value as i64,
-                NativeSymSection::RelRo => relro_bases[i] as i64 + sym.value as i64,
-                NativeSymSection::Data => data_bases[i] as i64 + sym.value as i64,
-                NativeSymSection::Bss => bss_bases[i] as i64 + sym.value as i64,
+                NativeSymSection::RoData => ro_map[i].at(sym.value) as i64,
+                NativeSymSection::RelRo => relro_map[i].at(sym.value) as i64,
+                NativeSymSection::Data => rw_map[i].at(sym.value) as i64,
+                NativeSymSection::Bss => bss_map[i].at(sym.value) as i64,
                 NativeSymSection::Text => text_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Tls => {
                     return Err(link_err(&format!(
@@ -1909,10 +2104,10 @@ pub fn link_native_objects_with_shared_libs<'a>(
             reloc,
             sym,
             &text_bases,
-            &rodata_bases,
-            &relro_bases,
-            &data_bases,
-            &bss_bases,
+            &ro_map,
+            &relro_map,
+            &rw_map,
+            &bss_map,
             merged_data_len,
             &debug_abbrev_bases,
             &debug_line_bases,
@@ -1940,10 +2135,10 @@ pub fn link_native_objects_with_shared_libs<'a>(
             reloc,
             sym,
             &text_bases,
-            &rodata_bases,
-            &relro_bases,
-            &data_bases,
-            &bss_bases,
+            &ro_map,
+            &relro_map,
+            &rw_map,
+            &bss_map,
             merged_data_len,
             &debug_abbrev_bases,
             &debug_line_bases,
@@ -2065,10 +2260,10 @@ fn resolve_debug_reloc(
     reloc: &super::object::NativeReloc,
     sym: &super::object::NativeSymbol,
     text_bases: &[usize],
-    rodata_bases: &[usize],
-    relro_bases: &[usize],
-    data_bases: &[usize],
-    bss_bases: &[usize],
+    ro_map: &[BlobMap],
+    relro_map: &[BlobMap],
+    rw_map: &[BlobMap],
+    bss_map: &[BlobMap],
     data_len: usize,
     debug_abbrev_bases: &[usize],
     debug_line_bases: &[usize],
@@ -2122,11 +2317,11 @@ fn resolve_debug_reloc(
     );
     let (merged_value, in_text, resolvable) = match sym.section {
         NativeSymSection::Text => (text_bases[unit_idx] as u64 + sym.value, true, true),
-        NativeSymSection::RoData => (rodata_bases[unit_idx] as u64 + sym.value, false, true),
-        NativeSymSection::RelRo => (relro_bases[unit_idx] as u64 + sym.value, false, true),
-        NativeSymSection::Data => (data_bases[unit_idx] as u64 + sym.value, false, true),
+        NativeSymSection::RoData => (ro_map[unit_idx].at(sym.value), false, true),
+        NativeSymSection::RelRo => (relro_map[unit_idx].at(sym.value), false, true),
+        NativeSymSection::Data => (rw_map[unit_idx].at(sym.value), false, true),
         NativeSymSection::Bss => (
-            data_len as u64 + bss_bases[unit_idx] as u64 + sym.value,
+            data_len as u64 + bss_map[unit_idx].at(sym.value),
             false,
             true,
         ),
@@ -3058,6 +3253,7 @@ mod tests {
             family: SectionFamily::Text,
             offset: 0,
             size: 0x40,
+            align: 4,
         }];
         let origin = RelocOrigin::in_input("vmlinux.o", &sections, SectionFamily::Text);
         // R_AARCH64_MOVW_PREL_G0 has no patcher in the native path.

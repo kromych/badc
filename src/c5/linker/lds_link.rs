@@ -40,7 +40,7 @@ use super::lds::{
 };
 use super::object::{
     Elf32Ehdr, Elf32Rel, Elf32Rela, Elf32Shdr, Elf32Sym, Elf64Ehdr, Elf64Rel, Elf64Shdr, ElfClass,
-    absolute_in_pie_body, elf_reloc_desc, locate_reloc, read_struct,
+    absolute_in_pie_body, elf_reloc_desc, is_c_identifier, locate_reloc, read_struct,
 };
 use crate::c5::object::elf_reloc_types as rt;
 
@@ -96,6 +96,7 @@ const STT_FILE: u8 = 4;
 const STT_COMMON: u8 = 5;
 const STV_DEFAULT: u8 = 0;
 const STV_HIDDEN: u8 = 2;
+const STV_PROTECTED: u8 = 3;
 
 const PT_LOAD: u32 = 1;
 const PT_DYNAMIC: u32 = 2;
@@ -763,6 +764,10 @@ struct ScriptSym {
     /// section (ld's section_for_dot fixup); the value itself stays
     /// absolute for expression purposes.
     final_out: Option<usize>,
+    /// Visibility that does not localize the binding, used by the
+    /// synthesized `__start_` / `__stop_` pair. `hidden` stays the
+    /// `PROVIDE_HIDDEN` path, which does localize.
+    vis: Option<u8>,
 }
 
 /// One input section's per-pass placement.
@@ -2275,7 +2280,44 @@ impl<'a> LdsLinker<'a> {
             self.outs[oi].lma = self.outs[oi].addr;
             self.dot = saved_dot;
         }
+        self.define_start_stop(oi);
         self.cur_out = None;
+    }
+
+    /// Bound an output section whose name is a C identifier with
+    /// `__start_<name>` / `__stop_<name>`, as bfd's
+    /// `lang_init_start_stop` does. Both follow PROVIDE's rule -- a
+    /// referenced, otherwise-undefined name only -- and take the
+    /// section's binding and visibility, not the script-symbol
+    /// defaults: GLOBAL PROTECTED, matching `-z
+    /// start-stop-visibility`'s default.
+    fn define_start_stop(&mut self, oi: usize) {
+        let (name, addr, size, alloc) = {
+            let o = &self.outs[oi];
+            (o.name.clone(), o.addr, o.size, o.alloc)
+        };
+        if !alloc || !is_c_identifier(&name) {
+            return;
+        }
+        for (prefix, value) in [("__start_", addr), ("__stop_", addr + size)] {
+            let sym = alloc::format!("{prefix}{name}");
+            if self.globals.contains_key(&sym) || !self.referenced.contains(&sym) {
+                continue;
+            }
+            self.script_now.insert(
+                sym,
+                ScriptSym {
+                    val: Val {
+                        v: value,
+                        att: Att::Out(oi),
+                    },
+                    hidden: false,
+                    kind: STT_NOTYPE,
+                    final_out: Some(oi),
+                    vis: Some(STV_PROTECTED),
+                },
+            );
+        }
     }
 
     fn synth_out_type(&self, oi: usize) -> Option<u32> {
@@ -2358,6 +2400,7 @@ impl<'a> LdsLinker<'a> {
                 hidden: a.hidden,
                 kind,
                 final_out,
+                vis: None,
             },
         );
     }
@@ -4933,7 +4976,7 @@ impl<'a> LdsLinker<'a> {
             syms.push(FinalSym {
                 name: name.clone(),
                 info: (if vis.is_some() { STB_LOCAL } else { STB_GLOBAL } << 4) | s.kind,
-                other: vis.unwrap_or(STV_DEFAULT),
+                other: vis.or(s.vis).unwrap_or(STV_DEFAULT),
                 shndx,
                 value: s.val.v,
                 size: 0,
@@ -6460,6 +6503,93 @@ SECTIONS {
             .expect("orphan placement succeeds");
         let secs = readelf_sections(&res.image);
         assert!(secs.iter().any(|s| s.0 == ".rodata.str"));
+    }
+
+    /// An object placing data under a C-identifier section name keeps
+    /// that name as its own output section and gets the `__start_` /
+    /// `__stop_` pair bounding it, as bfd does.
+    #[test]
+    fn start_stop_bound_an_identifier_named_section() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90],
+            )
+            .sec("mytab", SHT_PROGBITS, SHF_ALLOC, 8, &[7u8; 24])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .sym("__start_mytab", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .sym("__stop_mytab", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let sec = readelf_sections(&res.image)
+            .into_iter()
+            .find(|s| s.0 == "mytab")
+            .expect("`mytab` keeps its identity as an output section");
+        let syms = image_symbols(&res.image);
+        let val = |n: &str| {
+            syms.iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{n}"))
+                .1
+        };
+        assert_eq!(val("__start_mytab"), sec.2);
+        assert_eq!(val("__stop_mytab"), sec.2 + 24);
+        assert_eq!(sec.3, 24);
+    }
+
+    /// bfd defines the pair only where nothing else does: an object
+    /// defining the name keeps its own definition.
+    #[test]
+    fn an_object_definition_outranks_the_synthesized_bound() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90; 8],
+            )
+            .sec("tty", SHT_PROGBITS, SHF_ALLOC, 8, &[7u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .sym("__start_tty", STB_GLOBAL, STT_FUNC, 0, 4, 4)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let syms = image_symbols(&res.image);
+        let text = readelf_sections(&res.image)
+            .into_iter()
+            .find(|s| s.0 == ".text")
+            .expect(".text");
+        let start = syms.iter().find(|s| s.0 == "__start_tty").expect("kept");
+        assert_eq!(start.1, text.2 + 4);
+    }
+
+    /// A name carrying a `.` is not an identifier, so it gets no pair.
+    #[test]
+    fn a_dotted_section_name_gets_no_bounds() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90],
+            )
+            .sec(".my.tab", SHT_PROGBITS, SHF_ALLOC, 8, &[7u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .sym("__start_.my.tab", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let syms = image_symbols(&res.image);
+        assert!(!syms.iter().any(|s| s.0 == "__start_.my.tab"), "{syms:?}");
     }
 
     #[test]

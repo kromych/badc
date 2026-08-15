@@ -4590,3 +4590,89 @@ fn stdin_source_compiles_to_an_object_and_into_an_archive() {
         members.iter().map(|m| &m.name).collect::<Vec<_>>()
     );
 }
+
+/// The gcc / clang link-time-table idiom: several units place data
+/// under one C-identifier section name and walk it between
+/// `__start_<name>` and `__stop_<name>`. Every unit's contribution has
+/// to be contiguous and the bounds have to enclose exactly it.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn start_stop_bound_a_named_section_across_units() {
+    let dir = tempdir("start-stop-table");
+    write_source(
+        &dir,
+        "tab.h",
+        "struct ent { long v; };\n\
+         #define REG(n, val) static const struct ent e_##n \\\n\
+           __attribute__((section(\"mytab\"), used, aligned(8))) = { val }\n\
+         extern const struct ent __start_mytab[], __stop_mytab[];\n",
+    );
+    write_source(
+        &dir,
+        "a.c",
+        "#include \"tab.h\"\nint pad_a[3] = { 1, 2, 3 };\nREG(alpha, 1);\nREG(beta, 2);\n",
+    );
+    write_source(
+        &dir,
+        "b.c",
+        "#include \"tab.h\"\nconst char *rod_b = \"b\";\nREG(gamma, 4);\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "#include \"tab.h\"\n\
+         REG(delta, 8);\n\
+         int main(void) {\n\
+         \tif (__stop_mytab - __start_mytab != 4) return 1;\n\
+         \tint sum = 0;\n\
+         \tfor (const struct ent *p = __start_mytab; p < __stop_mytab; p++) sum += (int)p->v;\n\
+         \treturn sum == 15 ? 0 : 2;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("b.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link a named-section table",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "named-section bounds: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// A unit defining `__start_<name>` itself keeps that definition: bfd
+/// synthesizes the pair only where nothing else does, and
+/// `__start_tty` is an ordinary function in at least one real tree.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn an_object_definition_outranks_a_synthesized_section_bound() {
+    let dir = tempdir("start-stop-conflict");
+    write_source(
+        &dir,
+        "main.c",
+        "static const int t __attribute__((section(\"tty\"), used)) = 5;\n\
+         int __start_tty(void) { return 7; }\n\
+         int main(void) { return __start_tty() == 7 && t == 5 ? 0 : 1; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link a unit defining __start_tty itself",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(0), "the object's definition wins");
+}

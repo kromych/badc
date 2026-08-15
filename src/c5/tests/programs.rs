@@ -6479,6 +6479,37 @@ fn vm_region_basic_info_keeps_the_kernel_packing() {
 }
 
 #[test]
+fn mach_time_declares_the_sdk_clock_set() {
+    use crate::Target;
+    // The SDK's declaration set, all bound to libSystem. The struct tag
+    // and mach_timebase_info_t matter because callers spell the argument
+    // either way.
+    let src = "#include <mach/mach_time.h>\n\
+        int ck[(sizeof(mach_timebase_info_data_t)==8 \
+             && sizeof(struct mach_timebase_info)==8)?1:-1];\n\
+        unsigned long long f(void) {\n\
+            mach_timebase_info_data_t tb;\n\
+            mach_timebase_info_t p = &tb;\n\
+            mach_timebase_info(p);\n\
+            mach_wait_until(mach_absolute_time());\n\
+            return mach_absolute_time() * tb.numer / tb.denom\n\
+                 + mach_approximate_time() + mach_continuous_time()\n\
+                 + mach_continuous_approximate_time(); }\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "the Mach clock surface must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
 fn corevideo_umbrella_carries_the_time_types() {
     use crate::Target;
     // Sizes, offsets and values are what clang reports against the macOS

@@ -2595,7 +2595,11 @@ pub(super) fn write(
     if emit_dyn {
         let r_type = r_relative(machine);
         for r in &build.data_relocs {
-            let addend = data_off_to_vaddr(r.target_offset);
+            // `.rodata` / `.data` / `.bss` occupy separate runtime
+            // regions; the anchor picks the region, the signed
+            // displacement rides on the address.
+            let addend = data_off_to_vaddr(r.target_anchor)
+                .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
             write_struct(
                 &mut rela,
                 &Elf64Rela {
@@ -2764,7 +2768,9 @@ pub(super) fn write(
     // baked value is the pre-slide initializer.
     let mut data_with_relocs = build.data[ro_len as usize..].to_vec();
     for r in &build.data_relocs {
-        let absolute = data_off_to_vaddr(r.target_offset);
+        // Same anchored mapping as the `.rela.dyn` addend above.
+        let absolute = data_off_to_vaddr(r.target_anchor)
+            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
         let off = reloc_slot_in_data(r.data_offset, ro_len, "data")?;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(

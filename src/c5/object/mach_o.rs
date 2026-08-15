@@ -2599,7 +2599,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     out.resize(data_section_fileoff as usize, 0);
     let mut data_with_relocs = build.data.clone();
     for r in &build.data_relocs {
-        let preferred_va = data_off_to_vaddr(r.target_offset);
+        // `__data` and the zero-fill tail map to separate runtime
+        // regions, so the anchor picks the region and the signed
+        // displacement `target - anchor` rides on the address.
+        let preferred_va = data_off_to_vaddr(r.target_anchor)
+            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(

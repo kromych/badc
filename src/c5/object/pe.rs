@@ -1234,7 +1234,11 @@ pub(super) fn write(
         // the slide delta after mapping.
         let mut data_with_relocs = build.data.clone();
         for r in &build.data_relocs {
-            let preferred_va = IMAGE_BASE + data_off_to_rva(r.target_offset as u32) as u64;
+            // `.data` and its zero-fill tail are separated by the TLS
+            // blob; the anchor picks the region, the signed
+            // displacement rides on the address.
+            let preferred_va = (IMAGE_BASE + data_off_to_rva(r.target_anchor as u32) as u64)
+                .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
             let off = r.data_offset as usize;
             if off + 8 > data_with_relocs.len() {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(

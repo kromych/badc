@@ -1015,10 +1015,14 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
         // fill tail included; no per-section bias is applied here.
         match r.target {
             MergedTarget::Data(off) => {
+                let anchor = match r.anchor {
+                    MergedTarget::Data(a) => a,
+                    MergedTarget::Text(_) => off,
+                };
                 data_relocs.push(DataReloc {
                     data_offset: r.slot_offset,
                     target_offset: off as u64,
-                    target_anchor: off as u64,
+                    target_anchor: anchor as u64,
                 });
             }
             MergedTarget::Text(off) => {

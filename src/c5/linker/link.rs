@@ -327,6 +327,12 @@ pub struct DataAbsReloc {
     /// [`MergedTarget::Data`] offset through its data-offset-to-vaddr
     /// map and a [`MergedTarget::Text`] offset through `text_vaddr`.
     pub target: MergedTarget,
+    /// Start of the object `target` is measured from -- the resolved
+    /// symbol without the relocation addend. The data-byte space maps
+    /// to non-contiguous runtime regions, so a writer attributes the
+    /// region from the anchor and applies `target - anchor` to the
+    /// address. Equals `target` for a zero addend.
+    pub anchor: MergedTarget,
 }
 
 /// Which merged stream a resolved reference lands in, and where.
@@ -1596,7 +1602,15 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         sym.name, resolved_section,
                     ))
                 })?;
-            let off = match target {
+            // The anchor is the resolved symbol alone; the addend may
+            // displace `target` outside the image (a negative addend
+            // below the first object), which only the anchored writers
+            // can place, so the in-image check applies to the anchor.
+            let anchor = match target {
+                MergedTarget::Text(o) => MergedTarget::Text(o - reloc.addend),
+                MergedTarget::Data(o) => MergedTarget::Data(o - reloc.addend),
+            };
+            let off = match anchor {
                 MergedTarget::Text(o) | MergedTarget::Data(o) => o,
             };
             if off < 0 {
@@ -1607,6 +1621,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             data_abs_relocs.push(DataAbsReloc {
                 slot_offset,
                 target,
+                anchor,
             });
         }
     }
@@ -1618,12 +1633,14 @@ pub fn link_native_objects_with_shared_libs<'a>(
         data_abs_relocs.push(DataAbsReloc {
             slot_offset: init_array_start + (k * 8) as u64,
             target: MergedTarget::Text(text_off as i64),
+            anchor: MergedTarget::Text(text_off as i64),
         });
     }
     for (k, &(_, text_off)) in fini_entries.iter().enumerate() {
         data_abs_relocs.push(DataAbsReloc {
             slot_offset: fini_array_start + (k * 8) as u64,
             target: MergedTarget::Text(text_off as i64),
+            anchor: MergedTarget::Text(text_off as i64),
         });
     }
 
@@ -2286,6 +2303,7 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
         merged.data_abs_relocs.push(DataAbsReloc {
             slot_offset: slot,
             target: MergedTarget::Text(stub as i64),
+            anchor: MergedTarget::Text(stub as i64),
         });
     }
 
@@ -2458,6 +2476,7 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
         merged.data_abs_relocs.push(DataAbsReloc {
             slot_offset: slot,
             target: MergedTarget::Text(stub as i64),
+            anchor: MergedTarget::Text(stub as i64),
         });
     }
 

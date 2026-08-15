@@ -509,11 +509,15 @@ enum DataHome {
 }
 
 impl DataHome {
+    /// `delta` is a two's-complement byte displacement: a negative
+    /// addend arrives as a wrapped `u64` and the section-relative
+    /// offset goes negative through the same wrap (`home_sym` reads
+    /// it back as `i64`).
     fn add(self, delta: u64) -> DataHome {
         match self {
-            DataHome::Data(b) => DataHome::Data(b + delta),
-            DataHome::Bss(b) => DataHome::Bss(b + delta),
-            DataHome::Named(e, b) => DataHome::Named(e, b + delta),
+            DataHome::Data(b) => DataHome::Data(b.wrapping_add(delta)),
+            DataHome::Bss(b) => DataHome::Bss(b.wrapping_add(delta)),
+            DataHome::Named(e, b) => DataHome::Named(e, b.wrapping_add(delta)),
         }
     }
 }
@@ -591,12 +595,13 @@ impl DataPlan {
         s.home.add(delta)
     }
 
-    /// Map a data reference through its object anchor so a
-    /// one-past-the-end target (C99 6.5.6p8) follows its own object
-    /// rather than the next span.
+    /// Map a data reference through its object anchor: the anchor picks
+    /// the span, the signed displacement `target - anchor` rides as the
+    /// addend. A one-past-the-end target (C99 6.5.6p8) would otherwise
+    /// home on the next span, a negative addend (C99 6.6 address
+    /// constant minus an integer) on the preceding one.
     fn map_ref(&self, target: u64, anchor: u64) -> DataHome {
-        let a = anchor.min(target);
-        self.map(a).add(target - a)
+        self.map(anchor).add(target.wrapping_sub(anchor))
     }
 }
 

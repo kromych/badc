@@ -2509,11 +2509,12 @@ pub(crate) fn lower(
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
-        // Read-only prefix boundary the data compaction produced;
-        // zero when the pass did not run (JIT, empty data). The
-        // direct path segregates no relro region.
+        // Region boundaries the data compaction produced; zero when
+        // the pass did not run (JIT, empty data).
         data_ro_len: program.data_ro_len.min(program.data.len()),
-        data_relro_len: program.data_ro_len.min(program.data.len()),
+        data_relro_len: program
+            .data_relro_len
+            .clamp(program.data_ro_len, program.data.len()),
         data_align: program.data_align,
         text_align,
         bss_size: 0,

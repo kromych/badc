@@ -164,6 +164,14 @@ pub struct Program {
     /// freshly compiled unit); any repack resets it, and the pass
     /// re-establishes it for the layout it produced.
     pub data_ro_len: usize,
+    /// End of the relro region of `data`: `data[data_ro_len..
+    /// data_relro_len]` is `const`-qualified storage whose slots a
+    /// relocation writes, so it cannot ride the read-only prefix. The
+    /// image writers place it where the loader can patch it and
+    /// re-protect it before the entry point runs. Equals
+    /// [`Self::data_ro_len`] when the layout produced no such object,
+    /// and is reset with it by any repack.
+    pub data_relro_len: usize,
     /// Start offsets of anonymous data objects (string literals and the
     /// implicit `__func__` arrays of C99 6.4.2.2) within `data`. Named
     /// globals already carry their offset in `symbols[..].val`; these are
@@ -591,6 +599,7 @@ impl DataOffsets for Program {
             asm_hidden_names: _,
             data_align: _, // an alignment, not an offset
             data_ro_len,
+            data_relro_len,
             data_object_starts,
             const_data_ranges,
             data_pad_ranges,
@@ -625,9 +634,10 @@ impl DataOffsets for Program {
             init_funcs: _,              // code address space
             function_aliases: _,
         } = self;
-        // A repack invalidates the prefix boundary; the producing pass
-        // re-establishes it for the layout it emitted.
+        // A repack invalidates the region boundaries; the producing pass
+        // re-establishes them for the layout it emitted.
         *data_ro_len = 0;
+        *data_relro_len = 0;
         data_object_starts.retain_mut(|s| match r.remap(*s, *s) {
             Some(_) if !r.in_data(*s) => false,
             Some(new) => {
@@ -718,6 +728,7 @@ mod data_offset_tests {
             asm_weak_names: Vec::new(),
             asm_hidden_names: Vec::new(),
             data_ro_len: 0,
+            data_relro_len: 0,
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),

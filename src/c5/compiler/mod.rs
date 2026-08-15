@@ -2873,6 +2873,7 @@ impl Compiler {
             asm_hidden_names: self.asm_hidden_names,
             data_align: self.data_align,
             data_ro_len: 0,
+            data_relro_len: 0,
             data_object_starts: self.data_object_starts,
             const_data_ranges: self.const_data_ranges,
             data_pad_ranges: self.data_pad_ranges,

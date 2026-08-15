@@ -1057,15 +1057,20 @@ pub(crate) fn apply_data_liveness(
                 .all(|&b| b == 0)
     };
 
-    // Read-only file-backed objects pack ahead of the writable ones so
-    // they form a prefix the image writers map without write permission
-    // (`Program::data_ro_len`), the same regions-then-boundary layout
-    // the multi-object link produces. A relocated slot disqualifies an
-    // object: the writers patch such slots in the file image and the
-    // loader may re-patch them after mapping. Object 0 must stay at
-    // offset 0 (see above), so a prefix exists only when its bytes past
-    // the 8-byte NULL guard are recorded alignment padding -- content
-    // glued onto it has no recorded start and must stay writable.
+    // File-backed objects pack in three regions -- read-only prefix,
+    // relro, writable -- the same regions-then-boundary layout the
+    // multi-object link produces, so both paths hand the writers one
+    // shape. `const`-qualified storage with no relocated slot forms the
+    // prefix the writers map without write permission
+    // (`Program::data_ro_len`). `const` storage whose slot a relocation
+    // writes cannot ride it -- the loader patches such slots after
+    // mapping -- so it forms the relro region
+    // (`Program::data_relro_len`), which the writers re-protect before
+    // the entry point runs. Object 0 must stay at offset 0 (see above),
+    // so it leads the first non-empty region, and a region exists at all
+    // only when object 0's bytes past the 8-byte NULL guard are recorded
+    // alignment padding -- content glued onto it has no recorded start
+    // and must stay writable.
     let guard_immutable = !has_reloc_slot[0] && {
         let end = obj_end(0);
         let mut covered = end.min(8);
@@ -1076,9 +1081,34 @@ pub(crate) fn apply_data_liveness(
         }
         covered >= end
     };
-    let any_ro = (1..n).any(|i| live[i] && !is_bss(i) && is_readonly[i] && !has_reloc_slot[i]);
-    let in_ro_prefix = |i: usize| -> bool {
-        guard_immutable && any_ro && (i == 0 || (is_readonly[i] && !has_reloc_slot[i]))
+    const REGION_RO: u8 = 0;
+    const REGION_RELRO: u8 = 1;
+    const REGION_RW: u8 = 2;
+    let protected = |i: usize, reloc: bool| {
+        live[i] && !is_bss(i) && is_readonly[i] && has_reloc_slot[i] == reloc
+    };
+    let any_ro = (1..n).any(|i| protected(i, false));
+    let any_relro = (1..n).any(|i| protected(i, true));
+    let region_of = |i: usize| -> u8 {
+        if !guard_immutable {
+            return REGION_RW;
+        }
+        if i == 0 {
+            return if any_ro {
+                REGION_RO
+            } else if any_relro {
+                REGION_RELRO
+            } else {
+                REGION_RW
+            };
+        }
+        if !is_readonly[i] {
+            REGION_RW
+        } else if has_reloc_slot[i] {
+            REGION_RELRO
+        } else {
+            REGION_RO
+        }
     };
 
     // The packed layout invalidates the parse-recorded padding ranges;
@@ -1087,9 +1117,10 @@ pub(crate) fn apply_data_liveness(
     let mut new_base = alloc::vec![-1i64; n];
     let mut new_data: Vec<u8> = Vec::with_capacity(program.data.len());
     let mut data_ro_len: i64 = 0;
-    for ro_pass in [true, false] {
+    let mut data_relro_len: i64 = 0;
+    for pass in [REGION_RO, REGION_RELRO, REGION_RW] {
         for i in 0..n {
-            if !live[i] || is_bss(i) || in_ro_prefix(i) != ro_pass {
+            if !live[i] || is_bss(i) || region_of(i) != pass {
                 continue;
             }
             let want = starts[i].rem_euclid(align);
@@ -1103,10 +1134,9 @@ pub(crate) fn apply_data_liveness(
             new_base[i] = new_data.len() as i64;
             new_data.extend_from_slice(&program.data[starts[i] as usize..obj_end(i) as usize]);
         }
-        // The prefix ends on an `ALIGN` boundary so the writable
-        // region's packed residues hold at any `ALIGN`-multiple
-        // placement of `data[data_ro_len..]`.
-        if ro_pass && !new_data.is_empty() {
+        // Each region ends on an `ALIGN` boundary so the next one's
+        // packed residues hold at any `ALIGN`-multiple placement of it.
+        if pass != REGION_RW && !new_data.is_empty() {
             let pad_start = new_data.len() as i64;
             while (new_data.len() as i64).rem_euclid(align) != 0 {
                 new_data.push(0);
@@ -1114,7 +1144,10 @@ pub(crate) fn apply_data_liveness(
             if (new_data.len() as i64) > pad_start {
                 new_pad_ranges.push((pad_start, new_data.len() as i64));
             }
-            data_ro_len = new_data.len() as i64;
+            if pass == REGION_RO {
+                data_ro_len = new_data.len() as i64;
+            }
+            data_relro_len = new_data.len() as i64;
         }
     }
     // The `.bss` region begins immediately past the file image; an offset
@@ -1180,6 +1213,7 @@ pub(crate) fn apply_data_liveness(
     crate::c5::layout::DataOffsets::remap_data_offsets(&mut out, &map_to);
     out.data = new_data;
     out.data_ro_len = data_ro_len as usize;
+    out.data_relro_len = data_relro_len.max(data_ro_len) as usize;
     // The gaps this pass opened join the parse-recorded padding the remap
     // above carried over.
     out.data_pad_ranges.extend(new_pad_ranges);
@@ -1357,11 +1391,12 @@ mod tests {
         );
     }
 
-    // Read-only file-backed objects pack ahead of the writable ones and
-    // `Program::data_ro_len` marks the boundary: literals and named
-    // const objects land below it; a const object holding a relocated
-    // slot and every writable object stay past it, as do all recorded
-    // relocation slots.
+    // File-backed objects pack into three regions bounded by
+    // `Program::data_ro_len` and `Program::data_relro_len`: literals and
+    // named const objects with no relocated slot form the prefix, a
+    // const object holding a relocated slot forms the relro region, and
+    // writable objects follow. Every recorded relocation slot sits past
+    // the prefix.
     #[test]
     fn readonly_objects_pack_into_a_prefix() {
         let target = Target::LinuxX64;
@@ -1390,9 +1425,15 @@ mod tests {
                 .unwrap_or_else(|| panic!("symbol {name}"))
                 .val
         };
+        let relro = compacted.data_relro_len as i64;
+        assert!(relro > ro, "a relocated const must produce a relro region");
+        assert_eq!(relro % 16, 0, "relro must end on the packing alignment");
         assert!(sym("ck") + 4 <= ro, "const object belongs to the prefix");
-        assert!(sym("wv") >= ro, "writable object stays past the prefix");
-        assert!(sym("cp") >= ro, "a relocated const slot stays writable");
+        assert!(sym("wv") >= relro, "writable object stays past relro");
+        assert!(
+            sym("cp") >= ro && sym("cp") + 8 <= relro,
+            "a relocated const belongs to the relro region"
+        );
         for off in compacted.data_reloc_offsets() {
             assert!(off >= ro, "relocated slot {off:#x} below the prefix");
         }

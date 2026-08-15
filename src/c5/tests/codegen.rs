@@ -553,6 +553,199 @@ fn relocated_const_lands_in_relro_region_in_every_target() {
     }
 }
 
+/// The direct single-TU image segregates `.data` into the same three
+/// regions the multi-object link produces: `const` storage with no
+/// relocated slot forms the read-only prefix, `const` storage whose
+/// slot a relocation writes forms the relro region, and the rest stays
+/// writable. One relocation-carrying object costs only itself the
+/// prefix, not the whole unit.
+///
+/// The boundaries the writer is handed decide the placement, so they
+/// are asserted directly; the image is then checked for the region a
+/// format maps each range into. ELF splits them across a PF_R load and
+/// `PT_GNU_RELRO` and Mach-O across `__TEXT,__const` and
+/// `__DATA_CONST,__const`; PE carries both in `.rdata`, so there the
+/// image check confirms protection and the boundaries carry the split.
+#[test]
+fn single_tu_const_storage_splits_into_regions_in_every_target() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::{Compiler, NativeOptions, Target};
+    const PT_GNU_RELRO: u32 = 0x6474_E552;
+    const MEM_READ: u32 = 0x4000_0000;
+    const MEM_WRITE: u32 = 0x8000_0000;
+    const SG_READ_ONLY: u32 = 0x10;
+    // `pure_tab` holds no relocation and rides the prefix. `mixer`
+    // carries a pointer to a literal, so it belongs in relro; its
+    // `tag` field is the byte probe for the object itself, distinct
+    // from the literal it points at, which is a pure const of its own.
+    // `wglob` anchors the writable side.
+    let unit_pure = "\
+        const char pure_tab[16] = \"PURETABPURETAB\";\n\
+        int wglob = 5;\n\
+        int main(void){ return pure_tab[0] + wglob; }\n";
+    let unit_mixed = "\
+        const char pure_tab[16] = \"PURETABPURETAB\";\n\
+        struct ops { const char *n; char tag[8]; };\n\
+        const struct ops mixer = { \"MIXEDLIT\", \"MIXTAG\" };\n\
+        int wglob = 5;\n\
+        int main(void){ return pure_tab[0] + mixer.tag[0] + wglob; }\n";
+    // A relocation-carrying const alone: nothing else is const, so the
+    // prefix is empty and the relro region carries the unit's only
+    // protected object.
+    let unit_reloc = "\
+        char wtarget[8] = \"WTARGET\";\n\
+        struct ops { char *n; char tag[8]; };\n\
+        const struct ops solo = { wtarget, \"SOLOTAG\" };\n\
+        int main(void){ return solo.tag[0]; }\n";
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let emit = |src: &str| {
+            let program = Compiler::with_options(
+                alloc::string::String::from(src),
+                target,
+                CompileOptions::default(),
+            )
+            .compile()
+            .expect("compile");
+            crate::c5::object::single_tu_image_for_test(&program, target, NativeOptions::default())
+                .expect("emit")
+        };
+        let region = |r: &crate::c5::object::SingleTuRegions, name: &str| -> &'static str {
+            let off = r
+                .sym_offsets
+                .iter()
+                .find(|(n, _)| n == name)
+                .unwrap_or_else(|| panic!("{target:?}: no symbol `{name}`"))
+                .1 as usize;
+            if off < r.ro_len {
+                "ro"
+            } else if off < r.relro_len {
+                "relro"
+            } else {
+                "rw"
+            }
+        };
+
+        let (_, pure) = emit(unit_pure);
+        assert_eq!(region(&pure, "pure_tab"), "ro", "{target:?}: pure const");
+        assert_eq!(region(&pure, "wglob"), "rw", "{target:?}: writable global");
+        assert_eq!(
+            pure.ro_len, pure.relro_len,
+            "{target:?}: a unit with no relocated const needs no relro region"
+        );
+
+        let (image, mixed) = emit(unit_mixed);
+        assert_eq!(
+            region(&mixed, "pure_tab"),
+            "ro",
+            "{target:?}: a relocated const must not cost the prefix to the rest of the unit"
+        );
+        assert_eq!(
+            region(&mixed, "mixer"),
+            "relro",
+            "{target:?}: relocated const belongs in the relro region"
+        );
+        assert_eq!(region(&mixed, "wglob"), "rw", "{target:?}: writable global");
+        assert!(
+            mixed.ro_len > 0 && mixed.relro_len > mixed.ro_len,
+            "{target:?}: the mixed unit must produce both regions"
+        );
+
+        let (_, solo) = emit(unit_reloc);
+        assert_eq!(
+            region(&solo, "solo"),
+            "relro",
+            "{target:?}: a relocated const alone still belongs in relro"
+        );
+        assert_eq!(
+            region(&solo, "wtarget"),
+            "rw",
+            "{target:?}: writable target stays writable"
+        );
+
+        // The mixed image: the prefix probe in the region the format
+        // maps read-only, the relro probe in the re-protected one, and
+        // neither in writable storage.
+        let holds =
+            |off: usize, len: usize, needle: &[u8]| contains(&image[off..off + len], needle);
+        match target {
+            Target::LinuxAarch64 | Target::LinuxX64 => {
+                const PF_W: u32 = 2;
+                let loads = elf_load_file_ranges(&image);
+                assert!(
+                    loads
+                        .iter()
+                        .any(|&(f, o, l)| f == 4 && contains(&image[o..o + l], b"PURETAB")),
+                    "{target:?}: pure const outside every PF_R-only load"
+                );
+                let (_, roff, rlen) =
+                    elf_phdr_file_range(&image, PT_GNU_RELRO).expect("PT_GNU_RELRO");
+                assert!(
+                    holds(roff, rlen, b"MIXTAG"),
+                    "{target:?}: relocated const outside PT_GNU_RELRO"
+                );
+                for &(f, o, l) in &loads {
+                    if f & PF_W != 0 {
+                        assert!(
+                            !contains(&image[o..o + l], b"PURETAB"),
+                            "{target:?}: pure const also present in a PF_W load"
+                        );
+                    }
+                }
+            }
+            Target::MacOSAarch64 => {
+                let (off, len) =
+                    macho_section_range(&image, "__TEXT", "__const").expect("__TEXT,__const");
+                assert!(
+                    holds(off, len, b"PURETAB"),
+                    "pure const not in __TEXT,__const"
+                );
+                let (croff, crlen) = macho_section_range(&image, "__DATA_CONST", "__const")
+                    .expect("__DATA_CONST,__const");
+                assert!(
+                    holds(croff, crlen, b"MIXTAG"),
+                    "relocated const not in __DATA_CONST,__const"
+                );
+                assert_eq!(
+                    macho_segment_flags(&image, "__DATA_CONST").expect("__DATA_CONST segment")
+                        & SG_READ_ONLY,
+                    SG_READ_ONLY,
+                    "__DATA_CONST must carry SG_READ_ONLY"
+                );
+                let (doff, dlen) =
+                    macho_section_range(&image, "__DATA", "__data").expect("__DATA,__data");
+                assert!(
+                    !holds(doff, dlen, b"PURETAB") && !holds(doff, dlen, b"MIXTAG"),
+                    "const storage also present in writable __DATA,__data"
+                );
+            }
+            Target::WindowsX64 | Target::WindowsAarch64 => {
+                let (chars, off, len) = pe_section(&image, ".rdata").expect(".rdata section");
+                assert_eq!(
+                    chars & MEM_READ,
+                    MEM_READ,
+                    "{target:?}: .rdata not MEM_READ"
+                );
+                assert_eq!(chars & MEM_WRITE, 0, "{target:?}: .rdata is writable");
+                assert!(
+                    holds(off, len, b"PURETAB") && holds(off, len, b"MIXTAG"),
+                    "{target:?}: const storage not in .rdata"
+                );
+                let (_, doff, dlen) = pe_section(&image, ".data").expect(".data section");
+                assert!(
+                    !holds(doff, dlen, b"PURETAB") && !holds(doff, dlen, b"MIXTAG"),
+                    "{target:?}: const storage also present in .data"
+                );
+            }
+        }
+    }
+}
+
 /// x86_64 switch dispatch tables (`Build::rodata`) belong to the
 /// read-only image: the ELF writer already places them in the PF_R
 /// load; the PE writer carries them at the 8-aligned tail of

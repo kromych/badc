@@ -912,6 +912,27 @@ pub(crate) fn emit_native_single_tu_for_test(
     target: Target,
     options: NativeOptions,
 ) -> Result<alloc::vec::Vec<u8>, C5Error> {
+    Ok(single_tu_image_for_test(program, target, options)?.0)
+}
+
+/// The single-TU image plus the data-region boundaries it was written
+/// from and the compacted `.data` offset of every named global:
+/// `data[..ro_len]` is the pure read-only prefix, `data[ro_len..
+/// relro_len]` the relro region, the rest writable.
+#[cfg(all(test, feature = "native-emit"))]
+pub(crate) struct SingleTuRegions {
+    pub ro_len: usize,
+    pub relro_len: usize,
+    pub sym_offsets: alloc::vec::Vec<(alloc::string::String, u64)>,
+}
+
+#[cfg(all(test, feature = "native-emit"))]
+pub(crate) fn single_tu_image_for_test(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+) -> Result<(alloc::vec::Vec<u8>, SingleTuRegions), C5Error> {
+    use crate::c5::token::Token;
     let (compacted, bss_size, mut build) = compact_and_lower(program, target, options)?;
     let program = &compacted;
     build.bss_size = bss_size;
@@ -923,7 +944,17 @@ pub(crate) fn emit_native_single_tu_for_test(
         .func_names
         .push(alloc::string::String::from("__c5_entry"));
     build.func_ent_pcs.push(pc);
-    write_for(program, &build, target)
+    let regions = SingleTuRegions {
+        ro_len: build.data_ro_len,
+        relro_len: build.data_relro_len,
+        sym_offsets: program
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Glo as i64 && s.defined_here && !s.is_alias)
+            .map(|s| (s.name.clone(), s.val as u64))
+            .collect(),
+    };
+    Ok((write_for(program, &build, target)?, regions))
 }
 
 #[cfg(all(feature = "full", feature = "std"))]

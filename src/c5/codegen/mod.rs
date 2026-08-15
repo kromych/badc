@@ -1505,8 +1505,7 @@ pub(crate) struct Build {
     /// is read-only storage with loader-written slots. The ELF image
     /// writer covers it by `PT_GNU_RELRO`; writers without such a
     /// mechanism keep it writable. Equals [`Self::data_ro_len`] when
-    /// the producer segregated no such region (the direct single-TU
-    /// path routes relocated const storage to the writable side).
+    /// the producer segregated no such region.
     pub data_relro_len: usize,
     /// Base alignment `data` requires in the image, at least 8.
     /// Raised past 8 only by linked foreign sections with a larger

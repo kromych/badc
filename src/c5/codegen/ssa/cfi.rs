@@ -34,6 +34,10 @@ pub(crate) const DW_CFA_DEF_CFA_REGISTER: u8 = 0x0d;
 pub(crate) const DW_CFA_DEF_CFA_OFFSET: u8 = 0x0e;
 pub(crate) const DW_CFA_OFFSET_EXTENDED_SF: u8 = 0x11;
 pub(crate) const DW_CFA_DEF_CFA_OFFSET_SF: u8 = 0x13;
+pub(crate) const DW_CFA_VAL_OFFSET: u8 = 0x14;
+pub(crate) const DW_CFA_VAL_OFFSET_SF: u8 = 0x15;
+/// `DW_CFA_GNU_window_save`, and on AArch64 `DW_CFA_AARCH64_negate_ra_state`.
+pub(crate) const DW_CFA_NEGATE_RA_STATE: u8 = 0x2d;
 
 /// `DW_EH_PE_pcrel | DW_EH_PE_sdata4`: the FDE pointer encoding the `zR`
 /// augmentation advertises. A 4-byte PC-relative displacement keeps the
@@ -68,7 +72,6 @@ pub(crate) enum CfiArch {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CfiTarget {
     pub arch: CfiArch,
-    /// Address size in bytes, from the object's ELF class.
     pub addr_bytes: u8,
 }
 
@@ -213,6 +216,8 @@ pub(crate) enum CfiOp {
     AdjustCfaOffset(i64),
     Offset { reg: CfiReg, off: i64 },
     RelOffset { reg: CfiReg, off: i64 },
+    ValOffset { reg: CfiReg, off: i64 },
+    NegateRaState,
     Register { reg: CfiReg, from: CfiReg },
     Restore(CfiReg),
     Undefined(CfiReg),
@@ -299,6 +304,11 @@ pub(crate) fn parse_cfi_directive(
             reg: reg(0)?,
             off: num(1)?,
         },
+        ".cfi_val_offset" => CfiOp::ValOffset {
+            reg: reg(0)?,
+            off: num(1)?,
+        },
+        ".cfi_negate_ra_state" | ".cfi_window_save" => CfiOp::NegateRaState,
         ".cfi_register" => CfiOp::Register {
             reg: reg(0)?,
             from: reg(1)?,
@@ -516,6 +526,7 @@ fn hoistable(op: &CfiOp) -> bool {
             | CfiOp::AdjustCfaOffset(_)
             | CfiOp::Offset { .. }
             | CfiOp::RelOffset { .. }
+            | CfiOp::ValOffset { .. }
             | CfiOp::Register { .. }
             | CfiOp::Undefined(_)
             | CfiOp::SameValue(_)
@@ -554,6 +565,21 @@ fn encode_op(
         CfiOp::RelOffset { reg, off } => {
             write_offset(out, reg.resolve(t)?, *off - cfa.offset, daf)?
         }
+        // The register's value, rather than the address it was saved at.
+        CfiOp::ValOffset { reg, off } => {
+            let r = reg.resolve(t)?;
+            let factored = factor(*off, daf)?;
+            if factored >= 0 {
+                out.push(DW_CFA_VAL_OFFSET);
+                write_uleb(out, r);
+                write_uleb(out, factored as u64);
+            } else {
+                out.push(DW_CFA_VAL_OFFSET_SF);
+                write_uleb(out, r);
+                write_sleb(out, factored);
+            }
+        }
+        CfiOp::NegateRaState => out.push(DW_CFA_NEGATE_RA_STATE),
         CfiOp::Register { reg, from } => {
             out.push(DW_CFA_REGISTER);
             write_uleb(out, reg.resolve(t)?);
@@ -598,13 +624,18 @@ fn write_def_cfa_offset(out: &mut Vec<u8>, off: i64, daf: i64) {
     }
 }
 
-fn write_offset(out: &mut Vec<u8>, reg: u64, off: i64, daf: i64) -> Result<(), String> {
+/// Divide a CFA-relative byte offset by the data alignment factor.
+fn factor(off: i64, daf: i64) -> Result<i64, String> {
     if off % daf != 0 {
         return Err(alloc::format!(
             "a saved-register offset of {off} is not a multiple of the data alignment factor {daf}"
         ));
     }
-    let factored = off / daf;
+    Ok(off / daf)
+}
+
+fn write_offset(out: &mut Vec<u8>, reg: u64, off: i64, daf: i64) -> Result<(), String> {
+    let factored = factor(off, daf)?;
     if factored >= 0 && reg < 0x40 {
         out.push(DW_CFA_OFFSET_HI | reg as u8);
         write_uleb(out, factored as u64);

@@ -1683,6 +1683,30 @@ fn an_i386_frame_takes_the_i386_register_numbering() {
     assert!(secs.iter().any(|s| s.0 == ".rel.eh_frame"));
 }
 
+/// `.cfi_val_offset` states a register's value rather than where it was
+/// saved, and takes the signed opcode when the factored offset is negative.
+/// `.cfi_negate_ra_state` is the AArch64 return-address-signing toggle,
+/// which shares its vendor opcode with `DW_CFA_GNU_window_save`. GNU as
+/// 2.46.1's bytes.
+#[test]
+fn val_offset_and_ra_state_take_their_own_opcodes() {
+    let b = object_for(
+        "cfi-val",
+        "\t.text\n\t.globl f\n\t.type f,%function\nf:\n\t.cfi_startproc\n\
+         \t.cfi_negate_ra_state\n\tnop\n\t.cfi_val_offset x19, -16\n\tnop\n\
+         \t.cfi_val_offset x20, 24\n\tnop\n\t.cfi_endproc\n\t.size f,.-f\n",
+        A64,
+    );
+    assert_eq!(
+        section_data(&b, ".eh_frame"),
+        [
+            0x10, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x7a, 0x52, 0x00, 0x04, 0x78, 0x1e, 0x01, 0x1b, 0x0c,
+            0x1f, 0x00, 0x18, 0, 0, 0, 0x18, 0, 0, 0, 0, 0, 0, 0, 0x0c, 0, 0, 0, 0x00, 0x2d, 0x41,
+            0x14, 0x13, 0x02, 0x41, 0x15, 0x14, 0x7d, 0x00, 0x00
+        ]
+    );
+}
+
 /// A frame operand is an absolute expression, not a literal: the kernel's
 /// signal trampolines spell every saved-register slot as offset arithmetic
 /// over a macro argument. Both frames below describe the same state, so

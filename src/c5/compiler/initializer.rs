@@ -608,6 +608,7 @@ impl Compiler {
             // of the dimensions below it (`child_span` at `d == 0`, 1 at
             // the innermost). A `.field` step is still unsupported and
             // falls through to a parse error.
+            let entry_designated = self.lex.tk == Token::Brak;
             if self.lex.tk == Token::Brak {
                 let mut base: usize = 0;
                 let mut range_end: usize = 0;
@@ -664,9 +665,12 @@ impl Compiler {
                 desig_range_end = if range_end > 0 { Some(range_end) } else { None };
                 desig_depth = depth - 1;
             }
-            // The level the entry that follows belongs to: this level for a
-            // positional entry or a single `[N]`, one deeper per extra
-            // chained subscript.
+            // The level the entry that follows belongs to: one deeper per
+            // extra chained subscript for a designated entry. C99 6.7.8p17
+            // resumes a positional entry at the subobject after the one the
+            // last designator named, so its level is the outermost one whose
+            // row boundary the cursor sits on -- a whole-row span measured
+            // from mid-row would advance the count past the object.
             let level = core::mem::replace(&mut desig_depth, 0);
             // Nested brace list (multi-dim array): `{ {1,2}, {3,4}, ... }`.
             // c5's array-symbol storage carries a single flat
@@ -678,6 +682,16 @@ impl Compiler {
             // current level.
             if self.lex.tk == '{' {
                 let before = cursor;
+                let level = if entry_designated {
+                    level
+                } else {
+                    (0..=inner_dims.len())
+                        .find(|&k| {
+                            let s: usize = inner_dims[k..].iter().map(|&d| d as usize).product();
+                            s > 0 && before.is_multiple_of(s)
+                        })
+                        .unwrap_or(inner_dims.len())
+                };
                 let dims_below = inner_dims.get(level..).unwrap_or(&[]);
                 let span: usize = dims_below.iter().map(|&d| d as usize).product();
                 self.pending.init_inner_dims = if dims_below.is_empty() {

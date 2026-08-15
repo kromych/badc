@@ -185,6 +185,22 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../libc/include/CoreFoundation/CoreFoundation.h"),
     ),
     (
+        "CoreVideo/CoreVideo.h",
+        include_str!("../../libc/include/CoreVideo/CoreVideo.h"),
+    ),
+    (
+        "CoreVideo/CVBase.h",
+        include_str!("../../libc/include/CoreVideo/CVBase.h"),
+    ),
+    (
+        "CoreVideo/CVReturn.h",
+        include_str!("../../libc/include/CoreVideo/CVReturn.h"),
+    ),
+    (
+        "CoreVideo/CVHostTime.h",
+        include_str!("../../libc/include/CoreVideo/CVHostTime.h"),
+    ),
+    (
         "SystemConfiguration/SCDynamicStoreCopySpecific.h",
         include_str!("../../libc/include/SystemConfiguration/SCDynamicStoreCopySpecific.h"),
     ),

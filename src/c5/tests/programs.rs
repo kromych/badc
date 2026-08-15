@@ -6479,6 +6479,81 @@ fn vm_region_basic_info_keeps_the_kernel_packing() {
 }
 
 #[test]
+fn corevideo_umbrella_carries_the_time_types() {
+    use crate::Target;
+    // Sizes, offsets and values are what clang reports against the macOS
+    // SDK. CVSMPTETime packs to 24 bytes on 4-byte alignment, which puts
+    // CVTimeStamp's trailing two 64-bit words at 64 and 72.
+    let src = "#include <CoreVideo/CoreVideo.h>\n\
+        #include <stddef.h>\n\
+        int ck[(sizeof(CVOptionFlags)==8 && sizeof(CVSMPTETimeType)==4 \
+             && sizeof(CVSMPTETimeFlags)==4 && sizeof(CVTimeFlags)==4 \
+             && sizeof(CVTimeStampFlags)==8 && sizeof(CVReturn)==4 \
+             && sizeof(CVSMPTETime)==24 && sizeof(CVTime)==16 \
+             && sizeof(CVTimeStamp)==80 \
+             && offsetof(CVSMPTETime,counter)==4 \
+             && offsetof(CVSMPTETime,hours)==16 \
+             && offsetof(CVSMPTETime,frames)==22 \
+             && offsetof(CVTime,timeScale)==8 && offsetof(CVTime,flags)==12 \
+             && offsetof(CVTimeStamp,videoTime)==8 \
+             && offsetof(CVTimeStamp,rateScalar)==24 \
+             && offsetof(CVTimeStamp,smpteTime)==40 \
+             && offsetof(CVTimeStamp,flags)==64 \
+             && offsetof(CVTimeStamp,reserved)==72 \
+             && kCVSMPTETimeType24==0 && kCVSMPTETimeType5994==7 \
+             && kCVSMPTETimeValid==1 && kCVSMPTETimeRunning==2 \
+             && kCVTimeIsIndefinite==1 \
+             && kCVTimeStampVideoTimeValid==1 \
+             && kCVTimeStampRateScalarValid==16 \
+             && kCVTimeStampTopField==65536 \
+             && kCVTimeStampBottomField==131072 \
+             && kCVTimeStampVideoHostTimeValid==3 \
+             && kCVTimeStampIsInterlaced==196608 \
+             && kCVReturnSuccess==0 && kCVReturnFirst==-6660 \
+             && kCVReturnError==-6660 && kCVReturnLast==-6699 \
+             && kCVReturnInvalidArgument==-6661 \
+             && kCVReturnUnsupported==-6663 \
+             && kCVReturnDisplayLinkCallbacksNotSet==-6673 \
+             && kCVReturnPixelBufferNotMetalCompatible==-6684 \
+             && kCVReturnRetry==-6692)?1:-1];\n\
+        enum _CVReturn tag_is_named;\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+    // Every declaration sits behind __APPLE__, so no other target sees it.
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "the CoreVideo surface must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn corevideo_host_clock_is_bound_to_the_framework() {
+    use crate::Target;
+    // The only CoreVideo entry points the bundled set declares. Anything
+    // else in the framework is left undeclared so a caller fails at the
+    // link rather than against a stand-in.
+    let src = "#include <CoreVideo/CVHostTime.h>\n\
+        double f(CVTimeStamp *ts) {\n\
+            ts->hostTime = CVGetCurrentHostTime();\n\
+            ts->version = CVGetHostClockMinimumTimeDelta();\n\
+            return CVGetHostClockFrequency(); }\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+
+    let absent = "#include <CoreVideo/CoreVideo.h>\n\
+        void f(void) { CVDisplayLinkRelease(0); }\n";
+    assert!(
+        !header_snippet_compiles(absent, Target::MacOSAarch64),
+        "the display-link surface needs CoreGraphics types that are not bundled"
+    );
+}
+
+#[test]
 fn process_vm_transfers_are_a_linux_binding() {
     use crate::Target;
     // glibc declares the pair in <sys/uio.h> under __USE_GNU; no other

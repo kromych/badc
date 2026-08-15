@@ -998,14 +998,15 @@ fn is_inline_candidate(
                 }
             }
             // A segment-relative access reaches here. Splicing one is
-            // operand-correct (`remap_inst_operands` routes both variants),
-            // but the spliced access shares a register with the enclosing
-            // function's inline-asm operand handling: an accessor inlined
-            // ahead of an `"=rm"` block reloads the operand address into
-            // the register the access then uses as its segment base, so it
-            // reads through a frame address. TODO: admit these once the
-            // asm-operand register handling accounts for the spliced
-            // access.
+            // operand-correct (`remap_inst_operands` routes both variants)
+            // and the accesses a defconfig build emits are correct, but the
+            // arm also gates every body rejected only for a nested access.
+            // Those carry their own frame slots into each caller, and an
+            // `always_inline` request is exempt from both frame budgets, so
+            // a defconfig caller reaches a 4 KiB frame and the kernel
+            // overflows its 16 KiB task stack during boot. TODO: admit
+            // these once a mandatory splice is charged for the frame it
+            // relocates.
             _ => {
                 say(format_args!("disallowed inst {:?}", inst));
                 return false;

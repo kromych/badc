@@ -842,6 +842,22 @@ pub fn is_elf_object(bytes: &[u8]) -> bool {
     bytes.len() >= 4 && &bytes[0..4] == b"\x7fELF"
 }
 
+/// True when `bytes` is a relocatable object in a format the linker
+/// reads: ELF `ET_REL` or Mach-O `MH_OBJECT`.
+pub fn is_native_object(bytes: &[u8]) -> bool {
+    is_elf_object(bytes) || super::mach_o_object::is_mach_o_object(bytes)
+}
+
+/// Parse a relocatable object of either format the linker reads,
+/// dispatching on the leading magic.
+pub fn parse_native_object(bytes: &[u8]) -> Result<NativeObject, C5Error> {
+    if super::mach_o_object::is_mach_o_object(bytes) {
+        super::mach_o_object::parse_native_mach_o(bytes)
+    } else {
+        parse_native_elf(bytes)
+    }
+}
+
 /// Container format of a blob, by leading magic; `None` when nothing
 /// matches. Reports what an input is when the linker cannot read it.
 /// Mach-O has 32- and 64-bit magics in both byte orders plus the

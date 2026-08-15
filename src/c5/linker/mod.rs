@@ -52,6 +52,8 @@ pub(crate) mod lds_link;
 #[cfg(feature = "std")]
 pub(crate) mod link;
 #[cfg(feature = "std")]
+pub(crate) mod mach_o_object;
+#[cfg(feature = "std")]
 pub(crate) mod map;
 #[cfg(feature = "std")]
 pub(crate) mod object;
@@ -84,12 +86,16 @@ pub use link::{
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
+pub use mach_o_object::{is_mach_o_object, parse_native_mach_o};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
 pub use map::{ArchiveInclusion, render_link_map};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use object::{
     NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, SharedLibrary,
-    detect_binary_format, is_elf_object, parse_native_elf, parse_shared_library,
+    detect_binary_format, is_elf_object, is_native_object, parse_native_elf, parse_native_object,
+    parse_shared_library,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

@@ -97,13 +97,24 @@ impl<H: Host> Vm<H> {
     /// Construct a `Vm` with an explicit `Host`. Required in `no_std`
     /// where there's no default; convenient in `std` for tests that
     /// want to stub IO. Trace defaults to off.
-    pub fn with_host(program: Program, host: H) -> Self {
+    pub fn with_host(mut program: Program, host: H) -> Self {
         // Lift the program to SSA up front so `Vm::run` can
         // dispatch into the interpreter directly. Failures here
         // (walker compile errors, etc.) are deferred to `run`
         // because `with_host` doesn't return `Result`.
+        // Execution is the link step: bind import placeholders a
+        // function alias of the unit resolves, in the lifted bodies
+        // and in the data-slot function addresses.
         let ssa_funcs =
-            super::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false);
+            super::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false).map(
+                |mut funcs| {
+                    super::codegen::ssa::shadow::bind_alias_imports(&program, &mut funcs);
+                    funcs
+                },
+            );
+        let mut code_relocs = core::mem::take(&mut program.code_relocs);
+        super::codegen::bind_code_reloc_aliases(&program, &mut code_relocs);
+        program.code_relocs = code_relocs;
         let binding_names = program
             .dylibs
             .iter()

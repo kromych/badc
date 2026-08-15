@@ -6617,6 +6617,65 @@ fn weak_alias_used_bindings_in_relocatable() {
 }
 
 #[test]
+fn interposable_call_keeps_relocation_under_optimize() {
+    // An interposable definition -- a weak alias or a plain weak
+    // function -- may be replaced by a strong definition at link time,
+    // so a call through the interposable name stays out of line under
+    // -O and relocates against that name, never against the target's
+    // body. A call naming the (strong) target directly still inlines.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_PLT32: u32 = 4;
+    const R_AARCH64_CALL26: u32 = 283;
+    const STB_WEAK: u8 = 2;
+    let src = "int real_fn(void) { return 41; }\n\
+               int alias_fn(void) __attribute__((weak, alias(\"real_fn\")));\n\
+               int caller(void) { return alias_fn() + 1; }\n\
+               int direct(void) { return real_fn() + 1; }\n\
+               __attribute__((weak)) int weak_fn(void) { return 7; }\n\
+               int wcaller(void) { return weak_fn() + 1; }\n";
+    for (target, call_rtype) in [
+        (Target::LinuxX64, R_X86_64_PLT32),
+        (Target::LinuxAarch64, R_AARCH64_CALL26),
+    ] {
+        let program = Compiler::with_options(
+            String::from(src),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            optimize: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        for name in ["alias_fn", "weak_fn"] {
+            let syms: Vec<_> = obj.symbols.iter().filter(|s| s.name == name).collect();
+            assert_eq!(syms.len(), 1, "one `{name}` entry, no UNDEF duplicate");
+            assert_eq!(syms[0].binding, STB_WEAK, "`{name}` binds STB_WEAK");
+            let call = obj
+                .text_relocs
+                .iter()
+                .find(|r| obj.symbols[r.sym_idx].name == name && r.rtype == call_rtype);
+            assert!(
+                call.is_some(),
+                "the call through `{name}` must keep a call relocation ({target:?})"
+            );
+        }
+        assert!(
+            !obj.text_relocs
+                .iter()
+                .any(|r| obj.symbols[r.sym_idx].name == "real_fn"),
+            "the direct call to the strong target inlines; no relocation names it"
+        );
+    }
+}
+
+#[test]
 fn strong_definition_overrides_weak_at_link() {
     // ELF weak semantics in the native linker: a strong STB_GLOBAL
     // definition wins over a weak one with no multiple-definition

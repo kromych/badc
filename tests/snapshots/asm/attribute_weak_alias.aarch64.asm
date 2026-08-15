@@ -27,6 +27,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
+               	sxtw	x0, w0
+               	cmp	x0, #0x29
+               	b.eq	<addr>
+               	mov	x0, #0x2                // =2
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	bl	<addr>
                	cmp	x0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

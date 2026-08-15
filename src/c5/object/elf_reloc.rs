@@ -1626,6 +1626,7 @@ pub(super) fn write_relocatable(
     for site in &build.user_extern_call_sites {
         let s = site.symbol_name.as_str();
         if !defined_fn_names.contains(s)
+            && !program.function_aliases.iter().any(|a| a.name == s)
             && !asm_defined_labels.contains(s)
             && !user_extern_names.contains(&s)
         {
@@ -1644,6 +1645,7 @@ pub(super) fn write_relocatable(
         .collect();
     for r in &build.code_relocs {
         if let Some(&name) = extern_fn_by_pc.get(&(r.target_ent_pc as usize))
+            && !program.function_aliases.iter().any(|a| a.name == name)
             && !asm_defined_labels.contains(name)
             && !user_extern_names.contains(&name)
         {
@@ -1727,7 +1729,10 @@ pub(super) fn write_relocatable(
     let mut user_extern_data_names: Vec<&str> = Vec::new();
     for r in &build.user_extern_data_refs {
         let s = r.symbol_name.as_str();
-        if !asm_defined_labels.contains(s) && !user_extern_data_names.contains(&s) {
+        if !asm_defined_labels.contains(s)
+            && !program.function_aliases.iter().any(|a| a.name == s)
+            && !user_extern_data_names.contains(&s)
+        {
             user_extern_data_names.push(s);
         }
     }
@@ -2780,21 +2785,33 @@ pub(super) fn write_relocatable(
         // A GOT reference keeps the symbol: the slot is per-symbol, so the
         // section+offset reduction has nothing to bind to there.
         let form = extern_addr_form(r.symbol_name.as_str());
-        let (sym_idx, base) = match asm_label_ref(r.symbol_name.as_str()) {
-            Some(_) if form == ExternAddrForm::Got => (
-                *asm_label_symidx
-                    .get(r.symbol_name.as_str())
-                    .expect("a resolved asm label has a symbol") as u64,
-                0,
-            ),
-            Some(pair) => pair,
-            None => {
-                let pos = user_extern_data_names
-                    .iter()
-                    .position(|n| *n == r.symbol_name.as_str())
-                    .expect("user_extern_data_names contains every ref's name");
-                (user_extern_data_sym_idx[pos] as u64, 0)
-            }
+        // A function-alias name resolves against its defined (weak)
+        // symbol; the reference form stays symbolic so the linker's
+        // binding decides which definition the address names.
+        let alias_sym = program
+            .function_aliases
+            .iter()
+            .any(|a| a.name == r.symbol_name)
+            .then(|| func_symidx_by_name.get(r.symbol_name.as_str()).copied())
+            .flatten();
+        let (sym_idx, base) = match alias_sym {
+            Some(i) => (i as u64, 0),
+            None => match asm_label_ref(r.symbol_name.as_str()) {
+                Some(_) if form == ExternAddrForm::Got => (
+                    *asm_label_symidx
+                        .get(r.symbol_name.as_str())
+                        .expect("a resolved asm label has a symbol") as u64,
+                    0,
+                ),
+                Some(pair) => pair,
+                None => {
+                    let pos = user_extern_data_names
+                        .iter()
+                        .position(|n| *n == r.symbol_name.as_str())
+                        .expect("user_extern_data_names contains every ref's name");
+                    (user_extern_data_sym_idx[pos] as u64, 0)
+                }
+            },
         };
         // A segment-qualified inline-asm `%a` operand takes a direct
         // `R_X86_64_PC32` against the symbol (x86_64 only): the access rides
@@ -3180,15 +3197,20 @@ pub(super) fn write_relocatable(
         // since the named symbol carries the target's text
         // offset directly.
         if let Some(&name) = extern_fn_by_pc.get(&ent_pc) {
-            let (sym_idx, base) = match asm_label_ref(name) {
-                Some(pair) => pair,
-                None => {
-                    let pos = user_extern_names
-                        .iter()
-                        .position(|n| *n == name)
-                        .expect("user_extern_names contains every code-reloc extern callee");
-                    (user_extern_sym_idx[pos] as u64, 0)
-                }
+            // A name this unit defines -- a function alias -- resolves
+            // against its defined (weak) symbol; otherwise the UNDEF.
+            let (sym_idx, base) = match func_symidx_by_name.get(name) {
+                Some(&i) => (i as u64, 0),
+                None => match asm_label_ref(name) {
+                    Some(pair) => pair,
+                    None => {
+                        let pos = user_extern_names
+                            .iter()
+                            .position(|n| *n == name)
+                            .expect("user_extern_names contains every code-reloc extern callee");
+                        (user_extern_sym_idx[pos] as u64, 0)
+                    }
+                },
             };
             push_data_row(
                 &mut carve,

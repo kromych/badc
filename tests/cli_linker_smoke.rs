@@ -84,6 +84,76 @@ fn two_sources_compile_separately_then_link() {
     assert_eq!(out.status.code(), Some(42), "exit code mismatch");
 }
 
+#[test]
+fn weak_alias_strong_override_wins_at_link() {
+    // A call through a weak alias keeps its relocation under -O, so a
+    // strong definition of the alias name in another object replaces
+    // the target's body at link time; with no override the weak alias
+    // binds to its target.
+    let dir = tempdir("weak-alias-override");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "int real_fn(void) { return 41; }\n\
+         int alias_fn(void) __attribute__((weak, alias(\"real_fn\")));\n\
+         int caller(void) { return alias_fn() + 1; }\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "extern int caller(void);\n\
+         int alias_fn(void) { return 7; }\n\
+         int main(void) { return caller(); }\n",
+    );
+    let c = write_source(
+        &dir,
+        "c.c",
+        "extern int caller(void);\nint main(void) { return caller(); }\n",
+    );
+    for s in [&a, &b, &c] {
+        run(
+            Command::new(badc())
+                .arg("-O")
+                .arg("-c")
+                .arg(s)
+                .current_dir(&dir),
+            "compile unit",
+        );
+    }
+    let strong = dir.join("strong");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&strong)
+            .arg(dir.join("a.o"))
+            .arg(dir.join("b.o"))
+            .current_dir(&dir),
+        "link with override",
+    );
+    let out = Command::new(&strong).output().expect("run strong");
+    assert_eq!(
+        out.status.code(),
+        Some(8),
+        "the strong alias_fn must override the weak alias"
+    );
+    let weak = dir.join("weak");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&weak)
+            .arg(dir.join("a.o"))
+            .arg(dir.join("c.o"))
+            .current_dir(&dir),
+        "link without override",
+    );
+    let out = Command::new(&weak).output().expect("run weak");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "with no override the weak alias binds to its target"
+    );
+}
+
 // Gated on Linux: same end-to-end exec + native-ELF-only
 // constraint as `two_sources_compile_separately_then_link`.
 #[cfg(target_os = "linux")]

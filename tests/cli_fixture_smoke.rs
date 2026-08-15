@@ -407,6 +407,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_section_label.c", 42),
     ("attribute_weak_alias.c", 0),
     ("weak_definition_not_inlined.c", 42),
+    ("weak_alias_call_not_inlined.c", 42),
     ("weak_extern_data_address.c", 0),
     ("tentative_array_definition.c", 0),
     ("tentative_deferred_array_grows.c", 0),

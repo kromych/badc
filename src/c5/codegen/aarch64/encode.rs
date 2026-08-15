@@ -1711,6 +1711,12 @@ pub(crate) fn lower(
             alloc::collections::BTreeMap::new(),
         ),
     };
+    // A final image is its own link step: bind import placeholders a
+    // function alias of this unit resolves. A relocatable object keeps
+    // them symbolic for the linker.
+    if native.output_kind != super::OutputKind::Relocatable {
+        super::ssa::shadow::bind_alias_imports(program, &mut ssa_funcs);
+    }
     super::ssa::emit_common::check_frame_limits(&ssa_funcs)?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops

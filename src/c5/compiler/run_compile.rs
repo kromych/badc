@@ -1219,13 +1219,21 @@ impl Compiler {
                         // `alias("target")` on a bodyless declarator: the
                         // declared name becomes an additional symbol for a
                         // function already defined in this unit, and calls
-                        // through it resolve to the target's entry.
+                        // through it resolve to the target's entry. A weak
+                        // alias is interposable -- a strong definition in
+                        // another object replaces it at link time -- so it
+                        // never binds here; the unit-end resolver keeps its
+                        // references symbolic.
                         if let Some(target) = self.pending.attr_alias.take() {
-                            let tgt = self.symbols.iter().position(|s| {
-                                s.link_name() == target
-                                    && s.class == Token::Fun as i64
-                                    && s.defined_here
-                            });
+                            let tgt = (!self.symbols[id_idx].is_weak)
+                                .then(|| {
+                                    self.symbols.iter().position(|s| {
+                                        s.link_name() == target
+                                            && s.class == Token::Fun as i64
+                                            && s.defined_here
+                                    })
+                                })
+                                .flatten();
                             let Some(tgt) = tgt else {
                                 // The target may be defined later in the unit;
                                 // retry once the unit is complete.
@@ -2801,14 +2809,15 @@ impl Compiler {
 
     /// Bind aliases whose target had not been defined when the declarator was
     /// parsed. The target must be defined in this unit: an alias to an
-    /// undefined symbol has no address to share.
+    /// undefined symbol has no address to share. A weak function alias is
+    /// interposable, so its references never bind to the target's body:
+    /// the symbol stays an external reference (the extern-import pass
+    /// routes it by name) while the alias record still emits the weak
+    /// definition at the target's address.
     fn resolve_pending_aliases(&mut self) -> Result<(), C5Error> {
         for (id_idx, target, is_object) in core::mem::take(&mut self.pending_aliases) {
             let want = if is_object { Token::Glo } else { Token::Fun } as i64;
-            let tgt = self
-                .symbols
-                .iter()
-                .position(|s| s.link_name() == target && s.class == want && s.defined_here);
+            let tgt = self.resolved_alias_target(&target, want);
             let Some(tgt) = tgt else {
                 let kind = if is_object { "an object" } else { "a function" };
                 return Err(self.compile_err(format!(
@@ -2816,6 +2825,16 @@ impl Compiler {
                 )));
             };
             self.symbols[tgt].was_referenced = true;
+            if !is_object && self.symbols[id_idx].is_weak {
+                let name = self.symbols[id_idx].link_name().into();
+                self.function_aliases
+                    .push(crate::c5::program::FunctionAlias {
+                        name,
+                        target,
+                        weak: true,
+                    });
+                continue;
+            }
             self.symbols[id_idx].val = self.symbols[tgt].val;
             self.symbols[id_idx].defined_here = true;
             self.symbols[id_idx].is_extern_decl = false;
@@ -2829,6 +2848,29 @@ impl Compiler {
             }
         }
         Ok(())
+    }
+
+    /// Symbol index the alias target `name` resolves to: a defined symbol
+    /// of class `want`, following function-alias records so an alias whose
+    /// target is itself an (unbound weak) alias reaches the chain's
+    /// defined end.
+    fn resolved_alias_target(&self, name: &str, want: i64) -> Option<usize> {
+        let mut name = name;
+        for _ in 0..=self.function_aliases.len() {
+            if let Some(i) = self
+                .symbols
+                .iter()
+                .position(|s| s.link_name() == name && s.class == want && s.defined_here)
+            {
+                return Some(i);
+            }
+            name = &self
+                .function_aliases
+                .iter()
+                .find(|a| a.name == name)?
+                .target;
+        }
+        None
     }
 
     /// Settle every function's inline linkage once the unit's last

@@ -23,31 +23,44 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rcx
-               	cmpq	$0x1, %rcx
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
+               	movl	$0x1, %edi
+               	callq	<addr>
+               	leaq	<rip>, %rbx
+               	movslq	(%rbx), %rax
+               	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x1, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
-               	movslq	(%rax), %rcx
-               	addq	$0x2, %rcx
-               	movl	%ecx, (%rax)
-               	movslq	%ecx, %rcx
-               	cmpq	$0x3, %rcx
+               	movl	$0x2, %edi
+               	callq	<addr>
+               	movslq	(%rbx), %rax
+               	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x2, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
-               	movslq	(%rax), %rcx
-               	addq	$0x4, %rcx
-               	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	movslq	(%rbx), %rax
+               	addq	$0x4, %rax
+               	movl	%eax, (%rbx)
+               	movslq	%eax, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x3, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
                	xorq	%rax, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq

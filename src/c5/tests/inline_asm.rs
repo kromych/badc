@@ -1181,12 +1181,8 @@ fn wide_operand_memory_and_split_spellings_stay_accepted() {
             __asm__(\"# %0\" :: \"m\"(u.v)); \
             return (int)r & 0; }";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
-        crate::Compiler::with_options(
-            src.to_string(),
-            target,
-            crate::CompileOptions::default(),
-        )
-        .compile()
-        .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        crate::Compiler::with_options(src.to_string(), target, crate::CompileOptions::default())
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
     }
 }

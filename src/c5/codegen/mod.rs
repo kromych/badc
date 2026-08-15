@@ -2711,6 +2711,9 @@ pub(crate) fn lower_for_with_prebuilt(
     build.data_relocs = program.data_relocs.clone();
     build.extern_data_relocs = program.extern_data_relocs.clone();
     build.code_relocs = program.code_relocs.clone();
+    if options.output_kind != OutputKind::Relocatable {
+        bind_code_reloc_aliases(program, &mut build.code_relocs);
+    }
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;
     build.dllmain_pc = program.dllmain_pc;
@@ -2847,6 +2850,25 @@ pub(crate) fn reloc_callee_ctx(
     }
     ctx.starts.sort_unstable();
     ctx
+}
+
+/// Bind data-slot function addresses carrying an import placeholder a
+/// function alias of this unit resolves; see
+/// [`ssa::shadow::alias_import_bindings`]. Final-image outputs only --
+/// a relocatable object emits the by-name relocation instead.
+pub(crate) fn bind_code_reloc_aliases(
+    program: &Program,
+    code_relocs: &mut [crate::c5::program::CodeReloc],
+) {
+    let map = ssa::shadow::alias_import_bindings(program);
+    if map.is_empty() {
+        return;
+    }
+    for r in code_relocs {
+        if let Some(&t) = map.get(&(r.target_ent_pc as usize)) {
+            r.target_ent_pc = t as u64;
+        }
+    }
 }
 
 /// Append the [`crate::OUTPUT_MARKER`] to the tail of

@@ -878,6 +878,7 @@ mod jit_impl {
         build.abi = target.abi();
         build.data_relocs = program.data_relocs.clone();
         build.code_relocs = program.code_relocs.clone();
+        crate::c5::codegen::bind_code_reloc_aliases(program, &mut build.code_relocs);
         build.extern_data_relocs = program.extern_data_relocs.clone();
         crate::c5::codegen::emit_ssa_dump(&mut build);
         Ok(build)

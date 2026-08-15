@@ -2038,10 +2038,18 @@ fn speculative_init_parse_data_rewind() {
 
 #[test]
 fn attribute_weak_alias() {
-    // `weak` / `alias` / `used`: the interpreter resolves an alias to
-    // its target at parse time; weak binding is an object-file
-    // property it ignores.
+    // `weak` / `alias` / `used`: a non-weak alias resolves to its
+    // target at parse time; a weak alias stays symbolic and the
+    // interpreter binds it at execution, its link step.
     assert_eq!(run_fixture("attribute_weak_alias.c"), 0);
+}
+
+#[test]
+fn weak_alias_call_not_inlined() {
+    // Calls, a static function-pointer initializer, and an address
+    // comparison through a weak alias; execution binds them to the
+    // target once no strong override can appear.
+    assert_eq!(run_fixture("weak_alias_call_not_inlined.c"), 42);
 }
 
 #[test]

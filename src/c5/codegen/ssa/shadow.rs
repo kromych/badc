@@ -287,6 +287,69 @@ pub(crate) fn produce_ssa_funcs(
     Ok(Vec::new())
 }
 
+/// Import-placeholder pcs that resolve inside this unit: entries of
+/// `extern_function_imports` whose name a function alias defines, mapped
+/// to the ent_pc of the alias chain's defined function. A weak alias
+/// keeps references symbolic so a relocatable object leaves them to the
+/// linker; a consumer that is itself the link -- the interpreter, the
+/// JIT, a single-unit final image -- binds them with this map.
+pub(crate) fn alias_import_bindings(
+    program: &Program,
+) -> alloc::collections::BTreeMap<usize, usize> {
+    use crate::c5::token::Token;
+    let mut out = alloc::collections::BTreeMap::new();
+    if program.function_aliases.is_empty() {
+        return out;
+    }
+    let defined: alloc::collections::BTreeMap<&str, usize> = program
+        .symbols
+        .iter()
+        .filter(|s| s.class == Token::Fun as i64 && s.defined_here && !s.name.is_empty())
+        .map(|s| (s.link_name(), s.val as usize))
+        .collect();
+    for (pc, name) in &program.extern_function_imports {
+        let mut n = name.as_str();
+        for _ in 0..=program.function_aliases.len() {
+            if let Some(&ent) = defined.get(n) {
+                out.insert(*pc, ent);
+                break;
+            }
+            match program.function_aliases.iter().find(|a| a.name == n) {
+                Some(a) => n = a.target.as_str(),
+                None => break,
+            }
+        }
+    }
+    out
+}
+
+/// Rewrite call and code-address sites carrying an import placeholder
+/// that [`alias_import_bindings`] resolves to a function of this unit.
+pub(crate) fn bind_alias_imports(program: &Program, funcs: &mut [FunctionSsa]) {
+    use crate::c5::ir::Inst;
+    let map = alias_import_bindings(program);
+    if map.is_empty() {
+        return;
+    }
+    for f in funcs {
+        for inst in &mut f.insts {
+            match inst {
+                Inst::Call { target_pc, .. } => {
+                    if let Some(&t) = map.get(target_pc) {
+                        *target_pc = t;
+                    }
+                }
+                Inst::ImmCode(pc) => {
+                    if let Some(&t) = map.get(pc) {
+                        *pc = t;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 /// Stable-partition the emission order so functions placed in a named
 /// section (`__attribute__((section("name")))`) come last, grouped by
 /// section name. The relocatable writer carves each group off the tail
@@ -474,6 +537,22 @@ pub(crate) fn compute_live_sets(
                     .push(interval_of(s.val)),
                 None => work.push(Node::Data(interval_of(s.val))),
             }
+        }
+    }
+    // A function alias exports its target under another name, so the
+    // chain's defined end stays live even when the alias symbol is the
+    // only reference (a weak alias's own `val` is an import placeholder,
+    // not the target's pc).
+    for a in &program.function_aliases {
+        let mut t = a.target.as_str();
+        for _ in 0..program.function_aliases.len() {
+            match program.function_aliases.iter().find(|x| x.name == t) {
+                Some(next) => t = next.target.as_str(),
+                None => break,
+            }
+        }
+        if let Some(&Node::Func(pc)) = named.get(t) {
+            work.push(Node::Func(pc));
         }
     }
     // Constructors / destructors are referenced through `.init_array` /

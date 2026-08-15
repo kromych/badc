@@ -285,7 +285,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movl	0x10(%rax), %eax
+               	addq	$0x10, %rax
+               	movl	(%rax), %eax
                	xorq	$0x9, %rax
                	movl	%eax, %eax
                	testq	%rax, %rax

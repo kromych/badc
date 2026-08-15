@@ -4324,7 +4324,8 @@ impl Compiler {
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
                 let saved_callee_depth =
                     core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
-                let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
+                let saved_callee_ret =
+                    core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
                 let saved_fn_ptr_chain = self.pending.fn_ptr_chain_depth;
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;

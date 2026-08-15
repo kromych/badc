@@ -2098,11 +2098,36 @@ impl Compiler {
             // subtract pointer offsets like
             // `(char *)"..." - (char *)0`.
             let addr = self.lex.ival;
+            let narrow = !self.lex.str_is_wide;
             self.next()?;
             while self.lex.tk == '"' {
                 self.next()?;
             }
             self.push_literal_nul();
+            // `"..."[i]` with a constant index reads the staged byte back
+            // (C99 6.4.5p6: the literal is a static char array), so the
+            // subscript is a constant value, not just the address constant
+            // the designation grammar folds. The bytes stay staged: an
+            // enclosing checkpoint may span them, so they cannot be
+            // reclaimed here.
+            if narrow && self.lex.tk == Token::Brak {
+                let len = self.data.len() as i64 - addr;
+                self.next()?;
+                let n = self.parse_const_expr_cond_val()?.as_int();
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("close bracket expected in constant subscript"));
+                }
+                self.next()?;
+                if n < 0 || n >= len {
+                    return Err(
+                        self.compile_err(format!("string subscript {n} out of bounds [0, {len})"))
+                    );
+                }
+                return Ok(ConstVal::Int {
+                    val: self.data[(addr + n) as usize] as i8 as i128,
+                    ty: Ty::Char as i64,
+                });
+            }
             return Ok(ConstVal::Int {
                 val: addr as i128,
                 ty: Ty::Ptr as i64,

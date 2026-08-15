@@ -1650,12 +1650,20 @@ impl Compiler {
             return self.parse_constant_init_scalar();
         }
         if self.lex.tk == '"' {
+            let cp = self.init_checkpoint();
             let addr = self.lex.ival;
             self.next()?;
             while self.lex.tk == '"' {
                 self.next()?;
             }
             self.push_literal_nul();
+            // A subscripted literal (`"..."[i]`) is a constant byte value,
+            // not an address; rewind past the staged bytes and let the
+            // scalar evaluator fold it with any trailing operators.
+            if self.lex.tk == Token::Brak {
+                self.restore_init_checkpoint(cp);
+                return self.parse_constant_init_scalar();
+            }
             return Ok((addr as i128, InitElemReloc::Data(None)));
         }
         if self.lex.tk == Token::AndOp {

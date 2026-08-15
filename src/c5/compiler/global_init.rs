@@ -422,33 +422,41 @@ impl Compiler {
             self.restore_lex(snap);
             self.truncate_data(data_snap);
         }
-        // String literal in a `char *p` global initializer.
+        // String literal in a `char *p` global initializer. Only when the
+        // literal is the whole initializer: a trailing token (a `[i]`
+        // subscript, an operator) makes it an operand of a larger constant
+        // expression, which the evaluator tail folds.
         if self.lex.tk == '"' && is_pointer_ty(var_ty) {
-            if is_thread_local {
-                return Err(self.compile_err_at(
-                    line,
-                    "string-literal initializer for `_Thread_local` not supported",
-                ));
-            }
+            let cp = self.init_checkpoint();
             let addr = self.lex.ival;
             self.next()?;
             while self.lex.tk == '"' {
                 self.next()?;
             }
             self.push_literal_nul();
-            let bytes = (addr as u64).to_le_bytes();
-            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-            self.note_init_reloc(var_offset as usize);
-            self.data_relocs.push(crate::c5::program::DataReloc {
-                data_offset: var_offset as u64,
-                target_offset: addr as u64,
-                target_anchor: addr as u64,
-            });
-            // String-literal target -- no originating
-            // symbol; sentinel marks the entry as
-            // intra-unit only.
-            self.data_reloc_sym_idx.push(usize::MAX);
-            return Ok(());
+            if !self.at_initializer_end() {
+                self.restore_init_checkpoint(cp);
+            } else {
+                if is_thread_local {
+                    return Err(self.compile_err_at(
+                        line,
+                        "string-literal initializer for `_Thread_local` not supported",
+                    ));
+                }
+                let bytes = (addr as u64).to_le_bytes();
+                self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+                self.note_init_reloc(var_offset as usize);
+                self.data_relocs.push(crate::c5::program::DataReloc {
+                    data_offset: var_offset as u64,
+                    target_offset: addr as u64,
+                    target_anchor: addr as u64,
+                });
+                // String-literal target -- no originating
+                // symbol; sentinel marks the entry as
+                // intra-unit only.
+                self.data_reloc_sym_idx.push(usize::MAX);
+                return Ok(());
+            }
         }
         // `&`-rooted address constant (C99 6.6p9). What the operand is --
         // an object, a sub-object, a compound literal, or a function

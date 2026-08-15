@@ -39,11 +39,14 @@ from pathlib import Path
 def repo_root() -> Path:
     out = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
-        check=True,
         capture_output=True,
         text=True,
     )
-    return Path(out.stdout.strip())
+    if out.returncode == 0:
+        return Path(out.stdout.strip())
+    # An rsync/tar export of the tree carries no .git; the script's own
+    # location fixes the root.
+    return Path(__file__).resolve().parents[1]
 
 
 def ensure_badc(root: Path) -> Path:
@@ -100,9 +103,15 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # the next line is always this pattern, never arithmetic, so the
     # immediate carries no codegen signal and is normalized to keep
     # the snapshot stable against any earlier reflow.
+    #
+    # The ADRP operand reads `<addr>` rather than `<page>` when the
+    # disassembler resolved the page to a symbol, since the `<addr>`
+    # rule above consumes the address and its `<symbol>` comment
+    # together. Both spellings introduce the same pair.
     (
         re.compile(
-            r"(adrp\s+(\w+),\s+<page>\n\s*add\s+\2,\s+\2,\s+)#0x[0-9a-fA-F]+"
+            r"(adrp\s+(\w+),\s+<(?:page|addr)>\n\s*add\s+\2,\s+\2,\s+)"
+            r"#0x[0-9a-fA-F]+"
         ),
         r"\1<lo12>",
     ),
@@ -112,7 +121,8 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # shifts with any earlier reflow and carries no codegen signal.
     (
         re.compile(
-            r"(adrp\s+(\w+),\s+<page>\n\s*ldr\s+\2,\s+\[\2,\s+)#0x[0-9a-fA-F]+(\])"
+            r"(adrp\s+(\w+),\s+<(?:page|addr)>\n\s*ldr\s+\2,\s+\[\2,\s+)"
+            r"#0x[0-9a-fA-F]+(\])"
         ),
         r"\1<lo12>\3",
     ),

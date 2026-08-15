@@ -1404,6 +1404,12 @@ pub struct Compiler {
     /// the folding contexts raise this depth.
     const_object_fold: u32,
 
+    /// Nesting depth of initializers for an object with static storage
+    /// duration declared inside a function body. C99 6.7.8p4 requires
+    /// those to be constant expressions; an automatic object's
+    /// initializer at the same nesting has no such requirement.
+    static_duration_init: u32,
+
     /// Per-function AST. The arena is reset at every function
     /// entry; the SSA walker reads from these snapshots at codegen
     /// entry.
@@ -2213,6 +2219,7 @@ impl Compiler {
             pending_noreturn: false,
             const_unevaluated: 0,
             const_object_fold: 0,
+            static_duration_init: 0,
             ast: super::ast::Ast::new(),
             ast_acc: None,
             ast_vstack: Vec::new(),

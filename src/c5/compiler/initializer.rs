@@ -1441,7 +1441,11 @@ impl Compiler {
                 // an anonymous static array and the element stores its
                 // address. Distinguished from a plain cast by the `[`.
                 if self.lex.tk == Token::Brak {
-                    return self.parse_array_compound_literal(cast_ty);
+                    let r = self.parse_array_compound_literal(cast_ty)?;
+                    if let (_, InitElemReloc::Data(Some(sym))) = r {
+                        self.reject_automatic_compound_literal(sym)?;
+                    }
+                    return Ok(r);
                 }
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
                 // brace holds a single value; the result is that value

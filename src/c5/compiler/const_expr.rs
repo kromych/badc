@@ -1605,6 +1605,7 @@ impl Compiler {
                  such as `((T*)0)->field`",
             ));
         }
+        self.reject_automatic_compound_literal_root(d.root)?;
         Ok(ConstAddr {
             value: d.value,
             root: d.root,
@@ -1693,6 +1694,33 @@ impl Compiler {
         Ok(d)
     }
 
+    /// C99 6.5.2.5p5: a compound literal written inside a function body has
+    /// automatic storage duration, so its address is not an address constant
+    /// (6.6p9) and cannot initialize an object of static storage duration
+    /// (6.7.8p4). One at file scope has static storage duration and stands,
+    /// as does one initializing an automatic object, whose initializer need
+    /// not be constant. Reading a staged element back is a value, not an
+    /// address, and does not reach here.
+    pub(super) fn reject_automatic_compound_literal(&self, sym: usize) -> Result<(), C5Error> {
+        if self.static_duration_init > 0
+            && self.in_function_body()
+            && self.symbols[sym].is_compound_literal
+        {
+            return Err(self.compile_err(
+                "address of a compound literal with automatic storage duration \
+                 is not a constant expression",
+            ));
+        }
+        Ok(())
+    }
+
+    fn reject_automatic_compound_literal_root(&self, root: ConstRoot) -> Result<(), C5Error> {
+        match root {
+            ConstRoot::Data(sym) => self.reject_automatic_compound_literal(sym),
+            _ => Ok(()),
+        }
+    }
+
     fn parse_const_designation_primary(&mut self) -> Result<ConstDesig, C5Error> {
         let line = self.lex.line;
         if self.lex.tk == Token::AndOp {
@@ -1704,6 +1732,7 @@ impl Compiler {
                     self.compile_err_at(line, "`&` requires an lvalue in a constant expression")
                 );
             }
+            self.reject_automatic_compound_literal_root(inner.root)?;
             return Ok(ConstDesig {
                 value: inner.value,
                 ty: inner.ty + Ty::Ptr as i64,
@@ -1980,9 +2009,11 @@ impl Compiler {
                         self.next()?;
                         return self.read_staged_const_element(target_ty, off, n);
                     }
+                    let root = ConstRoot::Data(sym);
+                    self.reject_automatic_compound_literal_root(root)?;
                     return Ok(ConstVal::Addr(ConstAddr {
                         value: off,
-                        root: ConstRoot::Data(sym),
+                        root,
                         elem_size: (self.size_of_type(target_ty) as i64).max(1),
                     }));
                 }

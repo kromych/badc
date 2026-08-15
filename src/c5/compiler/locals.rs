@@ -522,7 +522,10 @@ impl Compiler {
                     // drops below the natural alignment.
                     self.symbols[loc_idx].type_align = a.obj_align.max(0);
                 }
-                self.allocate_static_local(loc_idx, ty, array_size)?;
+                self.static_duration_init += 1;
+                let r = self.allocate_static_local(loc_idx, ty, array_size);
+                self.static_duration_init -= 1;
+                r?;
                 self.push_block_static_record(loc_idx, ty);
                 self.ast_emit_static_local_decl(loc_idx as u32);
             } else {

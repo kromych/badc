@@ -2366,3 +2366,43 @@ fn sizeof_of_an_incomplete_type_is_diagnosed() {
     .compile()
     .expect("pointers to an incomplete tag and completed tags stay legal");
 }
+
+#[test]
+fn address_of_a_block_scope_compound_literal_is_not_constant() {
+    // C99 6.5.2.5p5: a compound literal inside a function body has
+    // automatic storage duration, so its address is not an address
+    // constant (6.6p9) and cannot initialize a static-duration object.
+    expect_compile_error(
+        "struct s { int a; int b; };\n\
+         int main(void) { static struct s *p = &(struct s){ 77, 88 }; return p->a - 77; }",
+        "address of a compound literal with automatic storage duration",
+    );
+    // The array form decays to the same address.
+    expect_compile_error(
+        "int main(void) { static int *q = (int[]){ 3, 4 }; return *q - 3; }",
+        "address of a compound literal with automatic storage duration",
+    );
+    // A member of the literal is part of the same automatic object.
+    expect_compile_error(
+        "struct s { int a; int b; };\n\
+         int main(void) { static int *p = &((struct s){ 77, 88 }).b; return *p - 88; }",
+        "address of a compound literal with automatic storage duration",
+    );
+    // A file-scope literal has static storage duration; an automatic
+    // object's initializer need not be constant at all; and reading a
+    // staged element back is a value, not an address.
+    let prog = Compiler::new(
+        "struct s { int a; int b; };\n\
+         static struct s *fp = &(struct s){ 1, 2 };\n\
+         int main(void) {\n\
+             struct s *ap = &(struct s){ 3, 4 };\n\
+             struct s arr[1] = { { .a = (int)(long)&(struct s){ 5, 6 }, .b = 7 } };\n\
+             static int v = (int[]){ 8, 9 }[1];\n\
+             return fp->a + ap->b + (arr[0].b - 7) + v - 14;\n\
+         }"
+        .to_string(),
+    )
+    .compile()
+    .expect("static-duration and automatic-object compound literals stay legal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}

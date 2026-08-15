@@ -733,7 +733,16 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
 /// * Register class: a value's place must match its register class (FP
 ///   value in an FP register, integer value in an integer register or
 ///   slot).
-/// * FP phi class: a phi's register class must match every operand's.
+/// * FP phi class: a phi's register class must match every operand's,
+///   apart from the float constant the phi lowering re-materialises.
+/// * Block coverage: no instruction or terminator inside a block reads a
+///   value covered by no block's `inst_range`.
+///
+/// The placement invariants are checked over the covered values only --
+/// the tape the emit walks. `prune_unreachable` leaves a deleted block's
+/// instructions in `insts` as inert immediates; nothing emits them, so
+/// their place names no register any code writes. The coverage check is
+/// what establishes that per function rather than assuming it.
 #[cfg(feature = "codegen_test")]
 fn verify_allocation(
     func: &FunctionSsa,
@@ -751,19 +760,49 @@ fn verify_allocation(
             func.name, func.ent_pc
         );
     };
+    let covered = |v: usize| liveness.in_cfg(v as ValueId);
+
+    // Block coverage: a value no block's `inst_range` covers must have no
+    // reader inside one.
+    for (b, blk) in func.blocks.iter().enumerate() {
+        let read = |user: &str, v: ValueId| {
+            if v != NO_VALUE && (v as usize) < func.insts.len() && !covered(v as usize) {
+                report(alloc::format!(
+                    "block coverage: {user} reads v{v}, which no block's inst_range covers"
+                ));
+            }
+        };
+        for idx in blk.inst_range.clone() {
+            for_each_operand(&func.insts[idx as usize], |op| {
+                read(&alloc::format!("v{idx}"), op)
+            });
+        }
+        let term = alloc::format!("b{b}'s terminator");
+        read(&alloc::format!("b{b}'s exit accumulator"), blk.exit_acc);
+        match &blk.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => read(&term, *cond),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                read(&term, *target)
+            }
+            Terminator::Return(v) => read(&term, *v),
+            _ => {}
+        }
+    }
 
     // Cross-call discipline: caller-saved registers do not survive a call.
     for (c, inst) in func.insts.iter().enumerate() {
-        if !matches!(
-            inst,
-            Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }
-        ) {
+        if !covered(c)
+            || !matches!(
+                inst,
+                Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }
+            )
+        {
             continue;
         }
         let cid = c as ValueId;
         for v in 0..func.insts.len() {
             let vid = v as ValueId;
-            if vid == cid || !liveness.live_after(func, vid, cid) {
+            if vid == cid || !covered(v) || !liveness.live_after(func, vid, cid) {
                 continue;
             }
             match places.get(v).copied().unwrap_or(Place::None) {
@@ -780,7 +819,7 @@ fn verify_allocation(
 
     // Register class: a value's place must match its register file.
     for (v, inst) in func.insts.iter().enumerate() {
-        if !produces_value(inst) {
+        if !covered(v) || !produces_value(inst) {
             continue;
         }
         let is_fp = produces_fp_result(inst);
@@ -805,9 +844,19 @@ fn verify_allocation(
         let Inst::Phi { incoming, .. } = inst else {
             continue;
         };
+        if !covered(v) {
+            continue;
+        }
         let phi_fp = produces_fp_result(inst);
         for &(_, src) in incoming {
             if (src as usize) >= func.insts.len() {
+                continue;
+            }
+            // `result_kind` classes every `Imm` in the integer file, so a
+            // float constant reaches an FP phi integer-classed;
+            // `emit_phi_predecessor_moves` re-materialises it into the FP
+            // destination rather than copying within a file.
+            if matches!(func.insts[src as usize], Inst::Imm(_)) && phi_fp {
                 continue;
             }
             let op_fp = produces_fp_result(&func.insts[src as usize]);
@@ -832,7 +881,7 @@ fn verify_allocation(
     let mut by_place: alloc::collections::BTreeMap<(u8, u32), Vec<usize>> =
         alloc::collections::BTreeMap::new();
     for (v, p) in places.iter().enumerate() {
-        if let Some(k) = key(*p) {
+        if let (true, Some(k)) = (covered(v), key(*p)) {
             by_place.entry(k).or_default().push(v);
         }
     }
@@ -863,7 +912,10 @@ fn verify_allocation(
     // `param_incoming_reg_clobber.c` shape).
     if !func.is_variadic {
         let mut used = alloc::vec![false; func.insts.len()];
-        for inst in &func.insts {
+        for (v, inst) in func.insts.iter().enumerate() {
+            if !covered(v) {
+                continue;
+            }
             for_each_operand(inst, |op| {
                 if (op as usize) < used.len() {
                     used[op as usize] = true;
@@ -903,7 +955,7 @@ fn verify_allocation(
                 continue;
             };
             let pi = *idx as usize;
-            if (func.param_fp_mask & (1u32 << pi)) != 0 || !used[vid] {
+            if (func.param_fp_mask & (1u32 << pi)) != 0 || !used[vid] || !covered(vid) {
                 continue;
             }
             let int_rank = (0..pi)

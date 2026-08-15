@@ -24,6 +24,9 @@ use super::super::ir::{BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId
 /// Sentinel for a value outside the live-set universe.
 const NO_RANK: u32 = u32::MAX;
 
+/// Sentinel for a value covered by no block's `inst_range`.
+const NO_BLOCK: BlockId = BlockId::MAX;
+
 /// Per-block live-in / live-out sets over the CFG.
 ///
 /// The bit universe is the set of values that cross a block boundary:
@@ -247,7 +250,8 @@ pub(crate) struct Liveness {
     /// Per-block live-in / live-out sets over the values that cross a
     /// block boundary.
     blocks: BlockLiveness,
-    /// Defining block per value.
+    /// Defining block per value, `NO_BLOCK` for a value covered by no
+    /// block's `inst_range`.
     block_of: Vec<BlockId>,
     /// Last program position at which each value is used, excluding phi
     /// operands (which are edge uses): the instruction index of its
@@ -261,7 +265,7 @@ impl Liveness {
     pub(crate) fn compute(func: &FunctionSsa) -> Self {
         let n = func.insts.len();
 
-        let mut block_of: Vec<BlockId> = vec![0; n];
+        let mut block_of: Vec<BlockId> = vec![NO_BLOCK; n];
         for (b, blk) in func.blocks.iter().enumerate() {
             for v in blk.inst_range.clone() {
                 block_of[v as usize] = b as BlockId;
@@ -316,6 +320,15 @@ impl Liveness {
         &self.blocks
     }
 
+    /// Whether `v` is covered by some block's `inst_range`, i.e. whether
+    /// it is part of the tape the emit walks. `prune_unreachable` deletes
+    /// a block orphaned by a folded branch and leaves its instructions in
+    /// `insts`, rewritten to inert immediates; those are covered by no
+    /// block and carry no live range.
+    pub(crate) fn in_cfg(&self, v: ValueId) -> bool {
+        matches!(self.block_of.get(v as usize), Some(&b) if b != NO_BLOCK)
+    }
+
     fn live_in(&self, b: BlockId, v: ValueId) -> bool {
         self.blocks.live_in(b, v)
     }
@@ -329,6 +342,11 @@ impl Liveness {
     /// index); `x` is any other value.
     fn live_just_after_def(&self, func: &FunctionSsa, x: ValueId, y: ValueId) -> bool {
         if x == y {
+            return false;
+        }
+        // A value covered by no block is never reached, so it is live at
+        // no program point and defines none.
+        if !self.in_cfg(x) || !self.in_cfg(y) {
             return false;
         }
         let b = self.block_of[y as usize];
@@ -873,6 +891,48 @@ mod tests {
             !live.interfere(&func, 1, 3),
             "v1 dies at v2, before v3 is defined"
         );
+    }
+
+    /// `prune_unreachable` leaves a deleted block's instructions in
+    /// `insts` covered by no `inst_range`. Those values are reached by
+    /// nothing, so they are in no block and interfere with nothing --
+    /// before, `block_of` defaulted to 0 and attributed them to the
+    /// entry block, which made the query report an overlap with every
+    /// entry-block value still live at their index.
+    #[test]
+    fn value_outside_every_block_is_not_in_the_cfg() {
+        let insts = alloc::vec![
+            Inst::Imm(0),
+            Inst::Imm(1),
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 0,
+                rhs: 1,
+            },
+            Inst::Imm(0),
+            Inst::Imm(0),
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..3,
+            terminator: Terminator::Return(2),
+            exit_acc: 2,
+        }];
+        let func = func_with(insts, blocks);
+        let live = Liveness::compute(&func);
+        assert!(live.in_cfg(0) && live.in_cfg(2));
+        assert!(!live.in_cfg(3) && !live.in_cfg(4));
+        for covered in 0..3 {
+            for orphan in 3..5 {
+                assert!(
+                    !live.interfere(&func, covered, orphan),
+                    "v{covered} cannot interfere with uncovered v{orphan}"
+                );
+            }
+        }
+        assert!(!live.interfere(&func, 3, 4));
+        let g = live.interference(&func, &identity(func.insts.len()));
+        assert!(g.neighbors(3).is_empty() && g.neighbors(4).is_empty());
     }
 
     #[test]

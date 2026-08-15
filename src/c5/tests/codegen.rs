@@ -3441,6 +3441,94 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
     }
 }
 
+/// Every internal-linkage data object -- a file-scope `static`, a
+/// block-scope static (`name.N`), the C99 6.4.2.2 `__func__` array and
+/// a compound literal with static storage duration -- reaches the
+/// relocatable object under its own `STB_LOCAL` `STT_OBJECT` symbol,
+/// with the storage's section, offset and size. Without one, a tool
+/// attributing an address to a symbol names the nearest preceding
+/// global instead. Matches what gcc emits for the same unit.
+#[test]
+fn internal_linkage_data_objects_are_named_by_local_symbols() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STB_LOCAL: u8 = 0;
+    const STT_OBJECT: u8 = 1;
+    const SHT_SYMTAB: u32 = 2;
+    let src = "static const int s_const_scalar = 7;\n\
+               static int s_mut_scalar = 11;\n\
+               int g_global = 3;\n\
+               struct P { int a, b, c; };\n\
+               struct P *pp = &(struct P){ 1, 2, 3 };\n\
+               const char *who(void) { return __func__; }\n\
+               int *bump(void) { static int local_mut = 28; return &local_mut; }\n\
+               int rd(void) { return s_const_scalar + s_mut_scalar; }\n\
+               int main(void) { return rd() + *bump() + who()[0] + pp->a; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let obj = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new()
+            },
+        )
+        .expect("emit relocatable");
+        let headers = elf64_section_headers(&obj);
+        let records = elf64_symbol_records(&obj);
+        // (name, section, size): `__func__` is `char[4]` for "who",
+        // the literal is one `struct P`.
+        for (name, section, size) in [
+            ("s_const_scalar", ".rodata", 4u64),
+            ("s_mut_scalar", ".data", 4),
+            ("local_mut.0", ".data", 4),
+            ("__func__.0", ".rodata", 4),
+            ("__compound.0", ".data", 12),
+        ] {
+            let (_, st_info, st_shndx, _, st_size) = records
+                .iter()
+                .find(|(n, ..)| n == name)
+                .unwrap_or_else(|| panic!("{target:?}: `{name}` missing from .symtab"));
+            assert_eq!(
+                (st_info >> 4, st_info & 0xf),
+                (STB_LOCAL, STT_OBJECT),
+                "{target:?}: `{name}` must bind STB_LOCAL STT_OBJECT"
+            );
+            assert_eq!(*st_size, size, "{target:?}: `{name}` st_size");
+            assert_eq!(
+                headers[*st_shndx as usize].0, section,
+                "{target:?}: `{name}` section"
+            );
+        }
+        // The external object keeps its global binding beside them.
+        let g = records.iter().find(|(n, ..)| n == "g_global").expect("g");
+        assert_eq!(g.1 >> 4, 1, "{target:?}: `g_global` stays STB_GLOBAL");
+        // ELF requires every local to precede the first non-local, and
+        // `.symtab`'s sh_info to name that first non-local.
+        let first_global = records
+            .iter()
+            .position(|(_, info, ..)| info >> 4 != STB_LOCAL)
+            .expect("a global symbol");
+        assert!(
+            records[first_global..]
+                .iter()
+                .all(|(_, info, ..)| info >> 4 != STB_LOCAL),
+            "{target:?}: an STB_LOCAL symbol follows a non-local one"
+        );
+        let sh_info = headers
+            .iter()
+            .find(|(n, ty, ..)| n == ".symtab" && *ty == SHT_SYMTAB)
+            .expect(".symtab header")
+            .4;
+        assert_eq!(
+            sh_info as usize, first_global,
+            "{target:?}: .symtab sh_info must name the first non-local symbol"
+        );
+    }
+}
+
 /// A `_Bool` returned by a callee defined in another unit is only
 /// defined in the low byte per the psABI; a caller that tests the full
 /// return register (`!f()` / `if (f())`) must mask to the low byte

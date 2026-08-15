@@ -11454,6 +11454,107 @@ mod code_mode_tests {
         }
     }
 
+    /// The descriptor-table and machine-status ops against memory. The
+    /// operand names a 16-bit field, so the memory forms carry no
+    /// operand-size prefix whatever width the source wrote; a 32-bit register
+    /// destination is the 16-bit encoding without the 0x66.
+    #[test]
+    fn descriptor_table_memory_forms_match_gnu_as() {
+        for (src, want) in [
+            ("sldt (%rax)\n", &[0x0fu8, 0x00, 0x00][..]),
+            ("sldt (%r12)\n", &[0x41, 0x0f, 0x00, 0x04, 0x24]),
+            ("sldt 8(%rbx)\n", &[0x0f, 0x00, 0x43, 0x08]),
+            ("sldt %ax\n", &[0x66, 0x0f, 0x00, 0xc0]),
+            ("sldt %eax\n", &[0x0f, 0x00, 0xc0]),
+            ("str (%rax)\n", &[0x0f, 0x00, 0x08]),
+            ("str %ax\n", &[0x66, 0x0f, 0x00, 0xc8]),
+            ("lldt (%rax)\n", &[0x0f, 0x00, 0x10]),
+            ("lldt (%r13)\n", &[0x41, 0x0f, 0x00, 0x55, 0x00]),
+            ("lldt %ax\n", &[0x0f, 0x00, 0xd0]),
+            ("ltr (%rax)\n", &[0x0f, 0x00, 0x18]),
+            ("ltr %ax\n", &[0x0f, 0x00, 0xd8]),
+            ("smsw (%rax)\n", &[0x0f, 0x01, 0x20]),
+            ("smsw %ax\n", &[0x66, 0x0f, 0x01, 0xe0]),
+            ("smsw %eax\n", &[0x0f, 0x01, 0xe0]),
+            ("lmsw (%rax)\n", &[0x0f, 0x01, 0x30]),
+            ("lmsw %ax\n", &[0x0f, 0x01, 0xf0]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// Packed integer absolute value, VEX and legacy. VEX.L follows the
+    /// destination; the source may be a register or memory.
+    #[test]
+    fn packed_absolute_value_matches_gnu_as() {
+        for (src, want) in [
+            (
+                "vpabsb %xmm13, %xmm13\n",
+                &[0xc4u8, 0x42, 0x79, 0x1c, 0xed][..],
+            ),
+            ("vpabsb %ymm13, %ymm13\n", &[0xc4, 0x42, 0x7d, 0x1c, 0xed]),
+            ("vpabsb %xmm0, %xmm15\n", &[0xc4, 0x62, 0x79, 0x1c, 0xf8]),
+            ("vpabsw %xmm1, %xmm2\n", &[0xc4, 0xe2, 0x79, 0x1d, 0xd1]),
+            ("vpabsd %xmm1, %xmm2\n", &[0xc4, 0xe2, 0x79, 0x1e, 0xd1]),
+            ("vpabsd %ymm1, %ymm2\n", &[0xc4, 0xe2, 0x7d, 0x1e, 0xd1]),
+            ("vpabsb (%rax), %xmm1\n", &[0xc4, 0xe2, 0x79, 0x1c, 0x08]),
+            (
+                "vpabsd (%r12), %ymm9\n",
+                &[0xc4, 0x42, 0x7d, 0x1e, 0x0c, 0x24],
+            ),
+            (
+                "pabsb %xmm13, %xmm13\n",
+                &[0x66, 0x45, 0x0f, 0x38, 0x1c, 0xed],
+            ),
+            ("pabsw %xmm1, %xmm2\n", &[0x66, 0x0f, 0x38, 0x1d, 0xd1]),
+            ("pabsd %xmm1, %xmm2\n", &[0x66, 0x0f, 0x38, 0x1e, 0xd1]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+    }
+
+    /// Packed shifts by a variable count. The count is `xmm/m128` at every
+    /// destination width, so it takes ModRM.rm and VEX.L follows the
+    /// destination and source; a ymm count has no encoding.
+    #[test]
+    fn variable_count_packed_shifts_match_gnu_as() {
+        for (src, want) in [
+            (
+                "vpslld %xmm11, %xmm8, %xmm15\n",
+                &[0xc4u8, 0x41, 0x39, 0xf2, 0xfb][..],
+            ),
+            ("vpsllw %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xf1, 0xd9]),
+            ("vpsllq %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xf3, 0xd9]),
+            ("vpsrlw %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xd1, 0xd9]),
+            ("vpsrld %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xd2, 0xd9]),
+            ("vpsrlq %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xd3, 0xd9]),
+            ("vpsraw %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xe1, 0xd9]),
+            ("vpsrad %xmm1, %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xe2, 0xd9]),
+            ("vpslld %xmm1, %ymm2, %ymm3\n", &[0xc5, 0xed, 0xf2, 0xd9]),
+            ("vpsrld (%rax), %xmm2, %xmm3\n", &[0xc5, 0xe9, 0xd2, 0x18]),
+            ("vpsrld (%rax), %ymm2, %ymm3\n", &[0xc5, 0xed, 0xd2, 0x18]),
+            ("psrld %xmm1, %xmm2\n", &[0x66, 0x0f, 0xd2, 0xd1]),
+            ("psllw %xmm1, %xmm9\n", &[0x66, 0x44, 0x0f, 0xf1, 0xc9]),
+            ("psrlq %xmm9, %xmm10\n", &[0x66, 0x45, 0x0f, 0xd3, 0xd1]),
+            ("psrld (%rax), %xmm2\n", &[0x66, 0x0f, 0xd2, 0x10]),
+            // The immediate forms keep the destination in VEX.vvvv.
+            ("vpslld $5, %xmm2, %xmm3\n", &[0xc5, 0xe1, 0x72, 0xf2, 0x05]),
+            ("pslld $5, %xmm2\n", &[0x66, 0x0f, 0x72, 0xf2, 0x05]),
+        ] {
+            assert_eq!(assemble(src), want, "{src}");
+        }
+        // A ymm count is not encodable, and the shifts without a
+        // variable-count member keep requiring an immediate.
+        for (src, want) in [
+            ("vpslld %ymm1, %ymm2, %ymm3\n", "count is xmm"),
+            ("vpslldq %xmm1, %xmm2, %xmm3\n", "immediate expected"),
+            ("pslldq %xmm1, %xmm2\n", "immediate expected"),
+        ] {
+            let e = assemble_err(src);
+            assert!(e.contains(want), "{src}: {e}");
+        }
+    }
+
     /// `vmovd` / `vmovq` between an xmm lane and a general register or
     /// memory. VEX.W selects the width of a general-register transfer; the
     /// xmm and memory forms are W-ignored and take the two-byte VEX.

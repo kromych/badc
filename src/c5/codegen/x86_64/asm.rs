@@ -107,12 +107,16 @@ pub(crate) enum Mnemonic {
         w: bool,
         store: bool,
     },
-    /// A packed shift by immediate `<op> $imm8, %xmm`, encoded as
-    /// `66 [REX] 0F <opcode> /digit ib`: the op rides ModRM.reg as an opcode
-    /// extension, the (source = destination) xmm sits in r/m.
+    /// A packed shift `<op> $imm8, %xmm` encoded as `66 [REX] 0F <opcode>
+    /// /digit ib`: the op rides ModRM.reg as an opcode extension, the
+    /// (source = destination) xmm sits in r/m. `var_opcode`, where the shift
+    /// has a variable-count member, encodes `<op> %xmm_count, %xmm` as
+    /// `66 [REX] 0F <var_opcode> /r`; `pslldq` / `psrldq` have no such member
+    /// and leave it absent.
     SseShiftImm {
         opcode: u8,
         digit: u8,
+        var_opcode: Option<u8>,
     },
     /// A 3-operand VEX (AVX) op `<v-op> %{x,y}mm_src2, %{x,y}mm_src1,
     /// %{x,y}mm_dst`, encoded `VEX(vvvv=src1, L=ymm, W=w, pp) <map> <opcode>
@@ -177,9 +181,16 @@ pub(crate) enum Mnemonic {
     /// A VEX packed shift by immediate `v-op $imm8, %src, %dst`, encoded
     /// `VEX(vvvv=dst, L, pp=66, 0F) <opcode> /digit ib`: the destination rides
     /// VEX.vvvv, the opcode extension ModRM.reg, and the source ModRM.rm.
+    /// `var_opcode`, where the shift has a variable-count member, encodes
+    /// `v-op %xmm_count, %src, %dst` as the ordinary 3-operand VEX
+    /// `VEX(vvvv=src, L, pp=66, 0F) <var_opcode> ModRM(reg=dst, rm=count)`.
+    /// The count is `xmm/m128` at every destination width, so `L` follows the
+    /// destination and source alone. `vpslldq` / `vpsrldq` have no such
+    /// member and leave it absent.
     VexShiftImm {
         opcode: u8,
         digit: u8,
+        var_opcode: Option<u8>,
     },
     /// An operandless VEX form (`vzeroupper` / `vzeroall`): `VEX(L) 0F 77`.
     VexNullary {
@@ -1292,17 +1303,22 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
             store,
         });
     }
+    // `(name, immediate opcode, /digit, variable-count opcode)`.
     #[rustfmt::skip]
-    const SHIFTS: &[(&str, u8, u8)] = &[
-        ("psllw", 0x71, 6), ("pslld", 0x72, 6), ("psllq", 0x73, 6),
-        ("psrlw", 0x71, 2), ("psrld", 0x72, 2), ("psrlq", 0x73, 2),
-        ("psraw", 0x71, 4), ("psrad", 0x72, 4),
-        ("pslldq", 0x73, 7), ("psrldq", 0x73, 3),
+    const SHIFTS: &[(&str, u8, u8, Option<u8>)] = &[
+        ("psllw", 0x71, 6, Some(0xF1)), ("pslld", 0x72, 6, Some(0xF2)), ("psllq", 0x73, 6, Some(0xF3)),
+        ("psrlw", 0x71, 2, Some(0xD1)), ("psrld", 0x72, 2, Some(0xD2)), ("psrlq", 0x73, 2, Some(0xD3)),
+        ("psraw", 0x71, 4, Some(0xE1)), ("psrad", 0x72, 4, Some(0xE2)),
+        ("pslldq", 0x73, 7, None), ("psrldq", 0x73, 3, None),
     ];
     SHIFTS
         .iter()
-        .find(|(n, _, _)| *n == name)
-        .map(|&(_, opcode, digit)| Mnemonic::SseShiftImm { opcode, digit })
+        .find(|(n, _, _, _)| *n == name)
+        .map(|&(_, opcode, digit, var_opcode)| Mnemonic::SseShiftImm {
+            opcode,
+            digit,
+            var_opcode,
+        })
 }
 
 /// 3-operand VEX (AVX) ops as `(name, pp, 0F-opcode)`, where `pp` selects the
@@ -1338,17 +1354,22 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
             vvvv_first,
         });
     }
-    // VEX packed shifts by immediate as `(name, opcode, /digit)`; the
-    // destination rides VEX.vvvv, so they are their own shape.
+    // VEX packed shifts as `(name, immediate opcode, /digit, variable-count
+    // opcode)`; the immediate form puts the destination in VEX.vvvv, so they
+    // are their own shape.
     #[rustfmt::skip]
-    const SHIFTS: &[(&str, u8, u8)] = &[
-        ("vpsllw", 0x71, 6), ("vpslld", 0x72, 6), ("vpsllq", 0x73, 6),
-        ("vpsrlw", 0x71, 2), ("vpsrld", 0x72, 2), ("vpsrlq", 0x73, 2),
-        ("vpsraw", 0x71, 4), ("vpsrad", 0x72, 4),
-        ("vpslldq", 0x73, 7), ("vpsrldq", 0x73, 3),
+    const SHIFTS: &[(&str, u8, u8, Option<u8>)] = &[
+        ("vpsllw", 0x71, 6, Some(0xF1)), ("vpslld", 0x72, 6, Some(0xF2)), ("vpsllq", 0x73, 6, Some(0xF3)),
+        ("vpsrlw", 0x71, 2, Some(0xD1)), ("vpsrld", 0x72, 2, Some(0xD2)), ("vpsrlq", 0x73, 2, Some(0xD3)),
+        ("vpsraw", 0x71, 4, Some(0xE1)), ("vpsrad", 0x72, 4, Some(0xE2)),
+        ("vpslldq", 0x73, 7, None), ("vpsrldq", 0x73, 3, None),
     ];
-    if let Some(&(_, opcode, digit)) = SHIFTS.iter().find(|(n, _, _)| *n == name) {
-        return Some(Mnemonic::VexShiftImm { opcode, digit });
+    if let Some(&(_, opcode, digit, var_opcode)) = SHIFTS.iter().find(|(n, _, _, _)| *n == name) {
+        return Some(Mnemonic::VexShiftImm {
+            opcode,
+            digit,
+            var_opcode,
+        });
     }
     if let "vmovd" | "vmovq" = name {
         return Some(Mnemonic::VexMovd { w: name == "vmovq" });
@@ -1390,6 +1411,11 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vpbroadcastw" => Some((1, 2, 0x79)),
         "vpbroadcastd" => Some((1, 2, 0x58)),
         "vpbroadcastq" => Some((1, 2, 0x59)),
+        // Packed integer absolute value (0F38, 66); VEX.L follows the
+        // destination as for the broadcasts.
+        "vpabsb" => Some((1, 2, 0x1C)),
+        "vpabsw" => Some((1, 2, 0x1D)),
+        "vpabsd" => Some((1, 2, 0x1E)),
         // Both operands are sources; the second AT&T one is ModRM.reg and
         // fixes VEX.L, as for the single-source ops above.
         "vptest" => Some((1, 2, 0x17)),
@@ -2802,17 +2828,25 @@ fn resolve_evex(
         _ => false,
     });
     // The VEX packed shift by immediate reads its source from a register only;
-    // AVX-512 added the memory-source form.
-    let evex_only_operand = matches!(mnemonic, Mnemonic::VexShiftImm { .. })
-        && operands.iter().any(|o| {
-            matches!(
-                o,
-                AsmOpnd::Mem { .. }
-                    | AsmOpnd::AbsMem { .. }
-                    | AsmOpnd::IndexMem { .. }
-                    | AsmOpnd::SymMem { .. }
-            )
-        });
+    // AVX-512 added the memory-source form. The count of a variable-count
+    // shift is the one memory position VEX does encode, so memory there keeps
+    // the VEX form.
+    let is_mem = |o: &AsmOpnd| {
+        matches!(
+            o,
+            AsmOpnd::Mem { .. }
+                | AsmOpnd::AbsMem { .. }
+                | AsmOpnd::IndexMem { .. }
+                | AsmOpnd::SymMem { .. }
+        )
+    };
+    let evex_only_operand = match mnemonic {
+        Mnemonic::VexShiftImm { var_opcode, .. } => {
+            let count_mem = operands.first().is_some_and(&is_mem);
+            operands.iter().any(is_mem) && !(var_opcode.is_some() && count_mem)
+        }
+        _ => false,
+    };
     let mut f = match mnemonic {
         Mnemonic::Evex(f) => f,
         _ if evex_reg || evex_only_operand || decor.any() => {
@@ -3932,7 +3966,11 @@ fn encode_bespoke(
             code.push(*ib as u8);
             Ok(())
         }
-        Mnemonic::SseShiftImm { opcode, digit } => {
+        Mnemonic::SseShiftImm {
+            opcode,
+            digit,
+            var_opcode,
+        } => {
             // `<op> $imm, %xmm`: 66 [REX.B] 0F <opcode> /digit ib. The opcode
             // extension `digit` rides ModRM.reg, the xmm sits in r/m.
             let xmm = |c: &Concrete| match c {
@@ -3944,11 +3982,36 @@ fn encode_bespoke(
             let [imm, reg] = ops else {
                 return Err(String::from("inline asm: packed shift needs $imm, %xmm"));
             };
-            let Concrete::Imm(ib) = imm else {
-                return Err(String::from("inline asm: packed shift immediate expected"));
-            };
             let Some(r) = xmm(reg) else {
                 return Err(String::from("inline asm: packed shift operand must be xmm"));
+            };
+            // `<op> %xmm_count, %xmm`: 66 [REX] 0F <var_opcode> /r, the
+            // destination in ModRM.reg and the count in r/m.
+            let Concrete::Imm(ib) = imm else {
+                let Some(var) = var_opcode else {
+                    return Err(String::from("inline asm: packed shift immediate expected"));
+                };
+                let (reg_count, mem_count) = (xmm(imm), MemRm::of(imm));
+                let (x, b) = match (reg_count, &mem_count) {
+                    (Some(c), _) => (false, c >= 8),
+                    (None, Some(mr)) => (mr.rex_x(), mr.rex_b()),
+                    (None, None) => {
+                        return Err(String::from(
+                            "inline asm: packed shift count must be an immediate, xmm or memory",
+                        ));
+                    }
+                };
+                code.push(0x66);
+                if r >= 8 || x || b {
+                    code.push(rex(false, r >= 8, x, b));
+                }
+                code.extend_from_slice(&[0x0F, var]);
+                match (reg_count, mem_count) {
+                    (Some(c), _) => code.push(modrm_reg(r & 7, c & 7)),
+                    (None, Some(mr)) => mr.emit(code, addr, r & 7)?,
+                    (None, None) => unreachable!("checked above"),
+                }
+                return Ok(());
             };
             code.push(0x66);
             if r >= 8 {
@@ -4307,7 +4370,11 @@ fn encode_bespoke(
             code.push(*ib as u8);
             Ok(())
         }
-        Mnemonic::VexShiftImm { opcode, digit } => {
+        Mnemonic::VexShiftImm {
+            opcode,
+            digit,
+            var_opcode,
+        } => {
             // `v-op $imm, %src, %dst`: VEX(vvvv=dst, L, pp=66, 0F) <opcode>
             // /digit ib. The destination rides VEX.vvvv, the opcode extension
             // ModRM.reg, and the source ModRM.rm.
@@ -4316,15 +4383,43 @@ fn encode_bespoke(
                     "inline asm: VEX packed shift needs $imm, %src, %dst",
                 ));
             };
-            let Concrete::Imm(ib) = imm else {
-                return Err(String::from(
-                    "inline asm: VEX packed shift immediate expected",
-                ));
-            };
             let (Some((d, dy)), Some((s, sy))) = (vec_reg(dst), vec_reg(src)) else {
                 return Err(String::from(
                     "inline asm: VEX packed shift operands must be xmm/ymm",
                 ));
+            };
+            // `v-op %xmm_count, %src, %dst`: the count is xmm/m128 whatever
+            // the destination width, so it takes ModRM.rm and the source
+            // VEX.vvvv, and L follows destination and source.
+            let Concrete::Imm(ib) = imm else {
+                let Some(var) = var_opcode else {
+                    return Err(String::from(
+                        "inline asm: VEX packed shift immediate expected",
+                    ));
+                };
+                let l = u8::from(dy || sy);
+                match vec_reg(imm) {
+                    Some((c, false)) => {
+                        emit_vex(code, d >= 8, false, c >= 8, 1, false, s, l, 1);
+                        code.push(var);
+                        code.push(modrm_reg(d & 7, c & 7));
+                    }
+                    Some(_) => {
+                        return Err(String::from("inline asm: VEX packed shift count is xmm"));
+                    }
+                    None => {
+                        let Some(mr) = MemRm::of(imm) else {
+                            return Err(String::from(
+                                "inline asm: VEX packed shift count must be an immediate, \
+                                 xmm or memory",
+                            ));
+                        };
+                        emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), 1, false, s, l, 1);
+                        code.push(var);
+                        mr.emit(code, addr, d & 7)?;
+                    }
+                }
+                return Ok(());
             };
             emit_vex(
                 code,
@@ -5670,7 +5765,8 @@ mod tests {
             enc(
                 Mnemonic::SseShiftImm {
                     opcode: 0x72,
-                    digit: 6
+                    digit: 6,
+                    var_opcode: Some(0xF2),
                 },
                 None,
                 &[imm(3), xmm(0)]
@@ -5681,7 +5777,8 @@ mod tests {
             enc(
                 Mnemonic::SseShiftImm {
                     opcode: 0x73,
-                    digit: 3
+                    digit: 3,
+                    var_opcode: None,
                 },
                 None,
                 &[imm(8), xmm(1)]
@@ -5692,7 +5789,8 @@ mod tests {
             enc(
                 Mnemonic::SseShiftImm {
                     opcode: 0x72,
-                    digit: 6
+                    digit: 6,
+                    var_opcode: Some(0xF2),
                 },
                 None,
                 &[imm(3), xmm(11)]
@@ -5754,7 +5852,8 @@ mod tests {
             sse_imm("psllq"),
             Some(Mnemonic::SseShiftImm {
                 opcode: 0x73,
-                digit: 6
+                digit: 6,
+                var_opcode: Some(0xF3),
             })
         );
         assert_eq!(sse_imm("not_an_op"), None);

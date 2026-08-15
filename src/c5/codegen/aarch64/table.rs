@@ -804,6 +804,58 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | ((rn as u32) << 5)
             | (rd as u32));
     }
+    // SIMD `dup Vd.T, Vn.Ts[i]`: broadcast one lane across the destination.
+    // Same imm5 encoding as the scalar `dup Bd|Hd|Sd|Dd, Vn.T[i]` below but
+    // with a vector destination, so Q comes from the arrangement. The
+    // destination element size must equal the source's; .1d is not a target.
+    if mnemonic == "dup"
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecElem {
+                num: rn,
+                size: esize,
+                index,
+            },
+        ] = *ops
+    {
+        if size != esize {
+            return Err(String::from(
+                "inline asm: dup arrangement must name the source element size",
+            ));
+        }
+        if size > 3 || (size == 3 && !q) {
+            return Err(String::from(
+                "inline asm: bad dup arrangement (8b/16b/4h/8h/2s/4s/2d)",
+            ));
+        }
+        let imm5 = ((index as u32) << (size + 1)) | (1u32 << size);
+        return Ok((if q { 1u32 << 30 } else { 0 })
+            | 0x0E00_0400
+            | (imm5 << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD `rbit Vd.T, Vn.T`: reverse the bits of every byte. Byte
+    // arrangements only, so Q is the sole size input; the GP `rbit Wd, Wn`
+    // and `rbit Xd, Xn` stay in the catalogue.
+    if mnemonic == "rbit"
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+        ] = *ops
+    {
+        if size != 0 || s1 != 0 || q != q1 {
+            return Err(String::from("inline asm: bad rbit arrangement (8b/16b)"));
+        }
+        return Ok((if q { 1u32 << 30 } else { 0 })
+            | 0x2E60_5800
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
     // SIMD three-same integer ops `Vd.T, Vn.T, Vm.T`, one arrangement. size at
     // bit 22, Q at 30, U at 29, the opcode in the base word; `lo..=hi` bounds
     // the element size (mul/min/max/mla/abd have no 64-bit form). GP add/sub/mul
@@ -1789,6 +1841,25 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => return Err(String::from("inline asm: bad sys-op operands")),
         };
         return Ok(base | (rt & 31));
+    }
+    // `uxtw Xd, Wn`: the 32-bit `orr Wd, wzr, Wn`, whose W-register write
+    // zeroes the upper half. Unlike uxtb / uxth there is no ubfm form, since
+    // the widening is the register write itself.
+    if mnemonic == "uxtw"
+        && let [
+            Opnd::Reg {
+                num: rd,
+                is64: true,
+                ..
+            },
+            Opnd::Reg {
+                num: rn,
+                is64: false,
+                ..
+            },
+        ] = *ops
+    {
+        return Ok(0x2A00_03E0 | ((rn as u32) << 16) | (rd as u32));
     }
     // Bitfield extract / insert aliases of sbfm/bfm/ubfm: the written
     // `Xd, Xn, #lsb, #width` becomes immr/imms. Extract (ubfx/sbfx/bfxil) keeps

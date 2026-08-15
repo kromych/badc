@@ -10833,6 +10833,63 @@ mod tests {
         assert_eq!(sec.bytes, bytes);
     }
 
+    /// Lane broadcast to a vector, the SIMD bit reverse, and `uxtw`. The
+    /// broadcast shares the scalar form's imm5 but takes Q from the
+    /// arrangement; `rbit` is byte arrangements only; `uxtw` is the 32-bit
+    /// `orr`, whose W-register write does the widening.
+    #[test]
+    fn file_scope_a64_dup_rbit_uxtw_match_gnu_as() {
+        use super::super::ssa::emit_common::{
+            extract_file_scope_asm_sections, materialize_asm_sections,
+        };
+        let text = ".pushsection .t,\"ax\"\n\
+                    dup v12.4s, v14.s[0]\n\
+                    dup v0.4s, v0.s[3]\n\
+                    dup v31.2s, v31.s[1]\n\
+                    dup v1.8h, v2.h[7]\n\
+                    dup v1.4h, v2.h[3]\n\
+                    dup v3.16b, v4.b[15]\n\
+                    dup v3.8b, v4.b[0]\n\
+                    dup v5.2d, v6.d[1]\n\
+                    rbit v16.16b, v0.16b\n\
+                    rbit v0.8b, v1.8b\n\
+                    rbit v31.16b, v31.16b\n\
+                    uxtw x5, w5\n\
+                    uxtw x0, w1\n\
+                    .popsection\n";
+        let mut blocks = extract_file_scope_asm_sections(text, true).unwrap();
+        encode_a64_file_asm_section_code(&mut blocks).unwrap();
+        let mut sink = AsmSectionSink::default();
+        materialize_asm_sections(
+            &blocks,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            &|_| None,
+            true,
+            &mut sink,
+        )
+        .unwrap();
+        let want_words: [u32; 13] = [
+            0x4e0405cc, // dup v12.4s, v14.s[0]
+            0x4e1c0400, // dup v0.4s, v0.s[3]
+            0x0e0c07ff, // dup v31.2s, v31.s[1]
+            0x4e1e0441, // dup v1.8h, v2.h[7]
+            0x0e0e0441, // dup v1.4h, v2.h[3]
+            0x4e1f0483, // dup v3.16b, v4.b[15]
+            0x0e010483, // dup v3.8b, v4.b[0]
+            0x4e1804c5, // dup v5.2d, v6.d[1]
+            0x6e605810, // rbit v16.16b, v0.16b
+            0x2e605820, // rbit v0.8b, v1.8b
+            0x6e605bff, // rbit v31.16b, v31.16b
+            0x2a0503e5, // uxtw x5, w5
+            0x2a0103e0, // uxtw x0, w1
+        ];
+        let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
+    }
+
     /// A relocation specifier may carry GNU as's optional `#` and a constant
     /// addend. Byte- and relocation-identical to `as`: `add x1, x2, #:lo12:sym`
     /// is 0x91000041 with ADD_ABS_LO12_NC, and the addend rides the relocation

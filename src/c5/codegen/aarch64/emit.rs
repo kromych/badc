@@ -507,6 +507,31 @@ fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
     super::ssa::emit_common::function_makes_no_calls(func)
 }
 
+/// Whether the function signs its return address under
+/// `-mbranch-protection=pac-ret`.
+///
+/// A full leaf never spills x30, so no stored return address exists to
+/// protect. A `Terminator::TailExt` forwarder leaves through a tail
+/// jump that runs no epilogue, so a signature taken at entry would
+/// never be authenticated. Everything else takes the pair: `paciasp`
+/// ahead of the first sp-moving prologue instruction and `autiasp`
+/// after the last sp-restoring epilogue one, which is the window in
+/// which sp -- the signing modifier -- holds its entry value.
+fn signs_return_address(
+    func: &FunctionSsa,
+    frame: Frame,
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> bool {
+    abi.hardening.pac_ret
+        && !func.is_naked
+        && !is_full_leaf(func, frame, alloc)
+        && !func
+            .blocks
+            .iter()
+            .any(|b| matches!(b.terminator, Terminator::TailExt(_)))
+}
+
 fn bail_msg(reason: &str) {
     super::ssa::emit_common::bail_msg("aarch64", reason);
 }
@@ -922,7 +947,12 @@ pub(crate) fn emit_function(
         // `BTI C` ahead of the prologue. A naked function is excluded --
         // its body is the whole function, and prefixing an instruction
         // would displace a hand-built entry sequence.
-        if abi.hardening.bti {
+        //
+        // `PACIASP` accepts both of those BTYPEs itself, so a signed
+        // function needs no separate pad ahead of it.
+        if signs_return_address(func, frame, alloc, abi) {
+            emit(code, super::encode::PACIASP);
+        } else if abi.hardening.bti {
             emit(code, super::encode::BTI_C);
         }
         emit_prologue(code, func, alloc, frame, abi);
@@ -9905,9 +9935,13 @@ fn emit_return(
     // from there so the two sides agree across every branch the
     // prologue takes (variadic, host-stack overflow,
     // ParamRef-elided, per-slot pending_sub flush).
-    let _ = (func, abi);
     if frame.param_spill_bytes > 0 {
         emit_add_sp_imm(code, frame.param_spill_bytes);
+    }
+    // Every teardown above has completed, so sp holds the value
+    // `paciasp` signed against.
+    if signs_return_address(func, frame, alloc, abi) {
+        emit(code, super::encode::AUTIASP);
     }
     emit(code, enc_ret(Reg(30)));
 }

@@ -1075,6 +1075,17 @@ pub(crate) const BTI_C: u32 = 0xD503_245F;
 /// (PSTATE.BTYPE 0b11) as well as 0b01. `HINT #36`.
 pub(crate) const BTI_J: u32 = 0xD503_249F;
 
+/// `PACIASP` -- sign x30 with key A, modifier sp. `HINT #25`, so it
+/// decodes as a NOP where FEAT_PAuth is absent. Also a landing pad
+/// for PSTATE.BTYPE 0b01 / 0b10, which is every way a function entry
+/// is reached indirectly (Arm ARM D24.2.2).
+pub(crate) const PACIASP: u32 = 0xD503_233F;
+
+/// `AUTIASP` -- authenticate x30 with key A, modifier sp. `HINT #29`.
+/// The modifier must match the one `PACIASP` signed with, so sp has to
+/// be back at its function-entry value.
+pub(crate) const AUTIASP: u32 = 0xD503_23BF;
+
 /// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
 /// the `Terminator::TailExt` lowering to forward control to the
 /// IAT/GOT-resolved libc address without saving a return point:

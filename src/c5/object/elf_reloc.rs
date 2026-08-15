@@ -1337,6 +1337,35 @@ pub(super) fn write_relocatable(
         sizes[e] = base + s.bytes.len() as u64;
         asm_placements.push((e, base));
     }
+    // `.note.gnu.property`: the AArch64 feature word the branch
+    // protections claim. The consumer AND-merges it across inputs, so
+    // an object may only set a bit whose instructions it actually
+    // emits (`Hardening` gates both sides).
+    let gnu_property_align: u64 = match class {
+        ElfClass::Elf32 => 4,
+        ElfClass::Elf64 => 8,
+    };
+    let gnu_property_note: Option<(usize, u64, Vec<u8>)> =
+        match build_gnu_property_note(machine, build, gnu_property_align as usize) {
+            None => None,
+            Some(body) => {
+                let e = carve
+                    .table
+                    .get_or_insert(
+                        ".note.gnu.property",
+                        SHT_NOTE,
+                        SHF_ALLOC,
+                        gnu_property_align,
+                    )
+                    .map_err(|msg| C5Error::Compile(crate::c5::error::fmt_internal_err(&msg)))?;
+                if sizes.len() <= e {
+                    sizes.resize(e + 1, 0);
+                }
+                let base = round_up(sizes[e], gnu_property_align);
+                sizes[e] = base + body.len() as u64;
+                Some((e, base, body))
+            }
+        };
     // Switch dispatch tables: a read-only entry of their own. The
     // name keeps the `.rodata` prefix consumers that discover
     // compiler jump tables key on, and stays apart from the carved
@@ -3913,6 +3942,13 @@ pub(super) fn write_relocatable(
         }
         ent.bytes.extend_from_slice(&s.bytes);
     }
+    if let Some((e, base, body)) = &gnu_property_note {
+        let ent = &mut carve.table.entries[*e];
+        if (ent.bytes.len() as u64) < *base {
+            ent.bytes.resize(*base as usize, 0);
+        }
+        ent.bytes.extend_from_slice(body);
+    }
     // Switch-table blob bytes; slots stay zero, the entry's `.rela`
     // rows recorded above carry the values.
     if let Some((e, base)) = jt_placement {
@@ -4355,6 +4391,48 @@ fn pack_sym_info(bind: u8, ty: u8) -> u8 {
 /// the 4-byte ELF gABI boundary. The binding-map and exports
 /// records are omitted when empty so a TU with neither still
 /// round-trips through the older single-record shape.
+/// `NT_GNU_PROPERTY_TYPE_0` (ELF gABI, "Program Property").
+const NT_GNU_PROPERTY_TYPE_0: u32 = 5;
+/// `GNU_PROPERTY_AARCH64_FEATURE_1_AND` and the two feature bits badc
+/// can claim (AArch64 ELF ABI). `GCS` is not claimed: badc runs no
+/// analysis that would establish it.
+const GNU_PROPERTY_AARCH64_FEATURE_1_AND: u32 = 0xc000_0000;
+const GNU_PROPERTY_AARCH64_FEATURE_1_BTI: u32 = 1 << 0;
+const GNU_PROPERTY_AARCH64_FEATURE_1_PAC: u32 = 1 << 1;
+
+/// The `.note.gnu.property` body claiming the branch protections the
+/// emitted code carries, or `None` when it claims none. The note holds
+/// one `NT_GNU_PROPERTY_TYPE_0` note with one property whose payload is
+/// padded to the note alignment (8 for ELF64, 4 for ELF32).
+fn build_gnu_property_note(machine: Machine, build: &Build, align: usize) -> Option<Vec<u8>> {
+    let h = build.abi.hardening;
+    let (ty, bits) = match RelocAbi::of(machine, build.elf_class) {
+        RelocAbi::Aarch64 => (
+            GNU_PROPERTY_AARCH64_FEATURE_1_AND,
+            (u32::from(h.bti) * GNU_PROPERTY_AARCH64_FEATURE_1_BTI)
+                | (u32::from(h.pac_ret) * GNU_PROPERTY_AARCH64_FEATURE_1_PAC),
+        ),
+        _ => return None,
+    };
+    if bits == 0 {
+        return None;
+    }
+    let mut desc: Vec<u8> = Vec::new();
+    desc.extend_from_slice(&ty.to_le_bytes());
+    desc.extend_from_slice(&4u32.to_le_bytes());
+    desc.extend_from_slice(&bits.to_le_bytes());
+    while !desc.len().is_multiple_of(align) {
+        desc.push(0);
+    }
+    let mut body: Vec<u8> = Vec::new();
+    body.extend_from_slice(&4u32.to_le_bytes());
+    body.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+    body.extend_from_slice(&NT_GNU_PROPERTY_TYPE_0.to_le_bytes());
+    body.extend_from_slice(b"GNU\0");
+    body.extend_from_slice(&desc);
+    Some(body)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_badc_note(
     imports: &super::ResolvedImports,

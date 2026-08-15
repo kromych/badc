@@ -602,6 +602,85 @@ fn property_notes_merge_across_a_relocatable_link() {
     );
 }
 
+/// The compiler claims the branch protections it emitted, and only
+/// those: the merge is an intersection, so a bit set by an object that
+/// does not carry the instructions would disarm the whole image.
+#[test]
+fn a_hardened_object_carries_the_matching_property_note() {
+    use crate::c5::linker::gnu_property::{self, Property};
+    const AARCH64_FEATURE_1_AND: u32 = 0xc000_0000;
+    const SRC: &str = "extern int g(int);\nint f(int x) { return g(x) + 1; }\n";
+    let obj = |hardening: crate::Hardening| -> EtRel {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(SRC.to_string(), Target::LinuxAarch64, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            hardening,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+        parse_et_rel(&bytes, "o.o").expect("parse")
+    };
+    let note = |o: &EtRel| -> Option<Vec<u8>> {
+        o.sections
+            .iter()
+            .find(|s| s.name == ".note.gnu.property")
+            .map(|s| s.bytes.clone())
+    };
+    assert_eq!(
+        note(&obj(crate::Hardening::NONE)),
+        None,
+        "an unhardened object claims nothing"
+    );
+    for (hardening, bits) in [
+        (
+            crate::Hardening {
+                bti: true,
+                ..crate::Hardening::NONE
+            },
+            1u64,
+        ),
+        (
+            crate::Hardening {
+                pac_ret: true,
+                ..crate::Hardening::NONE
+            },
+            2,
+        ),
+        (
+            crate::Hardening {
+                bti: true,
+                pac_ret: true,
+                ..crate::Hardening::NONE
+            },
+            3,
+        ),
+    ] {
+        let o = obj(hardening);
+        assert_eq!(
+            note(&o).as_deref(),
+            Some(
+                gnu_property::encode(&[Property::number(AARCH64_FEATURE_1_AND, 4, bits)], 8)
+                    .as_slice()
+            ),
+            "the note the linker's own encoder would produce for {bits:#x}"
+        );
+        let sec = o
+            .sections
+            .iter()
+            .find(|s| s.name == ".note.gnu.property")
+            .expect("note section");
+        assert_eq!(sec.sh_type, 7, "SHT_NOTE");
+        assert_eq!(sec.flags & 2, 2, "SHF_ALLOC");
+        assert_eq!(sec.addralign, 8, "ELF64 note alignment");
+    }
+}
+
 #[test]
 fn build_id_note_is_emitted_and_stable() {
     let a = compile_obj("int v(void) { return 2; }\n", "a.o");

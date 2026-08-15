@@ -118,6 +118,49 @@ fn return_42() {
     assert_eq!(build_and_run("int main() { return 42; }", "ret42"), 42);
 }
 
+/// Return-address signing on the host CPU: every frame shape the
+/// signing decision distinguishes returns through `autiasp` and
+/// produces its value. The signature itself is inert in a plain arm64
+/// macOS process -- the keys are an arm64e facility -- so this pins
+/// that the pair executes and the epilogue leaves sp where `paciasp`
+/// salted with it, which is what the emitted-code assertions cannot
+/// establish on their own.
+#[test]
+fn pac_ret_signed_frames_return_natively() {
+    const SRC: &str = "
+        int g(int x) { return x + 1; }
+        int framed(int x) { return g(x) * 2; }
+        int recur(int n) { return n <= 1 ? 1 : n * recur(n - 1); }
+        int vla(int n) { int a[n]; a[0] = n; for (int i = 1; i < n; i++) a[i] = a[i-1] + i;
+                         return a[n-1]; }
+        int leaf(void) { return 1; }
+        int many(long a, long b, long c, long d, long e, long f, long g_, long h, long i) {
+            return (int)(a + b + c + d + e + f + g_ + h + i);
+        }
+        int main(void) {
+            int bad = 0;
+            if (framed(20) != 42) bad++;
+            if (recur(6) != 720) bad++;
+            if (vla(5) != 15) bad++;
+            if (leaf() != 1) bad++;
+            if (many(1,2,3,4,5,6,7,8,9) != 45) bad++;
+            return bad == 0 ? 42 : bad;
+        }
+    ";
+    let opts = NativeOptions {
+        hardening: crate::Hardening {
+            pac_ret: true,
+            ..crate::Hardening::NONE
+        },
+        ..NativeOptions::default()
+    };
+    let outcome = build_and_run_outcome_with_options(SRC, "pac_ret_native", opts);
+    assert!(
+        outcome.matches(42),
+        "signed frames must return their values, got {outcome:?}"
+    );
+}
+
 /// Link + run a source through the startup runtime (`__c5_entry`),
 /// signing before exec. Mirrors `build_and_run` but takes the full
 /// link path so `__attribute__((constructor))` functions run: dyld

@@ -243,5 +243,18 @@ require: `-mcmodel=small|kernel|tiny`, `-mno-sse` / `-mgeneral-regs-only`
 (keep codegen off the FP/SIMD register file), `-mstrict-align`,
 `-fPIC`/`-fpic`/`-fPIE`/`-fpie`, `-mindirect-branch=` and `-mfunction-return=`
 (retpolines), `-mharden-sls=`, `-fcf-protection=branch` (`endbr64`), and
-`-mbranch-protection=bti`. Options badc does not implement are rejected rather
-than accepted and ignored, so a configure-time probe gets a truthful answer.
+`-mbranch-protection=none|bti|pac-ret|standard`. Options badc does not implement
+are rejected rather than accepted and ignored, so a configure-time probe gets a
+truthful answer.
+
+`pac-ret` signs the return address of every function that stores the link
+register: `paciasp` ahead of the prologue, `autiasp` after the last teardown
+instruction of each epilogue, where sp -- the signing modifier -- holds its
+function-entry value again. A frameless leaf never stores the link register and
+is left alone. `standard` is `bti+pac-ret`; a signed function opens with
+`paciasp`, which is itself a landing pad for the branch types a function entry
+is reached with, so it takes no separate `BTI C`. An aarch64 object built with
+either claims the matching bits in a `.note.gnu.property`
+`GNU_PROPERTY_AARCH64_FEATURE_1_AND` word. The linker intersects that word
+across inputs, so the compiler sets a bit only where it emitted the
+instructions.

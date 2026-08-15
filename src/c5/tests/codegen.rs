@@ -6925,6 +6925,139 @@ fn a64_branch_protection_skips_a_naked_body() {
     assert_ne!(first, 0xD503_245F, "no pad ahead of a naked body");
 }
 
+const PACIASP: u32 = 0xD503_233F;
+const AUTIASP: u32 = 0xD503_23BF;
+const A64_RET: u32 = 0xD65F_03C0;
+
+/// The three frame shapes the signing decision distinguishes. `leaf`
+/// takes no frame at all (no param spill, no callee save, no call), so
+/// x30 is never stored; `framed` saves it across a call; `vla` moves sp
+/// at run time and restores it from x29 on the way out.
+const PAC_LEAF_SRC: &str = "int leaf(void) { return 1; }\n";
+const PAC_FRAMED_SRC: &str = "extern int g(int);\nint framed(int x) { return g(x) + 1; }\n";
+const PAC_VLA_SRC: &str = "int vla(int n) { int a[n]; a[0] = n; for (int i = 1; i < n; i++) a[i] = a[i-1] + i; \
+     return a[n-1]; }\n";
+
+/// `.text` as instruction words.
+fn a64_words(obj: &[u8]) -> alloc::vec::Vec<u32> {
+    elf_text(obj)
+        .chunks_exact(4)
+        .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+        .collect()
+}
+
+fn a64_pac_words(src: &str, hardening: crate::Hardening) -> alloc::vec::Vec<u32> {
+    a64_words(&emit_hardened(src, crate::Target::LinuxAarch64, hardening))
+}
+
+const PAC_RET_ONLY: crate::Hardening = crate::Hardening {
+    pac_ret: true,
+    ..crate::Hardening::NONE
+};
+
+#[test]
+fn a64_pac_ret_signs_a_function_that_stores_the_link_register() {
+    // `-mbranch-protection=pac-ret`: `paciasp` opens the function and
+    // `autiasp` closes it, one pair per emitted return.
+    for src in [PAC_FRAMED_SRC, PAC_VLA_SRC] {
+        let plain = a64_pac_words(src, crate::Hardening::NONE);
+        assert_eq!(
+            plain
+                .iter()
+                .filter(|&&w| w == PACIASP || w == AUTIASP)
+                .count(),
+            0,
+            "no signing without the flag"
+        );
+        let signed = a64_pac_words(src, PAC_RET_ONLY);
+        assert_eq!(signed.first().copied(), Some(PACIASP), "signs at entry");
+        let rets = signed.iter().filter(|&&w| w == A64_RET).count();
+        assert_eq!(
+            signed.iter().filter(|&&w| w == AUTIASP).count(),
+            rets,
+            "one authentication per return"
+        );
+        assert_eq!(
+            signed.iter().filter(|&&w| w == PACIASP).count(),
+            1,
+            "one signature per function"
+        );
+    }
+}
+
+#[test]
+fn a64_pac_ret_authenticates_with_sp_at_its_entry_value() {
+    // `autiasp` salts with sp, so it has to sit after the last teardown
+    // instruction -- immediately ahead of the `ret` it protects.
+    for src in [PAC_FRAMED_SRC, PAC_VLA_SRC] {
+        let w = a64_pac_words(src, PAC_RET_ONLY);
+        let rets: alloc::vec::Vec<usize> = w
+            .iter()
+            .enumerate()
+            .filter(|&(_, &x)| x == A64_RET)
+            .map(|(i, _)| i)
+            .collect();
+        assert!(!rets.is_empty(), "the fixture returns");
+        for i in rets {
+            assert_eq!(w[i - 1], AUTIASP, "`autiasp` directly precedes the `ret`");
+        }
+    }
+}
+
+#[test]
+fn a64_pac_ret_leaves_a_frameless_leaf_unsigned() {
+    // A full leaf never stores x30, so no return address exists on the
+    // stack to protect and the pair would be pure cost.
+    let w = a64_pac_words(PAC_LEAF_SRC, PAC_RET_ONLY);
+    assert_eq!(
+        w.iter().filter(|&&x| x == PACIASP || x == AUTIASP).count(),
+        0,
+        "no pair around a frameless leaf"
+    );
+    assert!(w.contains(&A64_RET), "the leaf still returns");
+}
+
+#[test]
+fn a64_branch_protection_standard_opens_each_function_once() {
+    // `standard` is `bti+pac-ret`. `PACIASP` is itself a landing pad for
+    // the BTYPEs a function entry is reached with, so a signed function
+    // takes no separate `BTI C`; an unsigned one still does.
+    const BTI_C: u32 = 0xD503_245F;
+    let both = crate::Hardening {
+        bti: true,
+        pac_ret: true,
+        ..crate::Hardening::NONE
+    };
+    let leaf = a64_pac_words(PAC_LEAF_SRC, both);
+    assert_eq!(leaf.first().copied(), Some(BTI_C), "unsigned leaf pads");
+    assert_eq!(
+        leaf.iter().filter(|&&w| w == PACIASP).count(),
+        0,
+        "the leaf is not signed"
+    );
+    let framed = a64_pac_words(PAC_FRAMED_SRC, both);
+    assert_eq!(framed.first().copied(), Some(PACIASP), "signed entry");
+    assert_eq!(
+        framed.iter().filter(|&&w| w == BTI_C).count(),
+        0,
+        "no pad ahead of `paciasp`"
+    );
+}
+
+#[test]
+fn a64_pac_ret_skips_a_naked_body() {
+    // Same admission rule as the BTI pad: a naked function's body is the
+    // entire function, so nothing is prefixed to it and its own `ret`
+    // takes no authentication.
+    const SRC: &str = "__attribute__((naked)) void n(void) { __asm__ volatile(\"ret\"); }\n";
+    let w = a64_pac_words(SRC, PAC_RET_ONLY);
+    assert_eq!(
+        w.iter().filter(|&&x| x == PACIASP || x == AUTIASP).count(),
+        0,
+        "a naked body is emitted verbatim"
+    );
+}
+
 #[test]
 fn hardening_absent_leaves_the_object_unchanged() {
     // The mitigations are opt-in: an object emitted with every field off

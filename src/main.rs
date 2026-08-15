@@ -1001,19 +1001,29 @@ fn run() {
                     std::process::exit(1);
                 }
             },
-            // A `+`-joined AArch64 feature list. Return-address signing
-            // (`pac-ret`, and `standard` which implies it) needs the
-            // pointer-authentication prologue/epilogue pair badc does not
-            // emit, so it is rejected rather than reduced to `bti`.
+            // A `+`-joined AArch64 feature list. `standard` is gcc's
+            // alias for `bti+pac-ret`. The `leaf` and `b-key` modifiers
+            // of `pac-ret`, and `gcs`, are rejected: an accepted-but-
+            // ignored spelling would build an object that claims a
+            // protection it does not carry.
             s if s.starts_with("-mbranch-protection=") => {
                 for feature in s["-mbranch-protection=".len()..].split('+') {
                     match feature {
-                        "none" => hardening.bti = false,
+                        "none" => {
+                            hardening.bti = false;
+                            hardening.pac_ret = false;
+                        }
                         "bti" => hardening.bti = true,
+                        "pac-ret" => hardening.pac_ret = true,
+                        "standard" => {
+                            hardening.bti = true;
+                            hardening.pac_ret = true;
+                        }
                         other => {
                             eprint_diagnostic(format!(
                                 "badc: error: unsupported feature `{other}` in \
-                                 `-mbranch-protection=` (supported: none, bti)"
+                                 `-mbranch-protection=` (supported: none, bti, \
+                                 pac-ret, standard)"
                             ));
                             std::process::exit(1);
                         }

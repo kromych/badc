@@ -195,6 +195,10 @@ const DW_CFA_DEF_CFA: u8 = 0x0c;
 /// to. Used in the `_start` FDE so gdb stops gracefully
 /// instead of reading past the bottom-most frame.
 const DW_CFA_UNDEFINED: u8 = 0x07;
+/// `DW_CFA_AARCH64_negate_ra_state` -- toggles the row's RA_SIGN_STATE
+/// (AArch64 ELF ABI). Set, the unwinder strips the authentication code
+/// from the saved return address before using it.
+const DW_CFA_AARCH64_NEGATE_RA_STATE: u8 = 0x2d;
 
 // Architecture-specific register codes used in CFI rules.
 //
@@ -442,6 +446,12 @@ struct Subprog {
     /// CFI FDE's `DW_CFA_advance_loc` so the post-prologue CFA
     /// rule starts at the right PC.
     prologue_size: u32,
+    /// The function opens with `paciasp`, so from that point the
+    /// return address it saves carries a pointer-authentication code.
+    /// The FDE flags it with `DW_CFA_AARCH64_negate_ra_state` -- an
+    /// unwinder that misses the flag reads the signature as address
+    /// bits and loses the parent frame.
+    ra_signed: bool,
     /// Locals + formal-parameters that c5 captured for this
     /// subprogram (see `Compiler::variables`). The DWARF emitter
     /// turns each into a `DW_TAG_variable` /
@@ -528,6 +538,18 @@ fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
     } else {
         (body_start - low_pc) as u32
     }
+}
+
+/// Whether the function at `low_pc` signs its return address, read
+/// off the emitted code rather than the option: only the a64 emitter
+/// decides which functions take the pair, and this is the same
+/// instruction word it wrote.
+fn opens_with_paciasp(build: &Build, low_pc: usize) -> bool {
+    build
+        .text
+        .get(low_pc..low_pc + 4)
+        .and_then(|w| w.try_into().ok())
+        .is_some_and(|w| u32::from_le_bytes(w) == crate::c5::codegen::aarch64::encode::PACIASP)
 }
 
 /// One-past-the-last byte of user code in `build.text`. The PLT
@@ -790,6 +812,7 @@ fn collect_subprograms(
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
             prologue_size: prologue_size_for(ent_pc, lo, build),
+            ra_signed: opens_with_paciasp(build, lo),
             variables,
             external: !internal_pcs.contains(&ent_pc),
         });
@@ -2377,7 +2400,16 @@ fn build_debug_frame(
         // CFA rule. Functions whose prologue size couldn't be
         // recovered (DCE'd, etc.) pass `prologue_size == 0` and
         // get the rule installed at the function's first byte.
-        if sub.prologue_size > 0 {
+        // `paciasp` is the entry instruction, so the return address is
+        // signed from the second word on. The rest of the prologue and
+        // the whole body inherit that state; the epilogue's `autiasp`
+        // is not described, matching the FDE's existing granularity
+        // (the frame teardown is not described either).
+        if sub.ra_signed && sub.prologue_size >= 4 {
+            write_advance_loc(&mut fde_body, arch, 4);
+            fde_body.push(DW_CFA_AARCH64_NEGATE_RA_STATE);
+            write_advance_loc(&mut fde_body, arch, sub.prologue_size - 4);
+        } else if sub.prologue_size > 0 {
             write_advance_loc(&mut fde_body, arch, sub.prologue_size);
         }
         write_post_prologue_instructions(&mut fde_body, arch);
@@ -3020,6 +3052,54 @@ mod tests {
     }
 
     #[test]
+    fn debug_frame_flags_a_signed_return_address() {
+        // A `paciasp`-opening function's FDE has to toggle
+        // RA_SIGN_STATE one instruction in, before the rest of the
+        // prologue: an unwinder that misses it reads the signature as
+        // address bits and loses the parent frame.
+        let sub = |ra_signed| Subprog {
+            name_off: 0,
+            low_pc: 0x1000,
+            high_pc: 0x1040,
+            prologue_size: 12,
+            ra_signed,
+            variables: Vec::new(),
+            external: true,
+        };
+        // The single FDE follows the CIE; its instructions start 24
+        // bytes in (unit_length + cie_pointer + the two addresses).
+        let body = |ra_signed| {
+            let out = build_debug_frame(Target::LinuxAarch64, &[sub(ra_signed)], None, None);
+            let fde = 4 + u32::from_le_bytes(out[..4].try_into().unwrap()) as usize;
+            let len = u32::from_le_bytes(out[fde..fde + 4].try_into().unwrap()) as usize;
+            let mut b = out[fde + 24..fde + 4 + len].to_vec();
+            // Drop the record's `DW_CFA_nop` alignment padding.
+            while b.last() == Some(&0) {
+                b.pop();
+            }
+            b
+        };
+        let plain = body(false);
+        let signed = body(true);
+        assert!(
+            !plain.contains(&DW_CFA_AARCH64_NEGATE_RA_STATE),
+            "an unsigned frame claims nothing"
+        );
+        // advance_loc(1 unit), negate, advance_loc(2 units), then the
+        // post-prologue rules the unsigned form opens with after its
+        // own advance_loc(3 units).
+        assert_eq!(
+            &signed[..3],
+            &[
+                DW_CFA_ADVANCE_LOC_HI | 1,
+                DW_CFA_AARCH64_NEGATE_RA_STATE,
+                DW_CFA_ADVANCE_LOC_HI | 2,
+            ]
+        );
+        assert_eq!(&signed[3..], &plain[1..], "same rules follow");
+    }
+
+    #[test]
     fn collect_plt_subprograms_uses_offset_delta_not_text_len() {
         // Per-stub size must come from the offset delta
         // between consecutive trampolines, NOT from
@@ -3241,6 +3321,7 @@ mod info_golden {
             low_pc: 0x1000,
             high_pc: 0x1010,
             prologue_size: 4,
+            ra_signed: false,
             variables: alloc::vec![],
             external: true,
         }];

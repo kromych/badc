@@ -2427,6 +2427,10 @@ pub struct Hardening {
     /// `-mbranch-protection=bti`: AArch64 BTI landing pads at function
     /// entries and at indirect-branch targets (Arm ARM D24.2.2).
     pub bti: bool,
+    /// `-mbranch-protection=pac-ret`: AArch64 return-address signing.
+    /// A function that spills the link register signs it against sp on
+    /// entry (`paciasp`) and authenticates it before `ret` (`autiasp`).
+    pub pac_ret: bool,
     /// `-fcf-protection=branch`: x86_64 indirect-branch tracking. An
     /// `endbr64` opens every function and every indirect-branch target,
     /// which is the only instruction CET permits an indirect transfer to
@@ -2460,6 +2464,7 @@ impl Hardening {
         sls_return: false,
         sls_indirect_jmp: false,
         bti: false,
+        pac_ret: false,
         cf_protection_branch: false,
     };
 }
@@ -2866,6 +2871,10 @@ pub(crate) fn lower_for_with_prebuilt(
     }
     build.imports = imports;
     build.abi = target.abi();
+    // The emitters build their per-function `Abi` from the same pair,
+    // so the recorded one has to carry the mitigations too: the object
+    // writer reads it to decide what the image may claim.
+    build.abi.hardening = options.hardening;
     build.data_relocs = program.data_relocs.clone();
     build.extern_data_relocs = program.extern_data_relocs.clone();
     build.code_relocs = program.code_relocs.clone();

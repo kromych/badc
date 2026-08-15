@@ -800,6 +800,44 @@ struct MergePool {
     align: u64,
 }
 
+/// A `.eh_frame` input rewritten with its duplicate CIEs dropped.
+struct EhFrame {
+    bytes: Vec<u8>,
+    /// Size before the rewrite, for end-of-section references.
+    orig_size: u64,
+    /// Surviving ranges as (input offset, length, new offset), sorted.
+    kept: Vec<(u64, u64, u64)>,
+    /// Per FDE: its new offset, and the input section and new offset of
+    /// the CIE it names.
+    fdes: Vec<(u64, usize, u64)>,
+}
+
+impl EhFrame {
+    /// New offset of `off`, or `None` when the entry holding it went
+    /// away.
+    fn remap(&self, off: u64) -> Option<u64> {
+        if off >= self.orig_size {
+            return Some(self.bytes.len() as u64);
+        }
+        match self.kept.binary_search_by_key(&off, |k| k.0) {
+            Ok(k) => Some(self.kept[k].2),
+            Err(0) => None,
+            Err(k) => {
+                let (o, len, new) = self.kept[k - 1];
+                (off - o < len).then_some(new + (off - o))
+            }
+        }
+    }
+}
+
+/// Identity of a CIE for deduplication: the bytes after its length
+/// field, and the relocations covering it.
+#[derive(PartialEq, Eq, Hash)]
+struct CieKey {
+    bytes: Vec<u8>,
+    relocs: Vec<(u64, u32, String, i64)>,
+}
+
 struct DynReloc {
     offset: u64,
     rtype: u32,
@@ -823,6 +861,10 @@ pub struct LdsLinker<'a> {
     /// Orphan class -> the output section later orphans stack after.
     orphan_anchor: HashMap<u32, usize>,
     pools: Vec<MergePool>,
+    /// insec index -> `.eh_frame` rewrite, for the inputs that lost a
+    /// CIE to deduplication.
+    eh_of: HashMap<usize, usize>,
+    eh_frames: Vec<EhFrame>,
 
     outs: Vec<OutSec>,
     /// Statement stream of the SECTIONS block with input claims
@@ -1048,6 +1090,8 @@ impl<'a> LdsLinker<'a> {
             merge_of: HashMap::new(),
             orphan_anchor: HashMap::new(),
             pools: Vec::new(),
+            eh_of: HashMap::new(),
+            eh_frames: Vec::new(),
             outs: Vec::new(),
             stmts: Vec::new(),
             globals: HashMap::new(),
@@ -1089,6 +1133,7 @@ impl<'a> LdsLinker<'a> {
         linker.gc_sections();
         linker.claim_inputs()?;
         linker.build_merge_pools();
+        linker.build_eh_frame_dedup();
         Ok(linker)
     }
 
@@ -2043,7 +2088,163 @@ impl<'a> LdsLinker<'a> {
             }
             return 0;
         }
+        if let Some(&e) = self.eh_of.get(&i) {
+            return self.eh_frames[e].bytes.len() as u64;
+        }
         self.insec(i).size
+    }
+
+    /// Offset `off` into input section `i` after the content transforms
+    /// that move bytes within it. `None` when the byte is gone.
+    fn placed_off(&self, i: usize, off: u64) -> Option<u64> {
+        if self.merge_of.contains_key(&i) {
+            return Some(self.merge_remap(i, off));
+        }
+        match self.eh_of.get(&i) {
+            Some(&e) => self.eh_frames[e].remap(off),
+            None => Some(off),
+        }
+    }
+
+    // ----------------------------------------------- .eh_frame CIEs
+
+    /// Merge the CIEs of the `.eh_frame` inputs of one output section,
+    /// as bfd's `elf-eh-frame.c` does: the first copy in output order
+    /// stays and the FDEs of every dropped copy name it instead. Two
+    /// CIEs are one when the bytes after their length field and the
+    /// relocations covering them agree; bfd compares a CIE's parsed
+    /// fields and the symbol its personality resolves to, and those
+    /// follow from byte and relocation equality.
+    fn build_eh_frame_dedup(&mut self) {
+        let mut order: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        for oi in 0..self.outs.len() {
+            for p in &self.outs[oi].pieces {
+                let Piece::Inputs(v) = p else { continue };
+                for &i in v {
+                    let s = self.insec(i);
+                    if s.name == OUT_EH_FRAME && s.shtype == SHT_PROGBITS && s.size != 0 {
+                        order.entry(oi).or_default().push(i);
+                    }
+                }
+            }
+        }
+        let mut built: Vec<(usize, EhFrame)> = Vec::new();
+        for inputs in order.values() {
+            let mut canon: HashMap<CieKey, (usize, u64)> = HashMap::new();
+            for &i in inputs {
+                if let Some(f) = self.dedup_eh_frame(i, &mut canon) {
+                    built.push((i, f));
+                }
+            }
+        }
+        for (i, f) in built {
+            self.eh_of.insert(i, self.eh_frames.len());
+            self.eh_frames.push(f);
+        }
+    }
+
+    /// Rewrite one `.eh_frame` input against the CIEs already seen in
+    /// its output section, registering its own. `None` when it keeps
+    /// every CIE, which leaves its bytes and offsets untouched.
+    fn dedup_eh_frame(
+        &self,
+        i: usize,
+        canon: &mut HashMap<CieKey, (usize, u64)>,
+    ) -> Option<EhFrame> {
+        let id = self.insecs[i];
+        let o = &self.objects[id.obj];
+        let data = o.section_data(&o.sections[id.sec]);
+        let ents = eh_frame::entries(data).ok()?;
+        let mut bytes: Vec<u8> = Vec::with_capacity(data.len());
+        let mut kept: Vec<(u64, u64, u64)> = Vec::new();
+        let mut fdes: Vec<(u64, usize, u64)> = Vec::new();
+        // Input offset of each CIE -> the copy that survives.
+        let mut cies: HashMap<usize, (usize, u64)> = HashMap::new();
+        let mut dropped = false;
+        for e in &ents {
+            match e.cie {
+                None => {
+                    let here = (i, bytes.len() as u64);
+                    let seen = *canon.entry(self.cie_key(i, data, e)).or_insert(here);
+                    cies.insert(e.off, seen);
+                    if seen != here {
+                        dropped = true;
+                        continue;
+                    }
+                }
+                Some(at) => fdes.push({
+                    let (sec, off) = *cies.get(&at)?;
+                    (bytes.len() as u64, sec, off)
+                }),
+            }
+            kept.push((e.off as u64, e.len as u64, bytes.len() as u64));
+            bytes.extend_from_slice(&data[e.off..e.off + e.len]);
+        }
+        if !dropped {
+            return None;
+        }
+        // Whatever follows the last entry (a terminator, padding) is
+        // not addressed by any of them and carries over verbatim.
+        let tail = ents.last().map_or(0, |e| e.off + e.len);
+        kept.push((tail as u64, (data.len() - tail) as u64, bytes.len() as u64));
+        bytes.extend_from_slice(&data[tail..]);
+        Some(EhFrame {
+            orig_size: data.len() as u64,
+            bytes,
+            kept,
+            fdes,
+        })
+    }
+
+    fn cie_key(&self, i: usize, data: &[u8], e: &eh_frame::Entry) -> CieKey {
+        let id = self.insecs[i];
+        let s = &self.objects[id.obj].sections[id.sec];
+        let (start, end) = (e.off as u64, (e.off + e.len) as u64);
+        let relocs = s
+            .relocs
+            .iter()
+            .filter(|r| r.offset >= start && r.offset < end)
+            .map(|r| {
+                // A local symbol is named by nothing an object outside
+                // its own can match, so it keeps the CIE to itself.
+                let sym = &self.objects[id.obj].symbols[r.sym as usize];
+                let name = match sym.binding() {
+                    STB_LOCAL => format!("{}:{}", id.obj, r.sym),
+                    _ => sym.name.clone(),
+                };
+                (r.offset - start, r.rtype, name, r.addend)
+            })
+            .collect();
+        CieKey {
+            bytes: data[e.off + 4..e.off + e.len].to_vec(),
+            relocs,
+        }
+    }
+
+    /// Point every FDE of a rewritten input at the CIE that survived.
+    /// The field holds the distance back from itself to the CIE, so it
+    /// settles only once both have been placed.
+    fn patch_eh_frame(&self, contents: &mut HashMap<usize, Vec<u8>>) {
+        for (&i, &e) in &self.eh_of {
+            let SecFate::Placed { out } = self.fates[i] else {
+                continue;
+            };
+            let Some(buf) = contents.get_mut(&out) else {
+                continue;
+            };
+            let base = self.placements[i].off;
+            for &(fde, cie_sec, cie_off) in &self.eh_frames[e].fdes {
+                let field = base + fde + eh_frame::CIE_POINTER as u64;
+                let cie = self.placements[cie_sec].off + cie_off;
+                let (Some(v), true) = (
+                    field.checked_sub(cie).and_then(|d| u32::try_from(d).ok()),
+                    field + 4 <= buf.len() as u64,
+                ) else {
+                    continue;
+                };
+                buf[field as usize..field as usize + 4].copy_from_slice(&v.to_le_bytes());
+            }
+        }
     }
 
     // --------------------------------------------------------- layout
@@ -2746,11 +2947,7 @@ impl<'a> LdsLinker<'a> {
                         // exact values; later ones fall back to the
                         // previous pass's placement, which matches at
                         // convergence.
-                        let off = if self.merge_of.contains_key(&i) {
-                            self.merge_remap(i, sym.value)
-                        } else {
-                            sym.value
-                        };
+                        let off = self.placed_off(i, sym.value)?;
                         let base = if let Some(&pl) = self.merge_of.get(&i) {
                             self.placements[self.pools[pl].rep].off
                         } else {
@@ -3603,14 +3800,10 @@ impl<'a> LdsLinker<'a> {
                         // addend applies to the remapped address (matches
                         // bfd -- an addend past the entry, e.g. one past a
                         // string's NUL, must stay relative to that entry).
-                        let off = if self.merge_of.contains_key(&i) {
-                            if sym.kind() == STT_SECTION {
-                                self.merge_remap(i, sym.value.wrapping_add(addend as u64))
-                            } else {
-                                self.merge_remap(i, sym.value).wrapping_add(addend as u64)
-                            }
+                        let off = if sym.kind() == STT_SECTION {
+                            self.placed_off(i, sym.value.wrapping_add(addend as u64))?
                         } else {
-                            sym.value.wrapping_add(addend as u64)
+                            self.placed_off(i, sym.value)?.wrapping_add(addend as u64)
                         };
                         let base = if let Some(&pl) = self.merge_of.get(&i) {
                             self.placements[self.pools[pl].rep].off
@@ -3890,6 +4083,7 @@ impl<'a> LdsLinker<'a> {
             }
             contents.insert(oi, buf);
         }
+        self.patch_eh_frame(&mut contents);
 
         // Apply relocations into the content buffers.
         let relr_set: HashSet<u64> = self.relr_addrs.iter().copied().collect();
@@ -3937,14 +4131,18 @@ impl<'a> LdsLinker<'a> {
         })
     }
 
-    /// Bytes an input chunk contributes: its own section data, or the
-    /// merge pool for a pool representative (empty for other members).
+    /// Bytes an input chunk contributes: its own section data, the
+    /// merge pool for a pool representative (empty for other members),
+    /// or its deduplicated `.eh_frame`.
     fn chunk_input_bytes(&self, i: usize) -> &[u8] {
         if let Some(&p) = self.merge_of.get(&i) {
             if self.pools[p].rep == i {
                 return &self.pools[p].bytes;
             }
             return &[];
+        }
+        if let Some(&e) = self.eh_of.get(&i) {
+            return &self.eh_frames[e].bytes;
         }
         let id = self.insecs[i];
         let o = &self.objects[id.obj];
@@ -4007,8 +4205,13 @@ impl<'a> LdsLinker<'a> {
                 continue;
             };
             for r in &relocs {
-                let site = (place.off + r.offset) as usize;
-                let p = sec_addr + r.offset;
+                // A relocation whose site went away with a duplicate
+                // CIE applies nowhere.
+                let Some(off) = self.placed_off(i, r.offset) else {
+                    continue;
+                };
+                let site = (place.off + off) as usize;
+                let p = sec_addr + off;
                 let target = self.resolve_reloc_target(id.obj, r, tolerant, &mut errors);
                 let Some(s_plus_a) = target else { continue };
                 if errors.len() > 40 {
@@ -8066,6 +8269,162 @@ SECTIONS {
         assert_eq!(find_sym(&syms, "third"), ro.2, "duplicate entry folds");
         assert_eq!(find_sym(&syms, "b_two"), ro.2 + 8);
         assert_eq!(find_sym(&syms, "b_four"), ro.2 + 16);
+    }
+
+    /// A `zR` CIE, the shape gcc emits for a unit needing no
+    /// personality routine.
+    fn eh_cie_zr() -> Vec<u8> {
+        alloc::vec![
+            0x14, 0, 0, 0, 0, 0, 0, 0, 1, b'z', b'R', 0, 1, 0x78, 0x10, 1, 0x1b, 0x0c, 0x07, 0x08,
+            0x90, 0x01, 0, 0,
+        ]
+    }
+
+    /// A `zPR` CIE; its personality pointer sits at offset 0x12 and is
+    /// relocated.
+    fn eh_cie_zpr() -> Vec<u8> {
+        alloc::vec![
+            0x1c, 0, 0, 0, 0, 0, 0, 0, 1, b'z', b'P', b'R', 0, 1, 0x78, 0x10, 6, 0x9b, 0, 0, 0, 0,
+            0x1b, 0x0c, 0x07, 0x08, 0x90, 0x01, 0, 0, 0, 0,
+        ]
+    }
+
+    /// An FDE naming a CIE `back` bytes before its own pointer field;
+    /// its initial location sits at offset 8 and is relocated.
+    fn eh_fde(back: u32) -> Vec<u8> {
+        let mut f: Vec<u8> = alloc::vec![0x14, 0, 0, 0];
+        f.extend_from_slice(&back.to_le_bytes());
+        f.extend_from_slice(&[0, 0, 0, 0, 8, 0, 0, 0]);
+        f.extend_from_slice(&[0; 8]);
+        f
+    }
+
+    fn image_section(image: &[u8], name: &str) -> (u64, Vec<u8>) {
+        let shoff = u64::from_le_bytes(image[40..48].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(image[60..62].try_into().unwrap()) as usize;
+        let sh = |i: usize| -> Elf64Shdr { read_struct(image, shoff + i * 64).unwrap() };
+        let str_sh = sh(u16::from_le_bytes(image[62..64].try_into().unwrap()) as usize);
+        let names = &image[str_sh.sh_offset as usize..(str_sh.sh_offset + str_sh.sh_size) as usize];
+        let h = (1..shnum)
+            .map(sh)
+            .find(|h| strz(names, h.sh_name as usize) == name)
+            .expect("section is in the image");
+        (
+            h.sh_addr,
+            image[h.sh_offset as usize..(h.sh_offset + h.sh_size) as usize].to_vec(),
+        )
+    }
+
+    /// bfd folds the identical CIEs of separately compiled units into
+    /// one and repoints every FDE at it. The pointer is the distance
+    /// back from its own field, so each FDE takes a different value.
+    #[test]
+    fn eh_frame_folds_identical_cies() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text) } .eh_frame : { *(.eh_frame) } }",
+        )
+        .expect("parses");
+        let unit = |name: &str| {
+            let mut eh = eh_cie_zr();
+            eh.extend_from_slice(&eh_fde(0x1c));
+            TestObj::new()
+                .sec(
+                    ".text",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    8,
+                    &[0x90; 8],
+                )
+                .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh)
+                // The FDE's initial location, against the text it covers.
+                .reloc(1, 0x20, 1, rt::R_X86_64_PC32, 0)
+                .sym(name, STB_GLOBAL, STT_FUNC, 0, 0, 8)
+                .build(EM_X86_64)
+        };
+        let objs = alloc::vec![
+            parse_lds_object("a.o", unit("fa")).expect("parses"),
+            parse_lds_object("b.o", unit("fb")).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24 + 24, "one CIE, both FDEs");
+        assert_eq!(&body[..24], &eh_cie_zr()[..], "the first CIE stays");
+        assert_eq!(
+            u32::from_le_bytes(body[0x1c..0x20].try_into().unwrap()),
+            0x1c
+        );
+        assert_eq!(
+            u32::from_le_bytes(body[0x34..0x38].try_into().unwrap()),
+            0x34,
+            "the second FDE reaches back to the surviving CIE"
+        );
+        let fdes = eh_frame::scan(&body, addr).expect("scans");
+        let syms = image_symbols(&res.image);
+        assert_eq!(
+            fdes.iter().map(|e| e.pc).collect::<Vec<_>>(),
+            alloc::vec![find_sym(&syms, "fa"), find_sym(&syms, "fb")],
+            "both FDEs still cover their own text"
+        );
+    }
+
+    /// bfd keys a CIE on the personality routine it resolves to, not on
+    /// the bytes of the pointer, which relocation leaves zero in every
+    /// input.
+    #[test]
+    fn eh_frame_cies_split_on_the_personality_they_name() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text) } .eh_frame : { *(.eh_frame) } }",
+        )
+        .expect("parses");
+        let unit = |fname: &str, pers: &str, defines: bool| {
+            let mut eh = eh_cie_zpr();
+            eh.extend_from_slice(&eh_fde(0x24));
+            let o = TestObj::new()
+                .sec(
+                    ".text",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    8,
+                    &[0x90; 8],
+                )
+                .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh)
+                .reloc(1, 0x12, 4, rt::R_X86_64_PC32, 0)
+                .reloc(1, 0x28, 1, rt::R_X86_64_PC32, 0)
+                .sym(fname, STB_GLOBAL, STT_FUNC, 0, 0, 8);
+            let sec = if defines { 0 } else { usize::MAX };
+            o.sym(pers, STB_GLOBAL, STT_FUNC, sec, 0, 0)
+                .build(EM_X86_64)
+        };
+        let objs = alloc::vec![
+            parse_lds_object("a.o", unit("fa", "pers", true)).expect("parses"),
+            parse_lds_object("b.o", unit("fb", "pers", false)).expect("parses"),
+            parse_lds_object("c.o", unit("fc", "pers2", true)).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(
+            body.len(),
+            32 + 24 + 24 + 32 + 24,
+            "the two units naming one routine share a CIE; the third keeps its own"
+        );
+        assert_eq!(
+            u32::from_le_bytes(body[0x3c..0x40].try_into().unwrap()),
+            0x3c,
+            "b.o's FDE reaches back to a.o's CIE"
+        );
+        assert_eq!(
+            u32::from_le_bytes(body[0x74..0x78].try_into().unwrap()),
+            0x24,
+            "c.o's FDE keeps its own"
+        );
+        let syms = image_symbols(&res.image);
+        let pers = find_sym(&syms, "pers");
+        assert_eq!(
+            i32::from_le_bytes(body[0x12..0x16].try_into().unwrap()) as i64 + (addr + 0x12) as i64,
+            pers as i64,
+            "the surviving CIE keeps its own personality relocation"
+        );
+        assert_eq!(eh_frame::scan(&body, addr).expect("scans").len(), 3);
     }
 
     /// An ABS64 against a non-local symbol in an allocated section the

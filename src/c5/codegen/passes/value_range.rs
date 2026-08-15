@@ -201,6 +201,7 @@ fn load_expr_key(insts: &[Inst], canon: &[ValueId], v: ValueId) -> Option<Key> {
             disp,
             kind,
             volatile: false,
+            ..
         }) => Some((5, c(*addr), load_kind_code(*kind), *disp as i64)),
         Some(Inst::LoadLocal {
             off,
@@ -1129,6 +1130,7 @@ mod tests {
                     disp: 8,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::BinopI {
                     op: BinOp::Uge,
@@ -1144,6 +1146,7 @@ mod tests {
                     value: 2,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 });
             }
             let load = insts.len() as u32;
@@ -1152,6 +1155,7 @@ mod tests {
                 disp: 8,
                 kind: LoadKind::I64,
                 volatile: false,
+                align: 0,
             });
             insts.push(Inst::BinopI {
                 op: BinOp::Ge,
@@ -1212,6 +1216,7 @@ mod tests {
                 disp: 8,
                 kind: LoadKind::I64,
                 volatile: false,
+                align: 0,
             },
             // The write separating the load from the branch that
             // tests it.
@@ -1221,6 +1226,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                align: 0,
             },
             Inst::BinopI {
                 op: BinOp::Uge,
@@ -1233,6 +1239,7 @@ mod tests {
                 disp: 8,
                 kind: LoadKind::I64,
                 volatile: false,
+                align: 0,
             },
             Inst::BinopI {
                 op: BinOp::Ge,

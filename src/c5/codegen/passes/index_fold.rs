@@ -157,12 +157,14 @@ fn foldable_scaled_addresses(
                 disp: 0,
                 kind,
                 volatile: false,
+                align: 0,
             } => (*addr, int_load_width(*kind)),
             Inst::Store {
                 addr,
                 disp: 0,
                 kind,
                 volatile: false,
+                align: 0,
                 ..
             } => (*addr, int_store_width(*kind)),
             _ => continue,
@@ -194,8 +196,10 @@ fn foldable_scaled_addresses(
 /// the width keeps the AArch64 `ldr` / `str` immediate encoding (which
 /// scales by the width) valid; a width-`w` field is naturally
 /// `w`-aligned, while a packed field at an unaligned offset is left for
-/// the plain add path. A mix of access widths on one address, or any
-/// non-access use, leaves the address alone.
+/// the plain add path. The fold leaves the address itself unchanged, so
+/// an access carrying a proven alignment keeps it. A mix of access
+/// widths on one address, or any non-access use, leaves the address
+/// alone.
 fn foldable_displaced_addresses(
     func: &FunctionSsa,
     counts: &[u32],
@@ -221,21 +225,27 @@ fn foldable_displaced_addresses(
     let mut width_seen: alloc::collections::BTreeMap<ValueId, u8> =
         alloc::collections::BTreeMap::new();
     let mut valid: alloc::collections::BTreeMap<ValueId, u32> = alloc::collections::BTreeMap::new();
+    // Addresses an access carries a proven alignment for: the lowering
+    // may split such an access into byte units, whose scaled immediate
+    // reaches only 4095 rather than the width-scaled range below.
+    let mut bounded: alloc::collections::BTreeSet<ValueId> = alloc::collections::BTreeSet::new();
     for inst in &func.insts {
-        let (addr, w) = match inst {
+        let (addr, w, align) = match inst {
             Inst::Load {
                 addr,
                 disp: 0,
                 kind,
                 volatile: false,
-            } => (*addr, load_width(*kind)),
+                align,
+            } => (*addr, load_width(*kind), *align),
             Inst::Store {
                 addr,
                 disp: 0,
                 kind,
                 volatile: false,
+                align,
                 ..
-            } => (*addr, store_width(*kind)),
+            } => (*addr, store_width(*kind), *align),
             _ => continue,
         };
         if !cand.contains_key(&addr) {
@@ -244,6 +254,9 @@ fn foldable_displaced_addresses(
         let seen = width_seen.entry(addr).or_insert(0);
         *seen = if *seen == 0 || *seen == w { w } else { 0xff };
         *valid.entry(addr).or_insert(0) += 1;
+        if align != 0 {
+            bounded.insert(addr);
+        }
     }
     cand.into_iter()
         .filter_map(|(p, (base, c))| {
@@ -252,7 +265,8 @@ fn foldable_displaced_addresses(
             if w == 0 || w == 0xff || valid.get(&p).copied().unwrap_or(0) != total {
                 return None;
             }
-            if c % (w as i64) != 0 || c >= (w as i64) * 4096 {
+            let reach = if bounded.contains(&p) { 1 } else { w as i64 };
+            if c % (w as i64) != 0 || c + (w as i64) > reach * 4096 {
                 return None;
             }
             i32::try_from(c).ok().map(|disp| (p, (base, disp)))
@@ -346,10 +360,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                     disp: 0,
                     kind,
                     volatile: false,
+                    align,
                 } => {
-                    if let (Some(width), Some(&(base, index, scale))) =
-                        (int_load_width(*kind), scaled.get(addr))
-                    {
+                    if let (Some(width), Some(&(base, index, scale))) = (
+                        int_load_width(*kind),
+                        scaled.get(addr).filter(|_| *align == 0),
+                    ) {
                         debug_assert_eq!(scale, width);
                         rewrites.push((
                             idx,
@@ -368,6 +384,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 disp,
                                 kind: *kind,
                                 volatile: false,
+                                align: *align,
                             },
                         ));
                     }
@@ -378,10 +395,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                     value,
                     kind,
                     volatile: false,
+                    align,
                 } => {
-                    if let (Some(width), Some(&(base, index, scale))) =
-                        (int_store_width(*kind), scaled.get(addr))
-                    {
+                    if let (Some(width), Some(&(base, index, scale))) = (
+                        int_store_width(*kind),
+                        scaled.get(addr).filter(|_| *align == 0),
+                    ) {
                         debug_assert_eq!(scale, width);
                         rewrites.push((
                             idx,
@@ -402,6 +421,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 value: *value,
                                 kind: *kind,
                                 volatile: false,
+                                align: *align,
                             },
                         ));
                     }

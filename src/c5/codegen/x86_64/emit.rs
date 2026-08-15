@@ -3362,7 +3362,11 @@ fn emit_inst(
             true
         }
         Inst::Load {
-            addr, disp, kind, ..
+            addr,
+            disp,
+            kind,
+            align,
+            ..
         } => emit_load(
             code,
             dst,
@@ -3373,15 +3377,27 @@ fn emit_inst(
             alloc.is_f32(v),
             alloc,
             frame,
+            narrow_bound(*align, abi),
         ),
         Inst::Store {
             addr,
             disp,
             value,
             kind,
+            align,
             ..
         } => emit_store(
-            code, dst, v, *addr, *disp, *value, *kind, None, alloc, frame,
+            code,
+            dst,
+            v,
+            *addr,
+            *disp,
+            *value,
+            *kind,
+            None,
+            alloc,
+            frame,
+            narrow_bound(*align, abi),
         ),
         Inst::SegLoad {
             addr, kind, seg, ..
@@ -3395,6 +3411,7 @@ fn emit_inst(
             alloc.is_f32(v),
             alloc,
             frame,
+            None,
         ),
         Inst::SegStore {
             addr,
@@ -3413,6 +3430,7 @@ fn emit_inst(
             seg_prefix(*seg),
             alloc,
             frame,
+            None,
         ),
         Inst::LoadLocal { off, kind, .. } => {
             emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
@@ -3955,11 +3973,25 @@ fn emit_load_fp_mem(
     disp: i32,
     seg: Option<u8>,
     frame: Frame,
+    bound: Option<u32>,
     site: &str,
 ) -> bool {
     let Some(dd) = fp_or_spill_dst(dst) else {
         return fail(&alloc::format!("{site}: dst not fp reg / spill"));
     };
+    // A bounded access composes in a GPR and crosses via `movq`, which
+    // zeroes the register above the composed bytes exactly as the
+    // `movss` / `movsd` it replaces does.
+    if let Some(a) = bound {
+        let width = if matches!(kind, LoadKind::F32) { 4 } else { 8 };
+        let acc = emit_narrow_compose(code, base, disp, width, a, &[]);
+        super::encode::emit_movq_xmm_r(code, dd, acc);
+        if matches!(kind, LoadKind::F32) && !keep_f32 {
+            emit_cvtss2sd(code, dd, dd);
+        }
+        fp_spill_dst_to_slot(code, dst, dd, frame);
+        return true;
+    }
     // Segment override precedes the mandatory SSE prefix and the opcode.
     if let Some(p) = seg {
         code.push(p);
@@ -3994,6 +4026,7 @@ fn emit_store_fp_mem(
     disp: i32,
     seg: Option<u8>,
     frame: Frame,
+    bound: Option<u32>,
     site: &str,
 ) -> bool {
     let Some(dn) = materialize_fp(code, value_place, SCRATCH_XMM14, frame) else {
@@ -4008,18 +4041,32 @@ fn emit_store_fp_mem(
             code.push(p);
         }
     };
+    let narrowed = |code: &mut Vec<u8>, src: Reg, width: u32, a: u32| {
+        super::encode::emit_movq_r_xmm(code, SCRATCH_R11, src);
+        emit_narrow_store(code, SCRATCH_R11, base, disp, width, a);
+    };
     if matches!(kind, StoreKind::F32) {
-        if value_is_f32 {
-            push_seg(code);
-            emit_movss_mem_xmm(code, base, disp, dn);
+        let src = if value_is_f32 {
+            dn
         } else {
             emit_cvtsd2ss(code, SCRATCH_XMM15, dn);
-            push_seg(code);
-            emit_movss_mem_xmm(code, base, disp, SCRATCH_XMM15);
+            SCRATCH_XMM15
+        };
+        match bound {
+            Some(a) => narrowed(code, src, 4, a),
+            None => {
+                push_seg(code);
+                emit_movss_mem_xmm(code, base, disp, src);
+            }
         }
     } else {
-        push_seg(code);
-        emit_movsd_mem_xmm(code, base, disp, dn);
+        match bound {
+            Some(a) => narrowed(code, dn, 8, a),
+            None => {
+                push_seg(code);
+                emit_movsd_mem_xmm(code, base, disp, dn);
+            }
+        }
     }
     mirror_fp_dst(code, dst, dn, frame);
     true
@@ -4073,6 +4120,7 @@ fn emit_load_local(
             disp,
             None,
             frame,
+            None,
             "LoadLocal",
         );
     }
@@ -4119,6 +4167,7 @@ fn emit_store_local(
             disp,
             None,
             frame,
+            None,
             "StoreLocal",
         );
     }
@@ -4311,6 +4360,7 @@ fn emit_load(
     keep_f32: bool,
     alloc: &Allocation,
     frame: Frame,
+    bound: Option<u32>,
 ) -> bool {
     let addr_place = place_of(alloc, addr);
     // Spill-tolerant base materialisation: load a spilled address
@@ -4321,12 +4371,17 @@ fn emit_load(
         return fail("Load: addr Place not int reg / spill");
     };
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
-        return emit_load_fp_mem(code, dst, kind, keep_f32, base, disp, seg, frame, "Load");
+        return emit_load_fp_mem(
+            code, dst, kind, keep_f32, base, disp, seg, frame, bound, "Load",
+        );
     }
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("Load: dst not int reg / spill");
     };
-    emit_load_kind_mem(code, kind, rd, base, disp, seg);
+    match bound {
+        Some(a) => emit_narrow_load(code, rd, base, disp, kind, a),
+        None => emit_load_kind_mem(code, kind, rd, base, disp, seg),
+    }
     spill_dst_to_slot(code, dst, rd, frame);
     true
 }
@@ -4342,6 +4397,7 @@ fn emit_store(
     seg: Option<u8>,
     alloc: &Allocation,
     frame: Frame,
+    bound: Option<u32>,
 ) -> bool {
     let addr_place = place_of(alloc, addr);
     let value_place = place_of(alloc, value);
@@ -4368,6 +4424,7 @@ fn emit_store(
             disp,
             seg,
             frame,
+            bound,
             "Store",
         );
     }
@@ -4393,7 +4450,10 @@ fn emit_store(
     let Some(rs) = materialize_int(code, value_place, value_scratch, frame) else {
         return fail("Store: value Place not int reg / spill");
     };
-    emit_store_kind_mem(code, kind, base, disp, rs, seg);
+    match bound {
+        Some(a) => emit_narrow_store(code, rs, base, disp, int_store_width(kind), a),
+        None => emit_store_kind_mem(code, kind, base, disp, rs, seg),
+    }
     // Stored value also feeds dst when the allocator wants it
     // parked (Store ops leave the written value in the
     // accumulator per the c5 stack-machine semantics).
@@ -9876,6 +9936,106 @@ fn emit_agg_load_sse(
     emit_agg_load_int(code, tmp, base, disp, 8, align, strict_align, Reg::RAX);
     super::encode::emit_movq_xmm_r(code, dst, tmp);
     emit_pop_r(code, Reg::RAX);
+}
+
+/// Alignment a scalar access must respect, or `None` when it may keep
+/// its natural width: an access carries a bound only where the walker
+/// proved one, and only `-mstrict-align` acts on it.
+fn narrow_bound(align: u8, abi: super::Abi) -> Option<u32> {
+    (abi.strict_align && align != 0).then_some(align as u32)
+}
+
+/// Register a narrowed scalar access borrows for its piece temp. Each
+/// candidate is in the allocator's caller-saved bank, so it is pushed
+/// and popped across the sequence; nothing in between addresses `rsp`.
+/// Mirrors the reservation `emit_mcpy` makes.
+fn narrow_borrow(avoid: &[u8]) -> Reg {
+    for cand in [Reg::RAX, Reg::RCX, Reg::RDX, Reg::RSI, Reg::RDI] {
+        if !avoid.contains(&cand.0) {
+            return cand;
+        }
+    }
+    unreachable!("narrow access: no free borrow register")
+}
+
+/// Byte width of an integer load kind, and whether it sign-extends.
+fn int_load_shape(kind: LoadKind) -> (u32, bool) {
+    match kind {
+        LoadKind::I64 => (8, false),
+        LoadKind::I32 => (4, true),
+        LoadKind::U32 => (4, false),
+        LoadKind::I16 => (2, true),
+        LoadKind::U16 => (2, false),
+        LoadKind::I8 => (1, true),
+        LoadKind::U8 => (1, false),
+        LoadKind::F32 | LoadKind::F64 => (0, false),
+    }
+}
+
+/// Byte width of an integer store kind.
+fn int_store_width(kind: StoreKind) -> u32 {
+    match kind {
+        StoreKind::I64 => 8,
+        StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        StoreKind::F32 | StoreKind::F64 => 0,
+    }
+}
+
+/// Compose `width` bytes at `[base + disp]`, whose address is proven
+/// only `align`-aligned, into SCRATCH_R11 and return it. The caller
+/// must not have `base` in r11.
+fn emit_narrow_compose(
+    code: &mut Vec<u8>,
+    base: Reg,
+    disp: i32,
+    width: u32,
+    align: u32,
+    avoid: &[u8],
+) -> Reg {
+    let acc = SCRATCH_R11;
+    let mut blocked = alloc::vec![base.0, acc.0];
+    blocked.extend_from_slice(avoid);
+    let tmp = narrow_borrow(&blocked);
+    emit_push_r(code, tmp);
+    emit_agg_load_int(code, acc, base, disp, width, align, true, tmp);
+    emit_pop_r(code, tmp);
+    acc
+}
+
+/// Lower an integer load bounded by `align` into `rd`, sign-extending
+/// the composed value when the kind is signed.
+fn emit_narrow_load(code: &mut Vec<u8>, rd: Reg, base: Reg, disp: i32, kind: LoadKind, align: u32) {
+    let (width, signed) = int_load_shape(kind);
+    let acc = emit_narrow_compose(code, base, disp, width, align, &[rd.0]);
+    match (signed, width) {
+        (true, 4) => super::encode::emit_movsxd_r_r(code, rd, acc),
+        (true, 2) => super::encode::emit_movsx_r_r16(code, rd, acc),
+        (true, 1) => super::encode::emit_movsx_r_r8(code, rd, acc),
+        _ if rd.0 != acc.0 => emit_mov_rr(code, rd, acc),
+        _ => {}
+    }
+}
+
+/// Store companion to [`emit_narrow_load`]: write the low `width`
+/// bytes of `rs` to `[base + disp]` in `align`-wide pieces.
+fn emit_narrow_store(code: &mut Vec<u8>, rs: Reg, base: Reg, disp: i32, width: u32, align: u32) {
+    let tmp = narrow_borrow(&[base.0, rs.0]);
+    emit_push_r(code, tmp);
+    let off = disp.max(0) as u32;
+    for (i, (o, w)) in super::super::access_pieces(off, width, align, true).enumerate() {
+        let at = disp + (o - off) as i32;
+        let src = if i == 0 {
+            rs
+        } else {
+            emit_mov_rr(code, tmp, rs);
+            emit_shift_ri(code, Mnem::Shr, 8, tmp, ((o - off) * 8) as u8);
+            tmp
+        };
+        emit_store_unit(code, w, base, at, src);
+    }
+    emit_pop_r(code, tmp);
 }
 
 #[allow(clippy::too_many_arguments)]

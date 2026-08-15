@@ -83,23 +83,35 @@ pub(crate) enum Inst {
     /// access to a volatile-qualified object (C99 6.7.3p6): the load
     /// must be performed strictly per the abstract machine, so no pass
     /// may delete, duplicate, or forward it (5.1.2.3p2).
+    ///
+    /// `align` is the alignment the address is proven to satisfy, in
+    /// bytes. Zero means the access is naturally aligned for its width,
+    /// which C99 6.3.2.3p7 guarantees for every well-formed object; a
+    /// packed member or a packed bitfield storage unit records the lower
+    /// bound it actually has. Under [`NativeOptions::strict_align`] the
+    /// lowering then composes the value from accesses no wider than
+    /// that. A pass that rebuilds the access at the same address must
+    /// carry the field across; one that retargets it to a different
+    /// address must recompute it.
     Load {
         addr: ValueId,
         disp: i32,
         kind: LoadKind,
         volatile: bool,
+        align: u8,
     },
     /// Store to `addr + disp`. The c5 semantics leave the stored value
     /// in the accumulator afterward; downstream uses of this
     /// instruction's id read that value. `disp` is a byte offset folded
     /// from a constant pointer addition, zero for a plain dereference.
-    /// `volatile` as for [`Self::Load`].
+    /// `volatile` and `align` as for [`Self::Load`].
     Store {
         addr: ValueId,
         disp: i32,
         value: ValueId,
         kind: StoreKind,
         volatile: bool,
+        align: u8,
     },
     /// Load from a local / parameter slot. Equivalent to a
     /// `LocalAddr(off)` followed by `Load { kind }`, but
@@ -1544,7 +1556,8 @@ mod tests {
                     addr: 1,
                     disp: 0,
                     kind: LoadKind::I64,
-                    volatile: false
+                    volatile: false,
+                    align: 0,
                 },
                 alloc::vec![1]
             ),
@@ -1554,7 +1567,8 @@ mod tests {
                     disp: 0,
                     value: 2,
                     kind: StoreKind::I64,
-                    volatile: false
+                    volatile: false,
+                    align: 0,
                 },
                 alloc::vec![1, 2]
             ),

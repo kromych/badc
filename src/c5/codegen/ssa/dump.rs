@@ -103,10 +103,12 @@ fn fmt_inst(inst: &Inst) -> String {
             disp,
             kind,
             volatile,
+            align,
         } => format!(
-            "Load {{ addr=v{addr}, disp={disp}, kind={}{} }}",
+            "Load {{ addr=v{addr}, disp={disp}, kind={}{}{} }}",
             fmt_load_kind(*kind),
             fmt_volatile(*volatile),
+            fmt_align(*align),
         ),
         Store {
             addr,
@@ -114,10 +116,12 @@ fn fmt_inst(inst: &Inst) -> String {
             value,
             kind,
             volatile,
+            align,
         } => format!(
-            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={}{} }}",
+            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={}{}{} }}",
             fmt_store_kind(*kind),
             fmt_volatile(*volatile),
+            fmt_align(*align),
         ),
         SegLoad {
             addr,
@@ -340,6 +344,17 @@ fn fmt_place(p: Place) -> String {
 /// Rendered only when set so non-volatile dumps are unchanged.
 fn fmt_volatile(v: bool) -> &'static str {
     if v { ", volatile" } else { "" }
+}
+
+/// Proven alignment of a memory access, shown only when it is below
+/// the natural one for the width -- the naturally aligned case is the
+/// norm and printing it everywhere would bury the exceptions.
+fn fmt_align(align: u8) -> alloc::string::String {
+    if align == 0 {
+        alloc::string::String::new()
+    } else {
+        alloc::format!(", align={align}")
+    }
 }
 
 fn fmt_load_kind(k: LoadKind) -> &'static str {

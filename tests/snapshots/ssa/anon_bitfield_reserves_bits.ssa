@@ -362,7 +362,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=7
     v268 CallExt { binding_idx=5, args=[v264, v265, v267], fp_arg_mask=0x0 } -> x0
     v269 LocalAddr(-6)                                    -> x0
     v270 Imm(1)                                           -> x1
-    v271 Store { addr=v269, disp=0, value=v270, kind=I32 } -> -
+    v271 Store { addr=v269, disp=0, value=v270, kind=I32, align=1 } -> -
     v272 LocalAddr(-6)                                    -> x0
     v273 BinopI { op=add, lhs=v272, rhs_imm=8 }           -> x1
     v274 Imm(287454020)                                   -> x1
@@ -374,7 +374,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=7
     v280 Imm(1432778632)                                  -> x1
     v281 Store { addr=v276, disp=12, value=v280, kind=I32 } -> -
     v282 LocalAddr(-6)                                    -> x0
-    v283 Load { addr=v282, disp=0, kind=U32 }             -> x0
+    v283 Load { addr=v282, disp=0, kind=U32, align=1 }    -> x0
     v284 BinopI { op=xor, lhs=v283, rhs_imm=1 }           -> x0
     v285 BinopI { op=and, lhs=v284, rhs_imm=4294967295 }  -> x0
     v286 BinopI { op=ne, lhs=v285, rhs_imm=0 }            -> x0

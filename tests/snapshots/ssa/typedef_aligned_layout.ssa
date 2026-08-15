@@ -39,7 +39,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=11
     v33  LocalAddr(-11)                                   -> x0
     v34  BinopI { op=add, lhs=v33, rhs_imm=1 }            -> x0
     v35  Imm(8)                                           -> x1
-    v36  Store { addr=v34, disp=0, value=v35, kind=I32 }  -> -
+    v36  Store { addr=v34, disp=0, value=v35, kind=I32, align=1 } -> -
     v37  LocalAddr(-2)                                    -> x0
     v38  Imm(16)                                          -> x1
     v39  BinopI { op=and, lhs=v37, rhs_imm=15 }           -> x0
@@ -141,7 +141,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=11
     v107 Extend { value=v105, kind=I32 }                  -> x1
     v108 LocalAddr(-11)                                   -> x1
     v109 BinopI { op=add, lhs=v108, rhs_imm=1 }           -> x1
-    v110 Load { addr=v109, disp=0, kind=I32 }             -> x1
+    v110 Load { addr=v109, disp=0, kind=I32, align=1 }    -> x1
     v111 Binop { op=add, lhs=v105, rhs=v110 }             -> x0
     v112 BinopI { op=shl, lhs=v111, rhs_imm=32 }          -> x1
     v113 Extend { value=v111, kind=I32 }                  -> x1

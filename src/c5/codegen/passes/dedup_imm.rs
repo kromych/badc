@@ -203,6 +203,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::ImmData(7),
                 Inst::Load {
@@ -210,6 +211,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
             ],
             alloc::vec![

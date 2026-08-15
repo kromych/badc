@@ -621,11 +621,24 @@ impl SsaBuilder {
 
     /// [`Self::load`] with an explicit volatile mark (C99 6.7.3p6).
     pub(crate) fn load_vol(&mut self, addr: ValueId, kind: LoadKind, volatile: bool) -> ValueId {
+        self.load_at(addr, kind, volatile, 0)
+    }
+
+    /// [`Self::load_vol`] with the address's proven alignment; see
+    /// [`Inst::Load`]. Zero means naturally aligned for the width.
+    pub(crate) fn load_at(
+        &mut self,
+        addr: ValueId,
+        kind: LoadKind,
+        volatile: bool,
+        align: u8,
+    ) -> ValueId {
         let v = self.push(Inst::Load {
             addr,
             disp: 0,
             kind,
             volatile,
+            align,
         });
         if matches!(kind, LoadKind::F32) {
             self.mark_f32(v);
@@ -651,6 +664,19 @@ impl SsaBuilder {
         kind: StoreKind,
         volatile: bool,
     ) -> ValueId {
+        self.store_at(addr, value, kind, volatile, 0)
+    }
+
+    /// [`Self::store_vol`] with the address's proven alignment; see
+    /// [`Inst::Load`].
+    pub(crate) fn store_at(
+        &mut self,
+        addr: ValueId,
+        value: ValueId,
+        kind: StoreKind,
+        volatile: bool,
+        align: u8,
+    ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Store {
             addr,
@@ -658,6 +684,7 @@ impl SsaBuilder {
             value,
             kind,
             volatile,
+            align,
         })
     }
 

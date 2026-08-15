@@ -877,6 +877,7 @@ mod tests {
             disp: 0,
             kind: LoadKind::I64,
             volatile: false,
+            align: 0,
         };
         run_one(&mut f);
         assert_eq!(f.blocks.len(), 5);
@@ -892,6 +893,7 @@ mod tests {
             value: 3,
             kind: StoreKind::I64,
             volatile: true,
+            align: 0,
         };
         run_one(&mut f);
         assert_eq!(f.blocks.len(), 5);

@@ -1145,6 +1145,7 @@ mod tests {
                 disp: 0,
                 kind: LoadKind::I64,
                 volatile: false,
+                align: 0,
             },
             Inst::Phi {
                 incoming: vec![(0, 0), (1, 1)],

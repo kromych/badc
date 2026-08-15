@@ -1521,6 +1521,7 @@ fn splice_arg_addresses(
                 disp: 0,
                 kind: LoadKind::I64,
                 volatile: false,
+                ..
             }) => *slot = *addr,
             _ => return None,
         }
@@ -1621,6 +1622,14 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
 /// chunks of the merged ranges. A field whose size is not a load width
 /// is chunked the same way. Padding bytes are not copied; they hold
 /// unspecified values either way (C99 6.2.6.1p6).
+/// Alignment an aggregate piece at `off` is proven to have, as
+/// [`Inst::Load`] records it: zero when the object's own alignment
+/// already covers the piece width.
+fn piece_align(agg_align: u32, off: u32, size: u32) -> u8 {
+    let at = crate::c5::codegen::offset_align(agg_align, off as i64);
+    if at >= size { 0 } else { at as u8 }
+}
+
 fn agg_pieces(d: &crate::c5::ir::AggDesc) -> Vec<(u32, u32)> {
     let mut fields: Vec<(u32, u32)> = d.fields.iter().map(|f| (f.offset, f.size)).collect();
     fields.sort_unstable();
@@ -1697,6 +1706,12 @@ fn splice_multi_block(
     let ret_pieces: Option<Vec<(u32, u32)>> = callee
         .ret_agg
         .map(|i| agg_pieces(&callee.agg_descs[i as usize]));
+    // The pieces are read from the caller's object, so its own
+    // alignment bounds each read; the return slot they land in is a
+    // frame slot and needs no bound.
+    let ret_align: u32 = callee
+        .ret_agg
+        .map_or(0, |i| callee.agg_descs[i as usize].align);
     // Frame slots holding a register-passed struct parameter's bytes,
     // mapped to (parameter index, layout). The cell relocates into the
     // caller frame with the callee's other own locals; the prefix copies
@@ -2139,6 +2154,7 @@ fn splice_multi_block(
                     disp: off as i32,
                     kind: lk,
                     volatile: false,
+                    align: piece_align(ret_align, off, size),
                 });
                 new_inst_src.push((0, 0));
                 new_f32.push(false);
@@ -2151,6 +2167,7 @@ fn splice_multi_block(
                     value: lv,
                     kind: sk,
                     volatile: false,
+                    align: 0,
                 });
                 new_inst_src.push((0, 0));
                 new_f32.push(false);

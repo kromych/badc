@@ -188,6 +188,7 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
                 disp,
                 kind,
                 volatile,
+                ..
             } => {
                 if let Some((base, off)) = resolved.get(*addr as usize).copied().flatten()
                     && let Some(&cells) = cells_of.get(&base)
@@ -214,6 +215,7 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
                 value,
                 kind,
                 volatile,
+                ..
             } => {
                 if let Some((base, off)) = resolved.get(*addr as usize).copied().flatten()
                     && let Some(&cells) = cells_of.get(&base)
@@ -649,6 +651,7 @@ fn expand_block_inits(func: &mut FunctionSsa, splits: &BTreeMap<u32, Vec<CopyFie
                                 disp: c.off as i32,
                                 kind: c.load,
                                 volatile: false,
+                                align: 0,
                             },
                         });
                         new_insts.push(Inst::StoreLocal {
@@ -835,6 +838,7 @@ mod tests {
             value,
             kind: StoreKind::I64,
             volatile: false,
+            align: 0,
         }
     }
     fn load(addr: ValueId) -> Inst {
@@ -843,6 +847,7 @@ mod tests {
             disp: 0,
             kind: LoadKind::I64,
             volatile: false,
+            align: 0,
         }
     }
     fn add_imm(lhs: ValueId, k: i64) -> Inst {
@@ -1009,14 +1014,16 @@ mod tests {
                 disp: 0,
                 value: 0,
                 kind: StoreKind::I32,
-                volatile: false
+                volatile: false,
+                align: 0,
             }, // v2 s.state = 3
             Inst::LocalAddr(-4), // v3
             Inst::Load {
                 addr: 3,
                 disp: 0,
                 kind: LoadKind::U32,
-                volatile: false
+                volatile: false,
+                align: 0,
             }, // v4 s.state
         ];
         let mut f = func(insts, Terminator::Return(4), alloc::vec![(-4, 4)]);
@@ -1053,7 +1060,8 @@ mod tests {
                 disp: 0,
                 value: 0,
                 kind: StoreKind::I32,
-                volatile: false
+                volatile: false,
+                align: 0,
             }, // v2
             Inst::LocalAddr(-2), // v3
             Inst::Store {
@@ -1061,14 +1069,16 @@ mod tests {
                 disp: 4,
                 value: 0,
                 kind: StoreKind::I32,
-                volatile: false
+                volatile: false,
+                align: 0,
             }, // v4
             Inst::LocalAddr(-2), // v5
             Inst::Load {
                 addr: 5,
                 disp: 4,
                 kind: LoadKind::I32,
-                volatile: false
+                volatile: false,
+                align: 0,
             }, // v6
         ];
         let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1)]);
@@ -1098,7 +1108,8 @@ mod tests {
                 addr: 3,
                 disp: 0,
                 kind: LoadKind::I32,
-                volatile: false
+                volatile: false,
+                align: 0,
             }, // v4 4-byte load at 0
         ];
         let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 1)]);
@@ -1123,13 +1134,15 @@ mod tests {
                 addr: 3,
                 disp: 0,
                 kind: LoadKind::I32,
-                volatile: false
+                volatile: false,
+                align: 0,
             }, // v4 4-byte load at 0
             Inst::Load {
                 addr: 3,
                 disp: 4,
                 kind: LoadKind::I32,
-                volatile: false
+                volatile: false,
+                align: 0,
             }, // v5 4-byte load at 4
         ];
         let mut f = func(insts, Terminator::Return(5), alloc::vec![(-2, 1)]);
@@ -1202,7 +1215,8 @@ mod tests {
                 addr: 3,
                 disp: 8,
                 kind: LoadKind::I64,
-                volatile: false
+                volatile: false,
+                align: 0,
             }, // v4
         ];
         let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
@@ -1342,7 +1356,8 @@ mod tests {
                 disp: 0,
                 value: 0,
                 kind: StoreKind::I64,
-                volatile: true
+                volatile: true,
+                align: 0,
             }, // v2
         ];
         let mut f = func(insts, Terminator::Return(2), alloc::vec![(-2, 1)]);

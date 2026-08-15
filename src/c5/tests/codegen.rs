@@ -5134,10 +5134,10 @@ fn a64_wide_off_object(obj: &[u8]) -> usize {
         .count()
 }
 
-/// Count of x86_64 memory accesses wider than one byte off a base that
-/// is not `rbp` (ModRM.rm = 101 with a displacement) or `rsp` (a SIB
-/// escape): `REX.W 8B/89` (8-byte integer), `F2 0F 10/11` (`movsd`),
-/// and the 32-bit `8B/89` without REX.W.
+/// Count of x86_64 eight-byte memory accesses off a base that is not
+/// `rbp` / `rsp` / rip-relative: `REX.W 8B/89` and `F2 0F 10/11`
+/// (`movsd`). A four-byte access carries neither REX.W nor the prefix,
+/// so it is counted separately where a fixture needs it.
 fn x64_wide_off_object(obj: &[u8]) -> usize {
     let text = elf_text(obj);
     // Register operands (mod 3), a SIB escape (rm 4) and the rbp /
@@ -5290,6 +5290,109 @@ fn strict_align_narrows_the_oversize_aggregate_transfers() {
     assert!(
         x64_movb(&emit(Target::LinuxX64, true)) >= 25,
         "x86_64 strict_align left the by-stack aggregate copy unnarrowed"
+    );
+}
+
+/// `Inst::Load` / `Inst::Store` carry the alignment the walker proved
+/// for the accessed address, so `-mstrict-align` reaches the accesses a
+/// type's layout leaves under-aligned: a packed member, a packed
+/// bitfield's storage unit, and a member whose type carries a reduced
+/// `__attribute__((aligned))`. Each composes from accesses no wider
+/// than that bound instead of one whole-width access.
+#[test]
+fn strict_align_narrows_the_under_aligned_member_access() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    // `P` is alignment 1 throughout; `R`'s reduced-alignment member sits
+    // at offset 4 with an 8-byte type, so its bound is 4.
+    const SRC: &str = "struct __attribute__((packed)) P { char c; int a; long b; };\n\
+         struct __attribute__((packed)) B { char c; unsigned x : 24; };\n\
+         typedef long __attribute__((aligned(4))) l4;\n\
+         struct R { int a; l4 b; };\n\
+         int get_a(struct P *p) { return p->a; }\n\
+         void set_a(struct P *p, int v) { p->a = v; }\n\
+         long get_b(struct P *p) { return p->b; }\n\
+         unsigned get_x(struct B *p) { return p->x; }\n\
+         void set_x(struct B *p, unsigned v) { p->x = v; }\n\
+         long get_r(struct R *p) { return p->b; }\n";
+    let emit = |target: Target, strict_align: bool| -> alloc::vec::Vec<u8> {
+        let prog = crate::Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile under-aligned member: {e}"));
+        emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                strict_align,
+                ..NativeOptions::default()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit object (strict_align={strict_align}): {e}"))
+    };
+
+    // Every access against a struct pointer here is under-aligned, so
+    // under the flag none may exceed its bound; `get_r`'s is 4, so the
+    // aarch64 counter (which admits 4-byte forms) sees it separately.
+    let a64_over_bound = |obj: &[u8]| -> usize {
+        elf_text(obj)
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .filter(|insn| {
+                let base = (insn >> 5) & 31;
+                let op = insn & 0xFFC0_0000;
+                // 8-byte forms, plus the 2/4-byte ones off a pointer.
+                let wide = matches!(op, 0xF940_0000 | 0xF900_0000);
+                let sub = matches!(
+                    op,
+                    0xB940_0000 | 0xB900_0000 | 0x7940_0000 | 0x7900_0000 | 0xB980_0000
+                );
+                (wide || sub) && base != 29 && base != 31
+            })
+            .count()
+    };
+    let loose = a64_over_bound(&emit(Target::LinuxAarch64, false));
+    assert!(
+        loose >= 6,
+        "aarch64 default should access each member at its natural width, saw {loose}"
+    );
+    // `get_r` keeps two 4-byte accesses under the flag: its bound is 4.
+    assert_eq!(
+        a64_over_bound(&emit(Target::LinuxAarch64, true)),
+        2,
+        "aarch64 strict_align still accesses an under-aligned member above its bound"
+    );
+
+    let x64_loose = x64_wide_off_object(&emit(Target::LinuxX64, false));
+    assert!(
+        x64_loose >= 2,
+        "x86_64 default should access each member at its natural width, saw {x64_loose}"
+    );
+    assert_eq!(
+        x64_wide_off_object(&emit(Target::LinuxX64, true)),
+        0,
+        "x86_64 strict_align still accesses an under-aligned member through a wide mov"
+    );
+    // The four-byte reads ride `movslq` (`REX.W 63 /r`) off the struct
+    // pointer; the narrowed form composes from `movzbq` instead.
+    let x64_movsxd = |obj: &[u8]| -> usize {
+        elf_text(obj)
+            .windows(3)
+            .filter(|w| w[0] & 0xF8 == 0x48 && w[1] == 0x63 && w[2] >> 6 != 3 && w[2] & 7 != 5)
+            .count()
+    };
+    assert!(
+        x64_movsxd(&emit(Target::LinuxX64, false)) >= 1,
+        "x86_64 default should read the packed int member with one movslq"
+    );
+    assert_eq!(
+        x64_movsxd(&emit(Target::LinuxX64, true)),
+        0,
+        "x86_64 strict_align still reads a packed int member in one access"
     );
 }
 

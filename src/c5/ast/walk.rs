@@ -799,14 +799,42 @@ impl<'a> Walker<'a> {
     /// not been finished, so a lookup miss cannot claim more than the
     /// C99 6.2.8 minimum.
     fn struct_align(&self, ty: i64) -> u32 {
+        self.struct_align_opt(ty).unwrap_or(1)
+    }
+
+    /// [`Self::struct_align`] without the fallback: `None` when `ty`
+    /// names no struct or its layout is unfinished. Resolves a pointer
+    /// to a struct to the same id, so `p->f` and `s.f` agree.
+    fn struct_align_opt(&self, ty: i64) -> Option<u32> {
         let stripped = strip_unsigned(ty);
         if stripped < STRUCT_BASE {
-            return 1;
+            return None;
         }
         let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
         match self.structs.get(id) {
-            Some(s) if s.align > 0 => s.align as u32,
-            _ => 1,
+            Some(s) if s.align > 0 => Some(s.align as u32),
+            _ => None,
+        }
+    }
+
+    /// Alignment the address of the member at `field_off` in the
+    /// aggregate `obj` names is proven to satisfy, as [`Inst::Load`]
+    /// records it: zero when it already covers `width`. C99 6.3.2.3p7
+    /// lets the aggregate's own alignment stand for the base address,
+    /// and an unresolved layout keeps the natural assumption.
+    fn member_align(&self, obj: ExprId, field_off: i64, width: u32) -> u8 {
+        let Some(base) = expr_ty(self.ast.expr(obj)).and_then(|t| self.struct_align_opt(t)) else {
+            return 0;
+        };
+        access_align(offset_align(base, field_off), width)
+    }
+
+    /// [`Self::member_align`] for an lvalue expression: only a member
+    /// access lowers the bound.
+    fn lvalue_align(&self, id: ExprId, width: u32) -> u8 {
+        match self.ast.expr(id) {
+            Expr::Member { obj, field_off, .. } => self.member_align(*obj, *field_off, width),
+            _ => 0,
         }
     }
     /// True when `ty` is the GCC 128-bit `__int128` as a value (not a
@@ -2643,6 +2671,10 @@ impl<'a> Walker<'a> {
                             v,
                             AsmSeg::None,
                             is_volatile_ty(elem.ty),
+                            access_align(
+                                offset_align(SLOT_ALIGN, elem.offset),
+                                bf.unit_size as u32,
+                            ),
                         );
                         continue;
                     }
@@ -2675,13 +2707,14 @@ impl<'a> Walker<'a> {
         bf: super::super::ast::BitfieldDesc,
         seg: AsmSeg,
         vol: bool,
+        align: u8,
     ) -> ValueId {
         let w = bf.bit_width as i64;
         if bf.unit_size == 16 {
             let v = self.bitfield_extract_128(b, addr, bf, vol);
             return self.bitfield_value_form(b, bf, v);
         }
-        let mut v = load_place(b, addr, bitfield_load_kind(bf), seg, vol);
+        let mut v = load_place(b, addr, bitfield_load_kind(bf), seg, vol, align);
         if bf.bit_offset > 0 {
             v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
         }
@@ -2699,6 +2732,7 @@ impl<'a> Walker<'a> {
     /// Returns the assignment's value per C99 6.5.16p3 -- the stored
     /// field converted to its declared type, not the storage word. A
     /// 16-byte unit takes and returns a 128-bit object's address.
+    #[allow(clippy::too_many_arguments)]
     fn store_into_bitfield(
         &mut self,
         b: &mut SsaBuilder,
@@ -2707,6 +2741,7 @@ impl<'a> Walker<'a> {
         value: ValueId,
         seg: AsmSeg,
         vol: bool,
+        align: u8,
     ) -> ValueId {
         let w = bf.bit_width as i64;
         let (mask_lo, mask_hi) = bitfield_mask_halves(bf.bit_width, 0);
@@ -2723,7 +2758,7 @@ impl<'a> Walker<'a> {
         }
         let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
         let masked = b.binop_imm(BinOp::And, value, mask_lo);
-        let old = load_place(b, addr, load_kind, seg, vol);
+        let old = load_place(b, addr, load_kind, seg, vol, align);
         let cleared = b.binop_imm(
             BinOp::And,
             old,
@@ -2735,7 +2770,7 @@ impl<'a> Walker<'a> {
             masked
         };
         let combined = b.binop(BinOp::Or, cleared, shifted);
-        store_place(b, addr, combined, store_kind, seg, vol);
+        store_place(b, addr, combined, store_kind, seg, vol, align);
         if bf.signed && w < 64 {
             let up = b.binop_imm(BinOp::Shl, masked, 64 - w);
             b.binop_imm(BinOp::Shr, up, 64 - w)
@@ -3176,12 +3211,12 @@ impl<'a> Walker<'a> {
         if w < 8 {
             let raw = b.binop(bin, va, vb);
             let wrapped = self.extend_atomic_result(b, raw, elem_ty);
-            store_place(b, addr, wrapped, store_kind, seg, false);
+            store_place(b, addr, wrapped, store_kind, seg, false, 0);
             return Ok(b.binop(BinOp::Ne, raw, wrapped));
         }
 
         let wrapped = b.binop(bin, va, vb);
-        store_place(b, addr, wrapped, store_kind, seg, false);
+        store_place(b, addr, wrapped, store_kind, seg, false, 0);
         let flag = match (op, unsigned) {
             // Unsigned add carries out iff the sum is below an addend.
             (0, true) => b.binop(BinOp::Ult, wrapped, va),
@@ -3811,7 +3846,8 @@ impl<'a> Walker<'a> {
                 // (adjacent bitfields, `a.x = a.y = v`) must be observed by
                 // this read-modify-write, else its store is clobbered.
                 let rhs_v = self.bitfield_store_value(b, bf, *rhs)?;
-                Ok(self.store_into_bitfield(b, addr, bf, rhs_v, seg, vol))
+                let align = self.member_align(*obj, *field_off, bf.unit_size as u32);
+                Ok(self.store_into_bitfield(b, addr, bf, rhs_v, seg, vol, align))
             }
             Expr::Assign { lhs, rhs, ty } => {
                 // C99 6.5.16.1p1 + the c5 address-as-value rule:
@@ -3899,7 +3935,8 @@ impl<'a> Walker<'a> {
                 if matches!(kind, StoreKind::F32) {
                     value = b.fp_narrow_to_f32(value);
                 }
-                store_place(b, addr, value, kind, seg, vol);
+                let align = self.lvalue_align(*lhs, store_kind_width(kind));
+                store_place(b, addr, value, kind, seg, vol, align);
                 // C99 6.5.16p3: the assignment expression's value has the
                 // converted type of the left operand. The store truncated
                 // the stored bytes; the value carried forward to an
@@ -4900,7 +4937,8 @@ impl<'a> Walker<'a> {
                     } else {
                         base
                     };
-                    return Ok(self.load_from_bitfield(b, addr, bf, seg, vol));
+                    let align = self.member_align(*obj, *field_off, bf.unit_size as u32);
+                    return Ok(self.load_from_bitfield(b, addr, bf, seg, vol, align));
                 }
                 let base = self.walk_expr_rvalue(b, *obj)?;
                 let addr = if *field_off != 0 {
@@ -4919,7 +4957,8 @@ impl<'a> Walker<'a> {
                 let kind = load_kind_for(*ty, self.target);
                 let vol = self.expr_is_volatile(id);
                 let seg = self.access_seg(id, *ty)?;
-                Ok(load_place(b, addr, kind, seg, vol))
+                let align = self.member_align(*obj, *field_off, load_kind_width(kind));
+                Ok(load_place(b, addr, kind, seg, vol, align))
             }
             Expr::Index { array, idx, ty } => {
                 let arr = self.walk_expr_rvalue(b, *array)?;
@@ -4948,7 +4987,7 @@ impl<'a> Walker<'a> {
                 }
                 let kind = load_kind_for(*ty, self.target);
                 let seg = self.access_seg(id, *ty)?;
-                Ok(load_place(b, addr, kind, seg, self.expr_is_volatile(id)))
+                Ok(load_place(b, addr, kind, seg, self.expr_is_volatile(id), 0))
             }
             Expr::Cast { child, to_ty } => {
                 let v = self.walk_expr_rvalue(b, *child)?;
@@ -5695,7 +5734,13 @@ impl<'a> Walker<'a> {
             } else {
                 base
             };
-            return Ok(RmwPlace::Bitfield { addr, bf, seg });
+            let align = self.member_align(obj, field_off, bf.unit_size as u32);
+            return Ok(RmwPlace::Bitfield {
+                addr,
+                bf,
+                seg,
+                align,
+            });
         }
         let seg = self.access_seg(lvalue, ty)?;
         if let Expr::Ident {
@@ -5717,7 +5762,8 @@ impl<'a> Walker<'a> {
             return Ok(RmwPlace::Slot(*val));
         }
         let addr = self.walk_expr_lvalue(b, lvalue)?;
-        Ok(RmwPlace::Addr { addr, seg })
+        let align = self.lvalue_align(lvalue, store_kind_width(store_kind_for(ty, self.target)));
+        Ok(RmwPlace::Addr { addr, seg, align })
     }
 
     fn walk_expr_lvalue(
@@ -6342,7 +6388,7 @@ impl<'a> Walker<'a> {
                 }
                 let kind = load_kind_for(ty, self.target);
                 let seg = self.access_seg(child, ty)?;
-                Ok(load_place(b, addr, kind, seg, is_volatile_ty(ty)))
+                Ok(load_place(b, addr, kind, seg, is_volatile_ty(ty), 0))
             }
         }
     }
@@ -6507,7 +6553,7 @@ impl<'a> Walker<'a> {
                 GloAddr::Resolved(off) => b.imm_data(off),
             };
             let kind = load_kind_for(ty, self.target);
-            Ok(load_place(b, addr_v, kind, seg, vol))
+            Ok(load_place(b, addr_v, kind, seg, vol, 0))
         } else if class == Token::Glo as i64 && is_thread_local {
             // Thread-local addressing already names its own segment on
             // x86; a further named address space cannot combine with it.
@@ -6560,6 +6606,7 @@ enum RmwPlace {
     Addr {
         addr: super::super::ir::ValueId,
         seg: AsmSeg,
+        align: u8,
     },
     /// A bitfield read-modify-write target: the storage unit's address
     /// and the field descriptor. `load` extracts the field value;
@@ -6570,6 +6617,7 @@ enum RmwPlace {
         addr: super::super::ir::ValueId,
         bf: super::super::ast::BitfieldDesc,
         seg: AsmSeg,
+        align: u8,
     },
 }
 
@@ -6582,14 +6630,19 @@ impl RmwPlace {
     ) -> super::super::ir::ValueId {
         match *self {
             RmwPlace::Slot(off) => b.load_local_vol(off, kind, vol),
-            RmwPlace::Addr { addr, seg } => load_place(b, addr, kind, seg, vol),
-            RmwPlace::Bitfield { addr, bf, seg } => {
+            RmwPlace::Addr { addr, seg, align } => load_place(b, addr, kind, seg, vol, align),
+            RmwPlace::Bitfield {
+                addr,
+                bf,
+                seg,
+                align,
+            } => {
                 // C99 6.7.2.1: load the unit, shift the slice to bit 0,
                 // mask, and sign-extend when the field type is signed.
                 // A 128-bit field never reaches here: its operators route
                 // through the walker's 128-bit read-modify-write.
                 debug_assert!(bf.unit_size <= 8);
-                let mut v = load_place(b, addr, bitfield_load_kind(bf), seg, vol);
+                let mut v = load_place(b, addr, bitfield_load_kind(bf), seg, vol, align);
                 if bf.bit_offset > 0 {
                     v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
                 }
@@ -6615,17 +6668,22 @@ impl RmwPlace {
             RmwPlace::Slot(off) => {
                 b.store_local_vol(off, value, kind, vol);
             }
-            RmwPlace::Addr { addr, seg } => {
-                store_place(b, addr, value, kind, seg, vol);
+            RmwPlace::Addr { addr, seg, align } => {
+                store_place(b, addr, value, kind, seg, vol, align);
             }
-            RmwPlace::Bitfield { addr, bf, seg } => {
+            RmwPlace::Bitfield {
+                addr,
+                bf,
+                seg,
+                align,
+            } => {
                 // C99 6.7.2.1: load the unit, clear the slice, mask + shift
                 // the new value into place, OR back, store.
                 debug_assert!(bf.unit_size <= 8);
                 let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
                 let mask = bitfield_mask_halves(bf.bit_width, 0).0;
                 let clear_mask = !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0;
-                let old = load_place(b, addr, load_kind, seg, vol);
+                let old = load_place(b, addr, load_kind, seg, vol, align);
                 let cleared = b.binop_imm(BinOp::And, old, clear_mask);
                 let masked = b.binop_imm(BinOp::And, value, mask);
                 let shifted = if bf.bit_offset > 0 {
@@ -6634,7 +6692,7 @@ impl RmwPlace {
                     masked
                 };
                 let combined = b.binop(BinOp::Or, cleared, shifted);
-                store_place(b, addr, combined, store_kind, seg, vol);
+                store_place(b, addr, combined, store_kind, seg, vol, align);
             }
         }
     }
@@ -6657,6 +6715,32 @@ fn bitfield_load_kind(bf: super::BitfieldDesc) -> LoadKind {
 /// Store kind for a bitfield's addressable storage unit.
 fn bitfield_store_kind(bf: super::BitfieldDesc) -> StoreKind {
     store_kind_for_width(bf.unit_size as u32)
+}
+
+/// Alignment `at` as [`Inst::Load`] records it for a `width`-byte
+/// access: zero once it already covers the width.
+fn access_align(at: u32, width: u32) -> u8 {
+    if at >= width { 0 } else { at as u8 }
+}
+
+/// Byte width of a scalar load kind.
+fn load_kind_width(kind: LoadKind) -> u32 {
+    match kind {
+        LoadKind::I8 | LoadKind::U8 => 1,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+        LoadKind::I64 | LoadKind::F64 => 8,
+    }
+}
+
+/// Byte width of a scalar store kind.
+fn store_kind_width(kind: StoreKind) -> u32 {
+    match kind {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        StoreKind::I64 | StoreKind::F64 => 8,
+    }
 }
 
 /// Integer load kind for a `width`-byte access. Unsigned below eight
@@ -6703,9 +6787,12 @@ fn load_place(
     kind: LoadKind,
     seg: AsmSeg,
     vol: bool,
+    align: u8,
 ) -> ValueId {
     match seg {
-        AsmSeg::None => b.load_vol(addr, kind, vol),
+        AsmSeg::None => b.load_at(addr, kind, vol, align),
+        // A named address space names per-CPU / per-thread storage the
+        // ABI keeps naturally aligned, and only x86 targets have one.
         seg => b.seg_load(addr, kind, seg, vol),
     }
 }
@@ -6718,10 +6805,11 @@ fn store_place(
     kind: StoreKind,
     seg: AsmSeg,
     vol: bool,
+    align: u8,
 ) {
     match seg {
         AsmSeg::None => {
-            b.store_vol(addr, value, kind, vol);
+            b.store_at(addr, value, kind, vol, align);
         }
         seg => {
             b.seg_store(addr, value, kind, seg, vol);

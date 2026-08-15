@@ -807,6 +807,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -842,6 +843,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I8,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -877,6 +879,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::U8,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -910,6 +913,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -940,6 +944,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -968,6 +973,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::U32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Extend {
                     value: 1,
@@ -1013,6 +1019,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Binop {
                     op: BinOp::Add,
@@ -1029,6 +1036,7 @@ mod tests {
                     value: 3,
                     kind: store_kind,
                     volatile: false,
+                    align: 0,
                 },
             ],
             vec![Block {
@@ -1431,6 +1439,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Binop {
                     op: BinOp::Mul,

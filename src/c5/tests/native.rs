@@ -353,6 +353,96 @@ fn strict_align_marshals_an_under_aligned_aggregate() {
     }
 }
 
+/// Executed companion to the under-aligned member-access encoding
+/// check: composing a member, a bitfield storage unit or a float from
+/// narrower accesses must reproduce the value the whole-width access
+/// would have moved, in both directions. The object sits at an odd
+/// address, so every access the lowering emits is under-aligned at its
+/// natural width.
+#[test]
+fn strict_align_round_trips_an_under_aligned_member() {
+    const SRC: &str = "struct __attribute__((packed)) P {\n\
+         \tchar c;\n\
+         \tint a;\n\
+         \tlong b;\n\
+         \tfloat f;\n\
+         \tdouble d;\n\
+         };\n\
+         struct __attribute__((packed)) B { char c; unsigned x : 24; int y : 20; };\n\
+         typedef long __attribute__((aligned(4))) l4;\n\
+         struct R { int a; l4 b; };\n\
+         int main(void) {\n\
+         \tchar buf[96];\n\
+         \tstruct P *p = (struct P *)(buf + 1);\n\
+         \tstruct B *q = (struct B *)(buf + 33);\n\
+         \tstruct R *r = (struct R *)(buf + 49);\n\
+         \tfor (int i = 0; i < 95; i++) buf[i + 1] = (char)(i * 5 + 1);\n\
+         \tp->a = -123456789;\n\
+         \tp->b = -1234567890123456789L;\n\
+         \tp->f = 12.5f;\n\
+         \tp->d = -1e300;\n\
+         \tif (p->a != -123456789) return 1;\n\
+         \tif (p->b != -1234567890123456789L) return 2;\n\
+         \tif (p->f != 12.5f) return 3;\n\
+         \tif (p->d != -1e300) return 4;\n\
+         \tp->a += 1;\n\
+         \tif (p->a != -123456788) return 5;\n\
+         \tq->c = 3;\n\
+         \tq->x = 0xabcdef;\n\
+         \tq->y = -12345;\n\
+         \tif (q->c != 3 || q->x != 0xabcdefu || q->y != -12345) return 6;\n\
+         \tq->x += 1;\n\
+         \tif (q->x != 0xabcdf0u) return 7;\n\
+         \tr->b = 0x1122334455667788L;\n\
+         \tif (r->b != 0x1122334455667788L) return 8;\n\
+         \t/* a too-wide store would reach the preceding member */\n\
+         \tp->c = 0x5a;\n\
+         \tp->a = 7;\n\
+         \tif (p->c != 0x5a || p->a != 7) return 9;\n\
+         \treturn 42;\n\
+         }\n";
+    for optimize in [false, true] {
+        let opts = NativeOptions {
+            strict_align: true,
+            optimize,
+            ..NativeOptions::default()
+        };
+        match build_and_run_outcome_with_options(SRC, "strict_align_member", opts) {
+            RunOutcome::Exit(42) => {}
+            other => panic!("strict-align member access (optimize={optimize}): {other:?}"),
+        }
+    }
+}
+
+/// The AAPCS64 indirect-result copy addresses both endpoints through
+/// scaled immediates, whose reach is 4095 bytes for the byte form and
+/// 32760 for the eightbyte one. An aggregate past the narrower reach
+/// must advance the base pointers instead of encoding an out-of-range
+/// offset, and still return the caller's original buffer pointer.
+/// Independent of `-mstrict-align`, which only lowers the unit width.
+#[test]
+fn oversize_by_value_return_advances_its_bases() {
+    const SRC: &str = "struct Big { char x[8003]; };\n\
+         struct Big fetch(struct Big *p) { return *p; }\n\
+         int main(void) {\n\
+         \tstatic struct Big src, out;\n\
+         \tfor (int i = 0; i < 8003; i++) src.x[i] = (char)(i * 3 + 1);\n\
+         \tout = fetch(&src);\n\
+         \tfor (int i = 0; i < 8003; i++) if (out.x[i] != (char)(i * 3 + 1)) return 1;\n\
+         \treturn 42;\n\
+         }\n";
+    for strict_align in [false, true] {
+        let opts = NativeOptions {
+            strict_align,
+            ..NativeOptions::default()
+        };
+        match build_and_run_outcome_with_options(SRC, "oversize_ret", opts) {
+            RunOutcome::Exit(42) => {}
+            other => panic!("oversize by-value return (strict_align={strict_align}): {other:?}"),
+        }
+    }
+}
+
 #[test]
 fn bss_segregation_coexists_with_thread_local() {
     // Zero-fill must be the segment's tail. `__thread_bss`/thread storage

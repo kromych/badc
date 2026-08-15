@@ -4418,7 +4418,11 @@ fn emit_inst(
         // fixup), so it never reaches emit_inst.
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, func, frame),
         Inst::Load {
-            addr, disp, kind, ..
+            addr,
+            disp,
+            kind,
+            align,
+            ..
         } => emit_load(
             code,
             dst,
@@ -4429,15 +4433,26 @@ fn emit_inst(
             alloc,
             frame,
             scratch,
+            narrow_bound(*align, abi),
         ),
         Inst::Store {
             addr,
             disp,
             value,
             kind,
+            align,
             ..
         } => emit_store(
-            code, dst, *addr, *disp, *value, *kind, alloc, frame, scratch,
+            code,
+            dst,
+            *addr,
+            *disp,
+            *value,
+            *kind,
+            alloc,
+            frame,
+            scratch,
+            narrow_bound(*align, abi),
         ),
         Inst::LoadLocal { off, kind, .. } => emit_load_local(
             code,
@@ -6703,6 +6718,114 @@ fn emit_agg_load_fp(
     }
 }
 
+/// Alignment a scalar access must respect, or `None` when it may keep
+/// its natural width: an access carries a bound only where the walker
+/// proved one, and only `-mstrict-align` acts on it.
+fn narrow_bound(align: u8, abi: super::Abi) -> Option<u32> {
+    (abi.strict_align && align != 0).then_some(align as u32)
+}
+
+/// Zero-extending store of the low `width` bytes (8, 4, 2 or 1) of
+/// `rt` to `[base + off]`.
+fn enc_store_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
+    match width {
+        8 => enc_str_imm(rt, base, off),
+        4 => super::encode::enc_str32_imm(rt, base, off),
+        2 => enc_strh_imm(rt, base, off),
+        _ => enc_strb_imm(rt, base, off),
+    }
+}
+
+/// Registers a narrowed scalar access borrows for its accumulator and
+/// piece temp. They sit in the allocator's pool, so each is saved and
+/// restored across the sequence; nothing between the save and the
+/// restore addresses `sp`. Mirrors the reservation `emit_mcpy` makes.
+const NARROW_BORROW: [u8; 7] = [9, 10, 11, 12, 13, 14, 15];
+
+/// The first `N` borrow registers distinct from every register in
+/// `avoid`. The pool is larger than any caller's avoid set, so the
+/// pick always succeeds.
+fn narrow_borrows<const N: usize>(avoid: &[u8]) -> [Reg; N] {
+    let mut out = [Reg(0); N];
+    let mut n = 0;
+    for cand in NARROW_BORROW {
+        if n == N {
+            break;
+        }
+        if !avoid.contains(&cand) {
+            out[n] = Reg(cand);
+            n += 1;
+        }
+    }
+    debug_assert_eq!(n, N, "narrow access: no free borrow register");
+    out
+}
+
+/// Byte width of an integer load kind, and whether it sign-extends.
+fn int_load_shape(kind: LoadKind) -> (u32, bool) {
+    match kind {
+        LoadKind::I64 => (8, false),
+        LoadKind::I32 => (4, true),
+        LoadKind::U32 => (4, false),
+        LoadKind::I16 => (2, true),
+        LoadKind::U16 => (2, false),
+        LoadKind::I8 => (1, true),
+        LoadKind::U8 => (1, false),
+        LoadKind::F32 | LoadKind::F64 => (0, false),
+    }
+}
+
+/// Byte width of an integer store kind.
+fn int_store_width(kind: StoreKind) -> u32 {
+    match kind {
+        StoreKind::I64 => 8,
+        StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        StoreKind::F32 | StoreKind::F64 => 0,
+    }
+}
+
+/// Lower an integer load at `[rn + disp]` whose address is proven only
+/// `align`-aligned into accesses no wider than that, into `rd`. The
+/// pieces compose zero-extended; a signed kind is sign-extended after.
+fn emit_narrow_load(code: &mut Vec<u8>, rd: Reg, rn: Reg, disp: u32, kind: LoadKind, align: u32) {
+    let (width, signed) = int_load_shape(kind);
+    let [acc, tmp] = narrow_borrows::<2>(&[rn.0, rd.0]);
+    emit(code, enc_str_pre(acc, Reg(31), -16));
+    emit(code, enc_str_pre(tmp, Reg(31), -16));
+    emit_agg_load_int(code, acc, rn, disp, width, align, true, tmp);
+    match (signed, width) {
+        (true, 4) => emit(code, super::encode::enc_sxtw(rd, acc)),
+        (true, 2) => emit(code, super::encode::enc_sxth(rd, acc)),
+        (true, 1) => emit(code, super::encode::enc_sxtb(rd, acc)),
+        _ => emit_mov_reg(code, rd, acc),
+    }
+    emit(code, enc_ldr_post(tmp, Reg(31), 16));
+    emit(code, enc_ldr_post(acc, Reg(31), 16));
+}
+
+/// Store companion to [`emit_narrow_load`]: write the low `width`
+/// bytes of `rs` to `[rn + disp]` in `align`-wide pieces, most
+/// significant last.
+fn emit_narrow_store(code: &mut Vec<u8>, rs: Reg, rn: Reg, disp: u32, width: u32, align: u32) {
+    let [tmp] = narrow_borrows::<1>(&[rn.0, rs.0]);
+    emit(code, enc_str_pre(tmp, Reg(31), -16));
+    for (i, (o, w)) in super::super::access_pieces(disp, width, align, true).enumerate() {
+        let src = if i == 0 {
+            rs
+        } else {
+            emit(
+                code,
+                super::encode::enc_lsr_imm(tmp, rs, ((o - disp) * 8) as u8),
+            );
+            tmp
+        };
+        emit(code, enc_store_unit(w, src, rn, o));
+    }
+    emit(code, enc_ldr_post(tmp, Reg(31), 16));
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_mcpy(
     code: &mut Vec<u8>,
@@ -7618,11 +7741,14 @@ fn emit_load(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
+    bound: Option<u32>,
 ) -> bool {
     // `disp` is a byte offset folded from a constant pointer addition.
     // index_fold only emits a displacement that is a multiple of the
     // access width and within the scaled-immediate range, so it passes
-    // straight to the immediate-offset encoders below.
+    // straight to the immediate-offset encoders below. That multiple
+    // also lets `bound` -- recorded for the accessed address -- be read
+    // as an alignment of the base that `disp` then advances.
     let disp = disp as u32;
     let addr_place = alloc
         .places
@@ -7649,7 +7775,10 @@ fn emit_load(
                 return false;
             }
         };
-        emit(code, enc_ldr_s_imm(dd, rn, disp));
+        match bound {
+            Some(a) => emit_agg_load_fp(code, dd, rn, disp, 4, a, true, scratch.secondary),
+            None => emit(code, enc_ldr_s_imm(dd, rn, disp)),
+        }
         if !keep_f32 {
             emit(code, enc_fcvt_d_s(dd, dd));
         }
@@ -7669,7 +7798,10 @@ fn emit_load(
                 return false;
             }
         };
-        emit(code, enc_ldr_d_imm(dd, rn, disp));
+        match bound {
+            Some(a) => emit_agg_load_fp(code, dd, rn, disp, 8, a, true, scratch.secondary),
+            None => emit(code, enc_ldr_d_imm(dd, rn, disp)),
+        }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
             emit_spill_str_d_auto(code, frame, dd, sp_off);
@@ -7681,6 +7813,14 @@ fn emit_load(
         Place::Spill(_) => scratch.secondary,
         Place::FpReg(_) | Place::None => return false,
     };
+    if let Some(a) = bound {
+        emit_narrow_load(code, rd, rn, disp, kind, a);
+        if let Place::Spill(slot) = dst {
+            let sp_off = spill_off(frame, slot);
+            emit_spill_str_x_auto(code, frame, rd, sp_off);
+        }
+        return true;
+    }
     match kind {
         LoadKind::I64 => emit(code, enc_ldr_imm(rd, rn, disp)),
         LoadKind::I32 => emit(code, enc_ldrsw_imm(rd, rn, disp)),
@@ -8264,10 +8404,12 @@ fn emit_store(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
+    bound: Option<u32>,
 ) -> bool {
     // `disp` is a width-aligned, in-range byte offset folded from a
     // constant pointer addition; it passes straight to the immediate-
-    // offset store encoders.
+    // offset store encoders, and lets `bound` be read as an alignment
+    // of the base that `disp` then advances.
     let disp = disp as u32;
     // The c5 store ops leave the stored value in the accumulator
     // afterward, so `dst` may be a register or spill slot the
@@ -8299,7 +8441,13 @@ fn emit_store(
                 Some(r) => r,
                 None => return false,
             };
-            emit(code, enc_str_s_imm(sn, rn, disp));
+            match bound {
+                Some(a) => {
+                    emit(code, enc_fmov_d_to_x(scratch.secondary, sn));
+                    emit_narrow_store(code, scratch.secondary, rn, disp, 4, a);
+                }
+                None => emit(code, enc_str_s_imm(sn, rn, disp)),
+            }
             // Propagate the f32 accumulator to `dst` if parked elsewhere.
             if let Some(rd) = fp_reg(dst) {
                 if rd != sn {
@@ -8335,7 +8483,13 @@ fn emit_store(
         // V register, so narrowing in place over a pooled register
         // would destroy a value the surrounding code still reads.
         emit(code, enc_fcvt_s_d(SCRATCH_FP1, dn));
-        emit(code, enc_str_s_imm(SCRATCH_FP1, rn, disp));
+        match bound {
+            Some(a) => {
+                emit(code, enc_fmov_d_to_x(scratch.secondary, SCRATCH_FP1));
+                emit_narrow_store(code, scratch.secondary, rn, disp, 4, a);
+            }
+            None => emit(code, enc_str_s_imm(SCRATCH_FP1, rn, disp)),
+        }
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
                 emit(code, enc_fmov_d_to_x(scratch.primary, dn));
@@ -8352,7 +8506,13 @@ fn emit_store(
         let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
             return false;
         };
-        emit(code, super::encode::enc_str_d_imm(dn, rn, disp));
+        match bound {
+            Some(a) => {
+                emit(code, enc_fmov_d_to_x(scratch.secondary, dn));
+                emit_narrow_store(code, scratch.secondary, rn, disp, 8, a);
+            }
+            None => emit(code, super::encode::enc_str_d_imm(dn, rn, disp)),
+        }
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
                 emit(code, super::encode::enc_fmov_d_d(rd, dn));
@@ -8378,14 +8538,17 @@ fn emit_store(
             None => return false,
         }
     };
-    match kind {
-        StoreKind::I64 => emit(code, enc_str_imm(rs, rn, disp)),
-        StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, disp)),
-        StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, disp)),
-        StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, disp)),
-        StoreKind::F32 | StoreKind::F64 => {
-            unreachable!("FP store handled in the FP branch above")
-        }
+    match bound {
+        Some(a) => emit_narrow_store(code, rs, rn, disp, int_store_width(kind), a),
+        None => match kind {
+            StoreKind::I64 => emit(code, enc_str_imm(rs, rn, disp)),
+            StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, disp)),
+            StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, disp)),
+            StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, disp)),
+            StoreKind::F32 | StoreKind::F64 => {
+                unreachable!("FP store handled in the FP branch above")
+            }
+        },
     }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != rs.0 {
@@ -9611,15 +9774,34 @@ fn emit_return(
             // Both endpoints are the caller's object, so its alignment
             // bounds the transfer unit.
             let unit = super::super::access_chunk(desc.align, abi.strict_align, 8);
-            let mut copied = 0u32;
-            while copied + unit <= size {
-                emit_copy_unit(code, unit, Reg(0), base, copied, dst, copied);
-                copied += unit;
+            // The byte form's scaled immediate reaches 4095, so a copy
+            // past that advances both bases; `WINDOW` is 8-aligned and
+            // below 4096, keeping every unit and tail offset in range.
+            const WINDOW: u32 = 4088;
+            let mut pos = 0u32;
+            while pos < size {
+                let run = (size - pos).min(WINDOW);
+                let mut copied = 0u32;
+                while copied + unit <= run {
+                    emit_copy_unit(code, unit, Reg(0), base, copied, dst, copied);
+                    copied += unit;
+                }
+                while copied < run {
+                    emit(code, enc_ldrb_imm(Reg(0), base, copied));
+                    emit(code, enc_strb_imm(Reg(0), dst, copied));
+                    copied += 1;
+                }
+                pos += run;
+                if pos < size {
+                    emit(code, super::encode::enc_add_imm(base, base, run));
+                    emit(code, super::encode::enc_add_imm(dst, dst, run));
+                }
             }
-            while copied < size {
-                emit(code, enc_ldrb_imm(Reg(0), base, copied));
-                emit(code, enc_strb_imm(Reg(0), dst, copied));
-                copied += 1;
+            if size > WINDOW {
+                // The advanced `dst` no longer names the caller's buffer;
+                // re-read the saved indirect-result pointer to return it.
+                emit_local_addr_fp(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
+                emit(code, enc_ldr_imm(dst, dst, 0));
             }
             emit_mov_reg(code, Reg(0), dst);
         }

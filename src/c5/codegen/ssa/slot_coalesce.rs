@@ -642,6 +642,7 @@ mod tests {
                         disp: 0,
                         kind: LoadKind::I64,
                         volatile: false,
+                        align: 0,
                     },
                 ],
                 1,
@@ -676,6 +677,7 @@ mod tests {
                         disp: 0,
                         kind: LoadKind::I64,
                         volatile: false,
+                        align: 0,
                     },
                 ],
                 1,
@@ -767,6 +769,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::StoreLocal {
                     off: -2,
@@ -802,6 +805,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::LoadLocal {
                     off: -9,

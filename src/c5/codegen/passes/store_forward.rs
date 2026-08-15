@@ -256,6 +256,7 @@ fn run_one(func: &mut FunctionSsa) {
                     disp,
                     kind,
                     volatile: false,
+                    ..
                 } => {
                     let addr = *addr;
                     let disp = *disp;
@@ -326,6 +327,7 @@ fn run_one(func: &mut FunctionSsa) {
                     value,
                     kind,
                     volatile,
+                    ..
                 } => {
                     let addr = *addr;
                     let disp = *disp;
@@ -605,12 +607,14 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(3),
@@ -643,12 +647,14 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I32,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I32,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(3),
@@ -688,12 +694,14 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I8,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::U8,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(3),
@@ -708,6 +716,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::U8,
                     volatile: false,
+                    align: 0,
                 }
             ),
             "an unsigned sub-width reload must not forward",
@@ -736,6 +745,7 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Mcpy {
                     dst: 0,
@@ -748,6 +758,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(4),
@@ -790,6 +801,7 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::InlineAsm {
                     asm,
@@ -800,6 +812,7 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(4),
@@ -832,12 +845,14 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: true,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
             ],
             Terminator::Return(3),
@@ -871,18 +886,21 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: true,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: true,
+                    align: 0,
                 },
                 Inst::Binop {
                     op: crate::c5::ir::BinOp::Add,
@@ -999,6 +1017,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::LoadLocal {
                     off: -1,
@@ -1189,12 +1208,14 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Load {
                     addr: 0,
                     disp: 0,
                     kind: LoadKind::I64,
                     volatile: false,
+                    align: 0,
                 },
                 Inst::Binop {
                     op: crate::c5::ir::BinOp::Add,

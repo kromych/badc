@@ -609,7 +609,7 @@ fn resolve_single_image_asm_sym_fixups(
                 let disp = off as i64 - r.instr_offset as i64;
                 let patched =
                     patch_asm_insn_field(&mut build.text, r.instr_offset, r.kind, true, 4, disp)
-                        .map_err(|m| err(m))?;
+                        .map_err(&err)?;
                 if !patched {
                     return Err(refuse("a symbol operand"));
                 }

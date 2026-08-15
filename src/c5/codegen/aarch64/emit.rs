@@ -9668,7 +9668,7 @@ pub(crate) fn encode_a64_file_asm_section_code(
     // offset, `movz` or `movn` -- which a relocation applied to a finished
     // word cannot.
     let measured = a64_section_operand_layout(blocks)?;
-    a64_for_each_section_item_mut(blocks, &mut |key, item| {
+    a64_for_each_section_item_mut(blocks, &mut |key, site, item| {
         {
             let AsmSectionItem::Code(text) = item else {
                 return Ok(());
@@ -9676,9 +9676,11 @@ pub(crate) fn encode_a64_file_asm_section_code(
             let mut insns = super::asm::parse_template(text.as_bytes())
                 .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
             if let Some(measured) = &measured {
+                let mut here = site.and_then(|s| measured.place(s));
                 for insn in &mut insns {
-                    fold_a64_layout_operands(insn, key, measured)
+                    fold_a64_layout_operands(insn, key, here, measured)
                         .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+                    here = here.map(|h| h + a64_insn_placeholder_len(insn) as i64);
                 }
             }
             let mut bytes: Vec<u8> = Vec::new();
@@ -9733,36 +9735,43 @@ pub(crate) fn encode_a64_file_asm_section_code(
     })
 }
 
+/// Visitor of [`a64_for_each_section_item_mut`]: the section identity key,
+/// the item's `(block, item)` index where it has one, and the item.
+type A64SectionItemFn<'a> = dyn FnMut(
+        &str,
+        Option<(usize, usize)>,
+        &mut super::ssa::emit_common::AsmSectionItem,
+    ) -> Result<(), alloc::string::String>
+    + 'a;
+
 /// Apply `f` to every item of the blocks with the identity key of the section
 /// it lands in, descending into `.rept` bodies as the shared walk does. The
-/// key is the section an operand expression folds against.
+/// key is the section an operand expression folds against. `site` is the
+/// item's `(block, item)` index, `None` inside a `.rept` body, whose items
+/// the measurement walk does not place individually.
 fn a64_for_each_section_item_mut(
     blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
-    f: &mut dyn FnMut(
-        &str,
-        &mut super::ssa::emit_common::AsmSectionItem,
-    ) -> Result<(), alloc::string::String>,
+    f: &mut A64SectionItemFn<'_>,
 ) -> Result<(), alloc::string::String> {
     fn walk(
         key: &str,
+        bi: usize,
+        top: bool,
         items: &mut [super::ssa::emit_common::AsmSectionItem],
-        f: &mut dyn FnMut(
-            &str,
-            &mut super::ssa::emit_common::AsmSectionItem,
-        ) -> Result<(), alloc::string::String>,
+        f: &mut A64SectionItemFn<'_>,
     ) -> Result<(), alloc::string::String> {
-        for it in items {
+        for (ii, it) in items.iter_mut().enumerate() {
             if let super::ssa::emit_common::AsmSectionItem::Rept { items, .. } = it {
-                walk(key, items, f)?;
+                walk(key, bi, false, items, f)?;
             } else {
-                f(key, it)?;
+                f(key, top.then_some((bi, ii)), it)?;
             }
         }
         Ok(())
     }
-    for b in blocks {
+    for (bi, b) in blocks.iter_mut().enumerate() {
         let key = super::ssa::emit_common::section_key(b);
-        walk(&key, &mut b.items, f)?;
+        walk(&key, bi, true, &mut b.items, f)?;
     }
     Ok(())
 }
@@ -9780,7 +9789,7 @@ fn a64_section_operand_layout(
     use super::ssa::emit_common::AsmSectionItem;
     let mut sized = blocks.to_vec();
     let mut needs = false;
-    a64_for_each_section_item_mut(&mut sized, &mut |_, item| {
+    a64_for_each_section_item_mut(&mut sized, &mut |_, _, item| {
         let AsmSectionItem::Code(text) = item else {
             return Ok(());
         };
@@ -9790,14 +9799,7 @@ fn a64_section_operand_layout(
             .iter()
             .flat_map(|i| &i.operands)
             .any(|o| matches!(o, AsmOpndA64::ImmExpr(_) | AsmOpndA64::MemExpr { .. }));
-        let len = insns
-            .iter()
-            .map(|i| match i {
-                i if i.label_def.is_some() => 0,
-                i if i.bytes.is_empty() => 4,
-                i => i.bytes.len(),
-            })
-            .sum();
+        let len = insns.iter().map(a64_insn_placeholder_len).sum();
         *item = AsmSectionItem::CodeBytes {
             bytes: alloc::vec![0u8; len],
             relocs: Vec::new(),
@@ -9817,15 +9819,30 @@ fn a64_section_operand_layout(
     .map(Some)
 }
 
+/// The bytes a parsed statement occupies before it is encoded: a label
+/// definition none, an assembled A64 instruction one word, and a statement
+/// the parse already resolved to bytes its own length. The operand fold
+/// advances the location counter by this, as the sizing pass measures by it.
+fn a64_insn_placeholder_len(i: &super::asm::AsmInsnA64) -> usize {
+    match i {
+        i if i.label_def.is_some() => 0,
+        i if i.bytes.is_empty() => 4,
+        i => i.bytes.len(),
+    }
+}
+
 /// Replace each operand the section layout values with the constant it folds
-/// to, so the encoder selects the form from the value as GNU as does.
+/// to, so the encoder selects the form from the value as GNU as does. `here`
+/// is the instruction's section offset, which its expressions read as the
+/// location counter.
 fn fold_a64_layout_operands(
     insn: &mut super::asm::AsmInsnA64,
     key: &str,
+    here: Option<i64>,
     measured: &super::ssa::emit_common::SectionLabelOffsets,
 ) -> Result<(), alloc::string::String> {
     use super::asm::AsmOpndA64;
-    let fold = |e: &str| super::ssa::emit_common::fold_asm_operand_expr(e, key, measured);
+    let fold = |e: &str| super::ssa::emit_common::fold_asm_operand_expr(e, key, here, measured);
     for o in &mut insn.operands {
         let folded = match o {
             AsmOpndA64::ImmExpr(expr) => AsmOpndA64::Imm(fold(expr)?),
@@ -10815,8 +10832,7 @@ mod tests {
 
     /// An operand expression must reduce to an absolute value, as GNU as
     /// requires: an undefined symbol or a difference across sections has no
-    /// relocation to carry it, and the location counter has no place before
-    /// the instruction is laid out.
+    /// relocation to carry it.
     #[test]
     fn file_scope_a64_operand_expression_rejects_what_gnu_as_rejects() {
         let one = |body: &str| {
@@ -10836,11 +10852,88 @@ mod tests {
                 one(bad)
             );
         }
+    }
+
+    /// The location counter in an instruction operand is the offset the
+    /// instruction itself is placed at, and the fold precedes encoding, so
+    /// the value still selects the form: `ldr` becomes `ldur` for an offset
+    /// that is not a multiple of the access size, `prfm` stays scaled for one
+    /// that is, and `mov` of a negative value becomes `movn`. Words from
+    /// `as`, which emits no relocation for any of them. Each section carries
+    /// its own counter.
+    #[test]
+    fn file_scope_a64_location_counter_operand_matches_gnu_as() {
+        let text = ".pushsection .t,\"ax\"\n\
+                    1:\n\
+                    nop\n\
+                    ldr x0, [x30, #(. - 1b)]\n\
+                    add x0, x0, #(. - 1b)\n\
+                    add x1, x1, #(2f - .)\n\
+                    nop\n\
+                    2:\n\
+                    prfm plil1strm, [x30, #(. - 1b)]\n\
+                    mov x7, #(1b - .)\n\
+                    .set k, . - 1b\n\
+                    add x4, x4, #k\n\
+                    prfm plil1strm, [x30, #(. - 1b)]\n\
+                    .popsection\n\
+                    .pushsection .u,\"ax\"\n\
+                    3:\n\
+                    nop\n\
+                    add x8, x8, #(. - 3b)\n\
+                    .popsection\n";
+        let sink = materialize_one_section(text).unwrap();
+        let want_t: [u32; 9] = [
+            0xd503201f, // nop
+            0xf84043c0, // ldur  x0, [x30, #4]
+            0x91002000, // add   x0, x0, #0x8
+            0x91002021, // add   x1, x1, #0x8
+            0xd503201f, // nop
+            0xf88143c9, // prfum plil1strm, [x30, #20]
+            0x928002e7, // mov   x7, #-0x18
+            0x91007084, // add   x4, x4, #0x1c
+            0xf98013c9, // prfm  plil1strm, [x30, #32]
+        ];
+        let want_u: [u32; 2] = [
+            0xd503201f, // nop
+            0x91001108, // add   x8, x8, #0x4
+        ];
+        for (name, want) in [(".t", &want_t[..]), (".u", &want_u[..])] {
+            let bytes: Vec<u8> = want.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let sec = sink.iter().find(|s| s.name == name).expect("section");
+            assert_eq!(sec.bytes, bytes, "{name}");
+            assert!(sec.relocs.is_empty(), "{name}: {:?}", sec.relocs);
+        }
+    }
+
+    /// A `.rept` whose count is a label difference defers to the section
+    /// layer with its body held once, so a statement inside it stands at one
+    /// offset per repetition and the counter has no single value. A label
+    /// difference there is still constant and folds.
+    #[test]
+    fn file_scope_a64_location_counter_in_a_deferred_rept_is_rejected() {
+        let body = |op: &str| {
+            alloc::format!(
+                ".pushsection .t,\"ax\"\n1:\nnop\nnop\n2:\nnop\n\
+                 .rept (2b - 1b) / 4\n{op}\n.endr\n.popsection\n"
+            )
+        };
+        let err = materialize_one_section(&body("add x0, x0, #(. - 1b)"))
+            .err()
+            .unwrap_or_default();
         assert!(
-            one("add x0, x0, #(. - vs)").contains("location counter `.` is not available here"),
-            "{}",
-            one("add x0, x0, #(. - vs)")
+            err.contains("location counter `.` is not available here"),
+            "{err}"
         );
+        let sink = materialize_one_section(&body("add x0, x0, #(2b - 1b)")).unwrap();
+        let want: [u32; 5] = [
+            0xd503201f, 0xd503201f, 0xd503201f, //
+            0x91002000, // add x0, x0, #0x8
+            0x91002000,
+        ];
+        let bytes: Vec<u8> = want.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        assert_eq!(sec.bytes, bytes);
     }
 
     /// The add/sub immediate field is unsigned, so GNU as encodes a negative

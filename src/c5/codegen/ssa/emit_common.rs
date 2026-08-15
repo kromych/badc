@@ -5187,6 +5187,10 @@ pub(crate) struct SectionLabelOffsets {
     /// symbol of the section's own name whose value is the section start,
     /// so a bare section name is usable in an expression.
     sections: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
+    /// Section-relative offset of each top-level item, by block and item
+    /// index. A `.rept` body item is absent: its statements occupy one
+    /// offset per repetition, so the location counter has no value there.
+    places: alloc::collections::BTreeMap<(usize, usize), i64>,
 }
 
 impl SectionLabelOffsets {
@@ -5215,6 +5219,11 @@ impl SectionLabelOffsets {
     /// The identity key of the section a bare section name refers to.
     pub(crate) fn section_named(&self, name: &str) -> Option<&str> {
         self.sections.get(name).map(|k| k.as_str())
+    }
+    /// The section-relative offset an item starts at, or `None` where the
+    /// item has no single place.
+    pub(crate) fn place(&self, site: (usize, usize)) -> Option<i64> {
+        self.places.get(&site).copied()
     }
 }
 
@@ -5320,19 +5329,20 @@ pub(crate) fn section_key_of(s: &AsmSection) -> alloc::string::String {
 /// Fold an instruction operand expression, assembled into section `key`, to
 /// the absolute value GNU as requires there: an instruction field carries no
 /// relocation, so the expression has to reduce to a literal, an assigned
-/// symbol, or a difference of two labels of one section. The location counter
-/// is not a leaf -- the fold precedes the instruction's placement.
+/// symbol, or a difference of two labels of one section. `here` is the
+/// section offset the instruction is placed at, the value of the location
+/// counter; `None` where the statement has no single place.
 pub(crate) fn fold_asm_operand_expr(
     expr: &str,
     key: &str,
+    here: Option<i64>,
     measured: &SectionLabelOffsets,
 ) -> Result<i64, alloc::string::String> {
     let sink_labels = AsmSinkLabels::new();
     let num_unique = alloc::collections::BTreeMap::new();
     let resolve = |t: &str| {
-        (t != ".")
-            .then(|| section_expr_leaf(t, key, 0, measured, &sink_labels, &num_unique, &|_| None))
-            .flatten()
+        let at = if t == "." { here? } else { 0 };
+        section_expr_leaf(t, key, at, measured, &sink_labels, &num_unique, &|_| None)
     };
     let ctx = AsmExprCtx {
         resolve: &resolve,
@@ -5778,6 +5788,8 @@ fn measure_round_inner(
     // location, as GNU as resolves the chain.
     let mut aliases: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> =
         alloc::collections::BTreeMap::new();
+    let mut places: alloc::collections::BTreeMap<(usize, usize), i64> =
+        alloc::collections::BTreeMap::new();
     for &bi in &subsection_order(blocks) {
         let b = &blocks[bi];
         let key = section_key(b);
@@ -5788,6 +5800,7 @@ fn measure_round_inner(
             .entry(key.clone())
             .or_insert_with(|| sink.index_of(b).map_or(0, |i| sink[i].bytes.len() as i64));
         for (ii, item) in b.items.iter().enumerate() {
+            places.insert((bi, ii), at);
             match item {
                 AsmSectionItem::Label(name) => {
                     let digits = numeric_label_digits(name).unwrap_or(name);
@@ -5990,6 +6003,7 @@ fn measure_round_inner(
         syms,
         long: AsmRelaxSet::new(),
         sections,
+        places,
     })
 }
 

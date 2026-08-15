@@ -7412,7 +7412,7 @@ fn file_scope_asm_incbin_embeds_file_bytes() {
     // cwd-independent). A missing file is a compile error naming the path.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let payload = b"\x00\x01binary\xffpayload";
-    let path = std::env::temp_dir().join("badc_incbin_test.bin");
+    let path = super::unique_temp_path("badc-incbin", "payload", ".bin");
     std::fs::write(&path, payload).expect("write payload");
     let src = alloc::format!(
         "asm(\".pushsection .blob,\\\"a\\\"\\n\"\n\
@@ -7439,6 +7439,7 @@ fn file_scope_asm_incbin_embeds_file_bytes() {
         expect.push(0xa5);
         assert_eq!(blob, &expect, "{target:?}: spliced bytes");
     }
+    let _ = std::fs::remove_file(&path);
     let missing = "asm(\".pushsection .blob,\\\"a\\\"\\n.incbin \\\"badc_no_such_payload.bin\\\"\\n.popsection\");";
     let err = Compiler::new(String::from(missing))
         .compile()

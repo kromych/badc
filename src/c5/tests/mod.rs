@@ -74,6 +74,18 @@ pub fn load_fixture(name: &str) -> String {
         .unwrap_or_else(|e| panic!("failed to load fixture {}: {}", path.display(), e))
 }
 
+/// `<tmp>/<prefix>-<pid>-<n>-<stem><ext>`: unique per process and call.
+/// Concurrent `cargo test` processes share the temp directory, so a fixed
+/// name lets one run clobber the other's file. Callers remove what they
+/// create.
+pub fn unique_temp_path(prefix: &str, stem: &str, ext: &str) -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}{ext}"))
+}
+
 /// Standard-library prelude prepended to every inline-source test.
 /// Replaces the auto-prepend the compiler used to do via the
 /// per-target umbrella header. Keeping it in the test helper means

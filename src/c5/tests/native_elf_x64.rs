@@ -51,7 +51,7 @@ fn build_and_run_outcome_with_options(src: &str, stem: &str, opts: NativeOptions
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let path = unique_temp_path("badc-elf64-test", stem);
+    let path = super::unique_temp_path("badc-elf64-test", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -75,14 +75,6 @@ fn build_and_run_outcome_with_options(src: &str, stem: &str, opts: NativeOptions
         }
         Err(e) => panic!("could not exec the produced binary: {e}"),
     }
-}
-
-fn unique_temp_path(prefix: &str, stem: &str) -> std::path::PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = std::process::id();
-    std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}.bin"))
 }
 
 fn exec_with_retry(path: &Path) -> std::io::Result<std::process::Output> {
@@ -258,7 +250,7 @@ fn environ_populated_through_runtime() {
     let bytes =
         super::link_executable_with_runtime(&program, Target::LinuxX64, NativeOptions::default())
             .expect("link LinuxX64 with runtime");
-    let path = unique_temp_path("badc-environ", "env");
+    let path = super::unique_temp_path("badc-environ", "env", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -289,7 +281,7 @@ fn constructor_runs_before_main() {
     let bytes =
         super::link_executable_with_runtime(&program, Target::LinuxX64, NativeOptions::default())
             .expect("link with runtime");
-    let path = unique_temp_path("badc-ctor", "run");
+    let path = super::unique_temp_path("badc-ctor", "run", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -323,7 +315,7 @@ fn constructor_priority_and_destructor_order() {
     let bytes =
         super::link_executable_with_runtime(&program, Target::LinuxX64, NativeOptions::default())
             .expect("link with runtime");
-    let path = unique_temp_path("badc-ctor-order", "run");
+    let path = super::unique_temp_path("badc-ctor-order", "run", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -576,8 +568,11 @@ fn riprel_param_fixture_runs_under_optimize() {
 
 #[test]
 fn file_io_natively() {
-    let dummy_path = std::env::temp_dir().join("test_dummy.txt");
-    std::fs::write(&dummy_path, "1234567890").unwrap();
+    // The fixture opens `test_dummy.txt` relative to the CWD, so the
+    // binary runs in a per-process directory holding that file.
+    let cwd = super::unique_temp_path("badc-elf64-test", "file_io-cwd", "");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::write(cwd.join("test_dummy.txt"), "1234567890").unwrap();
 
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
@@ -587,16 +582,13 @@ fn file_io_natively() {
     let src = std::fs::read_to_string(&path).unwrap();
     let program = Compiler::new(src).compile().expect("compile file_io.c");
     let bytes = emit_native(&program, Target::LinuxX64).expect("emit_native");
-    let bin_path = unique_temp_path("badc-elf64-test", "file_io");
+    let bin_path = super::unique_temp_path("badc-elf64-test", "file_io", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
 
     let output = (|| {
         for attempt in 0..10 {
-            match Command::new(&bin_path)
-                .current_dir(std::env::temp_dir())
-                .output()
-            {
+            match Command::new(&bin_path).current_dir(&cwd).output() {
                 Ok(o) => return Ok(o),
                 Err(e) if e.raw_os_error() == Some(26) => {
                     std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
@@ -604,13 +596,11 @@ fn file_io_natively() {
                 Err(e) => return Err(e),
             }
         }
-        Command::new(&bin_path)
-            .current_dir(std::env::temp_dir())
-            .output()
+        Command::new(&bin_path).current_dir(&cwd).output()
     })()
     .expect("exec native binary");
     let _ = std::fs::remove_file(&bin_path);
-    let _ = std::fs::remove_file(&dummy_path);
+    let _ = std::fs::remove_dir_all(&cwd);
     assert_eq!(output.status.code(), Some(0));
 }
 
@@ -626,7 +616,7 @@ fn getenv_value_natively() {
         .compile()
         .expect("compile getenv_value.c");
     let bytes = emit_native(&program, Target::LinuxX64).expect("emit_native");
-    let bin_path = unique_temp_path("badc-elf64-test", "getenv");
+    let bin_path = super::unique_temp_path("badc-elf64-test", "getenv", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
 
@@ -662,7 +652,7 @@ fn original_c4_compiles_and_runs_hello_natively() {
     let src = std::fs::read_to_string(&path).unwrap();
     let program = Compiler::new(src).compile().expect("compile c4.c");
     let bytes = emit_native(&program, Target::LinuxX64).expect("emit_native");
-    let bin_path = unique_temp_path("badc-elf64-test", "c4");
+    let bin_path = super::unique_temp_path("badc-elf64-test", "c4", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
 
@@ -740,7 +730,7 @@ int main(void) {\n\
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path = unique_temp_path("badc-elf64-tls2", "cross_unit_tls");
+    let path = super::unique_temp_path("badc-elf64-tls2", "cross_unit_tls", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -788,7 +778,7 @@ int main(void) { return (read_shared() == 0x12345678) ? 0 : 1; }\n";
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path = unique_temp_path("badc-elf64-inl-extref", "cross_unit_inline_extref");
+    let path = super::unique_temp_path("badc-elf64-inl-extref", "cross_unit_inline_extref", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -837,7 +827,7 @@ int main(void) { return (combine(1) == 107) ? 0 : 1; }\n";
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path = unique_temp_path("badc-elf64-dedup-imm", "cross_unit_dedup_imm");
+    let path = super::unique_temp_path("badc-elf64-dedup-imm", "cross_unit_dedup_imm", ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -957,9 +947,9 @@ fn foreign_caller_r13_preserved() {
     let obj = emit_native_with_options(&prog, Target::LinuxX64, reloc)
         .unwrap_or_else(|e| panic!("emit callee object: {e}"));
 
-    let obj_path = unique_temp_path("badc-elf64-r13", "callee_obj");
-    let main_path = unique_temp_path("badc-elf64-r13", "caller_main").with_extension("c");
-    let exe_path = unique_temp_path("badc-elf64-r13", "r13_exe");
+    let obj_path = super::unique_temp_path("badc-elf64-r13", "callee_obj", ".bin");
+    let main_path = super::unique_temp_path("badc-elf64-r13", "caller_main", ".c");
+    let exe_path = super::unique_temp_path("badc-elf64-r13", "r13_exe", ".bin");
     std::fs::write(&obj_path, &obj).expect("write callee object");
     std::fs::write(
         &main_path,
@@ -1025,7 +1015,7 @@ fn badc_caller_oversize_struct_return_from_foreign() {
         return;
     };
 
-    let dir = unique_temp_path("badc-elf64-outptr", "dir");
+    let dir = super::unique_temp_path("badc-elf64-outptr", "dir", "");
     std::fs::create_dir_all(&dir).expect("create temp dir");
     let callee_c = dir.join("callee.c");
     let so_path = dir.join("libbig24.so");
@@ -1107,7 +1097,7 @@ int main(void) { return pick(); }\n";
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path = unique_temp_path("badc-elf64-weak", "weak_override");
+    let path = super::unique_temp_path("badc-elf64-weak", "weak_override", ".bin");
     {
         use std::io::Write;
         let mut f = std::fs::File::create(&path).expect("create temp file");
@@ -1153,7 +1143,7 @@ int main(void) { return pick(); }\n";
     )
     .unwrap_or_else(|e| panic!("link: {e}"));
 
-    let path = unique_temp_path("badc-elf64-weak", "weak_override_opt");
+    let path = super::unique_temp_path("badc-elf64-weak", "weak_override_opt", ".bin");
     {
         use std::io::Write;
         let mut f = std::fs::File::create(&path).expect("create temp file");

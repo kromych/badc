@@ -814,24 +814,17 @@ mod differential {
         }
     }
 
-    /// A temp stem unique to this invocation. A content-derived name collides
-    /// whenever two concurrent callers assemble the same text, which alias
-    /// mnemonics guarantee (`sal r9b, cl` and `shl r9b, cl` are one encoding);
-    /// the loser then reads a file the winner has already removed.
-    fn temp_stem(prefix: &str) -> String {
-        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        alloc::format!("badc-{prefix}-{}-{n}", std::process::id())
-    }
-
     /// Assemble `src`, disassemble the result, and return the single
     /// normalized (mnemonic, operands) it decodes to. Errors carry the tool
     /// invocation and its output so a CI log is diagnosable on its own.
+    /// A content-derived scratch name collides whenever two concurrent
+    /// callers assemble the same text, which alias mnemonics guarantee
+    /// (`sal r9b, cl` and `shl r9b, cl` are one encoding); the loser then
+    /// reads a file the winner has already removed.
     fn assemble_and_decode(src: &str, prefix: &str) -> Result<(String, Vec<String>), String> {
-        let dir = std::env::temp_dir();
-        let stem = temp_stem(prefix);
-        let s = dir.join(alloc::format!("{stem}.s"));
-        let o = dir.join(alloc::format!("{stem}.o"));
+        let base = crate::c5::tests::unique_temp_path("badc", prefix, "");
+        let s = base.with_extension("s");
+        let o = base.with_extension("o");
         let clean = |s: &std::path::Path, o: &std::path::Path| {
             let _ = std::fs::remove_file(s);
             let _ = std::fs::remove_file(o);

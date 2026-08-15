@@ -156,7 +156,7 @@ fn build_and_run_with_options(
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let path = unique_temp_path("badc-pe64-test", stem);
+    let path = super::unique_temp_path("badc-pe64-test", stem, ".exe");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -189,14 +189,6 @@ fn build_and_run_with_options(
         }
         Err(e) => panic!("could not exec PE binary: {e}"),
     }
-}
-
-fn unique_temp_path(prefix: &str, stem: &str) -> PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = std::process::id();
-    std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}.exe"))
 }
 
 /// Runs the build-and-run path, asserting on the expected exit
@@ -465,7 +457,7 @@ int main(void) {\n\
         "expected a TEB-indexed `lea rd, [r10 + disp32]` with disp32 >= 16 (definer rebased past the pad)"
     );
 
-    let path = unique_temp_path("badc-pe-x64-test", "cross_unit_tls_rebased");
+    let path = super::unique_temp_path("badc-pe-x64-test", "cross_unit_tls_rebased", ".exe");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");

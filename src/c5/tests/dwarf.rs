@@ -42,7 +42,7 @@ fn build_signed_mach_o_opt(src: &str, stem: &str, optimize: bool) -> PathBuf {
     let bytes = crate::emit_native_with_options(&program, Target::MacOSAarch64, options)
         .unwrap_or_else(|e| panic!("emit_native_with_options failed for {stem}: {e}"));
 
-    let path = std::env::temp_dir().join(format!("badc-dwarf-{stem}.bin"));
+    let path = super::unique_temp_path("badc-dwarf", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -473,7 +473,7 @@ fn build_signed_mach_o_two_units(
     )
     .unwrap_or_else(|e| panic!("write_native_image_from_merged failed for {stem}: {e}"));
 
-    let path = std::env::temp_dir().join(format!("badc-dwarf-{stem}.bin"));
+    let path = super::unique_temp_path("badc-dwarf", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");

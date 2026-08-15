@@ -60,7 +60,7 @@ fn build_and_run_outcome_with_options(src: &str, stem: &str, opts: NativeOptions
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let path = std::env::temp_dir().join(format!("badc-test-{stem}.bin"));
+    let path = super::unique_temp_path("badc-test", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -119,7 +119,7 @@ fn link_run_capture(src: &str, stem: &str) -> (i32, String) {
         NativeOptions::default(),
     )
     .expect("link with runtime");
-    let path = std::env::temp_dir().join(format!("badc-test-{stem}.bin"));
+    let path = super::unique_temp_path("badc-test", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -428,7 +428,7 @@ where
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let bin_path = std::env::temp_dir().join(format!("badc-test-{stem}.bin"));
+    let bin_path = super::unique_temp_path("badc-test", stem, ".bin");
     {
         let mut f = std::fs::File::create(&bin_path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -452,14 +452,12 @@ where
 
 #[test]
 fn file_io_natively() {
-    // Native counterpart of `tests::programs::file_io`. Drops a
-    // 10-byte test_dummy.txt next to where the binary will run, then
-    // expects the fixture's open/read/close path to exit 0.
-    // The fixture hard-codes the filename `test_dummy.txt`, so we
-    // can't rename it -- instead we put it inside the temp dir we'll
-    // use as the binary's CWD.
-    let dummy_path = std::env::temp_dir().join("test_dummy.txt");
-    std::fs::write(&dummy_path, "1234567890").unwrap();
+    // Native counterpart of `tests::programs::file_io`. The fixture
+    // hard-codes the filename `test_dummy.txt`, resolved against the
+    // CWD, so the binary runs in a per-process directory holding it.
+    let cwd = super::unique_temp_path("badc-test", "file_io-cwd", "");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::write(cwd.join("test_dummy.txt"), "1234567890").unwrap();
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
     path.push("fixtures");
@@ -468,17 +466,17 @@ fn file_io_natively() {
     let src = std::fs::read_to_string(&path).unwrap();
     let program = Compiler::new(src).compile().expect("compile file_io.c");
     let bytes = emit_native(&program, Target::MacOSAarch64).expect("emit_native");
-    let bin_path = std::env::temp_dir().join("badc-test-file_io.bin");
+    let bin_path = super::unique_temp_path("badc-test", "file_io", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
     codesign(&bin_path);
 
     let output = Command::new(&bin_path)
-        .current_dir(std::env::temp_dir())
+        .current_dir(&cwd)
         .output()
         .expect("exec native binary");
     let _ = std::fs::remove_file(&bin_path);
-    let _ = std::fs::remove_file(&dummy_path);
+    let _ = std::fs::remove_dir_all(&cwd);
     assert_eq!(output.status.code(), Some(0));
 }
 
@@ -497,7 +495,7 @@ fn getenv_value_natively() {
         .compile()
         .expect("compile getenv_value.c");
     let bytes = emit_native(&program, Target::MacOSAarch64).expect("emit_native");
-    let bin_path = std::env::temp_dir().join("badc-test-getenv.bin");
+    let bin_path = super::unique_temp_path("badc-test", "getenv", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
     codesign(&bin_path);
@@ -553,7 +551,7 @@ fn string_extensions_join_the_macos_link() {
     )
     .expect("link the fixture for MacOSAarch64");
 
-    let path = std::env::temp_dir().join("badc-test-string-ext-link.bin");
+    let path = super::unique_temp_path("badc-test", "string-ext-link", ".bin");
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
     codesign(&path);
@@ -584,7 +582,7 @@ fn unistd_extensions_join_the_macos_link() {
     )
     .expect("link the fixture for MacOSAarch64");
 
-    let path = std::env::temp_dir().join("badc-test-unistd-ext-link.bin");
+    let path = super::unique_temp_path("badc-test", "unistd-ext-link", ".bin");
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
     codesign(&path);
@@ -785,7 +783,7 @@ fn dylib_export_dlopen_call_returns_42() {
     )
     .expect("emit_native dylib");
 
-    let path = std::env::temp_dir().join("badc-dylib-export-test.dylib");
+    let path = super::unique_temp_path("badc-dylib", "export", ".dylib");
     std::fs::write(&path, &bytes).unwrap();
     // dyld refuses to load an unsigned dylib on Apple Silicon.
     let status = Command::new("/usr/bin/codesign")
@@ -881,7 +879,7 @@ fn dylib_reads_host_data_symbol_through_its_import_slot() {
         super::link_shared_library(&program, Target::MacOSAarch64, NativeOptions::default())
             .expect("link shared library");
 
-    let path = std::env::temp_dir().join("badc-dylib-host-data-test.dylib");
+    let path = super::unique_temp_path("badc-dylib", "host-data", ".dylib");
     std::fs::write(&path, &bytes).unwrap();
     codesign(&path);
 

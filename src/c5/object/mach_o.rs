@@ -3298,7 +3298,7 @@ mod tests {
         use std::io::Write;
         use std::process::Command;
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
-        let path = std::env::temp_dir().join("badc-m1-3-h.bin");
+        let path = crate::c5::tests::unique_temp_path("badc-m1-3", "h", ".bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
         drop(f);
@@ -3328,7 +3328,7 @@ mod tests {
         use std::io::Write;
         use std::process::Command;
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
-        let path = std::env::temp_dir().join("badc-m1-3-bind.bin");
+        let path = crate::c5::tests::unique_temp_path("badc-m1-3", "bind", ".bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
         drop(f);
@@ -3498,7 +3498,7 @@ mod tests {
         use std::io::Write;
         use std::process::Command;
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
-        let path = std::env::temp_dir().join("badc-m1-3-nm.bin");
+        let path = crate::c5::tests::unique_temp_path("badc-m1-3", "nm", ".bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
         drop(f);

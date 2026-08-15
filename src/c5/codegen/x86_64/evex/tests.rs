@@ -1091,12 +1091,8 @@ mod differential {
     /// the surviving lines with their bytes. Each instruction is bracketed by
     /// an eight-byte nop run so the stream splits without decoding it.
     fn assemble(mut lines: Vec<String>) -> Vec<(String, Vec<u8>)> {
-        let dir = std::env::temp_dir();
-        let pid = std::process::id();
-        let (s, o) = (
-            dir.join(format!("badc-evex-{pid}.s")),
-            dir.join(format!("badc-evex-{pid}.o")),
-        );
+        let base = crate::c5::tests::unique_temp_path("badc-evex", "table", "");
+        let (s, o) = (base.with_extension("s"), base.with_extension("o"));
         let bytes = loop {
             let mut src = String::from(".text\n");
             for l in &lines {

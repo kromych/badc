@@ -151,7 +151,7 @@ fn build_and_run_with_options(
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let path = unique_temp_path("badc-pe-arm64-test", stem);
+    let path = super::unique_temp_path("badc-pe-arm64-test", stem, ".exe");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -184,14 +184,6 @@ fn build_and_run_with_options(
         }
         Err(e) => panic!("could not exec PE binary: {e}"),
     }
-}
-
-fn unique_temp_path(prefix: &str, stem: &str) -> PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = std::process::id();
-    std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}.exe"))
 }
 
 fn assert_exit(src: &str, stem: &str, args: &[&str], expected: i32) {
@@ -470,7 +462,7 @@ int main(void) {\n\
         "expected a TEB-indexed `add x?, x16, #imm12` with a link-patched non-zero offset"
     );
 
-    let path = unique_temp_path("badc-pe-arm64-test", "cross_unit_tls");
+    let path = super::unique_temp_path("badc-pe-arm64-test", "cross_unit_tls", ".exe");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
@@ -578,7 +570,7 @@ int main(void) {\n\
         "expected a TEB-indexed `add x?, x16, #imm12` with imm12 >= 16 (definer rebased past the pad)"
     );
 
-    let path = unique_temp_path("badc-pe-arm64-test", "cross_unit_tls_rebased");
+    let path = super::unique_temp_path("badc-pe-arm64-test", "cross_unit_tls_rebased", ".exe");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");

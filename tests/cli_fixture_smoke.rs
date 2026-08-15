@@ -305,7 +305,7 @@ fn every_fixture_compiles_standalone_for_linux() {
         fixtures_dir.display()
     );
 
-    let tmp_root = std::env::temp_dir().join("badc-cli-smoke");
+    let tmp_root = std::env::temp_dir().join(format!("badc-cli-smoke-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&tmp_root);
 
     let mut failures: Vec<String> = Vec::new();
@@ -343,6 +343,7 @@ fn every_fixture_compiles_standalone_for_linux() {
         }
     }
 
+    let _ = std::fs::remove_dir_all(&tmp_root);
     if !failures.is_empty() {
         panic!(
             "{} of {} fixture-compilation attempts failed:\n  {}",

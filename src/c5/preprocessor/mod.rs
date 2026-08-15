@@ -275,6 +275,11 @@ pub(crate) struct Preprocessor {
     /// costs one push to `include_records` per `#include` resolve
     /// attempt and nothing else.
     track_includes: bool,
+    /// `true` for assembler-with-cpp input (a `.S` unit). A `#` line
+    /// whose name is no directive then passes through with its tail
+    /// macro-expanded, as GNU cpp does for assembler input; in C such
+    /// a line is diagnosed and dropped.
+    asm_source: bool,
     /// Source-declared entry-point name (`#pragma entrypoint(<id>)`).
     /// `None` means the default `main` is used; set via
     /// the pragma to opt the translation unit into a non-`main`
@@ -746,6 +751,7 @@ impl Preprocessor {
             warnings: Vec::new(),
             include_records: Vec::new(),
             track_includes: false,
+            asm_source: false,
             entrypoint: None,
             subsystem: None,
             counter: Cell::new(0),
@@ -852,6 +858,11 @@ impl Preprocessor {
     /// the `-M` family's dependency output.
     pub fn set_track_includes(&mut self, enabled: bool) {
         self.track_includes = enabled;
+    }
+
+    /// Mark the input as assembler-with-cpp (a `.S` unit).
+    pub fn set_asm_source(&mut self, on: bool) {
+        self.asm_source = on;
     }
 
     /// Override the filename label used for the top-level translation
@@ -1070,9 +1081,19 @@ impl Preprocessor {
             let line_no = idx + 1;
             let trimmed = line.trim_start();
 
-            if let Some(rest) = trimmed.strip_prefix('#') {
+            // Assembler-with-cpp: a `#` line naming no directive is text,
+            // not a directive; it falls through to the content path and
+            // passes with its tail macro-expanded, as GNU cpp emits it
+            // for assembler input.
+            let parsed_hash = trimmed
+                .strip_prefix('#')
+                .map(|rest| (rest, parse_directive(rest.trim_start())));
+            let asm_text = self.asm_source
+                && matches!(&parsed_hash, Some((r, Directive::Other)) if !r.trim_start().is_empty());
+            if let Some((rest, parsed)) = parsed_hash
+                && !asm_text
+            {
                 let directive = rest.trim_start();
-                let parsed = parse_directive(directive);
                 guard.line(line, Some(&parsed), cond_stack.len());
                 if let Some(next) = self.apply_cond_or_macro_directive(
                     &parsed,
@@ -1271,7 +1292,9 @@ impl Preprocessor {
                         // body so the warning names what was
                         // dropped, and let the empty-line emit
                         // below pad the line counter.
-                        if active {
+                        // A bare `#` is the C99 6.10p9 null directive:
+                        // consumed without effect and without diagnostic.
+                        if active && !directive.is_empty() {
                             let kw = directive
                                 .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
                                 .next()

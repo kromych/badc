@@ -1014,6 +1014,71 @@ fn c_literals_are_unaffected_by_the_line_bound() {
     assert!(!out.contains("note"), "comment leaked: {out}");
 }
 
+fn process_asm(source: &str) -> String {
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_asm_source(true);
+    pp.process(source).expect("preprocessor failed")
+}
+
+/// Assembler-with-cpp: a `#` line naming no directive is text, passed
+/// through with the surrounding phase-3 rules intact, as GNU cpp emits
+/// it for assembler input. The kernel's `arch/x86/boot/header.S`
+/// reduces to this shape: an apostrophe in such a line, then a comment
+/// in a `# define` body.
+#[test]
+fn asm_hash_comment_line_passes_through() {
+    let src = "#define CONFIG_X86_64 1\n\
+               #define XLF_KERNEL_64 (1<<0)\n\
+               \t\t\t\t\t# with loadlin-1.5 (header v1.5). Don't\n\
+               #ifdef CONFIG_X86_64\n\
+               # define XLF0 XLF_KERNEL_64\t\t\t/* 64-bit kernel */\n\
+               #else\n\
+               # define XLF0 0\n\
+               #endif\n\
+               \t\t\t.word XLF0 | XLF1\n";
+    let out = process_asm(src);
+    assert!(
+        out.contains("# with loadlin-1.5 (header v1.5). Don't"),
+        "{out}"
+    );
+    assert!(out.contains("\t\t\t.word (1<<0) | XLF1"), "{out}");
+    assert!(!out.contains("64-bit kernel"), "comment leaked: {out}");
+}
+
+/// The passed-through line's tail is macro-expanded and its comments
+/// are stripped (`gcc -E -x assembler-with-cpp` produces `# hello 1`);
+/// an inactive branch still drops the line; C input still diagnoses
+/// and drops an unknown directive instead of passing it through.
+#[test]
+fn asm_hash_line_tail_is_macro_expanded() {
+    let out = process_asm("#define BAR 1\n# hello BAR /* gone */\n");
+    assert!(out.contains("# hello 1"), "{out}");
+    assert!(!out.contains("gone"), "{out}");
+    let out = process_asm("#if 0\n# hidden\n#endif\n\t.word 1\n");
+    assert!(!out.contains("hidden"), "{out}");
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp.process("# hello\nint x;\n").expect("preprocess");
+    assert!(!out.contains("# hello"), "{out}");
+    assert!(
+        pp.warnings.iter().any(|w| w.contains("`#hello`")),
+        "{:?}",
+        pp.warnings
+    );
+}
+
+/// C99 6.10p9: `#` with nothing after it is the null directive,
+/// consumed without effect and without diagnostic in either language.
+#[test]
+fn null_directive_is_silent() {
+    for asm in [false, true] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_asm_source(asm);
+        let out = pp.process("#\nline1\n").expect("preprocess");
+        assert!(out.contains("line1"), "{out}");
+        assert!(pp.warnings.is_empty(), "{:?}", pp.warnings);
+    }
+}
+
 #[test]
 fn ifdef_keeps_active_branch() {
     let src = "#define FOO 1\n#ifdef FOO\nint a;\n#else\nint b;\n#endif\n";

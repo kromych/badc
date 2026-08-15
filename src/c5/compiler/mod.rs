@@ -383,6 +383,10 @@ pub struct CompileOptions {
     /// conformance so a header takes its standard-C path for the GNU
     /// features badc lacks.
     pub gnu_dialect: bool,
+    /// Assembler-with-cpp input (a `.S` unit). The preprocessor then
+    /// passes a `#` line naming no directive through as text, as GNU
+    /// cpp does for assembler input.
+    pub asm_source: bool,
     /// Mirror of [`crate::NativeOptions::elf_class`]. The assembler's
     /// starting code mode follows it, the way `as --32` starts in
     /// 32-bit mode and `as --64` in 64-bit; a `.code16` / `.code32` /
@@ -410,6 +414,12 @@ impl CompileOptions {
     /// x86-64 code model of the object being produced (`-mcmodel`).
     pub fn with_code_model(mut self, model: crate::c5::CodeModel) -> Self {
         self.code_model = model;
+        self
+    }
+
+    /// Mark the input as assembler-with-cpp (a `.S` unit).
+    pub fn with_asm_source(mut self, on: bool) -> Self {
+        self.asm_source = on;
         self
     }
     /// Select the GNU89 inline linkage model as the unit default
@@ -2015,6 +2025,7 @@ impl Compiler {
         }
         pp.set_source_label(&opts.source_label);
         pp.set_track_includes(opts.track_includes);
+        pp.set_asm_source(opts.asm_source);
         for path in &opts.include_paths {
             pp.add_search_path(path);
         }

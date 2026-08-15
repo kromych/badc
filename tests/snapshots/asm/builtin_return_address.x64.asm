@@ -10,20 +10,13 @@ Disassembly of section .text:
                	callq	<addr>
                	ud2
 
-<capture>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	leaq	<rip>, %rcx
-               	xorq	%rax, %rax
-               	movq	0x8(%rbp), %rdx
-               	movq	%rdx, (%rcx)
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	callq	<addr>
+               	leaq	<rip>, %rax
+               	xorq	%rcx, %rcx
+               	movq	0x8(%rbp), %rcx
+               	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	testq	%rax, %rax

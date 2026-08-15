@@ -12,7 +12,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=3
     v6   BinopI { op=and, lhs=v3, rhs_imm=255 }           -> x0
     v7   ImmData(56)                                      -> x6
     v8   BinopI { op=add, lhs=v7, rhs_imm=4 }             -> x0
-    v9   ImmData(12)                                      -> x1
+    v9   ImmData(11)                                      -> x1
     terminator Jmp(b1)
   block 1  start_pc=0
     v130 Imm(0)                                           -> x2
@@ -149,7 +149,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=3
     v86  Store { addr=v85, disp=0, value=v82, kind=I32 }  -> -
     v87  LocalAddr(-2)                                    -> x0
     v88  BinopI { op=add, lhs=v87, rhs_imm=4 }            -> x0
-    v89  ImmData(29)                                      -> x1
+    v89  ImmData(28)                                      -> x1
     terminator Jmp(b19)
   block 19  start_pc=0
     v151 Imm(0)                                           -> x2

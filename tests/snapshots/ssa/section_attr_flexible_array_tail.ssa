@@ -388,7 +388,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator Return(v128)   (exit_acc=v128)
   block 68  start_pc=0
     v129 ImmData(320)                                     -> x0
-    v130 ImmData(50)                                      -> x1
+    v130 ImmData(46)                                      -> x1
     terminator Jmp(b69)
   block 69  start_pc=0
     v307 Imm(0)                                           -> x2
@@ -445,7 +445,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v139 ImmData(320)                                     -> x0
     v140 BinopI { op=add, lhs=v139, rhs_imm=32 }          -> x0
     v141 Imm(0)                                           -> x1
-    v142 ImmData(56)                                      -> x1
+    v142 ImmData(52)                                      -> x1
     terminator Jmp(b81)
   block 81  start_pc=0
     v328 Imm(0)                                           -> x2
@@ -509,7 +509,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v158 BinopI { op=add, lhs=v157, rhs_imm=32 }          -> x1
     v159 Imm(11)                                          -> x1
     v160 BinopI { op=add, lhs=v157, rhs_imm=43 }          -> x0
-    v161 ImmData(59)                                      -> x1
+    v161 ImmData(55)                                      -> x1
     terminator Jmp(b93)
   block 93  start_pc=0
     v349 Imm(0)                                           -> x2
@@ -570,8 +570,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v176 Imm(13)                                          -> x0
     terminator Return(v176)   (exit_acc=v176)
   block 104  start_pc=0
-    v177 ImmData(42)                                      -> x0
-    v178 ImmData(62)                                      -> x1
+    v177 ImmData(38)                                      -> x0
+    v178 ImmData(58)                                      -> x1
     terminator Jmp(b105)
   block 105  start_pc=0
     v370 Imm(0)                                           -> x2
@@ -615,10 +615,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v180 Imm(14)                                          -> x0
     terminator Return(v180)   (exit_acc=v180)
   block 114  start_pc=0
-    v181 ImmData(72)                                      -> x0
+    v181 ImmData(64)                                      -> x0
     v182 BinopI { op=add, lhs=v181, rhs_imm=32 }          -> x0
     v183 Imm(0)                                           -> x1
-    v184 ImmData(137)                                     -> x1
+    v184 ImmData(141)                                     -> x1
     terminator Jmp(b115)
   block 115  start_pc=0
     v391 Imm(0)                                           -> x2
@@ -662,7 +662,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v186 Imm(15)                                          -> x0
     terminator Return(v186)   (exit_acc=v186)
   block 124  start_pc=0
-    v187 ImmData(72)                                      -> x0
+    v187 ImmData(64)                                      -> x0
     v188 BinopI { op=add, lhs=v187, rhs_imm=32 }          -> x1
     v189 Imm(11)                                          -> x1
     v190 BinopI { op=add, lhs=v187, rhs_imm=43 }          -> x1
@@ -673,8 +673,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v195 Imm(0)                                           -> x0
     terminator Jmp(b125)   (exit_acc=v195)
   block 125  start_pc=0
-    v197 ImmData(129)                                     -> x0
-    v198 ImmData(140)                                     -> x1
+    v197 ImmData(133)                                     -> x0
+    v198 ImmData(144)                                     -> x1
     terminator Jmp(b126)
   block 126  start_pc=0
     v412 Imm(0)                                           -> x2

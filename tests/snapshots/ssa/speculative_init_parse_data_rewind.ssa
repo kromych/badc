@@ -156,14 +156,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v114 Imm(5)                                           -> x0
     terminator Return(v114)   (exit_acc=v114)
   block 20  start_pc=0
-    v115 ImmData(10)                                      -> x0
+    v115 ImmData(9)                                       -> x0
     v116 Imm(0)                                           -> x0
     v117 Imm(84)                                          -> x0
     v118 Imm(0)                                           -> x0
     v119 Imm(0)                                           -> x1
     terminator Jmp(b21)   (exit_acc=v118)
   block 21  start_pc=0
-    v120 ImmData(10)                                      -> x0
+    v120 ImmData(9)                                       -> x0
     v121 Imm(1)                                           -> x1
     v122 BinopI { op=add, lhs=v120, rhs_imm=1 }           -> x0
     v123 Imm(0)                                           -> x0

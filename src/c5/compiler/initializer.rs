@@ -58,6 +58,37 @@ pub(super) struct ArrayDesignator {
     pub(super) element_chain: bool,
 }
 
+/// A string literal staged in the data segment, ready to fill an
+/// array-shaped destination. Every string-literal initializer -- bare
+/// or brace-wrapped array, multi-dimensional row, struct member,
+/// flexible array member -- reads its elements through this, so the
+/// C99 6.7.8p14/p21 copy rules are stated once.
+struct StagedStringLiteral {
+    /// Data-segment offset of the literal's first byte.
+    start: usize,
+    /// Bytes per element: 1 for a narrow literal, the target's
+    /// `wchar_t` width for a wide one.
+    elem_bytes: usize,
+    /// Elements the literal spells, terminator excluded. An embedded
+    /// NUL is one of them (C99 6.4.5p5 counts it in the literal's
+    /// length), not a stop.
+    chars: usize,
+}
+
+impl StagedStringLiteral {
+    /// Elements that initialize a destination of `target` elements
+    /// (`None` when its size is taken from the initializer). C99
+    /// 6.7.8p14: the spelled characters plus the terminator, which is
+    /// dropped when the literal exactly fills a bounded destination.
+    /// A count above `target` is the caller's "too many initializers".
+    fn elem_count(&self, target: Option<usize>) -> usize {
+        match target {
+            Some(t) if self.chars >= t => self.chars,
+            _ => self.chars + 1,
+        }
+    }
+}
+
 /// Relocation kind for one initializer-element value. Tracks
 /// whether the bytes need to be patched at link / load time so
 /// the per-format writer can emit the right rebase entry.
@@ -454,6 +485,59 @@ impl Compiler {
         }
     }
 
+    /// Consume the string literal at the cursor together with its
+    /// adjacent parts (C99 5.1.1.2) and describe the bytes the lexer
+    /// staged for it. `elem_bytes` is the destination's element width,
+    /// which a wide literal's must equal (C99 6.7.8p15): a wider
+    /// element would store one code point per element at its own width
+    /// and run past the destination, a narrower one cannot hold the
+    /// code point.
+    fn take_staged_string_literal(
+        &mut self,
+        elem_bytes: usize,
+    ) -> Result<StagedStringLiteral, C5Error> {
+        let wide = self.lex.str_is_wide;
+        if wide && self.lex.str_elem_bytes != elem_bytes {
+            return Err(
+                self.compile_err("wide string initializer requires a wchar_t-width array element")
+            );
+        }
+        let start = self.take_concat_string_literal()?;
+        let staged = self.data.len().saturating_sub(start) / elem_bytes;
+        // The lexer appends a wide literal's terminator and leaves a
+        // narrow one's to the parser; report the spelled length either way.
+        let chars = if wide {
+            staged.saturating_sub(1)
+        } else {
+            staged
+        };
+        Ok(StagedStringLiteral {
+            start,
+            elem_bytes,
+            chars,
+        })
+    }
+
+    /// Value of `lit`'s element `k`, little-endian at the literal's
+    /// stride. Elements from the terminator on are zero: C99 6.7.8p14
+    /// terminates the copy and 6.7.8p21 zero-fills a bounded
+    /// destination past it, and both read as the same zero element.
+    /// Bytes that were never staged read as zero too, so a destination
+    /// longer than the literal cannot index past the data segment.
+    fn string_init_elem(&self, lit: &StagedStringLiteral, k: usize) -> i64 {
+        if k >= lit.chars {
+            return 0;
+        }
+        let base = lit.start + k * lit.elem_bytes;
+        let mut v: i64 = 0;
+        if base + lit.elem_bytes <= self.data.len() {
+            for b in 0..lit.elem_bytes {
+                v |= (self.data[base + b] as i64) << (b * 8);
+            }
+        }
+        v
+    }
+
     /// Collect an array initializer into a flat list of per-element
     /// values together with a "needs data relocation" flag. Two
     /// shapes are accepted:
@@ -637,70 +721,23 @@ impl Compiler {
                 self.truncate_data(data_snap);
             }
         }
-        if self.lex.tk == '"' && self.lex.str_is_wide {
-            // C99 6.4.5 / 6.7.8p14: a wide string literal initializes a
-            // `wchar_t`-shaped array. The lexer stored one code point
-            // per element plus a terminator at the target's `wchar_t`
-            // width; read them back at that stride.
-            let w = self.lex.str_elem_bytes;
-            // C99 6.7.8p15: the element type must be compatible with the
-            // literal's. A wider element would store `size_of_type(elem_ty)`
-            // bytes per decoded code point and run past the array; a narrower
-            // one cannot hold the code point. The struct-member sinks apply
-            // the same rule.
-            if self.size_of_type(elem_ty) != w {
-                return Err(self.compile_err(
-                    "wide string initializer requires a wchar_t-width array element",
-                ));
-            }
-            let start_addr = self.take_concat_string_literal()?;
-            let byte_count = self.data.len() - start_addr;
-            let mut elem_count = byte_count / w;
-            // The trailing NUL is dropped when the literal exactly fills
-            // a bounded array (the array holds the characters and nothing
-            // else); the lexer pushed it unconditionally, so trim it here.
-            if elem_count > 0 {
-                let chars = elem_count - 1;
-                let store_nul = target_size <= 0 || chars < target_size as usize;
-                if !store_nul {
-                    elem_count -= 1;
-                    self.truncate_data(start_addr + elem_count * w);
-                }
-            }
-            let elems: Vec<(i128, InitElemReloc)> = (0..elem_count)
-                .map(|k| {
-                    let base = start_addr + k * w;
-                    let mut v: i64 = 0;
-                    if base + w <= self.data.len() {
-                        for b in 0..w {
-                            v |= (self.data[base + b] as i64) << (b * 8);
-                        }
-                    }
-                    (v as i128, InitElemReloc::None)
-                })
-                .collect();
-            if brace_wrapped {
-                self.expect_close_brace_after_wrapped_string()?;
-            }
-            self.expect_close_parens(paren_depth)?;
-            return Ok(elems);
-        }
-        if self.lex.tk == '"' && strip_unsigned(elem_ty) == Ty::Char as i64 {
-            let start_addr = self.take_concat_string_literal()?;
-            let char_count = self.data.len() - start_addr;
-            // C99 6.7.8p14: a string-literal initializer for a
-            // bounded char array stores the literal's bytes
-            // including the terminating NUL when the array has
-            // room. When the literal is exactly `array_size`
-            // characters long, the NUL is omitted (the array
-            // holds the characters and nothing else).
-            let store_nul = target_size <= 0 || char_count < target_size as usize;
-            if store_nul {
-                self.push_literal_nul();
-            }
-            let elems: Vec<(i128, InitElemReloc)> = self.data[start_addr..]
-                .iter()
-                .map(|&b| (b as i128, InitElemReloc::None))
+        // C99 6.7.8p14/p15: a string literal initializes an array whose
+        // element type matches the literal's -- a narrow literal a char
+        // array, a wide one a `wchar_t`-width array. `target_size` bounds
+        // the copy; a deferred-size declarator (`T xs[] = "..."`) takes its
+        // length from the result.
+        if self.lex.tk == '"'
+            && (self.lex.str_is_wide || strip_unsigned(elem_ty) == Ty::Char as i64)
+        {
+            let elem_bytes = if self.lex.str_is_wide {
+                self.size_of_type(elem_ty)
+            } else {
+                1
+            };
+            let lit = self.take_staged_string_literal(elem_bytes)?;
+            let target = (target_size > 0).then_some(target_size as usize);
+            let elems: Vec<(i128, InitElemReloc)> = (0..lit.elem_count(target))
+                .map(|k| (self.string_init_elem(&lit, k) as i128, InitElemReloc::None))
                 .collect();
             if brace_wrapped {
                 self.expect_close_brace_after_wrapped_string()?;
@@ -820,19 +857,22 @@ impl Compiler {
                 continue;
             }
             // A string literal initializing a row of a multi-dimensional
-            // char array fills that row (C99 6.7.8p14): its bytes, then a
-            // NUL if the row has room, padded to the row width. The child
-            // is a one-dimensional char array exactly when `inner_dims`
-            // has a single entry. A one-dimensional char array took the
-            // brace-wrap / bare-string paths above instead.
+            // array fills that row (C99 6.7.8p14): its elements, then a
+            // terminator if the row has room, zero-padded to the row width.
+            // The child is a one-dimensional array exactly when
+            // `inner_dims` has a single entry; a one-dimensional array took
+            // the brace-wrap / bare-string paths above instead.
             if self.lex.tk == '"'
-                && !self.lex.str_is_wide
                 && inner_dims.len() == 1
-                && strip_unsigned(elem_ty) == Ty::Char as i64
+                && (self.lex.str_is_wide || strip_unsigned(elem_ty) == Ty::Char as i64)
             {
                 let row = inner_dims[0] as usize;
-                let start_addr = self.take_concat_string_literal()?;
-                let avail = self.data.len() - start_addr;
+                let elem_bytes = if self.lex.str_is_wide {
+                    self.size_of_type(elem_ty)
+                } else {
+                    1
+                };
+                let lit = self.take_staged_string_literal(elem_bytes)?;
                 let before = cursor;
                 // A range designator (`[a ... b] = "..."`) replicates the row
                 // across every covered index; a plain entry fills one row.
@@ -847,18 +887,14 @@ impl Compiler {
                 for r in 0..reps {
                     let dst = before + r * row;
                     for k in 0..row {
-                        let b = if k < avail {
-                            self.data[start_addr + k] as i64
-                        } else {
-                            0
-                        };
-                        elements[dst + k] = (b as i128, InitElemReloc::None);
+                        elements[dst + k] =
+                            (self.string_init_elem(&lit, k) as i128, InitElemReloc::None);
                     }
                 }
                 // The string's bytes were appended to the data segment by
                 // the lexer; they are copied into `elements` now, so drop
                 // them to avoid an orphaned literal.
-                self.truncate_data(start_addr);
+                self.truncate_data(lit.start);
                 cursor = total;
                 self.accept(',')?;
                 continue;
@@ -3181,19 +3217,17 @@ impl Compiler {
             return Ok(());
         }
         if self.lex.tk == '"' && strip_unsigned(elem_ty) == Ty::Char as i64 {
-            let start_addr = self.take_concat_string_literal()?;
-            self.push_literal_nul(); // ensure NUL terminator in the literal's bytes
-            let mut idx = 0usize;
-            while start_addr + idx < self.data.len() {
-                let b = self.data[start_addr + idx];
-                grow_to(&mut self.data, field_base + idx + 1);
-                self.data[field_base + idx] = b;
-                idx += 1;
-                if b == 0 {
-                    break;
-                }
+            // A flexible array member has no declared bound, so the copy is
+            // the literal plus its terminator; the count sizes the object's
+            // tail. An embedded NUL is one of the copied bytes.
+            let lit = self.take_staged_string_literal(1)?;
+            let count = lit.elem_count(None);
+            grow_to(&mut self.data, field_base + count);
+            for k in 0..count {
+                let b = self.string_init_elem(&lit, k) as u8;
+                self.data[field_base + k] = b;
             }
-            self.flex_array_measured_count = Some(idx);
+            self.flex_array_measured_count = Some(count);
             return Ok(());
         }
         if self.lex.tk != '{' {
@@ -3601,23 +3635,15 @@ impl Compiler {
         }
         if field.array_size > 0 && self.lex.tk == '"' && strip_unsigned(field.ty) == Ty::Char as i64
         {
-            // `struct S { char a[N]; } x = { "..." };` -- copy the
-            // string bytes (including the trailing NUL) into the
-            // char-array field, padding the remainder with zeroes.
-            // Without this branch the parser falls into the
-            // single-value path and writes the *pointer* to the
-            // string's data-segment slot into the field's first
-            // 8 bytes, which produces garbage at read time.
-            let start_addr = self.take_concat_string_literal()?;
-            self.push_literal_nul(); // ensure NUL terminator
-            let max = field.array_size as usize;
-            let mut idx = 0usize;
-            while idx < max {
-                let b = if start_addr + idx < self.data.len() {
-                    self.data[start_addr + idx]
-                } else {
-                    0
-                };
+            // `struct S { char a[N]; } x = { "..." };` -- copy the string
+            // into the char-array field, zero-padding the remainder.
+            // Without this branch the parser falls into the single-value
+            // path and writes the *pointer* to the string's data-segment
+            // slot into the field's first 8 bytes, which produces garbage
+            // at read time.
+            let lit = self.take_staged_string_literal(1)?;
+            for idx in 0..field.array_size as usize {
+                let b = self.string_init_elem(&lit, idx);
                 self.write_init_value(
                     field_base + idx,
                     1,
@@ -3625,13 +3651,6 @@ impl Compiler {
                     super::initializer::InitElemReloc::None,
                     field.ty,
                 );
-                idx += 1;
-                if start_addr + idx >= self.data.len() {
-                    // Past the string; remainder stays zero.
-                    // Still walk the loop so all `max` bytes are
-                    // explicitly written (zeroed above by
-                    // write_init_value when source byte is 0).
-                }
             }
             if char_array_brace_string {
                 self.expect_close_brace_after_wrapped_string()?;
@@ -3649,28 +3668,13 @@ impl Compiler {
             && self.lex.str_is_wide
         {
             // `struct S { wchar_t w[N]; } = { L"..." }`: store each wide
-            // code point at its element stride, NUL-padding the tail.
-            // Mirrors the bare wide-array path; a narrow-width element
-            // cannot hold a wide code point (C99 6.7.8p15). Without this
-            // branch the leaf falls to the single-value path and stores
-            // the string's pointer.
-            let w = self.lex.str_elem_bytes;
-            if self.size_of_type(field.ty) != w {
-                return Err(self
-                    .compile_err("wide string initializer requires a wchar_t-width array member"));
-            }
-            let start_addr = self.take_concat_string_literal()?;
-            for _ in 0..w {
-                self.push_literal_nul(); // terminator slot
-            }
+            // code point at its element stride, zero-padding the tail.
+            // Without this branch the leaf falls to the single-value path
+            // and stores the string's pointer.
+            let w = self.size_of_type(field.ty);
+            let lit = self.take_staged_string_literal(w)?;
             for idx in 0..field.array_size as usize {
-                let base = start_addr + idx * w;
-                let mut v: i64 = 0;
-                if base + w <= self.data.len() {
-                    for b in 0..w {
-                        v |= (self.data[base + b] as i64) << (b * 8);
-                    }
-                }
+                let v = self.string_init_elem(&lit, idx);
                 self.write_init_value(
                     field_base + idx * w,
                     w,
@@ -3827,15 +3831,9 @@ impl Compiler {
                 && !self.lex.str_is_wide
                 && strip_unsigned(field.ty) == Ty::Char as i64
             {
-                let start_addr = self.take_concat_string_literal()?;
-                self.push_literal_nul(); // ensure NUL terminator
-                let max = field.array_size as usize;
-                for k in 0..max {
-                    let b = if start_addr + k < self.data.len() {
-                        self.data[start_addr + k] as i64
-                    } else {
-                        0
-                    };
+                let lit = self.take_staged_string_literal(1)?;
+                for k in 0..field.array_size as usize {
+                    let b = self.string_init_elem(&lit, k);
                     let value = self.ast_emit_int_lit(b, Ty::Char as i64);
                     self.pending_local_runtime_elements.push(
                         super::super::ast::RuntimeInitElement {
@@ -3851,24 +3849,10 @@ impl Compiler {
             // Wide string into a wchar_t-width member (C99 6.7.8p15): a
             // per-element constant store at the element's stride.
             if self.lex.tk == '"' && self.lex.str_is_wide && field.inner_array_size == 0 {
-                let w = self.lex.str_elem_bytes;
-                if self.size_of_type(field.ty) != w {
-                    return Err(self.compile_err(
-                        "wide string initializer requires a wchar_t-width array member",
-                    ));
-                }
-                let start_addr = self.take_concat_string_literal()?;
-                for _ in 0..w {
-                    self.push_literal_nul(); // terminator slot
-                }
+                let w = self.size_of_type(field.ty);
+                let lit = self.take_staged_string_literal(w)?;
                 for k in 0..field.array_size as usize {
-                    let base = start_addr + k * w;
-                    let mut v: i64 = 0;
-                    if base + w <= self.data.len() {
-                        for b in 0..w {
-                            v |= (self.data[base + b] as i64) << (b * 8);
-                        }
-                    }
+                    let v = self.string_init_elem(&lit, k);
                     let value = self.ast_emit_int_lit(v, field.ty);
                     self.pending_local_runtime_elements.push(
                         super::super::ast::RuntimeInitElement {

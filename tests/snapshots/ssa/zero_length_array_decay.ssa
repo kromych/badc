@@ -15,21 +15,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Jmp(b2)   (exit_acc=v7)
   block 2  start_pc=0
     v9   ImmData(56)                                      -> x1
-    v10  ImmData(10)                                      -> x1
+    v10  ImmData(9)                                       -> x1
     v11  Binop { op=eq, lhs=v1, rhs=v10 }                 -> x0
     terminator Bz { cond=v11, target=b4, fall=b3 }   (exit_acc=v11)
   block 3  start_pc=0
     v12  Imm(8)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)
   block 4  start_pc=0
-    v13  ImmData(10)                                      -> x0
+    v13  ImmData(9)                                       -> x0
     v14  Imm(0)                                           -> x0
     v15  Imm(84)                                          -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x1
     terminator Jmp(b5)   (exit_acc=v16)
   block 5  start_pc=0
-    v18  ImmData(10)                                      -> x0
+    v18  ImmData(9)                                       -> x0
     v19  Imm(1)                                           -> x1
     v20  BinopI { op=add, lhs=v18, rhs_imm=1 }            -> x0
     v21  Imm(0)                                           -> x0

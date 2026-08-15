@@ -4783,6 +4783,17 @@ fn static_local_array_init_bounds() {
 }
 
 #[test]
+fn string_initializer_copy_rules() {
+    // C99 6.7.8p14/p21: one set of copy rules at every string-literal
+    // destination -- bare and brace-wrapped array, multi-dimensional row,
+    // struct member (constant and runtime paths), flexible array member.
+    // An embedded NUL is a copied character (the flexible array member used
+    // to stop there) and a wide row decodes at the wchar_t stride (it used
+    // to fall through to the pointer path).
+    assert_eq!(run_fixture("string_initializer_copy_rules.c"), 0);
+}
+
+#[test]
 fn bitfields_basic() {
     // bitfields pack into shared 8-byte storage units;
     // reads use Li/Shr/And; writes use load-clear-shift-or-store.

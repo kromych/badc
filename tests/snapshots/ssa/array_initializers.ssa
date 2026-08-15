@@ -16,7 +16,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v10  LocalAddr(-7)                                    -> x0
     v11  ImmData(72)                                      -> x1
     v12  Mcpy { dst=v10, src=v11, size=20, align=8 }      -> x0
-    v13  ImmData(110)                                     -> x0
+    v13  ImmData(109)                                     -> x0
     v14  Imm(0)                                           -> x1
     v15  Load { addr=v13, disp=0, kind=I8 }               -> x1
     v16  BinopI { op=ne, lhs=v15, rhs_imm=104 }           -> x1
@@ -25,7 +25,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v17  Imm(1)                                           -> x0
     terminator Return(v17)   (exit_acc=v17)
   block 2  start_pc=0
-    v18  ImmData(110)                                     -> x1
+    v18  ImmData(109)                                     -> x1
     v19  Imm(4)                                           -> x1
     v20  BinopI { op=add, lhs=v13, rhs_imm=4 }            -> x1
     v21  Load { addr=v13, disp=4, kind=I8 }               -> x1
@@ -35,7 +35,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v23  Imm(2)                                           -> x0
     terminator Return(v23)   (exit_acc=v23)
   block 4  start_pc=0
-    v24  ImmData(110)                                     -> x1
+    v24  ImmData(109)                                     -> x1
     v25  Imm(5)                                           -> x1
     v26  BinopI { op=add, lhs=v13, rhs_imm=5 }            -> x1
     v27  Load { addr=v13, disp=5, kind=I8 }               -> x0

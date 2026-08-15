@@ -289,6 +289,70 @@ fn bss_segregation_maps_and_zero_fills() {
     }
 }
 
+/// Executed companion to the `-mstrict-align` marshalling encoding
+/// checks: composing an eightbyte or HFA member from narrower accesses
+/// must reproduce the value the whole-width load would have read. Every
+/// aggregate here has alignment 1 and sits at an odd address, so each
+/// access the marshalling emits is under-aligned at its natural width.
+/// Covers the caller-side argument gather (direct and indirect calls,
+/// integer eightbytes, HFA members, System V SSE eightbytes), the
+/// by-value return gather, and the oversize by-stack / indirect-result
+/// transfers.
+#[test]
+fn strict_align_marshals_an_under_aligned_aggregate() {
+    const SRC: &str = "struct __attribute__((packed)) P9 { char c; int a, b; };\n\
+         struct __attribute__((packed)) H2 { float a, b; };\n\
+         struct __attribute__((packed)) P25 { char c; long a, b, d; };\n\
+         static int sum_of(const char *p, int n) {\n\
+         \tint s = 0;\n\
+         \tfor (int i = 0; i < n; i++) s += (int)(unsigned char)p[i];\n\
+         \treturn s;\n\
+         }\n\
+         static int bytes_equal(const char *x, const char *y, int n) {\n\
+         \tfor (int i = 0; i < n; i++) if (x[i] != y[i]) return 0;\n\
+         \treturn 1;\n\
+         }\n\
+         int sink_p(struct P9 v) { return sum_of((const char *)&v, (int)sizeof v); }\n\
+         int sink_h(struct H2 v) { return sum_of((const char *)&v, (int)sizeof v); }\n\
+         int sink_big(struct P25 v) { return sum_of((const char *)&v, (int)sizeof v); }\n\
+         struct P9 fetch_p(struct P9 *q) { return *q; }\n\
+         struct H2 fetch_h(struct H2 *q) { return *q; }\n\
+         struct P25 fetch_big(struct P25 *q) { return *q; }\n\
+         int (*volatile vp)(struct P9) = sink_p;\n\
+         int (*volatile vh)(struct H2) = sink_h;\n\
+         int main(void) {\n\
+         \tchar buf[80];\n\
+         \tchar *raw = buf + 1;\n\
+         \tfor (int i = 0; i < 79; i++) raw[i] = (char)(i * 7 + 3);\n\
+         \tstruct P9 *p = (struct P9 *)raw;\n\
+         \tstruct H2 *h = (struct H2 *)(raw + 32);\n\
+         \tstruct P25 *b = (struct P25 *)(raw + 40);\n\
+         \tif (sink_p(*p) != sum_of(raw, (int)sizeof *p)) return 1;\n\
+         \tif (sink_h(*h) != sum_of(raw + 32, (int)sizeof *h)) return 2;\n\
+         \tif (sink_big(*b) != sum_of(raw + 40, (int)sizeof *b)) return 3;\n\
+         \tif (vp(*p) != sum_of(raw, (int)sizeof *p)) return 4;\n\
+         \tif (vh(*h) != sum_of(raw + 32, (int)sizeof *h)) return 5;\n\
+         \tstruct P9 rp = fetch_p(p);\n\
+         \tstruct H2 rh = fetch_h(h);\n\
+         \tstruct P25 rb = fetch_big(b);\n\
+         \tif (!bytes_equal((const char *)&rp, raw, (int)sizeof rp)) return 6;\n\
+         \tif (!bytes_equal((const char *)&rh, raw + 32, (int)sizeof rh)) return 7;\n\
+         \tif (!bytes_equal((const char *)&rb, raw + 40, (int)sizeof rb)) return 8;\n\
+         \treturn 42;\n\
+         }\n";
+    for optimize in [false, true] {
+        let opts = NativeOptions {
+            strict_align: true,
+            optimize,
+            ..NativeOptions::default()
+        };
+        match build_and_run_outcome_with_options(SRC, "strict_align_marshal", opts) {
+            RunOutcome::Exit(42) => {}
+            other => panic!("strict-align marshalling (optimize={optimize}): {other:?}"),
+        }
+    }
+}
+
 #[test]
 fn bss_segregation_coexists_with_thread_local() {
     // Zero-fill must be the segment's tail. `__thread_bss`/thread storage

@@ -372,8 +372,14 @@ pub(crate) enum ArgPlacement {
     /// integer or FP register; the emitter loads the k-th slot from
     /// `[arg_addr + 8*k]`. C99 aggregates pass at most two GPRs
     /// (System V eightbytes) or four FP registers (AAPCS64 HFA), so
-    /// four slots suffice and the placement stays `Copy`.
-    StructRegs { regs: [ClassReg; 4], n: u8 },
+    /// four slots suffice and the placement stays `Copy`. `align` is
+    /// the aggregate's own alignment, the bound on the width of an
+    /// access against it under [`NativeOptions::strict_align`].
+    StructRegs {
+        regs: [ClassReg; 4],
+        n: u8,
+        align: u32,
+    },
     /// An aggregate passed by an implicit reference: the caller
     /// copies it to a temporary and passes the pointer in this
     /// integer register (index into `Abi::int_arg_regs`).
@@ -383,8 +389,10 @@ pub(crate) enum ArgPlacement {
     StructByRefStack(u32),
     /// An aggregate passed wholly on the outgoing-args stack: the
     /// caller copies `size` bytes to `[sp + off]` (System V MEMORY
-    /// class, or a register-bank-exhausted small aggregate).
-    StructStack { off: u32, size: u32 },
+    /// class, or a register-bank-exhausted small aggregate). `align`
+    /// bounds the copy's transfer width as in [`Self::StructRegs`];
+    /// the destination stack slot is 8-aligned.
+    StructStack { off: u32, size: u32, align: u32 },
 }
 
 /// One register slot of an [`ArgPlacement::StructRegs`]: the
@@ -443,12 +451,14 @@ pub(super) fn plan_call_args(
 /// struct-aware planner. `class` comes from
 /// [`abi_classify::classify_aggregate`]; `size` is the aggregate's
 /// byte size (needed for the stack reservation when it is passed by
-/// memory or by an implicit-reference copy).
+/// memory or by an implicit-reference copy); `align` is its own
+/// alignment, which the placement carries to the marshalling site.
 #[derive(Clone)]
 #[allow(dead_code)] // constructed by the per-arch emit's struct path
 pub(crate) struct ArgAgg {
     pub class: abi_classify::AggClass,
     pub size: u32,
+    pub align: u32,
 }
 
 /// Struct-aware [`plan_call_args`]. `aggs[i]` is `Some` when
@@ -487,6 +497,7 @@ pub(super) fn plan_call_args_aggs(
                 placements.push(ArgPlacement::StructStack {
                     off,
                     size: agg.size,
+                    align: agg.align,
                 });
                 continue;
             }
@@ -507,13 +518,18 @@ pub(super) fn plan_call_args_aggs(
                         reg: abi.int_arg_regs[i],
                         is_fp: false,
                     };
-                    ArgPlacement::StructRegs { regs, n: 1 }
+                    ArgPlacement::StructRegs {
+                        regs,
+                        n: 1,
+                        align: agg.align,
+                    }
                 } else {
                     let off = stack_used;
                     stack_used += aligned;
                     ArgPlacement::StructStack {
                         off,
                         size: agg.size,
+                        align: agg.align,
                     }
                 };
                 placements.push(placement);
@@ -554,6 +570,7 @@ pub(super) fn plan_call_args_aggs(
                         ArgPlacement::StructRegs {
                             regs,
                             n: need as u8,
+                            align: agg.align,
                         }
                     } else {
                         int_idx = int_max;
@@ -562,6 +579,7 @@ pub(super) fn plan_call_args_aggs(
                         ArgPlacement::StructStack {
                             off,
                             size: agg.size,
+                            align: agg.align,
                         }
                     }
                 };
@@ -599,7 +617,11 @@ pub(super) fn plan_call_args_aggs(
                             };
                             n += 1;
                         }
-                        ArgPlacement::StructRegs { regs, n }
+                        ArgPlacement::StructRegs {
+                            regs,
+                            n,
+                            align: agg.align,
+                        }
                     } else {
                         // The aggregate spills to the stack. AAPCS64
                         // 6.8.2 then exhausts the matching register file
@@ -620,6 +642,7 @@ pub(super) fn plan_call_args_aggs(
                         ArgPlacement::StructStack {
                             off,
                             size: agg.size,
+                            align: agg.align,
                         }
                     }
                 }
@@ -640,6 +663,7 @@ pub(super) fn plan_call_args_aggs(
                     ArgPlacement::StructStack {
                         off,
                         size: agg.size,
+                        align: agg.align,
                     }
                 }
                 AggClass::ReturnIndirect => {
@@ -650,6 +674,7 @@ pub(super) fn plan_call_args_aggs(
                     ArgPlacement::StructStack {
                         off,
                         size: agg.size,
+                        align: agg.align,
                     }
                 }
             };
@@ -2495,7 +2520,9 @@ pub struct NativeOptions {
     /// byte-moving lowerings (aggregate copy, by-value aggregate argument
     /// and return marshalling) then cap their transfer width at the
     /// alignment the operand types guarantee instead of using 8-byte
-    /// units. See [`access_chunk`].
+    /// units, and a register-passed eightbyte or HFA member composes
+    /// from accesses of that width. See [`access_chunk`] and
+    /// [`access_pieces`].
     pub strict_align: bool,
     /// Position-independent relocatable output (`-fPIC` / `-fpic`).
     /// A switch table then emits in the label-difference form the
@@ -2549,14 +2576,51 @@ pub(crate) fn access_chunk(align: u32, strict_align: bool, max: u32) -> u32 {
     if !strict_align {
         return max;
     }
-    // A non-power-of-two alignment guarantees only the power of two
-    // below it.
-    let usable = if align == 0 {
+    pow2_align(align).min(max)
+}
+
+/// Largest power of two dividing `align` -- the only alignment a
+/// non-power-of-two one guarantees (address 12 is 4-aligned, not
+/// 8-aligned). Zero means nothing is guaranteed beyond a byte.
+fn pow2_align(align: u32) -> u32 {
+    if align == 0 {
         1
     } else {
-        1u32 << (u32::BITS - 1 - align.leading_zeros())
-    };
-    usable.min(max)
+        1u32 << align.trailing_zeros().min(31)
+    }
+}
+
+/// Alignment storage that is `base`-aligned guarantees at byte offset
+/// `off`: the largest power of two dividing both.
+pub(crate) fn offset_align(base: u32, off: i64) -> u32 {
+    let base = pow2_align(base);
+    if off == 0 {
+        return base;
+    }
+    base.min(1u32 << off.unsigned_abs().trailing_zeros().min(31))
+}
+
+/// Widest access a `width`-byte transfer at byte offset `off` into
+/// storage of alignment `align` may use. Equals `width` whenever the
+/// address already satisfies it, so a caller can test for narrowing
+/// with `access_unit(..) < width`.
+pub(crate) fn access_unit(off: u32, width: u32, align: u32, strict_align: bool) -> u32 {
+    access_chunk(offset_align(align, off as i64), strict_align, width)
+}
+
+/// Offset and width of each naturally aligned access a `width`-byte
+/// transfer at `off` decomposes into over storage of alignment
+/// `align`. Yields the single `(off, width)` access when no narrowing
+/// applies, so the unbounded lowering is unchanged. Pieces run from
+/// least to most significant byte; `width` must be a power of two.
+pub(crate) fn access_pieces(
+    off: u32,
+    width: u32,
+    align: u32,
+    strict_align: bool,
+) -> impl Iterator<Item = (u32, u32)> + Clone {
+    let unit = access_unit(off, width, align, strict_align);
+    (0..width / unit).map(move |i| (off + i * unit, unit))
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -3179,6 +3243,37 @@ impl Target {
 }
 
 #[cfg(test)]
+mod access_bound_tests {
+    use super::{access_pieces, access_unit, offset_align};
+
+    #[test]
+    fn pieces_cover_the_transfer_at_the_proven_alignment() {
+        let pieces = |off, width, align| -> alloc::vec::Vec<(u32, u32)> {
+            access_pieces(off, width, align, true).collect()
+        };
+        assert_eq!(pieces(0, 8, 8), alloc::vec![(0, 8)]);
+        assert_eq!(pieces(0, 8, 4), alloc::vec![(0, 4), (4, 4)]);
+        assert_eq!(
+            pieces(8, 8, 2),
+            alloc::vec![(8, 2), (10, 2), (12, 2), (14, 2)]
+        );
+        assert_eq!(pieces(4, 4, 8), alloc::vec![(4, 4)]);
+        // An 8-aligned base advanced by 4 guarantees only 4.
+        assert_eq!(pieces(4, 8, 8).len(), 2);
+        // A non-power-of-two alignment guarantees the power of two below.
+        assert_eq!(access_unit(0, 8, 12, true), 4);
+        // Without the flag the transfer stays whole whatever the offset.
+        assert_eq!(
+            access_pieces(1, 8, 1, false).collect::<alloc::vec::Vec<_>>(),
+            alloc::vec![(1, 8)]
+        );
+        assert_eq!(offset_align(8, 0), 8);
+        assert_eq!(offset_align(8, 12), 4);
+        assert_eq!(offset_align(1, 8), 1);
+    }
+}
+
+#[cfg(test)]
 mod abi_plan_tests {
     use super::abi_classify::{AggClass, RegClass};
     use super::{ArgAgg, ArgPlacement, Target, plan_call_args_aggs};
@@ -3194,6 +3289,7 @@ mod abi_plan_tests {
         let gp = ArgAgg {
             class: AggClass::Regs(alloc::vec![RegClass::Integer, RegClass::Integer]),
             size: 16,
+            align: 8,
         };
         // five int scalars, a 2-eightbyte GP aggregate that can't fit the
         // one remaining int reg, then one int scalar.
@@ -3215,6 +3311,7 @@ mod abi_plan_tests {
         let hfa = ArgAgg {
             class: AggClass::Regs(alloc::vec![RegClass::Sse; 4]),
             size: 16,
+            align: 4,
         };
         // five FP scalars, a 4-float HFA that can't fit the remaining FP
         // regs, then one int scalar that the integer file must still hold.

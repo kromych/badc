@@ -2305,7 +2305,7 @@ fn emit_struct_param_scatter(
             continue;
         }
         match placements.get(i) {
-            Some(super::ArgPlacement::StructRegs { regs, n }) => {
+            Some(super::ArgPlacement::StructRegs { regs, n, .. }) => {
                 // Materialise the body local's address into x16, then store
                 // each unit from its argument register. An integer
                 // eightbyte stores at offset 8k; an HFA member stores at
@@ -2332,7 +2332,7 @@ fn emit_struct_param_scatter(
                     }
                 }
             }
-            Some(super::ArgPlacement::StructStack { off, size }) => {
+            Some(super::ArgPlacement::StructStack { off, size, .. }) => {
                 // The aggregate spilled to the caller's stack argument
                 // area, which sits above the saved fp/lr (16 bytes) and
                 // the callee's c5 parameter cells (`param_spill_bytes`).
@@ -6616,6 +6616,93 @@ fn emit_copy_unit(
     emit(code, st);
 }
 
+/// Zero-extending load of `width` bytes (8, 4, 2 or 1) from
+/// `[base + off]` into `rt`.
+fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
+    match width {
+        8 => enc_ldr_imm(rt, base, off),
+        4 => super::encode::enc_ldr32_imm(rt, base, off),
+        2 => enc_ldrh_imm(rt, base, off),
+        _ => enc_ldrb_imm(rt, base, off),
+    }
+}
+
+/// Load `width` bytes at `[base + off]` into the integer register
+/// `dst`, using no access wider than `align` proves at that address
+/// (see [`super::super::access_pieces`]). `tmp` holds each narrow
+/// piece; it must differ from `base` and `dst`, and stays untouched
+/// when one access suffices -- the only case in which `dst` may alias
+/// `base`.
+#[allow(clippy::too_many_arguments)]
+fn emit_agg_load_int(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    off: u32,
+    width: u32,
+    align: u32,
+    strict_align: bool,
+    tmp: Reg,
+) {
+    for (i, (o, w)) in super::super::access_pieces(off, width, align, strict_align).enumerate() {
+        if i == 0 {
+            emit(code, enc_load_unit(w, dst, base, o));
+            continue;
+        }
+        debug_assert!(dst.0 != base.0 && tmp.0 != base.0 && tmp.0 != dst.0);
+        emit(code, enc_load_unit(w, tmp, base, o));
+        emit(
+            code,
+            super::encode::enc_lsl_imm(tmp, tmp, ((o - off) * 8) as u8),
+        );
+        emit(code, super::encode::enc_orr_reg(dst, dst, tmp));
+    }
+}
+
+/// As [`emit_agg_load_int`] with an FP register destination (`width`
+/// 8 for a d-register, 4 for an s-register). The value composes in the
+/// vector register itself, so `tmp` is the only register needed beyond
+/// `base`: the first piece arrives through `fmov` (which clears the
+/// element bits above it), the rest through element inserts.
+#[allow(clippy::too_many_arguments)]
+fn emit_agg_load_fp(
+    code: &mut Vec<u8>,
+    dst: u8,
+    base: Reg,
+    off: u32,
+    width: u32,
+    align: u32,
+    strict_align: bool,
+    tmp: Reg,
+) {
+    if super::super::access_unit(off, width, align, strict_align) == width {
+        emit(
+            code,
+            if width == 8 {
+                super::encode::enc_ldr_d_imm(dst, base, off)
+            } else {
+                super::encode::enc_ldr_s_imm(dst, base, off)
+            },
+        );
+        return;
+    }
+    for (i, (o, w)) in super::super::access_pieces(off, width, align, strict_align).enumerate() {
+        emit(code, enc_load_unit(w, tmp, base, o));
+        if i == 0 {
+            emit(
+                code,
+                if width == 8 {
+                    super::encode::enc_fmov_x_to_d(dst, tmp)
+                } else {
+                    super::encode::enc_fmov_w_to_s(dst, tmp)
+                },
+            );
+        } else {
+            emit(code, super::encode::enc_ins_gen(dst, w, i as u32, tmp));
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_mcpy(
     code: &mut Vec<u8>,
@@ -9176,7 +9263,7 @@ fn marshal_args(
     // while still live; x16/x17 are scratch and hold no argument value
     // at this point.
     for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::StructStack { off, size } = placement {
+        if let super::ArgPlacement::StructStack { off, size, align } = placement {
             let src = match materialize_int_shifted(
                 code,
                 arg_place(i),
@@ -9193,11 +9280,6 @@ fn marshal_args(
             // The outgoing stack slot is 8-aligned (AAPCS64 5.4.2); the
             // source is the caller's object, so its own alignment bounds
             // the unit.
-            let align = arg_aggs
-                .get(i)
-                .copied()
-                .flatten()
-                .map_or(1, |k| agg_descs[k as usize].align);
             let unit = super::super::access_chunk(align, abi.strict_align, 8);
             let mut copied = 0u32;
             while copied + unit <= size {
@@ -9274,7 +9356,7 @@ fn marshal_args(
     // reused per aggregate. Integer-class `StructRegs` (regs[0] is a GPR)
     // are left to the eightbyte path below.
     for (i, &placement) in plan.placements.iter().enumerate() {
-        let super::ArgPlacement::StructRegs { regs, n } = placement else {
+        let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
             continue;
         };
         if n == 0 || !regs[0].is_fp {
@@ -9298,11 +9380,16 @@ fn marshal_args(
                 .as_ref()
                 .and_then(|m| m.get(k).copied())
                 .unwrap_or(((k as u32) * 8, 8));
-            if msize == 8 {
-                emit(code, super::encode::enc_ldr_d_imm(cr.reg, base, off));
-            } else {
-                emit(code, super::encode::enc_ldr_s_imm(cr.reg, base, off));
-            }
+            emit_agg_load_fp(
+                code,
+                cr.reg,
+                base,
+                off,
+                msize,
+                align,
+                abi.strict_align,
+                scratch.secondary,
+            );
         }
     }
 
@@ -9328,7 +9415,7 @@ fn marshal_args(
                 }
             }
             // HFA aggregates (regs[0] is an FP register) loaded above.
-            super::ArgPlacement::StructRegs { regs, n } if n > 0 && !regs[0].is_fp => {
+            super::ArgPlacement::StructRegs { regs, n, .. } if n > 0 && !regs[0].is_fp => {
                 let dst = regs[0].reg;
                 if let Place::IntReg(s) = arg_place(i)
                     && s != dst
@@ -9373,7 +9460,7 @@ fn marshal_args(
     // register, the same destination the move loop used for the
     // register-resident case.
     for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::StructRegs { regs, n } = placement
+        if let super::ArgPlacement::StructRegs { regs, n, .. } = placement
             && n > 0
             && !regs[0].is_fp
             && !matches!(arg_place(i), Place::IntReg(_))
@@ -9404,15 +9491,37 @@ fn marshal_args(
         match placement {
             // Integer-class aggregate: load the eightbytes from the base in
             // regs[0]. An HFA (regs[0] is an FP register) loaded above.
-            super::ArgPlacement::StructRegs { regs, n } if !regs[0].is_fp => {
+            super::ArgPlacement::StructRegs { regs, n, align } if !regs[0].is_fp => {
                 let base = regs[0].reg;
                 for k in (1..n as usize).rev() {
-                    emit(
+                    emit_agg_load_int(
                         code,
-                        enc_ldr_imm(Reg(regs[k].reg), Reg(base), (k as u32) * 8),
+                        Reg(regs[k].reg),
+                        Reg(base),
+                        (k as u32) * 8,
+                        8,
+                        align,
+                        abi.strict_align,
+                        scratch.primary,
                     );
                 }
-                emit(code, enc_ldr_imm(Reg(base), Reg(base), 0));
+                // The base's own eightbyte overwrites the base, so a
+                // composed one accumulates in scratch first.
+                if super::super::access_unit(0, 8, align, abi.strict_align) == 8 {
+                    emit(code, enc_ldr_imm(Reg(base), Reg(base), 0));
+                } else {
+                    emit_agg_load_int(
+                        code,
+                        scratch.primary,
+                        Reg(base),
+                        0,
+                        8,
+                        align,
+                        abi.strict_align,
+                        scratch.secondary,
+                    );
+                    emit_mov_reg(code, Reg(base), scratch.primary);
+                }
             }
             super::ArgPlacement::StructByRefReg(_) | super::ArgPlacement::StructByRefStack(_) => {
                 // Not produced for AAPCS64 in this phase: >16-byte
@@ -9461,26 +9570,51 @@ fn emit_return(
             // member k in v[k] (d-register for an F64 member, s-register
             // for an F32). Load each from its byte offset in the source.
             for (k, (off, msize)) in members.iter().enumerate() {
-                if *msize == 8 {
-                    emit(code, super::encode::enc_ldr_d_imm(k as u8, base, *off));
-                } else {
-                    emit(code, super::encode::enc_ldr_s_imm(k as u8, base, *off));
-                }
+                emit_agg_load_fp(
+                    code,
+                    k as u8,
+                    base,
+                    *off,
+                    *msize,
+                    desc.align,
+                    abi.strict_align,
+                    scratch.secondary,
+                );
             }
         } else if size <= 16 {
             if size > 8 {
-                emit(code, enc_ldr_imm(Reg(1), base, 8));
+                emit_agg_load_int(
+                    code,
+                    Reg(1),
+                    base,
+                    8,
+                    8,
+                    desc.align,
+                    abi.strict_align,
+                    scratch.secondary,
+                );
             }
-            emit(code, enc_ldr_imm(Reg(0), base, 0));
+            emit_agg_load_int(
+                code,
+                Reg(0),
+                base,
+                0,
+                8,
+                desc.align,
+                abi.strict_align,
+                scratch.secondary,
+            );
         } else {
             let dst = scratch.secondary;
             emit_local_addr_fp(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
             emit(code, enc_ldr_imm(dst, dst, 0));
+            // Both endpoints are the caller's object, so its alignment
+            // bounds the transfer unit.
+            let unit = super::super::access_chunk(desc.align, abi.strict_align, 8);
             let mut copied = 0u32;
-            while copied + 8 <= size {
-                emit(code, enc_ldr_imm(Reg(0), base, copied));
-                emit(code, enc_str_imm(Reg(0), dst, copied));
-                copied += 8;
+            while copied + unit <= size {
+                emit_copy_unit(code, unit, Reg(0), base, copied, dst, copied);
+                copied += unit;
             }
             while copied < size {
                 emit(code, enc_ldrb_imm(Reg(0), base, copied));

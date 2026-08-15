@@ -689,6 +689,19 @@ pub(crate) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> u32 {
     0x1E27_0000 | ((wn.0 as u32) << 5) | (sd as u32)
 }
 
+/// `INS <Vd>.<T>[index], <Wn>` -- insert the low `esize` bytes of a
+/// general register into one element of a vector register, leaving the
+/// other elements alone. `esize` is 1, 2, 4 or 8. Composes a vector
+/// value from narrower loads when the source address does not satisfy
+/// the full width.
+pub(crate) fn enc_ins_gen(vd: u8, esize: u32, index: u32, wn: Reg) -> u32 {
+    debug_assert!(vd < 32);
+    debug_assert!(esize.is_power_of_two() && esize <= 8);
+    debug_assert!(index * esize < 16);
+    let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
+    0x4E00_1C00 | (imm5 << 16) | ((wn.0 as u32) << 5) | (vd as u32)
+}
+
 /// `FMOV <Sd>, <Sn>` -- copy a single-precision register. Used to
 /// move an `float` value into the allocator's chosen register when
 /// the producer wrote a different one.
@@ -2654,6 +2667,18 @@ mod tests {
     fn movk_x0_1234_lsl32() {
         // movk x0, #0x1234, lsl #32  ->  0xF2C24680
         assert_eq!(enc_movk(Reg::X0, 0x1234, 2), 0xF2C2_4680);
+    }
+
+    #[test]
+    fn ins_vector_element_from_gpr() {
+        // ins v0.b[0], w17 / v0.b[1], w17 / v3.b[7], w16
+        assert_eq!(enc_ins_gen(0, 1, 0, Reg(17)), 0x4E01_1E20);
+        assert_eq!(enc_ins_gen(0, 1, 1, Reg(17)), 0x4E03_1E20);
+        assert_eq!(enc_ins_gen(3, 1, 7, Reg(16)), 0x4E0F_1E03);
+        // ins v1.h[1], w17 / v2.s[1], w17 / v5.d[1], x9
+        assert_eq!(enc_ins_gen(1, 2, 1, Reg(17)), 0x4E06_1E21);
+        assert_eq!(enc_ins_gen(2, 4, 1, Reg(17)), 0x4E0C_1E22);
+        assert_eq!(enc_ins_gen(5, 8, 1, Reg(9)), 0x4E18_1D25);
     }
 
     #[test]

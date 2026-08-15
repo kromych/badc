@@ -5107,6 +5107,192 @@ fn strict_align_narrows_the_aggregate_copy_transfer_width() {
     );
 }
 
+/// Count of aarch64 load / store instructions wider than one byte
+/// whose base register is neither `sp` nor `fp`. The frame is
+/// 16-aligned by construction, so every remaining base in these
+/// fixtures is a pointer to the caller's aggregate. Covers the scaled
+/// unsigned-offset forms (the only ones the marshalling emits) in both
+/// register files.
+fn a64_wide_off_object(obj: &[u8]) -> usize {
+    const WIDE: [u32; 8] = [
+        0xF940_0000, // ldr  Xt
+        0xF900_0000, // str  Xt
+        0xFD40_0000, // ldr  Dt
+        0xFD00_0000, // str  Dt
+        0xB940_0000, // ldr  Wt
+        0xB900_0000, // str  Wt
+        0xBD40_0000, // ldr  St
+        0xBD00_0000, // str  St
+    ];
+    elf_text(obj)
+        .chunks_exact(4)
+        .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+        .filter(|insn| {
+            let base = (insn >> 5) & 31;
+            WIDE.contains(&(insn & 0xFFC0_0000)) && base != 29 && base != 31
+        })
+        .count()
+}
+
+/// Count of x86_64 memory accesses wider than one byte off a base that
+/// is not `rbp` (ModRM.rm = 101 with a displacement) or `rsp` (a SIB
+/// escape): `REX.W 8B/89` (8-byte integer), `F2 0F 10/11` (`movsd`),
+/// and the 32-bit `8B/89` without REX.W.
+fn x64_wide_off_object(obj: &[u8]) -> usize {
+    let text = elf_text(obj);
+    // Register operands (mod 3), a SIB escape (rm 4) and the rbp /
+    // rip-relative forms (rm 5) name the frame or a global, neither of
+    // which is the caller's aggregate.
+    let off_object = |modrm: u8| -> bool { modrm >> 6 != 3 && modrm & 7 != 4 && modrm & 7 != 5 };
+    let mov_rm = |w: &[u8]| -> bool {
+        w.len() >= 3 && w[0] & 0xF8 == 0x48 && (w[1] == 0x8B || w[1] == 0x89) && off_object(w[2])
+    };
+    // `movsd`, whose REX prefix sits between the F2 and the escape.
+    let movsd = |w: &[u8]| -> bool {
+        if w.first() != Some(&0xF2) {
+            return false;
+        }
+        let r = &w[1..];
+        let r = if r.first().is_some_and(|b| b & 0xF0 == 0x40) {
+            &r[1..]
+        } else {
+            r
+        };
+        r.len() >= 3 && r[0] == 0x0F && (r[1] == 0x10 || r[1] == 0x11) && off_object(r[2])
+    };
+    (0..text.len())
+        .filter(|&i| mov_rm(&text[i..]) || movsd(&text[i..]))
+        .count()
+}
+
+/// `-mstrict-align` bounds the host-ABI aggregate register
+/// marshalling as well as the copies: an eightbyte or HFA member of an
+/// under-aligned aggregate is composed from accesses no wider than the
+/// aggregate's alignment proves, rather than loaded whole. Covers the
+/// caller-side argument gather (integer eightbytes, HFA members, System
+/// V SSE eightbytes) and the callee-side by-value return gather.
+#[test]
+fn strict_align_narrows_the_aggregate_register_marshalling() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    // Both aggregates are alignment 1, so under the flag no access
+    // against them may exceed a byte. `P9` takes two integer eightbytes
+    // (an HFA on neither ABI); `H2` is an AAPCS64 HFA and a System V
+    // all-SSE eightbyte.
+    const SRC: &str = "struct __attribute__((packed)) P9 { char c; int a, b; };\n\
+         struct __attribute__((packed)) H2 { float a, b; };\n\
+         int take_p(struct P9);\n\
+         float take_h(struct H2);\n\
+         int call_p(struct P9 *p) { return take_p(*p); }\n\
+         float call_h(struct H2 *p) { return take_h(*p); }\n\
+         struct P9 ret_p(struct P9 *p) { return *p; }\n\
+         struct H2 ret_h(struct H2 *p) { return *p; }\n";
+    let emit = |target: Target, strict_align: bool| -> alloc::vec::Vec<u8> {
+        let prog = crate::Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile packed marshalling: {e}"));
+        emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                strict_align,
+                ..NativeOptions::default()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit object (strict_align={strict_align}): {e}"))
+    };
+
+    for (target, count) in [
+        (
+            Target::LinuxAarch64,
+            &a64_wide_off_object as &dyn Fn(&[u8]) -> usize,
+        ),
+        (Target::LinuxX64, &x64_wide_off_object),
+    ] {
+        let loose = count(&emit(target, false));
+        assert!(
+            loose >= 4,
+            "{target:?} default should marshal through whole eightbytes, saw {loose}"
+        );
+        assert_eq!(
+            count(&emit(target, true)),
+            0,
+            "{target:?} strict_align still marshals an alignment-1 aggregate through wide accesses"
+        );
+    }
+}
+
+/// The byte-moving halves of the same lowering: the caller's by-stack
+/// aggregate argument copy (System V MEMORY class) and the callee's
+/// gather through the indirect-result pointer both read the caller's
+/// object, so `-mstrict-align` caps their transfer unit too.
+#[test]
+fn strict_align_narrows_the_oversize_aggregate_transfers() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    const SRC: &str = "struct __attribute__((packed)) P25 { char c; long a, b, d; };\n\
+         int take_big(struct P25);\n\
+         int call_big(struct P25 *p) { return take_big(*p); }\n\
+         struct P25 ret_big(struct P25 *p) { return *p; }\n";
+    let emit = |target: Target, strict_align: bool| -> alloc::vec::Vec<u8> {
+        let prog = crate::Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile oversize aggregate: {e}"));
+        emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                strict_align,
+                ..NativeOptions::default()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit object (strict_align={strict_align}): {e}"))
+    };
+
+    // aarch64: `strb Wt, [Xn, #imm]`, one per copied byte.
+    let a64_strb = |obj: &[u8]| -> usize {
+        elf_text(obj)
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .filter(|insn| insn & 0xFFC0_0000 == 0x3900_0000)
+            .count()
+    };
+    assert!(
+        a64_strb(&emit(Target::LinuxAarch64, false)) < 25,
+        "aarch64 default should not copy the aggregate byte by byte"
+    );
+    assert!(
+        a64_strb(&emit(Target::LinuxAarch64, true)) >= 25,
+        "aarch64 strict_align left an oversize aggregate transfer unnarrowed"
+    );
+
+    // x86_64: `mov [base + disp], r8` -- opcode 0x88 with a memory ModRM.
+    let x64_movb = |obj: &[u8]| -> usize {
+        elf_text(obj)
+            .windows(2)
+            .filter(|w| w[0] == 0x88 && w[1] >> 6 != 3)
+            .count()
+    };
+    assert!(
+        x64_movb(&emit(Target::LinuxX64, false)) < 25,
+        "x86_64 default should not copy the aggregate byte by byte"
+    );
+    assert!(
+        x64_movb(&emit(Target::LinuxX64, true)) >= 25,
+        "x86_64 strict_align left the by-stack aggregate copy unnarrowed"
+    );
+}
+
 /// Minimal ELF64 section walk returning the `.text` bytes.
 fn elf_text(bytes: &[u8]) -> alloc::vec::Vec<u8> {
     let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;

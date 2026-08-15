@@ -11,6 +11,7 @@
 use alloc::string::String;
 
 use super::super::codegen::Target;
+use super::super::codegen::offset_align;
 use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_pointer_ty, is_struct_ty,
@@ -24,16 +25,6 @@ use super::{AtomicKind, Expr, ExprId, FinishedFunction, SLOT_ALIGN, Stmt, StmtId
 
 /// The low and high 64-bit halves of a 128-bit value, in that order.
 type Halves = (ValueId, ValueId);
-
-/// Alignment of storage that is `base` aligned and then advanced by
-/// `off` bytes -- the largest power of two dividing both.
-fn offset_align(base: u32, off: i64) -> u32 {
-    if off == 0 {
-        return base.max(1);
-    }
-    let step = 1u32 << off.unsigned_abs().trailing_zeros().min(31);
-    base.min(step).max(1)
-}
 
 /// A shape the walker does not lower. The `Unsupported` variants are
 /// deliberate rejections of constructs the target or the backend does not
@@ -223,6 +214,7 @@ pub(crate) fn walk_function(
                         false,
                     ),
                     size: desc.size,
+                    align: desc.align,
                 });
                 let idx = b.intern_agg_desc(desc);
                 param_aggs[i] = Some(idx);

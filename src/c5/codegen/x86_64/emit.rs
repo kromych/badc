@@ -1365,12 +1365,14 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>) {
 /// Resolve a call's `arg_aggs` indices into the `ArgAgg` vector the
 /// struct-aware planner consumes; empty when the call passes no
 /// aggregate by value.
+#[allow(clippy::too_many_arguments)]
 fn marshal_args(
     code: &mut Vec<u8>,
     plan: &super::CallPlan,
     args: &[u32],
     alloc: &Allocation,
     frame: Frame,
+    abi: super::Abi,
     site: &str,
 ) -> bool {
     let arg_place = |i: usize| -> Place { place_of(alloc, args[i]) };
@@ -1397,7 +1399,7 @@ fn marshal_args(
     // The address rides SCRATCH_R10, the per-word temp SCRATCH_R11;
     // both lie outside the allocator pools.
     for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::StructStack { off, size } = placement {
+        if let super::ArgPlacement::StructStack { off, size, align } = placement {
             let Some(src) =
                 materialize_int_shifted(code, arg_place(i), SCRATCH_R10, frame, plan.scratch_bytes)
             else {
@@ -1406,13 +1408,17 @@ fn marshal_args(
             if src.0 != SCRATCH_R10.0 {
                 emit_mov_rr(code, SCRATCH_R10, src);
             }
-            let words = size / 8;
+            // The outgoing stack slot is 8-aligned (System V AMD64
+            // 3.2.3); the source is the caller's object, so its own
+            // alignment bounds the unit.
+            let unit = super::super::access_chunk(align, abi.strict_align, 8);
+            let words = size / unit;
             for w in 0..words {
-                let o = (w * 8) as i32;
-                emit_mov_r_mem(code, SCRATCH_R11, SCRATCH_R10, o);
-                emit_mov_mem_r(code, Reg::RSP, off as i32 + o, SCRATCH_R11);
+                let o = (w * unit) as i32;
+                emit_load_unit(code, unit, SCRATCH_R11, SCRATCH_R10, o);
+                emit_store_unit(code, unit, Reg::RSP, off as i32 + o, SCRATCH_R11);
             }
-            for b in (words * 8)..size {
+            for b in (words * unit)..size {
                 let o = b as i32;
                 super::encode::emit_movzx_r_mem8(code, SCRATCH_R11, SCRATCH_R10, o);
                 super::encode::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, SCRATCH_R11);
@@ -1470,7 +1476,7 @@ fn marshal_args(
     // targets are argument GPRs that may still be another argument's
     // pending source, so their base rides the parallel move instead.
     for (i, &placement) in plan.placements.iter().enumerate() {
-        let super::ArgPlacement::StructRegs { regs, n } = placement else {
+        let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
             continue;
         };
         if n == 0 || !regs.iter().take(n as usize).all(|c| c.is_fp) {
@@ -1485,7 +1491,15 @@ fn marshal_args(
             emit_mov_rr(code, SCRATCH_R10, base);
         }
         for (k, cr) in regs.iter().take(n as usize).enumerate() {
-            emit_movsd_xmm_mem(code, Reg(cr.reg), SCRATCH_R10, (k as i32) * 8);
+            emit_agg_load_sse(
+                code,
+                Reg(cr.reg),
+                SCRATCH_R10,
+                (k as i32) * 8,
+                align,
+                abi.strict_align,
+                SCRATCH_R11,
+            );
         }
     }
 
@@ -1519,7 +1533,7 @@ fn marshal_args(
                 }
             }
             // All-SSE aggregates loaded above.
-            super::ArgPlacement::StructRegs { regs, n } => {
+            super::ArgPlacement::StructRegs { regs, n, .. } => {
                 if let Some(dst) = agg_base_reg(&regs, n)
                     && let Place::IntReg(s) = arg_place(i)
                     && s != dst
@@ -1564,7 +1578,7 @@ fn marshal_args(
     // register, the same destination the move loop used for the
     // register-resident case.
     for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::StructRegs { regs, n } = placement
+        if let super::ArgPlacement::StructRegs { regs, n, .. } = placement
             && let Some(dst) = agg_base_reg(&regs, n)
             && !matches!(arg_place(i), Place::IntReg(_))
         {
@@ -1585,17 +1599,34 @@ fn marshal_args(
     // the base register's own eightbyte last since the load overwrites
     // it. All-SSE aggregates were loaded above.
     for &placement in plan.placements.iter() {
-        if let super::ArgPlacement::StructRegs { regs, n } = placement
+        if let super::ArgPlacement::StructRegs { regs, n, align } = placement
             && let Some(base) = agg_base_reg(&regs, n)
         {
             for (k, cr) in regs.iter().take(n as usize).enumerate() {
                 if cr.is_fp {
-                    emit_movsd_xmm_mem(code, Reg(cr.reg), Reg(base), (k as i32) * 8);
+                    emit_agg_load_sse(
+                        code,
+                        Reg(cr.reg),
+                        Reg(base),
+                        (k as i32) * 8,
+                        align,
+                        abi.strict_align,
+                        SCRATCH_R10,
+                    );
                 }
             }
             for (k, cr) in regs.iter().take(n as usize).enumerate().rev() {
                 if !cr.is_fp && cr.reg != base {
-                    emit_mov_r_mem(code, Reg(cr.reg), Reg(base), (k as i32) * 8);
+                    emit_agg_load_int(
+                        code,
+                        Reg(cr.reg),
+                        Reg(base),
+                        (k as i32) * 8,
+                        8,
+                        align,
+                        abi.strict_align,
+                        SCRATCH_R10,
+                    );
                 }
             }
             let base_off = regs
@@ -1603,7 +1634,24 @@ fn marshal_args(
                 .take(n as usize)
                 .position(|c| !c.is_fp && c.reg == base)
                 .unwrap_or(0);
-            emit_mov_r_mem(code, Reg(base), Reg(base), (base_off as i32) * 8);
+            let disp = (base_off as i32) * 8;
+            // The base's own eightbyte overwrites the base, so a
+            // composed one accumulates in scratch first.
+            if super::super::access_unit(disp as u32, 8, align, abi.strict_align) == 8 {
+                emit_mov_r_mem(code, Reg(base), Reg(base), disp);
+            } else {
+                emit_agg_load_int(
+                    code,
+                    SCRATCH_R10,
+                    Reg(base),
+                    disp,
+                    8,
+                    align,
+                    abi.strict_align,
+                    SCRATCH_R11,
+                );
+                emit_mov_rr(code, Reg(base), SCRATCH_R10);
+            }
         }
     }
 
@@ -2985,7 +3033,7 @@ fn emit_struct_stack_param_copy(
     }
     let base = 16 + (func.n_params as i64) * 16;
     for (i, &placement) in placements.iter().enumerate() {
-        let super::ArgPlacement::StructStack { off, size } = placement else {
+        let super::ArgPlacement::StructStack { off, size, .. } = placement else {
             continue;
         };
         let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
@@ -3027,7 +3075,7 @@ fn emit_struct_param_scatter(
         if agg.is_none() {
             continue;
         }
-        let Some(super::ArgPlacement::StructRegs { regs, n }) = placements.get(i) else {
+        let Some(super::ArgPlacement::StructRegs { regs, n, .. }) = placements.get(i) else {
             continue;
         };
         let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
@@ -5793,7 +5841,15 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
-        if !marshal_args(code, &plan, args, alloc, frame, "Call (Win64 variadic)") {
+        if !marshal_args(
+            code,
+            &plan,
+            args,
+            alloc,
+            frame,
+            abi,
+            "Call (Win64 variadic)",
+        ) {
             return false;
         }
         let call_site = code.len();
@@ -5834,7 +5890,7 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
-        if !marshal_args(code, &plan, args, alloc, frame, "Call (SysV variadic)") {
+        if !marshal_args(code, &plan, args, alloc, frame, abi, "Call (SysV variadic)") {
             return false;
         }
         super::encode::emit_mov_al_imm8(code, xmm_used);
@@ -5880,7 +5936,7 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    if !marshal_args(code, &plan, args, alloc, frame, "Call") {
+    if !marshal_args(code, &plan, args, alloc, frame, abi, "Call") {
         return false;
     }
     // Record a fixup for the call's rel32 field. `emit_call_rel32`
@@ -5953,7 +6009,7 @@ fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
     }
-    if !marshal_args(code, &plan, args, alloc, frame, "CallExt") {
+    if !marshal_args(code, &plan, args, alloc, frame, abi, "CallExt") {
         return false;
     }
     // System V AMD64 ABI 3.2.3: when the callee is variadic, `al`
@@ -6112,7 +6168,7 @@ fn emit_call_indirect(
             super::ArgPlacement::IntReg(r) | super::ArgPlacement::StructByRefReg(r) => {
                 blocked.push(Reg(*r));
             }
-            super::ArgPlacement::StructRegs { regs, n } => {
+            super::ArgPlacement::StructRegs { regs, n, .. } => {
                 for cr in &regs[..*n as usize] {
                     if !cr.is_fp {
                         blocked.push(Reg(cr.reg));
@@ -6156,7 +6212,7 @@ fn emit_call_indirect(
         if plan.scratch_bytes > 0 {
             emit_stack_alloc(code, plan.scratch_bytes, None);
         }
-        if !marshal_args(code, &plan, args, alloc, frame, "CallIndirect") {
+        if !marshal_args(code, &plan, args, alloc, frame, abi, "CallIndirect") {
             return false;
         }
         if sysv_variadic_call {
@@ -6191,7 +6247,7 @@ fn emit_call_indirect(
         // jumps through a corrupt register).
         let mut shifted = plan.clone();
         shifted.scratch_bytes = plan.scratch_bytes + slot_bytes;
-        if !marshal_args(code, &shifted, args, alloc, frame, "CallIndirect") {
+        if !marshal_args(code, &shifted, args, alloc, frame, abi, "CallIndirect") {
             return false;
         }
         // The target slot sits just above the marshal's scratch
@@ -9739,24 +9795,87 @@ fn emit_imm_ext_code(
 /// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
 /// `[src + disp]` to `[dst + disp]` through `temp`.
 fn emit_copy_unit(code: &mut Vec<u8>, width: u32, temp: Reg, src: Reg, dst: Reg, disp: i32) {
+    emit_load_unit(code, width, temp, src, disp);
+    emit_store_unit(code, width, dst, disp, temp);
+}
+
+/// Store the low `width` bytes (8, 4, 2 or 1) of `src` to
+/// `[base + disp]`.
+fn emit_store_unit(code: &mut Vec<u8>, width: u32, base: Reg, disp: i32, src: Reg) {
     match width {
-        8 => {
-            emit_mov_r_mem(code, temp, src, disp);
-            emit_mov_mem_r(code, dst, disp, temp);
-        }
-        4 => {
-            super::encode::emit_mov_r_mem32(code, temp, src, disp);
-            super::encode::emit_mov_mem32_r(code, dst, disp, temp);
-        }
-        2 => {
-            super::encode::emit_movzx_r_mem16(code, temp, src, disp);
-            super::encode::emit_mov_mem16_r(code, dst, disp, temp);
-        }
-        _ => {
-            super::encode::emit_movzx_r_mem8(code, temp, src, disp);
-            super::encode::emit_mov_mem8_r(code, dst, disp, temp);
-        }
+        8 => emit_mov_mem_r(code, base, disp, src),
+        4 => super::encode::emit_mov_mem32_r(code, base, disp, src),
+        2 => super::encode::emit_mov_mem16_r(code, base, disp, src),
+        _ => super::encode::emit_mov_mem8_r(code, base, disp, src),
     }
+}
+
+/// Zero-extending load of `width` bytes (8, 4, 2 or 1) from
+/// `[base + disp]` into `dst`.
+fn emit_load_unit(code: &mut Vec<u8>, width: u32, dst: Reg, base: Reg, disp: i32) {
+    match width {
+        8 => emit_mov_r_mem(code, dst, base, disp),
+        4 => super::encode::emit_mov_r32_mem(code, dst, base, disp),
+        2 => super::encode::emit_movzx_r_mem16(code, dst, base, disp),
+        _ => super::encode::emit_movzx_r_mem8(code, dst, base, disp),
+    }
+}
+
+/// Load `width` bytes at `[base + disp]` into the integer register
+/// `dst`, using no access wider than `align` proves at that address
+/// (see [`super::super::access_pieces`]). `tmp` holds each narrow
+/// piece; it must differ from `base` and `dst`, and stays untouched
+/// when one access suffices -- the only case in which `dst` may alias
+/// `base`.
+#[allow(clippy::too_many_arguments)]
+fn emit_agg_load_int(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    disp: i32,
+    width: u32,
+    align: u32,
+    strict_align: bool,
+    tmp: Reg,
+) {
+    let off = disp.max(0) as u32;
+    for (i, (o, w)) in super::super::access_pieces(off, width, align, strict_align).enumerate() {
+        let at = disp + (o - off) as i32;
+        if i == 0 {
+            emit_load_unit(code, w, dst, base, at);
+            continue;
+        }
+        debug_assert!(dst.0 != base.0 && tmp.0 != base.0 && tmp.0 != dst.0);
+        emit_load_unit(code, w, tmp, base, at);
+        emit_shift_ri(code, Mnem::Shl, 8, tmp, ((o - off) * 8) as u8);
+        emit_rr(code, Mnem::Or, 8, dst, tmp);
+    }
+}
+
+/// As [`emit_agg_load_int`] with an SSE register destination: the
+/// eightbyte composes in `tmp` and moves across with `movq`. The
+/// composition's second register is borrowed from the stack, the
+/// marshal having no third free scratch; nothing between the push and
+/// the pop addresses `rsp`. `base` and `tmp` are the marshal's
+/// reserved scratches or argument registers, never `rax`.
+fn emit_agg_load_sse(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    disp: i32,
+    align: u32,
+    strict_align: bool,
+    tmp: Reg,
+) {
+    if super::super::access_unit(disp.max(0) as u32, 8, align, strict_align) == 8 {
+        emit_movsd_xmm_mem(code, dst, base, disp);
+        return;
+    }
+    debug_assert!(base.0 != Reg::RAX.0 && tmp.0 != Reg::RAX.0);
+    emit_push_r(code, Reg::RAX);
+    emit_agg_load_int(code, tmp, base, disp, 8, align, strict_align, Reg::RAX);
+    super::encode::emit_movq_xmm_r(code, dst, tmp);
+    emit_pop_r(code, Reg::RAX);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -10194,7 +10313,7 @@ fn emit_tail_call(
     // moved -- any spill load must use the natural slot offset.
     // Clear scratch_bytes to suppress the marshal's sp_shift add.
     plan.scratch_bytes = 0;
-    if !marshal_args(code, &plan, args, alloc, frame, "TailCall") {
+    if !marshal_args(code, &plan, args, alloc, frame, abi, "TailCall") {
         return false;
     }
     // Mirror emit_return's epilogue, omitting the return-value
@@ -10299,10 +10418,27 @@ fn emit_return(
         for (k, class) in eb_classes.iter().enumerate() {
             let off = (k as i32) * 8;
             if matches!(class, super::abi_classify::RegClass::Sse) {
-                emit_movsd_xmm_mem(code, Reg(Reg::XMM0.0 + sse_i), Reg::RCX, off);
+                emit_agg_load_sse(
+                    code,
+                    Reg(Reg::XMM0.0 + sse_i),
+                    Reg::RCX,
+                    off,
+                    desc.align,
+                    abi.strict_align,
+                    SCRATCH_R10,
+                );
                 sse_i += 1;
             } else {
-                emit_mov_r_mem(code, int_ret[int_i], Reg::RCX, off);
+                emit_agg_load_int(
+                    code,
+                    int_ret[int_i],
+                    Reg::RCX,
+                    off,
+                    8,
+                    desc.align,
+                    abi.strict_align,
+                    SCRATCH_R10,
+                );
                 int_i += 1;
             }
         }

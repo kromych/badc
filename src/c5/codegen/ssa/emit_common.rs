@@ -750,6 +750,7 @@ pub(crate) fn build_arg_aggs(
                         d.size, d.align, &d.fields, abi, false,
                     ),
                     size: d.size,
+                    align: d.align,
                 }
             })
         })

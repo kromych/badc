@@ -2331,14 +2331,14 @@ fn run() {
                     std::process::exit(1);
                 }
             };
-            if !badc::is_elf_object(&bytes) {
+            if !badc::is_native_object(&bytes) {
                 eprint_diagnostic(format!(
                     "badc: error: `{obj_path}`: {}",
                     unreadable_object_reason(&bytes, target)
                 ));
                 std::process::exit(1);
             }
-            match badc::parse_native_elf(&bytes) {
+            match badc::parse_native_object(&bytes) {
                 Ok(mut o) => {
                     o.source = obj_path.clone();
                     native_objs.push(o);
@@ -2377,7 +2377,7 @@ fn run() {
                 }
             };
             for m in members {
-                if !badc::is_elf_object(&m.bytes) {
+                if !badc::is_native_object(&m.bytes) {
                     eprint_diagnostic(format!(
                         "badc: error: archive `{a_path}` member `{}`: {}",
                         m.name,
@@ -2385,7 +2385,7 @@ fn run() {
                     ));
                     std::process::exit(1);
                 }
-                match badc::parse_native_elf(&m.bytes) {
+                match badc::parse_native_object(&m.bytes) {
                     Ok(mut o) => {
                         o.source = format!("{a_path}({})", m.name);
                         pending.push(Some(o));
@@ -2993,9 +2993,11 @@ fn default_system_include_paths(target: badc::Target, freestanding: bool) -> Vec
 /// on every target -- the target's container appears only in the final
 /// image -- so a foreign object is named by what it is.
 fn unreadable_object_reason(bytes: &[u8], target: Target) -> String {
-    let reads = "badc links ELF relocatable objects on every target";
+    let reads = "badc links ELF relocatable objects on every target, \
+                 and arm64 Mach-O relocatable objects";
     match badc::detect_binary_format(bytes) {
         Some(badc::BinaryFormat::Elf) => format!("malformed ELF object; {reads}"),
+        Some(badc::BinaryFormat::MachO) => format!("is a Mach-O file but not MH_OBJECT; {reads}"),
         Some(f) => {
             let image = target.binary_format();
             let mut s = format!("is a {} object; {reads}", f.name());
@@ -4181,11 +4183,11 @@ fn dump_native_link(rest: &[String]) {
                 std::process::exit(1);
             }
         };
-        if !badc::is_elf_object(&bytes) {
-            eprintln!("badc: --dump-native-link: `{p}` is not an ELF object");
+        if !badc::is_native_object(&bytes) {
+            eprintln!("badc: --dump-native-link: `{p}` is not a relocatable object");
             std::process::exit(1);
         }
-        match badc::parse_native_elf(&bytes) {
+        match badc::parse_native_object(&bytes) {
             Ok(o) => objs.push(o),
             Err(e) => {
                 eprintln!("badc: --dump-native-link: {p}: {e}");

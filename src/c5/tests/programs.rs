@@ -6524,6 +6524,28 @@ fn cpu_time_clocks_follow_each_platform_libc() {
 }
 
 #[test]
+fn closefrom_is_a_linux_binding() {
+    use crate::Target;
+    // glibc exports closefrom from 2.34 on. libSystem has never had it --
+    // the macOS SDK's <unistd.h> does not declare it -- and neither does
+    // msvcrt, so declaring it there would bind a symbol the loader cannot
+    // resolve.
+    let src = "#include <unistd.h>\nvoid f(void) { closefrom(3); }\n";
+    assert!(header_snippet_compiles(src, Target::LinuxX64));
+    assert!(header_snippet_compiles(src, Target::LinuxAarch64));
+    for target in [
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "closefrom must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
 fn sys_types_declares_time_t() {
     use crate::Target;
     // POSIX-2017 requires <sys/types.h> to define `time_t`; system

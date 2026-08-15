@@ -3,9 +3,8 @@
 // host: 8 bytes on LP64 (Linux/macOS) where `long` already
 // matches a pointer, and 8 bytes on LLP64 (Windows) where
 // `long` is only 32 bits and we have to fall back to
-// `long long` to keep the right width. `wchar_t` stays at
-// `int` width since UTF-16 / UTF-32 codepoints fit in 4 bytes
-// and no host expects a wider value here.
+// `long long` to keep the right width. `wchar_t` follows the
+// width the driver selected, reported as `__SIZEOF_WCHAR_T__`.
 //
 // C99 7.17p2: `size_t` is the unsigned integer type of the
 // result of `sizeof`. A signed underlying type makes
@@ -22,12 +21,18 @@
 #ifdef __BADC_WINDOWS__
 typedef unsigned long long size_t;
 typedef long long ptrdiff_t;
-// Windows `wchar_t` is a 16-bit UTF-16 code unit; the Win32 wide-string
-// APIs depend on the 2-byte width.
-typedef unsigned short wchar_t;
 #else
 typedef unsigned long size_t;
 typedef long ptrdiff_t;
+#endif
+
+// 2 bytes on Windows, whose wide-string APIs take UTF-16 code units,
+// and on any target under `-fshort-wchar`, where the type is also
+// unsigned; 4 bytes otherwise. Wide literals take the same width, so
+// the typedef and `L"..."` agree by construction.
+#if __SIZEOF_WCHAR_T__ == 2
+typedef unsigned short wchar_t;
+#else
 typedef int wchar_t;
 #endif
 

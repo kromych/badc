@@ -193,6 +193,13 @@ Compile knobs:
                            whatever the default is. With --gnu the model
                            is reported as __GNUC_GNU_INLINE__ /
                            __GNUC_STDC_INLINE__.
+  -fshort-wchar            Give wchar_t an unsigned 16-bit type instead
+                           of the target's default, narrowing the
+                           elements of L-prefixed string and character
+                           literals and the __SIZEOF_WCHAR_T__ /
+                           __WCHAR_TYPE__ predefines with it.
+                           -fno-short-wchar restores the default, which
+                           is already 16-bit on Windows.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
@@ -585,6 +592,8 @@ fn run() {
     // header takes its standard-C path for the GNU features badc lacks.
     let mut gnu_dialect = false;
     let mut gnu89_inline = false;
+    // `-fshort-wchar` -- narrow `wchar_t` to an unsigned 16-bit type.
+    let mut short_wchar = false;
     // Multi-translation-unit linker plumbing. Bytecode `.o`
     // inputs accumulate alongside C sources; `.a` archives
     // arrive either positionally or through `-l<name>` after a
@@ -1065,6 +1074,12 @@ fn run() {
             // linkage model the unit default in place of C99's.
             "-fgnu89-inline" => gnu89_inline = true,
             "-fno-gnu89-inline" => gnu89_inline = false,
+            // gcc / clang `-fshort-wchar`: `wchar_t` becomes an unsigned
+            // 16-bit type on every target. It changes the layout of every
+            // object holding a `wchar_t` or a wide literal, so it has to
+            // reach the front end rather than be dropped as a no-op.
+            "-fshort-wchar" => short_wchar = true,
+            "-fno-short-wchar" => short_wchar = false,
             // gcc / clang `-std=<dialect>`: the language the unit is
             // written in. badc compiles C99 with the GNU extensions
             // always available, so the dialect selects only whether
@@ -1849,6 +1864,7 @@ fn run() {
             let copts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_short_wchar(short_wchar)
                 .with_gnu_dialect(gnu_dialect)
                 .with_asm_source(SourceKind::of(src).is_asm())
                 .with_defines(tu_defines(src, &defines))
@@ -1924,6 +1940,7 @@ fn run() {
         let copts = badc::CompileOptions::default()
             .with_gnu(gnu)
             .with_gnu89_inline(gnu89_inline)
+            .with_short_wchar(short_wchar)
             .with_gnu_dialect(gnu_dialect)
             .with_optimize(optimize_flag)
             .with_defines(defines.clone())
@@ -2014,6 +2031,7 @@ fn run() {
             let opts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_short_wchar(short_wchar)
                 .with_gnu_dialect(gnu_dialect)
                 .with_optimize(optimize_flag)
                 .with_asm_source(SourceKind::of(src_path).is_asm())
@@ -2099,6 +2117,7 @@ fn run() {
             gnu,
             gnu_dialect,
             gnu89_inline,
+            short_wchar,
             optimize_flag,
             export_all,
             show_includes,
@@ -2133,6 +2152,7 @@ fn run() {
             let copts = badc::CompileOptions::default()
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
+                .with_short_wchar(short_wchar)
                 .with_gnu_dialect(gnu_dialect)
                 .with_optimize(optimize_flag)
                 .with_defines(copts_defines)
@@ -2719,6 +2739,7 @@ fn run() {
             gnu,
             gnu_dialect,
             gnu89_inline,
+            short_wchar,
             optimize_flag,
             export_all: false,
             show_includes,
@@ -2849,6 +2870,7 @@ fn run() {
             gnu,
             gnu_dialect,
             gnu89_inline,
+            short_wchar,
             optimize_flag,
             export_all: false,
             show_includes,
@@ -3243,6 +3265,7 @@ struct CompileCfg<'a> {
     gnu: bool,
     gnu_dialect: bool,
     gnu89_inline: bool,
+    short_wchar: bool,
     optimize_flag: bool,
     export_all: bool,
     show_includes: bool,
@@ -3404,6 +3427,7 @@ fn tu_compile_options(
     badc::CompileOptions::default()
         .with_gnu(cfg.gnu)
         .with_gnu89_inline(cfg.gnu89_inline)
+        .with_short_wchar(cfg.short_wchar)
         .with_gnu_dialect(cfg.gnu_dialect)
         .with_asm_source(SourceKind::of(src_path).is_asm())
         .with_defines(tu_defines(src_path, cfg.defines))

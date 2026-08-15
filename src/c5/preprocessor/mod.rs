@@ -386,18 +386,6 @@ pub enum Subsystem {
     EfiRom,
 }
 
-/// Install every predefine whose spelling or value follows the data
-/// model, replacing whatever a previous call left; sole owner of these
-/// names, so re-selecting leaves nothing from the other model behind.
-///
-/// `Elf32` on an x86 target is `-m16` / `-m32`, which gcc preprocesses
-/// as i386: `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit pointer
-/// / `long` / `size_t` / `wchar_t` spelling, no `__int128`, and the
-/// `__code_model_32__` name for whichever `-mcmodel` names otherwise.
-/// `-m16` is `-m32` code generation with a 16-bit default operand size
-/// and shares its predefines. An `Elf32` AArch64 object would be
-/// AArch32, which badc neither encodes nor describes; the driver
-/// refuses the flag there and the target's own model stands.
 /// C99 5.2.4.2.2 floating-point characteristics, in the `__FLT_*` /
 /// `__DBL_*` / `__LDBL_*` spellings gcc and clang predefine and that
 /// third-party headers test directly. badc's `float` is IEEE binary32
@@ -457,11 +445,27 @@ fn install_float_characteristics(macros: &mut HashMap<String, String>) {
     }
 }
 
+/// Install every predefine whose spelling or value follows the unit's
+/// model, replacing whatever a previous call left; sole owner of these
+/// names, so re-selecting leaves nothing from the other model behind.
+///
+/// `Elf32` on an x86 target is `-m16` / `-m32`, which gcc preprocesses
+/// as i386: `__i386__` for `__x86_64__`, ILP32 for LP64, 32-bit pointer
+/// / `long` / `size_t` / `wchar_t` spelling, no `__int128`, and the
+/// `__code_model_32__` name for whichever `-mcmodel` names otherwise.
+/// `-m16` is `-m32` code generation with a 16-bit default operand size
+/// and shares its predefines. An `Elf32` AArch64 object would be
+/// AArch32, which badc neither encodes nor describes; the driver
+/// refuses the flag there and the target's own model stands.
+///
+/// `short_wchar` is `-fshort-wchar`, which narrows `wchar_t` to an
+/// unsigned 16-bit type on any target; see [`Target::wchar_bytes`].
 fn install_data_model(
     macros: &mut HashMap<String, String>,
     target: Target,
     class: ElfClass,
     code_model: CodeModel,
+    short_wchar: bool,
 ) {
     let ilp32 = class.is32() && target.is_x86_64();
     // Both reserved spellings, as gcc has them; the unreserved `i386`
@@ -523,14 +527,17 @@ fn install_data_model(
     if !ilp32 {
         macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());
     }
-    // `wchar_t`'s underlying type: 16-bit on Windows, gcc's `long int`
-    // on i386, the bundled <stddef.h>'s `int` elsewhere. 4 bytes in
-    // both non-Windows spellings, agreeing with `__SIZEOF_WCHAR_T__`.
-    let wchar_ty = match (target.is_windows(), ilp32) {
-        (true, _) => "unsigned short",
-        (false, true) => "long int",
-        (false, false) => "int",
+    // `wchar_t`'s width and underlying type. Unsigned 16-bit on Windows
+    // and under `-fshort-wchar`, gcc's `long int` on i386, the bundled
+    // <stddef.h>'s `int` elsewhere; the spelling always agrees with
+    // `__SIZEOF_WCHAR_T__`, which the typedef keys on.
+    let wchar_bytes = target.wchar_bytes(short_wchar);
+    let wchar_ty = match (wchar_bytes, ilp32) {
+        (2, _) => "unsigned short",
+        (_, true) => "long int",
+        (_, false) => "int",
     };
+    macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar_bytes.to_string());
     macros.insert("__WCHAR_TYPE__".to_string(), wchar_ty.to_string());
     // gcc's x86 back end names the selected code model; the aarch64 one
     // defines no such macro. An ELFCLASS32 object is the 32-bit model
@@ -731,11 +738,6 @@ impl Preprocessor {
         // divergence and what it costs at a platform-libc boundary.
         macros.insert("__SIZEOF_LONG_DOUBLE__".to_string(), "8".to_string());
         install_float_characteristics(&mut macros);
-        let wchar_bytes = match target {
-            Target::WindowsX64 | Target::WindowsAarch64 => "2",
-            _ => "4",
-        };
-        macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar_bytes.to_string());
         // `wint_t` is the bundled <wchar.h>'s `int` on every target.
         macros.insert("__WINT_TYPE__".to_string(), "int".to_string());
         macros.insert("__SIZEOF_WINT_T__".to_string(), "4".to_string());
@@ -743,7 +745,13 @@ impl Preprocessor {
         // `__attribute__((aligned))` resolves to and what `__int128` /
         // 16-aligned automatics are placed at.
         macros.insert("__BIGGEST_ALIGNMENT__".to_string(), "16".to_string());
-        install_data_model(&mut macros, target, ElfClass::Elf64, CodeModel::Small);
+        install_data_model(
+            &mut macros,
+            target,
+            ElfClass::Elf64,
+            CodeModel::Small,
+            false,
+        );
         match target {
             Target::MacOSAarch64 => {
                 macros.insert("__APPLE__".to_string(), "1".to_string());
@@ -828,11 +836,12 @@ impl Preprocessor {
         }
     }
 
-    /// Re-select the predefines that follow the object's code model:
-    /// `-m16` / `-m32` select the i386 set through `class`, and
-    /// `-mcmodel` names the x86-64 model; see [`install_data_model`].
-    pub fn set_code_model(&mut self, class: ElfClass, model: CodeModel) {
-        install_data_model(&mut self.macros, self.target, class, model);
+    /// Re-select the predefines that follow the unit's model: `-m16` /
+    /// `-m32` select the i386 set through `class`, `-mcmodel` names the
+    /// x86-64 model, and `-fshort-wchar` narrows `wchar_t`; see
+    /// [`install_data_model`].
+    pub fn set_unit_model(&mut self, class: ElfClass, model: CodeModel, short_wchar: bool) {
+        install_data_model(&mut self.macros, self.target, class, model, short_wchar);
     }
 
     /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`

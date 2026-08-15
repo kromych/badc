@@ -304,7 +304,7 @@ fn lp64_predefined_for_lp64_targets_only() {
     }
 }
 
-/// `set_code_model` re-selects the whole data-model group, so an ILP32
+/// `set_unit_model` re-selects the whole data-model group, so an ILP32
 /// unit carries no macro from the LP64 one and back again is exact.
 /// Values are gcc 16.1.1's for `-m32` / `-m64` on `linux-x64`.
 #[test]
@@ -324,7 +324,7 @@ fn elf_class_selects_the_data_model_predefines() {
     let names64 = ["x86_64", "amd64", "lp64", "int128", "cmsmall"];
     let names32 = ["i386", "i386_bare", "ilp32", "cm32"];
     let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
-    pp.set_code_model(ElfClass::Elf32, CodeModel::Small);
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);
     let out = pp.process(probe).expect("preprocessor failed");
     for n in names32 {
         assert!(out.contains(n), "ELFCLASS32 must define {n}: {out}");
@@ -340,8 +340,8 @@ fn elf_class_selects_the_data_model_predefines() {
     assert!(out.contains("wchar long int ."), "i386 wchar_t: {out}");
     // Back to ELFCLASS64: no i386 macro survives the round trip.
     let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
-    pp.set_code_model(ElfClass::Elf32, CodeModel::Small);
-    pp.set_code_model(ElfClass::Elf64, CodeModel::Small);
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);
+    pp.set_unit_model(ElfClass::Elf64, CodeModel::Small, false);
     let out = pp.process(probe).expect("preprocessor failed");
     for n in names64 {
         assert!(out.contains(n), "ELFCLASS64 must define {n}: {out}");
@@ -358,7 +358,7 @@ fn elf_class_selects_the_data_model_predefines() {
     // An ELFCLASS32 AArch64 object would be AArch32, which badc neither
     // encodes nor describes; the target's own model stands.
     let mut pp = Preprocessor::new(Target::LinuxAarch64.id_str(), Target::LinuxAarch64, "0.1.0");
-    pp.set_code_model(ElfClass::Elf32, CodeModel::Small);
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);
     let out = pp.process(probe).expect("preprocessor failed");
     assert!(out.contains("lp64") && !out.contains("ilp32"), "{out}");
     assert!(out.contains("sizes 8 8 8 8"), "{out}");
@@ -383,7 +383,7 @@ fn the_code_model_predefine_names_the_selected_model() {
     for (class, model, want) in cases {
         for t in [Target::LinuxX64, Target::WindowsX64] {
             let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
-            pp.set_code_model(class, model);
+            pp.set_unit_model(class, model, false);
             let out = pp.process(probe).expect("preprocessor failed");
             for n in ["cm32", "cmsmall", "cmkernel"] {
                 assert_eq!(
@@ -438,6 +438,41 @@ fn type_size_predefines_match_the_layout_engine() {
         assert!(out.contains(&format!("wchar {wchar} .")), "{t:?}: {out}");
         assert!(!out.contains("phantom-float"), "{t:?}: {out}");
     }
+}
+
+/// `-fshort-wchar` moves `__SIZEOF_WCHAR_T__` and `__WCHAR_TYPE__`
+/// together on every target: 2 and an unsigned 16-bit spelling, which
+/// is what gcc 16.1.1 reports (`short unsigned int`, the same type).
+/// The Windows targets are already there, so the flag leaves them and
+/// its absence does not widen them. `<stddef.h>` keys its typedef on
+/// `__SIZEOF_WCHAR_T__`, so the pair is the type the unit sees.
+#[test]
+fn short_wchar_moves_the_wchar_predefines() {
+    use crate::c5::{CodeModel, ElfClass};
+    let probe = "wchar __WCHAR_TYPE__ = __SIZEOF_WCHAR_T__ .\n";
+    for (t, wide) in [
+        (Target::LinuxX64, "int = 4"),
+        (Target::LinuxAarch64, "int = 4"),
+        (Target::MacOSAarch64, "int = 4"),
+        (Target::WindowsX64, "unsigned short = 2"),
+        (Target::WindowsAarch64, "unsigned short = 2"),
+    ] {
+        for (short_wchar, want) in [(false, wide), (true, "unsigned short = 2")] {
+            let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+            pp.set_unit_model(ElfClass::Elf64, CodeModel::Small, short_wchar);
+            let out = pp.process(probe).expect("preprocessor failed");
+            assert!(
+                out.contains(&format!("wchar {want} .")),
+                "{t:?} short_wchar={short_wchar}: {out}"
+            );
+        }
+    }
+    // The i386 spelling is gcc's `long int` at the default width; the
+    // narrowed one wins over it, as the width does.
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, true);
+    let out = pp.process(probe).expect("preprocessor failed");
+    assert!(out.contains("wchar unsigned short = 2 ."), "ILP32: {out}");
 }
 
 /// C99 5.2.4.2.2 characteristics, in the `__FLT_*` / `__DBL_*` /

@@ -193,6 +193,13 @@ def rewrite(argv: list[str]) -> list[str]:
             # not GOT loads. badc validates the value.
             out.append(a)
             i += 1
+        elif a in ("-fshort-wchar", "-fno-short-wchar"):
+            # wchar_t width. The kernel builds the whole tree with
+            # -fshort-wchar and stages L"..." into efi_char16_t (u16)
+            # arrays, so a compiler that never sees it lays out the wrong
+            # element width.
+            out.append(a)
+            i += 1
         elif a in ("-fPIC", "-fpic", "-fPIE", "-fpie", "-fno-pic", "-fno-PIC"):
             # The EFI-stub island copies its objects wholesale and rejects
             # any absolute relocation, and the boot decompressor links its

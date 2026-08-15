@@ -178,6 +178,9 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
         elif a == "-mstrict-align":
             out.append(a)  # MMU-off units need naturally-aligned accesses
             i += 1
+        elif a in ("-fshort-wchar", "-fno-short-wchar"):
+            out.append(a)  # the tree stages L"..." into u16 arrays
+            i += 1
         elif a.startswith("-std="):
             # The dialect decides which declarations the headers reach:
             # `<asm/xen/interface_64.h>` gates the anonymous union naming

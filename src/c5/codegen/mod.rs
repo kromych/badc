@@ -214,6 +214,19 @@ impl Target {
         !matches!(self, Target::LinuxAarch64)
     }
 
+    /// `wchar_t` width in bytes: 2 on Windows, whose wide-string APIs
+    /// take UTF-16 code units, and 2 on any target under `-fshort-wchar`
+    /// (`short_wchar`). Sole source of the width for the lexer's wide
+    /// literals and for the `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__`
+    /// predefines the bundled `<stddef.h>` keys its typedef on.
+    pub fn wchar_bytes(self, short_wchar: bool) -> usize {
+        if short_wchar || self.is_windows() {
+            2
+        } else {
+            4
+        }
+    }
+
     /// The `long double` format the target's platform ABI defines, when
     /// it is wider than the binary64 badc gives the type; `None` when
     /// the platform agrees with badc. System V x86-64 passes the x87

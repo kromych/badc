@@ -805,8 +805,8 @@ impl Compiler {
             let val = self.lex.ival;
             self.emit_imm(val);
             // C99 6.4.4.4p11: a wide character constant (`L'x'`) has type
-            // `wchar_t`, sized by the target -- `unsigned short` (2 bytes)
-            // on Windows, `int` (4 bytes) on the Unix targets, matching the
+            // `wchar_t` -- `unsigned short` at the 2-byte width Windows
+            // and `-fshort-wchar` select, `int` at 4 -- matching the
             // `<stddef.h>` typedef. A plain integer or narrow character
             // constant takes the usual value-driven promotion.
             self.ty = if self.lex.char_is_wide {

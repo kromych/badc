@@ -34,6 +34,69 @@ fn wide_char_constant_has_target_wchar_width() {
     assert_eq!(run(val, Target::WindowsX64), 7, "L'A' keeps its value");
 }
 
+/// `-fshort-wchar` gives `wchar_t` an unsigned 16-bit type on every
+/// target, as gcc 16.1.1 does: `sizeof(wchar_t)` and the element width
+/// of `L"..."` / `L'...'` follow it, and a `wchar_t`-width array is then
+/// the 2-byte one (C99 6.7.8p15). The Windows targets are already
+/// 2-byte, so the flag is a no-op there and `-fno-short-wchar` does not
+/// widen them.
+#[test]
+fn short_wchar_narrows_wchar_t_on_every_target() {
+    use super::Vm;
+    use crate::{CompileOptions, Compiler, Target};
+    let run = |src: &str, t: Target, short: bool| -> i64 {
+        let opts = CompileOptions::default().with_short_wchar(short);
+        Vm::new(
+            Compiler::with_options(src.to_string(), t, opts)
+                .compile()
+                .unwrap(),
+        )
+        .run()
+        .unwrap()
+    };
+    // sizeof(wchar_t) through the bundled <stddef.h> typedef, the wide
+    // literal's array size (3 elements including the terminator), and
+    // the wide character constant's own width.
+    let probe = "#include <stddef.h>\n\
+                 int main(void){ return (int)(sizeof(wchar_t) * 100 \
+                 + sizeof(L\"ab\") * 10 + sizeof(L'A')); }";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let wide = if t.is_windows() { 262 } else { 524 };
+        assert_eq!(run(probe, t, false), wide, "{t:?} default wchar_t");
+        assert_eq!(run(probe, t, true), 262, "{t:?} under -fshort-wchar");
+    }
+    // The staged elements are the code points at the selected width, not
+    // a reinterpretation of 4-byte ones.
+    let elems = "#include <stddef.h>\n\
+                 int main(void){ const wchar_t *s = L\"ab\"; \
+                 return s[0] == 'a' && s[1] == 'b' && s[2] == 0 ? 7 : 0; }";
+    assert_eq!(run(elems, Target::LinuxX64, true), 7, "narrowed elements");
+    // C99 6.7.8p15: the destination element must be wchar_t-wide, so the
+    // flag is what lets a wide literal stage into an unsigned short array
+    // (the shape the kernel's efi_char16_t arrays take).
+    let u16_array = "unsigned short d[] = L\"ab\";\n\
+                     int main(void){ return (int)sizeof(d); }";
+    assert_eq!(
+        run(u16_array, Target::LinuxX64, true),
+        6,
+        "u16 array staged"
+    );
+    let opts = CompileOptions::default();
+    let err = Compiler::with_options(u16_array.to_string(), Target::LinuxX64, opts)
+        .compile()
+        .expect_err("a 4-byte wchar_t must refuse a 2-byte destination element");
+    assert!(
+        format!("{err:?}").contains("wchar_t-width array element"),
+        "diagnostic must name the element width; got: {err:?}"
+    );
+}
+
 #[test]
 fn warn_int_to_pointer_assignment() {
     // `int *p; p = 5;` -- assigning a non-zero integer to a pointer.

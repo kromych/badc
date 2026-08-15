@@ -874,6 +874,79 @@ fn m32_predefines_the_ilp32_data_model() {
     }
 }
 
+/// `-fshort-wchar` reaches the front end from the driver: the `wchar_t`
+/// predefine pair narrows and a wide literal stages 16-bit elements, so
+/// an `unsigned short` array takes one (C99 6.7.8p15) where the default
+/// 4-byte `wchar_t` refuses it. `-fno-short-wchar` is the explicit
+/// default, as in gcc 16.1.1, and leaves the already-16-bit Windows
+/// targets alone. The kernel builds its whole tree this way and stages
+/// `L"..."` into `efi_char16_t` arrays.
+#[test]
+fn short_wchar_narrows_wchar_t_from_the_driver() {
+    const PP: &str = concat!(
+        "#define Q(x) #x\n#define S(x) Q(x)\n",
+        "wchar S(__WCHAR_TYPE__) __SIZEOF_WCHAR_T__\n",
+    );
+    let d = dir("short-wchar");
+    write(&d, "pp.c", PP);
+    for (target, flags, want) in [
+        ("linux-x64", &[][..], r#"wchar "int" 4"#),
+        ("linux-x64", &["-fno-short-wchar"][..], r#"wchar "int" 4"#),
+        (
+            "linux-x64",
+            &["-fshort-wchar"][..],
+            r#"wchar "unsigned short" 2"#,
+        ),
+        (
+            "linux-aarch64",
+            &["-fshort-wchar"][..],
+            r#"wchar "unsigned short" 2"#,
+        ),
+        (
+            "windows-x64",
+            &["-fno-short-wchar"][..],
+            r#"wchar "unsigned short" 2"#,
+        ),
+    ] {
+        let tgt = format!("--target={target}");
+        let mut args = vec!["-q", "-E", &tgt];
+        args.extend_from_slice(flags);
+        args.push("pp.c");
+        let out = run_ok(&d, &args);
+        let body: String = out.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(body.contains(want), "{target} {flags:?}: {body}");
+    }
+    // The staged bytes are UTF-16 code units, which is what makes the
+    // 2-byte destination element legal.
+    write(&d, "w.c", "unsigned short d[] = L\"ab\";\n");
+    run_ok(
+        &d,
+        &[
+            "-q",
+            "-c",
+            "--target=linux-x64",
+            "-fshort-wchar",
+            "w.c",
+            "-o",
+            "w.o",
+        ],
+    );
+    let b = std::fs::read(d.join("w.o")).expect("object");
+    assert!(
+        b.windows(6).any(|w| w == b"a\0b\0\0\0"),
+        "wide literal must stage 16-bit elements"
+    );
+    let (ok, text) = run(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "w.c", "-o", "wide.o"],
+    );
+    assert!(!ok, "a 4-byte wchar_t must refuse a 2-byte element: {text}");
+    assert!(
+        text.contains("wchar_t-width array element"),
+        "diagnostic must name the element width: {text}"
+    );
+}
+
 /// `-mcmodel` names the selected x86-64 model in a predefine and
 /// `-m16` / `-m32` override the name to the 32-bit model; the aarch64
 /// targets name none. Names are gcc 16.1.1's.

@@ -5,8 +5,8 @@
 // `wchar_t` lives in <stddef.h> (C99 7.17p2); <wchar.h>
 // transitively includes it so a source that pulls in only
 // `<wchar.h>` still sees the typedef. badc encodes `wchar_t` as
-// `int` on the Unix targets and as a 16-bit unit on Windows
-// (UTF-16), matching each platform's ABI.
+// `int` on the Unix targets, as a 16-bit unit on Windows (UTF-16),
+// and as a 16-bit unit anywhere under `-fshort-wchar`.
 #include <stddef.h>
 
 // `wint_t` holds any `wchar_t` value plus `WEOF` (C99 7.24.1). It is a

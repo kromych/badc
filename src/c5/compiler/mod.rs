@@ -397,6 +397,10 @@ pub struct CompileOptions {
     /// Mirror of [`crate::NativeOptions::code_model`] (`-mcmodel`).
     /// The preprocessor's `__code_model_*__` predefine follows it.
     pub code_model: crate::c5::CodeModel,
+    /// `-fshort-wchar` -- give `wchar_t` an unsigned 16-bit type on
+    /// every target, which narrows `L"..."` / `L'...'` elements and the
+    /// `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__` predefines with it.
+    pub short_wchar: bool,
 }
 
 impl CompileOptions {
@@ -414,6 +418,11 @@ impl CompileOptions {
     /// x86-64 code model of the object being produced (`-mcmodel`).
     pub fn with_code_model(mut self, model: crate::c5::CodeModel) -> Self {
         self.code_model = model;
+        self
+    }
+    /// Narrow `wchar_t` to an unsigned 16-bit type (`-fshort-wchar`).
+    pub fn with_short_wchar(mut self, on: bool) -> Self {
+        self.short_wchar = on;
         self
     }
 
@@ -2054,8 +2063,9 @@ impl Compiler {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         // `-m16` / `-m32` reach the front end as an ELFCLASS32 object;
         // gcc preprocesses those units with the i386 predefine set.
-        // `-mcmodel` moves the `__code_model_*__` name the same way.
-        pp.set_code_model(opts.elf_class, opts.code_model);
+        // `-mcmodel` moves the `__code_model_*__` name the same way, and
+        // `-fshort-wchar` the `wchar_t` pair.
+        pp.set_unit_model(opts.elf_class, opts.code_model, opts.short_wchar);
         if opts.gnu {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }
@@ -2197,16 +2207,8 @@ impl Compiler {
 
         let lex = {
             let mut l = Lexer::new(preprocessed);
-            // `wchar_t` is 2 bytes (UTF-16) on Windows, 4 bytes on the
-            // Unix targets; wide literals follow suit.
-            l.wchar_bytes = if matches!(
-                target,
-                super::codegen::Target::WindowsX64 | super::codegen::Target::WindowsAarch64
-            ) {
-                2
-            } else {
-                4
-            };
+            // Wide literals take their element width from `wchar_t`.
+            l.wchar_bytes = target.wchar_bytes(opts.short_wchar);
             l.char_signed = target.plain_char_signed();
             l
         };

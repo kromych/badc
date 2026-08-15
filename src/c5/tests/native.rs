@@ -55,7 +55,22 @@ fn build_and_run_outcome_with_options(src: &str, stem: &str, opts: NativeOptions
         Ok(p) => p,
         Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
     };
-    let bytes = match emit_native_with_options(&program, Target::MacOSAarch64, opts) {
+    emit_sign_run(&program, stem, opts)
+}
+
+/// [`build_and_run_outcome`] without [`super::TEST_PRELUDE`], for
+/// sources whose binding scope is part of what the test asserts.
+fn build_and_run_outcome_bare(src: &str, stem: &str) -> RunOutcome {
+    let program = match Compiler::new(src.to_string()).compile() {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
+    emit_sign_run(&program, stem, NativeOptions::default())
+}
+
+/// Emit `program` for macOS arm64, write, ad-hoc-sign, exec, classify.
+fn emit_sign_run(program: &crate::c5::Program, stem: &str, opts: NativeOptions) -> RunOutcome {
+    let bytes = match emit_native_with_options(program, Target::MacOSAarch64, opts) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
@@ -230,6 +245,34 @@ fn bss_segregation_coexists_with_thread_local() {
     match build_and_run_outcome_with_options(src, "bss_tls", opts) {
         RunOutcome::Exit(0) => {}
         other => panic!("segregated .bss with _Thread_local must exit 0, got {other:?}"),
+    }
+}
+
+#[test]
+fn thread_local_without_exit_binding_in_scope() {
+    // `_Thread_local` with only `<stdio.h>` included: libSystem is
+    // resolved through the `printf` import and no `exit` binding
+    // exists. The TLV libSystem anchor must ride the dylib list, not
+    // a forced `exit` import.
+    let src = "#include <stdio.h>\n\
+               _Thread_local int t = 5;\n\
+               int main(void) { printf(\"%d\\n\", t); return t + 37; }\n";
+    match build_and_run_outcome_bare(src, "tls_no_exit") {
+        RunOutcome::Exit(42) => {}
+        other => panic!("TLS without an `exit` binding must run, got {other:?}"),
+    }
+}
+
+#[test]
+fn thread_local_headerless_pulls_libsystem() {
+    // No headers at all: no import resolves any dylib, so the TLV
+    // anchor must add libSystem itself or dyld cannot bind
+    // `__tlv_bootstrap` for the descriptors.
+    let src = "_Thread_local int t = 5;\n\
+               int main(void) { t = t + 37; return t; }\n";
+    match build_and_run_outcome_bare(src, "tls_headerless") {
+        RunOutcome::Exit(42) => {}
+        other => panic!("header-free TLS must run, got {other:?}"),
     }
 }
 

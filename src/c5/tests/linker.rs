@@ -3222,6 +3222,34 @@ fn thread_local_storage_round_trips_through_et_rel() {
 }
 
 #[test]
+fn thread_local_macho_relocatable_records_libsystem() {
+    // macOS arm64 `_Thread_local` with no binding in scope: the TLV
+    // anchor adds libSystem to the dylib list -- it must not require
+    // an `exit` (or any) `#pragma binding`. The ET_REL `.badc.dylibs`
+    // note carries the path the linker's `__tlv_bootstrap` ordinal
+    // lookup matches on.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::string::String::from(
+        "_Thread_local int t = 5;\nint main(void) { return t; }\n",
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts)
+        .expect("`_Thread_local` must emit a Mach-O-target object without any binding in scope");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        obj.dylibs.iter().any(|d| d.contains("libSystem")),
+        "TLV-bearing objects must record libSystem for the linker: {:?}",
+        obj.dylibs
+    );
+}
+
+#[test]
 fn thread_local_storage_links_into_pt_tls_executable() {
     // A single `_Thread_local`-bearing object links through the
     // native path into an executable with a PT_TLS segment. The

@@ -161,15 +161,17 @@ header takes its standard-C path for the GNU features badc lacks.
   arguments are not modelled -- every form carries the target's strongest
   ordering -- and only the non-`_explicit` spellings are recognized.
 - `_Thread_local`, and the GNU `__thread` spelling, at file and block scope
-  (a block-scope `static _Thread_local` gets one per-thread instance) on the
-  ELF and PE targets. On ELF, variables land in `.tdata` / `.tbss`, their
+  (a block-scope `static _Thread_local` gets one per-thread instance) on
+  every target. On ELF, variables land in `.tdata` / `.tbss`, their
   symbols are typed `STT_TLS`, and TLS-relative relocations let a badc object
   link against external TLS through the system linker; on PE the image
-  carries an `IMAGE_TLS_DIRECTORY64`. File-scope initializers are limited to
+  carries an `IMAGE_TLS_DIRECTORY64`; on Mach-O each variable gets a
+  `__DATA,__thread_vars` descriptor whose getter slot dyld binds to
+  libSystem's `__tlv_bootstrap`, with the per-thread image in
+  `__thread_data` / `__thread_bss` (libSystem is added to the dylib list
+  when nothing else pulls it in). File-scope initializers are limited to
   scalars and NULL, and an initializer on a block-scope `_Thread_local`
-  object is rejected. The macOS target has no thread-local support and
-  reports an internal compiler error on one. TODO: Mach-O thread-local
-  variables, and a real diagnostic in the meantime.
+  object is rejected.
 - Anonymous `struct` / `union` members (C11 6.7.2.1p13).
 - Binary integer literals `0b...` / `0B...` (C23 / GCC), with the same
   `u` / `l` suffix handling as hex and decimal.

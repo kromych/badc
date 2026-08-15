@@ -1003,6 +1003,24 @@ pub(crate) struct ResolvedDylib {
     pub path: String,
 }
 
+impl ResolvedDylib {
+    /// The target's C runtime library, for code paths that need one
+    /// when no `#pragma dylib` is in scope: the legacy-object link
+    /// fallback and the Mach-O TLV libSystem anchor.
+    pub fn runtime_default(target: Target) -> ResolvedDylib {
+        let (name, path) = match target {
+            Target::MacOSAarch64 => ("libSystem", "/usr/lib/libSystem.B.dylib"),
+            Target::LinuxAarch64 => ("libc", "/lib/ld-linux-aarch64.so.1"),
+            Target::LinuxX64 => ("libc", "/lib64/ld-linux-x86-64.so.2"),
+            Target::WindowsX64 | Target::WindowsAarch64 => ("msvcrt", "msvcrt.dll"),
+        };
+        ResolvedDylib {
+            name: name.to_string(),
+            path: path.to_string(),
+        }
+    }
+}
+
 /// The full set of imports a single compilation needs, derived from
 /// the SSA walk + the `#pragma binding` table. Each
 /// [`ResolvedImport`]'s position in `imports` is also its GOT / IAT
@@ -1100,6 +1118,27 @@ impl ResolvedImports {
             param_types: b.param_types.clone(),
         });
         Ok(())
+    }
+
+    /// Add a dylib no import references, for images that depend on a
+    /// loader-resolved symbol outside the binding table. Prefers an
+    /// in-scope `#pragma dylib` spec whose path contains `fragment`;
+    /// falls back to the target's runtime dylib. No-op when a matching
+    /// dylib is already listed.
+    pub fn ensure_dylib(&mut self, fragment: &str, program: &Program, target: Target) {
+        if self.dylibs.iter().any(|d| d.path.contains(fragment)) {
+            return;
+        }
+        let dylib = program
+            .dylibs
+            .iter()
+            .find(|s| s.path.contains(fragment))
+            .map(|s| ResolvedDylib {
+                name: s.name.clone(),
+                path: s.path.clone(),
+            })
+            .unwrap_or_else(|| ResolvedDylib::runtime_default(target));
+        self.dylibs.push(dylib);
     }
 
     /// Collect every libc binding the program reaches for and
@@ -2612,19 +2651,14 @@ pub(crate) fn lower_for_with_prebuilt(
     {
         imports.force_include_by_name("exit", program)?;
     }
-    // macOS arm64 with `_Thread_local` globals needs libSystem
-    // loaded so dyld can bind `__tlv_bootstrap` for the TLV
-    // descriptors. The bind opcode the writer emits names
-    // libSystem by ordinal (the position of the libSystem
-    // LC_LOAD_DYLIB in the load-command stream); when the
-    // program doesn't call any libc function the resolver
-    // wouldn't otherwise pull libSystem in, so we force one
-    // libSystem-resident symbol -- `exit`, which the prelude
-    // always declares -- to keep the dylib in scope. The
-    // forced binding is harmless for programs that never call
-    // exit themselves.
+    // macOS arm64 `_Thread_local`: each TLV descriptor's getter slot
+    // is bound to libSystem's `__tlv_bootstrap` by dylib ordinal, so
+    // the dylib list must carry libSystem even when the program calls
+    // no libc function. A dylib entry needs no symbol binding in
+    // scope, so this holds for sources that include no header at all;
+    // relocatable objects record the list for the linker.
     if matches!(target, Target::MacOSAarch64) && !program.tls_data.is_empty() {
-        imports.force_include_by_name("exit", program)?;
+        imports.ensure_dylib("libSystem", program, target);
     }
     // Linux aarch64 long-double libc returns. AAPCS64 returns
     // binary128 in v0 (full Q register); c5 stores `long double`

@@ -639,7 +639,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
     // single per-target default so the legacy single-libc link
     // path stays runnable.
     let dylibs: Vec<ResolvedDylib> = if merged.dylibs.is_empty() {
-        alloc::vec![default_dylib(target)]
+        alloc::vec![ResolvedDylib::runtime_default(target)]
     } else {
         merged
             .dylibs
@@ -722,23 +722,6 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
     })
 }
 
-fn default_dylib(target: Target) -> ResolvedDylib {
-    match target {
-        Target::MacOSAarch64 => ResolvedDylib {
-            name: "libSystem".to_string(),
-            path: "/usr/lib/libSystem.B.dylib".to_string(),
-        },
-        Target::LinuxAarch64 | Target::LinuxX64 => ResolvedDylib {
-            name: "libc".to_string(),
-            path: linux_libc_path(target),
-        },
-        Target::WindowsX64 | Target::WindowsAarch64 => ResolvedDylib {
-            name: "msvcrt".to_string(),
-            path: "msvcrt.dll".to_string(),
-        },
-    }
-}
-
 fn dylib_name_from_path(path: &str) -> String {
     // The c5 handle is the load path's stem -- "libc.so.6" maps
     // to "libc", "/usr/lib/libSystem.B.dylib" to "libSystem",
@@ -747,14 +730,6 @@ fn dylib_name_from_path(path: &str) -> String {
     let stem = basename.split('.').next().unwrap_or(basename);
     let stripped = stem.strip_prefix("lib").unwrap_or(stem);
     stripped.to_string()
-}
-
-fn linux_libc_path(target: Target) -> String {
-    match target {
-        Target::LinuxAarch64 => "/lib/ld-linux-aarch64.so.1".to_string(),
-        Target::LinuxX64 => "/lib64/ld-linux-x86-64.so.2".to_string(),
-        _ => String::new(),
-    }
 }
 
 /// Project [`MergedNative::pending_imports`] plus the matching PLT

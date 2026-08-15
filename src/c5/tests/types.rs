@@ -195,6 +195,39 @@ fn unprototyped_declaration_supplies_no_parameters() {
     );
 }
 
+#[test]
+fn typeof_redeclaration_merges_with_the_recorded_prototype() {
+    // C99 6.2.7p4: the composite type of two compatible declarations keeps
+    // the parameter type list, so a redeclaration through the function's
+    // own type merges with the recorded prototype instead of replacing it.
+    // The orderings differ in what the specifier reads: a definition alone,
+    // a prototype the definition follows, and a block-scope redeclaration.
+    let orderings = [
+        "unsigned inner(kuid_t k) { return k.val; }\n\
+         extern typeof(inner) inner;\n\
+         unsigned use(kuid_t k) { return inner(k, 1, 2); }\n",
+        "unsigned inner(kuid_t k);\n\
+         extern typeof(inner) inner;\n\
+         unsigned inner(kuid_t k) { return k.val; }\n\
+         unsigned use(kuid_t k) { return inner(k, 1, 2); }\n",
+        "unsigned inner(kuid_t k) { return k.val; }\n\
+         unsigned use(kuid_t k) { extern typeof(inner) inner; return inner(k, 1, 2); }\n",
+    ];
+    for body in orderings {
+        let src = alloc::format!(
+            "typedef struct {{ int val; }} kuid_t;\n{body}int main(void) {{ return 0; }}\n"
+        );
+        let p = compile_str(&src);
+        assert!(
+            p.warnings
+                .iter()
+                .any(|w| w.contains("too many arguments") && w.contains("inner")),
+            "expected an arity warning past the redeclaration, got: {:?}",
+            p.warnings
+        );
+    }
+}
+
 /// C99 6.2.4 + 6.2.2: block-scope locals, function parameters,
 /// and `static` file-scope functions that are never referenced
 /// are dead. The compiler emits a `<file>:<line>: warning:

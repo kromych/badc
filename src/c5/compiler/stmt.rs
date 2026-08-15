@@ -1481,16 +1481,25 @@ impl Compiler {
                 (true, Some(Segment::Fs)) => AsmSeg::Fs,
                 _ => AsmSeg::None,
             };
-            // `A` on a value too wide for one register would need the
-            // `rdx:rax` pair, which this constraint does not model; rejecting
-            // keeps it from silently using the low half.
-            if cstr.trim_start_matches(['=', '+', '&', '%']) == "A"
-                && !self.target.is_aarch64()
-                && self.size_of_type(self.ty) > 8
+            // A value wider than a general register needs a register pair,
+            // which no constraint here models; a single register would carry
+            // only part of the value. Memory, SIMD, and immediate operands
+            // have defined handling for wider values and stay accepted.
+            let op_size = self.size_of_type(self.ty);
+            if op_size > 8
+                && !matches!(
+                    constraint,
+                    AsmConstraint::Mem
+                        | AsmConstraint::MemBase
+                        | AsmConstraint::Fp
+                        | AsmConstraint::Imm
+                )
             {
                 self.truncate_data(data_base);
-                return Err(self
-                    .compile_err("inline asm: `A` operand wider than a register is unsupported"));
+                return Err(self.compile_err(alloc::format!(
+                    "inline asm: {op_size}-byte operand for constraint `{cstr}` exceeds a \
+                     general register; use a memory operand or split the value"
+                )));
             }
             // The x86 `x` operand path moves a full 128-bit value (movups), so
             // it requires a 16-byte operand (a __m128i / vector). A scalar

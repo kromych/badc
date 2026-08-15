@@ -1124,3 +1124,69 @@ fn two_outputs_on_one_fixed_register_are_rejected() {
         );
     }
 }
+
+#[test]
+fn operand_wider_than_a_general_register_is_diagnosed() {
+    // A 16-byte integer bound to a single-register constraint needs a
+    // register pair (gcc 16 allocates an even/odd pair on aarch64 and
+    // renders `%N` as its low register), which no constraint here models;
+    // one register would carry only part of the value, in either
+    // direction. TODO: allocate a register pair instead of rejecting.
+    let err = |target: crate::Target, body: &str| -> alloc::string::String {
+        let src = alloc::format!(
+            "int main(void){{ unsigned __int128 v = 5; (void)v; {body} return 0; }}"
+        );
+        crate::Compiler::with_options(src, target, crate::CompileOptions::default())
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default()
+    };
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for body in [
+            "__asm__(\"# %0\" :: \"r\"(v));",
+            "__asm__(\"# %0\" : \"=r\"(v));",
+            "__asm__(\"# %0\" : \"+r\"(v));",
+        ] {
+            let e = err(target, body);
+            assert!(
+                e.contains("16-byte operand") && e.contains("exceeds a general register"),
+                "{target:?} {body}: {e:?}"
+            );
+        }
+    }
+    // The specific-register letters bind one register just the same.
+    for body in [
+        "__asm__(\"# %0\" :: \"a\"(v));",
+        "__asm__(\"# %0\" :: \"A\"(v));",
+        "__asm__(\"# %0\" : \"=d\"(v));",
+    ] {
+        let e = err(crate::Target::LinuxX64, body);
+        assert!(
+            e.contains("16-byte operand") && e.contains("exceeds a general register"),
+            "{body}: {e:?}"
+        );
+    }
+}
+
+#[test]
+fn wide_operand_memory_and_split_spellings_stay_accepted() {
+    // The workable spellings for a 16-byte value: the object through a
+    // memory operand (its address), and the halves through 8-byte
+    // register operands via a union.
+    let src = "typedef union { unsigned __int128 v; \
+                    struct { unsigned long long lo, hi; } s; } u128u; \
+        int main(void) { u128u u; u.v = 5; unsigned long long r; \
+            __asm__(\"# %0 %1 %2\" : \"=r\"(r) : \"r\"(u.s.lo), \"r\"(u.s.hi)); \
+            __asm__(\"# %0\" :: \"m\"(u.v)); \
+            return (int)r & 0; }";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        crate::Compiler::with_options(
+            src.to_string(),
+            target,
+            crate::CompileOptions::default(),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}

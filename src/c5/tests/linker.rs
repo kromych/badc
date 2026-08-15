@@ -4179,6 +4179,51 @@ fn macho_executable_exports_globals_through_dyld_info_trie() {
     );
 }
 
+/// An address-constant `_Thread_local` initializer round-trips through
+/// ET_REL as a `.rela.tdata` absolute-64 relocation (the shape gcc
+/// emits) and the linker resolves it against the merged `.data`.
+#[test]
+fn thread_local_address_initializer_survives_the_object_round_trip() {
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "static int g = 7;\n\
+         __thread int *p = &g;\n\
+         int deref(void) { return *p; }\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    assert_eq!(
+        program.tls_data_relocs.len(),
+        1,
+        "the template must carry one address-constant relocation"
+    );
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert_eq!(
+        obj.tls_relocs.len(),
+        1,
+        "`.rela.tdata` must survive the ET_REL round trip"
+    );
+    assert_eq!(
+        obj.tls_relocs[0].offset, 0,
+        "the slot is the template's own"
+    );
+    let merged = link_native_objects(&[obj]).expect("link");
+    assert_eq!(
+        merged.tls_abs_relocs.len(),
+        1,
+        "the merged image must keep the template relocation"
+    );
+}
+
 #[test]
 fn thread_local_in_elf_shared_library_is_a_link_error() {
     // The emitted `_Thread_local` sequences use the local-exec TLS
@@ -5113,6 +5158,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
             bss_size: 0,
             bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
+            tls_relocs: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec![null_sym(), weak_undef()],
             text_relocs,
@@ -5306,6 +5352,7 @@ fn aarch64_data_ref_object_ex(
         bss_size: 0,
         bss_align: 1,
         tls_data: alloc::vec::Vec::new(),
+        tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
         prologue_ends: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
@@ -5558,6 +5605,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         bss_size: 0,
         bss_align: 1,
         tls_data: alloc::vec::Vec::new(),
+        tls_relocs: alloc::vec::Vec::new(),
         tls_bss_size: 0,
         prologue_ends: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),

@@ -532,6 +532,47 @@ fn r_relative(machine: Machine) -> u64 {
     }
 }
 
+/// Address-constant initializers of `_Thread_local` objects, as
+/// `(offset within the TLS template, link-time absolute target VA)`.
+/// Both the baked template bytes and the `.rela.dyn` addends read this,
+/// so the two cannot disagree.
+fn tls_reloc_sites(
+    build: &Build,
+    data_off_to_vaddr: &dyn Fn(u64) -> u64,
+    code_vmaddr: u64,
+    stub_len: u64,
+) -> Result<Vec<(usize, u64)>, C5Error> {
+    if let Some(r) = build.tls_extern_data_relocs.first() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+            "undefined reference to `{}` in a `_Thread_local` initializer: \
+             the template's address constant must resolve within the image",
+            r.symbol_name,
+        ))));
+    }
+    let mut sites = Vec::with_capacity(build.tls_data_relocs.len() + build.tls_code_relocs.len());
+    for r in &build.tls_data_relocs {
+        // Same anchored mapping the `.data` slots take: the anchor picks
+        // the runtime region, the signed displacement rides on the address.
+        let absolute = data_off_to_vaddr(r.target_anchor)
+            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
+        sites.push((r.data_offset as usize, absolute));
+    }
+    for r in &build.tls_code_relocs {
+        let ent_pc = r.target_ent_pc as usize;
+        let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("ELF: TLS code reloc references missing ent_pc {ent_pc}"),
+            )));
+        };
+        sites.push((
+            r.data_offset as usize,
+            code_vmaddr + stub_len + native_off as u64,
+        ));
+    }
+    sites.sort_unstable();
+    Ok(sites)
+}
+
 // `DT_NEEDED` entries come from `build.imports.dylibs` -- whatever
 // the program's resolved `#pragma binding`s pull in. Empty when the
 // program calls no libc.
@@ -1850,7 +1891,11 @@ pub(super) fn write(
     // relocation so it tracks the runtime load base; an executable maps at
     // its link-time vmaddr, so the baked bytes are final and need none.
     let n_relative = if emit_dyn {
-        build.data_relocs.len() + build.code_relocs.len() + build.label_relocs.len()
+        build.data_relocs.len()
+            + build.code_relocs.len()
+            + build.label_relocs.len()
+            + build.tls_data_relocs.len()
+            + build.tls_code_relocs.len()
     } else {
         0
     };
@@ -2704,6 +2749,19 @@ pub(super) fn write(
                 },
             );
         }
+        // The `_Thread_local` initialization template. `r_offset` is the
+        // template's own address, so the loader relocates the image bytes
+        // the per-thread copies are made from.
+        for (off, absolute) in tls_reloc_sites(build, &data_off_to_vaddr, code_vmaddr, stub_len)? {
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: tdata_vmaddr + off as u64,
+                    r_info: r_type,
+                    r_addend: absolute as i64,
+                },
+            );
+        }
     }
     // COPY relocations for data imports: the loader copies the named
     // symbol's object from the defining shared library into the slot at
@@ -2954,7 +3012,24 @@ pub(super) fn write(
         out.push(0);
     }
     debug_assert_eq!(out.len() as u64, tdata_off);
-    out.extend_from_slice(&build.tls_data[..build.tls_init_size]);
+    // The initialization template, with address-constant initializers
+    // resolved to their link-time VAs. Each also carries a `.rela.dyn`
+    // R_*_RELATIVE entry (built above) sited at the template's own address,
+    // so the loader relocates the template before any thread's block is
+    // allocated and every per-thread copy inherits the relocated value.
+    let mut tdata_with_relocs = build.tls_data[..build.tls_init_size].to_vec();
+    for (off, absolute) in tls_reloc_sites(build, &data_off_to_vaddr, code_vmaddr, stub_len)? {
+        if off + 8 > tdata_with_relocs.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: TLS reloc offset {off:#x} past end of .tdata ({})",
+                    tdata_with_relocs.len()
+                ),
+            )));
+        }
+        tdata_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+    }
+    out.extend_from_slice(&tdata_with_relocs);
 
     // Pad to end of segment 2 (page-aligned).
     while (out.len() as u64) < segment2_end {
@@ -3894,6 +3969,9 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
@@ -3991,6 +4069,9 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),

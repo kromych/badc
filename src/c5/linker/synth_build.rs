@@ -49,7 +49,7 @@ use crate::c5::object::elf_reloc_types::{
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
-use super::link::{MergedNative, MergedTarget, PltTrampoline};
+use super::link::{DataAbsReloc, MergedNative, MergedTarget, PltTrampoline};
 use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT, STV_DEFAULT};
 
 /// Synthesize a Program + Build for `merged` against `target` and
@@ -143,9 +143,14 @@ fn synth_program_and_build(
         text_abs: text_abs_relocs,
     } = synth_fixups(merged, plt, TextAbsolute::for_output(target, output_kind))?;
     let (data_relocs, code_relocs) = synth_relocs(merged);
+    let (tls_data_relocs, tls_code_relocs) = synth_abs_relocs(&merged.tls_abs_relocs);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt)?;
     let exports = synth_exports(merged, export_all, output_kind);
-    let pc_to_native = synth_pc_to_native(&merged.text, &code_relocs, &exports);
+    // A TLS template slot may hold the only reference to a function, so
+    // its target must be in the PC map the writers index.
+    let mut code_reloc_pcs = code_relocs.clone();
+    code_reloc_pcs.extend_from_slice(&tls_code_relocs);
+    let pc_to_native = synth_pc_to_native(&merged.text, &code_reloc_pcs, &exports);
 
     let program = Program {
         data: Vec::new(),
@@ -165,6 +170,9 @@ fn synth_program_and_build(
         data_relocs: data_relocs.clone(),
         extern_data_relocs: Vec::new(),
         code_relocs: code_relocs.clone(),
+        tls_data_relocs: Vec::new(),
+        tls_extern_data_relocs: Vec::new(),
+        tls_code_relocs: Vec::new(),
         exports: exports.clone(),
         dylibs: Vec::new(),
         dllmain_pc: None,
@@ -544,6 +552,11 @@ fn synth_program_and_build(
         data_relocs,
         extern_data_relocs: Vec::new(),
         code_relocs,
+        tls_data_relocs: tls_data_relocs.clone(),
+        // Every TLS-template target resolves within the merged image; an
+        // unresolved one is rejected in `link_native_objects`.
+        tls_extern_data_relocs: Vec::new(),
+        tls_code_relocs: tls_code_relocs.clone(),
         // A synthesized link image resolves every label address at
         // write time; no unresolved label slot survives into the Build.
         label_relocs: Vec::new(),
@@ -1060,9 +1073,16 @@ fn project_x86_64_pending(
 }
 
 fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
+    synth_abs_relocs(&merged.data_abs_relocs)
+}
+
+/// Split resolved absolute relocations into the data- and code-target
+/// lists the writers take. Shared by the `.data` slots and the
+/// `_Thread_local` template's, whose targets resolve identically.
+fn synth_abs_relocs(relocs: &[DataAbsReloc]) -> (Vec<DataReloc>, Vec<CodeReloc>) {
     let mut data_relocs: Vec<DataReloc> = Vec::new();
     let mut code_relocs: Vec<CodeReloc> = Vec::new();
-    for r in &merged.data_abs_relocs {
+    for r in relocs {
         // `MergedTarget::Data` is already the unified data-byte offset
         // the per-format writers' data-offset-to-vaddr map takes, zero-
         // fill tail included; no per-section bias is applied here.
@@ -1276,6 +1296,7 @@ mod tests {
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
+            tls_abs_relocs: Vec::new(),
             init_fini_arrays: Default::default(),
             section_map: Default::default(),
         }

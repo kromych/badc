@@ -1005,11 +1005,17 @@ pub(super) fn write_relocatable(
     let has_tls = !program.tls_data.is_empty();
     const SHIDX_TDATA: u16 = 15;
     const SHIDX_TBSS: u16 = 16;
+    //  17 = .rela.tdata (present only when the template carries an
+    //       address-constant initializer)
+    const SHIDX_RELA_TDATA: u16 = 17;
+    let has_tls_relocs = !build.tls_data_relocs.is_empty()
+        || !build.tls_extern_data_relocs.is_empty()
+        || !build.tls_code_relocs.is_empty();
     // Base section count (null + the fixed sections, plus the two TLS
-    // sections when present). Each `.init_array` / `.fini_array` group
-    // adds two more (the array + its `.rela`), counted once the groups
-    // are known below.
-    let base_sections: usize = if has_tls { 17 } else { 15 };
+    // sections when present and their relocation table when the template
+    // carries one). Each `.init_array` / `.fini_array` group adds two more
+    // (the array + its `.rela`), counted once the groups are known below.
+    let base_sections: usize = 15 + if has_tls { 2 } else { 0 } + usize::from(has_tls_relocs);
 
     // ---- `__attribute__((section("name")))` placement plan ----
     //
@@ -1809,7 +1815,11 @@ pub(super) fn write_relocatable(
             user_extern_data_names.push(s);
         }
     }
-    for r in &build.extern_data_relocs {
+    for r in build
+        .extern_data_relocs
+        .iter()
+        .chain(&build.tls_extern_data_relocs)
+    {
         let s = r.symbol_name.as_str();
         if !asm_defined_labels.contains(s) && !user_extern_data_names.contains(&s) {
             user_extern_data_names.push(s);
@@ -3561,6 +3571,70 @@ pub(super) fn write_relocatable(
         push_data_row(&mut carve, &mut rela_data_bytes, r.data_offset, sym, addend);
     }
 
+    // `.rela.tdata` -- address-constant initializers of `_Thread_local`
+    // objects. Same absolute-64 relocation as `.rela.data`; the slot is a
+    // `.tdata` offset, which the named-section carve never claims, so the
+    // rows go straight into the table.
+    let mut rela_tdata_bytes: Vec<u8> = Vec::new();
+    {
+        let mut push = |slot: u64, sym: u64, addend: i64| {
+            write_struct(
+                &mut rela_tdata_bytes,
+                &Elf64Rela {
+                    r_offset: slot,
+                    r_info: (sym << 32) | rtype_abs64 as u64,
+                    r_addend: addend,
+                },
+            );
+        };
+        for r in &build.tls_data_relocs {
+            let (sym, addend) = home_sym(plan.map_ref(r.target_offset, r.target_anchor));
+            push(r.data_offset, sym, addend);
+        }
+        for r in &build.tls_extern_data_relocs {
+            let (sym_idx, base) = match asm_label_ref(r.symbol_name.as_str()) {
+                Some(pair) => pair,
+                None => {
+                    let pos = user_extern_data_names
+                        .iter()
+                        .position(|n| *n == r.symbol_name.as_str())
+                        .expect("user_extern_data_names contains every extern_data_reloc name");
+                    (user_extern_data_sym_idx[pos] as u64, 0)
+                }
+            };
+            push(r.data_offset, sym_idx, base + r.addend);
+        }
+        for r in &build.tls_code_relocs {
+            let ent_pc = r.target_ent_pc as usize;
+            if let Some(&name) = extern_fn_by_pc.get(&ent_pc) {
+                let (sym_idx, base) = match func_symidx_by_name.get(name) {
+                    Some(&i) => (i as u64, 0),
+                    None => match asm_label_ref(name) {
+                        Some(pair) => pair,
+                        None => {
+                            let pos = user_extern_names.iter().position(|n| *n == name).expect(
+                                "user_extern_names contains every code-reloc extern callee",
+                            );
+                            (user_extern_sym_idx[pos] as u64, 0)
+                        }
+                    },
+                };
+                push(r.data_offset, sym_idx, base);
+                continue;
+            }
+            let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("elf_reloc: TLS code reloc references missing ent_pc {ent_pc}"),
+                )));
+            };
+            let (sym, addend) = match carve.map_text(native_off as u64) {
+                Some((te, new_off)) => (carve.sym_idx[te], new_off as i64),
+                None => (text_sym_idx, native_off as i64),
+            };
+            push(r.data_offset, sym, addend);
+        }
+    }
+
     // `.init_array` / `.fini_array` groups. C99 has no such attribute;
     // GNU practice (matched by every mainstream toolchain) lowers each
     // `__attribute__((constructor))` into an `SHT_INIT_ARRAY` pointer
@@ -3664,6 +3738,7 @@ pub(super) fn write_relocatable(
         (SHIDX_RELA_DATA, rela_data_bytes.is_empty()),
         (SHIDX_RELA_DEBUG_INFO, rela_debug_info_bytes.is_empty()),
         (SHIDX_RELA_DEBUG_LINE, rela_debug_line_bytes.is_empty()),
+        (SHIDX_RELA_TDATA, rela_tdata_bytes.is_empty()),
     ];
     let dropped_below = |n: u16| -> u16 {
         fixed_rela_empty
@@ -3738,6 +3813,9 @@ pub(super) fn write_relocatable(
     if has_tls {
         shstrtab_names.push(".tdata".to_string());
         shstrtab_names.push(".tbss".to_string());
+    }
+    if !rela_tdata_bytes.is_empty() {
+        shstrtab_names.push(format!("{rp}.tdata"));
     }
     // Named sections (attribute placements + inline-asm payloads) take
     // the indices right after the fixed set; the on-demand `.rela`
@@ -4197,6 +4275,26 @@ pub(super) fn write_relocatable(
         });
     } else {
         let _ = (SHIDX_TDATA, SHIDX_TBSS);
+    }
+    // .rela.tdata -- follows `.tbss` so the fixed indices below it stay
+    // put. `sh_info` names `.tdata`, whose bytes it patches.
+    if !rela_tdata_bytes.is_empty() {
+        let table = encode_reloc_table(class, &rela_tdata_bytes);
+        let rela_tdata_off = round_up(out.len() as u64, class.addr_size());
+        out.resize(rela_tdata_off as usize, 0);
+        out.extend_from_slice(&table);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_RELA_TDATA),
+            sh_type: reloc_sht(class),
+            sh_flags: SHF_INFO_LINK,
+            sh_offset: rela_tdata_off,
+            sh_size: table.len() as u64,
+            sh_link: shidx_symtab as u32,
+            sh_info: shndx_map(SHIDX_TDATA) as u32,
+            sh_addralign: class.addr_size(),
+            sh_entsize: reloc_entsize(class),
+            ..Default::default()
+        });
     }
 
     let _ = SHIDX_DEBUG_INFO;
@@ -5200,6 +5298,9 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
@@ -5277,6 +5378,9 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),

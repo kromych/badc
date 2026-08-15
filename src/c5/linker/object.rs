@@ -749,6 +749,10 @@ pub struct NativeObject {
     /// patching the 8-byte slot at `offset` in the merged
     /// `.data`.
     pub data_relocs: Vec<NativeReloc>,
+    /// `.rela.tdata` entries -- the same absolute-address relocation as
+    /// [`Self::data_relocs`], with `offset` indexing [`Self::tls_data`],
+    /// the `_Thread_local` initialization template.
+    pub tls_relocs: Vec<NativeReloc>,
     /// `.init_array` / `.fini_array` entries, each a constructor /
     /// destructor pointer resolved to this unit's `.text` offset. The
     /// linker collects these across units, orders them by priority, and
@@ -1092,6 +1096,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                     | SectionFamily::RelRo
                     | SectionFamily::Data
                     | SectionFamily::Bss
+                    | SectionFamily::Tdata
             )
         )
     });
@@ -1346,6 +1351,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut text_relocs: Vec<NativeReloc> = Vec::new();
     let mut relro_relocs: Vec<NativeReloc> = Vec::new();
     let mut data_relocs: Vec<NativeReloc> = Vec::new();
+    let mut tls_relocs: Vec<NativeReloc> = Vec::new();
     for &rela_sh_i in &rela_section_indices {
         let rela_sh = &shdrs[rela_sh_i];
         if rela_sh.sh_type != SHT_RELA {
@@ -1368,6 +1374,9 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             (NativeSymSection::Text, base) => (base, &mut text_relocs),
             (NativeSymSection::RelRo, base) => (base, &mut relro_relocs),
             (NativeSymSection::Data, base) => (base, &mut data_relocs),
+            // `.rela.tdata` -- an address-constant initializer of a
+            // `_Thread_local` object patches the initialization template.
+            (NativeSymSection::Tls, base) => (base, &mut tls_relocs),
             (other, _) => {
                 return Err(err(&format!(
                     ".rela.* section at index {rela_sh_i} targets section {target_shndx} \
@@ -1687,6 +1696,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         bss_size,
         bss_align,
         tls_data: tls_data_bytes,
+        tls_relocs,
         tls_bss_size,
         symbols,
         text_relocs,

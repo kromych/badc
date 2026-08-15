@@ -252,6 +252,10 @@ pub struct MergedNative {
     /// `_Thread_local` storage.
     pub tls_data: Vec<u8>,
     pub tls_init_size: usize,
+    /// Address-constant initializers inside [`Self::tls_data`]. Same
+    /// resolution as [`Self::data_abs_relocs`], with `slot_offset`
+    /// indexing the TLS template instead of `data`.
+    pub tls_abs_relocs: Vec<DataAbsReloc>,
     /// `.init_array` / `.fini_array` placement in [`Self::data`] (Pass 1.5),
     /// forwarded to the dynamic-ELF writer so it emits DT_INIT_ARRAY /
     /// DT_FINI_ARRAY. The pointer slots already carry R_*_RELATIVE via
@@ -1672,15 +1676,28 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // Data slots that name an imported function; the PLT pass turns each
     // into a stub-targeting `DataAbsReloc` (see `data_import_refs`).
     let mut data_import_refs: Vec<(u64, usize)> = Vec::new();
+    // `.rela.tdata` slots resolve their targets exactly as `.rela.data`
+    // does; only the segment the slot lives in differs, so they ride the
+    // same pass and split at the push.
+    let mut tls_abs_relocs: Vec<DataAbsReloc> = Vec::new();
     for (i, obj) in objs.iter().enumerate() {
         // A relocation site is a blob offset, so it moves with the
         // section that carries it.
         let sited = obj
             .data_relocs
             .iter()
-            .map(|r| (r, &rw_map[i]))
-            .chain(obj.relro_relocs.iter().map(|r| (r, &relro_map[i])));
-        for (reloc, site_map) in sited {
+            .map(|r| (r, rw_map[i].at(r.offset), false))
+            .chain(
+                obj.relro_relocs
+                    .iter()
+                    .map(|r| (r, relro_map[i].at(r.offset), false)),
+            )
+            .chain(
+                obj.tls_relocs
+                    .iter()
+                    .map(|r| (r, tls_bases[i] as u64 + r.offset, true)),
+            );
+        for (reloc, slot_offset, in_tls) in sited {
             if reloc.sym_idx >= obj.symbols.len() {
                 return Err(err(&format!(
                     "link_native_objects: .rela.data sym_idx {} out of range in object {i}",
@@ -1688,7 +1705,6 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 )));
             }
             let sym = &obj.symbols[reloc.sym_idx];
-            let slot_offset = site_map.at(reloc.offset);
             // A pc-relative slot in the data stream (a switch dispatch
             // table in folded `.rodata`, an assembler `label - .`
             // record in a folded named section): the value is
@@ -1727,6 +1743,14 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         )));
                     }
                 };
+                if in_tls {
+                    return Err(link_err(&format!(
+                        "pc-relative relocation against `{}` in the `_Thread_local` \
+                         initialization template: the template is copied per thread, \
+                         so a displacement from it has no fixed value",
+                        sym.name,
+                    )));
+                }
                 data_pcrel_relocs.push(DataPcRel {
                     slot_offset,
                     target: merged_target(section, value, reloc.addend, data.len())?,
@@ -1760,13 +1784,14 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         // slot now, no reloc survives.
                         None if sym.binding == 2 && !is_routed_import(sym.name.as_str()) => {
                             let slot = slot_offset as usize;
-                            if slot + 8 > data.len() {
+                            let seg = if in_tls { &mut tls_data } else { &mut data };
+                            if slot + 8 > seg.len() {
                                 return Err(err(&format!(
-                                    "weak data reloc slot 0x{slot:x} past end of data (len {})",
-                                    data.len(),
+                                    "weak data reloc slot 0x{slot:x} past end of segment (len {})",
+                                    seg.len(),
                                 )));
                             }
-                            data[slot..slot + 8]
+                            seg[slot..slot + 8]
                                 .copy_from_slice(&(reloc.addend as u64).to_le_bytes());
                             continue;
                         }
@@ -1779,6 +1804,14 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             || is_routed_import(sym.name.as_str())
                             || import_idx_for_name.contains_key(sym.name.as_str()) =>
                         {
+                            if in_tls {
+                                return Err(link_err(&format!(
+                                    "`_Thread_local` initializer names imported symbol `{}`: \
+                                     the template is resolved at image load, before the \
+                                     import's stub address is known",
+                                    sym.name,
+                                )));
+                            }
                             let idx =
                                 record_import(&sym.name, &mut imports, &mut import_idx_for_name);
                             flat_imports.insert(sym.name.clone());
@@ -1786,8 +1819,13 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             continue;
                         }
                         None => {
+                            let site = if in_tls {
+                                "`_Thread_local` initializer"
+                            } else {
+                                "data initializer"
+                            };
                             return Err(link_err(&format!(
-                                "undefined reference to `{}` (data initializer)",
+                                "undefined reference to `{}` ({site})",
                                 sym.name,
                             )));
                         }
@@ -1859,7 +1897,12 @@ pub fn link_native_objects_with_shared_libs<'a>(
                     "link_native_objects: .rela.data resolved to negative offset {off}",
                 )));
             }
-            data_abs_relocs.push(DataAbsReloc {
+            let dest = if in_tls {
+                &mut tls_abs_relocs
+            } else {
+                &mut data_abs_relocs
+            };
+            dest.push(DataAbsReloc {
                 slot_offset,
                 target,
                 anchor,
@@ -2199,6 +2242,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
         local_funcs,
         tls_data,
         tls_init_size,
+        tls_abs_relocs,
         init_fini_arrays: crate::c5::codegen::InitFiniArrays {
             init: (init_array_end > init_array_start)
                 .then_some((init_array_start, init_array_end - init_array_start)),
@@ -3852,6 +3896,7 @@ mod tests {
             bss_size: 0,
             bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
+            tls_relocs: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
@@ -4008,6 +4053,7 @@ mod tests {
             bss_size: 0,
             bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
+            tls_relocs: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
@@ -4105,6 +4151,7 @@ mod tests {
             bss_size: 0,
             bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
+            tls_relocs: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
@@ -4164,6 +4211,7 @@ mod tests {
             bss_size: 0,
             bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
+            tls_relocs: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
@@ -4254,6 +4302,7 @@ mod tests {
                 bss_size: 0,
                 bss_align: 1,
                 tls_data: alloc::vec::Vec::new(),
+                tls_relocs: alloc::vec::Vec::new(),
                 tls_bss_size: 0,
                 symbols,
                 text_relocs,
@@ -4432,6 +4481,7 @@ mod tests {
             bss_size: 0,
             bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
+            tls_relocs: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec::Vec::new(),
             text_relocs: alloc::vec::Vec::new(),
@@ -4518,6 +4568,7 @@ mod tests {
             bss_size: 0,
             bss_align: 1,
             tls_data: alloc::vec::Vec::new(),
+            tls_relocs: alloc::vec::Vec::new(),
             tls_bss_size: 0,
             symbols: alloc::vec::Vec::new(),
             text_relocs: alloc::vec::Vec::new(),

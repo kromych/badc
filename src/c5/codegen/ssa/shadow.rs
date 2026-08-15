@@ -583,6 +583,17 @@ pub(crate) fn compute_live_sets(
     if n > 0 {
         work.push(Node::Data(0));
     }
+    // The TLS template is kept whole, so an object its initializer names is
+    // a root rather than an edge from a `data` interval.
+    for r in &program.tls_data_relocs {
+        let anchor = r.target_anchor as i64;
+        if (0..data_len).contains(&anchor) {
+            work.push(Node::Data(interval_of(anchor)));
+        }
+    }
+    for r in &program.tls_code_relocs {
+        work.push(Node::Func(r.target_ent_pc as usize));
+    }
     for t in &program.file_asm {
         push_asm_names(t.as_bytes(), &named, &mut work);
     }

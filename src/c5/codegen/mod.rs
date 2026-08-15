@@ -1691,6 +1691,13 @@ pub(crate) struct Build {
     /// `pc_to_native` and patches the slot to the runtime
     /// code address.
     pub code_relocs: Vec<crate::c5::program::CodeReloc>,
+    /// Address-constant initializers of `_Thread_local` objects; mirrors of
+    /// [`Program::tls_data_relocs`] / `tls_extern_data_relocs` /
+    /// `tls_code_relocs`. Slots are `tls_data` offsets, so the per-format
+    /// writer sites them against the TLS template rather than `.data`.
+    pub tls_data_relocs: Vec<crate::c5::program::DataReloc>,
+    pub tls_extern_data_relocs: Vec<crate::c5::program::ExternDataReloc>,
+    pub tls_code_relocs: Vec<crate::c5::program::CodeReloc>,
     /// Data slots holding a `&&label` address, filled by native emit
     /// once each owning function's block layout is final.
     pub label_relocs: Vec<LabelReloc>,
@@ -2878,8 +2885,12 @@ pub(crate) fn lower_for_with_prebuilt(
     build.data_relocs = program.data_relocs.clone();
     build.extern_data_relocs = program.extern_data_relocs.clone();
     build.code_relocs = program.code_relocs.clone();
+    build.tls_data_relocs = program.tls_data_relocs.clone();
+    build.tls_extern_data_relocs = program.tls_extern_data_relocs.clone();
+    build.tls_code_relocs = program.tls_code_relocs.clone();
     if options.output_kind != OutputKind::Relocatable {
         bind_code_reloc_aliases(program, &mut build.code_relocs);
+        bind_code_reloc_aliases(program, &mut build.tls_code_relocs);
     }
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;

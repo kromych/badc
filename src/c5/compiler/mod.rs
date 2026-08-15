@@ -1683,6 +1683,19 @@ pub struct Compiler {
     /// function pointers carry the small `CODE_BASE + ent_pc` bias
     /// and the indirect-call lowering recognises that range.
     code_relocs: Vec<crate::c5::program::CodeReloc>,
+    /// Address-constant initializers of `_Thread_local` objects. Slots are
+    /// `tls_data` offsets; see [`program::Program::tls_data_relocs`].
+    pub(super) tls_data_relocs: Vec<crate::c5::program::DataReloc>,
+    /// Per-`tls_data_relocs` originating symbol index, as
+    /// [`Self::data_reloc_sym_idx`] is for `data_relocs`.
+    pub(super) tls_data_reloc_sym_idx: Vec<usize>,
+    /// [`Self::extern_data_relocs`] whose slot is in `tls_data`.
+    pub(super) tls_extern_data_relocs: Vec<crate::c5::program::ExternDataReloc>,
+    /// [`Self::code_relocs`] whose slot is in `tls_data`.
+    pub(super) tls_code_relocs: Vec<crate::c5::program::CodeReloc>,
+    /// Per-`tls_code_relocs` originating symbol index, as
+    /// [`Self::code_reloc_sym_idx`] is for `code_relocs`.
+    pub(super) tls_code_reloc_sym_idx: Vec<usize>,
     /// `&&label` initializer elements staged while parsing the current
     /// function body; moved onto `FinishedFunction::label_data_slots` at
     /// function close.
@@ -2311,6 +2324,11 @@ impl Compiler {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_data_reloc_sym_idx: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
+            tls_code_reloc_sym_idx: Vec::new(),
             pending_label_relocs: Vec::new(),
             in_function_body: false,
             pending_exports,
@@ -2606,6 +2624,16 @@ impl Compiler {
             let at = r.data_offset as usize;
             self.data[at..at + 8].copy_from_slice(&(target as u64).to_le_bytes());
         }
+        for r in &mut self.tls_data_relocs {
+            let Some(&(old, _, new)) = moves.iter().find(|m| m.0 == r.target_anchor as i64) else {
+                continue;
+            };
+            let target = r.target_offset as i64 - old + new;
+            r.target_offset = target as u64;
+            r.target_anchor = new as u64;
+            let at = r.data_offset as usize;
+            self.tls_data[at..at + 8].copy_from_slice(&(target as u64).to_le_bytes());
+        }
         for s in &mut self.symbols {
             s.relocated_from = None;
         }
@@ -2719,6 +2747,31 @@ impl Compiler {
                 self.data_reloc_sym_idx.push(sym_idx);
             }
             self.extern_data_relocs = still_extern;
+            // Same rewrite for a `_Thread_local` slot: only the segment the
+            // slot lives in differs.
+            let mut still_extern = alloc::vec::Vec::new();
+            for r in core::mem::take(&mut self.tls_extern_data_relocs) {
+                let defined = self.symbols.iter().position(|s| {
+                    s.class == Token::Glo as i64
+                        && s.defined_here
+                        && !s.is_thread_local
+                        && s.link_name() == r.symbol_name
+                });
+                let Some(sym_idx) = defined else {
+                    still_extern.push(r);
+                    continue;
+                };
+                let target = self.symbols[sym_idx].val + r.addend;
+                let off = r.data_offset as usize;
+                self.tls_data[off..off + 8].copy_from_slice(&(target as u64).to_le_bytes());
+                self.tls_data_relocs.push(crate::c5::program::DataReloc {
+                    data_offset: r.data_offset,
+                    target_offset: target as u64,
+                    target_anchor: self.symbols[sym_idx].val as u64,
+                });
+                self.tls_data_reloc_sym_idx.push(sym_idx);
+            }
+            self.tls_extern_data_relocs = still_extern;
             self.rebase_relocated_globals();
             // Record each defined object's byte size for the object
             // writers' symbol tables; the writers have no type layout.
@@ -2764,6 +2817,19 @@ impl Compiler {
                     reloc.target_ent_pc = sym.val as u64;
                 }
             }
+            for (reloc, &sym_idx) in self
+                .tls_code_relocs
+                .iter_mut()
+                .zip(self.tls_code_reloc_sym_idx.iter())
+            {
+                if sym_idx == usize::MAX || sym_idx >= self.symbols.len() {
+                    continue;
+                }
+                let sym = &self.symbols[sym_idx];
+                if sym.is_fun_entity() && !sym.defined_here && sym.linkage == Linkage::External {
+                    reloc.target_ent_pc = sym.val as u64;
+                }
+            }
             imports
         };
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
@@ -2794,6 +2860,9 @@ impl Compiler {
             data_relocs: self.data_relocs,
             extern_data_relocs: self.extern_data_relocs,
             code_relocs: self.code_relocs,
+            tls_data_relocs: self.tls_data_relocs,
+            tls_extern_data_relocs: self.tls_extern_data_relocs,
+            tls_code_relocs: self.tls_code_relocs,
             dylibs: self.dylibs,
             dllmain_pc,
             source_files: self.source_files,

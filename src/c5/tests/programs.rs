@@ -4068,6 +4068,15 @@ fn thread_local_initializer() {
 }
 
 #[test]
+fn thread_local_address_constant_initializer() {
+    // C99 6.7.8p4: thread storage duration takes the same initializer
+    // forms as static, address constants included. The VM keeps one
+    // copy of the template, so a slot holding a data offset reads back
+    // as the pointer it names. Returns 0 on success.
+    assert_eq!(run_fixture("thread_local_address_init.c"), 0);
+}
+
+#[test]
 fn struct_sizeof_reports_aggregate_size() {
     // sizeof(struct Three) == 24, etc. Returns 0 on success.
     assert_eq!(run_fixture("struct_sizeof.c"), 0);

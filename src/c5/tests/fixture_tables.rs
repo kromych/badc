@@ -840,12 +840,14 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_member_operand.c", 0),
     ("signal_nsig.c", 0),
     ("thread_local_initializer.c", 0),
+    ("thread_local_address_init.c", 0),
     // Per-thread isolation -- spawns a pthread, has the child
     // mutate a TLS variable, joins, and verifies the main
     // thread's view is untouched. Apple's TLV implementation
     // ties the storage to a pthread key, so each thread sees
     // its own copy.
     ("thread_local_per_thread.c", 0),
+    ("thread_local_address_per_thread.c", 0),
     // Struct-value locals + `.` field access on macOS arm64.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy on macOS arm64. The aarch64
@@ -1677,6 +1679,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // child, join, verify main's view is untouched. Fails in any
     // accidental "TLS lowered as a regular global" regression.
     ("thread_local_per_thread.c", 0),
+    ("thread_local_address_per_thread.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)` -- on Linux
     // AAPCS64, FP variadic args ride d0..d7 the same as fixed
     // FP args. The all-int packer would land 1.5's bit pattern
@@ -1776,6 +1779,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("volatile_store_reload.c", 0),
     ("zero_sign_extension_32bit.c", 0),
     ("thread_local_initializer.c", 0),
+    ("thread_local_address_init.c", 0),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -2358,6 +2362,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("signal_nsig.c", 0),
     // Per-thread isolation via pthread_create.
     ("thread_local_per_thread.c", 0),
+    ("thread_local_address_per_thread.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP
     // variadic args through xmm0..xmm7 with AL = XMM count; the
     // pre-packer code routed everything as 8-byte words via the
@@ -2461,6 +2466,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("volatile_store_reload.c", 0),
     ("zero_sign_extension_32bit.c", 0),
     ("thread_local_initializer.c", 0),
+    ("thread_local_address_init.c", 0),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
@@ -2884,6 +2890,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("msvc_pragma_operator.c", 0),
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
+    ("thread_local_address_init.c", 0),
     // Windows x86_64 alignment of `_setjmp`: the header's macro
     // wrapper must align the env pointer up to 16 bytes so the
     // `movdqa` saves of xmm6..xmm15 don't AV. The longjmp side
@@ -3399,6 +3406,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("msvc_pragma_operator.c", 0),
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
+    ("thread_local_address_init.c", 0),
     // Windows AArch64 routes setjmp / longjmp through the
     // `Intrinsic::SetjmpAArch64` / `Intrinsic::LongjmpAArch64`
     // inline expansions because msvcrt's `longjmp` requires SEH

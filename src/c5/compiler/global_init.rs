@@ -5,10 +5,10 @@
 //! `parse_constant_init_value`, the same constant-expression evaluator
 //! aggregate elements take, so both contexts accept one grammar. What
 //! stays here is how a scalar slot *stores* the result: the `.data` /
-//! `.tdata` split, the slot width, the `_Thread_local` rejections for
-//! values with no link-time-fixed address, and the type-mismatch
-//! warning. mod.rs's only role is to call `parse_global_initializer`
-//! from the file-scope decl loop.
+//! `.tdata` split, the slot width, which relocation list a slot's
+//! address constant joins, and the type-mismatch warning. mod.rs's only
+//! role is to call `parse_global_initializer` from the file-scope decl
+//! loop.
 
 use alloc::format;
 
@@ -110,34 +110,116 @@ impl Compiler {
     /// is resolved by name (`ExternDataReloc`); a defined object writes its
     /// data-segment offset and a `DataReloc` the native writer / linker
     /// patches to the runtime address (ELF resolves the VA; Mach-O / PE
-    /// emit a rebase / .reloc entry for the load slide).
-    fn emit_data_addr_reloc(&mut self, var_offset: i64, target_idx: usize, target_offset: i64) {
+    /// emit a rebase / .reloc entry for the load slide). Under
+    /// `is_thread_local` the slot is in the `_Thread_local`
+    /// initialization template instead; the relocation is the same.
+    fn emit_addr_reloc(
+        &mut self,
+        var_offset: i64,
+        target_idx: usize,
+        target_offset: i64,
+        is_thread_local: bool,
+    ) {
         self.symbols[target_idx].was_referenced = true;
-        self.note_init_reloc(var_offset as usize);
+        if !is_thread_local {
+            self.note_init_reloc(var_offset as usize);
+        }
         let t = &self.symbols[target_idx];
         let is_extern_data = t.is_extern_decl
             && t.linkage == crate::c5::symbol::Linkage::External
             && !t.has_initializer;
         if is_extern_data {
             let name = self.symbols[target_idx].link_name().into();
-            self.extern_data_relocs
-                .push(crate::c5::program::ExternDataReloc {
-                    data_offset: var_offset as u64,
-                    symbol_name: name,
-                    // The symbol's own `val` is a parse-time tentative slot
-                    // cleared at finalize; the addend is the byte offset alone.
-                    addend: target_offset - self.symbols[target_idx].val,
-                });
+            let reloc = crate::c5::program::ExternDataReloc {
+                data_offset: var_offset as u64,
+                symbol_name: name,
+                // The symbol's own `val` is a parse-time tentative slot
+                // cleared at finalize; the addend is the byte offset alone.
+                addend: target_offset - self.symbols[target_idx].val,
+            };
+            if is_thread_local {
+                self.tls_extern_data_relocs.push(reloc);
+            } else {
+                self.extern_data_relocs.push(reloc);
+            }
             return;
         }
         let bytes = (target_offset as u64).to_le_bytes();
-        self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-        self.data_relocs.push(crate::c5::program::DataReloc {
+        let reloc = crate::c5::program::DataReloc {
             data_offset: var_offset as u64,
             target_offset: target_offset as u64,
             target_anchor: self.symbols[target_idx].val as u64,
-        });
-        self.data_reloc_sym_idx.push(target_idx);
+        };
+        if is_thread_local {
+            self.tls_data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.tls_data_relocs.push(reloc);
+            self.tls_data_reloc_sym_idx.push(target_idx);
+        } else {
+            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.data_relocs.push(reloc);
+            self.data_reloc_sym_idx.push(target_idx);
+        }
+    }
+
+    /// Mark `tls_data[..off + 8]` as part of the loader's initialization
+    /// template: a relocated slot must be file-backed `.tdata`, never
+    /// `.tbss`.
+    fn note_tls_init(&mut self, off: i64) {
+        let end = off as usize + 8;
+        if end > self.tls_init_size {
+            self.tls_init_size = end;
+        }
+    }
+
+    /// Store the shared constant-initializer evaluator's result into the
+    /// `_Thread_local` template at `off`, routing the relocation, if any,
+    /// to the TLS lists. Mirrors `write_init_value` for `.data`.
+    fn write_tls_init_value(
+        &mut self,
+        line: usize,
+        off: i64,
+        value: i128,
+        reloc: InitElemReloc,
+        var_ty: i64,
+    ) -> Result<(), C5Error> {
+        let bits = self.to_storage_bits(value, reloc, var_ty);
+        let at = off as usize;
+        self.tls_data[at..at + 8].copy_from_slice(&(bits as u64).to_le_bytes());
+        self.note_tls_init(off);
+        match reloc {
+            InitElemReloc::None | InitElemReloc::Float64Bits => {}
+            InitElemReloc::Data(src_sym) => match src_sym {
+                Some(sym_idx) => self.emit_addr_reloc(off, sym_idx, value as i64, true),
+                // A string literal owns no symbol; the target is its own
+                // staged offset in `data`.
+                None => {
+                    self.tls_data_relocs.push(crate::c5::program::DataReloc {
+                        data_offset: off as u64,
+                        target_offset: value as u64,
+                        target_anchor: value as u64,
+                    });
+                    self.tls_data_reloc_sym_idx.push(usize::MAX);
+                }
+            },
+            InitElemReloc::Code(sym_idx) => {
+                self.symbols[sym_idx].was_referenced = true;
+                self.tls_code_relocs.push(crate::c5::program::CodeReloc {
+                    data_offset: off as u64,
+                    target_ent_pc: value as u64,
+                });
+                self.tls_code_reloc_sym_idx.push(sym_idx);
+            }
+            // `&&label` names a block in the function being parsed; a
+            // file-scope `_Thread_local` has no enclosing function.
+            InitElemReloc::Label(_) => {
+                return Err(self.compile_err_at(
+                    line,
+                    "`&&label` initializer for `_Thread_local` is not an address constant \
+                     at file scope",
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Parse a global / TLS initializer's right-hand side and stash the
@@ -202,16 +284,21 @@ impl Compiler {
         // evaluator -- the one aggregate elements take -- decides which
         // construct this is, and sees the initializer whole because a leading
         // cast sets the stride of a trailing `+ n` (6.5.6p8). Anything else
-        // rewinds to the arithmetic paths below; a `_Thread_local` template
-        // holds no relocation.
-        if !is_thread_local {
+        // rewinds to the arithmetic paths below. Thread storage duration
+        // takes the same initializer forms as static (6.7.8p4); the
+        // relocation lands on the initialization template instead of `.data`.
+        {
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
                 Ok((value, reloc))
                     if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
                         && self.at_initializer_end() =>
                 {
-                    self.write_init_value(var_offset as usize, 8, value, reloc, var_ty);
+                    if is_thread_local {
+                        self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
+                    } else {
+                        self.write_init_value(var_offset as usize, 8, value, reloc, var_ty);
+                    }
                     return Ok(());
                 }
                 _ => self.restore_init_checkpoint(cp),
@@ -324,12 +411,6 @@ impl Compiler {
                 || self.symbols[self.lex.curr_id_idx].class == Token::Sys as i64)
             && self.id_ends_initializer()?
         {
-            if is_thread_local {
-                return Err(self.compile_err_at(
-                    line,
-                    "function-pointer initializer for `_Thread_local` not supported",
-                ));
-            }
             let mut sym_idx = self.lex.curr_id_idx;
             if self.symbols[sym_idx].class == Token::Sys as i64 {
                 sym_idx = self.ensure_sys_trampoline_sym(sym_idx);
@@ -338,13 +419,21 @@ impl Compiler {
             let ent_pc = self.symbols[sym_idx].val;
             self.next()?;
             let bytes = (ent_pc as u64).to_le_bytes();
-            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-            self.note_init_reloc(var_offset as usize);
-            self.code_relocs.push(crate::c5::program::CodeReloc {
+            let reloc = crate::c5::program::CodeReloc {
                 data_offset: var_offset as u64,
                 target_ent_pc: ent_pc as u64,
-            });
-            self.code_reloc_sym_idx.push(sym_idx);
+            };
+            if is_thread_local {
+                self.tls_data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+                self.note_tls_init(var_offset);
+                self.tls_code_relocs.push(reloc);
+                self.tls_code_reloc_sym_idx.push(sym_idx);
+            } else {
+                self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+                self.note_init_reloc(var_offset as usize);
+                self.code_relocs.push(reloc);
+                self.code_reloc_sym_idx.push(sym_idx);
+            }
             return Ok(());
         }
         // Bare global array reference in a pointer initializer:
@@ -360,42 +449,17 @@ impl Compiler {
             && self.symbols[self.lex.curr_id_idx].array_size != 0
             && is_pointer_ty(var_ty)
         {
-            if is_thread_local {
-                return Err(self.compile_err_at(
-                    line,
-                    "array-decay initializer for `_Thread_local` not supported",
-                ));
-            }
             let target_idx = self.lex.curr_id_idx;
-            self.symbols[target_idx].was_referenced = true;
             self.next()?;
             // An extern array (`extern T a[]`) decays to a link-time
             // reference resolved by name; a local array decays to its own
-            // data-segment offset.
-            let t = &self.symbols[target_idx];
-            let is_extern_data = t.is_extern_decl
-                && t.linkage == crate::c5::symbol::Linkage::External
-                && !t.has_initializer;
-            if is_extern_data {
-                let name = self.symbols[target_idx].link_name().into();
-                self.extern_data_relocs
-                    .push(crate::c5::program::ExternDataReloc {
-                        data_offset: var_offset as u64,
-                        symbol_name: name,
-                        addend: 0,
-                    });
-                return Ok(());
-            }
+            // data-segment offset. Both shapes are the address of the
+            // symbol itself, so the addend is zero.
             let target_offset = self.symbols[target_idx].val;
-            let bytes = (target_offset as u64).to_le_bytes();
-            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-            self.note_init_reloc(var_offset as usize);
-            self.data_relocs.push(crate::c5::program::DataReloc {
-                data_offset: var_offset as u64,
-                target_offset: target_offset as u64,
-                target_anchor: target_offset as u64,
-            });
-            self.data_reloc_sym_idx.push(target_idx);
+            if is_thread_local {
+                self.note_tls_init(var_offset);
+            }
+            self.emit_addr_reloc(var_offset, target_idx, target_offset, is_thread_local);
             return Ok(());
         }
         // `T *p = g.arr;` / `T *p = g.member.arr[i];` -- a bare designation of
@@ -408,7 +472,6 @@ impl Compiler {
         if self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].class == Token::Glo as i64
             && is_pointer_ty(var_ty)
-            && !is_thread_local
         {
             let snap = self.lex.snapshot();
             let data_snap = self.data.len();
@@ -416,7 +479,10 @@ impl Compiler {
                 && is_array
                 && (self.lex.tk == ';' || self.lex.tk == ',')
             {
-                self.emit_data_addr_reloc(var_offset, sym_idx, off);
+                if is_thread_local {
+                    self.note_tls_init(var_offset);
+                }
+                self.emit_addr_reloc(var_offset, sym_idx, off, is_thread_local);
                 return Ok(());
             }
             self.restore_lex(snap);
@@ -437,24 +503,27 @@ impl Compiler {
             if !self.at_initializer_end() {
                 self.restore_init_checkpoint(cp);
             } else {
-                if is_thread_local {
-                    return Err(self.compile_err_at(
-                        line,
-                        "string-literal initializer for `_Thread_local` not supported",
-                    ));
-                }
                 let bytes = (addr as u64).to_le_bytes();
-                self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
-                self.note_init_reloc(var_offset as usize);
-                self.data_relocs.push(crate::c5::program::DataReloc {
+                let reloc = crate::c5::program::DataReloc {
                     data_offset: var_offset as u64,
                     target_offset: addr as u64,
                     target_anchor: addr as u64,
-                });
+                };
                 // String-literal target -- no originating
                 // symbol; sentinel marks the entry as
                 // intra-unit only.
-                self.data_reloc_sym_idx.push(usize::MAX);
+                if is_thread_local {
+                    self.tls_data[var_offset as usize..var_offset as usize + 8]
+                        .copy_from_slice(&bytes);
+                    self.note_tls_init(var_offset);
+                    self.tls_data_relocs.push(reloc);
+                    self.tls_data_reloc_sym_idx.push(usize::MAX);
+                } else {
+                    self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+                    self.note_init_reloc(var_offset as usize);
+                    self.data_relocs.push(reloc);
+                    self.data_reloc_sym_idx.push(usize::MAX);
+                }
                 return Ok(());
             }
         }
@@ -465,22 +534,17 @@ impl Compiler {
         // elements take, so both contexts accept the same grammar. Only the
         // scalar storage rules stay here.
         if self.lex.tk == Token::AndOp {
-            if is_thread_local {
-                return Err(self.compile_err_at(
-                    line,
-                    "address-of-global initializer for `_Thread_local` \
-                     not yet supported (the rebase / .reloc ordering against \
-                     the TLS template needs design work; integer / NULL \
-                     initializers are fine)",
-                ));
-            }
             // The address may instead be the operand of a larger constant
             // expression (`&s.b - &s.a` folds to an integer, C99 6.5.6p9);
             // an incomplete parse rewinds to the arithmetic evaluator below.
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
                 Ok((value, reloc)) if self.at_initializer_end() => {
-                    self.write_init_value(var_offset as usize, 8, value, reloc, var_ty);
+                    if is_thread_local {
+                        self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
+                    } else {
+                        self.write_init_value(var_offset as usize, 8, value, reloc, var_ty);
+                    }
                     return Ok(());
                 }
                 _ => self.restore_init_checkpoint(cp),
@@ -513,29 +577,40 @@ impl Compiler {
         // symbol's own address): a symbol-relative addend from a const-expr
         // `+`/`-` is not scaled by the pointee size here, so it stays rejected
         // rather than stored with a wrong offset. A `&sym[i]` / `&sym.field`
-        // suffix, and any narrower or `_Thread_local` slot, are handled by
-        // the paths above; the rest falls through to the reject below, which
-        // gcc / clang also apply to a sub-pointer-width slot.
+        // suffix, and any narrower slot, are handled by the paths above; the
+        // rest falls through to the reject below, which gcc / clang also
+        // apply to a sub-pointer-width slot.
         if let ConstVal::Addr(a) = cv
             && let Some(sym_idx) = a.root.sym()
             && a.value == self.symbols[sym_idx].val
-            && !is_thread_local
             && !var_is_float
             && self.size_of_type(var_ty) == 8
         {
             if matches!(a.root, super::const_expr::ConstRoot::Code(_)) {
                 self.symbols[sym_idx].was_referenced = true;
                 let ent_pc = self.symbols[sym_idx].val;
-                self.data[var_offset as usize..var_offset as usize + 8]
-                    .copy_from_slice(&(ent_pc as u64).to_le_bytes());
-                self.note_init_reloc(var_offset as usize);
-                self.code_relocs.push(crate::c5::program::CodeReloc {
+                let bytes = (ent_pc as u64).to_le_bytes();
+                let reloc = crate::c5::program::CodeReloc {
                     data_offset: var_offset as u64,
                     target_ent_pc: ent_pc as u64,
-                });
-                self.code_reloc_sym_idx.push(sym_idx);
+                };
+                if is_thread_local {
+                    self.tls_data[var_offset as usize..var_offset as usize + 8]
+                        .copy_from_slice(&bytes);
+                    self.note_tls_init(var_offset);
+                    self.tls_code_relocs.push(reloc);
+                    self.tls_code_reloc_sym_idx.push(sym_idx);
+                } else {
+                    self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+                    self.note_init_reloc(var_offset as usize);
+                    self.code_relocs.push(reloc);
+                    self.code_reloc_sym_idx.push(sym_idx);
+                }
             } else {
-                self.emit_data_addr_reloc(var_offset, sym_idx, a.value);
+                if is_thread_local {
+                    self.note_tls_init(var_offset);
+                }
+                self.emit_addr_reloc(var_offset, sym_idx, a.value, is_thread_local);
             }
             return Ok(());
         }

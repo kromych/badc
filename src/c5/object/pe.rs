@@ -670,6 +670,7 @@ pub(super) fn write(
     } else {
         0
     };
+    let tls_sites = tls_reloc_sites(build, &data_off_to_rva, text_rva + text_prologue_len)?;
     let reloc_bytes: Vec<u8> = if reloc_section_present {
         build_reloc_section(
             data_rva,
@@ -680,6 +681,7 @@ pub(super) fn write(
             &build.code_relocs,
             &build.label_relocs,
             &text_abs_fields,
+            &tls_sites,
         )
     } else {
         Vec::new()
@@ -1554,7 +1556,22 @@ pub(super) fn write(
             // TLS template -- copied verbatim into each thread's
             // per-thread region by the loader. `tls_data` holds the
             // initialised bytes followed by the zero-init tail.
-            out.extend_from_slice(&build.tls_data);
+            // Address-constant initializers hold the preferred VA and
+            // carry a `.reloc` DIR64 entry sited in the template, which
+            // the loader applies before any thread's block is created.
+            let mut tls_with_relocs = build.tls_data.clone();
+            for &(off, va) in &tls_sites {
+                if off + 8 > tls_with_relocs.len() {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "PE: TLS reloc offset {off:#x} past end of the TLS template ({})",
+                            tls_with_relocs.len()
+                        ),
+                    )));
+                }
+                tls_with_relocs[off..off + 8].copy_from_slice(&va.to_le_bytes());
+            }
+            out.extend_from_slice(&tls_with_relocs);
         }
     }
     if reloc_section_present {
@@ -1774,6 +1791,7 @@ fn build_reloc_section(
     code_relocs: &[crate::c5::program::CodeReloc],
     label_relocs: &[crate::c5::codegen::LabelReloc],
     text_abs_fields: &[AbsTextField],
+    tls_sites: &[(usize, u64)],
 ) -> Vec<u8> {
     // Bucket every relocation target by the 4 KiB page it
     // lives in. Per-page entries within a bucket get one
@@ -1796,6 +1814,11 @@ fn build_reloc_section(
         add(dir_rva, IMAGE_REL_BASED_DIR64); // StartAddressOfRawData
         add(dir_rva + 8, IMAGE_REL_BASED_DIR64); // EndAddressOfRawData
         add(dir_rva + 16, IMAGE_REL_BASED_DIR64); // AddressOfIndex
+        // Address-constant initializers inside the template itself.
+        let template_rva = data_rva + tls_layout.tls_init_offset_in_data;
+        for &(off, _) in tls_sites {
+            add(template_rva + off as u32, IMAGE_REL_BASED_DIR64);
+        }
     }
     for r in data_relocs {
         add(
@@ -1882,6 +1905,43 @@ struct TlsLayout {
     /// (`.tdata`). `IMAGE_TLS_DIRECTORY64.StartAddressOfRawData`
     /// points at it.
     tls_init_offset_in_data: u32,
+}
+
+/// Address-constant initializers of `_Thread_local` objects, as
+/// `(offset within the TLS template, preferred VA)`. Both the baked
+/// template bytes and the `.reloc` entries read this.
+fn tls_reloc_sites(
+    build: &Build,
+    data_off_to_rva: &dyn Fn(u32) -> u32,
+    text_body_rva: u32,
+) -> Result<Vec<(usize, u64)>, C5Error> {
+    if let Some(r) = build.tls_extern_data_relocs.first() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+            "undefined reference to `{}` in a `_Thread_local` initializer: \
+             the template's address constant must resolve within the image",
+            r.symbol_name,
+        ))));
+    }
+    let mut sites = Vec::with_capacity(build.tls_data_relocs.len() + build.tls_code_relocs.len());
+    for r in &build.tls_data_relocs {
+        let va = (IMAGE_BASE + data_off_to_rva(r.target_anchor as u32) as u64)
+            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
+        sites.push((r.data_offset as usize, va));
+    }
+    for r in &build.tls_code_relocs {
+        let ent_pc = r.target_ent_pc as usize;
+        let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("PE: TLS code reloc references missing ent_pc {ent_pc}"),
+            )));
+        };
+        sites.push((
+            r.data_offset as usize,
+            IMAGE_BASE + (text_body_rva + native_off as u32) as u64,
+        ));
+    }
+    sites.sort_unstable();
+    Ok(sites)
 }
 
 fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {

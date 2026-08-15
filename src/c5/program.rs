@@ -240,6 +240,20 @@ pub struct Program {
     /// writer handling mirrors `data_relocs` -- see [`CodeReloc`]
     /// for the per-format strategy.
     pub code_relocs: Vec<CodeReloc>,
+    /// Address-constant initializers of `_Thread_local` objects (C99
+    /// 6.7.8p4). `data_offset` is a byte offset into [`Self::tls_data`],
+    /// the initialization template the runtime copies per thread; the
+    /// target is an object in [`Self::data`], as for [`DataReloc`].
+    /// The relocation applies to the template image at load time and the
+    /// per-thread copies inherit the relocated value: every supported
+    /// format materializes the template as ordinary loadable bytes
+    /// (`.tdata`, `__DATA,__thread_data`, the PE `.data` TLS blob) and
+    /// applies image relocations before any thread's block exists.
+    pub tls_data_relocs: Vec<DataReloc>,
+    /// [`ExternDataReloc`] whose slot is in [`Self::tls_data`].
+    pub tls_extern_data_relocs: Vec<ExternDataReloc>,
+    /// [`CodeReloc`] whose slot is in [`Self::tls_data`].
+    pub tls_code_relocs: Vec<CodeReloc>,
     /// Functions the program asked to expose externally via
     /// `#pragma export(<name>)`. Each entry pairs the source
     /// name with the function's ent_pc -- the
@@ -517,25 +531,33 @@ pub struct VariableInfo {
 
 use crate::c5::layout::{DataOffsets, DataRemap, remap_self_u64};
 
+impl DataReloc {
+    /// Remap the target only. The slot of a TLS-template relocation is a
+    /// `tls_data` offset, which the `data` compaction never moves.
+    fn remap_target_offsets(&mut self, r: &dyn DataRemap) {
+        // The target follows the object its anchor names: a one-past-the-end
+        // target (C99 6.5.6p8) sits on the next object's start, so its own
+        // value would track the wrong object.
+        let anchor = self.target_anchor as i64;
+        if r.in_data(anchor) {
+            self.target_offset = r.remap(self.target_offset as i64, anchor).unwrap_or(0) as u64;
+            remap_self_u64(&mut self.target_anchor, r);
+        } else {
+            remap_self_u64(&mut self.target_offset, r);
+            self.target_anchor = self.target_offset;
+        }
+    }
+}
+
 impl DataOffsets for DataReloc {
     fn remap_data_offsets(&mut self, r: &dyn DataRemap) {
         let Self {
             data_offset,
-            target_offset,
-            target_anchor,
+            target_offset: _, // remapped by `remap_target_offsets`
+            target_anchor: _,
         } = self;
         remap_self_u64(data_offset, r);
-        // The target follows the object its anchor names: a one-past-the-end
-        // target (C99 6.5.6p8) sits on the next object's start, so its own
-        // value would track the wrong object.
-        let anchor = *target_anchor as i64;
-        if r.in_data(anchor) {
-            *target_offset = r.remap(*target_offset as i64, anchor).unwrap_or(0) as u64;
-            remap_self_u64(target_anchor, r);
-        } else {
-            remap_self_u64(target_offset, r);
-            *target_anchor = *target_offset;
-        }
+        self.remap_target_offsets(r);
     }
 }
 
@@ -580,6 +602,9 @@ impl DataOffsets for Program {
             data_relocs,
             extern_data_relocs,
             code_relocs,
+            tls_data_relocs,
+            tls_extern_data_relocs: _, // slot in `tls_data`, target by name
+            tls_code_relocs: _,        // slot in `tls_data`, target in code
             exports: _,
             dylibs: _,
             dllmain_pc: _,
@@ -646,6 +671,9 @@ impl DataOffsets for Program {
         for x in code_relocs.iter_mut() {
             x.remap_data_offsets(r);
         }
+        for x in tls_data_relocs.iter_mut() {
+            x.remap_target_offsets(r);
+        }
         for x in symbols.iter_mut() {
             x.remap_data_offsets(r);
         }
@@ -701,6 +729,9 @@ mod data_offset_tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,

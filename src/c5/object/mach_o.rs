@@ -1602,6 +1602,7 @@ fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result
 /// `data_section_offset_in_segment + data_offset - ro_len`. A slot
 /// below `ro_len` is rejected by the writer's data patch pass
 /// before the stream is consumed.
+#[allow(clippy::too_many_arguments)]
 fn build_rebase_opcodes(
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
@@ -1609,24 +1610,36 @@ fn build_rebase_opcodes(
     segment: u8,
     data_section_offset_in_segment: u64,
     ro_len: u64,
+    tls_sites: &[(usize, u64)],
+    thread_storage_offset_in_segment: u64,
 ) -> Vec<u8> {
-    if data_relocs.is_empty() && code_relocs.is_empty() && label_relocs.is_empty() {
+    if data_relocs.is_empty()
+        && code_relocs.is_empty()
+        && label_relocs.is_empty()
+        && tls_sites.is_empty()
+    {
         return Vec::new();
     }
     let mut out = Vec::new();
     out.push(REBASE_OPCODE_SET_TYPE_IMM | REBASE_TYPE_POINTER);
-    // Both data-pointer and code-pointer slots need the same
-    // pointer-typed rebase opcode -- dyld just adds the slide. Sort
-    // the merged list by data_offset so a future contiguous-burst
-    // pass can walk it cleanly.
-    let mut all: Vec<u64> =
-        Vec::with_capacity(data_relocs.len() + code_relocs.len() + label_relocs.len());
-    all.extend(data_relocs.iter().map(|r| r.data_offset));
-    all.extend(code_relocs.iter().map(|r| r.data_offset));
-    all.extend(label_relocs.iter().map(|r| r.data_offset));
+    // Data-pointer, code-pointer and TLS-template slots all need the same
+    // pointer-typed rebase opcode -- dyld just adds the slide. Sort the
+    // merged list by segment offset so a future contiguous-burst pass can
+    // walk it cleanly.
+    let mut all: Vec<u64> = Vec::with_capacity(
+        data_relocs.len() + code_relocs.len() + label_relocs.len() + tls_sites.len(),
+    );
+    let in_data = |off: u64| data_section_offset_in_segment + off.saturating_sub(ro_len);
+    all.extend(data_relocs.iter().map(|r| in_data(r.data_offset)));
+    all.extend(code_relocs.iter().map(|r| in_data(r.data_offset)));
+    all.extend(label_relocs.iter().map(|r| in_data(r.data_offset)));
+    all.extend(
+        tls_sites
+            .iter()
+            .map(|&(off, _)| thread_storage_offset_in_segment + off as u64),
+    );
     all.sort();
-    for &off in &all {
-        let seg_off = data_section_offset_in_segment + off.saturating_sub(ro_len);
+    for &seg_off in &all {
         out.push(REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
         put_uleb128(&mut out, seg_off);
         // `REBASE_OPCODE_DO_REBASE_IMM_TIMES | 1` -- one entry,
@@ -1636,6 +1649,40 @@ fn build_rebase_opcodes(
     out.push(REBASE_OPCODE_DONE);
     pad_to(&mut out, 8);
     out
+}
+
+/// Address-constant initializers of `_Thread_local` objects, as
+/// `(offset within the TLS template, preferred-load-address VA)`. Both
+/// the baked template bytes and the rebase stream read this.
+fn tls_reloc_sites(
+    build: &Build,
+    data_off_to_vaddr: &dyn Fn(u64) -> u64,
+    code_vmaddr_base: u64,
+) -> Result<Vec<(usize, u64)>, C5Error> {
+    if let Some(r) = build.tls_extern_data_relocs.first() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+            "undefined reference to `{}` in a `_Thread_local` initializer: \
+             the template's address constant must resolve within the image",
+            r.symbol_name,
+        ))));
+    }
+    let mut sites = Vec::with_capacity(build.tls_data_relocs.len() + build.tls_code_relocs.len());
+    for r in &build.tls_data_relocs {
+        let va = data_off_to_vaddr(r.target_anchor)
+            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
+        sites.push((r.data_offset as usize, va));
+    }
+    for r in &build.tls_code_relocs {
+        let ent_pc = r.target_ent_pc as usize;
+        let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("Mach-O: TLS code reloc references missing ent_pc {ent_pc}"),
+            )));
+        };
+        sites.push((r.data_offset as usize, code_vmaddr_base + native_off as u64));
+    }
+    sites.sort_unstable();
+    Ok(sites)
 }
 
 /// Source library a bind opcode selects: the flat-lookup pseudo-dylib or
@@ -2100,6 +2147,14 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         SEG_INDEX_DATA,
         data_section_offset_in_segment,
         ro_len,
+        // TLS-template slots sit in `__thread_data`, a different section
+        // of the same segment, so they carry their own segment base.
+        &tls_reloc_sites(
+            build,
+            &data_off_to_vaddr,
+            TEXT_VMADDR_BASE + entry_file_offset,
+        )?,
+        thread_storage_offset_in_segment,
     );
 
     // ---- symbol + string tables ----
@@ -2771,7 +2826,23 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         // .tdata/.tbss layout.
         if thread_storage_initialised {
             out.resize(thread_storage_fileoff as usize, 0);
-            out.extend_from_slice(&build.tls_data);
+            // Address-constant initializers resolved to their
+            // preferred-load VAs. Each also carries a rebase opcode sited
+            // in `__thread_data`, so dyld slides the template before the
+            // first per-thread copy is made.
+            let mut tls_with_relocs = build.tls_data.clone();
+            for (off, va) in tls_reloc_sites(build, &data_off_to_vaddr, code_vmaddr_base)? {
+                if off + 8 > tls_with_relocs.len() {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "Mach-O: TLS reloc offset {off:#x} past end of __thread_data ({})",
+                            tls_with_relocs.len()
+                        ),
+                    )));
+                }
+                tls_with_relocs[off..off + 8].copy_from_slice(&va.to_le_bytes());
+            }
+            out.extend_from_slice(&tls_with_relocs);
         }
     }
     out.resize((data_fileoff + data_filesize) as usize, 0);
@@ -2849,6 +2920,9 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
@@ -2947,6 +3021,9 @@ mod tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            tls_data_relocs: Vec::new(),
+            tls_extern_data_relocs: Vec::new(),
+            tls_code_relocs: Vec::new(),
             label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),

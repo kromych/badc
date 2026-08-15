@@ -1246,6 +1246,7 @@ mod tests {
             prologue_ends: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
+            tls_abs_relocs: alloc::vec![],
             tls_init_size: 0,
             init_fini_arrays: Default::default(),
             section_map: Default::default(),

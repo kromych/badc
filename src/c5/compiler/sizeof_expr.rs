@@ -55,7 +55,9 @@ impl Compiler {
     /// check only where no pointer decoration was parsed.
     fn require_complete_operand(&self, ty: i64, op: &str) -> Result<(), C5Error> {
         match self.incomplete_aggregate_tag(ty) {
-            Some(_) => Err(self.compile_err(format!("`{op}` applied to an incomplete type"))),
+            Some(_) => {
+                Err(self.compile_err(alloc::format!("`{op}` applied to an incomplete type")))
+            }
             None => Ok(()),
         }
     }

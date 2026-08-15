@@ -1025,6 +1025,16 @@ pub fn link_native_objects_with_shared_libs<'a>(
         .iter()
         .flat_map(|o| o.import_dylib_map.iter().map(|(n, _)| n.as_str()))
         .collect();
+    // Whether any unit routes `name` to a dylib. A binding map keys an
+    // entry by the host symbol, which on Mach-O carries the platform's
+    // leading underscore that the object readers strip; test both
+    // spellings so a reference from a foreign object matches. The
+    // import is still recorded under the reference's own name -- the
+    // per-format writer re-applies the platform prefix.
+    let is_routed_import = |name: &str| -> bool {
+        routed_import_names.contains(name)
+            || routed_import_names.contains(alloc::format!("_{name}").as_str())
+    };
     let record_import = |name: &'a str,
                          imports: &mut Vec<String>,
                          idx_for_name: &mut HashMap<&'a str, usize>|
@@ -1230,10 +1240,8 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         // no dylib routing resolves to address 0 (C
                         // practice; ELF leaves the symbol 0 so the
                         // `if (fn) fn();` guard idiom skips the call).
-                        if sym.binding == 2
-                            && !is_data_binding
-                            && !routed_import_names.contains(sym.name.as_str())
-                        {
+                        let routed = is_routed_import(sym.name.as_str());
+                        if sym.binding == 2 && !is_data_binding && !routed {
                             resolve_weak_undef_to_zero(
                                 machine,
                                 &mut text,
@@ -1243,10 +1251,17 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             )?;
                             continue;
                         }
+                        // Dylib routing names a symbol, not a unit: once
+                        // any unit's binding map places the name in a
+                        // dylib, every reference to it in the link is
+                        // that import. A foreign object (a Mach-O
+                        // archive member) states no routing of its own
+                        // and reaches its libc through this.
                         if sym.binding == 1
                             && !allow_undefined
                             && !is_data_binding
                             && !shlib_exports.contains(sym.name.as_str())
+                            && !routed
                         {
                             return Err(link_err(&format!(
                                 "undefined reference to `{}`",
@@ -1548,9 +1563,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         // initializer takes the absolute value
                         // 0 + addend (ELF behavior); patch the
                         // slot now, no reloc survives.
-                        None if sym.binding == 2
-                            && !routed_import_names.contains(sym.name.as_str()) =>
-                        {
+                        None if sym.binding == 2 && !is_routed_import(sym.name.as_str()) => {
                             let slot = slot_offset as usize;
                             if slot + 8 > data.len() {
                                 return Err(err(&format!(
@@ -1568,6 +1581,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         // import's PLT stub -- a valid function pointer --
                         // recorded for the PLT pass to resolve.
                         None if shlib_exports.contains(sym.name.as_str())
+                            || is_routed_import(sym.name.as_str())
                             || import_idx_for_name.contains_key(sym.name.as_str()) =>
                         {
                             let idx =

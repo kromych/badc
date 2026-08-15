@@ -3293,6 +3293,87 @@ fn i386_asm_branch_to_global_keeps_a_pc32_relocation() {
     assert!(t.windows(2).any(|w| w == [0xeb, 0xfe]), "{t:02x?}");
 }
 
+/// The section named `name` with a non-empty body: the writer emits its
+/// fixed empty `.text` ahead of an assembled unit's sections.
+fn nonempty_section(
+    sections: &[(String, u32, u64, alloc::vec::Vec<u8>)],
+    name: &str,
+) -> alloc::vec::Vec<u8> {
+    sections
+        .iter()
+        .find(|(n, _, _, b)| n == name && !b.is_empty())
+        .unwrap_or_else(|| panic!("{name} missing"))
+        .3
+        .clone()
+}
+
+#[test]
+fn assembler_macro_register_arguments_separate_on_whitespace() {
+    // The `arch/x86/entry` CR3-switch shape: a keyword invocation binds two
+    // registers, and the body forwards them to a nested macro as positional
+    // arguments separated by whitespace. Each `%`-led operand is its own
+    // argument (`\a \b` is two), so the inner body encodes; binding both to
+    // one parameter produced `mov %cr3, %r8 %r9`, which no source spells.
+    // Bytes measured with GNU as 2.46.1.
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = ".macro switch_scratch scratch_reg:req scratch_reg2:req\n\
+               \tmov\t%cr3, \\scratch_reg\n\
+               \tmovq\t\\scratch_reg, \\scratch_reg2\n\
+               \tmov\t\\scratch_reg, %cr3\n\
+               .endm\n\
+               .macro switch_nostack scratch_reg:req scratch_reg2:req\n\
+               \tswitch_scratch \\scratch_reg \\scratch_reg2\n\
+               .endm\n\
+               \t.text\n\
+               \tswitch_nostack scratch_reg=%r8 scratch_reg2=%r9\n";
+    let copts = CompileOptions::default().with_no_entry_point(true);
+    let program = Compiler::assemble(src, Target::LinuxX64, copts).expect("assemble");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let text = nonempty_section(&elf_sections(&bytes), ".text");
+    assert_eq!(
+        text,
+        [
+            0x41, 0x0F, 0x20, 0xD8, 0x4D, 0x89, 0xC1, 0x41, 0x0F, 0x22, 0xD8
+        ],
+        "{text:02x?}"
+    );
+}
+
+#[test]
+fn assembler_macro_invocation_in_a_substituted_argument_expands() {
+    // The `arch/x86/lib/retpoline.S` ANNOTATE shape: one quoted argument
+    // carries a `;`-separated instruction sequence, and the expansion is
+    // re-scanned, so the embedded keyword invocation is recognized as a
+    // macro rather than reaching the encoder as `annotate type=2`. Bytes
+    // measured with GNU as 2.46.1.
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = ".macro annotate type\n\
+               \t.pushsection .note.ann, \"a\"\n\
+               \t.byte \\type\n\
+               \t.popsection\n\
+               .endm\n\
+               .macro alt insn:req\n\
+               \t\\insn\n\
+               .endm\n\
+               \t.text\n\
+               \talt \"lfence; annotate type=2; jmp *%r11\"\n";
+    let copts = CompileOptions::default().with_no_entry_point(true);
+    let program = Compiler::assemble(src, Target::LinuxX64, copts).expect("assemble");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let text = nonempty_section(&sections, ".text");
+    assert_eq!(text, [0x0F, 0xAE, 0xE8, 0x41, 0xFF, 0xE3], "{text:02x?}");
+    assert_eq!(nonempty_section(&sections, ".note.ann"), [0x02]);
+}
+
 /// `sh_flags` of the first section named `want` in an ELF64 object, or 0.
 fn elf_section_flags(bytes: &[u8], want: &[u8]) -> u64 {
     let u16a = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;

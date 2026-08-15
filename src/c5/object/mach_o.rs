@@ -18,6 +18,7 @@
 //!   0x0000   mach_header_64                                \
 //!            LC_SEGMENT_64 __PAGEZERO                      |
 //!            LC_SEGMENT_64 __TEXT (__text, __const)        |
+//!            [LC_SEGMENT_64 __DATA_CONST (__const)]        |
 //!            LC_SEGMENT_64 __DATA (__got, __data, [__bss]) | __TEXT
 //!            LC_SEGMENT_64 __LINKEDIT                      |
 //!            LC_DYLD_INFO_ONLY                             |
@@ -32,7 +33,8 @@
 //!            <machine code from build.text>                |
 //!            __const: data[..data_ro_len] + version line   |
 //!            <pad to 16 KiB>                               /
-//!   0x4000   __DATA: __got at section start, __data after  - __DATA
+//!   0x4000   [__DATA_CONST: data[data_ro_len..relro_len]]  - __DATA_CONST
+//!   0x4000+  __DATA: __got at section start, __data after  - __DATA
 //!            (page-aligned, may span more than one page if
 //!             build.data is large)
 //!   0x8000+  __LINKEDIT contents:                          bind opcodes,
@@ -44,10 +46,14 @@
 //! null-pointer-deref catcher. __TEXT carries the header, the code, and
 //! `__const`: the read-only data prefix (`Build::data[..data_ro_len]`,
 //! no relocated slot in it) plus the producer fingerprint -- mapped
-//! non-writable by the segment itself. __DATA holds __got (one
+//! non-writable by the segment itself. __DATA_CONST, emitted only when
+//! the relro region is non-empty, carries `data[data_ro_len..
+//! data_relro_len]`: read-only content holding slots dyld rebases, so
+//! the segment maps writable and carries `SG_READ_ONLY` for dyld to
+//! drop write permission once the fixups land. __DATA holds __got (one
 //! pointer-sized slot per imported symbol; dyld fills the slots in at
 //! launch via the bind opcode stream in __LINKEDIT) and __data (the
-//! writable remainder `data[data_ro_len..]`, copied into the file by
+//! writable remainder `data[data_relro_len..]`, copied into the file by
 //! the writer and patched into the code via the `DataFixup` adrp+add
 //! pairs). __LINKEDIT also holds the symbol + string tables so tools
 //! like `otool -bind` can name what's being bound.
@@ -227,20 +233,34 @@ const SECT_INDEX_TEXT: u8 = 1;
 /// (`Build::data[..data_ro_len]`) with the producer fingerprint at
 /// its tail. Always emitted.
 const SECT_INDEX_CONST: u8 = 2;
+/// 1-based index of `__DATA_CONST,__const`, present only when the
+/// relro region is non-empty. It precedes `__DATA`, so every index
+/// below shifts by one when it is emitted.
+const SECT_INDEX_DATA_CONST: u8 = 3;
 /// 1-based index of `__DATA,__data`. `__DATA` always declares
 /// `__got` first (even when empty) followed by `__data`; the
 /// `__thread_*` sections, when present, come after. Used as
 /// `n_sect` for an exported data symbol.
-const SECT_INDEX_DATA: u8 = 4;
+fn sect_index_data(data_const: bool) -> u8 {
+    if data_const { 5 } else { 4 }
+}
 /// 1-based index of `__DATA,__bss`, which follows `__data` and the two
 /// `__thread_*` sections when TLS is present.
-fn sect_index_bss(tls_present: bool) -> u8 {
-    SECT_INDEX_DATA + if tls_present { 3 } else { 1 }
+fn sect_index_bss(tls_present: bool, data_const: bool) -> u8 {
+    sect_index_data(data_const) + if tls_present { 3 } else { 1 }
 }
 
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
-/// commands. Bind opcodes refer to segments by this index.
-const SEG_INDEX_DATA: u8 = 2;
+/// commands. Bind and rebase opcodes refer to segments by this index.
+const SEG_INDEX_DATA_CONST: u8 = 2;
+fn seg_index_data(data_const: bool) -> u8 {
+    if data_const { 3 } else { 2 }
+}
+
+/// `SG_READ_ONLY` -- the segment is mapped `VM_PROT_READ|VM_PROT_WRITE`
+/// so dyld can apply its fixups, then mprotected read-only before the
+/// image gets control. Carries `__DATA_CONST`, as ld64 emits it.
+const SG_READ_ONLY: u32 = 0x10;
 
 /// `S_ATTR_DEBUG` -- set on every section inside `__DWARF`.
 /// Tells `nm`, `lldb`, `dyld_info`, and the Apple symbolicator
@@ -723,6 +743,58 @@ fn segment_text(
             addr,
             size,
             offset,
+            align,
+            reloff: 0,
+            nreloc: 0,
+            flags: 0, // S_REGULAR
+            reserved1: 0,
+            reserved2: 0,
+            reserved3: 0,
+        },
+    );
+    debug_assert_eq!(out.len(), total);
+    out
+}
+
+/// `LC_SEGMENT_64` for `__DATA_CONST`: one `__const` section holding
+/// the relro region (`Build::data[data_ro_len..data_relro_len]`) --
+/// read-only content whose slots dyld writes through the rebase
+/// stream. `SG_READ_ONLY` makes dyld drop write permission once the
+/// fixups are applied.
+fn segment_data_const(
+    vmaddr: u64,
+    vmsize: u64,
+    fileoff: u64,
+    filesize: u64,
+    const_size: u64,
+    align: u32,
+) -> Vec<u8> {
+    let total = SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE;
+    let mut out = Vec::with_capacity(total);
+    write_struct(
+        &mut out,
+        &SegmentCommand64 {
+            cmd: LC_SEGMENT_64,
+            cmdsize: total as u32,
+            segname: pack_name16("__DATA_CONST"),
+            vmaddr,
+            vmsize,
+            fileoff,
+            filesize,
+            maxprot: VM_PROT_READ | VM_PROT_WRITE,
+            initprot: VM_PROT_READ | VM_PROT_WRITE,
+            nsects: 1,
+            flags: SG_READ_ONLY,
+        },
+    );
+    write_struct(
+        &mut out,
+        &Section64 {
+            sectname: pack_name16("__const"),
+            segname: pack_name16("__DATA_CONST"),
+            addr: vmaddr,
+            size: const_size,
+            offset: fileoff as u32,
             align,
             reloff: 0,
             nreloc: 0,
@@ -1594,22 +1666,18 @@ fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result
 /// after mapping the image and adds the slide delta to each
 /// listed slot.
 ///
-/// `data_section_offset_in_segment` is the byte offset of
-/// `__data` inside the `__DATA` segment. Each reloc's
-/// `data_offset` is the byte offset within `build.data`, of which
-/// `__data` carries only `[ro_len..]`, so the segment-relative
-/// offset we feed to dyld is
-/// `data_section_offset_in_segment + data_offset - ro_len`. A slot
-/// below `ro_len` is rejected by the writer's data patch pass
+/// `data_slot` maps a `build.data` byte offset to the `(segment index,
+/// offset within that segment)` pair dyld needs: the relro region
+/// resolves into `__DATA_CONST`, everything past it into `__DATA`. A
+/// slot below `ro_len` is rejected by the writer's data patch pass
 /// before the stream is consumed.
 #[allow(clippy::too_many_arguments)]
 fn build_rebase_opcodes(
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
     label_relocs: &[crate::c5::codegen::LabelReloc],
-    segment: u8,
-    data_section_offset_in_segment: u64,
-    ro_len: u64,
+    data_slot: &dyn Fn(u64) -> (u8, u64),
+    tls_segment: u8,
     tls_sites: &[(usize, u64)],
     thread_storage_offset_in_segment: u64,
 ) -> Vec<u8> {
@@ -1626,20 +1694,19 @@ fn build_rebase_opcodes(
     // pointer-typed rebase opcode -- dyld just adds the slide. Sort the
     // merged list by segment offset so a future contiguous-burst pass can
     // walk it cleanly.
-    let mut all: Vec<u64> = Vec::with_capacity(
+    let mut all: Vec<(u8, u64)> = Vec::with_capacity(
         data_relocs.len() + code_relocs.len() + label_relocs.len() + tls_sites.len(),
     );
-    let in_data = |off: u64| data_section_offset_in_segment + off.saturating_sub(ro_len);
-    all.extend(data_relocs.iter().map(|r| in_data(r.data_offset)));
-    all.extend(code_relocs.iter().map(|r| in_data(r.data_offset)));
-    all.extend(label_relocs.iter().map(|r| in_data(r.data_offset)));
+    all.extend(data_relocs.iter().map(|r| data_slot(r.data_offset)));
+    all.extend(code_relocs.iter().map(|r| data_slot(r.data_offset)));
+    all.extend(label_relocs.iter().map(|r| data_slot(r.data_offset)));
     all.extend(
         tls_sites
             .iter()
-            .map(|&(off, _)| thread_storage_offset_in_segment + off as u64),
+            .map(|&(off, _)| (tls_segment, thread_storage_offset_in_segment + off as u64)),
     );
     all.sort();
-    for &seg_off in &all {
+    for &(segment, seg_off) in &all {
         out.push(REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
         put_uleb128(&mut out, seg_off);
         // `REBASE_OPCODE_DO_REBASE_IMM_TIMES | 1` -- one entry,
@@ -1909,10 +1976,23 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // `__TEXT,__const` carries the read-only data prefix and, at its
     // 8-aligned tail, the producer fingerprint.
     let ro_len = build.data_ro_len.min(build.data.len()) as u64;
+    // `data[ro_len..relro_total]` is read-only content carrying slots
+    // dyld rebases; it needs a segment it can write during fixups, so
+    // it goes to `__DATA_CONST` rather than the `__TEXT` prefix.
+    let relro_total = build
+        .data_relro_len
+        .clamp(build.data_ro_len, build.data.len()) as u64;
+    let relro_size = relro_total - ro_len;
+    let data_const_present = relro_size > 0;
     let provenance = super::provenance_comment();
     let const_marker_off = round_up(ro_len, 8);
     let const_size = const_marker_off + provenance.len() as u64;
     let text_seg_size = (SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE) as u64;
+    let data_const_seg_size: u64 = if data_const_present {
+        (SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE) as u64
+    } else {
+        0
+    };
     // __DATA carries 2 sections normally (__got, __data), 4 when the
     // program has `_Thread_local` globals (+__thread_vars, __thread_bss),
     // and one more (__bss) when segregation produced zero-init storage.
@@ -1977,6 +2057,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     };
     let sizeofcmds = pagezero_size
         + text_seg_size
+        + data_const_seg_size
         + data_seg_size
         + linkedit_seg_size
         + dwarf_seg_size
@@ -2029,8 +2110,18 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     //   __thread_bss    per-thread zero-fill storage (no file backing)
     // The first three contribute to the file image. Both __thread_bss
     // and the trailing zero-pad to a page boundary do not.
-    let data_fileoff = text_filesize;
-    let data_vmaddr = TEXT_VMADDR_BASE + text_vmsize;
+    // `__DATA_CONST` sits between `__TEXT` and `__DATA`, page-aligned
+    // like every other segment so dyld can drop write permission on it
+    // without touching its neighbours.
+    let data_const_fileoff = text_filesize;
+    let data_const_vmaddr = TEXT_VMADDR_BASE + text_vmsize;
+    let data_const_size = if data_const_present {
+        round_up(relro_size, PAGE_SIZE)
+    } else {
+        0
+    };
+    let data_fileoff = data_const_fileoff + data_const_size;
+    let data_vmaddr = data_const_vmaddr + data_const_size;
     let got_size = (build.imports.imports.len() * 8) as u64;
     let got_section_offset_in_segment: u64 = 0;
     // __data's base alignment: the segment base is page-aligned, so
@@ -2040,7 +2131,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // Full data-byte space; `__data` carries only the writable
     // remainder past the `__TEXT,__const` prefix.
     let program_data_size = build.data.len() as u64;
-    let writable_data_size = program_data_size - ro_len;
+    let writable_data_size = program_data_size - relro_total;
     let post_data_offset_in_segment: u64 =
         round_up(data_section_offset_in_segment + writable_data_size, 8);
     let thread_vars_size: u64 = (n_tlv as u64) * TLV_DESCRIPTOR_SIZE;
@@ -2108,8 +2199,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let data_off_to_vaddr = |off: u64| -> u64 {
         if off < ro_len {
             const_vmaddr + off
+        } else if off < relro_total {
+            data_const_vmaddr + (off - ro_len)
         } else if off < program_data_size {
-            data_section_vmaddr + (off - ro_len)
+            data_section_vmaddr + (off - relro_total)
         } else {
             bss_base_vmaddr + (off - program_data_size)
         }
@@ -2127,9 +2220,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // stream after sliding the image and adds the slide
     // delta, so the runtime values are correct under ASLR
     // (`MH_PIE` is set, so dyld always slides).
+    let seg_data = seg_index_data(data_const_present);
     let bind_ops = build_bind_opcodes(
         &build.imports,
-        SEG_INDEX_DATA,
+        seg_data,
         if tls_present {
             Some(TlvBindContext {
                 segment_offset: thread_vars_offset_in_segment,
@@ -2140,13 +2234,24 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             None
         },
     );
+    // A slot in the relro region is addressed against `__DATA_CONST`;
+    // one past it against `__data` inside `__DATA`.
+    let data_slot = |off: u64| -> (u8, u64) {
+        if off < relro_total {
+            (SEG_INDEX_DATA_CONST, off.saturating_sub(ro_len))
+        } else {
+            (
+                seg_data,
+                data_section_offset_in_segment + (off - relro_total),
+            )
+        }
+    };
     let rebase_ops = build_rebase_opcodes(
         &build.data_relocs,
         &build.code_relocs,
         &build.label_relocs,
-        SEG_INDEX_DATA,
-        data_section_offset_in_segment,
-        ro_len,
+        &data_slot,
+        seg_data,
         // TLS-template slots sit in `__thread_data`, a different section
         // of the same segment, so they carry their own segment base.
         &tls_reloc_sites(
@@ -2288,10 +2393,12 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
                 data_off_to_vaddr(d.offset),
                 if d.offset < ro_len {
                     SECT_INDEX_CONST
+                } else if d.offset < relro_total {
+                    SECT_INDEX_DATA_CONST
                 } else if d.offset < program_data_size {
-                    SECT_INDEX_DATA
+                    sect_index_data(data_const_present)
                 } else {
-                    sect_index_bss(tls_present)
+                    sect_index_bss(tls_present, data_const_present)
                 },
             ),
         };
@@ -2485,6 +2592,18 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             ro_align.trailing_zeros(),
         ),
     );
+    let data_const_segment = if data_const_present {
+        segment_data_const(
+            data_const_vmaddr,
+            data_const_size,
+            data_const_fileoff,
+            data_const_size,
+            relro_size,
+            data_align.trailing_zeros(),
+        )
+    } else {
+        Vec::new()
+    };
     let data_segment = if tls_present {
         segment_data_with_tlv(
             data_vmaddr,
@@ -2588,6 +2707,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     };
 
     debug_assert_eq!(text_segment.len() as u64, text_seg_size);
+    debug_assert_eq!(data_const_segment.len() as u64, data_const_seg_size);
     debug_assert_eq!(data_segment.len() as u64, data_seg_size);
     debug_assert_eq!(linkedit.len() as u64, linkedit_seg_size);
     debug_assert_eq!(dwarf_segment.len() as u64, dwarf_seg_size);
@@ -2602,10 +2722,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
 
     // mach_header_64. We have undefined symbols now (_write); MH_NOUNDEFS
     // is dropped accordingly.
-    // ncmds: 4 segments (5 with __DWARF) + dyldinfo + symtab +
-    //        dysymtab + dylinker + N dylibs + build_version
-    //        + main (or LC_ID_DYLIB for dylibs).
-    let ncmds: u32 = 11 + (emit_dwarf as u32) + build.imports.dylibs.len() as u32;
+    // ncmds: 4 segments (one more each for __DATA_CONST and __DWARF)
+    //        + dyldinfo + symtab + dysymtab + dylinker + N dylibs
+    //        + build_version + main (or LC_ID_DYLIB for dylibs).
+    let ncmds: u32 =
+        11 + (data_const_present as u32) + (emit_dwarf as u32) + build.imports.dylibs.len() as u32;
     let mut header_flags = MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
     if tls_present {
         header_flags |= MH_HAS_TLV_DESCRIPTORS;
@@ -2637,6 +2758,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // File-resident order matches LC order.
     out.extend_from_slice(&pagezero);
     out.extend_from_slice(&text_segment);
+    if data_const_present {
+        out.extend_from_slice(&data_const_segment);
+    }
     out.extend_from_slice(&data_segment);
     if emit_dwarf {
         out.extend_from_slice(&dwarf_segment);
@@ -2722,80 +2846,92 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // runtime values land at the right address under ASLR.
     // The GOT entries (in __got, ahead of __data) come from
     // the bind opcode stream; we leave those zero here.
+    // Every relocated slot lies at or past `ro_len`, so one buffer
+    // covers them all; it is split at `relro_size` below, the head
+    // becoming `__DATA_CONST,__const` and the tail `__DATA,__data`.
+    let data_with_relocs = {
+        let mut data_with_relocs = build.data[ro_len as usize..].to_vec();
+        for r in &build.data_relocs {
+            // `__data` and the zero-fill tail map to separate runtime
+            // regions, so the anchor picks the region and the signed
+            // displacement `target - anchor` rides on the address.
+            let preferred_va = data_off_to_vaddr(r.target_anchor)
+                .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
+            let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "data")?;
+            if off + 8 > data_with_relocs.len() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "Mach-O: data reloc offset {off:#x} past end of __data ({})",
+                        data_with_relocs.len()
+                    ),
+                )));
+            }
+            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+        }
+        // Function-pointer initializers in the data segment: pre-fill
+        // each slot with the function's preferred-load-address VA
+        // (text vmaddr + native code offset). dyld adds the slide
+        // delta when it walks the rebase opcode stream below.
+        for r in &build.code_relocs {
+            let ent_pc = r.target_ent_pc as usize;
+            let native_off = build
+                .pc_to_native
+                .get(ent_pc)
+                .copied()
+                .unwrap_or(usize::MAX);
+            if native_off == usize::MAX {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("Mach-O: code reloc references missing ent_pc {ent_pc}"),
+                )));
+            }
+            let preferred_va = code_vmaddr_base + native_off as u64;
+            let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "code")?;
+            #[cfg(feature = "codegen_test")]
+            if std::env::var("BADC_DEBUG_CODE_RELOCS").is_ok() {
+                std::eprintln!(
+                    "[code_reloc] data_off={:#x} target_ent_pc={} native_off={:#x} preferred_va={:#x}",
+                    r.data_offset,
+                    ent_pc,
+                    native_off,
+                    preferred_va,
+                );
+            }
+            if off + 8 > data_with_relocs.len() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "Mach-O: code reloc offset {off:#x} past end of __data ({})",
+                        data_with_relocs.len()
+                    ),
+                )));
+            }
+            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+        }
+        // `&&label` initializers: the label's text offset is already
+        // resolved, so the preferred VA is the text base plus that offset.
+        // dyld slides it through the same rebase stream.
+        for r in &build.label_relocs {
+            let preferred_va = code_vmaddr_base + r.text_offset;
+            let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "label")?;
+            if off + 8 > data_with_relocs.len() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "Mach-O: label reloc offset {off:#x} past end of __data ({})",
+                        data_with_relocs.len()
+                    ),
+                )));
+            }
+            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+        }
+        data_with_relocs
+    };
+    // __DATA_CONST,__const: the relro region. Its slots hold the
+    // preferred VA; dyld rebases them, then drops write permission.
+    if data_const_present {
+        out.resize(data_const_fileoff as usize, 0);
+        out.extend_from_slice(&data_with_relocs[..relro_size as usize]);
+    }
     out.resize(data_section_fileoff as usize, 0);
-    let mut data_with_relocs = build.data[ro_len as usize..].to_vec();
-    for r in &build.data_relocs {
-        // `__data` and the zero-fill tail map to separate runtime
-        // regions, so the anchor picks the region and the signed
-        // displacement `target - anchor` rides on the address.
-        let preferred_va = data_off_to_vaddr(r.target_anchor)
-            .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-        let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "data")?;
-        if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "Mach-O: data reloc offset {off:#x} past end of __data ({})",
-                    data_with_relocs.len()
-                ),
-            )));
-        }
-        data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
-    }
-    // Function-pointer initializers in the data segment: pre-fill
-    // each slot with the function's preferred-load-address VA
-    // (text vmaddr + native code offset). dyld adds the slide
-    // delta when it walks the rebase opcode stream below.
-    for r in &build.code_relocs {
-        let ent_pc = r.target_ent_pc as usize;
-        let native_off = build
-            .pc_to_native
-            .get(ent_pc)
-            .copied()
-            .unwrap_or(usize::MAX);
-        if native_off == usize::MAX {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: code reloc references missing ent_pc {ent_pc}"),
-            )));
-        }
-        let preferred_va = code_vmaddr_base + native_off as u64;
-        let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "code")?;
-        #[cfg(feature = "codegen_test")]
-        if std::env::var("BADC_DEBUG_CODE_RELOCS").is_ok() {
-            std::eprintln!(
-                "[code_reloc] data_off={:#x} target_ent_pc={} native_off={:#x} preferred_va={:#x}",
-                r.data_offset,
-                ent_pc,
-                native_off,
-                preferred_va,
-            );
-        }
-        if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "Mach-O: code reloc offset {off:#x} past end of __data ({})",
-                    data_with_relocs.len()
-                ),
-            )));
-        }
-        data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
-    }
-    // `&&label` initializers: the label's text offset is already
-    // resolved, so the preferred VA is the text base plus that offset.
-    // dyld slides it through the same rebase stream.
-    for r in &build.label_relocs {
-        let preferred_va = code_vmaddr_base + r.text_offset;
-        let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "label")?;
-        if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "Mach-O: label reloc offset {off:#x} past end of __data ({})",
-                    data_with_relocs.len()
-                ),
-            )));
-        }
-        data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
-    }
-    out.extend_from_slice(&data_with_relocs);
+    out.extend_from_slice(&data_with_relocs[relro_size as usize..]);
     if tls_present {
         // __thread_vars: one 24-byte descriptor per TLS variable.
         // Slot 0 (thunk getter) stays zero -- dyld writes
@@ -3407,7 +3543,7 @@ mod tests {
             .expect("_myglobal export");
         assert_eq!(data.1 & N_EXT, N_EXT, "data export must be external");
         assert_eq!(data.1 & N_SECT, N_SECT, "data export must be N_SECT");
-        assert_eq!(data.2, SECT_INDEX_DATA, "data export n_sect");
+        assert_eq!(data.2, sect_index_data(false), "data export n_sect");
 
         let zero = found
             .iter()
@@ -3416,7 +3552,7 @@ mod tests {
         assert_eq!(zero.1 & N_EXT, N_EXT, "bss export must be external");
         assert_eq!(
             zero.2,
-            sect_index_bss(false),
+            sect_index_bss(false, false),
             "a data offset past build.data must resolve to __DATA,__bss"
         );
     }

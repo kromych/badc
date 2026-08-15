@@ -246,6 +246,39 @@ fn elf_load_file_ranges(bytes: &[u8]) -> alloc::vec::Vec<(u32, usize, usize)> {
         .collect()
 }
 
+/// `(p_flags, file_offset, p_filesz)` of the first program header of
+/// `p_type` in an ELF image.
+fn elf_phdr_file_range(bytes: &[u8], p_type: u32) -> Option<(u32, usize, usize)> {
+    let u16at = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let (phoff, phentsize, phnum) = (u64at(0x20), u16at(0x36), u16at(0x38));
+    (0..phnum)
+        .map(|i| phoff + i * phentsize)
+        .find(|&p| u32at(p) == p_type)
+        .map(|p| (u32at(p + 4), u64at(p + 8), u64at(p + 32)))
+}
+
+/// `flags` field of a Mach-O `LC_SEGMENT_64` located by name.
+fn macho_segment_flags(bytes: &[u8], seg: &str) -> Option<u32> {
+    let ncmds = u32::from_le_bytes(bytes[16..20].try_into().unwrap());
+    let mut p = 32usize;
+    for _ in 0..ncmds {
+        let cmd = u32::from_le_bytes(bytes[p..p + 4].try_into().unwrap());
+        let cmdsize = u32::from_le_bytes(bytes[p + 4..p + 8].try_into().unwrap()) as usize;
+        if cmd == 0x19 {
+            let name = &bytes[p + 8..p + 24];
+            if name.starts_with(seg.as_bytes()) && name[seg.len()] == 0 {
+                return Some(u32::from_le_bytes(
+                    bytes[p + 68..p + 72].try_into().unwrap(),
+                ));
+            }
+        }
+        p += cmdsize;
+    }
+    None
+}
+
 /// `(file_offset, size)` of a Mach-O section, plus the byte range of a
 /// segment, located by name.
 fn macho_section_range(bytes: &[u8], seg: &str, sect: &str) -> Option<(usize, usize)> {
@@ -385,6 +418,135 @@ fn string_literals_land_read_only_in_every_target() {
                 assert!(
                     !contains(&bytes[doff..doff + dlen], needle),
                     "{target:?}: literal also present in .data"
+                );
+            }
+        }
+    }
+}
+
+/// A `const` object carrying a relocation cannot ride the pure
+/// read-only prefix -- the loader has to write its slot before the
+/// image runs -- so it belongs in the relro region, read-only by the
+/// time control arrives. Every format expresses that: ELF covers it
+/// with `PT_GNU_RELRO`, Mach-O gives it `__DATA_CONST` (`SG_READ_ONLY`,
+/// as ld64 emits), PE puts it in `.rdata` (`MEM_READ` without
+/// `MEM_WRITE`) and relocates through it, as link.exe does. In no
+/// format may it land in the writable region.
+#[test]
+fn relocated_const_lands_in_relro_region_in_every_target() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{
+        Compiler, NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
+        emit_x86_64_plt,
+    };
+    const PT_GNU_RELRO: u32 = 0x6474_E552;
+    const MEM_READ: u32 = 0x4000_0000;
+    const MEM_WRITE: u32 = 0x8000_0000;
+    const SG_READ_ONLY: u32 = 0x10;
+    // `clean_tab` holds no relocation and stays in the pure prefix;
+    // `mixer` carries a function pointer and a literal address, so it
+    // must move to the relro region. `wglob` anchors the writable side.
+    // The unit supplies `__c5_entry`, so the link stays freestanding and
+    // needs no runtime on any of the five targets.
+    let src_clean = "const char clean_tab[16] = \"CLEANTBLCLEANTB\";\n";
+    let src_mixed = "\
+        extern const char clean_tab[16];\n\
+        static int probe(void) { return 1; }\n\
+        struct ops { int (*p)(void); const char *n; };\n\
+        const struct ops mixer = { probe, \"MIXEDTBL\" };\n\
+        int wglob = 5;\n\
+        void __c5_entry(void *sp, long off) {\n\
+            (void)sp; (void)off; wglob += mixer.p() + clean_tab[0];\n\
+        }\n";
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let unit = |src: &str| {
+            let copts = CompileOptions::default().with_no_entry_point(true);
+            let program = Compiler::with_options(alloc::string::String::from(src), target, copts)
+                .compile()
+                .expect("compile");
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            parse_native_elf(&bytes).expect("parse")
+        };
+        let mut merged = link_native_objects(&[unit(src_clean), unit(src_mixed)]).expect("link");
+        assert!(
+            merged.data_ro_len < merged.data_relro_len,
+            "{target:?}: the link must produce a non-empty relro region"
+        );
+        let plt = match merged.machine {
+            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        }
+        .expect("plt");
+        let image = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "__c5_entry",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let holds =
+            |off: usize, len: usize, needle: &[u8]| contains(&image[off..off + len], needle);
+        match target {
+            Target::LinuxAarch64 | Target::LinuxX64 => {
+                let (_, off, len) =
+                    elf_phdr_file_range(&image, PT_GNU_RELRO).expect("PT_GNU_RELRO");
+                assert!(
+                    holds(off, len, b"MIXEDTBL"),
+                    "{target:?}: relocated const outside PT_GNU_RELRO"
+                );
+            }
+            Target::MacOSAarch64 => {
+                let (off, len) = macho_section_range(&image, "__DATA_CONST", "__const")
+                    .expect("__DATA_CONST,__const section");
+                assert!(
+                    holds(off, len, b"MIXEDTBL"),
+                    "relocated const not in __DATA_CONST,__const"
+                );
+                assert_eq!(
+                    macho_segment_flags(&image, "__DATA_CONST").expect("__DATA_CONST segment")
+                        & SG_READ_ONLY,
+                    SG_READ_ONLY,
+                    "__DATA_CONST must carry SG_READ_ONLY"
+                );
+                let (doff, dlen) =
+                    macho_section_range(&image, "__DATA", "__data").expect("__DATA,__data");
+                assert!(
+                    !holds(doff, dlen, b"MIXEDTBL"),
+                    "relocated const also present in writable __DATA,__data"
+                );
+            }
+            Target::WindowsX64 | Target::WindowsAarch64 => {
+                let (chars, off, len) = pe_section(&image, ".rdata").expect(".rdata section");
+                assert_eq!(
+                    chars & MEM_READ,
+                    MEM_READ,
+                    "{target:?}: .rdata not MEM_READ"
+                );
+                assert_eq!(chars & MEM_WRITE, 0, "{target:?}: .rdata is writable");
+                assert!(
+                    holds(off, len, b"MIXEDTBL"),
+                    "{target:?}: relocated const not in .rdata"
+                );
+                let (_, doff, dlen) = pe_section(&image, ".data").expect(".data section");
+                assert!(
+                    !holds(doff, dlen, b"MIXEDTBL"),
+                    "{target:?}: relocated const also present in .data"
                 );
             }
         }

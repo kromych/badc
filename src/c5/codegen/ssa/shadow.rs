@@ -126,6 +126,7 @@ pub(crate) fn walk_program(
             .map_or_else(|| f.name.clone(), |n| (*n).clone());
         func.is_inline = f.is_inline;
         func.is_always_inline = f.is_always_inline;
+        func.is_noinline = f.is_noinline;
         func.is_naked = f.is_naked;
         func.is_weak = weak_names.contains(func.name.as_str());
         func.is_internal = internal_names.contains(func.name.as_str());

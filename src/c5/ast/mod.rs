@@ -737,6 +737,8 @@ pub(crate) struct FinishedFunction {
     /// Propagated onto `FunctionSsa::is_always_inline`; implies
     /// `is_inline`.
     pub is_always_inline: bool,
+    /// Propagated onto `FunctionSsa::is_noinline`.
+    pub is_noinline: bool,
     /// `__attribute__((naked))`: propagated onto `FunctionSsa::is_naked`.
     pub is_naked: bool,
     pub n_locals: i64,
@@ -1191,6 +1193,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             is_variadic: _,
             is_inline: _,
             is_always_inline: _,
+            is_noinline: _,
             is_naked: _,
             n_locals: _,
             param_tys: _,

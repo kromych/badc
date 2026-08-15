@@ -445,6 +445,13 @@ fn is_inline_candidate(
         }
     };
 
+    // gcc's documented way to keep a body out of line, and the escape hatch
+    // its `__builtin_return_address` wording names. Checked before every
+    // other gate so the request holds whatever the body's shape.
+    if func.is_noinline {
+        say(format_args!("noinline"));
+        return false;
+    }
     if func.is_variadic {
         say(format_args!("variadic"));
         return false;
@@ -2599,6 +2606,7 @@ fn splice_multi_block(
         is_variadic: original.is_variadic,
         is_inline: original.is_inline,
         is_always_inline: original.is_always_inline,
+        is_noinline: original.is_noinline,
         section: original.section,
         is_naked: original.is_naked,
         is_weak: original.is_weak,

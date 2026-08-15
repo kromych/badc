@@ -1725,6 +1725,30 @@ fn asm_named_statics_survive_dce() {
 }
 
 #[test]
+fn noinline_holds_a_body_out_of_line() {
+    // `noinline` holds a body out of line whatever the inliner would
+    // otherwise do, so the callee keeps its own definition instead of being
+    // spliced into its only caller. A plain `inline` static of the same
+    // shape is spliced and dead-stripped, which is what the request
+    // suppresses.
+    let src = "\
+        static __attribute__((noinline)) int held_out_of_line(int x) { return x + 1; }\n\
+        static inline int spliced_away(int x) { return x + 2; }\n\
+        int caller(int x) { return held_out_of_line(x) + spliced_away(x); }\n";
+    for target in [crate::c5::Target::LinuxAarch64, crate::c5::Target::LinuxX64] {
+        let bytes = reloc_tu(src, target, true);
+        assert!(
+            bytes.windows(16).any(|w| w == b"held_out_of_line"),
+            "a noinline callee must keep its definition on {target:?}"
+        );
+        assert!(
+            !bytes.windows(12).any(|w| w == b"spliced_away"),
+            "a plain inline static of the same shape is spliced on {target:?}"
+        );
+    }
+}
+
+#[test]
 fn used_and_section_statics_survive_dce() {
     // `__attribute__((used))` and named-section placement keep an
     // otherwise unreferenced internal definition: their consumers

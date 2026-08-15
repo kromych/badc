@@ -51,6 +51,7 @@ struct AttrFlags {
     constructor: bool,
     destructor: bool,
     always_inline: bool,
+    noinline: bool,
     gnu_inline: bool,
     naked: bool,
     weak: bool,
@@ -68,6 +69,7 @@ impl AttrFlags {
         self.noreturn |= other.noreturn;
         self.dllexport |= other.dllexport;
         self.always_inline |= other.always_inline;
+        self.noinline |= other.noinline;
         self.gnu_inline |= other.gnu_inline;
         self.naked |= other.naked;
         self.weak |= other.weak;
@@ -1003,6 +1005,9 @@ impl Compiler {
                 // GNU `always_inline`: a mandatory inline request. Recorded so
                 // the inliner can warn when it cannot honor it.
                 f.always_inline = true;
+            } else if n == "noinline" || n == "__noinline__" {
+                // GNU `noinline`: suppress every inline request for this body.
+                f.noinline = true;
             } else if n == "gnu_inline" || n == "__gnu_inline__" {
                 // GNU `gnu_inline`: the function follows the GNU89 inline
                 // linkage model whatever the unit's default model is.
@@ -1349,6 +1354,9 @@ impl Compiler {
             // model does not see it.
             self.pending_is_inline = true;
             self.pending_is_always_inline = true;
+        }
+        if attrs.noinline {
+            self.pending_is_noinline = true;
         }
         if attrs.gnu_inline {
             self.pending_is_gnu_inline = true;

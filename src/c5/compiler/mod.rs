@@ -1419,6 +1419,8 @@ pub struct Compiler {
     /// request (`__attribute__((always_inline))` / MSVC
     /// `__forceinline`); implies `pending_is_inline`.
     pending_is_always_inline: bool,
+    /// `__attribute__((noinline))` seen on the declarator being emitted.
+    pending_is_noinline: bool,
 
     /// True when the most recent decl-spec parse consumed an `inline`
     /// function specifier -- `inline` / `__inline` / `__inline__` or
@@ -2281,6 +2283,7 @@ impl Compiler {
             stmt_expr_arena_ranges: Vec::new(),
             pending_is_inline: false,
             pending_is_always_inline: false,
+            pending_is_noinline: false,
             pending_saw_inline_specifier: false,
             pending_is_gnu_inline: false,
             pending_is_naked: false,

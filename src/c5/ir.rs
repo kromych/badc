@@ -1173,6 +1173,12 @@ pub(crate) struct FunctionSsa {
     /// coverage gap. A plain `inline` that stays out of line is silent
     /// (it is only a hint).
     pub is_always_inline: bool,
+    /// True if the function carried `__attribute__((noinline))`. gcc's
+    /// documented way to hold a body out of line, and what its
+    /// `__builtin_return_address` wording directs a caller to when the
+    /// inlined result is not the wanted one. Suppresses every inline
+    /// request, mandatory or size-driven.
+    pub is_noinline: bool,
     /// True if the function carried `__attribute__((naked))`: emit no
     /// prologue/epilogue and no implicit return; the body (inline asm) is the
     /// function's entire machine code. Used for interrupt service routines.
@@ -1501,6 +1507,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_variadic: _,
             is_inline: _,
             is_always_inline: _,
+            is_noinline: _,
             is_naked: _,
             is_weak: _,
             is_internal: _,

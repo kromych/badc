@@ -161,6 +161,7 @@ impl SsaBuilder {
             is_variadic,
             is_inline: false,
             is_always_inline: false,
+            is_noinline: false,
             is_naked: false,
             is_weak: false,
             is_internal: false,

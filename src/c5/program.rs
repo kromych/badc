@@ -157,6 +157,13 @@ pub struct Program {
     /// (or the attribute equivalents). The native writers place the
     /// data section at a multiple of it.
     pub data_align: usize,
+    /// Length of the read-only prefix of `data`: `const`-qualified
+    /// storage with no relocated slot, packed to the front by the
+    /// native data compaction so the image writers can map it without
+    /// write permission. Zero until that pass runs (VM, JIT, a
+    /// freshly compiled unit); any repack resets it, and the pass
+    /// re-establishes it for the layout it produced.
+    pub data_ro_len: usize,
     /// Start offsets of anonymous data objects (string literals and the
     /// implicit `__func__` arrays of C99 6.4.2.2) within `data`. Named
     /// globals already carry their offset in `symbols[..].val`; these are
@@ -558,6 +565,7 @@ impl DataOffsets for Program {
             asm_weak_names: _,
             asm_hidden_names: _,
             data_align: _, // an alignment, not an offset
+            data_ro_len,
             data_object_starts,
             const_data_ranges,
             data_pad_ranges,
@@ -589,6 +597,9 @@ impl DataOffsets for Program {
             init_funcs: _,              // code address space
             function_aliases: _,
         } = self;
+        // A repack invalidates the prefix boundary; the producing pass
+        // re-establishes it for the layout it emitted.
+        *data_ro_len = 0;
         data_object_starts.retain_mut(|s| match r.remap(*s, *s) {
             Some(_) if !r.in_data(*s) => false,
             Some(new) => {
@@ -675,6 +686,7 @@ mod data_offset_tests {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             asm_hidden_names: Vec::new(),
+            data_ro_len: 0,
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),

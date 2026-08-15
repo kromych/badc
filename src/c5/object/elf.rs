@@ -1492,20 +1492,9 @@ fn resolve_import_version_reqs(
     alloc::vec![None; imports.imports.len()]
 }
 
-/// Index of a relocated 8-byte slot within the writable data payload.
-/// A slot below the read-only prefix would need a load-time write to a
-/// page the loader maps without write permission, so the producer's
-/// segregation is checked rather than assumed.
+/// [`super::reloc_slot_in_data`] with this writer's format tag.
 fn reloc_slot_in_data(data_offset: u64, ro_len: u64, kind: &str) -> Result<usize, C5Error> {
-    if data_offset < ro_len {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!(
-                "ELF: {kind} reloc slot {data_offset:#x} lies in the read-only data prefix \
-                 (len {ro_len:#x})"
-            ),
-        )));
-    }
-    Ok((data_offset - ro_len) as usize)
+    super::reloc_slot_in_data("ELF", data_offset, ro_len, kind)
 }
 
 pub(super) fn write(
@@ -3748,6 +3737,7 @@ mod tests {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             asm_hidden_names: Vec::new(),
+            data_ro_len: 0,
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),

@@ -2494,9 +2494,9 @@ pub(crate) fn lower(
         copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
-        // The single-TU path keeps one writable data image; the
-        // read-only carve happens in the relocatable writer.
-        data_ro_len: 0,
+        // Read-only prefix boundary the data compaction produced;
+        // zero when the pass did not run (JIT, empty data).
+        data_ro_len: program.data_ro_len.min(program.data.len()),
         data_align: program.data_align,
         text_align,
         bss_size: 0,

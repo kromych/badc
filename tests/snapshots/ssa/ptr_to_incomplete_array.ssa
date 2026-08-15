@@ -4,12 +4,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x3
+    v1   ImmData(72)                                      -> x3
     v2   Imm(0)                                           -> x0
-    v3   ImmData(56)                                      -> x13
+    v3   ImmData(104)                                     -> x13
     v4   BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x0
     v5   Load { addr=v3, disp=8, kind=I64 }               -> x12
-    v6   ImmData(84)                                      -> x6
+    v6   ImmData(36)                                      -> x6
     terminator Jmp(b1)
   block 1  start_pc=0
     v31  Imm(0)                                           -> x0
@@ -86,7 +86,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Return(v8)   (exit_acc=v8)
   block 15  start_pc=0
     v9   LoadLocal { off=-1, kind=I64 }                   -> x0
-    v10  ImmData(91)                                      -> x6
+    v10  ImmData(43)                                      -> x6
     terminator Jmp(b16)
   block 16  start_pc=0
     v80  Imm(0)                                           -> x0
@@ -175,10 +175,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v22  Imm(0)                                           -> x0
     terminator Jmp(b32)   (exit_acc=v22)
   block 32  start_pc=0
-    v23  ImmData(56)                                      -> x0
+    v23  ImmData(104)                                     -> x0
     v24  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x0
     v25  Load { addr=v3, disp=8, kind=I64 }               -> x0
-    v26  ImmData(8)                                       -> x1
+    v26  ImmData(72)                                      -> x1
     v27  Imm(0)                                           -> x1
     v28  Binop { op=ne, lhs=v25, rhs=v1 }                 -> x0
     terminator Bz { cond=v28, target=b34, fall=b33 }   (exit_acc=v28)

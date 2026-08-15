@@ -47,14 +47,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=22
     v41  Store { addr=v1, disp=152, value=v2, kind=I64 }  -> -
     v42  BinopI { op=add, lhs=v1, rhs_imm=160 }           -> x2
     v43  Store { addr=v1, disp=160, value=v2, kind=I64 }  -> -
-    v44  ImmData(32)                                      -> x0
+    v44  ImmData(16)                                      -> x0
     v45  LocalAddr(-21)                                   -> x1
     v46  Store { addr=v45, disp=0, value=v44, kind=I64 }  -> -
-    v47  ImmData(36)                                      -> x1
+    v47  ImmData(20)                                      -> x1
     v48  LocalAddr(-21)                                   -> x0
     v49  BinopI { op=add, lhs=v48, rhs_imm=8 }            -> x2
     v50  Store { addr=v48, disp=8, value=v47, kind=I64 }  -> -
-    v51  ImmData(8)                                       -> x0
+    v51  ImmData(40)                                      -> x0
     v52  LocalAddr(-21)                                   -> x1
     v53  BinopI { op=add, lhs=v52, rhs_imm=16 }           -> x2
     v54  Store { addr=v52, disp=16, value=v51, kind=I64 } -> -
@@ -74,7 +74,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=22
     v68  LocalAddr(-21)                                   -> x1
     v69  BinopI { op=add, lhs=v68, rhs_imm=40 }           -> x6
     v70  Store { addr=v68, disp=40, value=v67, kind=I32 } -> -
-    v71  ImmData(39)                                      -> x2
+    v71  ImmData(23)                                      -> x2
     v72  LocalAddr(-21)                                   -> x1
     v73  BinopI { op=add, lhs=v72, rhs_imm=48 }           -> x6
     v74  Store { addr=v72, disp=48, value=v71, kind=I64 } -> -
@@ -144,7 +144,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=22
     v127 BinopI { op=add, lhs=v124, rhs_imm=48 }          -> x6
     v128 BinopI { op=add, lhs=v124, rhs_imm=56 }          -> x6
     v129 Load { addr=v124, disp=56, kind=I64 }            -> x1
-    v130 ImmData(8)                                       -> x1
+    v130 ImmData(40)                                      -> x1
     v131 Imm(8)                                           -> x1
     v132 BinopI { op=add, lhs=v51, rhs_imm=8 }            -> x0
     v133 Binop { op=ne, lhs=v76, rhs=v132 }               -> x0

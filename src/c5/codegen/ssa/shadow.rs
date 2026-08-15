@@ -1003,13 +1003,41 @@ pub(crate) fn apply_data_liveness(
                 .all(|&b| b == 0)
     };
 
+    // Read-only file-backed objects pack ahead of the writable ones so
+    // they form a prefix the image writers map without write permission
+    // (`Program::data_ro_len`), the same regions-then-boundary layout
+    // the multi-object link produces. A relocated slot disqualifies an
+    // object: the writers patch such slots in the file image and the
+    // loader may re-patch them after mapping. Object 0 must stay at
+    // offset 0 (see above), so a prefix exists only when its bytes past
+    // the 8-byte NULL guard are recorded alignment padding -- content
+    // glued onto it has no recorded start and must stay writable.
+    let guard_immutable = !has_reloc_slot[0] && {
+        let end = obj_end(0);
+        let mut covered = end.min(8);
+        for &(lo, hi) in &program.data_pad_ranges {
+            if lo <= covered && hi > covered {
+                covered = hi;
+            }
+        }
+        covered >= end
+    };
+    let any_ro = (1..n).any(|i| live[i] && !is_bss(i) && is_readonly[i] && !has_reloc_slot[i]);
+    let in_ro_prefix = |i: usize| -> bool {
+        guard_immutable && any_ro && (i == 0 || (is_readonly[i] && !has_reloc_slot[i]))
+    };
+
     // The packed layout invalidates the parse-recorded padding ranges;
     // rebuild them from the gaps this pass itself creates.
     let mut new_pad_ranges: Vec<(i64, i64)> = Vec::new();
     let mut new_base = alloc::vec![-1i64; n];
     let mut new_data: Vec<u8> = Vec::with_capacity(program.data.len());
-    for i in 0..n {
-        if live[i] && !is_bss(i) {
+    let mut data_ro_len: i64 = 0;
+    for ro_pass in [true, false] {
+        for i in 0..n {
+            if !live[i] || is_bss(i) || in_ro_prefix(i) != ro_pass {
+                continue;
+            }
             let want = starts[i].rem_euclid(align);
             let pad_start = new_data.len() as i64;
             while (new_data.len() as i64).rem_euclid(align) != want {
@@ -1020,6 +1048,19 @@ pub(crate) fn apply_data_liveness(
             }
             new_base[i] = new_data.len() as i64;
             new_data.extend_from_slice(&program.data[starts[i] as usize..obj_end(i) as usize]);
+        }
+        // The prefix ends on an `ALIGN` boundary so the writable
+        // region's packed residues hold at any `ALIGN`-multiple
+        // placement of `data[data_ro_len..]`.
+        if ro_pass && !new_data.is_empty() {
+            let pad_start = new_data.len() as i64;
+            while (new_data.len() as i64).rem_euclid(align) != 0 {
+                new_data.push(0);
+            }
+            if (new_data.len() as i64) > pad_start {
+                new_pad_ranges.push((pad_start, new_data.len() as i64));
+            }
+            data_ro_len = new_data.len() as i64;
         }
     }
     // The `.bss` region begins immediately past the file image; an offset
@@ -1084,6 +1125,7 @@ pub(crate) fn apply_data_liveness(
         .retain(|f| live_func_pcs.contains(&f.ent_pc));
     crate::c5::layout::DataOffsets::remap_data_offsets(&mut out, &map_to);
     out.data = new_data;
+    out.data_ro_len = data_ro_len as usize;
     // The gaps this pass opened join the parse-recorded padding the remap
     // above carried over.
     out.data_pad_ranges.extend(new_pad_ranges);
@@ -1259,6 +1301,47 @@ mod tests {
                 .any(|r| r.target_offset >= data_len),
             "the &g[3] initializer must target a byte in the bss region"
         );
+    }
+
+    // Read-only file-backed objects pack ahead of the writable ones and
+    // `Program::data_ro_len` marks the boundary: literals and named
+    // const objects land below it; a const object holding a relocated
+    // slot and every writable object stay past it, as do all recorded
+    // relocation slots.
+    #[test]
+    fn readonly_objects_pack_into_a_prefix() {
+        let target = Target::LinuxX64;
+        let src = "const int ck = 7; \
+                   int wv = 3; \
+                   char *msg = \"prefix-check\"; \
+                   const char *const cp = \"demoted\"; \
+                   int main(void) { return ck + wv + msg[0] + cp[0]; }";
+        let compacted = compact_program_data(&compile(src, target), target, true, false)
+            .expect("compact")
+            .program;
+        let ro = compacted.data_ro_len as i64;
+        assert!(ro > 0, "const data must produce a read-only prefix");
+        assert_eq!(ro % 16, 0, "prefix must end on the packing alignment");
+        let lit = compacted
+            .data
+            .windows(12)
+            .position(|w| w == b"prefix-check")
+            .expect("literal") as i64;
+        assert!(lit + 12 <= ro, "the literal must sit in the prefix");
+        let sym = |name: &str| {
+            compacted
+                .symbols
+                .iter()
+                .find(|s| s.name == name)
+                .unwrap_or_else(|| panic!("symbol {name}"))
+                .val
+        };
+        assert!(sym("ck") + 4 <= ro, "const object belongs to the prefix");
+        assert!(sym("wv") >= ro, "writable object stays past the prefix");
+        assert!(sym("cp") >= ro, "a relocated const slot stays writable");
+        for off in compacted.data_reloc_offsets() {
+            assert!(off >= ro, "relocated slot {off:#x} below the prefix");
+        }
     }
 
     // A `_Thread_local` global's `val` is an offset into the TLS image, not

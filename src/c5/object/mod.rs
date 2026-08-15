@@ -103,6 +103,29 @@ pub(crate) fn apply_merged_dwarf_data_reloc(
     Ok(())
 }
 
+/// Index of a relocated 8-byte slot within the writable data payload
+/// (`data[data_ro_len..]`). A slot below the read-only prefix would
+/// need a load-time write to a page the loader maps without write
+/// permission, so the producer's segregation is checked rather than
+/// assumed. Shared by every final-image writer.
+#[cfg(feature = "native-emit")]
+fn reloc_slot_in_data(
+    format: &str,
+    data_offset: u64,
+    ro_len: u64,
+    kind: &str,
+) -> Result<usize, C5Error> {
+    if data_offset < ro_len {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &alloc::format!(
+                "{format}: {kind} reloc slot {data_offset:#x} lies in the read-only data prefix \
+                 (len {ro_len:#x})"
+            ),
+        )));
+    }
+    Ok((data_offset - ro_len) as usize)
+}
+
 #[cfg(feature = "native-emit")]
 pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error> {
     emit_native_with_options(program, target, NativeOptions::default())

@@ -15,7 +15,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=2
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   StoreLocal { off=2, value=v1, kind=I32 }         -> -
     v3   LocalAddr(-2)                                    -> x0
-    v4   ImmData(552)                                     -> x1
+    v4   ImmData(568)                                     -> x1
     v5   Mcpy { dst=v3, src=v4, size=16, align=8 }        -> x0
     v6   LocalAddr(-2)                                    -> x0
     v7   Extend { value=v1, kind=I32 }                    -> x1

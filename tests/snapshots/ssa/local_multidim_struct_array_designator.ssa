@@ -75,7 +75,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v55  LoadLocal { off=-21, kind=I64 }                  -> x1
     terminator Jmp(b9)   (exit_acc=v54)
   block 9  start_pc=0
-    v57  ImmData(40)                                      -> x0
+    v57  ImmData(184)                                     -> x0
     v58  Imm(16)                                          -> x1
     v59  BinopI { op=add, lhs=v57, rhs_imm=16 }           -> x1
     v60  Imm(8)                                           -> x1
@@ -85,7 +85,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v64  Imm(0)                                           -> x1
     terminator Bnz { cond=v63, target=b39, fall=b10 }   (exit_acc=v63)
   block 10  start_pc=0
-    v65  ImmData(40)                                      -> x0
+    v65  ImmData(184)                                     -> x0
     v66  Imm(16)                                          -> x1
     v67  BinopI { op=add, lhs=v65, rhs_imm=16 }           -> x1
     v68  Imm(8)                                           -> x1
@@ -103,14 +103,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v76  Imm(4)                                           -> x0
     terminator Return(v76)   (exit_acc=v76)
   block 13  start_pc=0
-    v77  ImmData(40)                                      -> x0
+    v77  ImmData(184)                                     -> x0
     v78  Imm(0)                                           -> x1
     v79  Load { addr=v77, disp=0, kind=I32 }              -> x0
     v80  BinopI { op=ne, lhs=v79, rhs_imm=9 }             -> x0
     v81  Imm(0)                                           -> x1
     terminator Bnz { cond=v80, target=b38, fall=b14 }   (exit_acc=v80)
   block 14  start_pc=0
-    v82  ImmData(40)                                      -> x0
+    v82  ImmData(184)                                     -> x0
     v83  Imm(0)                                           -> x1
     v84  BinopI { op=add, lhs=v82, rhs_imm=4 }            -> x1
     v85  Load { addr=v82, disp=4, kind=I32 }              -> x0
@@ -125,7 +125,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v90  Imm(5)                                           -> x0
     terminator Return(v90)   (exit_acc=v90)
   block 17  start_pc=0
-    v91  ImmData(40)                                      -> x0
+    v91  ImmData(184)                                     -> x0
     v92  Imm(0)                                           -> x1
     v93  Imm(8)                                           -> x1
     v94  BinopI { op=add, lhs=v91, rhs_imm=8 }            -> x1
@@ -134,7 +134,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v97  Imm(0)                                           -> x1
     terminator Bnz { cond=v96, target=b37, fall=b18 }   (exit_acc=v96)
   block 18  start_pc=0
-    v98  ImmData(40)                                      -> x0
+    v98  ImmData(184)                                     -> x0
     v99  Imm(16)                                          -> x1
     v100 BinopI { op=add, lhs=v98, rhs_imm=16 }           -> x1
     v101 Imm(0)                                           -> x1
@@ -152,7 +152,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     terminator Return(v108)   (exit_acc=v108)
   block 21  start_pc=0
     v109 LocalAddr(-12)                                   -> x0
-    v110 ImmData(72)                                      -> x1
+    v110 ImmData(40)                                      -> x1
     v111 Mcpy { dst=v109, src=v110, size=64, align=8 }    -> x0
     v112 LocalAddr(-12)                                   -> x0
     v113 Imm(32)                                          -> x1
@@ -229,7 +229,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     terminator Jmp(b30)   (exit_acc=v168)
   block 30  start_pc=0
     v171 LocalAddr(-16)                                   -> x0
-    v172 ImmData(136)                                     -> x1
+    v172 ImmData(104)                                     -> x1
     v173 Mcpy { dst=v171, src=v172, size=32, align=8 }    -> x0
     v174 LocalAddr(-16)                                   -> x0
     v175 Imm(0)                                           -> x1
@@ -256,7 +256,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     terminator Jmp(b33)   (exit_acc=v190)
   block 33  start_pc=0
     v193 LocalAddr(-20)                                   -> x0
-    v194 ImmData(168)                                     -> x1
+    v194 ImmData(136)                                     -> x1
     v195 Mcpy { dst=v193, src=v194, size=32, align=8 }    -> x0
     v196 LocalAddr(-20)                                   -> x0
     v197 Imm(0)                                           -> x0

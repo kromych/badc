@@ -239,6 +239,34 @@ fn return_value_truncates_to_byte() {
 }
 
 #[test]
+fn string_literal_store_faults() {
+    // C99 6.4.5p6 leaves the store undefined; the literal lives in
+    // `__TEXT,__const`, so the write hits a non-writable mapping.
+    let src = "int main(void) { char *p = \"immutable\"; p[0] = 'X'; return 0; }";
+    match build_and_run_outcome(src, "lit_store") {
+        RunOutcome::Signal(_) => {}
+        other => panic!("store through a string literal must fault, got {other:?}"),
+    }
+    // Writable storage a literal initializes stays writable: the
+    // array is the object, the literal is only its initializer image.
+    let src = "char buf[] = \"abc\"; \
+               int main(void) { buf[0] = 'X'; return buf[0] == 'X' ? 0 : 1; }";
+    assert_eq!(build_and_run(src, "lit_copy_store"), 0);
+    // Reading a literal through a relocated const pointer crosses
+    // from the writable slot into the read-only region.
+    let src = "const char *const cp = \"readback\"; \
+               int main(void) { return cp[0] == 'r' ? 0 : 1; }";
+    assert_eq!(build_and_run(src, "lit_readback"), 0);
+    // The multi-TU link path (object merge -> Mach-O) enforces the
+    // same mapping; a signal surfaces as a `None` exit code here.
+    let (code, _) = link_run_capture(
+        "int main(void) { char *p = \"immutable\"; p[0] = 'X'; return 0; }",
+        "lit_store_linked",
+    );
+    assert_eq!(code, -1, "linked-image literal store must die on a signal");
+}
+
+#[test]
 fn bss_segregation_maps_and_zero_fills() {
     // With segregation on, wholly-zero globals leave `__data` for the
     // `__DATA` segment's `vmsize > filesize` zero-fill tail. The array

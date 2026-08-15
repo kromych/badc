@@ -220,7 +220,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v167 Imm(11)                                          -> x0
     terminator Return(v167)   (exit_acc=v167)
   block 31  start_pc=0
-    v168 ImmData(24)                                      -> x7
+    v168 ImmData(8)                                       -> x7
     v169 CallExt { binding_idx=0, args=[v168], fp_arg_mask=0x0 } -> x0
     v170 Imm(0)                                           -> x0
     terminator Return(v170)   (exit_acc=v170)

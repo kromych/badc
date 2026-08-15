@@ -218,17 +218,23 @@ const DYNAMIC_LOOKUP_ORDINAL: u8 = 0xFE;
 /// 1-based index of `__TEXT,__text` within the per-image
 /// section table. Mach-O numbers sections globally across
 /// all segments in declaration order; `__text` is the first
-/// section we emit (`__TEXT`'s sole section), hence index 1.
+/// section we emit, hence index 1.
 const SECT_INDEX_TEXT: u8 = 1;
+/// 1-based index of `__TEXT,__const`: the read-only data prefix
+/// (`Build::data[..data_ro_len]`). Emitted only when the prefix is
+/// non-empty; every later ordinal shifts up by one then.
+const SECT_INDEX_CONST: u8 = 2;
 /// 1-based index of `__DATA,__data`. `__DATA` always declares
-/// `__got` first (section 2, even when empty) followed by `__data`
-/// (section 3); the `__thread_*` sections, when present, come after.
-/// Used as `n_sect` for an exported data symbol.
-const SECT_INDEX_DATA: u8 = 3;
+/// `__got` first (even when empty) followed by `__data`; the
+/// `__thread_*` sections, when present, come after. Used as
+/// `n_sect` for an exported data symbol.
+fn sect_index_data(has_const: bool) -> u8 {
+    3 + has_const as u8
+}
 /// 1-based index of `__DATA,__bss`, which follows `__data` and the two
 /// `__thread_*` sections when TLS is present.
-fn sect_index_bss(tls_present: bool) -> u8 {
-    SECT_INDEX_DATA + if tls_present { 3 } else { 1 }
+fn sect_index_bss(has_const: bool, tls_present: bool) -> u8 {
+    sect_index_data(has_const) + if tls_present { 3 } else { 1 }
 }
 
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
@@ -654,8 +660,12 @@ fn segment_no_sections(
     out
 }
 
-/// `LC_SEGMENT_64` for `__TEXT` containing a single `__text` section.
-/// 72 bytes for the segment header + 80 bytes for the section header.
+/// `LC_SEGMENT_64` for `__TEXT`: the `__text` section, plus a
+/// `__const` section when the build carries a read-only data prefix.
+/// `__const` rides the segment's existing R+X mapping -- the prefix
+/// holds no relocated slot, so nothing writes it after emission, and
+/// the section carries no instruction attribute so tools do not
+/// decode it.
 #[allow(clippy::too_many_arguments)]
 fn segment_text(
     vmaddr: u64,
@@ -665,14 +675,16 @@ fn segment_text(
     text_addr: u64,
     text_size: u64,
     text_offset: u32,
+    const_section: Option<(u64, u64, u32, u32)>,
 ) -> Vec<u8> {
-    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE;
-    let mut out = Vec::with_capacity(TOTAL);
+    let nsects = 1 + const_section.is_some() as u32;
+    let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
+    let mut out = Vec::with_capacity(total);
     write_struct(
         &mut out,
         &SegmentCommand64 {
             cmd: LC_SEGMENT_64,
-            cmdsize: TOTAL as u32,
+            cmdsize: total as u32,
             segname: pack_name16("__TEXT"),
             vmaddr,
             vmsize,
@@ -680,7 +692,7 @@ fn segment_text(
             filesize,
             maxprot: VM_PROT_READ | VM_PROT_EXECUTE,
             initprot: VM_PROT_READ | VM_PROT_EXECUTE,
-            nsects: 1,
+            nsects,
             flags: 0,
         },
     );
@@ -702,7 +714,26 @@ fn segment_text(
             reserved3: 0,
         },
     );
-    debug_assert_eq!(out.len(), TOTAL);
+    if let Some((addr, size, offset, align)) = const_section {
+        write_struct(
+            &mut out,
+            &Section64 {
+                sectname: pack_name16("__const"),
+                segname: pack_name16("__TEXT"),
+                addr,
+                size,
+                offset,
+                align,
+                reloff: 0,
+                nreloc: 0,
+                flags: 0, // S_REGULAR
+                reserved1: 0,
+                reserved2: 0,
+                reserved3: 0,
+            },
+        );
+    }
+    debug_assert_eq!(out.len(), total);
     out
 }
 
@@ -1566,15 +1597,19 @@ fn tlv_bootstrap_ordinal(dylibs: &[crate::c5::codegen::ResolvedDylib]) -> Result
 ///
 /// `data_section_offset_in_segment` is the byte offset of
 /// `__data` inside the `__DATA` segment. Each reloc's
-/// `data_offset` is the byte offset within `build.data`, so
-/// the segment-relative offset we feed to dyld is
-/// `data_section_offset_in_segment + data_offset`.
+/// `data_offset` is the byte offset within `build.data`, of which
+/// `__data` carries only `[ro_len..]`, so the segment-relative
+/// offset we feed to dyld is
+/// `data_section_offset_in_segment + data_offset - ro_len`. A slot
+/// below `ro_len` is rejected by the writer's data patch pass
+/// before the stream is consumed.
 fn build_rebase_opcodes(
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
     label_relocs: &[crate::c5::codegen::LabelReloc],
     segment: u8,
     data_section_offset_in_segment: u64,
+    ro_len: u64,
 ) -> Vec<u8> {
     if data_relocs.is_empty() && code_relocs.is_empty() && label_relocs.is_empty() {
         return Vec::new();
@@ -1592,7 +1627,7 @@ fn build_rebase_opcodes(
     all.extend(label_relocs.iter().map(|r| r.data_offset));
     all.sort();
     for &off in &all {
-        let seg_off = data_section_offset_in_segment + off;
+        let seg_off = data_section_offset_in_segment + off.saturating_sub(ro_len);
         out.push(REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
         put_uleb128(&mut out, seg_off);
         // `REBASE_OPCODE_DO_REBASE_IMM_TIMES | 1` -- one entry,
@@ -1824,7 +1859,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
 
     let mh_size = MACH_HEADER_64_SIZE as u64;
     let pagezero_size = SEGMENT_COMMAND_64_SIZE as u64;
-    let text_seg_size = (SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE) as u64;
+    // `__TEXT,__const` carries the read-only data prefix.
+    let ro_len = build.data_ro_len.min(build.data.len()) as u64;
+    let has_const = ro_len > 0;
+    let text_seg_size =
+        (SEGMENT_COMMAND_64_SIZE + (1 + has_const as usize) * SECTION_64_SIZE) as u64;
     // __DATA carries 2 sections normally (__got, __data), 4 when the
     // program has `_Thread_local` globals (+__thread_vars, __thread_bss),
     // and one more (__bss) when segregation produced zero-init storage.
@@ -1925,7 +1964,17 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let entry_file_offset = round_up(header_plus_lcs + CODESIGN_LC_PAD, text_align);
     let lc_pad_bytes = (entry_file_offset - header_plus_lcs) as usize;
     let code_size = code.len() as u64;
-    let text_filesize = round_up(entry_file_offset + code_size, PAGE_SIZE);
+    // `__TEXT,__const` sits past the code, at the data image's base
+    // alignment so the prefix's packed residues hold absolutely
+    // (fileoff == vmaddr offset within __TEXT).
+    let ro_align = crate::c5::layout::data_image_align(build.data_align) as u64;
+    let const_fileoff = if has_const {
+        round_up(entry_file_offset + code_size, ro_align)
+    } else {
+        entry_file_offset + code_size
+    };
+    let const_vmaddr = TEXT_VMADDR_BASE + const_fileoff;
+    let text_filesize = round_up(const_fileoff + ro_len, PAGE_SIZE);
     let text_vmsize = text_filesize;
 
     // __DATA layout:
@@ -1943,9 +1992,12 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // aligning the in-segment offset aligns both fileoff and vmaddr.
     let data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
     let data_section_offset_in_segment: u64 = round_up(got_size, data_align);
+    // Full data-byte space; `__data` carries only the writable
+    // remainder past the `__TEXT,__const` prefix.
     let program_data_size = build.data.len() as u64;
+    let writable_data_size = program_data_size - ro_len;
     let post_data_offset_in_segment: u64 =
-        round_up(data_section_offset_in_segment + program_data_size, 8);
+        round_up(data_section_offset_in_segment + writable_data_size, 8);
     let thread_vars_size: u64 = (n_tlv as u64) * TLV_DESCRIPTOR_SIZE;
     let thread_vars_offset_in_segment: u64 = if tls_present {
         post_data_offset_in_segment
@@ -1979,7 +2031,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             thread_vars_offset_in_segment + thread_vars_size
         }
     } else {
-        data_section_offset_in_segment + program_data_size
+        data_section_offset_in_segment + writable_data_size
     };
     // Regular zero-init `.bss` sits past `__data` with no file backing;
     // the loader zero-fills the segment's `[filesize, vmsize)` tail. Only
@@ -2006,11 +2058,13 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let bss_base_vmaddr = if tls_present {
         thread_storage_vmaddr + thread_storage_size
     } else {
-        data_section_vmaddr + program_data_size
+        data_section_vmaddr + writable_data_size
     };
     let data_off_to_vaddr = |off: u64| -> u64 {
-        if off < program_data_size {
-            data_section_vmaddr + off
+        if off < ro_len {
+            const_vmaddr + off
+        } else if off < program_data_size {
+            data_section_vmaddr + (off - ro_len)
         } else {
             bss_base_vmaddr + (off - program_data_size)
         }
@@ -2047,6 +2101,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         &build.label_relocs,
         SEG_INDEX_DATA,
         data_section_offset_in_segment,
+        ro_len,
     );
 
     // ---- symbol + string tables ----
@@ -2178,10 +2233,12 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             }
             crate::c5::codegen::DynamicExportSection::Data => (
                 data_off_to_vaddr(d.offset),
-                if d.offset < program_data_size {
-                    SECT_INDEX_DATA
+                if d.offset < ro_len {
+                    SECT_INDEX_CONST
+                } else if d.offset < program_data_size {
+                    sect_index_data(has_const)
                 } else {
-                    sect_index_bss(tls_present)
+                    sect_index_bss(has_const, tls_present)
                 },
             ),
         };
@@ -2368,6 +2425,14 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         TEXT_VMADDR_BASE + entry_file_offset,
         code_size,
         entry_file_offset as u32,
+        has_const.then(|| {
+            (
+                const_vmaddr,
+                ro_len,
+                const_fileoff as u32,
+                ro_align.trailing_zeros(),
+            )
+        }),
     );
     let data_segment = if tls_present {
         segment_data_with_tlv(
@@ -2379,7 +2444,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             got_size,
             (data_fileoff + got_section_offset_in_segment) as u32,
             data_section_vmaddr,
-            program_data_size,
+            writable_data_size,
             data_section_fileoff as u32,
             data_align.trailing_zeros(),
             thread_vars_vmaddr,
@@ -2402,7 +2467,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             got_size,
             (data_fileoff + got_section_offset_in_segment) as u32,
             data_section_vmaddr,
-            program_data_size,
+            writable_data_size,
             data_section_fileoff as u32,
             data_align.trailing_zeros(),
             bss_base_vmaddr,
@@ -2587,6 +2652,12 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         thread_vars_vmaddr,
         &build.macho_tlv_fixups,
     )?;
+    // __TEXT,__const: the read-only data prefix, verbatim -- no slot
+    // in it is relocated, so the bytes are final at emission.
+    if has_const {
+        out.resize(const_fileoff as usize, 0);
+        out.extend_from_slice(&build.data[..ro_len as usize]);
+    }
     while (out.len() as u64) < text_filesize {
         out.push(0);
     }
@@ -2600,14 +2671,14 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // The GOT entries (in __got, ahead of __data) come from
     // the bind opcode stream; we leave those zero here.
     out.resize(data_section_fileoff as usize, 0);
-    let mut data_with_relocs = build.data.clone();
+    let mut data_with_relocs = build.data[ro_len as usize..].to_vec();
     for r in &build.data_relocs {
         // `__data` and the zero-fill tail map to separate runtime
         // regions, so the anchor picks the region and the signed
         // displacement `target - anchor` rides on the address.
         let preferred_va = data_off_to_vaddr(r.target_anchor)
             .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-        let off = r.data_offset as usize;
+        let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "data")?;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -2635,7 +2706,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             )));
         }
         let preferred_va = code_vmaddr_base + native_off as u64;
-        let off = r.data_offset as usize;
+        let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "code")?;
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_DEBUG_CODE_RELOCS").is_ok() {
             std::eprintln!(
@@ -2661,7 +2732,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // dyld slides it through the same rebase stream.
     for r in &build.label_relocs {
         let preferred_va = code_vmaddr_base + r.text_offset;
-        let off = r.data_offset as usize;
+        let off = super::reloc_slot_in_data("Mach-O", r.data_offset, ro_len, "label")?;
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -2769,6 +2840,7 @@ mod tests {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             asm_hidden_names: Vec::new(),
+            data_ro_len: 0,
             data_object_starts: Vec::new(),
             const_data_ranges: Vec::new(),
             data_pad_ranges: Vec::new(),
@@ -3258,7 +3330,7 @@ mod tests {
             .expect("_myglobal export");
         assert_eq!(data.1 & N_EXT, N_EXT, "data export must be external");
         assert_eq!(data.1 & N_SECT, N_SECT, "data export must be N_SECT");
-        assert_eq!(data.2, SECT_INDEX_DATA, "data export n_sect");
+        assert_eq!(data.2, sect_index_data(false), "data export n_sect");
 
         let zero = found
             .iter()
@@ -3267,7 +3339,7 @@ mod tests {
         assert_eq!(zero.1 & N_EXT, N_EXT, "bss export must be external");
         assert_eq!(
             zero.2,
-            sect_index_bss(false),
+            sect_index_bss(false, false),
             "a data offset past build.data must resolve to __DATA,__bss"
         );
     }

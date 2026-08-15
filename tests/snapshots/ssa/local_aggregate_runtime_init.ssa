@@ -23,7 +23,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v5   Store { addr=v1, disp=8, value=v2, kind=I64 }    -> -
     v6   BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x2
     v7   Store { addr=v1, disp=16, value=v2, kind=I64 }   -> -
-    v8   ImmData(8)                                       -> x3
+    v8   ImmData(40)                                      -> x3
     v9   Load { addr=v8, disp=0, kind=I32 }               -> x1
     v10  LocalAddr(-5)                                    -> x2
     v11  Store { addr=v10, disp=0, value=v9, kind=I32 }   -> -
@@ -159,7 +159,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v113 LoadLocal { off=-6, kind=I64 }                   -> x1
     v114 BinopI { op=add, lhs=v50, rhs_imm=16 }           -> x1
     v115 Load { addr=v50, disp=16, kind=I64 }             -> x0
-    v116 ImmData(8)                                       -> x1
+    v116 ImmData(40)                                      -> x1
     v117 Binop { op=ne, lhs=v115, rhs=v8 }                -> x0
     terminator Bz { cond=v117, target=b16, fall=b15 }   (exit_acc=v117)
   block 15  start_pc=0
@@ -171,11 +171,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v121 Store { addr=v119, disp=0, value=v120, kind=I64 } -> -
     v122 BinopI { op=add, lhs=v119, rhs_imm=8 }           -> x2
     v123 Store { addr=v119, disp=8, value=v120, kind=I32 } -> -
-    v124 ImmData(8)                                       -> x0
+    v124 ImmData(40)                                      -> x0
     v125 Load { addr=v8, disp=0, kind=I32 }               -> x0
     v126 LocalAddr(-2)                                    -> x1
     v127 Store { addr=v126, disp=0, value=v125, kind=I32 } -> -
-    v128 ImmData(16)                                      -> x0
+    v128 ImmData(48)                                      -> x0
     v129 Load { addr=v128, disp=0, kind=I32 }             -> x1
     v130 LocalAddr(-2)                                    -> x0
     v131 BinopI { op=add, lhs=v130, rhs_imm=4 }           -> x2
@@ -223,7 +223,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v163 Imm(5)                                           -> x0
     terminator Return(v163)   (exit_acc=v163)
   block 22  start_pc=0
-    v164 ImmData(24)                                      -> x0
+    v164 ImmData(56)                                      -> x0
     v165 Load { addr=v164, disp=0, kind=I64 }             -> x1
     v166 Imm(0)                                           -> x0
     v167 LoadLocal { off=-6, kind=I64 }                   -> x0

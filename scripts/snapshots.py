@@ -64,11 +64,6 @@ def ensure_badc(root: Path) -> Path:
 TARGETS = [("x64", "linux-x64"), ("aarch64", "linux-aarch64")]
 OBJDUMP_FLAGS = ["--disassemble", "--no-show-raw-insn", "--no-addresses"]
 
-# badc appends its version-line marker (`badc <version> ...`, see
-# OUTPUT_MARKER in src/lib.rs) to the tail of every emitted `.text`
-# section. Disassembled, those bytes would churn the snapshot on
-# every release bump. Truncate the objdump output at the marker.
-BUILD_INFO_MARKER = b"badc "
 
 # objdump's disassembly bakes in several forms of absolute addresses
 # that shift on any earlier-code reflow even when the local emit is
@@ -209,62 +204,62 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> boo
     return proc.returncode == 0
 
 
-def build_info_stop_address(binary: Path) -> int | None:
-    """Return the .text virtual address at which the BUILD_INFO marker
-    begins, or None if either ELF parsing fails or the marker is
-    absent. The caller passes the result as `--stop-address` to
-    objdump so the trailing BUILD_INFO bytes (which embed the current
-    git commit and would churn the snapshot every push) don't reach
-    the disassembled output.
+def fixture_text_stop_address(map_path: Path) -> int | None:
+    """Return the virtual address one past the fixture's last executable
+    contribution -- its `.text` plus any named executable sections --
+    read from the badc link map. `<internal>` inputs (entry stub, PLT)
+    don't move the boundary and `<runtime/...>` ends the scan, so the
+    caller's `--stop-address` keeps the snapshot to the fixture's own
+    code: the trailing fill and the identical runtime tail every image
+    shares would otherwise churn the whole tree on any runtime edit.
+    None when the map is missing or names no fixture contribution.
     """
-    import struct
-
-    data = binary.read_bytes()
-    if data[:4] != b"\x7fELF":
+    try:
+        text = map_path.read_text()
+    except OSError:
         return None
-    is_64 = data[4] == 2
-    is_le = data[5] == 1
-    if not is_64 or not is_le:
-        return None
-    e_shoff = struct.unpack_from("<Q", data, 0x28)[0]
-    e_shentsize = struct.unpack_from("<H", data, 0x3a)[0]
-    e_shnum = struct.unpack_from("<H", data, 0x3c)[0]
-    e_shstrndx = struct.unpack_from("<H", data, 0x3e)[0]
-    shstr_off = struct.unpack_from(
-        "<Q", data, e_shoff + e_shstrndx * e_shentsize + 0x18
-    )[0]
-    for i in range(e_shnum):
-        base = e_shoff + i * e_shentsize
-        sh_name = struct.unpack_from("<I", data, base)[0]
-        end = data.index(b"\x00", shstr_off + sh_name)
-        name = data[shstr_off + sh_name : end].decode("ascii", errors="replace")
-        if name != ".text":
+    in_text = False
+    last_end = None
+    for line in text.splitlines():
+        if re.match(r"\.text\s+0x", line):
+            in_text = True
             continue
-        sh_addr = struct.unpack_from("<Q", data, base + 0x10)[0]
-        sh_offset = struct.unpack_from("<Q", data, base + 0x18)[0]
-        sh_size = struct.unpack_from("<Q", data, base + 0x20)[0]
-        section = data[sh_offset : sh_offset + sh_size]
-        idx = section.find(BUILD_INFO_MARKER)
-        if idx < 0:
-            return None
-        return sh_addr + idx
-    return None
+        if not in_text:
+            continue
+        if not line.strip() or not line.startswith(" "):
+            break
+        # A contribution is `[name] 0xaddr 0xsize input`, with the name
+        # wrapped onto its own line when long; symbol and `*fill*` rows
+        # carry no input token and don't match.
+        m = re.match(r"\s+(?:\S+\s+)?0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\S+)\s*$", line)
+        if not m:
+            continue
+        inp = m.group(3)
+        if inp.startswith("<runtime/"):
+            break
+        if not inp.startswith("<"):
+            last_end = int(m.group(1), 16) + int(m.group(2), 16)
+    return last_end
 
 
 def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root: Path) -> bool:
     # Relative source path + cwd=root: keep `__FILE__` checkout-independent
     # (see emit_ssa).
     flags = fixture_flags(src)
+    # `-Map` records where the embedded runtime's .text begins; `-c`
+    # produces no link and takes no map (an object carries no runtime).
+    map_path = tmp_bin.with_suffix(".map")
+    map_flags = [] if "-c" in flags else [f"-Map={map_path}"]
     proc = subprocess.run(
-        [str(badc), "-q", "-O", f"--target={target}", *flags, "-o", str(tmp_bin),
-         str(src.relative_to(root))],
+        [str(badc), "-q", "-O", f"--target={target}", *flags, *map_flags,
+         "-o", str(tmp_bin), str(src.relative_to(root))],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         cwd=root,
     )
     if proc.returncode != 0:
         return False
-    stop = build_info_stop_address(tmp_bin)
+    stop = None if "-c" in flags else fixture_text_stop_address(map_path)
     extra: list[str] = []
     if stop is not None:
         extra.append(f"--stop-address=0x{stop:x}")

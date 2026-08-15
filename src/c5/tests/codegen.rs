@@ -81,6 +81,45 @@ fn output_marker_is_version_only_and_present_in_every_target() {
             !leaked,
             "{target:?}: git provenance leaked into output -- breaks reproducibility"
         );
+        // The marker sits outside the instruction stream (ELF
+        // `.comment`, `__TEXT,__const`, `.rdata`): decoders walking
+        // the code section must never reach it.
+        match target {
+            Target::LinuxAarch64 | Target::LinuxX64 => {
+                for &(flags, off, len) in &elf_load_file_ranges(&bytes) {
+                    assert!(
+                        !contains(&bytes[off..off + len], needle),
+                        "{target:?}: marker inside a loaded segment (p_flags {flags:#x})"
+                    );
+                }
+            }
+            Target::MacOSAarch64 => {
+                let (off, len) =
+                    macho_section_range(&bytes, "__TEXT", "__text").expect("__text section");
+                assert!(
+                    !contains(&bytes[off..off + len], needle),
+                    "marker inside __TEXT,__text"
+                );
+                let (coff, clen) =
+                    macho_section_range(&bytes, "__TEXT", "__const").expect("__const section");
+                assert!(
+                    contains(&bytes[coff..coff + clen], needle),
+                    "marker not in __TEXT,__const"
+                );
+            }
+            Target::WindowsX64 | Target::WindowsAarch64 => {
+                let (_, toff, tlen) = pe_section(&bytes, ".text").expect(".text section");
+                assert!(
+                    !contains(&bytes[toff..toff + tlen], needle),
+                    "{target:?}: marker inside .text"
+                );
+                let (_, roff, rlen) = pe_section(&bytes, ".rdata").expect(".rdata section");
+                assert!(
+                    contains(&bytes[roff..roff + rlen], needle),
+                    "{target:?}: marker not in .rdata"
+                );
+            }
+        }
     }
 }
 
@@ -334,9 +373,23 @@ fn pe_switch_tables_ride_rdata_not_text() {
         NativeOptions::default(),
     )
     .expect("emit WindowsX64");
-    let (chars, _, len) = pe_section(&bytes, ".rdata").expect(".rdata section");
+    let (chars, _, _) = pe_section(&bytes, ".rdata").expect(".rdata section");
     assert_eq!(chars & 0x8000_0000, 0, ".rdata is writable");
-    assert!(len > 0, ".rdata carries the dispatch tables");
+    // Contrast against a switch-free image: the tables (plus any
+    // const data), not just the fingerprint, must account for the
+    // section's extent.
+    let (vsize, _, _) = pe_section_dims(&bytes, b".rdata\0\0").expect(".rdata dims");
+    let plain = crate::c5::object::emit_native_single_tu_for_test(
+        &super::compile_str_bare("int main(void){ return 0; }"),
+        Target::WindowsX64,
+        NativeOptions::default(),
+    )
+    .expect("emit plain WindowsX64");
+    let (base_vsize, _, _) = pe_section_dims(&plain, b".rdata\0\0").expect("baseline dims");
+    assert!(
+        vsize > base_vsize,
+        ".rdata must carry the dispatch tables past the fingerprint ({vsize} vs {base_vsize})"
+    );
 }
 
 /// Every emitted target gets one PLT trampoline per import

@@ -210,6 +210,8 @@ const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
+const SHF_MERGE: u64 = 0x10;
+const SHF_STRINGS: u64 = 0x20;
 
 // ------------------------------------------------------------------
 // On-disk shapes. `#[repr(C)]` with explicit fields plus a
@@ -347,13 +349,14 @@ enum Sec {
     Debug,
     RelaText,
     RelaData,
+    Comment,
     Symtab,
     Strtab,
     Shstrtab,
 }
 
 /// Emission order. `Sec::Debug` stands for the whole `.debug_*` run.
-const SECTION_ORDER: [Sec; 22] = [
+const SECTION_ORDER: [Sec; 23] = [
     Sec::Null,
     Sec::Interp,
     Sec::Dynsym,
@@ -373,6 +376,7 @@ const SECTION_ORDER: [Sec; 22] = [
     Sec::Debug,
     Sec::RelaText,
     Sec::RelaData,
+    Sec::Comment,
     Sec::Symtab,
     Sec::Strtab,
     Sec::Shstrtab,
@@ -380,7 +384,7 @@ const SECTION_ORDER: [Sec; 22] = [
 
 struct SectionPlan {
     /// Headers each slot of [`SECTION_ORDER`] contributes.
-    counts: [usize; 22],
+    counts: [usize; 23],
 }
 
 /// Which optional sections an image carries. `dwarf` is a count because
@@ -401,7 +405,7 @@ struct SectionsPresent {
 
 impl SectionPlan {
     fn new(p: SectionsPresent) -> Self {
-        let mut counts = [1usize; 22];
+        let mut counts = [1usize; 23];
         let mut set =
             |s: Sec, n: usize| counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()] = n;
         set(Sec::GnuVersion, p.versions as usize);
@@ -2239,19 +2243,24 @@ pub(super) fn write(
     } else {
         (post_dwarf_off, post_dwarf_off, post_dwarf_off)
     };
+    // `.comment`: the NUL-terminated producer fingerprint, in gcc's
+    // ident form -- non-alloc file bytes past the loaded image, so
+    // `.text` stays instruction-pure and no load segment grows.
+    let comment_bytes = super::provenance_comment();
+    let comment_off = post_rela_off;
+    let post_comment_off = comment_off + comment_bytes.len() as u64;
     let (symtab_off, strtab_off, shstrtab_off) = if emit_symtab {
         // .symtab requires 8-byte alignment (each Elf64_Sym is 24
         // bytes). The file body pads to `symtab_off` before
         // emitting the bytes; .strtab and .shstrtab sit immediately
         // after with no further padding.
-        let s = round_up(post_rela_off, 8);
+        let s = round_up(post_comment_off, 8);
         let st = s + plt_symtab_bytes.len() as u64;
         let sh = st + plt_strtab_bytes.len() as u64;
         (s, st, sh)
     } else {
-        // No static symtab -> .shstrtab abuts DWARF directly,
-        // matching the pre-#61 layout.
-        (post_rela_off, post_rela_off, post_rela_off)
+        // No static symtab -> .shstrtab abuts `.comment` directly.
+        (post_comment_off, post_comment_off, post_comment_off)
     };
     // .shstrtab content: NUL + section names. The empty name at the
     // front backs the SHT_NULL sentinel (sh_name=0). The catalog lists
@@ -2278,6 +2287,7 @@ pub(super) fn write(
         ".data",
         ".tbss",
         ".bss",
+        ".comment",
     ]);
     if emit_dwarf {
         shstrtab_names.extend_from_slice(&[
@@ -2893,6 +2903,8 @@ pub(super) fn write(
         out.extend_from_slice(&rela_data_bytes);
         debug_assert_eq!(out.len() as u64, post_rela_off);
     }
+    debug_assert_eq!(out.len() as u64, comment_off);
+    out.extend_from_slice(&comment_bytes);
     if emit_symtab {
         // Pad to 8 so each Elf64_Sym lands aligned.
         while (out.len() as u64) < symtab_off {
@@ -3387,6 +3399,27 @@ pub(super) fn write(
         );
     }
 
+    // `.comment` -- the producer fingerprint (SHF_MERGE | SHF_STRINGS
+    // over byte strings, as gcc emits it).
+    emit_shdr(
+        &mut out,
+        &plan,
+        &mut shdr_cursor,
+        Sec::Comment,
+        &Elf64Shdr {
+            sh_name: name_off(".comment"),
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_MERGE | SHF_STRINGS,
+            sh_addr: 0,
+            sh_offset: comment_off,
+            sh_size: comment_bytes.len() as u64,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 1,
+            sh_entsize: 1,
+        },
+    );
+
     // PLT-trampoline static symbol table. `.symtab`'s
     // `sh_info` field must point one past the last LOCAL symbol;
     // we only emit locals, so it's `n_symbols` (sentinel + one
@@ -3710,8 +3743,8 @@ mod tests {
             });
             // Independent restatement of the unconditional set: NULL,
             // .interp, .dynsym, .dynstr, .hash, .rela.dyn, .text, .dynamic,
-            // .got, .shstrtab.
-            let mut expected = 10;
+            // .got, .comment, .shstrtab.
+            let mut expected = 11;
             expected += 2 * (bits & 1 != 0) as usize; // .gnu.version{,_r}
             expected += (bits & 64 != 0) as usize; // .rodata
             expected += (bits & 2 != 0) as usize; // .tdata

@@ -631,13 +631,6 @@ pub fn link_native_objects_with_shared_libs<'a>(
         text_align = text_align.max(obj.text_align);
         text_bases.push(text.len());
         text.extend_from_slice(&obj.text);
-        // The per-unit producer fingerprint. Input objects keep their
-        // `.text` instruction-pure (stream decoders reject embedded
-        // data), so the tail marker the single-unit image writers
-        // append lands here instead, giving the merged image the same
-        // strings(1)-visible mark after each unit's code.
-        text.extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
-        text.push(0);
         align_up(
             &mut data,
             crate::c5::layout::data_image_align(obj.rodata_align),
@@ -3711,12 +3704,8 @@ mod tests {
             .iter()
             .find(|c| c.input == Some(1) && c.name == ".text")
             .expect("unit B .text contribution");
-        // Unit B's base: unit A's text plus the per-unit producer
-        // marker, 16-aligned.
-        assert_eq!(
-            b_text.offset as usize,
-            (a_text_len + crate::OUTPUT_MARKER.len() + 1).next_multiple_of(16),
-        );
+        // Unit B's base: unit A's text, 16-aligned.
+        assert_eq!(b_text.offset as usize, a_text_len.next_multiple_of(16));
         let bfn = merged.defined.get("bfn").expect("bfn defined");
         assert!(
             (b_text.offset..b_text.offset + b_text.size).contains(&bfn.value),

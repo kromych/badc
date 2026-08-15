@@ -103,6 +103,19 @@ pub(crate) fn apply_merged_dwarf_data_reloc(
     Ok(())
 }
 
+/// The producer fingerprint every final image carries: the
+/// NUL-terminated release version line, `strings(1)`-visible and
+/// placed outside the instruction stream (ELF `.comment`, the Mach-O
+/// `__TEXT,__const` tail, the PE `.rdata` tail) so decoders never
+/// walk into it. Release version only -- no git state -- so identical
+/// source/flags/target produce identical bytes.
+#[cfg(feature = "native-emit")]
+fn provenance_comment() -> Vec<u8> {
+    let mut v = crate::OUTPUT_MARKER.as_bytes().to_vec();
+    v.push(0);
+    v
+}
+
 /// Index of a relocated 8-byte slot within the writable data payload
 /// (`data[data_ro_len..]`). A slot below the read-only prefix would
 /// need a load-time write to a page the loader maps without write

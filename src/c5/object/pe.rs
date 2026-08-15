@@ -173,11 +173,12 @@ const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
 
 const NUM_DATA_DIRS: u32 = 16;
 
-/// Section layout: every 64-bit Windows PE always carries
-/// `.text`, `.pdata`, and `.idata`. The optional `.data` only
-/// appears when the c5 program has initialized data -- string
-/// literals, globals, or `_Thread_local` storage -- because
-/// real Windows kernels reject images that list a zero-sized
+/// Section layout: every emitted PE carries `.text`, `.pdata`,
+/// `.idata`, and `.rdata` (read-only data prefix + switch tables +
+/// producer fingerprint; the fingerprint keeps it non-empty). The
+/// optional `.data` only appears when the c5 program has writable
+/// initialized, zero-fill, or `_Thread_local` storage -- real
+/// Windows kernels reject images that list a zero-sized
 /// section. The optional `.reloc` appears when the image holds
 /// any absolute VA the ASLR-aware loader must fix up after
 /// sliding: the three `IMAGE_TLS_DIRECTORY64` pointer fields
@@ -368,17 +369,20 @@ pub(super) fn write(
     };
 
     // `.rdata` carries the read-only data prefix
-    // (`build.data[..data_ro_len]`, no relocated slot in it) and the
-    // switch-table blob at an 8-aligned tail past it; both were
-    // previously left writable (the prefix) or folded into `.text`
-    // (the tables).
+    // (`build.data[..data_ro_len]`, no relocated slot in it), the
+    // switch-table blob at an 8-aligned tail past it, and the
+    // producer fingerprint last -- mingw gcc's ident placement
+    // (`.rdata$zzz`). The fingerprint keeps the section non-empty,
+    // so it is always present.
     let ro_len: u32 = build.data_ro_len.min(build.data.len()) as u32;
     let jt_base_in_rdata: u32 = if build.rodata.bytes.is_empty() {
         ro_len
     } else {
         round_up(ro_len, 8)
     };
-    let rdata_size: u32 = jt_base_in_rdata + build.rodata.bytes.len() as u32;
+    let provenance = super::provenance_comment();
+    let marker_base_in_rdata: u32 = round_up(jt_base_in_rdata + build.rodata.bytes.len() as u32, 8);
+    let rdata_size: u32 = marker_base_in_rdata + provenance.len() as u32;
     let rdata_section_present = rdata_size > 0;
     // The `.data` section is present when the c5 program has
     // writable initialized or zero-fill data OR any `_Thread_local`
@@ -1303,12 +1307,14 @@ pub(super) fn write(
     out.extend_from_slice(&idata_bytes);
     pad_to(&mut out, (idata_file_off + idata_raw_size) as usize)?;
     if rdata_section_present {
-        // `.rdata`: the read-only data prefix, then the switch-table
-        // blob at its 8-aligned tail. Neither holds a relocated slot,
-        // so the bytes are final at emission.
+        // `.rdata`: the read-only data prefix, the switch-table blob
+        // at its 8-aligned tail (neither holds a relocated slot, so
+        // the bytes are final at emission), then the fingerprint.
         out.extend_from_slice(&build.data[..ro_len as usize]);
         pad_to(&mut out, (rdata_file_off + jt_base_in_rdata) as usize)?;
         out.extend_from_slice(&jt_bytes);
+        pad_to(&mut out, (rdata_file_off + marker_base_in_rdata) as usize)?;
+        out.extend_from_slice(&provenance);
         pad_to(&mut out, (rdata_file_off + rdata_raw_size) as usize)?;
     }
     if data_section_present {

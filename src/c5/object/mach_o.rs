@@ -17,7 +17,7 @@
 //!   ------------------------------------------------------------------------
 //!   0x0000   mach_header_64                                \
 //!            LC_SEGMENT_64 __PAGEZERO                      |
-//!            LC_SEGMENT_64 __TEXT (1 sect: __text)         |
+//!            LC_SEGMENT_64 __TEXT (__text, __const)        |
 //!            LC_SEGMENT_64 __DATA (__got, __data, [__bss]) | __TEXT
 //!            LC_SEGMENT_64 __LINKEDIT                      |
 //!            LC_DYLD_INFO_ONLY                             |
@@ -30,6 +30,7 @@
 //!            LC_MAIN entry_off=...                         |
 //!            <padding>                                     |
 //!            <machine code from build.text>                |
+//!            __const: data[..data_ro_len] + version line   |
 //!            <pad to 16 KiB>                               /
 //!   0x4000   __DATA: __got at section start, __data after  - __DATA
 //!            (page-aligned, may span more than one page if
@@ -40,14 +41,16 @@
 //! ```
 //!
 //! __PAGEZERO is an unmapped 4 GiB segment at vmaddr 0 -- the standard
-//! null-pointer-deref catcher. __TEXT carries the header plus the code.
-//! __DATA holds two sections: __got (one pointer-sized slot per imported
-//! symbol; dyld fills the slots in at launch via the bind opcode stream
-//! in __LINKEDIT) and __data (the program's static data segment, copied
-//! into the file by the writer and patched into the code via the
-//! `DataFixup` adrp+add pairs). __LINKEDIT also holds the symbol +
-//! string tables so tools like `otool -bind` can name what's being
-//! bound.
+//! null-pointer-deref catcher. __TEXT carries the header, the code, and
+//! `__const`: the read-only data prefix (`Build::data[..data_ro_len]`,
+//! no relocated slot in it) plus the producer fingerprint -- mapped
+//! non-writable by the segment itself. __DATA holds __got (one
+//! pointer-sized slot per imported symbol; dyld fills the slots in at
+//! launch via the bind opcode stream in __LINKEDIT) and __data (the
+//! writable remainder `data[data_ro_len..]`, copied into the file by
+//! the writer and patched into the code via the `DataFixup` adrp+add
+//! pairs). __LINKEDIT also holds the symbol + string tables so tools
+//! like `otool -bind` can name what's being bound.
 //!
 //! Apple Silicon mandates 16 KiB pages for arm64 (`vm_page_size`).
 //!
@@ -221,20 +224,18 @@ const DYNAMIC_LOOKUP_ORDINAL: u8 = 0xFE;
 /// section we emit, hence index 1.
 const SECT_INDEX_TEXT: u8 = 1;
 /// 1-based index of `__TEXT,__const`: the read-only data prefix
-/// (`Build::data[..data_ro_len]`). Emitted only when the prefix is
-/// non-empty; every later ordinal shifts up by one then.
+/// (`Build::data[..data_ro_len]`) with the producer fingerprint at
+/// its tail. Always emitted.
 const SECT_INDEX_CONST: u8 = 2;
 /// 1-based index of `__DATA,__data`. `__DATA` always declares
 /// `__got` first (even when empty) followed by `__data`; the
 /// `__thread_*` sections, when present, come after. Used as
 /// `n_sect` for an exported data symbol.
-fn sect_index_data(has_const: bool) -> u8 {
-    3 + has_const as u8
-}
+const SECT_INDEX_DATA: u8 = 4;
 /// 1-based index of `__DATA,__bss`, which follows `__data` and the two
 /// `__thread_*` sections when TLS is present.
-fn sect_index_bss(has_const: bool, tls_present: bool) -> u8 {
-    sect_index_data(has_const) + if tls_present { 3 } else { 1 }
+fn sect_index_bss(tls_present: bool) -> u8 {
+    SECT_INDEX_DATA + if tls_present { 3 } else { 1 }
 }
 
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
@@ -660,8 +661,8 @@ fn segment_no_sections(
     out
 }
 
-/// `LC_SEGMENT_64` for `__TEXT`: the `__text` section, plus a
-/// `__const` section when the build carries a read-only data prefix.
+/// `LC_SEGMENT_64` for `__TEXT`: the `__text` section plus the
+/// `__const` section (read-only data prefix + producer fingerprint).
 /// `__const` rides the segment's existing R+X mapping -- the prefix
 /// holds no relocated slot, so nothing writes it after emission, and
 /// the section carries no instruction attribute so tools do not
@@ -675,10 +676,9 @@ fn segment_text(
     text_addr: u64,
     text_size: u64,
     text_offset: u32,
-    const_section: Option<(u64, u64, u32, u32)>,
+    const_section: (u64, u64, u32, u32),
 ) -> Vec<u8> {
-    let nsects = 1 + const_section.is_some() as u32;
-    let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
+    let total = SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE;
     let mut out = Vec::with_capacity(total);
     write_struct(
         &mut out,
@@ -692,7 +692,7 @@ fn segment_text(
             filesize,
             maxprot: VM_PROT_READ | VM_PROT_EXECUTE,
             initprot: VM_PROT_READ | VM_PROT_EXECUTE,
-            nsects,
+            nsects: 2,
             flags: 0,
         },
     );
@@ -714,25 +714,24 @@ fn segment_text(
             reserved3: 0,
         },
     );
-    if let Some((addr, size, offset, align)) = const_section {
-        write_struct(
-            &mut out,
-            &Section64 {
-                sectname: pack_name16("__const"),
-                segname: pack_name16("__TEXT"),
-                addr,
-                size,
-                offset,
-                align,
-                reloff: 0,
-                nreloc: 0,
-                flags: 0, // S_REGULAR
-                reserved1: 0,
-                reserved2: 0,
-                reserved3: 0,
-            },
-        );
-    }
+    let (addr, size, offset, align) = const_section;
+    write_struct(
+        &mut out,
+        &Section64 {
+            sectname: pack_name16("__const"),
+            segname: pack_name16("__TEXT"),
+            addr,
+            size,
+            offset,
+            align,
+            reloff: 0,
+            nreloc: 0,
+            flags: 0, // S_REGULAR
+            reserved1: 0,
+            reserved2: 0,
+            reserved3: 0,
+        },
+    );
     debug_assert_eq!(out.len(), total);
     out
 }
@@ -1859,11 +1858,13 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
 
     let mh_size = MACH_HEADER_64_SIZE as u64;
     let pagezero_size = SEGMENT_COMMAND_64_SIZE as u64;
-    // `__TEXT,__const` carries the read-only data prefix.
+    // `__TEXT,__const` carries the read-only data prefix and, at its
+    // 8-aligned tail, the producer fingerprint.
     let ro_len = build.data_ro_len.min(build.data.len()) as u64;
-    let has_const = ro_len > 0;
-    let text_seg_size =
-        (SEGMENT_COMMAND_64_SIZE + (1 + has_const as usize) * SECTION_64_SIZE) as u64;
+    let provenance = super::provenance_comment();
+    let const_marker_off = round_up(ro_len, 8);
+    let const_size = const_marker_off + provenance.len() as u64;
+    let text_seg_size = (SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE) as u64;
     // __DATA carries 2 sections normally (__got, __data), 4 when the
     // program has `_Thread_local` globals (+__thread_vars, __thread_bss),
     // and one more (__bss) when segregation produced zero-init storage.
@@ -1968,13 +1969,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // alignment so the prefix's packed residues hold absolutely
     // (fileoff == vmaddr offset within __TEXT).
     let ro_align = crate::c5::layout::data_image_align(build.data_align) as u64;
-    let const_fileoff = if has_const {
-        round_up(entry_file_offset + code_size, ro_align)
-    } else {
-        entry_file_offset + code_size
-    };
+    let const_fileoff = round_up(entry_file_offset + code_size, ro_align);
     let const_vmaddr = TEXT_VMADDR_BASE + const_fileoff;
-    let text_filesize = round_up(const_fileoff + ro_len, PAGE_SIZE);
+    let text_filesize = round_up(const_fileoff + const_size, PAGE_SIZE);
     let text_vmsize = text_filesize;
 
     // __DATA layout:
@@ -2236,9 +2233,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
                 if d.offset < ro_len {
                     SECT_INDEX_CONST
                 } else if d.offset < program_data_size {
-                    sect_index_data(has_const)
+                    SECT_INDEX_DATA
                 } else {
-                    sect_index_bss(has_const, tls_present)
+                    sect_index_bss(tls_present)
                 },
             ),
         };
@@ -2425,14 +2422,12 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         TEXT_VMADDR_BASE + entry_file_offset,
         code_size,
         entry_file_offset as u32,
-        has_const.then(|| {
-            (
-                const_vmaddr,
-                ro_len,
-                const_fileoff as u32,
-                ro_align.trailing_zeros(),
-            )
-        }),
+        (
+            const_vmaddr,
+            const_size,
+            const_fileoff as u32,
+            ro_align.trailing_zeros(),
+        ),
     );
     let data_segment = if tls_present {
         segment_data_with_tlv(
@@ -2652,12 +2647,13 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         thread_vars_vmaddr,
         &build.macho_tlv_fixups,
     )?;
-    // __TEXT,__const: the read-only data prefix, verbatim -- no slot
-    // in it is relocated, so the bytes are final at emission.
-    if has_const {
-        out.resize(const_fileoff as usize, 0);
-        out.extend_from_slice(&build.data[..ro_len as usize]);
-    }
+    // __TEXT,__const: the read-only data prefix, verbatim (no slot in
+    // it is relocated, so the bytes are final at emission), then the
+    // producer fingerprint at the 8-aligned tail.
+    out.resize(const_fileoff as usize, 0);
+    out.extend_from_slice(&build.data[..ro_len as usize]);
+    out.resize((const_fileoff + const_marker_off) as usize, 0);
+    out.extend_from_slice(&provenance);
     while (out.len() as u64) < text_filesize {
         out.push(0);
     }
@@ -3330,7 +3326,7 @@ mod tests {
             .expect("_myglobal export");
         assert_eq!(data.1 & N_EXT, N_EXT, "data export must be external");
         assert_eq!(data.1 & N_SECT, N_SECT, "data export must be N_SECT");
-        assert_eq!(data.2, sect_index_data(false), "data export n_sect");
+        assert_eq!(data.2, SECT_INDEX_DATA, "data export n_sect");
 
         let zero = found
             .iter()
@@ -3339,7 +3335,7 @@ mod tests {
         assert_eq!(zero.1 & N_EXT, N_EXT, "bss export must be external");
         assert_eq!(
             zero.2,
-            sect_index_bss(false, false),
+            sect_index_bss(false),
             "a data offset past build.data must resolve to __DATA,__bss"
         );
     }

@@ -2741,14 +2741,6 @@ pub(crate) fn lower_for_with_prebuilt(
     build.output_kind = options.output_kind;
     build.dllmain_pc = program.dllmain_pc;
     build.debug_info = options.debug_info;
-    // A relocatable object keeps `.text` instruction-pure -- external
-    // tooling decodes the section as one instruction stream -- so the
-    // fingerprint rides a `.comment` section there (the ET_REL
-    // writer emits it) and the multi-object synthesizer re-appends
-    // the in-text form to the final image.
-    if options.output_kind != OutputKind::Relocatable {
-        append_build_info(&mut build);
-    }
     Ok(build)
 }
 
@@ -2892,30 +2884,6 @@ pub(crate) fn bind_code_reloc_aliases(
             r.target_ent_pc = t as u64;
         }
     }
-}
-
-/// Append the [`crate::OUTPUT_MARKER`] to the tail of
-/// `Build::text`. The bytes never get executed -- the entry
-/// point is at `build.entry_offset` and every function ends
-/// with a return -- so this is purely a `strings(1)`-friendly
-/// fingerprint that says which badc version emitted the binary.
-/// The marker is the release version only, with no git state, so
-/// the same source/flags/target produce identical output bytes
-/// regardless of the build environment.
-///
-/// The marker is NUL-terminated and appended immediately after the
-/// last instruction with no alignment pad. A pad would be 0-3 bytes
-/// of `0x00` whose length tracks where the final instruction happens
-/// to end, so a disassembler walking to the marker decodes it as a
-/// trailing instruction that shifts on any earlier code-size change --
-/// which churns the `tests/snapshots` disassembly for cosmetic
-/// reasons. Appending flush keeps the marker's start at the code end,
-/// so disassembly stops exactly at the last real instruction.
-fn append_build_info(build: &mut Build) {
-    build
-        .text
-        .extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
-    build.text.push(0);
 }
 
 /// Per-target ABI knobs that affect lowering, not just the final

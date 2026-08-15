@@ -207,7 +207,7 @@ def kernel_steps() -> list[str]:
     ]
 
 
-def remote_run_linux(box: Box, github_token: str, kernel: bool) -> int:
+def remote_run_linux(box: Box, github_token: str, kernel: bool, demos: bool) -> int:
     steps = [
         "step cargo build --release --locked --features full",
         "step cargo test --release --features full",
@@ -216,7 +216,9 @@ def remote_run_linux(box: Box, github_token: str, kernel: bool) -> int:
         # that has caught spill-interaction bugs the default banks hide.
         "step env BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
         'cargo test --release --features "codegen_test full"',
-    ] + [f"step python3 {d}" for d in GATING_DEMOS]
+    ]
+    if demos:
+        steps += [f"step python3 {d}" for d in GATING_DEMOS]
     # Last: the most expensive step, so the cheaper ones report first.
     if kernel:
         steps += kernel_steps()
@@ -295,19 +297,20 @@ def sync_windows(box: Box, github_token: str) -> int:
 
 # `_kernel` is unused: the kernel step is a Linux-lane dimension, and the
 # parameter is present only so both lane kinds dispatch through one signature.
-def remote_run_windows(box: Box, github_token: str, _kernel: bool) -> int:
-    demo_cmd = " && ".join(f"python {d}" for d in GATING_DEMOS)
+def remote_run_windows(box: Box, github_token: str, _kernel: bool, demos: bool) -> int:
     # cmd's path separator is the backslash; forward slashes from a
     # caller-supplied --box arg work for some commands but not for
     # `cd /d`, which silently returns success without changing the cwd.
     remote_path = box.remote_path.replace("/", "\\")
-    inner = (
-        f"cd /d {remote_path} && "
-        f"set GITHUB_TOKEN={github_token} && "
-        f"cargo build --release --locked --features full && "
-        f"cargo test --release --features full && "
-        f"{demo_cmd}"
-    )
+    parts = [
+        f"cd /d {remote_path}",
+        f"set GITHUB_TOKEN={github_token}",
+        "cargo build --release --locked --features full",
+        "cargo test --release --features full",
+    ]
+    if demos:
+        parts += [f"python {d}" for d in GATING_DEMOS]
+    inner = " && ".join(parts)
     # Quote the entire command so the outer ssh-side cmd /c treats the
     # whole `cd && ... && cargo ...` chain as one cmd context. Without
     # the quotes only the first `&&` chunk runs under the inner cd; the
@@ -316,14 +319,14 @@ def remote_run_windows(box: Box, github_token: str, _kernel: bool) -> int:
     return stream(box.short, ["ssh", box.host, f'cmd /c "{inner}"'])
 
 
-def run_box(box: Box, github_token: str, kernel: bool) -> int:
+def run_box(box: Box, github_token: str, kernel: bool, demos: bool) -> int:
     sync = sync_linux if box.kind == "linux" else sync_windows
     test = remote_run_linux if box.kind == "linux" else remote_run_windows
     rc = sync(box, github_token)
     if rc != 0:
         sys.stdout.write(f"[{box.short}] SYNC FAILED ({rc})\n")
         return rc
-    rc = test(box, github_token, kernel)
+    rc = test(box, github_token, kernel, demos)
     sys.stdout.write(f"[{box.short}] {'OK' if rc == 0 else f'FAIL ({rc})'}\n")
     return rc
 
@@ -344,6 +347,14 @@ def main() -> int:
         "--no-kernel",
         action="store_true",
         help="skip the defconfig kernel step on Linux lanes",
+    )
+    p.add_argument(
+        "--no-demos",
+        action="store_true",
+        help="skip the gating demos on every lane; with --no-kernel this "
+        "leaves sync + release build + the full test suite (+ the pressure "
+        "rerun on Linux), the quick check for intermediate merges -- the "
+        "full gate stays required before a push",
     )
     args = p.parse_args()
     selected: list[Box] = args.box
@@ -376,7 +387,9 @@ def main() -> int:
     results: dict[str, int] = {}
 
     def worker(box: Box) -> None:
-        results[box.short] = run_box(box, github_token, not args.no_kernel)
+        results[box.short] = run_box(
+            box, github_token, not args.no_kernel, not args.no_demos
+        )
 
     threads = [threading.Thread(target=worker, args=(b,)) for b in selected]
     for t in threads:

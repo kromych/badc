@@ -238,6 +238,9 @@ pub struct RawSection {
     pub size: u64,
     pub relocs: Vec<RawReloc>,
     pub orig_shndx: u32,
+    /// `sh_link`: for an `SHF_LINK_ORDER` section, the section whose
+    /// output placement orders this one.
+    pub link: u32,
 }
 
 /// One ET_REL input at full fidelity.
@@ -401,6 +404,7 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
             size: sh.sh_size,
             relocs: Vec::new(),
             orig_shndx: i as u32,
+            link: sh.sh_link,
         });
     }
     // Attach relocation tables to their sections via sh_info. SHT_REL
@@ -1152,6 +1156,7 @@ impl<'a> LdsLinker<'a> {
             size: 0,
             relocs: Vec::new(),
             orig_shndx,
+            link: 0,
         });
         obj.shndx_map.insert(orig_shndx, idx);
         idx
@@ -2194,9 +2199,18 @@ impl<'a> LdsLinker<'a> {
         } else {
             SHT_PROGBITS
         };
-        // Merge-related flags survive only when every input agrees.
-        let mut flags =
-            in_flags & !(SHF_GROUP | SHF_LINK_ORDER | SHF_INFO_LINK | SHF_GNU_RETAIN | SHF_EXCLUDE);
+        // A group is an input-side construct and its member index does
+        // not survive the link, so bfd clears SHF_GROUP; the retain
+        // flag describes the content and does survive. Link order is
+        // a property of the whole output section, so bfd takes it from
+        // the section opening the output and from no other.
+        let mut flags = in_flags & !(SHF_GROUP | SHF_INFO_LINK | SHF_EXCLUDE | SHF_LINK_ORDER);
+        if self
+            .first_input(oi)
+            .is_some_and(|i| self.insec(i).flags & SHF_LINK_ORDER != 0)
+        {
+            flags |= SHF_LINK_ORDER;
+        }
         let uniform = !in_flag_set.is_empty()
             && in_flag_set.iter().all(|&f| f == in_flag_set[0])
             && entsizes.iter().all(|&e| e == entsizes[0]);
@@ -4534,51 +4548,70 @@ impl<'a> LdsLinker<'a> {
             self.set_phdr_alignments(&mut segs);
             Ok(segs)
         } else {
-            // No PHDRS command: bfd's default segment assignment. A new
-            // PT_LOAD begins only at a read-only-to-writable transition
-            // (so read-only content keeps read-only pages) or where a
-            // file-backed section follows a NOBITS one (file content
-            // can't trail zero-fill in the same segment). Executable
-            // sections OR their bit into the current segment rather than
-            // forcing a split, which is why a writable segment can carry
-            // code (the RWE segment ld emits without a PHDRS command).
+            // No PHDRS command: bfd's default segment assignment
+            // (`_bfd_elf_map_sections_to_segments`). A new PT_LOAD
+            // begins where the section would leave a page of the
+            // segment unused, where the LMA stops tracking the VMA,
+            // and where the protection changes -- the last only when
+            // the section does not share the previous one's page,
+            // since a page carries one protection anyway. File-backed
+            // content following zero fill stays in the segment; the
+            // zero fill then occupies file space.
+            let page = self.opts.max_page_size.max(1);
             let mut segs: Vec<(Elf64Phdr, Vec<usize>)> = Vec::new();
             let mut cur: Option<usize> = None;
             let mut cur_writable = false;
-            let mut prev_nobits = false;
+            let mut cur_code = false;
+            let mut prev_end = 0u64;
+            let mut prev_bias = 0u64;
             for &oi in emit_order {
                 let o = &self.outs[oi];
                 if !o.alloc {
                     continue;
                 }
                 let writable = o.flags & SHF_WRITE != 0;
+                let code = o.flags & SHF_EXECINSTR != 0;
                 let nobits = o.shtype == SHT_NOBITS;
+                let bias = o.lma.wrapping_sub(o.addr);
+                let same_page = prev_end.saturating_sub(1) & !(page - 1) == o.addr & !(page - 1);
+                let protection_change = (writable && !cur_writable) || code != cur_code;
                 let start_new = match cur {
                     None => true,
-                    Some(_) => (writable && !cur_writable) || (!nobits && prev_nobits),
+                    Some(_) => {
+                        bias != prev_bias
+                            || align_up(prev_end, page) < align_up(o.addr, page)
+                            || (protection_change && !same_page)
+                    }
                 };
                 if start_new {
                     segs.push((
                         Elf64Phdr {
                             p_type: PT_LOAD,
                             p_flags: PF_R,
-                            p_align: self.opts.max_page_size,
+                            p_align: page,
                             ..Default::default()
                         },
                         Vec::new(),
                     ));
                     cur = Some(segs.len() - 1);
                     cur_writable = writable;
+                    cur_code = code;
                 }
                 cur_writable |= writable;
-                prev_nobits = nobits;
+                cur_code |= code;
+                prev_bias = bias;
+                // Zero-size TLS zero fill overlays the following
+                // section rather than occupying its own addresses.
+                if !nobits || o.flags & SHF_TLS == 0 {
+                    prev_end = o.addr + o.size;
+                }
                 let k = cur.expect("current segment exists");
                 segs[k].1.push(oi);
                 let mut fl = PF_R;
                 if writable {
                     fl |= PF_W;
                 }
-                if o.flags & SHF_EXECINSTR != 0 {
+                if code {
                     fl |= PF_X;
                 }
                 segs[k].0.p_flags |= fl;
@@ -4681,6 +4714,33 @@ impl<'a> LdsLinker<'a> {
     }
 
     // ------------------------------------------------------- symtab
+
+    /// `sh_link` of an `SHF_LINK_ORDER` output section: the output
+    /// section holding what its inputs are ordered against, as bfd
+    /// records in `assign_section_numbers`. Zero when the target went
+    /// away with its section.
+    fn link_order_target(&self, oi: usize, shndx_of_out: &HashMap<usize, u16>) -> u32 {
+        let Some(i) = self.first_input(oi) else {
+            return 0;
+        };
+        let id = self.insecs[i];
+        let sec = &self.objects[id.obj].sections[id.sec];
+        let Some(&target) = self.objects[id.obj].shndx_map.get(&sec.link) else {
+            return 0;
+        };
+        match self.fates[self.insec_index(id.obj, target)] {
+            SecFate::Placed { out } => shndx_of_out.get(&out).copied().unwrap_or(0) as u32,
+            _ => 0,
+        }
+    }
+
+    /// First input section placed into an output section.
+    fn first_input(&self, oi: usize) -> Option<usize> {
+        self.outs[oi].pieces.iter().find_map(|p| match p {
+            Piece::Inputs(v) => v.first().copied(),
+            _ => None,
+        })
+    }
 
     /// Section flags of the input section a symbol is defined in, zero
     /// for a symbol that names no section.
@@ -5405,6 +5465,7 @@ impl<'a> LdsLinker<'a> {
                         .unwrap_or(0),
                 ),
                 SYNTH_DYNAMIC => (dynstr_ndx, 0),
+                _ if o.flags & SHF_LINK_ORDER != 0 => (self.link_order_target(oi, shndx_of_out), 0),
                 _ => (0, 0),
             };
             wr_shdr(
@@ -5680,6 +5741,8 @@ mod tests {
         entsizes: Vec<(usize, u64)>,
         // Symbol-list index -> st_other.
         sym_vis: Vec<(usize, u8)>,
+        // Section index -> sh_link.
+        links: Vec<(usize, u32)>,
     }
 
     impl TestObj {
@@ -5689,6 +5752,7 @@ mod tests {
                 syms: Vec::new(),
                 entsizes: Vec::new(),
                 sym_vis: Vec::new(),
+                links: Vec::new(),
             }
         }
         fn sec(mut self, name: &str, shtype: u32, flags: u64, align: u64, body: &[u8]) -> Self {
@@ -5704,6 +5768,11 @@ mod tests {
         }
         fn entsize(mut self, sec: usize, entsize: u64) -> Self {
             self.entsizes.push((sec, entsize));
+            self
+        }
+        /// `sh_link` of `sec`, naming another section by its index.
+        fn links_to(mut self, sec: usize, target: usize) -> Self {
+            self.links.push((sec, target as u32 + 1));
             self
         }
         fn reloc(mut self, sec: usize, offset: u64, sym: u32, rtype: u32, addend: i64) -> Self {
@@ -5904,13 +5973,19 @@ mod tests {
                     .find(|(s, _)| *s == k)
                     .map(|(_, e)| *e)
                     .unwrap_or(0);
+                let link = self
+                    .links
+                    .iter()
+                    .find(|(s, _)| *s == k)
+                    .map(|(_, l)| *l)
+                    .unwrap_or(0);
                 shdrs.push(hdr(
                     names[k],
                     *shtype,
                     *flags,
                     body_off[k],
                     body.len(),
-                    0,
+                    link,
                     0,
                     *align,
                     entsize,
@@ -7747,6 +7822,122 @@ SECTIONS {
             "merged-section temporary dropped"
         );
         assert!(rows.iter().any(|(n, _, _)| n == "b_local"));
+    }
+
+    /// Without a PHDRS command a PT_LOAD ends where bfd ends one: at a
+    /// protection change the sections do not share a page across, and
+    /// at a skipped page. A same-page change and file-backed content
+    /// after zero fill both stay in the segment.
+    #[test]
+    fn default_segments_group_like_bfd() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0;
+  .header : { *(.header) }
+  . = ALIGN(4);
+  .rodata : { *(.rodata) }
+  . = ALIGN(0x1000);
+  .text : { *(.text) }
+  . = ALIGN(0x1000);
+  .data : { *(.data) }
+  .bss : { *(.bss) }
+  . = ALIGN(4);
+  .signature : { *(.signature) }
+}
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(".header", SHT_PROGBITS, SHF_ALLOC, 4, &[0u8; 8])
+            .sec(".rodata", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0u8; 8])
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sec(".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 32])
+            .sec(".signature", SHT_PROGBITS, SHF_ALLOC, 4, &[0u8; 4])
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let loads: Vec<Elf64Phdr> = image_phdrs(&res.image)
+            .into_iter()
+            .filter(|p| p.p_type == PT_LOAD)
+            .collect();
+        let shape: Vec<(u64, u64, u32)> = loads
+            .iter()
+            .map(|p| (p.p_vaddr, p.p_memsz, p.p_flags))
+            .collect();
+        assert_eq!(
+            shape,
+            alloc::vec![
+                (0, 0x10, PF_R | PF_W),
+                (0x1000, 1, PF_R | PF_X),
+                (0x2000, 0x2c, PF_R | PF_W),
+            ]
+        );
+    }
+
+    /// Link order describes the whole output section, so bfd takes it
+    /// from the section that opens one and points `sh_link` at the
+    /// output section its target landed in; the retain flag survives
+    /// while the group flag does not.
+    #[test]
+    fn output_section_flags_follow_bfd() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x1000;
+  .tgt : { *(.tgt) }
+  .ordered : { *(.o1) *(.plain) }
+  .unordered : { *(.plain2) *(.o2) }
+  .kept : { *(.ret) *(.grp) }
+}
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(".tgt", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
+            .sec(
+                ".o1",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_LINK_ORDER,
+                8,
+                &[0u8; 8],
+            )
+            .sec(".plain", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
+            .sec(".plain2", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
+            .sec(
+                ".o2",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_LINK_ORDER,
+                8,
+                &[0u8; 8],
+            )
+            .sec(
+                ".ret",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_GNU_RETAIN,
+                8,
+                &[0u8; 8],
+            )
+            .sec(".grp", SHT_PROGBITS, SHF_ALLOC | SHF_GROUP, 8, &[0u8; 8])
+            .links_to(1, 0)
+            .links_to(4, 0)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let secs = readelf_sections(&res.image);
+        let flags = |n: &str| {
+            secs.iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{n}"))
+                .4
+        };
+        assert_eq!(flags(".ordered") & SHF_LINK_ORDER, SHF_LINK_ORDER);
+        assert_eq!(flags(".unordered") & SHF_LINK_ORDER, 0, "opened unordered");
+        assert_eq!(flags(".kept") & SHF_GNU_RETAIN, SHF_GNU_RETAIN);
+        assert_eq!(flags(".kept") & SHF_GROUP, 0, "group is input-side");
+        let tgt = (secs.iter().position(|s| s.0 == ".tgt").expect("tgt") + 1) as u32;
+        assert_eq!(section_link(&res.image, ".ordered"), tgt);
     }
 
     /// `--emit-relocs` gives the entries relocations name: one section

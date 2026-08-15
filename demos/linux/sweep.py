@@ -12,7 +12,8 @@ Prerequisite: a completed reference build in the kernel tree (``setup.py
 to a scratch directory.
 
 Flag rewriting keeps the preprocessor surface (-D/-U/-I/-iquote/-include,
--isystem folded into -I) and the code model (-mcmodel=), and drops everything
+-isystem folded into -I), the language dialect (-std=), which decides which
+declarations the headers reach, and the code model (-mcmodel=); it drops everything
 else: warnings, optimization, debug, and the gcc hardening set (-mno-red-zone,
 -fno-strict-aliasing, -fstack-protector*, -pg, ...) have no badc spelling.
 badc runs with --gnu -q -c --target=<triple>. Kbuild issues relative paths,
@@ -177,6 +178,14 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
         elif a == "-mstrict-align":
             out.append(a)  # MMU-off units need naturally-aligned accesses
             i += 1
+        elif a.startswith("-std="):
+            # The dialect decides which declarations the headers reach:
+            # `<asm/xen/interface_64.h>` gates the anonymous union naming
+            # both `rip` and `eip` on `__GNUC__ && !__STRICT_ANSI__`, which
+            # badc keys off this flag as gcc does. Dropping it measures a
+            # unit the build never compiles.
+            out.append(a)
+            i += 1
         elif a.startswith("-mcmodel="):
             # Code model: under `kernel` external addresses become the
             # sign-extended 32-bit absolutes the module loader applies,
@@ -187,7 +196,7 @@ def rewrite(argv: list[str], autoconf: str | None = None) -> list[str]:
             opt = a  # last one wins, as with gcc
             i += 1
         elif a.startswith("-"):
-            i += 1  # warnings, -g, -std, -f*, -m*, -Wp,* -- no badc spelling
+            i += 1  # warnings, -g, -f*, -m*, -Wp,* -- no badc spelling
         else:
             i += 1  # positional: the source (added by the caller) or an object
     # Replay at the recorded optimization level: units the reference build

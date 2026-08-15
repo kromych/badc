@@ -741,6 +741,8 @@ impl Val {
 struct ScriptSym {
     val: Val,
     hidden: bool,
+    /// Symbol type the definition took from its expression.
+    kind: u8,
     /// Output section carrying the symbol in the symtab when the
     /// value came from the location counter outside any output
     /// section (ld's section_for_dot fixup); the value itself stays
@@ -2323,14 +2325,40 @@ impl<'a> LdsLinker<'a> {
         } else {
             None
         };
+        let kind = self.assigned_sym_type(a);
         self.script_now.insert(
             a.symbol.clone(),
             ScriptSym {
                 val: value,
                 hidden: a.hidden,
+                kind,
                 final_out,
             },
         );
+    }
+
+    /// Type a script-defined symbol takes from its expression. bfd
+    /// copies the source symbol's type when the expression names one
+    /// symbol and nothing else (ldexp.c's `expld.assign_src`, applied
+    /// through `bfd_copy_link_hash_symbol_type`); a compound
+    /// expression leaves the symbol untyped. An operator assignment
+    /// reads the destination, so it names that symbol too.
+    fn assigned_sym_type(&self, a: &Assignment) -> u8 {
+        let mut names: HashSet<String> = HashSet::new();
+        collect_symbols(&a.value, &mut names);
+        if a.op != AssignOp::Set {
+            names.insert(a.symbol.clone());
+        }
+        if names.len() != 1 {
+            return STT_NOTYPE;
+        }
+        let Some(name) = names.iter().next() else {
+            return STT_NOTYPE;
+        };
+        match self.globals.get(name) {
+            Some(&(oi, si)) => self.objects[oi].symbols[si].kind(),
+            None => STT_NOTYPE,
+        }
     }
 
     /// ld's section_for_dot: the symtab section for a symbol assigned
@@ -3024,7 +3052,7 @@ impl<'a> LdsLinker<'a> {
             };
             out.push(DynSym {
                 name: name.clone(),
-                info: (STB_GLOBAL << 4) | STT_NOTYPE,
+                info: (STB_GLOBAL << 4) | s.kind,
                 other: STV_DEFAULT,
                 shndx,
                 value: s.val.v,
@@ -3405,6 +3433,16 @@ fn collect_symbols(e: &Expr, out: &mut HashSet<String>) {
         }
         _ => {}
     }
+}
+
+/// Name bfd gives a synthesized file symbol: the input's base name,
+/// which for an archive member is the member name.
+fn file_sym_name(source: &str) -> String {
+    let base = source.rsplit(['/', '\\']).next().unwrap_or(source);
+    base.split_once('(')
+        .map(|(_, m)| m.trim_end_matches(')'))
+        .unwrap_or(base)
+        .to_string()
 }
 
 fn is_debug_section(name: &str) -> bool {
@@ -4644,6 +4682,45 @@ impl<'a> LdsLinker<'a> {
 
     // ------------------------------------------------------- symtab
 
+    /// Section flags of the input section a symbol is defined in, zero
+    /// for a symbol that names no section.
+    fn sym_input_flags(&self, obj_i: usize, sym_i: usize) -> u64 {
+        let sym = &self.objects[obj_i].symbols[sym_i];
+        match self.objects[obj_i].shndx_map.get(&sym.shndx) {
+            Some(&sec) => self.objects[obj_i].sections[sec].flags,
+            None => 0,
+        }
+    }
+
+    /// Object order for local symbols: bfd walks the output sections
+    /// and takes each object the first time one of its input sections
+    /// is reached, then sweeps the objects no output section took.
+    fn local_symbol_object_order(&self, emit_order: &[usize]) -> Vec<usize> {
+        let mut seen = alloc::vec![false; self.objects.len()];
+        let mut order: Vec<usize> = Vec::new();
+        if self.synth_obj < seen.len() {
+            seen[self.synth_obj] = true;
+        }
+        for &oi in emit_order {
+            for p in &self.outs[oi].pieces {
+                let Piece::Inputs(v) = p else { continue };
+                for &i in v {
+                    let obj = self.insecs[i].obj;
+                    if !seen[obj] {
+                        seen[obj] = true;
+                        order.push(obj);
+                    }
+                }
+            }
+        }
+        for (obj, taken) in seen.iter().enumerate() {
+            if !taken {
+                order.push(obj);
+            }
+        }
+        order
+    }
+
     fn build_symtab(
         &self,
         emit_order: &[usize],
@@ -4652,30 +4729,38 @@ impl<'a> LdsLinker<'a> {
     ) -> Vec<FinalSym> {
         let track = self.opts.emit_relocs;
         let mut syms: Vec<FinalSym> = Vec::new();
-        // Section symbols.
-        for &oi in emit_order {
-            if track {
+        // Section symbols exist for relocations to name, so bfd emits
+        // them only when the output carries relocations
+        // (`bfd_link_relocatable(info) || info->emitrelocations`). This
+        // engine writes no relocatable output; `-r` is a separate path.
+        if track {
+            for &oi in emit_order {
                 index.sec.insert(oi, syms.len());
+                syms.push(FinalSym {
+                    name: String::new(),
+                    info: STT_SECTION,
+                    other: 0,
+                    shndx: out_shndx(oi),
+                    value: self.outs[oi].addr,
+                    size: 0,
+                });
             }
-            syms.push(FinalSym {
-                name: String::new(),
-                info: STT_SECTION,
-                other: 0,
-                shndx: out_shndx(oi),
-                value: self.outs[oi].addr,
-                size: 0,
-            });
         }
-        // Local symbols per input object, in input order.
-        for (obj_i, o) in self.objects.iter().enumerate() {
-            if obj_i == self.synth_obj {
-                continue;
-            }
+        // Local symbols per input object, in the order bfd reaches the
+        // objects.
+        for obj_i in self.local_symbol_object_order(emit_order) {
+            let o = &self.objects[obj_i];
+            // bfd carries the file symbol of the object whose locals
+            // follow, synthesizing one from the input's name when the
+            // object has none, so a local is never read as belonging
+            // to the preceding file.
+            let mut have_file = false;
             for (sym_i, sym) in o.symbols.iter().enumerate() {
                 if sym.binding() != STB_LOCAL || sym.kind() == STT_SECTION {
                     continue;
                 }
                 if sym.kind() == STT_FILE {
+                    have_file = true;
                     if track {
                         index.local.insert((obj_i, sym_i as u32), syms.len());
                     }
@@ -4689,11 +4774,29 @@ impl<'a> LdsLinker<'a> {
                     });
                     continue;
                 }
-                if !self.opts.discard_none && self.opts.discard_locals && sym.name.starts_with(".L")
+                // `-X` drops every compiler temporary; bfd's default
+                // policy drops the ones a merged section holds, whose
+                // offsets deduplication moves, unless the link emits
+                // relocations that can name them.
+                if !self.opts.discard_none
+                    && sym.name.starts_with(".L")
+                    && (self.opts.discard_locals
+                        || (!track && self.sym_input_flags(obj_i, sym_i) & SHF_MERGE != 0))
                 {
                     continue;
                 }
                 if let Some(fs) = self.finalize_sym(obj_i, sym_i, out_shndx) {
+                    if !have_file {
+                        have_file = true;
+                        syms.push(FinalSym {
+                            name: file_sym_name(&o.source),
+                            info: (STB_LOCAL << 4) | STT_FILE,
+                            other: 0,
+                            shndx: SHN_ABS,
+                            value: 0,
+                            size: 0,
+                        });
+                    }
                     if track {
                         index.local.insert((obj_i, sym_i as u32), syms.len());
                     }
@@ -4758,7 +4861,7 @@ impl<'a> LdsLinker<'a> {
             }
             syms.push(FinalSym {
                 name: name.clone(),
-                info: (if vis.is_some() { STB_LOCAL } else { STB_GLOBAL } << 4) | STT_NOTYPE,
+                info: (if vis.is_some() { STB_LOCAL } else { STB_GLOBAL } << 4) | s.kind,
                 other: vis.unwrap_or(STV_DEFAULT),
                 shndx,
                 value: s.val.v,
@@ -7535,6 +7638,134 @@ SECTIONS {
         };
         assert_eq!(shndx_of("bnd"), data_shndx, "dot assignment prefers next");
         assert_eq!(shndx_of("tail"), data_shndx, "previous allocated section");
+    }
+
+    /// `(name, st_info, st_shndx)` in symbol table order.
+    fn image_sym_rows(image: &[u8]) -> Vec<(String, u8, u16)> {
+        let shoff = u64::from_le_bytes(image[40..48].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(image[60..62].try_into().unwrap()) as usize;
+        let sh = |i: usize| -> Elf64Shdr { read_struct(image, shoff + i * 64).unwrap() };
+        for i in 1..shnum {
+            let h = sh(i);
+            if h.sh_type != SHT_SYMTAB {
+                continue;
+            }
+            let strh = sh(h.sh_link as usize);
+            let strtab = &image[strh.sh_offset as usize..(strh.sh_offset + strh.sh_size) as usize];
+            return (0..(h.sh_size / 24) as usize)
+                .map(|k| {
+                    let s: Elf64Sym = read_struct(image, h.sh_offset as usize + k * 24).unwrap();
+                    (strz(strtab, s.st_name as usize), s.st_info, s.st_shndx)
+                })
+                .collect();
+        }
+        Vec::new()
+    }
+
+    fn symtab_objects() -> Vec<LdsObject> {
+        // a.o names its source file; b.o has none, and its section is
+        // placed ahead of a.o's.
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(
+                ".rodata.str1.1",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_MERGE | SHF_STRINGS,
+                1,
+                b"hi\0",
+            )
+            .entsize(1, 1)
+            .sym("a.c", STB_LOCAL, STT_FILE, usize::MAX - 1, 0, 0)
+            .sym("a_local", STB_LOCAL, STT_OBJECT, 0, 0, 1)
+            .sym(".Lstr", STB_LOCAL, STT_NOTYPE, 1, 0, 0)
+            .sym("gfunc", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .build(EM_X86_64);
+        let b = TestObj::new()
+            .sec(
+                ".text.b",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xc3],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym("b_local", STB_LOCAL, STT_OBJECT, 1, 0, 4)
+            .sym("gdata", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            .build(EM_X86_64);
+        alloc::vec![
+            parse_lds_object("obj/a.o", a).expect("a parses"),
+            parse_lds_object("lib.a(b.o)", b).expect("b parses"),
+        ]
+    }
+
+    const SYMTAB_SCRIPT: &str = r#"
+SECTIONS {
+  . = 0x1000;
+  .btext : { *(.text.b) }
+  .text : { *(.text) }
+  .rodata : { *(.rodata.str1.1) }
+  .data : { *(.data) }
+  alias_func = gfunc;
+  alias_data = gdata;
+  alias_sum = gfunc + gdata;
+}
+"#;
+
+    /// bfd's `.symtab` composition: no section symbols in a final link
+    /// that emits no relocations, a file symbol heading every object's
+    /// locals in placement order, compiler temporaries of a merged
+    /// section dropped, and an assignment carrying the type of the one
+    /// symbol its expression names.
+    #[test]
+    fn symtab_composition_follows_bfd() {
+        let script = parse_linker_script(SYMTAB_SCRIPT).expect("script parses");
+        let res = link_with_script(&script, symtab_objects(), &LdsOptions::default())
+            .expect("link succeeds");
+        let rows = image_sym_rows(&res.image);
+        assert!(
+            rows.iter().all(|(_, info, _)| info & 0xf != STT_SECTION),
+            "no section symbols without emitted relocations"
+        );
+        let files: Vec<&str> = rows
+            .iter()
+            .filter(|(_, info, _)| info & 0xf == STT_FILE)
+            .map(|(n, _, _)| n.as_str())
+            .collect();
+        assert_eq!(files, alloc::vec!["b.o", "a.c"], "placement order");
+        let kind = |name: &str| {
+            rows.iter()
+                .find(|(n, _, _)| n == name)
+                .unwrap_or_else(|| panic!("{name}"))
+                .1
+                & 0xf
+        };
+        assert_eq!(kind("alias_func"), STT_FUNC);
+        assert_eq!(kind("alias_data"), STT_OBJECT);
+        assert_eq!(kind("alias_sum"), STT_NOTYPE, "two names carry no type");
+        assert!(
+            !rows.iter().any(|(n, _, _)| n == ".Lstr"),
+            "merged-section temporary dropped"
+        );
+        assert!(rows.iter().any(|(n, _, _)| n == "b_local"));
+    }
+
+    /// `--emit-relocs` gives the entries relocations name: one section
+    /// symbol per output section, and the merged-section temporaries.
+    #[test]
+    fn emit_relocs_keeps_the_entries_relocations_name() {
+        let script = parse_linker_script(SYMTAB_SCRIPT).expect("script parses");
+        let opts = LdsOptions {
+            emit_relocs: true,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, symtab_objects(), &opts).expect("link succeeds");
+        let rows = image_sym_rows(&res.image);
+        let sections = rows
+            .iter()
+            .filter(|(_, i, _)| i & 0xf == STT_SECTION)
+            .count();
+        assert_eq!(sections, readelf_sections(&res.image).len() - 3, "one each");
+        assert!(rows.iter().any(|(n, _, _)| n == ".Lstr"));
     }
 
     /// An unresolved default-visibility weak reference keeps

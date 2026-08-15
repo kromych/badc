@@ -1308,7 +1308,7 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         use super::super::ast::{AsmBlockAst, Expr, UnOp};
         use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
-        use super::types::{Segment, segment_of_ty};
+        use super::types::{Segment, segment_of_object_ty};
         let mut operands: alloc::vec::Vec<AsmOperand> = alloc::vec::Vec::new();
         let mut operand_names: alloc::vec::Vec<Option<alloc::string::String>> =
             alloc::vec::Vec::new();
@@ -1476,7 +1476,7 @@ impl Compiler {
             // through a segment override. Read the segment off the operand's
             // element type now, before the address-of below retypes `self.ty`
             // to a pointer. x86-only: no other target has segment registers.
-            let operand_seg = match (is_x86, segment_of_ty(self.ty)) {
+            let operand_seg = match (is_x86, segment_of_object_ty(self.ty)) {
                 (true, Some(Segment::Gs)) => AsmSeg::Gs,
                 (true, Some(Segment::Fs)) => AsmSeg::Fs,
                 _ => AsmSeg::None,

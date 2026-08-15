@@ -561,6 +561,12 @@ impl Compiler {
                 self.push_block_static_record(loc_idx, ty);
                 self.ast_emit_static_local_decl(loc_idx as u32);
             } else {
+                // TR 18037 5.1.2 (GCC named address spaces): an object
+                // in `__seg_gs` / `__seg_fs` needs static storage; a
+                // frame slot has no segment.
+                if super::types::segment_of_object_ty(ty).is_some() {
+                    return Err(self.compile_err("a named address space requires static storage"));
+                }
                 self.symbols[loc_idx].class = Token::Loc as i64;
                 self.symbols[loc_idx].type_ = ty;
                 self.symbols[loc_idx].was_referenced = false;

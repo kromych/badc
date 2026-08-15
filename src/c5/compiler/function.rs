@@ -264,6 +264,12 @@ impl Compiler {
                 return Err(self.compile_err("duplicate parameter definition"));
             }
 
+            // A parameter has automatic storage, which no named address
+            // space covers (pointers into one are fine: the qualifier
+            // then sits on the pointee).
+            if super::types::segment_of_object_ty(full_ty).is_some() {
+                return Err(self.compile_err("a named address space requires static storage"));
+            }
             self.shadow_symbol(param_idx);
             self.symbols[param_idx].class = Token::Loc as i64;
             self.symbols[param_idx].type_ = full_ty;

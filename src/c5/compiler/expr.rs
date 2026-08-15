@@ -55,7 +55,8 @@ const MAX_MEM_TRANSFER_ALIGN: u32 = 8;
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits, format_type, fp_result_ty, integer_promote,
     is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_struct_value_ty,
-    is_unsigned_ty, is_vector_ty, is_void_ptr_ty, struct_id_of, struct_ptr_depth,
+    is_unsigned_ty, is_vector_ty, is_void_ptr_ty, object_segment_bits, segment_of_ty, struct_id_of,
+    struct_ptr_depth,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -4480,7 +4481,22 @@ impl Compiler {
                 if field.offset > 0 {
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Add, field.offset as i64);
                 }
-                self.ty = field.ty;
+                // A named address space is a property of the object, so a
+                // member of a segment-qualified struct is reached through
+                // the same segment: fold the object's qualifier onto the
+                // field's tag at the field's own derivation level.
+                let obj_seg_bits = object_segment_bits(if is_dot { t } else { t - Ty::Ptr as i64 });
+                let field_ty = if obj_seg_bits != 0 {
+                    if segment_of_ty(field.ty).is_some() {
+                        return Err(self.compile_err(
+                            "segment-qualified member of a segment-qualified object",
+                        ));
+                    }
+                    apply_qual_bits(field.ty, obj_seg_bits)
+                } else {
+                    field.ty
+                };
+                self.ty = field_ty;
 
                 if field.bit_width > 0 {
                     // Bitfield. Two shapes:
@@ -4514,7 +4530,7 @@ impl Compiler {
                     // the integer promotions may narrow (C99 6.3.1.1p2),
                     // so the walker and the surrounding expression agree
                     // on the value's width.
-                    let bf_field_ty = super::emit::bitfield_value_ty(field.bit_width, field.ty);
+                    let bf_field_ty = super::emit::bitfield_value_ty(field.bit_width, field_ty);
                     self.pending.bf_assign_rhs = None;
                     self.pending.bf_compound_assign = None;
                     // emit_bitfield_access drives the c5 stack
@@ -4527,7 +4543,7 @@ impl Compiler {
                     // dedicated dual-emit for the bitfield
                     // produces the only AST node this site needs.
                     let bf_vstack_depth = self.ast_vstack.len();
-                    self.emit_bitfield_access(field.bit_offset, field.bit_width, field.ty)?;
+                    self.emit_bitfield_access(field.bit_offset, field.bit_width, field_ty)?;
                     if self.ast_vstack.len() > bf_vstack_depth {
                         self.ast_vstack.truncate(bf_vstack_depth);
                     }

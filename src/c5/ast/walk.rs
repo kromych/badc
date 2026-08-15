@@ -15,7 +15,7 @@ use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_pointer_ty, is_struct_ty,
     is_struct_value_ty, is_vector_ty, is_volatile_object_ty, is_volatile_ty, load_kind,
-    segment_of_ty, strip_unsigned, struct_ptr_depth,
+    segment_of_object_ty, strip_unsigned, struct_ptr_depth,
 };
 use super::super::ir::{AsmSeg, AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
 use super::super::symbol::Symbol;
@@ -828,6 +828,57 @@ impl<'a> Walker<'a> {
         expr_ty(self.ast.expr(id)).is_some_and(is_volatile_ty)
     }
 
+    /// Segment override for an access to an lvalue of type `ty`.
+    /// `AsmSeg::None` for the generic space. Only the x86 encoder emits
+    /// segment prefixes; elsewhere a qualified access is an error rather
+    /// than a silently generic one.
+    fn access_seg(&self, id: ExprId, ty: i64) -> Result<AsmSeg, WalkError> {
+        match segment_of_object_ty(ty) {
+            None => Ok(AsmSeg::None),
+            Some(_) if !self.target.is_x86_64() => Err(WalkError::UnsupportedExpr {
+                id,
+                kind: "__seg_gs/__seg_fs access (x86 only)",
+            }),
+            Some(seg) => Ok(asm_seg_of(seg)),
+        }
+    }
+
+    /// Reject an aggregate rvalue whose bytes would be copied through
+    /// the generic space while its type names an address space. The
+    /// aggregate's address-as-value production is segment-neutral; the
+    /// copy consumers (assignment, initialization, argument and return
+    /// passing, 128-bit half loads) are not.
+    fn reject_seg_aggregate_copy(&self, id: ExprId) -> Result<(), WalkError> {
+        let seg_aggregate = expr_ty(self.ast.expr(id))
+            .is_some_and(|t| is_struct_value_ty(t) && segment_of_object_ty(t).is_some());
+        if seg_aggregate {
+            return Err(WalkError::UnsupportedExpr {
+                id,
+                kind: "aggregate copy in a named address space",
+            });
+        }
+        Ok(())
+    }
+
+    /// [`Self::access_seg`] for a bitfield's storage unit. A 16-byte
+    /// unit is accessed as two 64-bit halves through the generic-space
+    /// 128-bit helpers, which carry no segment; reject that combination.
+    fn bitfield_access_seg(
+        &self,
+        id: ExprId,
+        ty: i64,
+        bf: super::super::ast::BitfieldDesc,
+    ) -> Result<AsmSeg, WalkError> {
+        let seg = self.access_seg(id, ty)?;
+        if seg != AsmSeg::None && bf.unit_size == 16 {
+            return Err(WalkError::UnsupportedExpr {
+                id,
+                kind: "16-byte bitfield unit in a named address space",
+            });
+        }
+        Ok(seg)
+    }
+
     /// Volatility of a read-modify-write access. A slot is the object's
     /// own storage, so its top-level qualifier governs (C99 6.7.5.1p1);
     /// a place reached through an address keeps the whole-tag reading,
@@ -854,6 +905,8 @@ impl<'a> Walker<'a> {
         rhs: ExprId,
         ty: i64,
     ) -> Result<super::super::ir::ValueId, WalkError> {
+        self.reject_seg_aggregate_copy(lhs)?;
+        self.reject_seg_aggregate_copy(rhs)?;
         let lhs_addr = self.walk_expr_rvalue(b, lhs)?;
         let rhs_addr = self.walk_expr_rvalue(b, rhs)?;
         let size = self.struct_size(ty);
@@ -940,6 +993,7 @@ impl<'a> Walker<'a> {
     /// converts per C99 6.3.1.3 (widen to 64 bits, then sign- or
     /// zero-fill the high half, mirroring `store_scalar_as_int128`).
     fn int128_operand(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<Halves, WalkError> {
+        self.reject_seg_aggregate_copy(id)?;
         let ty = expr_ty(self.ast.expr(id)).unwrap_or(Ty::Int as i64);
         let is128 = self.expr_is_int128_value(id);
         let v = self.walk_expr_rvalue(b, id)?;
@@ -1622,6 +1676,14 @@ impl<'a> Walker<'a> {
         by: i64,
         postfix: bool,
     ) -> Result<ValueId, WalkError> {
+        // The 128-bit halves are accessed through the generic space,
+        // which carries no segment.
+        if expr_ty(self.ast.expr(lvalue)).is_some_and(|t| segment_of_object_ty(t).is_some()) {
+            return Err(WalkError::UnsupportedExpr {
+                id: lvalue,
+                kind: "128-bit access in a named address space",
+            });
+        }
         // A bitfield target reads and writes its slice of the storage
         // unit rather than the whole 16 bytes.
         if let Some((unit, bf)) = self.wide_bitfield_place(b, lvalue)? {
@@ -1662,6 +1724,14 @@ impl<'a> Walker<'a> {
         lhs: ExprId,
         rhs: ExprId,
     ) -> Result<ValueId, WalkError> {
+        // The 128-bit halves are accessed through the generic space,
+        // which carries no segment.
+        if expr_ty(self.ast.expr(lhs)).is_some_and(|t| segment_of_object_ty(t).is_some()) {
+            return Err(WalkError::UnsupportedExpr {
+                id: lhs,
+                kind: "128-bit access in a named address space",
+            });
+        }
         // A bitfield target reads and writes its slice of the storage
         // unit rather than the whole 16 bytes.
         if let Some((unit, bf)) = self.wide_bitfield_place(b, lhs)? {
@@ -1683,6 +1753,7 @@ impl<'a> Walker<'a> {
     /// Shift count for a 128-bit shift: a scalar rvalue, or the low
     /// half of an int128-typed count.
     fn int128_shift_count(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
+        self.reject_seg_aggregate_copy(id)?;
         let is128 = self.expr_is_int128_value(id);
         let v = self.walk_expr_rvalue(b, id)?;
         if is128 {
@@ -1708,6 +1779,7 @@ impl<'a> Walker<'a> {
                 // scalar returned through the 128-bit integer carrier is a
                 // value, not an address, so widen it into a 16-byte object
                 // first -- the aggregate paths below read an address.
+                self.reject_seg_aggregate_copy(*e)?;
                 let widened = if self.is_int128_value_ty(self.scalar_return_ty)
                     && !self.expr_is_int128_value(*e)
                 {
@@ -2433,6 +2505,7 @@ impl<'a> Walker<'a> {
         match init {
             super::super::ast::LocalInit::None => Ok(()),
             super::super::ast::LocalInit::Scalar(init_id) => {
+                self.reject_seg_aggregate_copy(*init_id)?;
                 let v = self.walk_expr_rvalue(b, *init_id)?;
                 // C99 6.7.8p13 struct-value initializer: copy the source's
                 // bytes into the slot via Mcpy. `v` is the source address
@@ -2533,6 +2606,7 @@ impl<'a> Walker<'a> {
                         }
                         super::super::ast::RuntimeInitValue::Expr(value) => value,
                     };
+                    self.reject_seg_aggregate_copy(value)?;
                     let v = match elem.bitfield {
                         Some(bf) => self.bitfield_store_value(b, bf, value)?,
                         None => self.walk_expr_rvalue(b, value)?,
@@ -2548,7 +2622,15 @@ impl<'a> Walker<'a> {
                     // in the same unit are preserved (the slot was
                     // zero-seeded, so the field's own bits start clear).
                     if let Some(bf) = elem.bitfield {
-                        self.store_into_bitfield(b, addr, bf, v, is_volatile_ty(elem.ty));
+                        // Frame storage is always in the generic space.
+                        self.store_into_bitfield(
+                            b,
+                            addr,
+                            bf,
+                            v,
+                            AsmSeg::None,
+                            is_volatile_ty(elem.ty),
+                        );
                         continue;
                     }
                     // C99 6.7.8p13: a struct/union member initialized by a
@@ -2578,6 +2660,7 @@ impl<'a> Walker<'a> {
         b: &mut SsaBuilder,
         addr: ValueId,
         bf: super::super::ast::BitfieldDesc,
+        seg: AsmSeg,
         vol: bool,
     ) -> ValueId {
         let w = bf.bit_width as i64;
@@ -2585,7 +2668,7 @@ impl<'a> Walker<'a> {
             let v = self.bitfield_extract_128(b, addr, bf, vol);
             return self.bitfield_value_form(b, bf, v);
         }
-        let mut v = b.load_vol(addr, bitfield_load_kind(bf), vol);
+        let mut v = load_place(b, addr, bitfield_load_kind(bf), seg, vol);
         if bf.bit_offset > 0 {
             v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
         }
@@ -2609,6 +2692,7 @@ impl<'a> Walker<'a> {
         addr: ValueId,
         bf: super::super::ast::BitfieldDesc,
         value: ValueId,
+        seg: AsmSeg,
         vol: bool,
     ) -> ValueId {
         let w = bf.bit_width as i64;
@@ -2626,7 +2710,7 @@ impl<'a> Walker<'a> {
         }
         let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
         let masked = b.binop_imm(BinOp::And, value, mask_lo);
-        let old = b.load_vol(addr, load_kind, vol);
+        let old = load_place(b, addr, load_kind, seg, vol);
         let cleared = b.binop_imm(
             BinOp::And,
             old,
@@ -2638,7 +2722,7 @@ impl<'a> Walker<'a> {
             masked
         };
         let combined = b.binop(BinOp::Or, cleared, shifted);
-        b.store_vol(addr, combined, store_kind, vol);
+        store_place(b, addr, combined, store_kind, seg, vol);
         if bf.signed && w < 64 {
             let up = b.binop_imm(BinOp::Shl, masked, 64 - w);
             b.binop_imm(BinOp::Shr, up, 64 - w)
@@ -2657,6 +2741,7 @@ impl<'a> Walker<'a> {
         bf: super::super::ast::BitfieldDesc,
         rhs: ExprId,
     ) -> Result<ValueId, WalkError> {
+        self.reject_seg_aggregate_copy(rhs)?;
         if bf.is_wide_value() {
             let pair = self.int128_operand(b, rhs)?;
             return Ok(self.int128_materialize(b, pair));
@@ -3070,6 +3155,7 @@ impl<'a> Walker<'a> {
             1 => BinOp::Sub,
             _ => BinOp::Mul,
         };
+        let seg = self.access_seg(dst_expr, elem_ty)?;
         let va = self.walk_expr_rvalue(b, a_expr)?;
         let vb = self.walk_expr_rvalue(b, b_expr)?;
         let addr = self.walk_expr_rvalue(b, dst_expr)?;
@@ -3077,12 +3163,12 @@ impl<'a> Walker<'a> {
         if w < 8 {
             let raw = b.binop(bin, va, vb);
             let wrapped = self.extend_atomic_result(b, raw, elem_ty);
-            b.store(addr, wrapped, store_kind);
+            store_place(b, addr, wrapped, store_kind, seg, false);
             return Ok(b.binop(BinOp::Ne, raw, wrapped));
         }
 
         let wrapped = b.binop(bin, va, vb);
-        b.store(addr, wrapped, store_kind);
+        store_place(b, addr, wrapped, store_kind, seg, false);
         let flag = match (op, unsigned) {
             // Unsigned add carries out iff the sum is below an addend.
             (0, true) => b.binop(BinOp::Ult, wrapped, va),
@@ -3216,6 +3302,14 @@ impl<'a> Walker<'a> {
             return Err(WalkError::UnsupportedExpr {
                 id: dst_expr,
                 kind: "__builtin_*_overflow requires a 1/2/4/8-byte scalar type",
+            });
+        }
+        // The 128-bit result store runs through generic-space half
+        // stores, which carry no segment.
+        if segment_of_object_ty(elem_ty).is_some() {
+            return Err(WalkError::UnsupportedExpr {
+                id: dst_expr,
+                kind: "128-bit access in a named address space",
             });
         }
         let unsigned = (elem_ty & UNSIGNED_BIT) != 0;
@@ -3692,6 +3786,7 @@ impl<'a> Walker<'a> {
                 // assignment's own value (for an enclosing expression)
                 // is the masked field value, not the storage word.
                 let bf = *bitfield;
+                let seg = self.bitfield_access_seg(id, *ty, bf)?;
                 let base = self.walk_expr_rvalue(b, *obj)?;
                 let addr = if *field_off != 0 {
                     b.binop_imm(BinOp::Add, base, *field_off)
@@ -3703,7 +3798,7 @@ impl<'a> Walker<'a> {
                 // (adjacent bitfields, `a.x = a.y = v`) must be observed by
                 // this read-modify-write, else its store is clobbered.
                 let rhs_v = self.bitfield_store_value(b, bf, *rhs)?;
-                Ok(self.store_into_bitfield(b, addr, bf, rhs_v, vol))
+                Ok(self.store_into_bitfield(b, addr, bf, rhs_v, seg, vol))
             }
             Expr::Assign { lhs, rhs, ty } => {
                 // C99 6.5.16.1p1 + the c5 address-as-value rule:
@@ -3716,6 +3811,17 @@ impl<'a> Walker<'a> {
                 // dst address as the expression's value
                 // (mirroring libc `memcpy`).
                 if is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0 {
+                    // The copy runs through the generic space; a
+                    // segment-qualified aggregate on either side is
+                    // rejected rather than silently copied at the wrong
+                    // addresses.
+                    if segment_of_object_ty(*ty).is_some() {
+                        return Err(WalkError::UnsupportedExpr {
+                            id: *lhs,
+                            kind: "aggregate copy in a named address space",
+                        });
+                    }
+                    self.reject_seg_aggregate_copy(*rhs)?;
                     let dst = self.walk_expr_lvalue(b, *lhs)?;
                     let src = self.walk_expr_rvalue(b, *rhs)?;
                     let size = self.struct_size(*ty);
@@ -3729,26 +3835,6 @@ impl<'a> Walker<'a> {
                 // the store so the assignment yields the f32 value.
                 let kind = store_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*lhs);
-                // A write through a `__seg_gs` / `__seg_fs` pointer rides a
-                // segment-override prefix (GCC named address spaces), mirroring
-                // the load guard in `walk_unary`; x86 only. The lvalue of the
-                // qualified deref yields the pointer's address value.
-                if let Some(seg) = segment_of_ty(*ty) {
-                    if !self.target.is_x86_64() {
-                        return Err(WalkError::UnsupportedExpr {
-                            id: *lhs,
-                            kind: "direct __seg_gs/__seg_fs write (x86 only)",
-                        });
-                    }
-                    let addr = self.walk_expr_lvalue(b, *lhs)?;
-                    let mut value = self.walk_expr_rvalue(b, *rhs)?;
-                    if matches!(kind, StoreKind::F32) {
-                        value = b.fp_narrow_to_f32(value);
-                    }
-                    b.seg_store(addr, value, kind, asm_seg_of(seg), vol);
-                    let rhs_ty = expr_ty(self.ast.expr(*rhs)).unwrap_or(*ty);
-                    return Ok(self.narrow_int_to_ty(b, value, rhs_ty, *ty));
-                }
                 if let Expr::Ident {
                     class,
                     val,
@@ -3757,6 +3843,15 @@ impl<'a> Walker<'a> {
                 } = self.ast.expr(*lhs)
                     && *class == Token::Loc as i64
                 {
+                    // A frame slot has no named address space; the parser
+                    // rejects such declarations, so a tag reaching here is
+                    // an error, not a generic-space store.
+                    if segment_of_object_ty(*ty).is_some() {
+                        return Err(WalkError::UnsupportedExpr {
+                            id: *lhs,
+                            kind: "named address space on automatic storage",
+                        });
+                    }
                     let slot = *val;
                     // The destination is the object's own storage, so its
                     // top-level qualifier governs, not one that sits on a
@@ -3779,6 +3874,7 @@ impl<'a> Walker<'a> {
                     let rhs_ty = expr_ty(self.ast.expr(*rhs)).unwrap_or(*ty);
                     return Ok(self.narrow_int_to_ty(b, value, rhs_ty, *ty));
                 }
+                let seg = self.access_seg(*lhs, *ty)?;
                 let addr = self.walk_expr_lvalue(b, *lhs)?;
                 let mut value = self.walk_expr_rvalue(b, *rhs)?;
                 // C99 6.5.16.1 + 6.3.1.5: a `double` value assigned to a
@@ -3790,7 +3886,7 @@ impl<'a> Walker<'a> {
                 if matches!(kind, StoreKind::F32) {
                     value = b.fp_narrow_to_f32(value);
                 }
-                b.store_vol(addr, value, kind, vol);
+                store_place(b, addr, value, kind, seg, vol);
                 // C99 6.5.16p3: the assignment expression's value has the
                 // converted type of the left operand. The store truncated
                 // the stored bytes; the value carried forward to an
@@ -4020,6 +4116,9 @@ impl<'a> Walker<'a> {
                 // call site.
                 let mut fp_arg_mask: u32 = 0;
                 for (i, a) in args.iter().enumerate() {
+                    // A by-value aggregate argument is copied by the
+                    // callee through the generic space.
+                    self.reject_seg_aggregate_copy(*a)?;
                     arg_vals.push(self.walk_expr_rvalue(b, *a)?);
                     if expr_ty(self.ast.expr(*a))
                         .map(is_floating_scalar)
@@ -4779,14 +4878,16 @@ impl<'a> Walker<'a> {
                     // the field's storage unit (parser already
                     // included `field_off`).
                     let bf = *bf;
-                    let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*obj);
+                    let ty = *ty;
+                    let vol = is_volatile_ty(ty) || self.expr_is_volatile(*obj);
+                    let seg = self.bitfield_access_seg(id, ty, bf)?;
                     let base = self.walk_expr_rvalue(b, *obj)?;
                     let addr = if *field_off != 0 {
                         b.binop_imm(BinOp::Add, base, *field_off)
                     } else {
                         base
                     };
-                    return Ok(self.load_from_bitfield(b, addr, bf, vol));
+                    return Ok(self.load_from_bitfield(b, addr, bf, seg, vol));
                 }
                 let base = self.walk_expr_rvalue(b, *obj)?;
                 let addr = if *field_off != 0 {
@@ -4804,7 +4905,8 @@ impl<'a> Walker<'a> {
                 }
                 let kind = load_kind_for(*ty, self.target);
                 let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*obj);
-                Ok(b.load_vol(addr, kind, vol))
+                let seg = self.access_seg(id, *ty)?;
+                Ok(load_place(b, addr, kind, seg, vol))
             }
             Expr::Index { array, idx, ty } => {
                 let arr = self.walk_expr_rvalue(b, *array)?;
@@ -4832,7 +4934,8 @@ impl<'a> Walker<'a> {
                     return Ok(addr);
                 }
                 let kind = load_kind_for(*ty, self.target);
-                Ok(b.load_vol(addr, kind, is_volatile_ty(*ty)))
+                let seg = self.access_seg(id, *ty)?;
+                Ok(load_place(b, addr, kind, seg, is_volatile_ty(*ty)))
             }
             Expr::Cast { child, to_ty } => {
                 let v = self.walk_expr_rvalue(b, *child)?;
@@ -4888,6 +4991,7 @@ impl<'a> Walker<'a> {
                 // floating target instead converts the whole 128-bit
                 // value (C99 6.3.1.4) through `int128_to_fp`.
                 if self.is_int128_value_ty(src_ty) && !is_struct_ty(*to_ty) {
+                    self.reject_seg_aggregate_copy(*child)?;
                     if is_floating_scalar(*to_ty) {
                         let pair = self.int128_load(b, v);
                         let signed = (src_ty & UNSIGNED_BIT) == 0;
@@ -5329,6 +5433,15 @@ impl<'a> Walker<'a> {
                 },
             });
         }
+        // The atomic instructions carry no segment operand; an atomic
+        // object in a named address space is rejected rather than
+        // accessed through the generic space.
+        if segment_of_object_ty(elem_ty).is_some() {
+            return Err(WalkError::UnsupportedExpr {
+                id: args[0],
+                kind: "atomic access in a named address space",
+            });
+        }
         let addr = self.walk_expr_rvalue(b, args[0])?;
         match kind {
             AtomicKind::Load => Ok(b.load(addr, load_kind)),
@@ -5548,21 +5661,6 @@ impl<'a> Walker<'a> {
         lvalue: ExprId,
         ty: i64,
     ) -> Result<RmwPlace, WalkError> {
-        // A named-address-space lvalue: both halves of the
-        // read-modify-write ride the segment override, as the plain read
-        // and write of the same lvalue do. Non-x86 targets have no
-        // segment register, so reject rather than drop the qualifier,
-        // mirroring the load and store paths.
-        if let Some(seg) = segment_of_ty(ty) {
-            if !self.target.is_x86_64() {
-                return Err(WalkError::UnsupportedExpr {
-                    id: lvalue,
-                    kind: "__seg_gs/__seg_fs read-modify-write (x86 only)",
-                });
-            }
-            let addr = self.walk_expr_lvalue(b, lvalue)?;
-            return Ok(RmwPlace::SegAddr { addr, seg });
-        }
         // A bitfield member: compute the storage unit's address once so
         // the read and the write target the same unit (the object is
         // evaluated a single time per C99 6.5.2.4 / 6.5.16.2).
@@ -5570,10 +5668,12 @@ impl<'a> Walker<'a> {
             obj,
             field_off,
             bitfield: Some(bf),
+            ty: member_ty,
             ..
         } = self.ast.expr(lvalue)
         {
             let bf = *bf;
+            let seg = self.bitfield_access_seg(lvalue, *member_ty, bf)?;
             let obj = *obj;
             let field_off = *field_off;
             let base = self.walk_expr_rvalue(b, obj)?;
@@ -5582,8 +5682,9 @@ impl<'a> Walker<'a> {
             } else {
                 base
             };
-            return Ok(RmwPlace::Bitfield { addr, bf });
+            return Ok(RmwPlace::Bitfield { addr, bf, seg });
         }
+        let seg = self.access_seg(lvalue, ty)?;
         if let Expr::Ident {
             class,
             val,
@@ -5592,9 +5693,18 @@ impl<'a> Walker<'a> {
         } = self.ast.expr(lvalue)
             && *class == Token::Loc as i64
         {
+            // A frame slot has no named address space; the parser
+            // rejects such declarations.
+            if seg != AsmSeg::None {
+                return Err(WalkError::UnsupportedExpr {
+                    id: lvalue,
+                    kind: "named address space on automatic storage",
+                });
+            }
             return Ok(RmwPlace::Slot(*val));
         }
-        Ok(RmwPlace::Addr(self.walk_expr_lvalue(b, lvalue)?))
+        let addr = self.walk_expr_lvalue(b, lvalue)?;
+        Ok(RmwPlace::Addr { addr, seg })
     }
 
     fn walk_expr_lvalue(
@@ -6217,22 +6327,9 @@ impl<'a> Walker<'a> {
                 if is_struct_value_ty(ty) {
                     return Ok(addr);
                 }
-                // A read through a `__seg_gs` / `__seg_fs` pointer rides a
-                // segment-override prefix (GCC named address spaces). Only the
-                // x86 encoder emits it; on a target without segment registers
-                // reject rather than drop the qualifier (a silent wrong-address
-                // access).
                 let kind = load_kind_for(ty, self.target);
-                if let Some(seg) = segment_of_ty(ty) {
-                    if !self.target.is_x86_64() {
-                        return Err(WalkError::UnsupportedExpr {
-                            id: child,
-                            kind: "direct __seg_gs/__seg_fs read (x86 only)",
-                        });
-                    }
-                    return Ok(b.seg_load(addr, kind, asm_seg_of(seg), is_volatile_ty(ty)));
-                }
-                Ok(b.load_vol(addr, kind, is_volatile_ty(ty)))
+                let seg = self.access_seg(child, ty)?;
+                Ok(load_place(b, addr, kind, seg, is_volatile_ty(ty)))
             }
         }
     }
@@ -6384,8 +6481,17 @@ impl<'a> Walker<'a> {
                 });
             }
         }
+        let seg = self.access_seg(id, ty)?;
         let vol = is_volatile_object_ty(ty);
         if class == Token::Loc as i64 {
+            // A frame slot has no named address space; the parser
+            // rejects such declarations.
+            if seg != AsmSeg::None {
+                return Err(WalkError::UnsupportedExpr {
+                    id,
+                    kind: "named address space on automatic storage",
+                });
+            }
             let kind = load_kind_for(ty, self.target);
             Ok(b.load_local_vol(val, kind, vol))
         } else if let Some(addr) = glo_addr {
@@ -6394,8 +6500,16 @@ impl<'a> Walker<'a> {
                 GloAddr::Resolved(off) => b.imm_data(off),
             };
             let kind = load_kind_for(ty, self.target);
-            Ok(b.load_vol(addr_v, kind, vol))
+            Ok(load_place(b, addr_v, kind, seg, vol))
         } else if class == Token::Glo as i64 && is_thread_local {
+            // Thread-local addressing already names its own segment on
+            // x86; a further named address space cannot combine with it.
+            if seg != AsmSeg::None {
+                return Err(WalkError::UnsupportedExpr {
+                    id,
+                    kind: "named address space on thread-local storage",
+                });
+            }
             let addr = match self.live_tls_addr(_sym, val) {
                 GloAddr::Extern => b.tls_addr_extern(_sym),
                 GloAddr::Resolved(off) => b.tls_addr(off),
@@ -6434,13 +6548,11 @@ impl<'a> Walker<'a> {
 /// address-taken and pins it to memory.
 enum RmwPlace {
     Slot(i64),
-    Addr(super::super::ir::ValueId),
-    /// A read-modify-write target in an x86 named address space
-    /// (`__seg_gs` / `__seg_fs`): both halves ride a segment-override
-    /// prefix, as the plain read and write of the same lvalue do.
-    SegAddr {
+    /// A materialized address, with the segment override every access
+    /// to the lvalue rides (`AsmSeg::None` for the generic space).
+    Addr {
         addr: super::super::ir::ValueId,
-        seg: Segment,
+        seg: AsmSeg,
     },
     /// A bitfield read-modify-write target: the storage unit's address
     /// and the field descriptor. `load` extracts the field value;
@@ -6450,6 +6562,7 @@ enum RmwPlace {
     Bitfield {
         addr: super::super::ir::ValueId,
         bf: super::super::ast::BitfieldDesc,
+        seg: AsmSeg,
     },
 }
 
@@ -6462,15 +6575,14 @@ impl RmwPlace {
     ) -> super::super::ir::ValueId {
         match *self {
             RmwPlace::Slot(off) => b.load_local_vol(off, kind, vol),
-            RmwPlace::Addr(addr) => b.load_vol(addr, kind, vol),
-            RmwPlace::SegAddr { addr, seg } => b.seg_load(addr, kind, asm_seg_of(seg), vol),
-            RmwPlace::Bitfield { addr, bf } => {
+            RmwPlace::Addr { addr, seg } => load_place(b, addr, kind, seg, vol),
+            RmwPlace::Bitfield { addr, bf, seg } => {
                 // C99 6.7.2.1: load the unit, shift the slice to bit 0,
                 // mask, and sign-extend when the field type is signed.
                 // A 128-bit field never reaches here: its operators route
                 // through the walker's 128-bit read-modify-write.
                 debug_assert!(bf.unit_size <= 8);
-                let mut v = b.load_vol(addr, bitfield_load_kind(bf), vol);
+                let mut v = load_place(b, addr, bitfield_load_kind(bf), seg, vol);
                 if bf.bit_offset > 0 {
                     v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
                 }
@@ -6496,20 +6608,17 @@ impl RmwPlace {
             RmwPlace::Slot(off) => {
                 b.store_local_vol(off, value, kind, vol);
             }
-            RmwPlace::Addr(addr) => {
-                b.store_vol(addr, value, kind, vol);
+            RmwPlace::Addr { addr, seg } => {
+                store_place(b, addr, value, kind, seg, vol);
             }
-            RmwPlace::SegAddr { addr, seg } => {
-                b.seg_store(addr, value, kind, asm_seg_of(seg), vol);
-            }
-            RmwPlace::Bitfield { addr, bf } => {
+            RmwPlace::Bitfield { addr, bf, seg } => {
                 // C99 6.7.2.1: load the unit, clear the slice, mask + shift
                 // the new value into place, OR back, store.
                 debug_assert!(bf.unit_size <= 8);
                 let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
                 let mask = bitfield_mask_halves(bf.bit_width, 0).0;
                 let clear_mask = !bitfield_mask_halves(bf.bit_width, bf.bit_offset).0;
-                let old = b.load_vol(addr, load_kind, vol);
+                let old = load_place(b, addr, load_kind, seg, vol);
                 let cleared = b.binop_imm(BinOp::And, old, clear_mask);
                 let masked = b.binop_imm(BinOp::And, value, mask);
                 let shifted = if bf.bit_offset > 0 {
@@ -6518,7 +6627,7 @@ impl RmwPlace {
                     masked
                 };
                 let combined = b.binop(BinOp::Or, cleared, shifted);
-                b.store_vol(addr, combined, store_kind, vol);
+                store_place(b, addr, combined, store_kind, seg, vol);
             }
         }
     }
@@ -6576,6 +6685,40 @@ fn asm_seg_of(seg: Segment) -> AsmSeg {
     match seg {
         Segment::Gs => AsmSeg::Gs,
         Segment::Fs => AsmSeg::Fs,
+    }
+}
+
+/// Scalar load from `addr`, riding `seg`'s override when the lvalue's
+/// type named an address space. Every scalar lvalue read routes here.
+fn load_place(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    kind: LoadKind,
+    seg: AsmSeg,
+    vol: bool,
+) -> ValueId {
+    match seg {
+        AsmSeg::None => b.load_vol(addr, kind, vol),
+        seg => b.seg_load(addr, kind, seg, vol),
+    }
+}
+
+/// Store companion to [`load_place`].
+fn store_place(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    value: ValueId,
+    kind: StoreKind,
+    seg: AsmSeg,
+    vol: bool,
+) {
+    match seg {
+        AsmSeg::None => {
+            b.store_vol(addr, value, kind, vol);
+        }
+        seg => {
+            b.seg_store(addr, value, kind, seg, vol);
+        }
     }
 }
 

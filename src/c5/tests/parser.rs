@@ -1587,6 +1587,27 @@ fn seg_address_space_qualifiers_parse_as_qualifiers() {
     }
 }
 
+#[test]
+fn seg_qualified_automatic_storage_is_rejected() {
+    // TR 18037 5.1.2: an object in a named address space needs static
+    // storage. A local or parameter object in `__seg_gs` is rejected; a
+    // pointer *into* the space carries the qualifier on the pointee and
+    // stays valid automatic storage (asserted by the accept cases above).
+    for src in [
+        "int f(void){ int __seg_gs x; x = 1; return x; } int main(void){ return 0; }",
+        "int f(int __seg_gs x){ return x; } int main(void){ return 0; }",
+    ] {
+        let err = Compiler::new(src.to_string())
+            .compile()
+            .expect_err("seg-qualified automatic storage must be rejected")
+            .to_string();
+        assert!(
+            err.contains("a named address space requires static storage"),
+            "unexpected diagnostic for `{src}`: {err}"
+        );
+    }
+}
+
 // Reaches the SSA walk (via native emit), so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
@@ -1618,8 +1639,8 @@ fn direct_seg_access_lowers_on_x86_and_is_rejected_elsewhere() {
     let write_err = emit(write, Target::LinuxAarch64)
         .expect_err("aarch64 rejects a direct seg write")
         .to_string();
-    assert!(read_err.contains("__seg_gs/__seg_fs read (x86 only)"));
-    assert!(write_err.contains("__seg_gs/__seg_fs write (x86 only)"));
+    assert!(read_err.contains("__seg_gs/__seg_fs access (x86 only)"));
+    assert!(write_err.contains("__seg_gs/__seg_fs access (x86 only)"));
 }
 
 #[test]

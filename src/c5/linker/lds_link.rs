@@ -40,7 +40,8 @@ use super::lds::{
 };
 use super::object::{
     Elf32Ehdr, Elf32Rel, Elf32Rela, Elf32Shdr, Elf32Sym, Elf64Ehdr, Elf64Rel, Elf64Shdr, ElfClass,
-    absolute_in_pie_body, elf_reloc_desc, is_c_identifier, locate_reloc, read_struct,
+    SharedLibrary, absolute_in_pie_body, elf_reloc_desc, is_c_identifier, locate_reloc,
+    read_struct,
 };
 use crate::c5::object::elf_reloc_types as rt;
 
@@ -100,6 +101,8 @@ const STV_PROTECTED: u8 = 3;
 
 const PT_LOAD: u32 = 1;
 const PT_DYNAMIC: u32 = 2;
+const PT_INTERP: u32 = 3;
+const PT_PHDR: u32 = 6;
 const PT_NOTE: u32 = 4;
 const PT_GNU_EH_FRAME: u32 = 0x6474e550;
 const PT_GNU_STACK: u32 = 0x6474e551;
@@ -584,6 +587,15 @@ pub enum LdsEmit {
     Dyn,
 }
 
+/// A shared library input and how the link named it.
+#[derive(Debug, Clone)]
+pub struct SharedInput {
+    pub lib: SharedLibrary,
+    /// Named under a linker script's `AS_NEEDED`: it takes a dependency
+    /// record only where the link binds to it.
+    pub as_needed: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct LdsOptions {
     pub emit: LdsEmit,
@@ -629,6 +641,15 @@ pub struct LdsOptions {
     /// `-u` / `--undefined`: names the link must resolve. Each is a
     /// garbage-collection root.
     pub undefined: Vec<String>,
+    /// `--dynamic-linker`: the `PT_INTERP` program interpreter.
+    pub interp: Option<String>,
+    /// Shared libraries named on the command line, in order. Each takes
+    /// a `DT_NEEDED` and satisfies references its exports name.
+    pub shared_libs: Vec<SharedInput>,
+    /// `-rpath`: the library search path recorded in the image.
+    pub rpath: Vec<String>,
+    /// `--enable-new-dtags`: record the search path as `DT_RUNPATH`.
+    pub new_dtags: bool,
 }
 
 impl Default for LdsOptions {
@@ -655,6 +676,10 @@ impl Default for LdsOptions {
             eh_frame_hdr: false,
             gc_sections: false,
             undefined: Vec::new(),
+            interp: None,
+            shared_libs: Vec::new(),
+            rpath: Vec::new(),
+            new_dtags: false,
         }
     }
 }
@@ -800,6 +825,68 @@ struct MergePool {
     align: u64,
 }
 
+/// One PLT stub, on both targets.
+const PLT_ENTRY_SIZE: u64 = 16;
+
+/// The relaxable GOT forms, which `elf_reloc_types` does not name.
+const R_X86_64_GOTPCRELX: u32 = 41;
+const R_386_GOT32X: u32 = 43;
+
+/// Name -> position, for a list whose order is its index space.
+fn index_map(names: &[String]) -> HashMap<String, usize> {
+    names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.clone(), i))
+        .collect()
+}
+
+/// A relocation holding a branch displacement: reaching an imported
+/// symbol from one means going through a stub.
+fn reloc_needs_plt(machine: u16, rtype: u32) -> bool {
+    match machine {
+        EM_AARCH64 => matches!(rtype, rt::R_AARCH64_CALL26 | rt::R_AARCH64_JUMP26),
+        EM_386 => matches!(rtype, rt::R_386_PC32 | rt::R_386_PLT32),
+        _ => matches!(rtype, rt::R_X86_64_PC32 | rt::R_X86_64_PLT32),
+    }
+}
+
+/// A relocation naming a GOT slot rather than the symbol's own address.
+fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
+    match machine {
+        EM_AARCH64 => matches!(
+            rtype,
+            rt::R_AARCH64_ADR_GOT_PAGE | rt::R_AARCH64_LD64_GOT_LO12_NC
+        ),
+        EM_386 => matches!(rtype, rt::R_386_GOT32 | R_386_GOT32X),
+        _ => matches!(
+            rtype,
+            rt::R_X86_64_GOTPCREL | R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX
+        ),
+    }
+}
+
+/// A stub at `at` jumping through the GOT slot at `slot`.
+fn plt_entry(machine: u16, at: u64, slot: u64) -> [u8; PLT_ENTRY_SIZE as usize] {
+    let mut e = [0u8; PLT_ENTRY_SIZE as usize];
+    if machine == EM_AARCH64 {
+        let page = (slot & !0xfff).wrapping_sub(at & !0xfff) as i64 >> 12;
+        let imm = page as u32 & 0x1f_ffff;
+        let adrp = 0x9000_0010 | (imm & 3) << 29 | (imm >> 2) << 5;
+        let ldr = 0xf940_0211 | ((slot & 0xfff) as u32 / 8) << 10;
+        for (k, w) in [adrp, ldr, 0xd61f_0220, 0xd503_201f].iter().enumerate() {
+            e[k * 4..k * 4 + 4].copy_from_slice(&w.to_le_bytes());
+        }
+        return e;
+    }
+    // jmp *disp32(%rip), then a one-byte pad to the entry size.
+    e[0] = 0xff;
+    e[1] = 0x25;
+    e[2..6].copy_from_slice(&(slot.wrapping_sub(at + 6) as u32).to_le_bytes());
+    e[6..].fill(0xcc);
+    e
+}
+
 /// A `.eh_frame` input rewritten with its duplicate CIEs dropped.
 struct EhFrame {
     bytes: Vec<u8>,
@@ -842,6 +929,9 @@ struct DynReloc {
     offset: u64,
     rtype: u32,
     addend: i64,
+    /// `.dynsym` index the entry names; 0 where the fixup needs no
+    /// symbol.
+    sym: u32,
 }
 
 pub struct LdsLinker<'a> {
@@ -865,6 +955,17 @@ pub struct LdsLinker<'a> {
     /// CIE to deduplication.
     eh_of: HashMap<usize, usize>,
     eh_frames: Vec<EhFrame>,
+    /// Undefined references bound to an input shared library, sorted.
+    /// Their `.dynsym` indices are `1 + position`, which is what the
+    /// symbol-named dynamic relocations carry.
+    imports: Vec<String>,
+    import_of: HashMap<String, usize>,
+    /// The subset reached by a call, in the order of their PLT stubs.
+    plt_syms: Vec<String>,
+    plt_of: HashMap<String, usize>,
+    /// Program headers `SIZEOF_HEADERS` accounts for where the script
+    /// declares none, measured from the previous round's layout.
+    phdrs: usize,
 
     outs: Vec<OutSec>,
     /// Statement stream of the SECTIONS block with input claims
@@ -980,6 +1081,8 @@ const SYNTH_VERSYM: &str = ".gnu.version";
 const SYNTH_VERDEF: &str = ".gnu.version_d";
 const SYNTH_DYNAMIC: &str = ".dynamic";
 const SYNTH_EH_FRAME_HDR: &str = ".eh_frame_hdr";
+const SYNTH_INTERP: &str = ".interp";
+const SYNTH_PLT: &str = ".plt";
 const SYNTH_GNU_PROPERTY: &str = ".note.gnu.property";
 const OUT_EH_FRAME: &str = ".eh_frame";
 
@@ -1092,6 +1195,11 @@ impl<'a> LdsLinker<'a> {
             pools: Vec::new(),
             eh_of: HashMap::new(),
             eh_frames: Vec::new(),
+            imports: Vec::new(),
+            import_of: HashMap::new(),
+            plt_syms: Vec::new(),
+            plt_of: HashMap::new(),
+            phdrs: 4,
             outs: Vec::new(),
             stmts: Vec::new(),
             globals: HashMap::new(),
@@ -1134,6 +1242,7 @@ impl<'a> LdsLinker<'a> {
         linker.claim_inputs()?;
         linker.build_merge_pools();
         linker.build_eh_frame_dedup();
+        linker.build_imports();
         Ok(linker)
     }
 
@@ -1239,6 +1348,13 @@ impl<'a> LdsLinker<'a> {
     }
 
     fn synthesize_sections(&mut self) {
+        if let Some(path) = self.opts.interp.clone() {
+            let idx = self.push_synth_section(SYNTH_INTERP, SHT_PROGBITS, SHF_ALLOC);
+            let synth = self.synth_obj;
+            let sec = &mut self.objects[synth].sections[idx];
+            sec.addralign = 1;
+            sec.size = path.len() as u64 + 1;
+        }
         if !self.gnu_property.is_empty() {
             let idx = self.push_synth_section(SYNTH_GNU_PROPERTY, SHT_NOTE, SHF_ALLOC);
             let synth = self.synth_obj;
@@ -1257,6 +1373,11 @@ impl<'a> LdsLinker<'a> {
             let sec = &mut self.objects[synth].sections[idx];
             sec.addralign = 4;
             sec.size = 36; // 12-byte header + "GNU\0" + 20-byte sha1
+        }
+        if !self.opts.shared_libs.is_empty() {
+            let idx = self.push_synth_section(SYNTH_PLT, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR);
+            let synth = self.synth_obj;
+            self.objects[synth].sections[idx].addralign = PLT_ENTRY_SIZE;
         }
         if self.opts.emit == LdsEmit::Dyn {
             let (rela_name, rela_type, rela_ent) = self.dyn_reloc_kind();
@@ -2106,6 +2227,126 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
+    // ---------------------------------------------- shared imports
+
+    /// Bind the references no input defines against the shared
+    /// libraries named on the command line. Each binding takes a
+    /// `.dynsym` entry and a GOT slot; one a call reaches also takes a
+    /// PLT stub, since a call site holds a displacement rather than a
+    /// slot to load through.
+    fn build_imports(&mut self) {
+        if self.opts.shared_libs.is_empty() {
+            return;
+        }
+        // The script's own definitions satisfy a reference on their
+        // own, whether or not a library exports the same name.
+        let assigned = self
+            .stmts
+            .iter()
+            .filter_map(|st| match st {
+                Stmt::Assign(a) => Some(a),
+                _ => None,
+            })
+            .chain(self.outs.iter().flat_map(|o| {
+                o.pieces.iter().filter_map(|p| match p {
+                    Piece::Assign(a) => Some(a),
+                    _ => None,
+                })
+            }));
+        let script_defined: HashSet<&str> = assigned
+            .map(|a| a.symbol.as_str())
+            .filter(|s| *s != ".")
+            .collect();
+        let mut names: BTreeSet<&str> = BTreeSet::new();
+        for o in &self.objects {
+            for s in &o.symbols {
+                if s.binding() != STB_LOCAL
+                    && s.shndx as u16 == SHN_UNDEF
+                    && !s.name.is_empty()
+                    && !self.globals.contains_key(&s.name)
+                    && !script_defined.contains(s.name.as_str())
+                    && self
+                        .opts
+                        .shared_libs
+                        .iter()
+                        .any(|l| l.lib.exports.contains(&s.name))
+                {
+                    names.insert(&s.name);
+                }
+            }
+        }
+        let mut called: BTreeSet<&str> = BTreeSet::new();
+        for o in &self.objects {
+            for sec in &o.sections {
+                for r in &sec.relocs {
+                    let Some(sym) = o.symbols.get(r.sym as usize) else {
+                        continue;
+                    };
+                    if reloc_needs_plt(self.machine, r.rtype)
+                        && names.contains(sym.name.as_str())
+                        && !self.is_data_export(&sym.name)
+                    {
+                        called.insert(&sym.name);
+                    }
+                }
+            }
+        }
+        self.imports = names.iter().map(|s| String::from(*s)).collect();
+        self.plt_syms = called.iter().map(|s| String::from(*s)).collect();
+        self.import_of = index_map(&self.imports);
+        self.plt_of = index_map(&self.plt_syms);
+    }
+
+    /// `.dynsym` index of an imported symbol. Imports sit right after
+    /// the null entry, in their own order.
+    fn dynsym_index(&self, name: &str) -> u32 {
+        self.import_of.get(name).map_or(0, |&k| 1 + k as u32)
+    }
+
+    /// True when a shared library exports `name` as a data object, so a
+    /// reference must reach the object itself rather than a PLT stub.
+    fn is_data_export(&self, name: &str) -> bool {
+        self.opts
+            .shared_libs
+            .iter()
+            .any(|l| l.lib.data_exports.contains(name))
+    }
+
+    /// Address a reference to an imported symbol resolves to: its PLT
+    /// stub for a call, its GOT slot for a load through one.
+    fn import_target(&self, name: &str, rtype: u32) -> Option<u64> {
+        if !self.import_of.contains_key(name) {
+            return None;
+        }
+        if reloc_needs_plt(self.machine, rtype) {
+            let k = *self.plt_of.get(name)?;
+            return Some(self.synth_addr(SYNTH_PLT)? + k as u64 * PLT_ENTRY_SIZE);
+        }
+        if reloc_uses_got(self.machine, rtype) {
+            let k = *self.got_map.get(name)?;
+            return Some(self.got_slot_base()? + k as u64 * self.class.addr_size());
+        }
+        None
+    }
+
+    /// PLT stub bytes: each jumps through its symbol's GOT slot, which
+    /// the loader fills from the `GLOB_DAT` entry naming the symbol.
+    /// Lazy binding would need a `.rela.plt` the loader walks on
+    /// demand; these bind at load time.
+    fn plt_bytes(&self) -> Vec<u8> {
+        let (Some(plt), Some(got)) = (self.synth_addr(SYNTH_PLT), self.got_slot_base()) else {
+            return Vec::new();
+        };
+        let slot_size = self.class.addr_size();
+        let mut out = Vec::with_capacity(self.plt_syms.len() * PLT_ENTRY_SIZE as usize);
+        for (k, name) in self.plt_syms.iter().enumerate() {
+            let at = plt + k as u64 * PLT_ENTRY_SIZE;
+            let slot = got + *self.got_map.get(name).unwrap_or(&0) as u64 * slot_size;
+            out.extend_from_slice(&plt_entry(self.machine, at, slot));
+        }
+        out
+    }
+
     // ----------------------------------------------- .eh_frame CIEs
 
     /// Merge the CIEs of the `.eh_frame` inputs of one output section,
@@ -2250,16 +2491,30 @@ impl<'a> LdsLinker<'a> {
     // --------------------------------------------------------- layout
 
     fn run(&mut self) -> Result<LdsResult, C5Error> {
-        let mut prev_fingerprint: Option<Vec<u64>> = None;
         let mut converged = false;
-        for _pass in 0..48 {
-            self.layout_pass(false)?;
-            let fp = self.fingerprint();
-            if prev_fingerprint.as_ref() == Some(&fp) {
-                converged = true;
+        // Each round settles the layout for the current header count,
+        // then measures the count that layout produces.
+        for _round in 0..4 {
+            let mut prev_fingerprint: Option<Vec<u64>> = None;
+            converged = false;
+            for _pass in 0..48 {
+                self.layout_pass(false)?;
+                let fp = self.fingerprint();
+                if prev_fingerprint.as_ref() == Some(&fp) {
+                    converged = true;
+                    break;
+                }
+                prev_fingerprint = Some(fp);
+            }
+            if !converged {
                 break;
             }
-            prev_fingerprint = Some(fp);
+            let order = self.kept_order();
+            let n = self.build_phdrs(&order)?.len();
+            if n == self.phdr_count_estimate() {
+                break;
+            }
+            self.phdrs = n;
         }
         if !converged {
             return Err(err("script layout did not converge"));
@@ -3189,8 +3444,25 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
+    /// Output sections the writer will emit, in statement order. The
+    /// same selection `finish` makes, without settling anything.
+    fn kept_order(&self) -> Vec<usize> {
+        self.stmts
+            .iter()
+            .filter_map(|st| match st {
+                Stmt::Open(oi) => Some(*oi),
+                _ => None,
+            })
+            .filter(|&oi| self.outs[oi].name != "/DISCARD/" && self.outs[oi].size != 0)
+            .collect()
+    }
+
+    /// What `SIZEOF_HEADERS` counts. A `PHDRS` command states it; the
+    /// default segment set is measured from a settled layout and fed
+    /// back, since a script places its first section past the headers
+    /// and a count short of the truth leaves that section below them.
     fn phdr_count_estimate(&self) -> usize {
-        self.script.phdrs().map(|p| p.len()).unwrap_or(4)
+        self.script.phdrs().map(|p| p.len()).unwrap_or(self.phdrs)
     }
 
     // -------------------------------------------- dynamic reloc sizing
@@ -3207,8 +3479,10 @@ impl<'a> LdsLinker<'a> {
         // GOT slot set stays stable across passes (driven by reloc
         // types alone), so compute it once.
         if self.got_slots.is_empty() && self.got_map.is_empty() {
-            let mut slots: Vec<String> = Vec::new();
-            let mut map: HashMap<String, usize> = HashMap::new();
+            // Every import loads through a slot the loader fills, so
+            // each takes one whether or not an input names the GOT.
+            let mut slots: Vec<String> = self.imports.clone();
+            let mut map: HashMap<String, usize> = index_map(&slots);
             for i in 0..self.insecs.len() {
                 let SecFate::Placed { .. } = self.fates[i] else {
                     continue;
@@ -3266,10 +3540,12 @@ impl<'a> LdsLinker<'a> {
                 // resolution to load time.
                 if !self.reloc_is_relative(id.obj, r.sym as usize) {
                     if self.undefweak_dynamic(id.obj, r.sym as usize) {
+                        let name = &self.objects[id.obj].symbols[r.sym as usize].name;
                         sym_relas.push(DynReloc {
                             offset: base + r.offset,
                             rtype: abs_addr,
                             addend: r.addend,
+                            sym: self.dynsym_index(name),
                         });
                     }
                     continue;
@@ -3296,6 +3572,7 @@ impl<'a> LdsLinker<'a> {
                         offset: slot,
                         rtype: glob_dat,
                         addend: 0,
+                        sym: self.dynsym_index(name),
                     });
                 }
             }
@@ -3311,6 +3588,7 @@ impl<'a> LdsLinker<'a> {
                     offset: addr,
                     rtype: relative,
                     addend,
+                    sym: 0,
                 });
             }
         }
@@ -3355,6 +3633,7 @@ impl<'a> LdsLinker<'a> {
                     let header = if got_header { slot } else { 0 };
                     sec.size = header + self.got_slots.len() as u64 * slot;
                 }
+                SYNTH_PLT => sec.size = self.plt_syms.len() as u64 * PLT_ENTRY_SIZE,
                 _ => {}
             }
         }
@@ -3463,7 +3742,21 @@ impl<'a> LdsLinker<'a> {
     /// script. Each version definition also contributes a symbol
     /// naming itself.
     fn collect_dyn_exports(&self, out_shndx: &dyn Fn(usize) -> u16) -> Vec<DynSym> {
-        let mut out: Vec<DynSym> = Vec::new();
+        // Imports come first and in their own order: a dynamic
+        // relocation names one by the index that ordering fixes.
+        let mut out: Vec<DynSym> = self
+            .imports
+            .iter()
+            .map(|name| DynSym {
+                name: name.clone(),
+                info: (STB_GLOBAL << 4) | STT_NOTYPE,
+                other: STV_DEFAULT,
+                shndx: SHN_UNDEF,
+                value: 0,
+                size: 0,
+                version: dynamic::VER_NDX_GLOBAL,
+            })
+            .collect();
         let mut names: Vec<&String> = self.globals.keys().collect();
         names.sort();
         for name in names {
@@ -3539,13 +3832,38 @@ impl<'a> LdsLinker<'a> {
         } else {
             Vec::new()
         };
+        let rpath = self.rpath_string();
+        let mut extra: Vec<&str> = self.needed_sonames().collect();
+        if let Some(p) = &rpath {
+            extra.push(p);
+        }
         self.dyn_tables = Some(dynamic::build_tables(
             &exports,
             self.opts.soname.as_deref(),
             &verdefs,
+            &extra,
             self.opts.hash_style,
             self.class,
         ));
+    }
+
+    /// Sonames this image depends on, in link order and once each. A
+    /// library the link took nothing from is recorded anyway, as bfd
+    /// does without `--as-needed`; one named only under `AS_NEEDED` is
+    /// recorded only where an import bound to it.
+    fn needed_sonames(&self) -> impl Iterator<Item = &str> {
+        let mut seen: HashSet<&str> = HashSet::new();
+        self.opts
+            .shared_libs
+            .iter()
+            .filter(|l| !l.as_needed || self.imports.iter().any(|n| l.lib.exports.contains(n)))
+            .map(|l| l.lib.soname.as_str())
+            .filter(move |s| seen.insert(s))
+    }
+
+    /// `-rpath` directories as the colon-separated string the tag holds.
+    fn rpath_string(&self) -> Option<String> {
+        (!self.opts.rpath.is_empty()).then(|| self.opts.rpath.join(":"))
     }
 
     /// Sizes of the dynamic tables for this pass, by section name.
@@ -3596,6 +3914,13 @@ impl<'a> LdsLinker<'a> {
             versym: addr(SYNTH_VERSYM),
             soname: match (t, self.opts.soname.as_deref()) {
                 (Some(t), Some(s)) => Some(t.str_offset(s)),
+                _ => None,
+            },
+            needed: t
+                .map(|t| self.needed_sonames().map(|s| t.str_offset(s)).collect())
+                .unwrap_or_default(),
+            rpath: match (t, self.rpath_string()) {
+                (Some(t), Some(p)) => Some((t.str_offset(&p), self.opts.new_dtags)),
                 _ => None,
             },
             symbolic: self.opts.symbolic,
@@ -4107,10 +4432,13 @@ impl<'a> LdsLinker<'a> {
                 }
             },
             // Nothing named an entry. A shared object has none, as bfd
-            // leaves `e_entry` zero for one; an executable starts at
-            // its first text address.
-            None if self.opts.emit == LdsEmit::Dyn => 0,
-            None => self.default_entry(&emit_order),
+            // leaves `e_entry` zero for one; an executable takes bfd's
+            // default entry symbol and, failing that, its first text
+            // address. A PIE is an executable.
+            None if self.opts.shared => 0,
+            None => self
+                .final_sym_value("_start")
+                .unwrap_or_else(|| self.default_entry(&emit_order)),
         };
 
         // Program headers.
@@ -4304,6 +4632,19 @@ impl<'a> LdsLinker<'a> {
             if let Some(s) = self.script_now.get(&sym.name) {
                 return Some(s.val.v.wrapping_add(r.addend as u64));
             }
+            if self.import_of.contains_key(&sym.name) {
+                if let Some(v) = self.import_target(&sym.name, r.rtype) {
+                    return Some(v.wrapping_add(r.addend as u64));
+                }
+                errors.push(format!(
+                    "{}: {} against `{}' cannot reach a shared library; \
+                     the reference needs a GOT slot or a call",
+                    self.objects[oi].source,
+                    elf_reloc_desc(self.machine, r.rtype),
+                    sym.name
+                ));
+                return None;
+            }
         }
         match sym.shndx as u16 {
             SHN_ABS => Some(sym.value.wrapping_add(r.addend as u64)),
@@ -4415,7 +4756,14 @@ impl<'a> LdsLinker<'a> {
                     let v = sa.wrapping_sub(p);
                     w(buf, site, &[v as u8]);
                 }
-                rt::R_X86_64_GOTPCREL | 41 | rt::R_X86_64_REX_GOTPCRELX => {
+                rt::R_X86_64_GOTPCREL | R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX => {
+                    // An import has no link-time address to relax to;
+                    // the site keeps its load from the GOT slot.
+                    if self.import_of.contains_key(&name()) {
+                        let v = sa.wrapping_sub(p) as i64;
+                        w(buf, site, &(v as i32).to_le_bytes());
+                        return;
+                    }
                     // The kernel scripts assert an empty GOT: relax
                     // the load to a direct reference.
                     if site >= 2 && buf[site - 2] == 0x8b {
@@ -4820,7 +5168,9 @@ impl<'a> LdsLinker<'a> {
                 bytes.resize(self.dyn_nones.unwrap_or(0) as usize * rela_ent as usize, 0);
                 for d in &self.dyn_relas {
                     bytes.extend_from_slice(&class.addr_bytes(d.offset)[..aw]);
-                    bytes.extend_from_slice(&class.addr_bytes(class.reloc_info(0, d.rtype))[..aw]);
+                    bytes.extend_from_slice(
+                        &class.addr_bytes(class.reloc_info(d.sym, d.rtype))[..aw],
+                    );
                     if use_rela {
                         bytes.extend_from_slice(&class.addr_bytes(d.addend as u64)[..aw]);
                     }
@@ -4872,6 +5222,11 @@ impl<'a> LdsLinker<'a> {
                         bytes.extend_from_slice(&[0u8; 20]);
                     }
                     SYNTH_GNU_PROPERTY => bytes = self.gnu_property.clone(),
+                    SYNTH_INTERP => {
+                        bytes = self.opts.interp.clone().unwrap_or_default().into_bytes();
+                        bytes.push(0);
+                    }
+                    SYNTH_PLT => bytes = self.plt_bytes(),
                     SYNTH_DYNAMIC => bytes = dynamic_bytes.clone(),
                     SYNTH_EH_FRAME_HDR => {
                         let Some(hdr_addr) = self.synth_addr(SYNTH_EH_FRAME_HDR) else {
@@ -5118,10 +5473,11 @@ impl<'a> LdsLinker<'a> {
             // `.eh_frame_hdr`, which is how an unwinder finds it;
             // PT_GNU_PROPERTY over the merged note, which is where a
             // loader looks for the image's feature claims.
-            for (name, ptype, flags) in [
-                (SYNTH_DYNAMIC, PT_DYNAMIC, PF_R | PF_W),
-                (SYNTH_EH_FRAME_HDR, PT_GNU_EH_FRAME, PF_R),
-                (SYNTH_GNU_PROPERTY, PT_GNU_PROPERTY, PF_R),
+            for (name, ptype, flags, align) in [
+                (SYNTH_INTERP, PT_INTERP, PF_R, 1),
+                (SYNTH_DYNAMIC, PT_DYNAMIC, PF_R | PF_W, 8),
+                (SYNTH_EH_FRAME_HDR, PT_GNU_EH_FRAME, PF_R, 8),
+                (SYNTH_GNU_PROPERTY, PT_GNU_PROPERTY, PF_R, 8),
             ] {
                 if let Some(&oi) = emit_order
                     .iter()
@@ -5131,7 +5487,7 @@ impl<'a> LdsLinker<'a> {
                         Elf64Phdr {
                             p_type: ptype,
                             p_flags: flags,
-                            p_align: 8,
+                            p_align: align,
                             ..Default::default()
                         },
                         alloc::vec![oi],
@@ -5148,6 +5504,28 @@ impl<'a> LdsLinker<'a> {
                 Vec::new(),
             ));
             self.set_phdr_alignments(&mut segs);
+            // An interpreted image needs PT_PHDR ahead of every
+            // loadable entry: a loader takes the load bias from it, and
+            // bfd pairs it with PT_INTERP for that reason. Its extent
+            // is the header table itself, filled once the count and the
+            // first segment's address are known.
+            if emit_order
+                .iter()
+                .any(|&oi| self.outs[oi].alloc && self.outs[oi].name == SYNTH_INTERP)
+            {
+                segs.insert(
+                    0,
+                    (
+                        Elf64Phdr {
+                            p_type: PT_PHDR,
+                            p_flags: PF_R,
+                            p_align: 8,
+                            ..Default::default()
+                        },
+                        Vec::new(),
+                    ),
+                );
+            }
             Ok(segs)
         }
     }
@@ -5638,6 +6016,14 @@ impl<'a> LdsLinker<'a> {
         // what lets a consumer derive the load bias from the first
         // PT_LOAD.
         let defs = self.script.phdrs().unwrap_or(&[]).to_owned();
+        // Absent a `PHDRS` command the first PT_LOAD covers them, which
+        // is what bfd's default segment map does and what leaves the
+        // headers mapped for a loader to read.
+        let default_first_load = defs.is_empty().then(|| {
+            phdrs
+                .iter()
+                .position(|(p, m)| p.p_type == PT_LOAD && !m.is_empty())
+        });
         for (k, (ph, members)) in phdrs.iter_mut().enumerate() {
             if members.is_empty() {
                 continue;
@@ -5646,6 +6032,12 @@ impl<'a> LdsLinker<'a> {
             ph.p_vaddr = self.outs[first].addr;
             ph.p_paddr = self.outs[first].lma;
             ph.p_offset = file_off[&first];
+            if default_first_load == Some(Some(k)) && ph.p_offset <= ph.p_vaddr {
+                let back = ph.p_offset;
+                ph.p_offset = 0;
+                ph.p_vaddr -= back;
+                ph.p_paddr = ph.p_paddr.saturating_sub(back);
+            }
             if let Some(d) = defs.get(k) {
                 let cover = match (d.filehdr, d.phdrs) {
                     (true, _) => Some(0),
@@ -5670,6 +6062,20 @@ impl<'a> LdsLinker<'a> {
             }
             ph.p_filesz = file_end - ph.p_offset;
             ph.p_memsz = mem_end - ph.p_vaddr;
+        }
+        // PT_PHDR covers the header table, inside the segment that
+        // reaches back over it.
+        if let Some(load) = phdrs
+            .iter()
+            .find(|(p, m)| p.p_type == PT_LOAD && !m.is_empty())
+            .map(|(p, _)| (p.p_offset, p.p_vaddr))
+            && let Some((ph, _)) = phdrs.iter_mut().find(|(p, _)| p.p_type == PT_PHDR)
+        {
+            ph.p_offset = class.ehdr_size();
+            ph.p_vaddr = load.1 + (class.ehdr_size() - load.0);
+            ph.p_paddr = ph.p_vaddr;
+            ph.p_filesz = phnum as u64 * class.phdr_size();
+            ph.p_memsz = ph.p_filesz;
         }
 
         // Symbol/string tables.
@@ -6189,6 +6595,7 @@ fn file_glob(pattern: &str, source: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c5::linker::default_script::default_script;
     use crate::c5::linker::lds::parse_linker_script;
 
     /// `(name, sh_type, flags, addralign, bytes, relocs)` of a test section.
@@ -8269,6 +8676,219 @@ SECTIONS {
         assert_eq!(find_sym(&syms, "third"), ro.2, "duplicate entry folds");
         assert_eq!(find_sym(&syms, "b_two"), ro.2 + 8);
         assert_eq!(find_sym(&syms, "b_four"), ro.2 + 16);
+    }
+
+    fn shared_input(soname: &str, funcs: &[&str], data: &[&str]) -> SharedInput {
+        SharedInput {
+            lib: SharedLibrary {
+                soname: soname.to_string(),
+                exports: funcs.iter().chain(data).map(|s| s.to_string()).collect(),
+                data_exports: data.iter().map(|s| s.to_string()).collect(),
+            },
+            as_needed: false,
+        }
+    }
+
+    /// A PIE against shared libraries, under the built-in script.
+    fn dynamic_opts(libs: Vec<SharedInput>) -> LdsOptions {
+        LdsOptions {
+            emit: LdsEmit::Dyn,
+            interp: Some(String::from("/lib64/ld-linux-x86-64.so.2")),
+            shared_libs: libs,
+            max_page_size: 0x200000,
+            ..LdsOptions::default()
+        }
+    }
+
+    /// `.text` calling `foo` and loading `bar` through the GOT.
+    fn import_user() -> Vec<u8> {
+        let body = [
+            0xe8, 0, 0, 0, 0, // call foo
+            0x48, 0x8b, 0x05, 0, 0, 0, 0, // mov bar@GOTPCREL(%rip), %rax
+            0xc3, 0, 0, 0,
+        ];
+        TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &body)
+            .reloc(0, 1, 3, rt::R_X86_64_PLT32, -4)
+            .reloc(0, 8, 4, rt::R_X86_64_REX_GOTPCRELX, -4)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 13)
+            .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+            .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+            .build(EM_X86_64)
+    }
+
+    fn dyn_tags(image: &[u8]) -> Vec<(u64, u64)> {
+        let (_, body) = image_section(image, ".dynamic");
+        body.chunks_exact(16)
+            .map(|c| {
+                (
+                    u64::from_le_bytes(c[..8].try_into().unwrap()),
+                    u64::from_le_bytes(c[8..].try_into().unwrap()),
+                )
+            })
+            .collect()
+    }
+
+    fn dynstr_at(image: &[u8], off: u64) -> String {
+        let (_, s) = image_section(image, ".dynstr");
+        strz(&s, off as usize)
+    }
+
+    /// A shared library input takes a `DT_NEEDED` naming its soname,
+    /// and `--dynamic-linker` an `.interp` a loader can find through
+    /// `PT_INTERP`, with `PT_PHDR` for the load bias.
+    #[test]
+    fn a_shared_library_input_records_a_dependency() {
+        let script = parse_linker_script(&default_script(true)).expect("parses");
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let mut opts = dynamic_opts(alloc::vec![
+            shared_input("libc.so.6", &["foo"], &["bar"]),
+            shared_input("libm.so.6", &["unused"], &[]),
+        ]);
+        opts.rpath = alloc::vec![String::from("/opt/lib"), String::from("$ORIGIN")];
+        opts.shared_libs[1].as_needed = true;
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let needed: Vec<String> = dyn_tags(&res.image)
+            .iter()
+            .filter(|&&(t, _)| t == dynamic::DT_NEEDED)
+            .map(|&(_, v)| dynstr_at(&res.image, v))
+            .collect();
+        assert_eq!(
+            needed,
+            alloc::vec![String::from("libc.so.6")],
+            "the library the link binds to is recorded; an AS_NEEDED one it does not use is not"
+        );
+        let rpath: Vec<String> = dyn_tags(&res.image)
+            .iter()
+            .filter(|&&(t, _)| t == dynamic::DT_RPATH)
+            .map(|&(_, v)| dynstr_at(&res.image, v))
+            .collect();
+        assert_eq!(rpath, alloc::vec![String::from("/opt/lib:$ORIGIN")]);
+        let (_, interp) = image_section(&res.image, ".interp");
+        assert_eq!(interp, b"/lib64/ld-linux-x86-64.so.2\0");
+        let phdrs = image_phdrs(&res.image);
+        let interp_seg = phdrs
+            .iter()
+            .find(|p| p.p_type == PT_INTERP)
+            .expect("PT_INTERP");
+        let (addr, _) = image_section(&res.image, ".interp");
+        assert_eq!(interp_seg.p_vaddr, addr);
+        let phdr_seg = phdrs.iter().find(|p| p.p_type == PT_PHDR).expect("PT_PHDR");
+        assert_eq!(phdr_seg.p_offset, 64, "the table follows the ELF header");
+        assert_eq!(
+            phdr_seg.p_filesz,
+            phdrs.len() as u64 * 56,
+            "and covers all of it"
+        );
+        let load = phdrs
+            .iter()
+            .find(|p| p.p_type == PT_LOAD)
+            .expect("a loadable segment");
+        assert_eq!(
+            (load.p_offset, load.p_vaddr),
+            (0, 0),
+            "the first load covers the headers a loader reads"
+        );
+    }
+
+    /// A call to an imported function reaches it through a PLT stub and
+    /// a load through a GOT slot the loader fills from a `GLOB_DAT`
+    /// entry naming the symbol.
+    #[test]
+    fn an_import_binds_through_a_stub_and_a_got_slot() {
+        let script = parse_linker_script(&default_script(true)).expect("parses");
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        // Imports lead the table, in name order, so a relocation can
+        // name one by index.
+        let syms = image_dynsyms(&res.image);
+        assert_eq!(syms[1].0, "bar");
+        assert_eq!(syms[2].0, "foo");
+        assert_eq!((syms[1].2, syms[2].2), (SHN_UNDEF, SHN_UNDEF));
+
+        let (got_addr, _) = image_section(&res.image, ".got");
+        let (_, rela) = image_section(&res.image, ".rela.dyn");
+        let entries: Vec<(u64, u32, u32)> = rela
+            .chunks_exact(24)
+            .map(|c| {
+                let info = u64::from_le_bytes(c[8..16].try_into().unwrap());
+                (
+                    u64::from_le_bytes(c[..8].try_into().unwrap()),
+                    (info >> 32) as u32,
+                    info as u32,
+                )
+            })
+            .collect();
+        let glob: Vec<&(u64, u32, u32)> = entries
+            .iter()
+            .filter(|e| e.2 == rt::R_X86_64_GLOB_DAT)
+            .collect();
+        assert_eq!(glob.len(), 2, "one slot per import");
+        assert_eq!(
+            (glob[0].0, glob[0].1),
+            (got_addr, 1),
+            "bar's slot names bar"
+        );
+        assert_eq!(
+            (glob[1].0, glob[1].1),
+            (got_addr + 8, 2),
+            "foo's slot names foo"
+        );
+
+        let (text_addr, text) = image_section(&res.image, ".text");
+        let (plt_addr, plt) = image_section(&res.image, ".plt");
+        assert_eq!(plt.len(), 16, "only the called import takes a stub");
+        let call = i32::from_le_bytes(text[1..5].try_into().unwrap()) as i64;
+        assert_eq!(
+            text_addr as i64 + 5 + call,
+            plt_addr as i64,
+            "the call reaches the stub"
+        );
+        let load = i32::from_le_bytes(text[8..12].try_into().unwrap()) as i64;
+        assert_eq!(
+            text_addr as i64 + 12 + load,
+            got_addr as i64,
+            "the load keeps its GOT slot rather than relaxing to an address"
+        );
+        assert_eq!(
+            text[5..8],
+            [0x48, 0x8b, 0x05],
+            "so the load is not rewritten"
+        );
+        // The stub jumps through the slot: ff 25 <rip-relative>.
+        assert_eq!(plt[..2], [0xff, 0x25]);
+        let disp = i32::from_le_bytes(plt[2..6].try_into().unwrap()) as i64;
+        assert_eq!(plt_addr as i64 + 6 + disp, got_addr as i64 + 8);
+    }
+
+    /// A reference that would need the imported object copied into this
+    /// image is refused rather than left pointing at nothing.
+    #[test]
+    fn a_direct_reference_to_imported_data_is_refused() {
+        let script = parse_linker_script(&default_script(true)).expect("parses");
+        let obj = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90; 8],
+            )
+            .reloc(0, 2, 3, rt::R_X86_64_PC32, -4)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", obj).expect("parses")];
+        let opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &[], &["bar"])]);
+        let e = alloc::format!(
+            "{}",
+            link_with_script(&script, objs, &opts).expect_err("refused")
+        );
+        assert!(
+            e.contains("`bar'") && e.contains("cannot reach a shared library"),
+            "{e}"
+        );
     }
 
     /// A `zR` CIE, the shape gcc emits for a unit needing no

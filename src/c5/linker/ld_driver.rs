@@ -20,7 +20,10 @@ use super::archive;
 use super::default_script::default_script;
 use super::dynamic::HashStyle;
 use super::lds::parse_linker_script;
-use super::lds_link::{LdsEmit, LdsObject, LdsOptions, OrphanHandling, parse_lds_object};
+use super::lds_link::{
+    LdsEmit, LdsObject, LdsOptions, OrphanHandling, SharedInput, parse_lds_object,
+};
+use super::object::parse_shared_library;
 use super::relocatable::{
     DiscardLocals, EM_386, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
     parse_et_rel, parse_module_script,
@@ -28,6 +31,7 @@ use super::relocatable::{
 
 /// How positional inputs and archive state were ordered on the
 /// command line.
+#[derive(Clone)]
 enum InputItem {
     File(PathBuf),
     Lib(String),
@@ -35,6 +39,11 @@ enum InputItem {
     WholeArchiveOff,
     GroupStart,
     GroupEnd,
+    /// `-Bstatic` / `-Bdynamic`: what `-l` may find from here on.
+    SearchShared(bool),
+    /// A linker script's `AS_NEEDED` span: a library inside one takes a
+    /// dependency record only where the link binds to it.
+    AsNeeded(bool),
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -98,6 +107,17 @@ struct LdArgs {
     nmagic: bool,
     /// `--eh-frame-hdr`.
     eh_frame_hdr: bool,
+    /// `--dynamic-linker PATH`: the `PT_INTERP` program interpreter.
+    interp: Option<String>,
+    /// `-rpath` / `-R` directories, in command order.
+    rpath: Vec<String>,
+    /// `DT_RUNPATH` rather than `DT_RPATH`, which is what the
+    /// reference `ld` is configured to emit; `--disable-new-dtags`
+    /// selects the older tag.
+    new_dtags: bool,
+    /// `-Bstatic` / `-Bdynamic`: whether `-l` may resolve to a shared
+    /// library. GNU ld starts dynamic and `-static` turns it off.
+    search_shared: bool,
 }
 
 fn ld_err(msg: impl core::fmt::Display) -> i32 {
@@ -243,6 +263,10 @@ pub fn run_ld(args: &[String]) -> i32 {
         symbolic: false,
         nmagic: false,
         eh_frame_hdr: false,
+        interp: None,
+        rpath: Vec::new(),
+        new_dtags: true,
+        search_shared: true,
     };
     let mut it = args.iter().map(String::as_str);
     let next_of = |it: &mut dyn Iterator<Item = &str>, flag: &str| -> Result<String, i32> {
@@ -352,23 +376,42 @@ pub fn run_ld(args: &[String]) -> i32 {
                     None => return ld_err(format!("unknown hash style `{v}`")),
                 }
             }
-            // An interpreter implies PT_INTERP and the `DT_NEEDED`
-            // machinery for resolving imports at run time, which the
-            // script-driven link does not build. Ignoring it would
-            // yield an image that links and cannot start.
-            "--dynamic-linker" => {
-                let _ = next_of(&mut it, arg);
-                return ld_err(format!(
-                    "`{arg}` needs an interpreter and import resolution, \
-                     which the script-driven link does not emit"
-                ));
-            }
+            "--dynamic-linker" | "-dynamic-linker" | "-I" => match next_of(&mut it, arg) {
+                Ok(p) => a.interp = Some(p),
+                Err(c) => return c,
+            },
             s if s.starts_with("--dynamic-linker=") => {
-                return ld_err(
-                    "`--dynamic-linker` needs an interpreter and import resolution, \
-                     which the script-driven link does not emit",
-                );
+                a.interp = Some(s["--dynamic-linker=".len()..].to_string());
             }
+            "-rpath" | "-R" | "--rpath" => match next_of(&mut it, arg) {
+                Ok(p) => a.rpath.push(p),
+                Err(c) => return c,
+            },
+            s if s.starts_with("-rpath=") || s.starts_with("--rpath=") => {
+                a.rpath
+                    .push(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
+            }
+            // `-rpath-link` steers the link-time search for a shared
+            // library's own dependencies, which badc does not follow.
+            "-rpath-link" | "--rpath-link" => {
+                let _ = next_of(&mut it, arg);
+            }
+            s if s.starts_with("-rpath-link=") || s.starts_with("--rpath-link=") => {}
+            "--enable-new-dtags" => a.new_dtags = true,
+            "--disable-new-dtags" => a.new_dtags = false,
+            "-Bstatic" | "-dn" | "-non_shared" | "-static" => {
+                a.inputs.push(InputItem::SearchShared(false));
+                a.search_shared = false;
+            }
+            "-Bdynamic" | "-dy" | "-call_shared" => {
+                a.inputs.push(InputItem::SearchShared(true));
+                a.search_shared = true;
+            }
+            // The LTO plugin has nothing to load: badc reads no IR.
+            "-plugin" => {
+                let _ = next_of(&mut it, arg);
+            }
+            s if s.starts_with("-plugin-opt") => {}
             "--fix-cortex-a53-843419" => {
                 // TODO: scan for the affected adrp page offsets and
                 // materialise veneers.
@@ -431,7 +474,9 @@ pub fn run_ld(args: &[String]) -> i32 {
             "-EL" => {} // little-endian, the only byte order supported
             "-EB" => return ld_err("big-endian output is not supported"),
             "--no-warn-rwx-segments" | "--warn-rwx-segments" => {}
-            "--as-needed" | "--no-as-needed" => {}
+            // badc records a DT_NEEDED for every shared library named
+            // on the command line, so neither keyword changes the tags.
+            "--as-needed" | "--no-as-needed" | "--add-needed" | "--no-add-needed" => {}
             "--gc-sections" => a.gc_sections = true,
             "--no-gc-sections" => a.gc_sections = false,
             s if s.starts_with("--orphan-handling=") => {
@@ -506,7 +551,9 @@ pub fn run_ld(args: &[String]) -> i32 {
     };
 
     let objs: Vec<EtRel> = match collect_inputs(&a, machine) {
-        Ok(o) => o,
+        // A relocatable link records no dependency, so a shared library
+        // named on its command line contributes nothing.
+        Ok((o, _)) => o,
         Err(code) => return code,
     };
     if objs.is_empty() {
@@ -638,12 +685,18 @@ impl InputObject for LdsObject {
 /// spans include every member; other archives contribute members that
 /// resolve undefined references, rescanning to a fixpoint across a
 /// `--start-group` span (a lone archive rescans itself the same way).
-fn collect_inputs<T: InputObject>(a: &LdArgs, machine: Option<u16>) -> Result<Vec<T>, i32> {
+fn collect_inputs<T: InputObject>(
+    a: &LdArgs,
+    machine: Option<u16>,
+) -> Result<(Vec<T>, Vec<SharedInput>), i32> {
     struct PendingArchive {
         members: Vec<(String, Vec<u8>)>,
         taken: Vec<bool>,
     }
     let mut objs: Vec<T> = Vec::new();
+    let mut libs: Vec<SharedInput> = Vec::new();
+    let mut search_shared = true;
+    let mut as_needed = false;
     // `-u SYM` forces a reference before any input is read, so a
     // member defining it is pulled even though nothing else names it.
     let mut undef: HashSet<String> = a.undefined.iter().cloned().collect();
@@ -699,18 +752,26 @@ fn collect_inputs<T: InputObject>(a: &LdArgs, machine: Option<u16>) -> Result<Ve
             .map_err(|e| ld_err(format!("`{}`: {e}", path.display())))?;
         Ok(members.into_iter().map(|m| (m.name, m.bytes)).collect())
     };
-    let find_lib = |name: &str| -> Result<PathBuf, i32> {
+    // GNU ld takes the first directory holding either spelling, and
+    // prefers the shared one there unless the search is static.
+    let find_lib = |name: &str, shared: bool| -> Result<PathBuf, i32> {
         for dir in &a.lib_paths {
-            let p = dir.join(format!("lib{name}.a"));
-            if p.is_file() {
-                return Ok(p);
+            let so = dir.join(format!("lib{name}.so"));
+            if shared && so.is_file() {
+                return Ok(so);
+            }
+            let ar = dir.join(format!("lib{name}.a"));
+            if ar.is_file() {
+                return Ok(ar);
             }
         }
         Err(ld_err(format!("cannot find -l{name}")))
     };
-    for item in &a.inputs {
+    let mut queue: Vec<InputItem> = a.inputs.clone();
+    queue.reverse();
+    while let Some(item) = queue.pop() {
         let path_owned;
-        let path: &Path = match item {
+        let path: &Path = match &item {
             InputItem::WholeArchiveOn => {
                 whole = true;
                 continue;
@@ -733,8 +794,27 @@ fn collect_inputs<T: InputObject>(a: &LdArgs, machine: Option<u16>) -> Result<Ve
                 resolve_span(&mut objs, &mut undef, &mut defined, &mut span)?;
                 continue;
             }
+            InputItem::SearchShared(on) => {
+                search_shared = *on;
+                continue;
+            }
+            InputItem::AsNeeded(on) => {
+                as_needed = *on;
+                continue;
+            }
             InputItem::Lib(name) => {
-                path_owned = find_lib(name)?;
+                path_owned = find_lib(name, search_shared)?;
+                &path_owned
+            }
+            // A name a linker script gave without a directory is
+            // searched the way `-l` is.
+            InputItem::File(p) if !p.is_file() && p.is_relative() => {
+                path_owned = a
+                    .lib_paths
+                    .iter()
+                    .map(|d| d.join(p))
+                    .find(|c| c.is_file())
+                    .unwrap_or_else(|| p.clone());
                 &path_owned
             }
             InputItem::File(p) => p,
@@ -776,6 +856,32 @@ fn collect_inputs<T: InputObject>(a: &LdArgs, machine: Option<u16>) -> Result<Ve
         } else {
             let bytes = std::fs::read(path)
                 .map_err(|e| ld_err(format!("cannot read `{}`: {e}", path.display())))?;
+            if is_shared_object(&bytes) {
+                let mut lib = parse_shared_library(&bytes)
+                    .map_err(|e| ld_err(format!("`{}`: {e}", path.display())))?;
+                if lib.soname.is_empty() {
+                    lib.soname = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                }
+                libs.push(SharedInput { lib, as_needed });
+                continue;
+            }
+            // A non-ELF input is a linker script naming further ones,
+            // which is how a system libc reaches its parts.
+            if !bytes.starts_with(b"\x7fELF") {
+                let text = String::from_utf8_lossy(&bytes);
+                let items = ld_script_inputs(&text);
+                if items.is_empty() {
+                    return Err(ld_err(format!(
+                        "`{}`: neither an object nor a linker script naming inputs",
+                        path.display()
+                    )));
+                }
+                queue.extend(items.into_iter().rev());
+                continue;
+            }
             match T::parse(&path.display().to_string(), bytes) {
                 Ok(o) => note(&mut objs, &mut undef, &mut defined, o),
                 Err(e) => return Err(ld_err(e)),
@@ -796,7 +902,110 @@ fn collect_inputs<T: InputObject>(a: &LdArgs, machine: Option<u16>) -> Result<Ve
             }
         }
     }
-    Ok(objs)
+    Ok((objs, libs))
+}
+
+/// Script words: parentheses stand alone, everything else runs to the
+/// next separator.
+fn tokenize_script(text: &str) -> Vec<&str> {
+    let mut out: Vec<&str> = Vec::new();
+    let mut start: Option<usize> = None;
+    for (i, c) in text.char_indices() {
+        if !(c.is_whitespace() || c == ',' || c == ';' || c == '(' || c == ')') {
+            start.get_or_insert(i);
+            continue;
+        }
+        if let Some(s) = start.take() {
+            out.push(&text[s..i]);
+        }
+        if c == '(' || c == ')' {
+            out.push(&text[i..i + 1]);
+        }
+    }
+    if let Some(s) = start {
+        out.push(&text[s..]);
+    }
+    out
+}
+
+/// Inputs an `INPUT` / `GROUP` command names, in order. A `GROUP` is
+/// bracketed by the group markers, which is what its archive-rescan
+/// semantics amount to, and an `AS_NEEDED` span by the markers that
+/// hold its dependency records back. Any other command is not an input
+/// list and contributes nothing.
+fn ld_script_inputs(text: &str) -> Vec<InputItem> {
+    let text = strip_comments(text);
+    let mut out: Vec<InputItem> = Vec::new();
+    let mut depth = 0usize;
+    // Nesting depths that are input lists, and the ones a `GROUP` and
+    // an `AS_NEEDED` opened.
+    let mut listing: Vec<usize> = Vec::new();
+    let (mut group_at, mut as_needed_at) = (None, None);
+    let mut pending: Option<&str> = None;
+    for t in tokenize_script(&text) {
+        match t {
+            "(" => {
+                depth += 1;
+                match pending.take() {
+                    Some("INPUT") => listing.push(depth),
+                    Some("GROUP") => {
+                        listing.push(depth);
+                        group_at = Some(depth);
+                        out.push(InputItem::GroupStart);
+                    }
+                    Some("AS_NEEDED") if !listing.is_empty() => {
+                        listing.push(depth);
+                        as_needed_at = Some(depth);
+                        out.push(InputItem::AsNeeded(true));
+                    }
+                    _ => {}
+                }
+            }
+            ")" => {
+                if as_needed_at == Some(depth) {
+                    out.push(InputItem::AsNeeded(false));
+                    as_needed_at = None;
+                }
+                if group_at == Some(depth) {
+                    out.push(InputItem::GroupEnd);
+                    group_at = None;
+                }
+                if listing.last() == Some(&depth) {
+                    listing.pop();
+                }
+                depth = depth.saturating_sub(1);
+            }
+            "INPUT" | "GROUP" | "AS_NEEDED" => pending = Some(t),
+            _ if listing.contains(&depth) => match t.strip_prefix("-l") {
+                Some(name) => out.push(InputItem::Lib(name.to_string())),
+                None => out.push(InputItem::File(PathBuf::from(t))),
+            },
+            _ => {}
+        }
+    }
+    out
+}
+
+fn strip_comments(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(k) = rest.find("/*") {
+        out.push_str(&rest[..k]);
+        match rest[k..].find("*/") {
+            Some(e) => rest = &rest[k + e + 2..],
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// True when the bytes are an ELF shared object.
+fn is_shared_object(bytes: &[u8]) -> bool {
+    const ET_DYN: u16 = 3;
+    bytes.len() >= 18
+        && bytes.starts_with(b"\x7fELF")
+        && u16::from_le_bytes([bytes[16], bytes[17]]) == ET_DYN
 }
 
 /// `-z max-page-size=` / GNU ld's size syntax: decimal or `0x` hex,
@@ -824,7 +1033,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         Ok(s) => s,
         Err(e) => return ld_err(format!("{e}")),
     };
-    let objs: Vec<LdsObject> = match collect_inputs(a, machine) {
+    let (objs, libs): (Vec<LdsObject>, Vec<SharedInput>) = match collect_inputs(a, machine) {
         Ok(o) => o,
         Err(code) => return code,
     };
@@ -874,6 +1083,10 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         symbolic: a.symbolic,
         nmagic: a.nmagic,
         eh_frame_hdr: a.eh_frame_hdr,
+        interp: a.interp.clone(),
+        shared_libs: libs,
+        rpath: a.rpath.clone(),
+        new_dtags: a.new_dtags,
     };
     let res = match super::lds_link::link_with_script(&script, objs, &opts) {
         Ok(r) => r,
@@ -976,6 +1189,45 @@ fn report_orphans(
 mod tests {
     use super::*;
     use alloc::vec;
+
+    /// A system `libc.so` is a script naming the parts of the library,
+    /// with the loader itself only where something needs it.
+    #[test]
+    fn a_linker_script_input_names_a_group_and_its_as_needed_span() {
+        let items = ld_script_inputs(
+            "/* GNU ld script */\nOUTPUT_FORMAT(elf64-x86-64)\n\
+             GROUP ( /lib64/libc.so.6 /usr/lib64/libc_nonshared.a \
+             AS_NEEDED ( /lib64/ld-linux-x86-64.so.2 -lgcc_s ) )",
+        );
+        let shape: Vec<String> = items
+            .iter()
+            .map(|i| match i {
+                InputItem::GroupStart => String::from("{"),
+                InputItem::GroupEnd => String::from("}"),
+                InputItem::AsNeeded(on) => alloc::format!("as-needed={on}"),
+                InputItem::File(p) => p.display().to_string(),
+                InputItem::Lib(n) => alloc::format!("-l{n}"),
+                _ => String::from("?"),
+            })
+            .collect();
+        assert_eq!(
+            shape,
+            vec![
+                "{",
+                "/lib64/libc.so.6",
+                "/usr/lib64/libc_nonshared.a",
+                "as-needed=true",
+                "/lib64/ld-linux-x86-64.so.2",
+                "-lgcc_s",
+                "as-needed=false",
+                "}",
+            ]
+        );
+        assert!(
+            ld_script_inputs("OUTPUT_FORMAT(elf64-x86-64)").is_empty(),
+            "a script naming no inputs contributes none"
+        );
+    }
 
     /// `scripts/ld-version.sh`: `10000*major + 100*minor + patch`, with a
     /// missing field zero and anything past the third ignored.

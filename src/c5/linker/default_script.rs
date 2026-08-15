@@ -21,6 +21,7 @@ pub fn default_script(shared: bool) -> String {
         r#"SECTIONS
 {{
   . = {base} + SIZEOF_HEADERS;
+  .interp : {{ *(.interp) }}
   .note.gnu.property : {{ *(.note.gnu.property) }}
   .note.gnu.build-id : {{ *(.note.gnu.build-id) }}
   .hash : {{ *(.hash) }}
@@ -33,6 +34,7 @@ pub fn default_script(shared: bool) -> String {
   .rela.dyn : {{ *(.rela.dyn) *(.rela.*) }}
   .relr.dyn : {{ *(.relr.dyn) }}
   .init : {{ KEEP (*(SORT_NONE(.init))) }}
+  .plt : {{ *(.plt) }}
   .text : {{ *(.text .text.* .gnu.linkonce.t.*) }}
   .fini : {{ KEEP (*(SORT_NONE(.fini))) }}
   .rodata : {{ *(.rodata .rodata.* .gnu.linkonce.r.*) }}

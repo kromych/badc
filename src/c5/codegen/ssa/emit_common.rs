@@ -5431,9 +5431,10 @@ pub(crate) fn subsection_order(blocks: &[AsmSectionBlock]) -> alloc::vec::Vec<us
 /// with the location counter at `here`: the counter itself, a `.set` value,
 /// a template label of the enclosing statement, a section label of this
 /// call, or a label an earlier statement left in the sink. A name none of
-/// those define is followed through its `.set name, symbol` chain, as GNU
-/// as follows it. `None` is an undefined symbol. A numeric reference binds
-/// only within this call, per GNU as label locality.
+/// those define takes the value of the name its `.set name, symbol` chain
+/// ends at; its relocation still names what the source wrote, as GNU as
+/// resolves the chain for the value alone. `None` is an undefined symbol. A
+/// numeric reference binds only within this call, per GNU as label locality.
 fn section_expr_leaf(
     t: &str,
     key: &str,
@@ -5449,21 +5450,39 @@ fn section_expr_leaf(
             target: AsmSectionTarget::OwnSection(here as u32),
         }));
     }
-    let mut t = t;
+    if let Some(leaf) = section_expr_defined_leaf(t, measured, sink_labels, num_unique, label_off) {
+        return Some(leaf);
+    }
+    let mut cur = t;
     for _ in 0..ASM_ALIAS_DEPTH_LIMIT {
+        let Some(next) = measured.alias(cur) else {
+            break;
+        };
+        cur = next;
         if let Some(leaf) =
-            section_expr_defined_leaf(t, measured, sink_labels, num_unique, label_off)
+            section_expr_defined_leaf(cur, measured, sink_labels, num_unique, label_off)
         {
-            return Some(leaf);
-        }
-        match measured.alias(t) {
-            Some(next) => t = next,
-            None => break,
+            return Some(leaf_named(leaf, t));
         }
     }
     // Last, so a label of the same name wins: a bare section name is that
     // section's start.
-    measured.section_named(t).map(section_start_leaf)
+    measured.section_named(cur).map(section_start_leaf)
+}
+
+/// A leaf reached through a `.set` chain, renamed to the symbol the source
+/// wrote. An absolute value and a region reference name no symbol.
+fn leaf_named(leaf: AsmExprLeaf, name: &str) -> AsmExprLeaf {
+    match leaf {
+        AsmExprLeaf::Loc(AsmExprTerm {
+            space,
+            target: AsmSectionTarget::Symbol(_),
+        }) => AsmExprLeaf::Loc(AsmExprTerm {
+            space,
+            target: AsmSectionTarget::Symbol(alloc::string::String::from(name)),
+        }),
+        other => other,
+    }
 }
 
 /// The leaf for a name the layout defines; `None` leaves the name to the
@@ -6972,8 +6991,9 @@ pub(crate) fn materialize_asm_sections(
                             }
                         }
                         let (leaf, local) = match &r.target {
-                            // A `.set` alias carries the locality of the name
-                            // its chain ends at, as its location does.
+                            // An instruction field resolves and binds as the
+                            // name its `.set` chain ends at does; a data
+                            // directive's field keeps the name written.
                             AsmSectionTarget::Symbol(n) => {
                                 let n = measured.alias_target(n.as_str());
                                 (

@@ -1141,22 +1141,33 @@ fn text_of(name: &str, src: &str) -> Vec<u8> {
 
 /// Assemble `src` for x86_64 and return the object bytes.
 fn object_of(name: &str, src: &str) -> Vec<u8> {
+    object_for(name, src, "linux-x64")
+}
+
+/// Assemble `src` for `target` and return the object bytes.
+fn object_for(name: &str, src: &str, target: &str) -> Vec<u8> {
     let d = dir(name);
     write(&d, "b.s", src);
-    run_ok(&d, &["-q", "-c", "--target=linux-x64", "b.s", "-o", "b.o"]);
+    let t = format!("--target={target}");
+    run_ok(&d, &["-q", "-c", &t, "b.s", "-o", "b.o"]);
     std::fs::read(d.join("b.o")).expect("object")
 }
 
 /// `(offset, type, symbol name, addend)` of every `.rela.text` entry.
 fn text_relocs(name: &str, src: &str) -> Vec<(u64, u32, String, i64)> {
-    let bytes = object_of(name, src);
+    named_relocs(&object_of(name, src), ".rela.text")
+}
+
+/// `(offset, type, symbol name, addend)` of every entry of the named RELA
+/// section of an ELF64 object.
+fn named_relocs(bytes: &[u8], want: &str) -> Vec<(u64, u32, String, i64)> {
     let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
     let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
     let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
     let shoff = u64at(0x28) as usize;
     let shentsize = u16at(0x3a);
     let shnum = u16at(0x3c);
-    // The symbol table `.rela.text` indexes, with the string table it names.
+    // The symbol table the RELA section indexes, with its string table.
     let (symtab, stroff) = (0..shnum)
         .map(|i| shoff + i * shentsize)
         .find(|&sh| u32at(sh + 4) == 2)
@@ -1184,7 +1195,7 @@ fn text_relocs(name: &str, src: &str) -> Vec<(u64, u32, String, i64)> {
     };
     let named = (0..shnum)
         .map(|i| shoff + i * shentsize)
-        .find(|&sh| str_at(strtab, u32at(sh)) == ".rela.text");
+        .find(|&sh| str_at(strtab, u32at(sh)) == want);
     let Some(sh) = named else {
         return Vec::new();
     };
@@ -1358,6 +1369,47 @@ fn a_branch_to_a_set_alias_follows_the_chain() {
         text_relocs("alias-glob-rel", src),
         [(1, 4, String::from("g"), -4)],
     );
+}
+
+/// A data field naming a `.set name, symbol` alias relocates against the
+/// name the source wrote: the chain supplies the value, not the symbol the
+/// relocation names, which is how GNU as 2.46.1 assembles the source below
+/// on both targets. `SYM_FUNC_ALIAS` plus `EXPORT_SYMBOL` gives the kernel
+/// one `.export_symbol` entry per name, and modpost matches each entry's
+/// label suffix against the name its relocation targets, so reducing the
+/// entry to the aliased name rejects the export.
+#[test]
+fn a_data_reference_to_a_set_alias_names_the_written_symbol() {
+    const X86_64: u32 = 1;
+    const A64_ABS64: u32 = 257;
+    let src = concat!(
+        "\t.text\n\t.globl memcpy\nmemcpy:\n\tnop\n",
+        "\t.globl __memcpy\n\t.set __memcpy, memcpy\n",
+        "\t.section \"exp\",\"a\"\n\t.quad __memcpy\n\t.quad memcpy\n"
+    );
+    for (target, kind) in [("linux-x64", X86_64), ("linux-aarch64", A64_ABS64)] {
+        let o = object_for(&format!("alias-data-{target}"), src, target);
+        assert_eq!(
+            named_relocs(&o, ".relaexp"),
+            [
+                (0, kind, String::from("__memcpy"), 0),
+                (8, kind, String::from("memcpy"), 0),
+            ],
+            "{target}"
+        );
+    }
+    // A branch still resolves through the chain: the alias of a local label
+    // of the branch's own section needs no relocation on either target.
+    let src = "\t.text\nf:\n\tjmp a\n\tnop\nt:\n\tnop\n\t.set a, t\n";
+    assert_eq!(
+        text_of("alias-data-branch-x64", src),
+        [0xeb, 0x01, 0x90, 0x90]
+    );
+    assert_eq!(text_relocs("alias-data-branch-x64-rel", src), []);
+    let src = "\t.text\nf:\n\tb a\n\tnop\nt:\n\tnop\n\t.set a, t\n";
+    let o = object_for("alias-data-branch-a64", src, "linux-aarch64");
+    assert_eq!(&section64(&o, ".text")[..4], [0x02, 0x00, 0x00, 0x14]);
+    assert_eq!(named_relocs(&o, ".rela.text"), []);
 }
 
 /// `call` has no `rel8` form, so it keeps `e8 rel32` at any distance.

@@ -1328,6 +1328,38 @@ fn a_relocated_branch_keeps_the_long_form() {
     assert_eq!(&t[..5], [0xe9, 0, 0, 0, 0], "global target in this section");
 }
 
+/// A branch to a `.set name, symbol` alias takes the location and the
+/// binding of the name the chain ends at. An alias of a local label of the
+/// branch's own section resolves at assembly time and takes the short form,
+/// and one of a label of another section reduces to that section's symbol;
+/// both are GNU as 2.46.1's encoding of the same source. An alias of a name
+/// the unit binds global keeps its relocation, against the name the chain
+/// ends at, as a direct reference to that name does.
+#[test]
+fn a_branch_to_a_set_alias_follows_the_chain() {
+    let src = "\t.text\nf:\n\tjmp a\n\tnop\nt:\n\tnop\n\t.set a, t\n";
+    assert_eq!(text_of("alias-local", src), [0xeb, 0x01, 0x90, 0x90]);
+    assert_eq!(text_relocs("alias-local-rel", src), []);
+    // A chain of assignments resolves the same way.
+    let src = "\t.text\nf:\n\tjmp a\n\tnop\nt:\n\tnop\n\t.set a, b\n\t.set b, t\n";
+    assert_eq!(text_of("alias-chain", src), [0xeb, 0x01, 0x90, 0x90]);
+    assert_eq!(text_relocs("alias-chain-rel", src), []);
+    // An alias of a label of another section reduces to that section.
+    let src = "\t.text\nf:\n\tjmp ya\n\t.set ya, o\n\t.section .other,\"ax\"\no:\n\tnop\n";
+    assert_eq!(&text_of("alias-xsec", src)[..5], [0xe9, 0, 0, 0, 0]);
+    assert_eq!(
+        text_relocs("alias-xsec-rel", src),
+        [(1, 2, String::from(".other"), -4)],
+    );
+    // An alias of a global keeps the relocation the target's binding needs.
+    let src = "\t.text\n\t.globl g\nf:\n\tjmp ga\n\tnop\ng:\n\tnop\n\t.set ga, g\n";
+    assert_eq!(&text_of("alias-glob", src)[..5], [0xe9, 0, 0, 0, 0]);
+    assert_eq!(
+        text_relocs("alias-glob-rel", src),
+        [(1, 4, String::from("g"), -4)],
+    );
+}
+
 /// `call` has no `rel8` form, so it keeps `e8 rel32` at any distance.
 #[test]
 fn a_near_call_is_not_shortened() {

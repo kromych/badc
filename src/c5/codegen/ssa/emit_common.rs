@@ -5222,6 +5222,9 @@ pub(crate) struct SectionLabelOffsets {
     /// index. A `.rept` body item is absent: its statements occupy one
     /// offset per repetition, so the location counter has no value there.
     places: alloc::collections::BTreeMap<(usize, usize), i64>,
+    /// `.set name, symbol` assignments. A reference to one reads the
+    /// location the chain ends at, as GNU as resolves it.
+    aliases: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
 }
 
 impl SectionLabelOffsets {
@@ -5255,6 +5258,31 @@ impl SectionLabelOffsets {
     /// item has no single place.
     pub(crate) fn place(&self, site: (usize, usize)) -> Option<i64> {
         self.places.get(&site).copied()
+    }
+    /// The `.set name, symbol` target of a name, or `None` when the section
+    /// defines the name itself -- a label or an assigned value wins over an
+    /// assignment of the same name, as it does when valuing a `.set`.
+    fn alias(&self, name: &str) -> Option<&str> {
+        if self
+            .map
+            .contains_key(numeric_label_digits(name).unwrap_or(name))
+            || self.syms.contains_key(name)
+        {
+            return None;
+        }
+        self.aliases.get(name).map(|t| t.as_str())
+    }
+    /// Follow a `.set` chain to the name it ends at; the depth limit ends a
+    /// cycle. A name with no assignment is its own target.
+    pub(crate) fn alias_target<'a>(&'a self, name: &'a str) -> &'a str {
+        let mut t = name;
+        for _ in 0..ASM_ALIAS_DEPTH_LIMIT {
+            match self.alias(t) {
+                Some(next) => t = next,
+                None => break,
+            }
+        }
+        t
     }
 }
 
@@ -5402,9 +5430,10 @@ pub(crate) fn subsection_order(blocks: &[AsmSectionBlock]) -> alloc::vec::Vec<us
 /// Resolve one leaf of a location expression evaluated inside section `key`
 /// with the location counter at `here`: the counter itself, a `.set` value,
 /// a template label of the enclosing statement, a section label of this
-/// call, or a label an earlier statement left in the sink. `None` is an
-/// undefined symbol. A numeric reference binds only within this call, per
-/// GNU as label locality.
+/// call, or a label an earlier statement left in the sink. A name none of
+/// those define is followed through its `.set name, symbol` chain, as GNU
+/// as follows it. `None` is an undefined symbol. A numeric reference binds
+/// only within this call, per GNU as label locality.
 fn section_expr_leaf(
     t: &str,
     key: &str,
@@ -5420,6 +5449,32 @@ fn section_expr_leaf(
             target: AsmSectionTarget::OwnSection(here as u32),
         }));
     }
+    let mut t = t;
+    for _ in 0..ASM_ALIAS_DEPTH_LIMIT {
+        if let Some(leaf) =
+            section_expr_defined_leaf(t, measured, sink_labels, num_unique, label_off)
+        {
+            return Some(leaf);
+        }
+        match measured.alias(t) {
+            Some(next) => t = next,
+            None => break,
+        }
+    }
+    // Last, so a label of the same name wins: a bare section name is that
+    // section's start.
+    measured.section_named(t).map(section_start_leaf)
+}
+
+/// The leaf for a name the layout defines; `None` leaves the name to the
+/// alias chain and the section names.
+fn section_expr_defined_leaf(
+    t: &str,
+    measured: &SectionLabelOffsets,
+    sink_labels: &AsmSinkLabels,
+    num_unique: &alloc::collections::BTreeMap<&str, alloc::string::String>,
+    label_off: &dyn Fn(&str) -> Option<LabelLoc>,
+) -> Option<AsmExprLeaf> {
     if let Some(v) = measured.symbol(t) {
         return Some(AsmExprLeaf::Abs(v));
     }
@@ -5455,9 +5510,7 @@ fn section_expr_leaf(
             target: AsmSectionTarget::Symbol(alloc::string::String::from(t)),
         }));
     }
-    // Last, so a label of the same name wins: a bare section name is that
-    // section's start.
-    measured.section_named(t).map(section_start_leaf)
+    None
 }
 
 /// The start of the section with identity key `sk`, as an expression leaf.
@@ -5674,10 +5727,13 @@ fn short_branch_reaches(
     let AsmSectionTarget::Symbol(name) = &short.reloc.target else {
         return false;
     };
-    // A `.set` name is an absolute value, not a location in this section,
-    // and a global or weak name may bind to another definition at link
-    // time, so its reference keeps a relocation at the long form's width.
-    if m.symbol(name).is_some() || non_local.contains(name.as_str()) {
+    // The reference takes the location and the binding of the name its
+    // `.set` chain ends at. A `.set` expression name is an absolute value,
+    // not a location in this section, and a global or weak name may bind to
+    // another definition at link time, so either keeps a relocation at the
+    // long form's width.
+    let name = m.alias_target(name.as_str());
+    if m.symbol(name).is_some() || non_local.contains(name) {
         return false;
     }
     let (Some(sec), Some(off)) = (m.section(name), m.offset(name)) else {
@@ -6035,6 +6091,7 @@ fn measure_round_inner(
         long: AsmRelaxSet::new(),
         sections,
         places,
+        aliases,
     })
 }
 
@@ -6915,18 +6972,23 @@ pub(crate) fn materialize_asm_sections(
                             }
                         }
                         let (leaf, local) = match &r.target {
-                            AsmSectionTarget::Symbol(n) => (
-                                section_expr_leaf(
-                                    n,
-                                    &key,
-                                    0,
-                                    &measured,
-                                    sink_labels,
-                                    &num_unique,
-                                    label_off,
-                                ),
-                                !non_local.contains(n.as_str()),
-                            ),
+                            // A `.set` alias carries the locality of the name
+                            // its chain ends at, as its location does.
+                            AsmSectionTarget::Symbol(n) => {
+                                let n = measured.alias_target(n.as_str());
+                                (
+                                    section_expr_leaf(
+                                        n,
+                                        &key,
+                                        0,
+                                        &measured,
+                                        sink_labels,
+                                        &num_unique,
+                                        label_off,
+                                    ),
+                                    !non_local.contains(n),
+                                )
+                            }
                             _ => (None, true),
                         };
                         match leaf {

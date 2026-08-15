@@ -6358,6 +6358,42 @@ fn strchrnul_memrchr_and_explicit_bzero_declare_on_every_target() {
 }
 
 #[test]
+fn mach_vm_statistics_carries_the_user_memory_tags() {
+    use crate::Target;
+    // The allocator tag namespace and the shift that places a tag in the
+    // top 8 bits of a VM flags word. Values follow the macOS SDK's
+    // <mach/vm_statistics.h>.
+    let src = "#include <mach/vm_statistics.h>\n\
+        int ck[(VM_MAKE_TAG(VM_MEMORY_MALLOC)==0x01000000 \
+             && VM_MEMORY_MALLOC==1 && VM_MEMORY_MALLOC_SMALL==2 \
+             && VM_MEMORY_MALLOC_NANO==11 && VM_MEMORY_STACK==30 \
+             && VM_MEMORY_DYLD==60 && VM_MEMORY_SQLITE==62 \
+             && VM_MEMORY_SANITIZER==99 && VM_MEMORY_IOACCELERATOR==100 \
+             && VM_MEMORY_APPLICATION_SPECIFIC_1==240 \
+             && VM_MEMORY_APPLICATION_SPECIFIC_16==255 \
+             && VM_MEMORY_COUNT==256 \
+             && VM_MEMORY_CARBON==VM_MEMORY_CORESERVICES \
+             && VM_FLAGS_ANYWHERE==1 && VM_FLAGS_OVERWRITE==0x4000 \
+             && VM_FLAGS_ALIAS_MASK==0xFF000000 \
+             && VM_FLAGS_SUPERPAGE_SIZE_2MB==(2<<16))?1:-1];\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+    // A Mach tag has no meaning off Darwin; mimalloc's own probe is
+    // `#if defined(VM_MAKE_TAG)`, so defining it elsewhere would select a
+    // tagged mmap on a kernel that reads the fd argument as a descriptor.
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "the Mach memory tags must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
 fn sys_types_declares_time_t() {
     use crate::Target;
     // POSIX-2017 requires <sys/types.h> to define `time_t`; system

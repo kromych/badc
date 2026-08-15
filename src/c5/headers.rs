@@ -218,6 +218,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "mach/task.h",
         include_str!("../../libc/include/mach/task.h"),
     ),
+    (
+        "mach/vm_statistics.h",
+        include_str!("../../libc/include/mach/vm_statistics.h"),
+    ),
     ("sysexits.h", include_str!("../../libc/include/sysexits.h")),
     (
         "sys/sys_domain.h",

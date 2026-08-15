@@ -21,10 +21,10 @@ typedef struct {
 } pair_t;
 
 typedef unsigned fn1_t();
-typedef unsigned long fn2_t();
+typedef unsigned long long fn2_t();
 
 unsigned take_kuid(kuid_t k) { return k.val; }
-unsigned long take_pair(pair_t p) { return ((unsigned long)p.hi << 32) | p.lo; }
+unsigned long long take_pair(pair_t p) { return ((unsigned long long)p.hi << 32) | p.lo; }
 
 /* The declared parameter list goes out of scope at the call site. */
 extern fn1_t take_kuid;
@@ -38,7 +38,7 @@ int main(void) {
     pair_t p = {0x11223344u, 0x55667788u};
 
     if (take_kuid(k) != 0xdeadbeefu) return 1;
-    if (take_pair(p) != 0x5566778811223344UL) return 2;
+    if (take_pair(p) != 0x5566778811223344ULL) return 2;
     if (take_kuid_proto(k) != 0xdeadbeefu) return 3;
 
     /* The caller's copy is unchanged by either form. */

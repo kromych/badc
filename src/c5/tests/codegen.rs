@@ -2541,16 +2541,19 @@ fn bss_segregation_resolves_data_pointer_into_bss() {
     let (bss_addr, bss_size) =
         elf64_section_addr_size(&bytes, ".bss").expect(".bss section must be present");
     assert!(bss_size > 0, ".bss must be non-empty");
-    let data = elf64_section(&bytes, ".data").expect(".data bytes");
     // Some 8-byte data word holds `gp = &g[3]`, a pointer into `.bss`.
     // Before the fix it pointed into `.data` and nothing reached `.bss`.
-    let into_bss = data
-        .chunks_exact(8)
+    // A relocated `const` object rides `.data.rel.ro`, so both writable
+    // streams are searched.
+    let into_bss = [".data", ".data.rel.ro"]
+        .iter()
+        .filter_map(|name| elf64_section(&bytes, name))
+        .flat_map(|sec| sec.chunks_exact(8))
         .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .any(|v| v >= bss_addr && v < bss_addr + bss_size);
     assert!(
         into_bss,
-        ".data must hold a pointer into .bss [{bss_addr:#x}, {:#x})",
+        "the data streams must hold a pointer into .bss [{bss_addr:#x}, {:#x})",
         bss_addr + bss_size
     );
 }

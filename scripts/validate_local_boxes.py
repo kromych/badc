@@ -15,9 +15,9 @@ Each lane:
      builds + fetches its own caches.
   2. Build release with `cargo build --release --locked`.
   3. Run `cargo test --release` (all test targets).
-  4. On Linux lanes, rerun the suite under the register-pressure caps
-     (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--features "codegen_test full"`)
-     as CI's pressure matrix does.
+  4. On Linux lanes, rerun the lib suite under the register-pressure caps
+     (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--lib --features "codegen_test full"`),
+     the same scope as CI's pressure matrix.
   5. Run the gating demos (`GATING_DEMOS` below).
   6. On Linux lanes, compile and link the pinned `defconfig` kernel with
      badc -- CI's kernel corpus, not the vendored minimal configs. Skip
@@ -215,8 +215,12 @@ def remote_run_linux(box: Box, github_token: str, kernel: bool, demos: bool) -> 
         # CI additionally runs the suite under register-pressure caps
         # (BADC_MAX_GPR / BADC_MAX_FPR over several N); N=2 is the value
         # that has caught spill-interaction bugs the default banks hide.
+        # The capped rerun keeps CI's --lib scope: the caps reach every
+        # badc the tests spawn, and an integration fixture asserting an
+        # optimization-strength property does not hold under a 2-register
+        # bank.
         "step env BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
-        'cargo test --release --features "codegen_test full"',
+        'cargo test --release --lib --features "codegen_test full"',
     ]
     if demos:
         steps += [f"step python3 {d}" for d in GATING_DEMOS]

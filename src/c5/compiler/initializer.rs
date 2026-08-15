@@ -3304,14 +3304,39 @@ impl Compiler {
     }
 
     /// The anonymous member whose promoted run starts at `field_idx`, if
-    /// any. A run with no fields of its own has nothing to initialize and
-    /// shares its start with the entry after it, so it is not one.
+    /// any, searched through the nested records (each promotion level
+    /// keeps its own), with `first` and `offset` rebased to `struct_id`.
+    /// The outermost run starting there wins: its brace opens first, and
+    /// deeper levels open through its own initializer. A run with no
+    /// fields of its own has nothing to initialize and shares its start
+    /// with the entry after it, so it is not one.
     fn anon_member_starting_at(&self, struct_id: usize, field_idx: usize) -> Option<AnonMember> {
-        self.structs[struct_id]
-            .anon_members
-            .iter()
-            .copied()
-            .find(|m| m.count > 0 && m.first as usize == field_idx)
+        let mut agg = struct_id;
+        let mut first_base = 0usize;
+        let mut offset_base = 0usize;
+        loop {
+            let runs = &self.structs[agg].anon_members;
+            if let Some(m) = runs
+                .iter()
+                .copied()
+                .find(|m| m.count > 0 && first_base + m.first as usize == field_idx)
+            {
+                return Some(AnonMember {
+                    first: (first_base + m.first as usize) as u32,
+                    offset: offset_base + m.offset,
+                    ..m
+                });
+            }
+            let Some(m) = runs.iter().copied().find(|m| {
+                let start = first_base + m.first as usize;
+                m.count > 0 && field_idx > start && field_idx < start + m.count as usize
+            }) else {
+                return None;
+            };
+            first_base += m.first as usize;
+            offset_base += m.offset;
+            agg = m.inner;
+        }
     }
 
     /// The positional cursor after filling field `i` of `struct_id`.

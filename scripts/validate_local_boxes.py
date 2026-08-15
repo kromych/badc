@@ -383,6 +383,13 @@ def sync_windows(box: Box, github_token: str) -> int:
     # not prune, so a file deleted or renamed in the working tree would linger
     # on the box and collide with its replacement (e.g. a module that became a
     # directory). target/ and .git are siblings and are preserved.
+    #
+    # demos/ is not pruned: it holds the fetched-source caches the tar excludes,
+    # and refetching them every run costs more than the staleness it would
+    # clear. The one class of stale file that has actually broken a lane is
+    # swept instead -- AppleDouble `._*` members, which the tar no longer packs
+    # but which a box synced before that exclusion still carries. A demo that
+    # globs `src/*.c` compiles one and fails on invalid UTF-8.
     return stream(
         box.short,
         [
@@ -391,6 +398,7 @@ def sync_windows(box: Box, github_token: str) -> int:
             f'cmd /c "mkdir {remote_path} 2>NUL & '
             f"cd /d {remote_path} && "
             f"rmdir /s /q src 2>NUL & rmdir /s /q tests 2>NUL & "
+            f"del /s /q /f ._* 2>NUL & "
             f'tar xzf C:\\tmp\\badc-tree.tar.gz"',
         ],
     )

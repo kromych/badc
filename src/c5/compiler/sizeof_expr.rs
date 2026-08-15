@@ -50,6 +50,16 @@ impl Compiler {
         Ok(ok)
     }
 
+    /// C11 6.5.3.4p1: neither operator applies to an incomplete type. A
+    /// pointer to an incomplete tag is itself complete, so the callers
+    /// check only where no pointer decoration was parsed.
+    fn require_complete_operand(&self, ty: i64, op: &str) -> Result<(), C5Error> {
+        match self.incomplete_aggregate_tag(ty) {
+            Some(_) => Err(self.compile_err(format!("`{op}` applied to an incomplete type"))),
+            None => Ok(()),
+        }
+    }
+
     pub(super) fn sizeof_operand_bytes(&mut self) -> Result<i64, C5Error> {
         // Cleared each call; set only when the operand is a VLA whose
         // size the `sizeof` site must read at runtime (C99 6.5.3.4p2).
@@ -134,6 +144,9 @@ impl Compiler {
                 self.next()?;
                 array_count *= n;
             }
+            if !decayed_to_ptr {
+                self.require_complete_operand(self.ty, "sizeof")?;
+            }
             let elem_size = self.size_of_type(self.ty) as i64;
             let zero_len = core::mem::take(&mut self.pending.typedef_base_zero_len);
             let base = if typedef_dim > 0 && !decayed_to_ptr {
@@ -167,6 +180,13 @@ impl Compiler {
             let idx = self.lex.curr_id_idx;
             let var_ty = self.symbols[idx].type_;
             let arr = self.symbols[idx].array_size;
+            // An array declared with an unspecified bound (`extern T x[];`,
+            // C99 6.7.5.2p4) has no size here either; a zero-length array
+            // is a complete type.
+            self.require_complete_operand(var_ty, "sizeof")?;
+            if arr < 0 && !self.symbols[idx].is_zero_len_array {
+                return Err(self.compile_err("`sizeof` applied to an incomplete type"));
+            }
             // C99 6.5.3.4p2: `sizeof` of a VLA is the runtime byte
             // count. Signal the caller to load it from the VLA's
             // size slot; the returned constant is unused in that case.
@@ -251,6 +271,9 @@ impl Compiler {
                 // whole object is 0 bytes.
                 0
             } else {
+                // An expression operand reaches the same constraint
+                // (`sizeof(*p)` for a pointer to an incomplete tag).
+                self.require_complete_operand(expr_ty, "sizeof")?;
                 self.size_of_type(expr_ty) as i64
             }
         };
@@ -525,6 +548,7 @@ impl Compiler {
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_reloc);
             self.ty = saved_ty;
+            self.require_complete_operand(expr_ty, "_Alignof")?;
             return Ok(self.align_of_type(expr_ty) as i64);
         }
         self.next()?;
@@ -550,6 +574,7 @@ impl Compiler {
                 return Err(self.compile_err("`)` expected to close `_Alignof`"));
             }
             self.next()?;
+            self.require_complete_operand(expr_ty, "_Alignof")?;
             return Ok(self.align_of_type(expr_ty) as i64);
         }
         let saved_ty = self.ty;
@@ -589,6 +614,9 @@ impl Compiler {
             return Err(self.compile_err("`)` expected to close `_Alignof`"));
         }
         self.next()?;
+        if !had_ptr {
+            self.require_complete_operand(self.ty, "_Alignof")?;
+        }
         let align = if type_align_override > 0 && !had_ptr {
             type_align_override
         } else {

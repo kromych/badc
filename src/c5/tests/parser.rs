@@ -2317,3 +2317,52 @@ fn object_of_incomplete_type_is_diagnosed() {
     .compile()
     .expect("a completed tentative definition, a block extern, and a pointer stay legal");
 }
+
+#[test]
+fn sizeof_of_an_incomplete_type_is_diagnosed() {
+    // C99 6.5.3.4p1 / C11 6.5.3.4p1: neither operator applies to an
+    // incomplete type, whether the operand is a type name, an identifier,
+    // or an expression.
+    expect_compile_error(
+        "struct Undef;\n\
+         int a[sizeof(struct Undef)];\n\
+         int main(void) { return a[0]; }",
+        "`sizeof` applied to an incomplete type",
+    );
+    expect_compile_error(
+        "union Undef;\n\
+         int main(void) { return (int)sizeof(union Undef); }",
+        "`sizeof` applied to an incomplete type",
+    );
+    // An array declared with an unspecified bound (C99 6.7.5.2p4).
+    expect_compile_error(
+        "extern int x[];\n\
+         int main(void) { return (int)sizeof(x); }",
+        "`sizeof` applied to an incomplete type",
+    );
+    // Through an expression operand.
+    expect_compile_error(
+        "struct Undef;\n\
+         struct Undef *p;\n\
+         int main(void) { return (int)sizeof(*p); }",
+        "`sizeof` applied to an incomplete type",
+    );
+    expect_compile_error(
+        "struct Undef;\n\
+         int main(void) { return (int)_Alignof(struct Undef); }",
+        "`_Alignof` applied to an incomplete type",
+    );
+    // A pointer to an incomplete type is complete, as is an array of a
+    // complete tag and a tag completed before the operator is applied.
+    Compiler::new(
+        "struct Undef;\n\
+         struct Later;\n\
+         struct Later { int a; int b; };\n\
+         extern int x[];\n\
+         int main(void) { return (int)(sizeof(struct Undef *) + sizeof(x[0])\n\
+         + sizeof(struct Later) + _Alignof(struct Undef *) + _Alignof(struct Later)) - 25; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("pointers to an incomplete tag and completed tags stay legal");
+}

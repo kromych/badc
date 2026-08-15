@@ -297,6 +297,13 @@ fn every_fixture_compiles_standalone_for_linux() {
         .expect("read tests/fixtures/c")
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("c"))
+        // A hidden file is not a fixture; macOS sync tooling plants
+        // AppleDouble `._*.c` companions next to the real ones.
+        .filter(|p| {
+            p.file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|n| !n.starts_with('.'))
+        })
         .collect();
     entries.sort();
     assert!(

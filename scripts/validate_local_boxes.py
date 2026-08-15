@@ -237,6 +237,10 @@ def remote_run_linux(box: Box, github_token: str, kernel: bool, demos: bool) -> 
 
 def sync_windows(box: Box, github_token: str) -> int:
     archive = Path("/tmp/badc-tree.tar.gz")
+    # macOS bsdtar synthesizes AppleDouble `._*` members for files
+    # carrying extended attributes; `--exclude` cannot filter entries
+    # created during packing, so they land on the box as stray files.
+    tar_env = dict(os.environ, COPYFILE_DISABLE="1")
     tar = subprocess.run(
         [
             "tar",
@@ -255,6 +259,7 @@ def sync_windows(box: Box, github_token: str) -> int:
         capture_output=True,
         text=True,
         errors="replace",
+        env=tar_env,
     )
     if tar.returncode != 0:
         sys.stdout.write(f"[{box.short}] tar failed: {tar.stderr}\n")

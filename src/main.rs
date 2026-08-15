@@ -1821,6 +1821,11 @@ fn run() {
         *stdin_cache.borrow_mut() = Some(s.clone());
         s
     };
+    // The pre-read every mode that resolves `-` through `read_tu_source`
+    // shares, so a `--jobs` worker never touches the process stream.
+    let stdin_src_of = |srcs: &[String]| -> Option<String> {
+        srcs.iter().any(|s| s == "-").then(&read_stdin_source)
+    };
 
     // `-M` / `-MM` preprocess only: emit the rule and produce no
     // object, as gcc does.
@@ -2086,13 +2091,8 @@ fn run() {
         let multi_tu = sources.len() > 1;
         // `.c` -> in-memory native ELF64 ET_REL: each source compiles
         // straight to ET_REL bytes that `parse_native_elf` reads back,
-        // so no intermediate `.o` is written to disk. Stdin is read once
-        // here so a `--jobs` worker never touches the process stream.
-        let stdin_src = if sources.iter().any(|s| s == "-") {
-            Some(read_stdin_source())
-        } else {
-            None
-        };
+        // so no intermediate `.o` is written to disk.
+        let stdin_src = stdin_src_of(&sources);
         let cfg = CompileCfg {
             target,
             reloc_opts,
@@ -2691,6 +2691,7 @@ fn run() {
             std::process::exit(1);
         }
         let source_count = sources.len();
+        let stdin_src = stdin_src_of(&sources);
         // Relocatable `-c` builds do not require `main`; the linker
         // picks the entry once it merges every TU.
         use badc::OutputKind;
@@ -2734,7 +2735,7 @@ fn run() {
             force_includes: &force_includes,
             deps: deps.as_ref(),
             dep_output: output_path.as_deref(),
-            stdin_src: None,
+            stdin_src: stdin_src.as_deref(),
         };
         if let Some(out) = output_path.as_deref() {
             if source_count != 1 {
@@ -2841,6 +2842,7 @@ fn run() {
         reloc_opts.output_kind = OutputKind::Relocatable;
         let stderr_is_tty = std::io::stderr().is_terminal();
         let multi_tu = sources.len() > 1;
+        let stdin_src = stdin_src_of(&sources);
         let cfg = CompileCfg {
             target,
             reloc_opts,
@@ -2865,7 +2867,7 @@ fn run() {
             // analogue for archive assembly.
             deps: None,
             dep_output: None,
-            stdin_src: None,
+            stdin_src: stdin_src.as_deref(),
         };
         let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(total_inputs);
         let mut sym_index: Vec<(usize, Vec<String>)> = Vec::with_capacity(total_inputs);

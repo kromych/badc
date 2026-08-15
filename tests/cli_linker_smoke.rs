@@ -4490,3 +4490,103 @@ fn bsd_format_archive_links_on_the_host_target() {
     let out = Command::new(&exe).output().expect("run prog");
     assert_eq!(out.status.code(), Some(38), "14 + 24");
 }
+
+/// Feed a source on stdin and return the finished invocation.
+fn run_with_stdin(cmd: &mut Command, src: &str, what: &str) -> std::process::Output {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("{what}: spawn: {e}"));
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(src.as_bytes())
+        .unwrap_or_else(|e| panic!("{what}: write: {e}"));
+    let out = child
+        .wait_with_output()
+        .unwrap_or_else(|e| panic!("{what}: wait: {e}"));
+    if !out.status.success() {
+        panic!(
+            "{what} failed: status={} stderr={:?}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    out
+}
+
+/// `-` names stdin for the object and archive modes as it does for the
+/// link, so a generator's output can be piped straight into a build. gcc
+/// and clang name the object after the input, giving `-.o`; `--ar` takes
+/// the same name for the member.
+#[test]
+fn stdin_source_compiles_to_an_object_and_into_an_archive() {
+    let dir = tempdir("stdin-object");
+    let src = "int from_stdin(void) { return 41; }\n";
+
+    // `-c -` without `-o` writes `-.o` beside the other objects.
+    run_with_stdin(
+        Command::new(badc())
+            .args(["-q", "-c", "-"])
+            .current_dir(&dir),
+        src,
+        "compile stdin to a default-named object",
+    );
+    let dashed = dir.join("-.o");
+    assert!(dashed.is_file(), "`-c -` must write `-.o`");
+    assert!(
+        badc::parse_native_elf(&std::fs::read(&dashed).expect("read -.o")).is_ok(),
+        "`-.o` must be a readable relocatable object"
+    );
+
+    // `-o` names the object explicitly, and it links like any other.
+    let obj = dir.join("stdin.o");
+    run_with_stdin(
+        Command::new(badc())
+            .args(["-q", "-c", "-", "-o"])
+            .arg(&obj)
+            .current_dir(&dir),
+        src,
+        "compile stdin to a named object",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "extern int from_stdin(void);\nint main(void) { return from_stdin(); }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["-q", "-o"])
+            .arg(&exe)
+            .arg(&main)
+            .arg(&obj)
+            .current_dir(&dir),
+        "link the object built from stdin",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(41), "the stdin unit's value");
+
+    // `--ar -` bundles the same bytes under the same `-.o` member name.
+    let lib = dir.join("libstdin.a");
+    run_with_stdin(
+        Command::new(badc())
+            .args(["-q", "--ar", "-", "-o"])
+            .arg(&lib)
+            .current_dir(&dir),
+        src,
+        "archive a unit read from stdin",
+    );
+    let members =
+        badc::read_archive(&std::fs::read(&lib).expect("read archive")).expect("read the archive");
+    assert!(
+        members.iter().any(|m| m.name == "-.o"),
+        "member names: {:?}",
+        members.iter().map(|m| &m.name).collect::<Vec<_>>()
+    );
+}

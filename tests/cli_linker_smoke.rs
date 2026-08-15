@@ -4061,7 +4061,7 @@ fn aarch64_low12_references_sharing_one_adrp_are_all_patched() {
         "add x4, x1, #:lo12:gdata"
     );
     assert!(
-        off != 0 && off % 16 == 0,
+        off != 0 && off.is_multiple_of(16),
         "`gdata` is `.balign 16` behind other data, so its in-page offset \
          is a non-zero multiple of 16; got {off:#x}"
     );

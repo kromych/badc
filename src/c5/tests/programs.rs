@@ -6493,6 +6493,37 @@ fn process_vm_transfers_are_a_linux_binding() {
 }
 
 #[test]
+fn cpu_time_clocks_follow_each_platform_libc() {
+    use crate::Target;
+    // POSIX names the two CPU-time clocks but leaves the ids to the
+    // implementation: libSystem's clockid_t enum numbers them 12 and 16,
+    // glibc 2 and 3. Windows takes the glibc numbering, as the realtime
+    // and monotonic ids already do.
+    let apple = "#include <time.h>\n\
+        int ck[(CLOCK_PROCESS_CPUTIME_ID==12 && CLOCK_THREAD_CPUTIME_ID==16)?1:-1];\n";
+    let gnu = "#include <time.h>\n\
+        int ck[(CLOCK_PROCESS_CPUTIME_ID==2 && CLOCK_THREAD_CPUTIME_ID==3)?1:-1];\n";
+    assert!(header_snippet_compiles(apple, Target::MacOSAarch64));
+    assert!(!header_snippet_compiles(gnu, Target::MacOSAarch64));
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(header_snippet_compiles(gnu, target), "{target:?}");
+        assert!(!header_snippet_compiles(apple, target), "{target:?}");
+    }
+    // The three ids that were already defined keep their values.
+    let common = "#include <time.h>\n\
+        int ck[(CLOCK_REALTIME==0 && CLOCK_MONOTONIC_RAW==4 \
+             && CLOCK_PROCESS_CPUTIME_ID!=CLOCK_THREAD_CPUTIME_ID)?1:-1];\n";
+    for target in ALL_TARGETS {
+        assert!(header_snippet_compiles(common, target), "{target:?}");
+    }
+}
+
+#[test]
 fn sys_types_declares_time_t() {
     use crate::Target;
     // POSIX-2017 requires <sys/types.h> to define `time_t`; system

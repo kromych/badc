@@ -5344,6 +5344,15 @@ fn long_double_advertised_as_fp64() {
                && LDBL_MAX==DBL_MAX && LDBL_EPSILON==DBL_EPSILON\n\
                && LDBL_MIN==DBL_MIN) ? 0 : 1; }";
     assert_eq!(super::run_str(src), 0);
+    // <float.h> derives every name from the predefines, so the header
+    // and `__LDBL_*` / `__DBL_*` / `__FLT_*` cannot drift apart.
+    let derived = "#include <float.h>\n\
+                   int main(void){ return (LDBL_MANT_DIG==__LDBL_MANT_DIG__\n\
+                   && DBL_MANT_DIG==__DBL_MANT_DIG__ && FLT_MANT_DIG==__FLT_MANT_DIG__\n\
+                   && FLT_RADIX==__FLT_RADIX__ && DBL_MAX==__DBL_MAX__\n\
+                   && LDBL_TRUE_MIN==__LDBL_DENORM_MIN__\n\
+                   && DECIMAL_DIG==__DECIMAL_DIG__) ? 0 : 1; }";
+    assert_eq!(super::run_str(derived), 0);
 }
 
 #[cfg(target_os = "macos")]

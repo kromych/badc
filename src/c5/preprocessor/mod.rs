@@ -398,6 +398,65 @@ pub enum Subsystem {
 /// and shares its predefines. An `Elf32` AArch64 object would be
 /// AArch32, which badc neither encodes nor describes; the driver
 /// refuses the flag there and the target's own model stands.
+/// C99 5.2.4.2.2 floating-point characteristics, in the `__FLT_*` /
+/// `__DBL_*` / `__LDBL_*` spellings gcc and clang predefine and that
+/// third-party headers test directly. badc's `float` is IEEE binary32
+/// and both `double` and `long double` are IEEE binary64 on every
+/// target, so the `__LDBL_*` row repeats the `__DBL_*` row with an `L`
+/// suffix on the value macros; the set is target-independent.
+/// `<float.h>` derives its `FLT_*` / `DBL_*` / `LDBL_*` names from
+/// these, which keeps one source of truth.
+fn install_float_characteristics(macros: &mut HashMap<String, String>) {
+    const COMMON: &[(&str, &str)] = &[
+        ("__FLT_RADIX__", "2"),
+        ("__DECIMAL_DIG__", "17"),
+        ("__FLT_MANT_DIG__", "24"),
+        ("__FLT_DIG__", "6"),
+        ("__FLT_MIN_EXP__", "(-125)"),
+        ("__FLT_MIN_10_EXP__", "(-37)"),
+        ("__FLT_MAX_EXP__", "128"),
+        ("__FLT_MAX_10_EXP__", "38"),
+        ("__FLT_DECIMAL_DIG__", "9"),
+        ("__FLT_EPSILON__", "1.19209290e-7F"),
+        ("__FLT_MIN__", "1.17549435e-38F"),
+        ("__FLT_MAX__", "3.40282347e+38F"),
+        ("__FLT_NORM_MAX__", "3.40282347e+38F"),
+        ("__FLT_DENORM_MIN__", "1.40129846e-45F"),
+        ("__DBL_MANT_DIG__", "53"),
+        ("__DBL_DIG__", "15"),
+        ("__DBL_MIN_EXP__", "(-1021)"),
+        ("__DBL_MIN_10_EXP__", "(-307)"),
+        ("__DBL_MAX_EXP__", "1024"),
+        ("__DBL_MAX_10_EXP__", "308"),
+        ("__DBL_DECIMAL_DIG__", "17"),
+        ("__DBL_EPSILON__", "2.2204460492503131e-16"),
+        ("__DBL_MIN__", "2.2250738585072014e-308"),
+        ("__DBL_MAX__", "1.7976931348623157e+308"),
+        ("__DBL_NORM_MAX__", "1.7976931348623157e+308"),
+        ("__DBL_DENORM_MIN__", "4.9406564584124654e-324"),
+        ("__LDBL_MANT_DIG__", "53"),
+        ("__LDBL_DIG__", "15"),
+        ("__LDBL_MIN_EXP__", "(-1021)"),
+        ("__LDBL_MIN_10_EXP__", "(-307)"),
+        ("__LDBL_MAX_EXP__", "1024"),
+        ("__LDBL_MAX_10_EXP__", "308"),
+        ("__LDBL_DECIMAL_DIG__", "17"),
+        ("__LDBL_EPSILON__", "2.2204460492503131e-16L"),
+        ("__LDBL_MIN__", "2.2250738585072014e-308L"),
+        ("__LDBL_MAX__", "1.7976931348623157e+308L"),
+        ("__LDBL_NORM_MAX__", "1.7976931348623157e+308L"),
+        ("__LDBL_DENORM_MIN__", "4.9406564584124654e-324L"),
+    ];
+    for (name, value) in COMMON {
+        macros.insert((*name).to_string(), (*value).to_string());
+    }
+    for prefix in ["__FLT", "__DBL", "__LDBL"] {
+        for trait_name in ["HAS_DENORM", "HAS_INFINITY", "HAS_QUIET_NAN"] {
+            macros.insert(format!("{prefix}_{trait_name}__"), "1".to_string());
+        }
+    }
+}
+
 fn install_data_model(
     macros: &mut HashMap<String, String>,
     target: Target,
@@ -666,9 +725,12 @@ impl Preprocessor {
         macros.insert("__SIZEOF_FLOAT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_DOUBLE__".to_string(), "8".to_string());
         // badc lays out `long double` as `double` on every target, so
-        // the size is 8, not gcc's x87 12 / 16; `__SIZEOF_FLOAT80__` and
-        // `__SIZEOF_FLOAT128__` stay undefined with the types absent.
+        // the size is 8, not the 16 both Linux ABIs use;
+        // `__SIZEOF_FLOAT80__` and `__SIZEOF_FLOAT128__` stay undefined
+        // with the types absent. doc/std-conformance.md records the
+        // divergence and what it costs at a platform-libc boundary.
         macros.insert("__SIZEOF_LONG_DOUBLE__".to_string(), "8".to_string());
+        install_float_characteristics(&mut macros);
         let wchar_bytes = match target {
             Target::WindowsX64 | Target::WindowsAarch64 => "2",
             _ => "4",

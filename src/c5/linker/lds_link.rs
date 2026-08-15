@@ -2421,14 +2421,27 @@ impl<'a> LdsLinker<'a> {
             kept.push((e.off as u64, e.len as u64, bytes.len() as u64));
             bytes.extend_from_slice(&data[e.off..e.off + e.len]);
         }
-        if !dropped {
-            return None;
-        }
         // Whatever follows the last entry (a terminator, padding) is
         // not addressed by any of them and carries over verbatim.
         let tail = ents.last().map_or(0, |e| e.off + e.len);
         kept.push((tail as u64, (data.len() - tail) as u64, bytes.len() as u64));
         bytes.extend_from_slice(&data[tail..]);
+        // An entry stream stopping short of the section's alignment
+        // would leave the padding before the next input inside the
+        // linked stream, where a zero length ends it. bfd gives the
+        // padding to the last entry instead; so does this.
+        let align = self.insec(i).addralign.max(1) as usize;
+        let padded = tail == data.len() && kept.len() > 1 && !bytes.len().is_multiple_of(align);
+        if padded {
+            let at = kept[kept.len() - 2].2 as usize;
+            let pad = align - bytes.len() % align;
+            let len = u32::from_le_bytes(bytes[at..at + 4].try_into().ok()?) + pad as u32;
+            bytes[at..at + 4].copy_from_slice(&len.to_le_bytes());
+            bytes.resize(bytes.len() + pad, 0);
+        }
+        if !dropped && !padded {
+            return None;
+        }
         Some(EhFrame {
             orig_size: data.len() as u64,
             bytes,
@@ -8909,14 +8922,19 @@ SECTIONS {
         ]
     }
 
-    /// An FDE naming a CIE `back` bytes before its own pointer field;
-    /// its initial location sits at offset 8 and is relocated.
-    fn eh_fde(back: u32) -> Vec<u8> {
-        let mut f: Vec<u8> = alloc::vec![0x14, 0, 0, 0];
+    /// An FDE of `total` bytes naming a CIE `back` bytes before its own
+    /// pointer field; its initial location sits at offset 8 and is
+    /// relocated.
+    fn eh_fde_sized(back: u32, total: usize) -> Vec<u8> {
+        let mut f: Vec<u8> = alloc::vec![(total - 4) as u8, 0, 0, 0];
         f.extend_from_slice(&back.to_le_bytes());
         f.extend_from_slice(&[0, 0, 0, 0, 8, 0, 0, 0]);
-        f.extend_from_slice(&[0; 8]);
+        f.resize(total, 0);
         f
+    }
+
+    fn eh_fde(back: u32) -> Vec<u8> {
+        eh_fde_sized(back, 24)
     }
 
     fn image_section(image: &[u8], name: &str) -> (u64, Vec<u8>) {
@@ -8985,6 +9003,49 @@ SECTIONS {
             alloc::vec![find_sym(&syms, "fa"), find_sym(&syms, "fb")],
             "both FDEs still cover their own text"
         );
+    }
+
+    /// A zero length ends `.eh_frame`, so the alignment padding between
+    /// two inputs may not fall inside the linked stream: the entry
+    /// before it absorbs the gap, as bfd's writer does.
+    #[test]
+    fn eh_frame_entries_leave_no_gap_at_an_input_boundary() {
+        let script = parse_linker_script(
+            "SECTIONS { . = 0x1000; .text : { *(.text) } .eh_frame : { *(.eh_frame) } }",
+        )
+        .expect("parses");
+        // 24-byte CIE + 20-byte FDE: 44 bytes under an 8-byte
+        // alignment, so the next input would start four bytes on.
+        let unit = |name: &str| {
+            let mut eh = eh_cie_zr();
+            eh.extend_from_slice(&eh_fde_sized(0x1c, 20));
+            TestObj::new()
+                .sec(
+                    ".text",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    8,
+                    &[0x90; 8],
+                )
+                .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh)
+                .reloc(1, 0x20, 1, rt::R_X86_64_PC32, 0)
+                .sym(name, STB_GLOBAL, STT_FUNC, 0, 0, 8)
+                .build(EM_X86_64)
+        };
+        let objs = alloc::vec![
+            parse_lds_object("a.o", unit("fa")).expect("parses"),
+            parse_lds_object("b.o", unit("fb")).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24 + 24, "one CIE and two padded FDEs");
+        assert_eq!(
+            u32::from_le_bytes(body[0x18..0x1c].try_into().unwrap()),
+            0x14,
+            "the first FDE covers the padding that followed it"
+        );
+        assert_eq!(eh_frame::scan(&body, addr).expect("scans").len(), 2);
+        assert_eq!(eh_frame::count_fdes(&body), 2);
     }
 
     /// bfd keys a CIE on the personality routine it resolves to, not on

@@ -623,6 +623,12 @@ pub struct LdsOptions {
     pub nmagic: bool,
     /// `--eh-frame-hdr`: build the unwinder's FDE search table.
     pub eh_frame_hdr: bool,
+    /// `--gc-sections`: drop every allocatable input section no kept
+    /// section reaches.
+    pub gc_sections: bool,
+    /// `-u` / `--undefined`: names the link must resolve. Each is a
+    /// garbage-collection root.
+    pub undefined: Vec<String>,
 }
 
 impl Default for LdsOptions {
@@ -647,6 +653,8 @@ impl Default for LdsOptions {
             symbolic: false,
             nmagic: false,
             eh_frame_hdr: false,
+            gc_sections: false,
+            undefined: Vec::new(),
         }
     }
 }
@@ -1078,6 +1086,7 @@ impl<'a> LdsLinker<'a> {
         linker.flatten_inputs();
         linker.build_statements()?;
         linker.collect_script_assigned();
+        linker.gc_sections();
         linker.claim_inputs()?;
         linker.build_merge_pools();
         Ok(linker)
@@ -1422,6 +1431,152 @@ impl<'a> LdsLinker<'a> {
             }
         }
         self.handle_orphans()
+    }
+
+    /// `--gc-sections`: discard every allocatable input section no
+    /// root reaches through a relocation, before the specs claim
+    /// anything. bfd's rule set -- a section carrying none of
+    /// `SEC_ALLOC` / `SEC_LOAD` / `SEC_RELOC` is kept, as is a debug
+    /// section, `SHF_GNU_RETAIN`, and anything a `KEEP()` names.
+    fn gc_sections(&mut self) {
+        if !self.opts.gc_sections {
+            return;
+        }
+        let mut live = alloc::vec![false; self.insecs.len()];
+        let mut work: Vec<usize> = Vec::new();
+        let mark = |live: &mut [bool], work: &mut Vec<usize>, i: usize| {
+            if !live[i] {
+                live[i] = true;
+                work.push(i);
+            }
+        };
+        // Sections GC never collects. Kept is not the same as
+        // reaching: a debug or unwind section names every function it
+        // describes, so following its relocations would keep the whole
+        // input. bfd keeps those sections and prunes their contents
+        // instead, and their references to a dropped section resolve
+        // to nothing rather than to a diagnostic.
+        for (i, keep) in live.iter_mut().enumerate() {
+            let id = self.insecs[i];
+            let s = &self.objects[id.obj].sections[id.sec];
+            let collectable = s.flags & SHF_ALLOC != 0 && s.shtype != SHT_GROUP;
+            *keep = !collectable
+                || s.flags & SHF_GNU_RETAIN != 0
+                || is_debug_section(&s.name)
+                || is_unwind_section(&s.name)
+                || id.obj == self.synth_obj;
+        }
+        // `KEEP()` roots, matched the way the claim would match them.
+        let specs = self.keep_specs();
+        for spec in &specs {
+            for i in 0..self.insecs.len() {
+                if self.spec_matches(spec, i, None) && !is_unwind_section(&self.insec(i).name) {
+                    mark(&mut live, &mut work, i);
+                }
+            }
+        }
+        // Named roots: the entry point, `-u`, and every symbol the
+        // dynamic table exports.
+        let mut roots: Vec<String> = self.opts.undefined.clone();
+        if let Some(e) = self
+            .opts
+            .entry_override
+            .clone()
+            .or_else(|| self.script.entry().map(String::from))
+        {
+            roots.push(e);
+        }
+        if self.opts.emit == LdsEmit::Dyn {
+            roots.extend(self.globals.keys().cloned());
+        }
+        for name in &roots {
+            for i in self.sections_defining(name) {
+                mark(&mut live, &mut work, i);
+            }
+        }
+        // Reachability. A reference to `__start_X` / `__stop_X` keeps
+        // every section named `X`, the bound being meaningless without
+        // the content it brackets.
+        while let Some(i) = work.pop() {
+            let id = self.insecs[i];
+            for r in self.objects[id.obj].sections[id.sec].relocs.clone() {
+                for t in self.reloc_targets(id.obj, r.sym as usize) {
+                    mark(&mut live, &mut work, t);
+                }
+            }
+        }
+        for (i, keep) in live.iter().enumerate() {
+            if !keep {
+                self.fates[i] = SecFate::Discarded;
+            }
+        }
+    }
+
+    /// Every `KEEP()`-marked input spec in the script.
+    fn keep_specs(&self) -> Vec<InputSpec> {
+        let mut out: Vec<InputSpec> = Vec::new();
+        for cmd in &self.script.commands {
+            let Command::Sections(list) = cmd else {
+                continue;
+            };
+            for item in list {
+                let SectionsItem::Output(o) = item else {
+                    continue;
+                };
+                for c in &o.contents {
+                    if let SectionContent::Input(spec) = c
+                        && spec.keep
+                    {
+                        out.push(spec.clone());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Input sections defining `name`, plus every section the name
+    /// brackets when it is a `__start_` / `__stop_` bound.
+    fn sections_defining(&self, name: &str) -> Vec<usize> {
+        let mut out: Vec<usize> = Vec::new();
+        if let Some(&(oi, si)) = self.globals.get(name) {
+            let sym = &self.objects[oi].symbols[si];
+            if let Some(&sec) = self.objects[oi].shndx_map.get(&sym.shndx) {
+                out.push(self.insec_index(oi, sec));
+            }
+        }
+        let bracketed = name
+            .strip_prefix("__start_")
+            .or_else(|| name.strip_prefix("__stop_"));
+        if let Some(sec_name) = bracketed {
+            for i in 0..self.insecs.len() {
+                if self.insec(i).name == sec_name {
+                    out.push(i);
+                }
+            }
+        }
+        out
+    }
+
+    /// Input sections a relocation against symbol `si` of object `oi`
+    /// reaches: the defining section, resolved by name for a global.
+    fn reloc_targets(&self, oi: usize, si: usize) -> Vec<usize> {
+        let Some(sym) = self.objects[oi].symbols.get(si) else {
+            return Vec::new();
+        };
+        if sym.binding() != STB_LOCAL && !sym.name.is_empty() {
+            let by_name = self.sections_defining(&sym.name);
+            if !by_name.is_empty() {
+                return by_name;
+            }
+        }
+        match sym.shndx as u16 {
+            SHN_UNDEF | SHN_ABS | SHN_COMMON => Vec::new(),
+            _ => match self.objects[oi].shndx_map.get(&sym.shndx) {
+                Some(&sec) => alloc::vec![self.insec_index(oi, sec)],
+                None => Vec::new(),
+            },
+        }
     }
 
     /// Sections matched by one input spec, in ld order: for a spec
@@ -3546,6 +3701,12 @@ fn file_sym_name(source: &str) -> String {
         .to_string()
 }
 
+/// Unwind and exception tables: kept whatever GC decides, and never a
+/// source of liveness -- each names every function it describes.
+fn is_unwind_section(name: &str) -> bool {
+    name == ".eh_frame" || name.starts_with(".eh_frame.") || name == ".eh_frame_hdr"
+}
+
 fn is_debug_section(name: &str) -> bool {
     name.starts_with(".debug")
         || name.starts_with(".zdebug")
@@ -3839,6 +4000,8 @@ impl<'a> LdsLinker<'a> {
             let place = self.placements[i];
             let sec_addr = self.outs[out].addr + place.off;
             let alloc = self.outs[out].alloc;
+            let name = &self.objects[id.obj].sections[id.sec].name;
+            let tolerant = is_debug_section(name) || is_unwind_section(name);
             let relocs = self.objects[id.obj].sections[id.sec].relocs.clone();
             let Some(buf) = contents.get_mut(&out) else {
                 continue;
@@ -3846,7 +4009,7 @@ impl<'a> LdsLinker<'a> {
             for r in &relocs {
                 let site = (place.off + r.offset) as usize;
                 let p = sec_addr + r.offset;
-                let target = self.resolve_reloc_target(id.obj, r, &mut errors);
+                let target = self.resolve_reloc_target(id.obj, r, tolerant, &mut errors);
                 let Some(s_plus_a) = target else { continue };
                 if errors.len() > 40 {
                     break;
@@ -3890,10 +4053,15 @@ impl<'a> LdsLinker<'a> {
 
     /// `S + A` for a relocation, or `None` when the reloc is skipped
     /// (undefined weak resolves to zero and still applies).
+    /// `tolerant` marks a referring section that describes other
+    /// sections rather than depending on them -- debug and unwind
+    /// tables -- where bfd resolves a dropped target to zero instead
+    /// of complaining.
     fn resolve_reloc_target(
         &self,
         oi: usize,
         r: &RawReloc,
+        tolerant: bool,
         errors: &mut Vec<String>,
     ) -> Option<u64> {
         let sym = match self.objects[oi].symbols.get(r.sym as usize) {
@@ -3915,6 +4083,7 @@ impl<'a> LdsLinker<'a> {
             if let Some(&(doi, dsi)) = self.globals.get(&sym.name) {
                 return match self.resolve_sym_prevpass(doi, dsi, r.addend) {
                     Some(v) => Some(v),
+                    None if tolerant => Some(r.addend as u64),
                     None => {
                         errors.push(format!(
                             "{}: `{}' resolves into a discarded section",
@@ -6658,6 +6827,76 @@ SECTIONS {
         let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
         let syms = image_symbols(&res.image);
         assert!(!syms.iter().any(|s| s.0 == "__start_.my.tab"), "{syms:?}");
+    }
+
+    /// Two text sections, one reached from the entry point and one
+    /// not, plus a `KEEP()`-named table nothing references.
+    fn gc_objects() -> Vec<LdsObject> {
+        let a = TestObj::new()
+            .sec(
+                ".text._start",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0xe8, 0, 0, 0, 0],
+            )
+            .sec(
+                ".text.live",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0xc3],
+            )
+            .sec(
+                ".text.dead",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90; 8],
+            )
+            .sec("__tab", SHT_PROGBITS, SHF_ALLOC, 8, &[5u8; 8])
+            .sec(".rodata.dead", SHT_PROGBITS, SHF_ALLOC, 8, &[6u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 5)
+            .sym("live", STB_GLOBAL, STT_FUNC, 1, 0, 1)
+            .sym("dead", STB_GLOBAL, STT_FUNC, 2, 0, 8)
+            // Symtab: null(0), sections(1..=5), _start(6), live(7), dead(8).
+            .reloc(0, 1, 7, rt::R_X86_64_PC32, -4)
+            .build(EM_X86_64);
+        alloc::vec![parse_lds_object("a.o", a).expect("parses")]
+    }
+
+    /// `--gc-sections` drops what the entry point does not reach, and
+    /// keeps what a `KEEP()` names.
+    #[test]
+    fn gc_sections_drops_what_the_entry_does_not_reach() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let opts = LdsOptions {
+            gc_sections: true,
+            ..LdsOptions::default()
+        };
+        let res = link_with_script(&script, gc_objects(), &opts).expect("links");
+        let names: Vec<String> = image_symbols(&res.image).into_iter().map(|s| s.0).collect();
+        assert!(names.iter().any(|n| n == "_start"), "{names:?}");
+        assert!(names.iter().any(|n| n == "live"), "{names:?}");
+        assert!(!names.iter().any(|n| n == "dead"), "{names:?}");
+        // The script KEEPs `__tab` between its own bounds.
+        let syms = image_symbols(&res.image);
+        let v = |n: &str| {
+            syms.iter()
+                .find(|s| s.0 == n)
+                .unwrap_or_else(|| panic!("{n}"))
+                .1
+        };
+        assert_eq!(v("__stop_tab") - v("__start_tab"), 8);
+    }
+
+    /// Without the option nothing is collected.
+    #[test]
+    fn without_gc_sections_every_input_is_placed() {
+        let script = parse_linker_script(SCRIPT).expect("script parses");
+        let res = link_with_script(&script, gc_objects(), &LdsOptions::default()).expect("links");
+        let names: Vec<String> = image_symbols(&res.image).into_iter().map(|s| s.0).collect();
+        assert!(names.iter().any(|n| n == "dead"), "{names:?}");
     }
 
     #[test]

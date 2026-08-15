@@ -4676,3 +4676,53 @@ fn an_object_definition_outranks_a_synthesized_section_bound() {
     let out = Command::new(&exe).output().expect("run prog");
     assert_eq!(out.status.code(), Some(0), "the object's definition wins");
 }
+
+/// `--gc-sections` through the ld persona: an identifier-named section
+/// nothing reaches is dropped, one bracketed by a referenced
+/// `__start_` / `__stop_` pair is kept, and without the option both
+/// survive.
+#[cfg(target_os = "linux")]
+#[test]
+fn gc_sections_drops_unreachable_named_sections() {
+    let dir = tempdir("gc-sections");
+    let src = write_source(
+        &dir,
+        "gc.c",
+        "static const int live[2] __attribute__((section(\"livetab\"), used)) = { 1, 2 };\n\
+         static const int dead[8] __attribute__((section(\"deadtab\"), used)) = { 0 };\n\
+         extern const int __start_livetab[], __stop_livetab[];\n\
+         int main(void) { return __stop_livetab - __start_livetab; }\n",
+    );
+    let obj = dir.join("gc.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "-c"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj)
+            .current_dir(&dir),
+        "compile the gc unit",
+    );
+    let link = |out: &str, gc: bool| -> Vec<(String, u32, u64)> {
+        let exe = dir.join(out);
+        let mut c = Command::new(badc());
+        c.arg("--ld");
+        if gc {
+            c.arg("--gc-sections");
+        }
+        run(
+            c.args(["-e", "main", "-o"])
+                .arg(&exe)
+                .arg(&obj)
+                .current_dir(&dir),
+            "link the gc unit",
+        );
+        elf_sections(&std::fs::read(&exe).expect("read image"))
+    };
+    let kept = link("gc_off", false);
+    assert!(kept.iter().any(|s| s.0 == "deadtab"), "{kept:?}");
+    assert!(kept.iter().any(|s| s.0 == "livetab"), "{kept:?}");
+    let swept = link("gc_on", true);
+    assert!(!swept.iter().any(|s| s.0 == "deadtab"), "{swept:?}");
+    assert!(swept.iter().any(|s| s.0 == "livetab"), "{swept:?}");
+}

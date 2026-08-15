@@ -86,6 +86,8 @@ struct LdArgs {
     apply_dynamic_relocs: bool,
     /// `-u SYM`: symbols forced undefined before the archive scan.
     undefined: Vec<String>,
+    /// `--gc-sections`: drop input sections no kept section reaches.
+    gc_sections: bool,
     /// `-soname NAME`: recorded as `DT_SONAME`.
     soname: Option<String>,
     /// `--hash-style`.
@@ -235,6 +237,7 @@ pub fn run_ld(args: &[String]) -> i32 {
         pack_relative_relocs: false,
         apply_dynamic_relocs: true,
         undefined: Vec::new(),
+        gc_sections: false,
         soname: None,
         hash_style: HashStyle::default(),
         symbolic: false,
@@ -429,7 +432,8 @@ pub fn run_ld(args: &[String]) -> i32 {
             "-EB" => return ld_err("big-endian output is not supported"),
             "--no-warn-rwx-segments" | "--warn-rwx-segments" => {}
             "--as-needed" | "--no-as-needed" => {}
-            "--gc-sections" | "--no-gc-sections" => {}
+            "--gc-sections" => a.gc_sections = true,
+            "--no-gc-sections" => a.gc_sections = false,
             s if s.starts_with("--orphan-handling=") => {
                 let kind = &s["--orphan-handling=".len()..];
                 if !matches!(kind, "place" | "warn" | "error" | "discard") {
@@ -445,7 +449,7 @@ pub fn run_ld(args: &[String]) -> i32 {
                      Supported: -r, -o, -m EMU, -T SCRIPT, --whole-archive, \
                      --start-group, -L/-l, -z KEYWORD, --build-id[=sha1|none], \
                      --emit-relocs, --fatal-warnings, -X, --strip-debug, -EL, \
-                     --orphan-handling=KIND, --no-undefined"
+                     --orphan-handling=KIND, --no-undefined, --gc-sections"
                 );
                 return 0;
             }
@@ -836,6 +840,8 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         },
         shared: a.shared_object,
         entry_override: a.entry.clone(),
+        gc_sections: a.gc_sections,
+        undefined: a.undefined.clone(),
         // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
         // on i386.
         max_page_size: a.max_page_size.unwrap_or(match m {

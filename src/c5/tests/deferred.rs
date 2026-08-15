@@ -128,16 +128,16 @@ fn integer_boundary_c99_final_boss() {
 
 // ---- thread-local reads under the in-process JIT ----
 //
-// The JIT runs `main` in-process and does not install a thread
-// pointer for the c5 program, so `_Thread_local` reads land in
-// the host runtime's TLS region (`fs` / `tpidr_el0`) and return
-// stale values. Native ELF output is correct. Gated to Linux
-// because macOS arm64's JIT has no TLS support at all (Mach-O
-// __thread_data + dyld __tlv_bootstrap is separate work) and
-// would fault the test runner on a `_Thread_local` access.
+// The JIT installs no thread pointer for the c5 program -- the
+// executing thread's TLS belongs to the host runtime -- so it now
+// refuses a `_Thread_local` access instead of emitting code that
+// reads the host's block; `super::jit::unsupported_fixtures_are_refused`
+// asserts the refusal. Native output is correct. Running the fixture
+// needs the access lowered to a JIT-owned per-thread block, which is
+// separate work on every JIT host.
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "TODO: in-process JIT installs no c5 thread pointer, so _Thread_local reads hit the host runtime's TLS"]
+#[ignore = "TODO: in-process JIT installs no c5 thread pointer, so a _Thread_local access is refused"]
 fn jit_thread_local_read() {
     let exit = jit_fixture_exit("deferred_jit_thread_local.c");
     assert_eq!(

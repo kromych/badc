@@ -307,6 +307,15 @@ mod jit_impl {
         if let Some(site) = build.user_extern_call_sites.first() {
             return Err(undefined_reference(&site.symbol_name));
         }
+        // A thread-pointer-relative access has no block to reach here: the
+        // executing thread's TLS belongs to the host runtime, and the
+        // fixups the backends record need the link step the JIT has not.
+        if !build.elf_tpoff_fixups.is_empty()
+            || !build.macho_tlv_fixups.is_empty()
+            || !build.tls_index_fixups.is_empty()
+        {
+            return Err(unsupported_thread_local(program));
+        }
         route_jit_data_imports(&mut build)?;
         resolve_jit_asm_sym_targets(program, &mut build);
 
@@ -786,6 +795,25 @@ mod jit_impl {
             )));
         }
         Ok(exit_code as i32)
+    }
+
+    /// Refuse a program whose code reaches a `_Thread_local` object.
+    /// Supporting one needs a lowering the JIT does not have: the native
+    /// backends address the block off the thread pointer, which here is
+    /// the host runtime's and admits no guest template, so the access
+    /// would have to route through a JIT-owned per-thread block instead.
+    fn unsupported_thread_local(program: &Program) -> C5Error {
+        let named = program
+            .symbols
+            .iter()
+            .find(|s| s.is_thread_local && !s.name.is_empty())
+            .map(|s| format!(" (`{}`)", s.name))
+            .unwrap_or_default();
+        C5Error::Compile(crate::c5::error::fmt_unsupported_err(&format!(
+            "JIT: thread-local storage{named} is not supported by the \
+             in-process JIT: the executing thread's TLS block belongs to \
+             the host runtime. Compile to a native image instead."
+        )))
     }
 
     /// Mirror the linker's undefined-symbol diagnostic wording.

@@ -21,7 +21,7 @@
     all(target_os = "macos", target_arch = "aarch64"),
 ))]
 
-use super::fixture_tables::JIT_FIXTURES;
+use super::fixture_tables::{JIT_FIXTURES, JIT_UNSUPPORTED_FIXTURES};
 use crate::{Compiler, NativeOptions, jit_run, jit_run_with_options};
 
 /// Compile `src` and run it through the JIT with `args` as argv.
@@ -1752,6 +1752,41 @@ fn jit_fixture(name: &str) -> i32 {
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     jit_exit(&src, &[name])
+}
+
+/// A construct the JIT declines must fail to load with a diagnostic
+/// naming it, on every JIT host. Left undriven, the combination
+/// regressed to a fault in the generated code instead: nothing in the
+/// suite ran a thread-local through the JIT.
+#[test]
+fn unsupported_fixtures_are_refused() {
+    let mut failures: Vec<String> = Vec::new();
+    for (name, needle) in JIT_UNSUPPORTED_FIXTURES {
+        let src = super::with_prelude(&super::load_fixture(name));
+        let program = match Compiler::new(src).compile() {
+            Ok(p) => p,
+            Err(e) => {
+                failures.push(format!("{name}: compile failed: {e}"));
+                continue;
+            }
+        };
+        match jit_run(&program, &[name.to_string()]) {
+            Ok(exit) => failures.push(format!("{name}: expected a refusal, ran and exited {exit}")),
+            Err(e) => {
+                let msg = format!("{e}");
+                if !msg.contains(needle) {
+                    failures.push(format!("{name}: refusal does not name `{needle}`: {msg}"));
+                }
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} unsupported JIT fixtures did not refuse as expected:\n  {}",
+        failures.len(),
+        JIT_UNSUPPORTED_FIXTURES.len(),
+        failures.join("\n  ")
+    );
 }
 
 #[test]

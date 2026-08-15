@@ -4091,12 +4091,11 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("volatile_pointer_object_cell.c", 0),
     ("volatile_fn_pointer_declarator.c", 0),
     ("generic_selection_volatile.c", 0),
-    // `thread_local_*.c` aren't here -- the JIT path's host is
-    // macOS arm64 in this repo, where TLS lowering isn't
-    // implemented yet (Mach-O __thread_data + dyld
-    // __tlv_bootstrap is future work). The native_elf and
-    // native_elf_x64 runners validate the Linux paths once the
-    // built ELF lands on the orb VMs.
+    // `thread_local_*.c` aren't here -- the JIT declines them, so
+    // they carry an expected diagnostic in
+    // `JIT_UNSUPPORTED_FIXTURES` instead of an exit code. The
+    // native_elf and native_elf_x64 runners validate the Linux
+    // paths once the built ELF lands on the orb VMs.
     ("packed_bitfield_repack.c", 0),
     ("nested_designator_string_member.c", 0),
     ("union_member_unbraced_init.c", 0),
@@ -4181,6 +4180,24 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("zero_sign_extension_32bit.c", 0),
 ];
 
+/// Fixtures the JIT declines rather than runs, so the exit-code tables
+/// above cannot express them. Each must fail to load with a diagnostic
+/// naming the construct; `super::jit::unsupported_fixtures_are_refused`
+/// drives them. A construct that gains JIT support moves to
+/// [`JIT_FIXTURES`] with its expected exit code.
+pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
+    // The executing thread's TLS block belongs to the host runtime, so a
+    // thread-pointer-relative access has nothing to reach.
+    ("block_scope_thread_local.c", "thread-local storage"),
+    ("deferred_jit_thread_local.c", "thread-local storage"),
+    ("thread_local_address_init.c", "thread-local storage"),
+    ("thread_local_address_per_thread.c", "thread-local storage"),
+    ("thread_local_basic.c", "thread-local storage"),
+    ("thread_local_gnu.c", "thread-local storage"),
+    ("thread_local_initializer.c", "thread-local storage"),
+    ("thread_local_per_thread.c", "thread-local storage"),
+];
+
 /// Every table above, named so a failure points at the stale entry's table.
 fn registration_tables() -> &'static [(&'static str, &'static [(&'static str, i32)])] {
     &[
@@ -4208,6 +4225,12 @@ fn every_registered_fixture_exists() {
             if !super::fixture_path(name).exists() {
                 missing.push(format!("{table}: {name}"));
             }
+        }
+    }
+    for (name, _) in JIT_UNSUPPORTED_FIXTURES {
+        checked += 1;
+        if !super::fixture_path(name).exists() {
+            missing.push(format!("JIT_UNSUPPORTED_FIXTURES: {name}"));
         }
     }
     assert!(

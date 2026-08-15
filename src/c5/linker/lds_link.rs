@@ -1189,13 +1189,15 @@ impl<'a> LdsLinker<'a> {
             let gotplt = self.push_synth_section(SYNTH_GOTPLT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let synth = self.synth_obj;
             let slot = self.class.addr_size();
+            let reserved = self.got_reserved();
             self.objects[synth].sections[rela].entsize = rela_ent;
             if let Some(relr) = relr {
                 self.objects[synth].sections[relr].entsize = slot;
             }
             self.objects[synth].sections[got].entsize = slot;
-            // .got: one reserved header slot; GOT slots append per use.
-            self.objects[synth].sections[got].size = slot;
+            // .got: the reserved header, where this target keeps it;
+            // GOT slots append per use.
+            self.objects[synth].sections[got].size = reserved * slot;
             // .got.plt: three reserved slots, no PLT entries.
             self.objects[synth].sections[gotplt].entsize = slot;
             self.objects[synth].sections[gotplt].size = 3 * slot;
@@ -2802,10 +2804,10 @@ impl<'a> LdsLinker<'a> {
         }
         // GOT slots are RELATIVE targets too; a slot for an unresolved
         // weak reference gets GLOB_DAT instead.
-        let got_base = self.got_addr_prevpass();
-        if let Some(got_base) = got_base {
+        let slot_size = self.class.addr_size();
+        if let Some(got_base) = self.got_slot_base() {
             for (k, name) in self.got_slots.clone().iter().enumerate() {
-                let slot = got_base + 8 + k as u64 * 8;
+                let slot = got_base + k as u64 * slot_size;
                 if let Some(v) = self.resolve_name(name) {
                     rel_addrs.push((slot, v as i64, true));
                 } else {
@@ -2850,8 +2852,10 @@ impl<'a> LdsLinker<'a> {
         // bfd reserves `_GLOBAL_OFFSET_TABLE_[0]` once the link either
         // needs a GOT slot or creates a `.dynamic` for the header to
         // point at; a link with neither leaves `.got` empty, which
-        // scripts assert on.
-        let got_header = !self.got_slots.is_empty() || self.kept_synth(SYNTH_DYNAMIC).is_some();
+        // scripts assert on. Where the header sits on `.got.plt`,
+        // `.got` reserves nothing.
+        let got_header = self.got_reserved() != 0
+            && (!self.got_slots.is_empty() || self.kept_synth(SYNTH_DYNAMIC).is_some());
         let (rela_name, _, rela_ent) = self.dyn_reloc_kind();
         let slot = self.class.addr_size();
         let synth = self.synth_obj;
@@ -2867,11 +2871,8 @@ impl<'a> LdsLinker<'a> {
             match sec.name.as_str() {
                 SYNTH_RELR => sec.size = relr_words.len() as u64 * slot,
                 SYNTH_GOT => {
-                    sec.size = if got_header {
-                        slot + self.got_slots.len() as u64 * slot
-                    } else {
-                        0
-                    }
+                    let header = if got_header { slot } else { 0 };
+                    sec.size = header + self.got_slots.len() as u64 * slot;
                 }
                 _ => {}
             }
@@ -3352,6 +3353,36 @@ impl<'a> LdsLinker<'a> {
             _ => None,
         }
     }
+
+    /// Whether the backend's GOT section is `.got.plt`. bfd defines
+    /// `_GLOBAL_OFFSET_TABLE_` on the section it creates for the GOT
+    /// and reserves that section's first slot for the `.dynamic`
+    /// address; the x86 targets set `elf_backend_want_got_plt`, so for
+    /// them both live on `.got.plt`.
+    fn got_on_got_plt(&self) -> bool {
+        matches!(self.machine, EM_386 | EM_X86_64)
+    }
+
+    /// Slots `.got` reserves ahead of its first entry.
+    fn got_reserved(&self) -> u64 {
+        u64::from(!self.got_on_got_plt())
+    }
+
+    /// The address `_GLOBAL_OFFSET_TABLE_` takes and every GOT-base
+    /// relative relocation is computed against.
+    fn got_symbol_addr(&self) -> Option<u64> {
+        if self.got_on_got_plt()
+            && let Some(addr) = self.synth_addr(SYNTH_GOTPLT)
+        {
+            return Some(addr);
+        }
+        self.got_addr_prevpass()
+    }
+
+    /// The address of the first GOT entry, past the reserved header.
+    fn got_slot_base(&self) -> Option<u64> {
+        Some(self.got_addr_prevpass()? + self.got_reserved() * self.class.addr_size())
+    }
 }
 
 /// Every symbol name an expression reads.
@@ -3756,7 +3787,7 @@ impl<'a> LdsLinker<'a> {
             }
             if sym.name == "_GLOBAL_OFFSET_TABLE_" {
                 return self
-                    .got_addr_prevpass()
+                    .got_symbol_addr()
                     .map(|g| g.wrapping_add(r.addend as u64));
             }
             if let Some(s) = self.script_now.get(&sym.name) {
@@ -3952,7 +3983,7 @@ impl<'a> LdsLinker<'a> {
             rt::R_386_PC32 | rt::R_386_PC16 | rt::R_386_PC8 | rt::R_386_GOTPC | rt::R_386_PLT32 => {
                 sa.wrapping_sub(p)
             }
-            rt::R_386_GOTOFF => match self.got_addr_prevpass() {
+            rt::R_386_GOTOFF => match self.got_symbol_addr() {
                 Some(g) => sa.wrapping_sub(g),
                 None => {
                     errors.push(format!(
@@ -4237,7 +4268,7 @@ impl<'a> LdsLinker<'a> {
     fn got_slot_addr(&self, oi: usize, r: &RawReloc) -> Option<u64> {
         let name = &self.objects[oi].symbols[r.sym as usize].name;
         let idx = *self.got_map.get(name)?;
-        Some(self.got_addr_prevpass()? + 8 + idx as u64 * 8)
+        Some(self.got_slot_base()? + idx as u64 * self.class.addr_size())
     }
 
     /// Write the synthesized sections' content: dynamic relocation
@@ -4294,13 +4325,15 @@ impl<'a> LdsLinker<'a> {
                     SYNTH_GOT => {
                         // The header slot holds the `.dynamic` address, as
                         // bfd writes `_GLOBAL_OFFSET_TABLE_[0]`.
-                        bytes.extend_from_slice(
-                            &class.addr_bytes(dyn_section_addr.unwrap_or(0))[..aw],
-                        );
-                        let base = self.got_addr_prevpass().unwrap_or(0);
+                        if self.got_reserved() != 0 {
+                            bytes.extend_from_slice(
+                                &class.addr_bytes(dyn_section_addr.unwrap_or(0))[..aw],
+                            );
+                        }
+                        let base = self.got_slot_base().unwrap_or(0);
                         for (k, gname) in self.got_slots.clone().iter().enumerate() {
                             let v = self.resolve_name(gname).unwrap_or(0);
-                            let slot_addr = base + slot + k as u64 * slot;
+                            let slot_addr = base + k as u64 * slot;
                             let write =
                                 relr_set.contains(&slot_addr) || self.opts.apply_dynamic_relocs;
                             bytes.extend_from_slice(
@@ -4310,6 +4343,15 @@ impl<'a> LdsLinker<'a> {
                     }
                     SYNTH_GOTPLT => {
                         bytes.resize(3 * aw, 0);
+                        // Where `_GLOBAL_OFFSET_TABLE_` names this
+                        // section, its first slot is the header the
+                        // psABI points at `.dynamic`; the next two are
+                        // the dynamic linker's.
+                        if self.got_on_got_plt() {
+                            bytes[..aw].copy_from_slice(
+                                &class.addr_bytes(dyn_section_addr.unwrap_or(0))[..aw],
+                            );
+                        }
                     }
                     SYNTH_BUILD_ID => {
                         bytes.extend_from_slice(&4u32.to_le_bytes()); // namesz
@@ -7782,6 +7824,161 @@ SECTIONS {
         let e = link_with_script(&script, objs, &LdsOptions::default())
             .expect_err("0x1000 does not fit an 8-bit field");
         assert!(format!("{e}").contains("R_386_8"), "{e}");
+    }
+
+    /// AArch64 keeps the GOT header on `.got`: its first slot holds the
+    /// `.dynamic` address and GOT entries follow it, while `.got.plt`
+    /// stays the dynamic linker's.
+    #[test]
+    fn aarch64_got_keeps_its_header_and_entries_follow_it() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x10000;
+  .text : { *(.text) }
+  .data : { *(.data) }
+  .dynamic : { *(.dynamic) }
+  .got : { *(.got) }
+  .got.plt : { *(.got.plt) }
+  .rela.dyn : { *(.rela .rela*) }
+}
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[0u8; 8],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            // Symtab: null(0), sections(1..=2), _start(3), datum(4).
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("datum", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            .reloc(0, 0, 4, rt::R_AARCH64_ADR_GOT_PAGE, 0)
+            .reloc(0, 4, 4, rt::R_AARCH64_LD64_GOT_LO12_NC, 0)
+            .build(EM_AARCH64);
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            max_page_size: 0x10000,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("links");
+        let secs = readelf_sections(&res.image);
+        let sec = |name: &str| {
+            secs.iter()
+                .find(|s| s.0 == name)
+                .unwrap_or_else(|| panic!("no `{name}' in the image"))
+        };
+        let (got_addr, got_size) = (sec(".got").2, sec(".got").3);
+        assert_eq!(got_size, 16, "the reserved header plus one entry");
+        let off = section_file_off(&res.image, got_addr);
+        assert_eq!(
+            u64::from_le_bytes(res.image[off..off + 8].try_into().unwrap()),
+            sec(".dynamic").2,
+            "`_GLOBAL_OFFSET_TABLE_[0]` holds the `.dynamic` address"
+        );
+        let rela = section_file_off(&res.image, sec(".rela.dyn").2);
+        assert_eq!(
+            u64::from_le_bytes(res.image[rela..rela + 8].try_into().unwrap()),
+            got_addr + 8,
+            "the GOT entry sits past the header"
+        );
+        let plt = section_file_off(&res.image, sec(".got.plt").2);
+        assert!(
+            res.image[plt..plt + sec(".got.plt").3 as usize]
+                .iter()
+                .all(|&b| b == 0),
+            "`.got.plt` carries no header here"
+        );
+    }
+
+    /// The x86 psABIs define `_GLOBAL_OFFSET_TABLE_` on `.got.plt`,
+    /// whose first slot holds the `.dynamic` address, and every
+    /// GOT-base relative relocation is computed against that same
+    /// address.
+    #[test]
+    fn i386_got_base_is_got_plt_holding_the_dynamic_address() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = SIZEOF_HEADERS;
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .gnu.hash : { *(.gnu.hash) }
+  .dynamic : { *(.dynamic) }
+  .text : { *(.text) }
+  .got : { *(.got) }
+  .got.plt : { *(.got.plt) }
+  .data : { *(.data) }
+}
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0u8; 4])
+            // Symtab: null(0), .text(1), .data(2), then these two.
+            .sym(
+                "_GLOBAL_OFFSET_TABLE_",
+                STB_GLOBAL,
+                STT_NOTYPE,
+                usize::MAX,
+                0,
+                0,
+            )
+            .sym("datum", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+            .reloc(0, 0, 3, rt::R_386_GOTPC, 0)
+            .reloc(0, 4, 4, rt::R_386_GOTOFF, 0)
+            .build_class(EM_386, ElfClass::Elf32, false);
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("links");
+        let addr = |name: &str| elf32_section(&res.image, name).2 as i64;
+        let text = elf32_body(&res.image, ".text");
+        let field = |at: usize| i32::from_le_bytes(text[at..at + 4].try_into().unwrap()) as i64;
+        assert_eq!(
+            field(0) + addr(".text"),
+            addr(".got.plt"),
+            "R_386_GOTPC yields the `.got.plt` address"
+        );
+        assert_eq!(
+            field(4),
+            addr(".data") - addr(".got.plt"),
+            "R_386_GOTOFF is relative to the same base"
+        );
+        let got_plt = elf32_body(&res.image, ".got.plt");
+        assert_eq!(
+            u32::from_le_bytes(got_plt[..4].try_into().unwrap()) as i64,
+            addr(".dynamic"),
+            "`_GLOBAL_OFFSET_TABLE_[0]` holds the `.dynamic` address"
+        );
+        assert!(
+            !elf32_sections(&res.image)
+                .iter()
+                .any(|s| s.0 == ".got" && s.4 != 0),
+            "`.got` reserves no header where `.got.plt` carries it"
+        );
     }
 
     #[test]

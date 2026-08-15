@@ -6470,6 +6470,29 @@ fn vm_region_basic_info_keeps_the_kernel_packing() {
 }
 
 #[test]
+fn process_vm_transfers_are_a_linux_binding() {
+    use crate::Target;
+    // glibc declares the pair in <sys/uio.h> under __USE_GNU; no other
+    // platform libc has a cross-address-space vectored transfer.
+    let src = "#include <sys/uio.h>\n\
+        long f(int pid, struct iovec *l, struct iovec *r) {\n\
+            return process_vm_readv(pid, l, 1, r, 1, 0)\n\
+                 + process_vm_writev(pid, l, 1, r, 1, 0); }\n";
+    assert!(header_snippet_compiles(src, Target::LinuxX64));
+    assert!(header_snippet_compiles(src, Target::LinuxAarch64));
+    for target in [
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "process_vm_readv must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
 fn sys_types_declares_time_t() {
     use crate::Target;
     // POSIX-2017 requires <sys/types.h> to define `time_t`; system

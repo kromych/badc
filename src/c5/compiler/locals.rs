@@ -991,7 +991,7 @@ impl Compiler {
                 for _ in 0..aligned {
                     self.data.push(0);
                 }
-                self.write_array_init_into_data(off, ty, &elements);
+                self.write_array_init_into_data(off, ty, &elements)?;
                 self.set_deferred_static_local_count(loc_idx, final_size);
             } else if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
                 // Known-size static-local array of structs: the shared
@@ -1030,7 +1030,7 @@ impl Compiler {
                     )));
                 }
                 let var_offset = self.symbols[loc_idx].val;
-                self.write_array_init_into_data(var_offset, ty, &elements);
+                self.write_array_init_into_data(var_offset, ty, &elements)?;
             } else if self.is_traversable_aggregate_ty(ty) {
                 let sid = struct_id_of(ty);
                 let var_offset = self.symbols[loc_idx].val;
@@ -1719,7 +1719,7 @@ impl Compiler {
             self.symbols[loc_idx].val =
                 self.reserve_slots(self.local_storage_slots(ty, final_size));
             let local_val = self.symbols[loc_idx].val;
-            let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements);
+            let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements)?;
             self.emit_local_array_init(local_val, start_addr, total_bytes);
             return Ok(());
         }
@@ -1991,7 +1991,7 @@ impl Compiler {
                         var_name, init_count, max
                     )));
                 }
-                let (start_addr, packed_bytes) = self.pack_initializer_into_data(ty, &elements);
+                let (start_addr, packed_bytes) = self.pack_initializer_into_data(ty, &elements)?;
                 // C99 6.7.9p21: when the brace list specifies
                 // fewer elements than the declared dimension, the
                 // remaining positions receive static-storage
@@ -2119,7 +2119,7 @@ impl Compiler {
                     self.pending.init_inner_dims = inner_dims.to_vec();
                     let elements = self.collect_array_initializer(elem_ty)?;
                     let full = elem_size * count as usize;
-                    let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements);
+                    let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements)?;
                     // C99 6.7.8p21: positions the list leaves out are
                     // zero; pad so the single Mcpy covers the object.
                     let total = if packed < full {
@@ -2161,7 +2161,7 @@ impl Compiler {
                             elements.len()
                         )));
                     }
-                    let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements);
+                    let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements)?;
                     let total = if packed < full {
                         for _ in 0..(full - packed) {
                             self.data.push(0);

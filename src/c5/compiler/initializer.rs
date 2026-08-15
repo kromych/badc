@@ -225,10 +225,18 @@ impl Compiler {
     ///                      post-body fixup pass.
     ///   * `Label(id)`   -- `&&label`, stage a pending label reloc the
     ///                      function's walk resolves to a basic block.
-    fn push_init_reloc(&mut self, here: usize, value: i64, reloc: InitElemReloc) {
+    fn push_init_reloc(
+        &mut self,
+        here: usize,
+        value: i64,
+        reloc: InitElemReloc,
+    ) -> Result<(), C5Error> {
         match reloc {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data(src_sym) => {
+                if let Some(sym_idx) = src_sym {
+                    self.reject_thread_local_addr_const(sym_idx)?;
+                }
                 self.note_init_reloc(here);
                 // A target defined in another unit (`extern T x;` with no
                 // definition here) resolves by name at link time, not
@@ -253,7 +261,7 @@ impl Compiler {
                                 symbol_name: name,
                                 addend,
                             });
-                        return;
+                        return Ok(());
                     }
                 }
                 let anchor = match src_sym {
@@ -283,6 +291,7 @@ impl Compiler {
                 });
             }
         }
+        Ok(())
     }
 
     /// Record that a relocation now covers the data slot at `off`.
@@ -933,7 +942,7 @@ impl Compiler {
         &mut self,
         elem_ty: i64,
         elements: &[(i128, InitElemReloc)],
-    ) -> (usize, usize) {
+    ) -> Result<(usize, usize), C5Error> {
         let elem_size = self.size_of_type(elem_ty);
         // The staged template's only consumer is an `Inst::Mcpy` into an
         // 8-byte-slotted frame local, which transfers in units up to 8
@@ -954,10 +963,10 @@ impl Compiler {
                 let here = start_addr + idx * elem_size;
                 let bits = self.to_storage_bits(v, reloc, elem_ty);
                 self.write_init_bytes(here, bits, elem_size);
-                self.push_init_reloc(here, v as i64, reloc);
+                self.push_init_reloc(here, v as i64, reloc)?;
             }
         }
-        (start_addr, elements.len() * elem_size)
+        Ok((start_addr, elements.len() * elem_size))
     }
 
     /// Parse one constant-expression initializer value, returning
@@ -2109,7 +2118,7 @@ impl Compiler {
             if elements.len() > count {
                 return Err(self.compile_err("too many initializers for array compound literal"));
             }
-            self.write_array_init_into_data(off, elem_ty, &elements);
+            self.write_array_init_into_data(off, elem_ty, &elements)?;
         }
         // An empty element list reserves a slot of its own: the literal
         // is a distinct unnamed object (C99 6.5.2.5p3) and the data-object
@@ -3212,7 +3221,7 @@ impl Compiler {
             self.pending.init_inner_dims = inner_dims.to_vec();
             let elems = self.collect_array_initializer(elem_ty)?;
             grow_to(&mut self.data, field_base + elems.len() * elem_size);
-            self.write_array_init_into_data(field_base as i64, elem_ty, &elems);
+            self.write_array_init_into_data(field_base as i64, elem_ty, &elems)?;
             self.flex_array_measured_count = Some(elems.len());
             return Ok(());
         }
@@ -3281,7 +3290,7 @@ impl Compiler {
                 for i in idx..=range_hi {
                     let here = field_base + i * elem_size;
                     grow_to(&mut self.data, here + elem_size);
-                    self.write_init_value(here, elem_size, value, reloc, elem_ty);
+                    self.write_init_value(here, elem_size, value, reloc, elem_ty)?;
                 }
             }
             idx = range_hi + 1;
@@ -3650,7 +3659,7 @@ impl Compiler {
                     b as i128,
                     super::initializer::InitElemReloc::None,
                     field.ty,
-                );
+                )?;
             }
             if char_array_brace_string {
                 self.expect_close_brace_after_wrapped_string()?;
@@ -3681,7 +3690,7 @@ impl Compiler {
                     v as i128,
                     InitElemReloc::None,
                     field.ty,
-                );
+                )?;
             }
         } else if field.array_size > 0 && self.lex.tk == '{' {
             // C99 6.7.8p21: a brace-enclosed initializer for the array
@@ -3714,7 +3723,7 @@ impl Compiler {
                         self.structs[struct_id].name, field.name
                     )));
                 }
-                self.write_array_init_into_data(field_base as i64, field.ty, &elements);
+                self.write_array_init_into_data(field_base as i64, field.ty, &elements)?;
             }
         } else if field.array_size > 0 {
             // C99 6.7.8p20 "implicit braces removed": a flat
@@ -3731,7 +3740,7 @@ impl Compiler {
             while (idx as i64) < field.array_size && self.lex.tk != '}' {
                 let (value, reloc) = self.parse_constant_init_value()?;
                 let here = field_base + idx * elem_size;
-                self.write_init_value(here, elem_size, value, reloc, field.ty);
+                self.write_init_value(here, elem_size, value, reloc, field.ty)?;
                 idx += 1;
                 if idx as i64 >= field.array_size {
                     break;
@@ -3791,7 +3800,7 @@ impl Compiler {
             }
             let (value, reloc) = self.parse_constant_init_value()?;
             let field_size = self.size_of_type(field.ty);
-            self.write_init_value(field_base, field_size, value, reloc, field.ty);
+            self.write_init_value(field_base, field_size, value, reloc, field.ty)?;
             if braced_scalar {
                 self.accept(',')?;
                 if self.lex.tk != '}' {
@@ -4029,7 +4038,7 @@ impl Compiler {
             InitTarget::Data { .. } => {
                 let (value, reloc) = self.parse_constant_init_value()?;
                 let size = self.size_of_type(ty);
-                self.write_init_value(at as usize, size, value, reloc, ty);
+                self.write_init_value(at as usize, size, value, reloc, ty)?;
                 Ok(())
             }
             InitTarget::Runtime { local_val, .. } => {
@@ -4092,10 +4101,10 @@ impl Compiler {
         value: i128,
         reloc: InitElemReloc,
         elem_ty: i64,
-    ) {
+    ) -> Result<(), C5Error> {
         let bits = self.to_storage_bits(value, reloc, elem_ty);
         self.write_init_bytes(here, bits, field_size);
-        self.push_init_reloc(here, value as i64, reloc);
+        self.push_init_reloc(here, value as i64, reloc)
     }
 
     /// Write packed initializer bytes into `self.data` at
@@ -4128,7 +4137,7 @@ impl Compiler {
         var_offset: i64,
         elem_ty: i64,
         elements: &[(i128, InitElemReloc)],
-    ) {
+    ) -> Result<(), C5Error> {
         let elem_size = self.size_of_type(elem_ty);
         let mut byte_off = var_offset as usize;
         for &(v, reloc) in elements {
@@ -4139,9 +4148,10 @@ impl Compiler {
             // so the reloc-push helper's None branch is the only
             // one that fires for elem_size == 1. Keeping the call
             // unconditional drops the size-1 special case.
-            self.push_init_reloc(byte_off, v as i64, reloc);
+            self.push_init_reloc(byte_off, v as i64, reloc)?;
             byte_off += elem_size;
         }
+        Ok(())
     }
 
     /// True when the bytes staged at `[off, off + len)` are the zero

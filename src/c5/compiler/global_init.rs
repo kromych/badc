@@ -119,7 +119,9 @@ impl Compiler {
         target_idx: usize,
         target_offset: i64,
         is_thread_local: bool,
-    ) {
+    ) -> Result<(), C5Error> {
+        // `is_thread_local` is the slot's storage, not the target's.
+        self.reject_thread_local_addr_const(target_idx)?;
         self.symbols[target_idx].was_referenced = true;
         if !is_thread_local {
             self.note_init_reloc(var_offset as usize);
@@ -142,7 +144,7 @@ impl Compiler {
             } else {
                 self.extern_data_relocs.push(reloc);
             }
-            return;
+            return Ok(());
         }
         let bytes = (target_offset as u64).to_le_bytes();
         let reloc = crate::c5::program::DataReloc {
@@ -159,6 +161,7 @@ impl Compiler {
             self.data_relocs.push(reloc);
             self.data_reloc_sym_idx.push(target_idx);
         }
+        Ok(())
     }
 
     /// Mark `tls_data[..off + 8]` as part of the loader's initialization
@@ -189,7 +192,7 @@ impl Compiler {
         match reloc {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data(src_sym) => match src_sym {
-                Some(sym_idx) => self.emit_addr_reloc(off, sym_idx, value as i64, true),
+                Some(sym_idx) => self.emit_addr_reloc(off, sym_idx, value as i64, true)?,
                 // A string literal owns no symbol; the target is its own
                 // staged offset in `data`.
                 None => {
@@ -297,7 +300,7 @@ impl Compiler {
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
                     } else {
-                        self.write_init_value(var_offset as usize, 8, value, reloc, var_ty);
+                        self.write_init_value(var_offset as usize, 8, value, reloc, var_ty)?;
                     }
                     return Ok(());
                 }
@@ -459,7 +462,7 @@ impl Compiler {
             if is_thread_local {
                 self.note_tls_init(var_offset);
             }
-            self.emit_addr_reloc(var_offset, target_idx, target_offset, is_thread_local);
+            self.emit_addr_reloc(var_offset, target_idx, target_offset, is_thread_local)?;
             return Ok(());
         }
         // `T *p = g.arr;` / `T *p = g.member.arr[i];` -- a bare designation of
@@ -482,7 +485,7 @@ impl Compiler {
                 if is_thread_local {
                     self.note_tls_init(var_offset);
                 }
-                self.emit_addr_reloc(var_offset, sym_idx, off, is_thread_local);
+                self.emit_addr_reloc(var_offset, sym_idx, off, is_thread_local)?;
                 return Ok(());
             }
             self.restore_lex(snap);
@@ -543,7 +546,7 @@ impl Compiler {
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
                     } else {
-                        self.write_init_value(var_offset as usize, 8, value, reloc, var_ty);
+                        self.write_init_value(var_offset as usize, 8, value, reloc, var_ty)?;
                     }
                     return Ok(());
                 }
@@ -610,7 +613,7 @@ impl Compiler {
                 if is_thread_local {
                     self.note_tls_init(var_offset);
                 }
-                self.emit_addr_reloc(var_offset, sym_idx, a.value, is_thread_local);
+                self.emit_addr_reloc(var_offset, sym_idx, a.value, is_thread_local)?;
             }
             return Ok(());
         }

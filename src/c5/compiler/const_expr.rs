@@ -523,6 +523,22 @@ impl Compiler {
         Ok(v)
     }
 
+    /// C11 6.7.9p4: an object with static storage duration is initialized
+    /// by constant expressions, and a thread-local object's address is not
+    /// one -- it has no value until a thread's block is materialized, which
+    /// is after image relocation. Keyed on the object whose address is
+    /// taken, so a thread-local initialized with an ordinary object's
+    /// address stays accepted.
+    pub(super) fn reject_thread_local_addr_const(&self, target: usize) -> Result<(), C5Error> {
+        if self.symbols[target].is_thread_local {
+            return Err(self.compile_err(alloc::format!(
+                "address of thread-local `{}` is not a constant expression",
+                self.symbols[target].name
+            )));
+        }
+        Ok(())
+    }
+
     /// Try to fold an array-declarator dimension to an integer
     /// constant. Returns `Some(value)` for a constant dimension, or
     /// `None` when the dimension is a non-constant expression (a C99

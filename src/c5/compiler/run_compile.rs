@@ -2435,7 +2435,7 @@ impl Compiler {
                             fresh
                         };
                         self.symbols[id_idx].val = off;
-                        self.write_array_init_into_data(off, ty, &elements);
+                        self.write_array_init_into_data(off, ty, &elements)?;
                         self.symbols[id_idx].has_initializer = true;
                         self.symbols[id_idx].defined_here = true;
                     } else {
@@ -2636,7 +2636,7 @@ impl Compiler {
                                         array_size
                                     )));
                                 }
-                                self.write_array_init_into_data(var_offset, ty, &elements);
+                                self.write_array_init_into_data(var_offset, ty, &elements)?;
                                 for _ in 0..array_cl_parens {
                                     self.accept(')')?;
                                 }

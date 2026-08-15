@@ -2408,6 +2408,52 @@ fn address_of_a_block_scope_compound_literal_is_not_constant() {
 }
 
 #[test]
+fn address_of_a_thread_local_is_not_a_constant_expression() {
+    // C11 6.7.9p4: an object with static storage duration is initialized
+    // by constant expressions, and a thread-local object's address is not
+    // one -- it has no value until a thread's block is materialized, which
+    // is after image relocation. gcc rejects each of these with
+    // "initializer element is not constant".
+    for src in [
+        "__thread int tv = 7;\nint *p = &tv;",
+        "__thread int tv = 7;\nint *p = &tv + 1;",
+        "__thread int a_tls[4];\nint *p = &a_tls[2];",
+        // The array name decays to the address of its first element.
+        "__thread int a_tls[4];\nint *p = a_tls;",
+        "struct s { int a; int b; };\n__thread struct s s_tls;\nint *p = &s_tls.b;",
+        "extern __thread int tv;\nint *p = &tv;",
+        "__thread int tv = 7;\nint *arr[2] = { &tv, 0 };",
+        "struct s { int *q; };\n__thread int tv = 7;\nstruct s v = { .q = &tv };",
+        // A compound literal at file scope has static storage duration.
+        "struct s { int *q; };\n__thread int tv = 7;\nstruct s v = (struct s){ &tv };",
+        "__thread int tv = 7;\nvoid f(void) { static int *p = &tv; (void)p; }",
+        // The rule keys on the object whose address is taken, so a
+        // thread-local slot is no exemption.
+        "__thread int tv;\n__thread int *tp = &tv;",
+    ] {
+        expect_compile_error(src, "address of thread-local");
+    }
+    // The opposite direction is an address constant and stays accepted:
+    // the thread-local is the object being initialized and the object
+    // whose address is taken has static storage duration. An automatic
+    // object's initializer need not be constant at all.
+    let prog = Compiler::new(
+        "int g = 3;\n\
+         static int arr[4] = { 1, 2, 3, 4 };\n\
+         __thread int *tp = &g;\n\
+         __thread int *tq = &arr[2];\n\
+         int main(void) {\n\
+             int *ap = &g;\n\
+             return (tp == &g ? 0 : 1) + (tq == &arr[2] ? 0 : 2) + (ap == &g ? 0 : 4);\n\
+         }"
+        .to_string(),
+    )
+    .compile()
+    .expect("a thread-local initialized with an ordinary object's address stays legal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
 fn static_local_array_initializer_over_bound_rejected() {
     // C99 6.7.8p2: an initializer may not provide a value for an object
     // outside the entity being initialized. The static-local allocator

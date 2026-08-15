@@ -2697,6 +2697,20 @@ impl Compiler {
                 sym.val = next_pc as i64;
                 next_pc += 1;
             }
+            // C99 6.2.2p2: an inline definition's identifier keeps
+            // external linkage, so `&f` must denote the program's one
+            // definition. The body carries `inline_body_name`, so the
+            // identifier is free to take an import placeholder; `val`
+            // keeps the real ent_pc and direct calls stay local. An
+            // entry nothing references emits no symbol.
+            for sym in self.symbols.iter_mut() {
+                if !sym.is_fun_entity() || sym.inline_body_name.is_none() {
+                    continue;
+                }
+                imports.push((next_pc, sym.link_name().into()));
+                sym.inline_addr_pc = Some(next_pc as i64);
+                next_pc += 1;
+            }
             // C99 6.7.1 + 6.9.2: an `extern T x;` / `extern T
             // x[N];` declaration with no defining initializer in
             // this TU contributes no storage. The parser-time
@@ -2806,7 +2820,17 @@ impl Compiler {
             // row whose source symbol is an extern function so
             // the ET_REL writer can identify it as a cross-TU
             // reference. Local code_relocs already carry the
-            // function's ent_pc and keep it.
+            // function's ent_pc and keep it. An inline definition's
+            // address takes the same route through `inline_addr_pc`:
+            // the slot must hold the program's definition, not this
+            // unit's body (C99 6.2.2p2).
+            let addr_pc = |sym: &crate::c5::symbol::Symbol| -> Option<u64> {
+                if let Some(pc) = sym.inline_addr_pc {
+                    return Some(pc as u64);
+                }
+                (sym.is_fun_entity() && !sym.defined_here && sym.linkage == Linkage::External)
+                    .then_some(sym.val as u64)
+            };
             for (reloc, &sym_idx) in self
                 .code_relocs
                 .iter_mut()
@@ -2815,9 +2839,8 @@ impl Compiler {
                 if sym_idx == usize::MAX || sym_idx >= self.symbols.len() {
                     continue;
                 }
-                let sym = &self.symbols[sym_idx];
-                if sym.is_fun_entity() && !sym.defined_here && sym.linkage == Linkage::External {
-                    reloc.target_ent_pc = sym.val as u64;
+                if let Some(pc) = addr_pc(&self.symbols[sym_idx]) {
+                    reloc.target_ent_pc = pc;
                 }
             }
             for (reloc, &sym_idx) in self
@@ -2828,9 +2851,8 @@ impl Compiler {
                 if sym_idx == usize::MAX || sym_idx >= self.symbols.len() {
                     continue;
                 }
-                let sym = &self.symbols[sym_idx];
-                if sym.is_fun_entity() && !sym.defined_here && sym.linkage == Linkage::External {
-                    reloc.target_ent_pc = sym.val as u64;
+                if let Some(pc) = addr_pc(&self.symbols[sym_idx]) {
+                    reloc.target_ent_pc = pc;
                 }
             }
             imports

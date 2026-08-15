@@ -654,16 +654,21 @@ fn collect_subprograms(
     // `(ent_pc, name)` pairs in lockstep, so an `ent_pc -> name` map
     // covers the sort-by-native-offset reorder below.
     //
-    // `func_names` holds assembler names. A GNU asm-label rename makes
-    // that differ from the identifier, and `DW_AT_name` is the source
-    // name (the symbol table already carries the assembler one), so the
-    // identifier is recovered from the symbol table where one exists.
+    // `func_names` holds assembler names. A GNU asm-label rename or an
+    // inline definition's private body name makes that differ from the
+    // identifier, and `DW_AT_name` is the source name (the symbol table
+    // already carries the assembler one), so the identifier is recovered
+    // from the symbol table where one exists.
     let ident_by_pc: BTreeMap<usize, &alloc::string::String> = {
         use crate::c5::token::Token;
         program
             .symbols
             .iter()
-            .filter(|s| s.class == Token::Fun as i64 && s.asm_name.is_some() && !s.name.is_empty())
+            .filter(|s| {
+                s.class == Token::Fun as i64
+                    && (s.asm_name.is_some() || s.inline_body_name.is_some())
+                    && !s.name.is_empty()
+            })
             .map(|s| (s.val as usize, &s.name))
             .collect()
     };

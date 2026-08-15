@@ -978,6 +978,95 @@ fn array_to_pointer_decay_in_global_initializer() {
     );
 }
 
+// C99 6.2.2p2: an inline definition's identifier keeps external
+// linkage, so `&f` denotes one function program-wide even though
+// 6.7.4p6 lets the unit implement its own calls from the local body.
+// The unit holding the inline definition and the unit holding the
+// external definition must agree on the pointer, as they do under gcc
+// and clang.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn inline_definition_address_is_the_same_across_tus() {
+    for opt in ["", "-O"] {
+        let dir = tempdir(&format!("inline-addr{}", opt.len()));
+        write_source(
+            &dir,
+            "inl.c",
+            "inline int f(int x) { return x + 1; }\n\
+             int (*pa)(int) = f;\n\
+             int ca(void) { return f(1); }\n",
+        );
+        write_source(
+            &dir,
+            "ext.c",
+            "int f(int x) { return x + 1; }\n\
+             int (*pb)(int) = f;\n",
+        );
+        write_source(
+            &dir,
+            "main.c",
+            "extern int (*pa)(int);\n\
+             extern int (*pb)(int);\n\
+             extern int ca(void);\n\
+             int main(void) { return (pa == pb) && ca() == 2 ? 42 : 1; }\n",
+        );
+        let exe = dir.join("prog");
+        let mut cmd = Command::new(badc());
+        if !opt.is_empty() {
+            cmd.arg(opt);
+        }
+        run(
+            cmd.arg("-o")
+                .arg(&exe)
+                .arg(dir.join("inl.c"))
+                .arg(dir.join("ext.c"))
+                .arg(dir.join("main.c"))
+                .current_dir(&dir),
+            "link inline definition + external definition",
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(
+            out.status.code(),
+            Some(42),
+            "{opt}: the two units disagree on `&f`: stdout={:?} stderr={:?}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+// The address escaping as an external reference means a program that
+// never defines the function fails to link, which is what gcc and clang
+// report for the same source.
+#[test]
+fn inline_definition_address_without_an_external_definition_fails_link() {
+    let dir = tempdir("inline-addr-undef");
+    write_source(
+        &dir,
+        "only.c",
+        "inline int f(int x) { return x + 1; }\n\
+         int (*p)(int) = f;\n\
+         int main(void) { return p(41); }\n",
+    );
+    let result = Command::new(badc())
+        .arg("-o")
+        .arg(dir.join("prog"))
+        .arg(dir.join("only.c"))
+        .current_dir(&dir)
+        .output()
+        .expect("invoke badc");
+    assert!(
+        !result.status.success(),
+        "link should have failed: stderr={:?}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("undefined reference") && stderr.contains('f'),
+        "expected an undefined reference to `f`, got: {stderr}"
+    );
+}
+
 // C99 6.7.9p23 + 6.2.2: a function-pointer initializer whose
 // target lives in another TU must resolve to the defining
 // unit's `.text` offset. The native ET_REL writer emits the

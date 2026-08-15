@@ -2799,11 +2799,13 @@ impl Compiler {
     /// runs only under `-O` and declines a body its candidate filter
     /// rejects, so the copy is what keeps those calls resolvable.
     ///
-    /// TODO: the licence covers calls, not the address. The name keeps
+    /// That licence covers calls, not the address. The name keeps
     /// external linkage, so C99 6.2.2p2 requires `&f` to denote one
-    /// function program-wide; against a unit-local body it does not.
-    /// Emitting the body under a private name would leave the address
-    /// an external reference while direct calls stay resolvable.
+    /// function program-wide. The body is therefore emitted under
+    /// `Symbol::inline_body_name`, a name no C identifier can spell, and
+    /// the identifier stays an undefined external reference that every
+    /// address site relocates against. A unit that only calls the
+    /// function needs no such reference and links as before.
     fn resolve_inline_linkage(&mut self) {
         use crate::c5::symbol::{Linkage, inline_definition};
         let model = self.inline_model;
@@ -2822,6 +2824,11 @@ impl Compiler {
             } else {
                 Linkage::External
             };
+            // `.` cannot occur in a C identifier, so the body name
+            // collides with nothing the source can declare.
+            if sym.is_inline_definition && sym.defined_here {
+                sym.inline_body_name = Some(alloc::format!("{}.inline", sym.link_name()));
+            }
         }
     }
 

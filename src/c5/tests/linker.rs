@@ -4818,12 +4818,13 @@ fn inline_linkage_follows_c99_6_7_4p7() {
         sym.binding
     }
 
-    // Plain `inline`, no other declaration: internal linkage (local).
+    // Plain `inline`, no other declaration: internal linkage (local),
+    // under the private body name the identifier is split from.
     assert_eq!(
         binding_of(
             "inline int f(int x) { return x + 1; }\n\
              int main(void) { return f(41) == 42 ? 0 : 1; }\n",
-            "f",
+            "f.inline",
         ),
         STB_LOCAL,
         "plain inline-only definition must be local"

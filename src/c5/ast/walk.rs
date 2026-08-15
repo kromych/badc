@@ -619,6 +619,18 @@ impl<'a> Walker<'a> {
         self.live_fun_sym(sym).map_or(fallback_val, |s| s.val)
     }
 
+    /// Live `ent_pc` for a function symbol whose *address* is being
+    /// taken. An inline definition provides no external definition, so
+    /// its identifier resolves through the import placeholder and the
+    /// address denotes the program's one definition (C99 6.2.2p2); every
+    /// other function addresses its own `val`, as a call does.
+    fn live_fun_addr_val(&self, sym: u32, fallback_val: i64) -> i64 {
+        match self.live_fun_sym(sym).and_then(|s| s.inline_addr_pc) {
+            Some(pc) => pc,
+            None => self.live_fun_val(sym, fallback_val),
+        }
+    }
+
     /// True when the function symbol is a variadic function. A
     /// variadic c5 callee keeps the c5 cdecl stack-push argument
     /// shape, so its floating-point arguments ride the integer
@@ -6607,7 +6619,7 @@ impl<'a> Walker<'a> {
             // post-parse `val` there. The walker sym is the
             // same index the parser stored, so the lookup hits
             // the same entry the trampoline emit updated.
-            let live_val = self.live_fun_val(*sym, *val);
+            let live_val = self.live_fun_addr_val(*sym, *val);
             if live_val == 0 {
                 Ok(b.imm_code_extern(*sym))
             } else {
@@ -6665,7 +6677,9 @@ impl<'a> Walker<'a> {
             None
         };
         let val: i64 = if class == Token::Fun as i64 {
-            self.live_fun_val(_sym, val)
+            // The only `Token::Fun` rvalue is the function-pointer decay
+            // of C99 6.3.2.1p4, so this is an address site.
+            self.live_fun_addr_val(_sym, val)
         } else {
             val
         };

@@ -18,7 +18,7 @@ fn weak_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> 
         .symbols
         .iter()
         .filter(|s| s.is_weak && s.class == Token::Fun as i64 && !s.name.is_empty())
-        .map(|s| s.link_name())
+        .map(|s| s.def_link_name())
         .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
         .collect()
 }
@@ -32,13 +32,14 @@ fn function_sections(
         .symbols
         .iter()
         .filter(|s| s.class == Token::Fun as i64 && s.defined_here)
-        .filter_map(|s| Some((s.link_name(), s.section_name.as_ref()?)))
+        .filter_map(|s| Some((s.def_link_name(), s.section_name.as_ref()?)))
         .collect()
 }
 
-/// Assembler name per function identifier the unit renames with a GNU
-/// asm label. Only renamed entries appear; every other function emits
-/// under its identifier.
+/// Assembler name per function identifier the unit emits under a name
+/// other than the identifier: a GNU asm label, or an inline definition's
+/// private body name. Only renamed entries appear; every other function
+/// emits under its identifier.
 fn renamed_functions(
     program: &Program,
 ) -> alloc::collections::BTreeMap<&str, &alloc::string::String> {
@@ -47,7 +48,12 @@ fn renamed_functions(
         .symbols
         .iter()
         .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
-        .filter_map(|s| Some((s.name.as_str(), s.asm_name.as_ref()?)))
+        .filter_map(|s| {
+            Some((
+                s.name.as_str(),
+                s.inline_body_name.as_ref().or(s.asm_name.as_ref())?,
+            ))
+        })
         .collect()
 }
 
@@ -64,7 +70,7 @@ fn internal_function_names(program: &Program) -> alloc::collections::BTreeSet<&s
                 && s.defined_here
                 && !s.name.is_empty()
         })
-        .map(|s| s.link_name())
+        .map(|s| s.def_link_name())
         .collect()
 }
 

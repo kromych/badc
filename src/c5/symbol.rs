@@ -455,6 +455,17 @@ pub(crate) struct Symbol {
     /// suppresses the unused-function diagnostic.
     pub is_inline_definition: bool,
 
+    /// Assembler name the inline definition's body is emitted under,
+    /// distinct from the identifier so the identifier stays available as
+    /// an undefined external reference. `None` for every other symbol.
+    /// See [`Symbol::def_link_name`].
+    pub inline_body_name: Option<String>,
+
+    /// Placeholder `ent_pc` naming the identifier as an import, used by
+    /// the address sites of an inline definition. `val` keeps the real
+    /// `ent_pc`, so a direct call still reaches the body in this unit.
+    pub inline_addr_pc: Option<i64>,
+
     /// True while a block-scope `extern` declaration that shadows an
     /// enclosing local (or other bound name) holds this slot. The slot
     /// is converted to `Glo` for the block so in-block references take
@@ -677,6 +688,20 @@ impl Symbol {
         self.asm_name.as_deref().unwrap_or(&self.name)
     }
 
+    /// Assembler name of the definition this unit emits. Equals
+    /// [`Self::link_name`] except for an inline definition, whose body is
+    /// private to the unit while the identifier stays an external
+    /// reference (C99 6.2.2p2). Consumers naming the body -- the emitted
+    /// function symbol, the per-function attribute lookups keyed on it --
+    /// use this; consumers naming the entity across units use
+    /// `link_name`.
+    pub fn def_link_name(&self) -> &str {
+        match self.inline_body_name.as_deref() {
+            Some(n) => n,
+            None => self.link_name(),
+        }
+    }
+
     /// Whether the slot denotes a function entity: a live `Token::Fun`
     /// binding, or a scoped function declaration whose name binding was
     /// unwound at scope exit (`class` back to 0) while `val`, the
@@ -769,6 +794,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             saw_extern_inline_decl: _, // linkage model input, not an offset
             is_gnu_inline: _,          // linkage model selector
             is_inline_definition: _,   // linkage model result
+            inline_body_name: _,       // assembler name, not an offset
+            inline_addr_pc: _,         // code address space
             saw_static_decl: _,
             block_extern_active: _,
             is_scope_bound: _,

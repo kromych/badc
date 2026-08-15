@@ -54,8 +54,10 @@ impl Compiler {
         // declaration, not to the first member; park it across the
         // body parse so the member checks see only member attributes.
         let decl_attr_align = core::mem::take(&mut self.pending.attr_align);
+        let decl_attr_alignas = core::mem::take(&mut self.pending.attr_alignas);
         let r = self.parse_aggregate_body_inner(name, is_union, packed);
         self.pending.attr_align = self.pending.attr_align.max(decl_attr_align);
+        self.pending.attr_alignas = self.pending.attr_alignas.max(decl_attr_alignas);
         r
     }
 
@@ -66,6 +68,7 @@ impl Compiler {
     /// object of such a type is diagnosed at its declaration instead.
     fn take_member_align(&mut self) -> Result<i64, C5Error> {
         let m_align = core::mem::take(&mut self.pending.attr_align);
+        self.pending.attr_alignas = 0;
         if m_align > 0 && !(m_align as usize).is_power_of_two() {
             return Err(
                 self.compile_err(format!("member alignment {m_align} is not a power of two"))

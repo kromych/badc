@@ -1061,6 +1061,7 @@ impl Compiler {
     fn skip_attribute_specifiers_inner(&mut self) -> Result<bool, C5Error> {
         let mut attrs = AttrFlags::default();
         let mut align: i64 = 0;
+        let mut alignas_align: i64 = 0;
         let mut vector_size: i64 = 0;
         let mut init_priority: Option<u32> = None;
         loop {
@@ -1087,7 +1088,8 @@ impl Compiler {
                                 self.next()?;
                             }
                         }
-                        align = align.max(self.align_of_type(ty) as i64);
+                        alignas_align = alignas_align.max(self.align_of_type(ty) as i64);
+                        align = align.max(alignas_align);
                         if self.lex.tk != ')' {
                             return Err(self.compile_err("`)` expected after `_Alignas` type"));
                         }
@@ -1096,6 +1098,7 @@ impl Compiler {
                         // C11 6.7.5: any constant expression, not only a
                         // literal (`_Alignas(sizeof(long))`).
                         let n = self.parse_constant_int()?;
+                        alignas_align = alignas_align.max(n);
                         align = align.max(n);
                         if self.lex.tk != ')' {
                             return Err(self.compile_err("`)` expected after `_Alignas` operand"));
@@ -1324,6 +1327,9 @@ impl Compiler {
         }
         if align > 0 {
             self.pending.attr_align = self.pending.attr_align.max(align);
+        }
+        if alignas_align > 0 {
+            self.pending.attr_alignas = self.pending.attr_alignas.max(alignas_align);
         }
         if attrs.packed {
             self.pending.attr_packed = true;

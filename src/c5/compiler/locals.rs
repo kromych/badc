@@ -53,6 +53,9 @@ pub(super) struct DeclAlign {
     /// `auto_align` exceeds the 8-byte frame slot, so the object needs the
     /// over-aligned frame region.
     pub region_auto: bool,
+    /// The request came from a variable-level GNU `aligned(N)`, which sets
+    /// the alignment rather than raising it.
+    pub gnu_set: bool,
 }
 
 impl Compiler {
@@ -155,11 +158,14 @@ impl Compiler {
         base_type_align: i64,
     ) -> Result<DeclAlign, C5Error> {
         let req_align = core::mem::take(&mut self.pending.attr_align);
+        let alignas_align = core::mem::take(&mut self.pending.attr_alignas);
         if req_align > 8 && !(req_align as usize).is_power_of_two() {
             return Err(self.compile_err(format!(
                 "requested alignment {req_align} is not a power of two"
             )));
         }
+        self.check_alignas_not_weaker(ty, alignas_align)?;
+        let gnu_set = req_align > alignas_align;
         // An over-alignment attribute in the type-specifier position
         // (`struct {...} __attribute__((aligned(16))) *p`) raises the pointee
         // type's alignment; a pointer object holds its own pointer-aligned
@@ -170,20 +176,28 @@ impl Compiler {
         } else {
             base_type_align.max(0)
         };
-        // GNU semantics: a declarator attribute replaces a typedef-carried
-        // alignment; without one it raises the natural alignment only. The
-        // typedef value alone stands as given, raising or lowering.
-        let obj_align = if req_align > 0 && type_align > 0 {
-            req_align
-        } else if req_align > 0 {
-            req_align.max(self.align_of_type(ty) as i64)
-        } else {
+        // A variable-level GNU `aligned(N)` sets the declared alignment,
+        // replacing both a typedef-carried value and the type's own; an
+        // `_Alignas` request raises the natural alignment only. The typedef
+        // value alone stands as given, raising or lowering.
+        let obj_align = if req_align == 0 {
             type_align
+        } else if gnu_set || type_align > 0 {
+            req_align
+        } else {
+            req_align.max(self.align_of_type(ty) as i64)
         };
+        // Placement keeps the type's attribute-free alignment as a floor
+        // even where the declared alignment is lower.
+        let floor = if gnu_set {
+            self.unattributed_align_of(ty)
+        } else {
+            self.align_of_type(ty)
+        } as i64;
         let auto_align = if is_static || obj_is_pointer {
             0
         } else {
-            core::cmp::max(obj_align, self.align_of_type(ty) as i64)
+            core::cmp::max(obj_align, floor)
         };
         // Any alignment above the 8-byte frame slot -- requested or derived
         // from the type, `__int128` and 16-aligned aggregates included --
@@ -213,7 +227,26 @@ impl Compiler {
             obj_align,
             auto_align,
             region_auto,
+            gnu_set,
         })
+    }
+
+    /// C11 6.7.5p4: an `_Alignas` specifier weaker than the declared type's
+    /// alignment is a constraint violation. A variable-level GNU
+    /// `aligned(N)` carries no such rule and is not checked here.
+    pub(super) fn check_alignas_not_weaker(
+        &mut self,
+        ty: i64,
+        alignas_align: i64,
+    ) -> Result<(), C5Error> {
+        let natural = self.align_of_type(ty) as i64;
+        if alignas_align > 0 && alignas_align < natural {
+            return Err(self.compile_err(format!(
+                "requested alignment {alignas_align} is less than the minimum \
+                 alignment {natural} of the declared type"
+            )));
+        }
+        Ok(())
     }
 
     /// Placement alignment of a block-scope static: the widest of the
@@ -221,10 +254,14 @@ impl Compiler {
     /// `aligned(N)` type attribute on the base. Records it on the symbol
     /// and raises the unit's `.data` alignment to match.
     pub(super) fn apply_static_local_align(&mut self, loc_idx: usize, ty: i64, a: &DeclAlign) {
-        let want_align = core::cmp::max(
-            core::cmp::max(a.req_align.max(0) as usize, self.align_of_type(ty)),
-            a.type_align.max(0) as usize,
-        );
+        let want_align = if a.gnu_set {
+            core::cmp::max(a.req_align as usize, self.unattributed_align_of(ty))
+        } else {
+            core::cmp::max(
+                core::cmp::max(a.req_align.max(0) as usize, self.align_of_type(ty)),
+                a.type_align.max(0) as usize,
+            )
+        };
         self.symbols[loc_idx].data_align = want_align.max(1) as i64;
         if want_align > 8 {
             self.align_data_to(want_align);

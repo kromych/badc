@@ -6262,6 +6262,93 @@ fn alignas_places_objects_at_requested_alignment() {
 }
 
 #[test]
+fn variable_aligned_sets_where_alignas_only_raises() {
+    // GNU practice: `__attribute__((aligned(N)))` on a variable sets that
+    // object's alignment, replacing the one its type declares, so it may
+    // lower it. C11 6.7.5p4 makes the same request spelled `_Alignas` a
+    // constraint violation when it is weaker than the type requires.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let unit = |src: &str| {
+        Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+    };
+    let unit_align = |src: &str| -> usize {
+        let program = unit(src).expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL").data_align
+    };
+    let cell = "struct __attribute__((aligned(64))) cell { char c[64]; };\n";
+    assert_eq!(
+        unit_align(&format!(
+            "{cell}struct cell lowered __attribute__((aligned(16)));\n\
+             int use_it(void) {{ return lowered.c[0]; }}\n"
+        )),
+        16,
+        "a variable `aligned(16)` must place at 16, not at the type's 64"
+    );
+    assert_eq!(
+        unit_align(&format!(
+            "{cell}struct cell plain;\n\
+             int use_it(void) {{ return plain.c[0]; }}\n"
+        )),
+        64,
+        "without a variable request the type's own alignment stands"
+    );
+    // `__alignof__` reports the object's set alignment; the type keeps its
+    // own. The `[N ? 1 : -1]` probe fails to compile when the value differs.
+    for probe in [
+        "struct cell v __attribute__((aligned(16)));\nchar p[__alignof__(v) == 16 ? 1 : -1];\n",
+        "char p[__alignof__(struct cell) == 64 ? 1 : -1];\n",
+        "int x __attribute__((aligned(1)));\nchar p[__alignof__(x) == 1 ? 1 : -1];\n",
+        "_Alignas(64) struct cell v;\nchar p[__alignof__(v) == 64 ? 1 : -1];\n",
+        "_Alignas(128) struct cell v;\nchar p[__alignof__(v) == 128 ? 1 : -1];\n",
+    ] {
+        assert!(
+            unit(&format!("{cell}{probe}")).is_ok(),
+            "must compile: {probe}"
+        );
+    }
+    // An `_Alignas` weaker than the declared type's alignment is rejected,
+    // where the GNU spelling of the same request is accepted.
+    for src in [
+        "_Alignas(16) struct cell weak;\n",
+        "_Alignas(1) int narrow;\n",
+        "int f(void) { _Alignas(16) struct cell weak; return weak.c[0]; }\n",
+    ] {
+        assert!(
+            unit(&format!("{cell}{src}")).is_err(),
+            "`_Alignas` below the type's alignment must be diagnosed: {src}"
+        );
+    }
+    // Automatic storage takes the set alignment too: a type aligned past
+    // what a frame can realise is placeable once the variable lowers it.
+    let wide = "struct __attribute__((aligned(8192))) page { char c[8192]; };\n";
+    assert!(
+        unit(&format!(
+            "{wide}int f(void) {{ struct page p __attribute__((aligned(16))); return p.c[0]; }}\n"
+        ))
+        .is_ok(),
+        "a lowered automatic must be placed, not rejected at the type's alignment"
+    );
+    assert!(
+        unit(&format!(
+            "{wide}int f(void) {{ struct page p; return p.c[0]; }}\n"
+        ))
+        .is_err(),
+        "the type's own alignment still exceeds what a frame can align to"
+    );
+}
+
+#[test]
 fn windows_x64_tz_globals_bind_to_msvcrt_data_exports() {
     // msvcrt's `_tzset` writes the DLL's own `_tzname` / `_timezone` /
     // `_daylight`; the x64 image must import them as data (the

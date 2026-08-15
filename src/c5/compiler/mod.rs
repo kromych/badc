@@ -978,6 +978,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// honor up to 16, anything larger (or an automatic object above
     /// the 8-byte slot alignment) is a diagnostic, never silent.
     pub attr_align: i64,
+    /// The `_Alignas(N)` share of `attr_align`, 0 when the request came
+    /// only from `__attribute__((aligned(N)))` / `__declspec(align(N))`.
+    /// C11 6.7.5 makes `_Alignas` raise-only and an alignment below the
+    /// type's a constraint violation, where a variable-level GNU
+    /// `aligned(N)` sets the object's alignment and may lower it.
+    pub attr_alignas: i64,
     /// Alignment (bytes) carried by the base type of the declaration
     /// under parse, from a typedef whose type has a GNU
     /// `aligned(N)` attribute. Distinct from `attr_align` (an object /
@@ -1069,6 +1075,7 @@ pub(super) struct DeclSpecifiers {
     attr_section: Option<alloc::string::String>,
     attr_cleanup: Option<usize>,
     attr_align: i64,
+    attr_alignas: i64,
     type_align: i64,
     attr_vector_size: i64,
     attr_mode: Option<(u8, bool)>,
@@ -1087,6 +1094,7 @@ impl Pending {
             attr_section: self.attr_section.take(),
             attr_cleanup: self.attr_cleanup.take(),
             attr_align: core::mem::take(&mut self.attr_align),
+            attr_alignas: core::mem::take(&mut self.attr_alignas),
             type_align: core::mem::take(&mut self.type_align),
             attr_vector_size: core::mem::take(&mut self.attr_vector_size),
             attr_mode: self.attr_mode.take(),
@@ -1102,6 +1110,7 @@ impl Pending {
         self.attr_section = s.attr_section;
         self.attr_cleanup = s.attr_cleanup;
         self.attr_align = s.attr_align;
+        self.attr_alignas = s.attr_alignas;
         self.type_align = s.type_align;
         self.attr_vector_size = s.attr_vector_size;
         self.attr_mode = s.attr_mode;
@@ -1227,6 +1236,7 @@ impl Default for Pending {
             compound_lit_close_parens: 0,
             attr_maybe_unused: false,
             attr_align: 0,
+            attr_alignas: 0,
             type_align: 0,
             attr_packed: false,
             attr_vector_size: 0,

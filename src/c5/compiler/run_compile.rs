@@ -350,6 +350,7 @@ impl Compiler {
             self.pending.attr_thread_local = false;
             self.pending.attr_dllexport = false;
             self.pending.attr_align = 0;
+            self.pending.attr_alignas = 0;
             self.pending.type_align = 0;
             self.pending.attr_vector_size = 0;
             self.pending.attr_constructor = false;
@@ -2017,6 +2018,7 @@ impl Compiler {
                     // the supported maximum is a diagnostic, never a silent
                     // drop.
                     let req_align = core::mem::take(&mut self.pending.attr_align);
+                    let alignas_align = core::mem::take(&mut self.pending.attr_alignas);
                     if req_align > 8 && !(req_align as usize).is_power_of_two() {
                         return Err(self.compile_err(format!(
                             "requested alignment {req_align} is not a power of two"
@@ -2043,10 +2045,20 @@ impl Compiler {
                     } else {
                         base_type_align.max(0) as usize
                     };
-                    let want_align = core::cmp::max(
-                        core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
-                        type_align,
-                    );
+                    self.check_alignas_not_weaker(ty, alignas_align)?;
+                    // A variable-level GNU `aligned(N)` sets the placement,
+                    // replacing what the type asks for; the type's
+                    // attribute-free alignment stays a floor. `_Alignas`
+                    // only raises.
+                    let gnu_set = req_align > alignas_align;
+                    let want_align = if gnu_set {
+                        core::cmp::max(req_align as usize, self.unattributed_align_of(ty))
+                    } else {
+                        core::cmp::max(
+                            core::cmp::max(req_align.max(0) as usize, self.align_of_type(ty)),
+                            type_align,
+                        )
+                    };
                     // Declarations of one object combine to the strictest
                     // alignment (C11 6.7.5, GNU attribute practice): an
                     // attribute-free redeclaration must not lower the
@@ -2059,12 +2071,12 @@ impl Compiler {
                     // value, else raises the natural alignment; the typedef
                     // value alone stands as given (it may lower). Distinct
                     // from the placement above, which never lowers.
-                    let obj_align = if req_align > 0 && type_align > 0 {
-                        req_align
-                    } else if req_align > 0 {
-                        req_align.max(self.align_of_type(ty) as i64)
-                    } else {
+                    let obj_align = if req_align == 0 {
                         type_align as i64
+                    } else if gnu_set || type_align > 0 {
+                        req_align
+                    } else {
+                        req_align.max(self.align_of_type(ty) as i64)
                     };
                     self.symbols[id_idx].type_align =
                         self.symbols[id_idx].type_align.max(obj_align);

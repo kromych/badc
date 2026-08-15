@@ -420,6 +420,7 @@ impl Compiler {
         // Scope the object-alignment carrier to this typedef so a prior
         // statement's `_Alignas` does not leak onto the alias.
         self.pending.attr_align = 0;
+        self.pending.attr_alignas = 0;
         let lbt = self.parse_decl_base_type()?;
         while self.lex.tk != ';' {
             let (id_idx, mut ty, mut td_array) = self.parse_declarator(lbt)?;
@@ -540,6 +541,7 @@ impl Compiler {
         // not leak onto a following block declaration; the file-scope
         // loop resets them per declaration, the block path does not.
         self.pending.attr_align = 0;
+        self.pending.attr_alignas = 0;
         self.pending.type_align = 0;
         Ok(())
     }

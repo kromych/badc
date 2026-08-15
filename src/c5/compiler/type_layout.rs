@@ -660,6 +660,21 @@ impl Compiler {
         }
     }
 
+    /// The type's alignment with any `aligned(N)` it carries removed. A
+    /// variable-level GNU `aligned(N)` replaces what the type asks for, so
+    /// this is the floor its placement keeps. An aggregate does not record
+    /// the field-derived value apart from the attribute-raised one, so an
+    /// attributed aggregate reports no floor.
+    pub(super) fn unattributed_align_of(&self, ty: i64) -> usize {
+        if is_struct_ty(ty)
+            && struct_ptr_depth(ty) == 0
+            && self.structs[struct_id_of(ty)].explicit_align > 0
+        {
+            return 1;
+        }
+        self.align_of_type(ty)
+    }
+
     /// C99 6.2.5p20 lays array elements contiguously, so an element type
     /// whose requested alignment exceeds its size cannot tile an array;
     /// a declarator-added dimension over such an element is rejected, as

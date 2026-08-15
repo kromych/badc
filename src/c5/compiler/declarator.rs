@@ -332,13 +332,26 @@ impl Compiler {
         // adds normally. Consumed here so it does not leak to the next
         // declarator.
         let absorb_fn_type_ptr = self.pending.base_is_function_type && leading_ptr_count > 0;
+        // With no `*` of its own, a following `( declarator )` is pure
+        // grouping (`F (*p)` is `F *p`): the function-type marker flows
+        // into the recursion, whose epilogue absorbs the pointer level.
+        let fn_type_flows_into_group = self.pending.base_is_function_type
+            && !absorb_fn_type_ptr
+            && self.lex.tk == '('
+            && !self.paren_opens_param_type_list()
+            && (self.lex.peek_after_whitespace(b'*')
+                || self.lex.peek_after_whitespace(b'(')
+                || self.lex.peek_after_whitespace_starts_ident());
         // A function-TYPE typedef used with no pointer level declares the
         // identifier with function type, i.e. a function declaration (C99
         // 6.9.1), not a function-pointer object. Flag it for the file-scope
         // declaration path; `F *p` (a pointer) takes the absorb path above.
-        self.pending.bare_function_type_declarator =
-            self.pending.base_is_function_type && leading_ptr_count == 0;
-        self.pending.base_is_function_type = false;
+        self.pending.bare_function_type_declarator = self.pending.base_is_function_type
+            && leading_ptr_count == 0
+            && !fn_type_flows_into_group;
+        if !fn_type_flows_into_group {
+            self.pending.base_is_function_type = false;
+        }
         if absorb_fn_type_ptr {
             ty -= Ty::Ptr as i64;
         }

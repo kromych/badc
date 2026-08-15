@@ -144,6 +144,15 @@ impl Compiler {
             if leading_ptr_count > 0 && self.pending.typedef_base_array_size > 0 {
                 ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
             }
+            // A function-TYPE typedef base pre-decays to a function
+            // pointer; the first `*` forms that pointer-to-function (C99
+            // 6.2.7) rather than adding a level, mirroring
+            // `parse_declarator`'s epilogue. Later `*`s add normally.
+            let absorb_fn_type_ptr = self.pending.base_is_function_type && leading_ptr_count > 0;
+            if absorb_fn_type_ptr {
+                self.pending.base_is_function_type = false;
+                ty -= Ty::Ptr as i64;
+            }
             // A parameter that is a pointer to a function-pointer typedef
             // base (`curl_write_callback *p`) gains one fn-pointer
             // indirection level per leading `*`, matching the general
@@ -151,10 +160,14 @@ impl Compiler {
             // (`*fp == fp`) misfires on `*p`, landing the load/store one
             // level too shallow (at the pointer's own slot).
             if leading_ptr_count > 0
-                && !self.pending.base_is_function_type
                 && let Some(fpi) = self.pending.fn_ptr_indirection
             {
-                self.pending.fn_ptr_indirection = Some(fpi + leading_ptr_count);
+                let added = if absorb_fn_type_ptr {
+                    leading_ptr_count - 1
+                } else {
+                    leading_ptr_count
+                };
+                self.pending.fn_ptr_indirection = Some(fpi + added);
             }
             // Optional `[N]` / `[]` after an unnamed parameter
             // type ('int []' / 'char [16]'). Per C99 6.7.5.3p7,

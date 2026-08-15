@@ -316,6 +316,42 @@ fn redeclaration_with_different_signature_warns() {
 }
 
 #[test]
+fn fn_type_typedef_ptr_redeclaration_is_silent() {
+    // C99 6.2.7 + 6.7.5.1p1: `F *` for a function-TYPE typedef `F` is
+    // the same type as the spelled-out fn-pointer declarator. Mixed-
+    // spelling prototype pairs -- both orders, unnamed, `F **`, the
+    // `F (*p)` grouping, a pointer typedef of `F`, and the bare `F`
+    // parameter (6.7.5.3p8) -- must merge silently.
+    for src in &[
+        "typedef int F(int); void f(int (*p)(int)); void f(F *p) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(F *p); void f(int (*p)(int)) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(int (*)(int)); void f(F *p) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(F *); void f(int (*p)(int)) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(int (**pp)(int)); void f(F **pp) { (void)pp; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(int (*p)(int)); void f(F (*p)) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); typedef F *P; void f(int (*p)(int)); void f(P p) { (void)p; } \
+         int main() { return 0; }",
+        "typedef int F(int); void f(int (*p)(int)); void f(F p) { (void)p; } \
+         int main() { return 0; }",
+    ] {
+        let prog = crate::c5::Compiler::new((*src).to_string())
+            .compile()
+            .unwrap();
+        assert!(
+            prog.warnings.is_empty(),
+            "expected silence for {src:?}, got {:?}",
+            prog.warnings,
+        );
+    }
+}
+
+#[test]
 fn matching_redeclaration_is_silent() {
     // The amalgamator (scripts/amalgamate.py) glues TUs that
     // typically include the same prototype many times via shared

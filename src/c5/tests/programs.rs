@@ -2413,6 +2413,15 @@ fn fn_ptr_return_via_fn_ptr_var() {
 }
 
 #[test]
+fn fn_type_typedef_ptr() {
+    // `F *` for a function-TYPE typedef `F` is the spelled-out
+    // fn-pointer type (C99 6.2.7): mixed-spelling prototype pairs,
+    // the `F **` deref, `F (*p)` grouping, and calls through stored
+    // pointers.
+    assert_eq!(run_fixture("fn_type_typedef_ptr.c"), 0);
+}
+
+#[test]
 fn duff_switch_into_loop() {
     // Duff's device: case labels inside a loop nested in the switch,
     // plus K&R parameters and C89 implicit-int locals.

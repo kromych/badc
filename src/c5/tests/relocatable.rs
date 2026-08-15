@@ -554,7 +554,7 @@ fn property_notes_merge_across_a_relocatable_link() {
         gnu_property::encode(
             &props
                 .iter()
-                .map(|&(ty, datasz, value)| Property { ty, datasz, value })
+                .map(|&(ty, datasz, value)| Property::number(ty, datasz, value))
                 .collect::<Vec<_>>(),
             8,
         )

@@ -6530,16 +6530,17 @@ SECTIONS {
             gnu_property::encode(
                 &props
                     .iter()
-                    .map(|&(ty, datasz, value)| gnu_property::Property { ty, datasz, value })
+                    .map(|&(ty, datasz, value)| gnu_property::Property::number(ty, datasz, value))
                     .collect::<Vec<_>>(),
                 8,
             )
         };
-        let obj = |feature: u64, isa: u64| {
+        let obj = |unknown: u64, feature: u64, isa: u64| {
             let body = note(&[
-                // A type outside every defined range: dropped, and it
-                // must not end the walk over the properties behind it.
-                (0x10, 4, 0xaabb_ccdd),
+                // A type outside every defined range, which the inputs
+                // disagree on: dropped, and it must not end the walk
+                // over the properties behind it.
+                (0x10, 4, unknown),
                 (X86_FEATURE_1_AND, 4, feature),
                 (X86_ISA_1_USED, 4, isa),
             ]);
@@ -6567,8 +6568,8 @@ SECTIONS {
         let res = link_with_script(
             &script,
             alloc::vec![
-                parse_lds_object("a.o", obj(0x3, 0x0)).expect("parses"),
-                parse_lds_object("b.o", obj(0x1, 0x1)).expect("parses"),
+                parse_lds_object("a.o", obj(0xaabb_ccdd, 0x3, 0x0)).expect("parses"),
+                parse_lds_object("b.o", obj(0x1122_3344, 0x1, 0x1)).expect("parses"),
             ],
             &opts,
         )
@@ -6631,14 +6632,7 @@ SECTIONS {
   .note.gnu.build-id : { *(.note.gnu.build-id) }
 }
 "#;
-        let body = gnu_property::encode(
-            &[gnu_property::Property {
-                ty: 0xc000_0002,
-                datasz: 4,
-                value: 0x3,
-            }],
-            8,
-        );
+        let body = gnu_property::encode(&[gnu_property::Property::number(0xc000_0002, 4, 0x3)], 8);
         let a = TestObj::new()
             .sec(
                 ".text",

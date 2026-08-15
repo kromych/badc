@@ -3473,6 +3473,39 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
     }
 }
 
+/// A `_Thread_local` access whose destination spills. Under a two-GPR
+/// pool the allocator places the `TlsAddr` result in a frame slot, and
+/// each aarch64 sequence must materialise it through a scratch and store
+/// it, as the other address-producing lowerings do. Refusing the place
+/// fails the build only under the pressure caps, which is the register
+/// matrix rather than a default run.
+#[test]
+fn thread_local_address_lowers_with_a_spilled_destination() {
+    use crate::c5::codegen::ssa::reg_alloc::with_pool_size_override;
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = super::with_prelude(&super::load_fixture("thread_local_address_per_thread.c"));
+    for target in [
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap();
+        with_pool_size_override(2, 2, || {
+            emit_native_with_options(
+                &program,
+                target,
+                NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_optimize()
+                },
+            )
+            .unwrap_or_else(|e| panic!("{target:?}: spilled TlsAddr destination: {e}"));
+        });
+    }
+}
+
 /// Every internal-linkage data object -- a file-scope `static`, a
 /// block-scope static (`name.N`), the C99 6.4.2.2 `__func__` array and
 /// a compound literal with static storage duration -- reaches the

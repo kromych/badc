@@ -4872,6 +4872,7 @@ fn emit_inst(
         Inst::TlsAddr(offset) => emit_tls_addr(
             code,
             dst,
+            frame,
             *offset,
             target,
             tls_index_fixups,
@@ -4932,6 +4933,7 @@ fn emit_inst(
 fn emit_tls_addr(
     code: &mut Vec<u8>,
     dst: Place,
+    frame: Frame,
     offset: i64,
     target: Target,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
@@ -4944,11 +4946,19 @@ fn emit_tls_addr(
     tls_extern_sym: Option<&str>,
 ) -> bool {
     use super::encode::{enc_add_imm_lsl12, enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
-    let Some(rd) = int_reg(dst) else {
-        bail_msg("TlsAddr: dst not int reg");
-        return false;
+    // A spilled destination materialises in the scratch every other
+    // address-producing lowering uses, then stores to the slot; x17 stays
+    // free for the store's base, and the three sequences below only read
+    // `rd` after their last use of x16.
+    let rd = match dst {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(_) => Reg(16),
+        _ => {
+            bail_msg("TlsAddr: dst not int reg / spill");
+            return false;
+        }
     };
-    match target {
+    let emitted = match target {
         Target::LinuxAarch64 => {
             // AAPCS64 variant-1: the static TLS block sits above the thread
             // pointer after a 16-byte TCB reserve, so a variable at
@@ -5086,7 +5096,11 @@ fn emit_tls_addr(
             bail_msg("TlsAddr: target not aarch64");
             false
         }
+    };
+    if emitted {
+        spill_local_addr_to_dst(code, dst, rd, frame);
     }
+    emitted
 }
 
 /// AAPCS64 `va_arg` (Appendix B). Reads the packed `(kind << 16) | size`

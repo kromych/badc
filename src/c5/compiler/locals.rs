@@ -717,17 +717,11 @@ impl Compiler {
         }
         let final_array = self.symbols[loc_idx].array_size;
         let fam_tail = self.symbols[loc_idx].fam_init_bytes;
-        // A zero-length array holds no element, so its record takes the
-        // slot the allocator actually reserved rather than one element's
-        // worth; an element-sized span would run into the next object.
         let zero_len = self.symbols[loc_idx].is_zero_len_array;
-        let reserved = if zero_len {
-            self.symbols[loc_idx].reserved_data_bytes
-        } else if final_array > 0 {
-            ((self.size_of_type(ty) as i64 * final_array + 7) / 8 * 8).max(8)
-        } else {
-            ((self.slots_of_type(ty) * 8).max(8) + fam_tail + 7) / 8 * 8
-        };
+        // The extent is whatever the allocator reserved. Re-deriving it
+        // from the type can overstate the reservation, and an overstated
+        // extent claims bytes of the following object or padding.
+        let reserved = self.symbols[loc_idx].reserved_data_bytes;
         // A GNU asm-label names the object outright, so it replaces the
         // disambiguating `name.N` rather than being suffixed: the label is
         // the assembler name the declaration asked for.
@@ -820,6 +814,7 @@ impl Compiler {
                 }
                 let off = self.data.len() as i64;
                 self.symbols[loc_idx].val = off;
+                self.symbols[loc_idx].reserved_data_bytes = bytes;
                 for _ in 0..bytes {
                     self.data.push(0);
                 }
@@ -889,6 +884,8 @@ impl Compiler {
                     self.align_data_to_8();
                     let off = self.data.len() as i64;
                     self.symbols[loc_idx].val = off;
+                    self.symbols[loc_idx].reserved_data_bytes =
+                        count * inner_dim * elem_size as i64;
                     for _ in 0..(count * inner_dim * elem_size as i64) {
                         self.data.push(0);
                     }
@@ -955,6 +952,7 @@ impl Compiler {
                 }
                 let off = self.data.len() as i64;
                 self.symbols[loc_idx].val = off;
+                self.symbols[loc_idx].reserved_data_bytes = aligned;
                 for _ in 0..aligned {
                     self.data.push(0);
                 }
@@ -1218,6 +1216,8 @@ impl Compiler {
             while !self.data.len().is_multiple_of(8) {
                 self.data.push(0);
             }
+            // The once-guard below sits past the object's extent.
+            self.symbols[loc_idx].reserved_data_bytes = self.data.len() as i64 - off;
             c
         };
         let guard_off = self.data.len() as i64 - self.symbols[loc_idx].val;

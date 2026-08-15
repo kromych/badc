@@ -1836,6 +1836,44 @@ fn dead_block_static_pointer_array_drops_with_literals() {
 }
 
 #[test]
+fn block_static_struct_array_extent_matches_reservation() {
+    // A deferred-size block-scope struct array reserves exactly
+    // `count * sizeof(elem)` bytes, which is not a multiple of 8 here.
+    // The emission record must claim that extent and no more: an
+    // extent rounded past the reservation runs the `.rodata` carve
+    // into the neighbouring object or into the padding the packed
+    // layout records ahead of the aligned global.
+    let src = "\
+        struct pair { char c[3]; };\n\
+        int use(const void *);\n\
+        int f(void) {\n\
+            static const struct pair xs[] = { {\"a\"}, {\"b\"}, {\"c\"} };\n\
+            return use(xs);\n\
+        }\n\
+        int g(void) {\n\
+            static const char msg[] = \"carve stays intact\";\n\
+            return use(msg);\n\
+        }\n\
+        static int aligned_tail __attribute__((aligned(64))) = 0x11223344;\n\
+        int h(void) { return use(&aligned_tail); }\n";
+    for target in [crate::c5::Target::LinuxAarch64, crate::c5::Target::LinuxX64] {
+        let bytes = reloc_tu(src, target, true);
+        assert!(
+            bytes.windows(9).any(|w| w == b"a\0\0b\0\0c\0\0"),
+            "the struct array's elements must survive contiguously"
+        );
+        assert!(
+            bytes.windows(18).any(|w| w == b"carve stays intact"),
+            "the neighbouring carved object must keep its bytes"
+        );
+        assert!(
+            bytes.windows(4).any(|w| w == 0x11223344u32.to_le_bytes()),
+            "the aligned global past the padding must keep its value"
+        );
+    }
+}
+
+#[test]
 fn automatic_initializer_materializes_addresses_without_data_relocs() {
     // C99 6.5.2.5p6 / 6.7.8: automatic storage (a compound literal, a
     // local aggregate) is built at runtime, so an address member --

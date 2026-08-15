@@ -3335,12 +3335,10 @@ impl Compiler {
                     ..m
                 });
             }
-            let Some(m) = runs.iter().copied().find(|m| {
+            let m = runs.iter().copied().find(|m| {
                 let start = first_base + m.first as usize;
                 m.count > 0 && field_idx > start && field_idx < start + m.count as usize
-            }) else {
-                return None;
-            };
+            })?;
             first_base += m.first as usize;
             offset_base += m.offset;
             agg = m.inner;

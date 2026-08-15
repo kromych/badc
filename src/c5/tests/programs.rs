@@ -3234,6 +3234,13 @@ fn struct_array_brace_elision() {
 }
 
 #[test]
+fn struct_array_designator_resume() {
+    // C99 6.7.8p17: a positional entry after a designated one in an array
+    // of structs takes the next subobject, not the next outer row.
+    assert_eq!(run_fixture("struct_array_designator_resume.c"), 0);
+}
+
+#[test]
 fn packed_anon_union_layout() {
     // A trailing `__attribute__((packed))` repacks the fields; the promoted
     // members of an anonymous union must keep overlapping (and a nested

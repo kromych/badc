@@ -2628,17 +2628,20 @@ impl Compiler {
         self.next()?;
         self.with_nesting("initializer", |c| {
             c.collect_struct_array_entries(elem_ty, base, dims)
-        })
+        })?;
+        Ok(())
     }
 
     /// The entry loop of [`Self::collect_struct_array_data`], entered past
-    /// the opening `{`; consumes through the matching `}`.
+    /// the opening `{`; consumes through the matching `}`. Returns the
+    /// one-past-the-highest flat element index the list initialized, for
+    /// the deferred-size outer dimension (C99 6.7.8p22).
     pub(super) fn collect_struct_array_entries(
         &mut self,
         elem_ty: i64,
         base: i64,
         dims: &[i64],
-    ) -> Result<(), C5Error> {
+    ) -> Result<i64, C5Error> {
         self.collect_struct_array_entries_braced(elem_ty, base, dims, true)
     }
 
@@ -2653,12 +2656,21 @@ impl Compiler {
         base: i64,
         dims: &[i64],
         braced: bool,
-    ) -> Result<(), C5Error> {
+    ) -> Result<i64, C5Error> {
         let sid = struct_id_of(elem_ty);
         let elem_size = self.size_of_type(elem_ty) as i64;
-        let stride = elem_size * dims[1..].iter().product::<i64>().max(1);
-        let mut i: i64 = 0;
-        while self.lex.tk != '}' && (braced || i < dims[0]) {
+        let child = &dims[1..];
+        let child_span: i64 = child.iter().product::<i64>().max(1);
+        let stride = elem_size * child_span;
+        let total = dims[0] * child_span;
+        // Flat element cursor: a chained designator leaves it just past
+        // the designated subobject, so a positional entry resumes there
+        // (C99 6.7.8p17), at the outermost level whose row boundary the
+        // cursor sits on. `high` tracks the extent for a deferred outer
+        // dimension.
+        let mut cursor: i64 = 0;
+        let mut high: i64 = 0;
+        while self.lex.tk != '}' && (braced || cursor < total) {
             if let Some((lo, hi, chain)) = self.take_struct_array_designator(dims[0])? {
                 if chain && hi > lo {
                     // `[lo ... hi].field = v` replicates the member fill
@@ -2674,53 +2686,67 @@ impl Compiler {
                             self.restore_lex(snap);
                         }
                     }
+                    cursor = (hi + 1) * child_span;
                 } else if chain {
-                    self.fill_struct_array_designated(elem_ty, base + lo * stride, &dims[1..])?;
+                    let end =
+                        self.fill_struct_array_designated(elem_ty, base + lo * stride, child)?;
+                    cursor = (end - base) / elem_size;
                 } else if hi > lo {
-                    let sub = &dims[1..];
-                    let last = hi;
                     for e in lo..=hi {
                         let snap = self.lex.snapshot();
                         let here = base + e * stride;
-                        if sub.is_empty() {
+                        if child.is_empty() {
                             self.init_struct_array_element(sid, here)?;
                         } else {
-                            self.collect_struct_array_data(elem_ty, here, sub)?;
+                            self.collect_struct_array_data(elem_ty, here, child)?;
                         }
-                        if e < last {
+                        if e < hi {
                             self.restore_lex(snap);
                         }
                     }
+                    cursor = (hi + 1) * child_span;
                 } else {
                     let here = base + lo * stride;
-                    if dims.len() == 1 {
+                    if child.is_empty() {
                         self.init_struct_array_element(sid, here)?;
                     } else {
-                        self.collect_struct_array_data(elem_ty, here, &dims[1..])?;
+                        self.collect_struct_array_data(elem_ty, here, child)?;
                     }
+                    cursor = (lo + 1) * child_span;
                 }
-                i = hi + 1;
+                high = high.max(cursor);
                 self.accept(',')?;
                 continue;
             }
-            if i >= dims[0] {
+            if cursor >= total {
                 return Err(self.compile_err("too many initializers for array"));
             }
-            let here = base + i * stride;
-            if dims.len() == 1 {
+            // The rank a positional entry fills: the outermost level whose
+            // row boundary the cursor sits on; mid-row it names a deeper
+            // subobject, down to a single element.
+            let level = (0..=child.len())
+                .find(|&k| {
+                    let s: i64 = child[k..].iter().product();
+                    s > 0 && cursor % s == 0
+                })
+                .unwrap_or(child.len());
+            let sub = &child[level..];
+            let here = base + cursor * elem_size;
+            if sub.is_empty() {
                 self.init_struct_array_element(sid, here)?;
             } else if self.lex.tk == '{' {
-                self.collect_struct_array_data(elem_ty, here, &dims[1..])?;
+                self.collect_struct_array_data(elem_ty, here, sub)?;
             } else {
-                self.collect_struct_array_entries_braced(elem_ty, here, &dims[1..], false)?;
+                self.collect_struct_array_entries_braced(elem_ty, here, sub, false)?;
             }
-            i += 1;
+            cursor += sub.iter().product::<i64>().max(1);
+            high = high.max(cursor);
             self.accept(',')?;
         }
         if braced {
             self.next()?; // consume `}`
         }
-        Ok(())
+        Ok(high)
     }
 
     /// Take an `[N]` / `[lo ... hi]` designator at the current level, the
@@ -2770,14 +2796,16 @@ impl Compiler {
     /// sub-object at `at` has dimensions `dims_below` (empty for a single
     /// element). Further `[k]` steps descend; a `.field` chain resolves a
     /// member; the terminating `=` takes a value for the designated
-    /// sub-object (C99 6.7.8p7).
+    /// sub-object (C99 6.7.8p7). Returns the byte offset one past the
+    /// designated sub-object, where a positional entry resumes (p17).
     fn fill_struct_array_designated(
         &mut self,
         elem_ty: i64,
         at: i64,
         dims_below: &[i64],
-    ) -> Result<(), C5Error> {
+    ) -> Result<i64, C5Error> {
         let sid = struct_id_of(elem_ty);
+        let elem_size = self.size_of_type(elem_ty) as i64;
         if self.lex.tk == Token::Brak {
             if dims_below.is_empty() {
                 // Element-level `[k]` continues into an array member
@@ -2797,8 +2825,7 @@ impl Compiler {
                 return Err(self.compile_err("`]` expected after array designator index"));
             }
             self.next()?; // `]`
-            let stride =
-                self.size_of_type(elem_ty) as i64 * dims_below[1..].iter().product::<i64>().max(1);
+            let stride = elem_size * dims_below[1..].iter().product::<i64>().max(1);
             return self.fill_struct_array_designated(elem_ty, at + n * stride, &dims_below[1..]);
         }
         if self.lex.tk == Token::Dot {
@@ -2807,16 +2834,19 @@ impl Compiler {
                     self.compile_err("`.field` designator requires indexing down to one element")
                 );
             }
-            return self.fill_element_field_designator(sid, elem_ty, at);
+            self.fill_element_field_designator(sid, elem_ty, at)?;
+            return Ok(at + elem_size);
         }
         if self.lex.tk != Token::Assign {
             return Err(self.compile_err("`=` expected after designator chain"));
         }
         self.next()?; // `=`
         if dims_below.is_empty() {
-            self.init_struct_array_element(sid, at)
+            self.init_struct_array_element(sid, at)?;
+            Ok(at + elem_size)
         } else {
-            self.collect_struct_array_data(elem_ty, at, dims_below)
+            self.collect_struct_array_data(elem_ty, at, dims_below)?;
+            Ok(at + elem_size * dims_below.iter().product::<i64>().max(1))
         }
     }
 

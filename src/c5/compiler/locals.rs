@@ -859,17 +859,30 @@ impl Compiler {
                     self.next()?;
                     // Multi-dimensional struct array: fill the rows below the
                     // deferred outer dimension through the shared struct-array
-                    // walker (designators at every level).
+                    // walker (designators at every level). The pre-scan counts
+                    // each top-level entry as a row, but an entry after a
+                    // chained designator resumes mid-row (C99 6.7.8p17), so
+                    // the walker's extent is the real outer count (p22).
                     if inner_dim > 1 {
                         let mut dims = alloc::vec::Vec::new();
                         dims.push(count);
                         dims.extend_from_slice(&self.symbols[loc_idx].array_dims[1..]);
-                        self.collect_struct_array_entries(ty, off, &dims)?;
-                        self.set_deferred_static_local_count(loc_idx, count * inner_dim);
+                        let high = self.collect_struct_array_entries(ty, off, &dims)?;
+                        let rows = (high + inner_dim - 1) / inner_dim;
+                        if rows < count
+                            && self.data.len() as i64 == off + count * inner_dim * elem_size as i64
+                        {
+                            self.truncate_data(
+                                (off + rows * inner_dim * elem_size as i64) as usize,
+                            );
+                            self.symbols[loc_idx].reserved_data_bytes =
+                                rows * inner_dim * elem_size as i64;
+                        }
+                        self.set_deferred_static_local_count(loc_idx, rows * inner_dim);
                         if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
                             && *first == 0
                         {
-                            *first = count;
+                            *first = rows;
                         }
                         while !self.data.len().is_multiple_of(8) {
                             self.data.push(0);
@@ -926,161 +939,24 @@ impl Compiler {
                 self.write_array_init_into_data(off, ty, &elements);
                 self.set_deferred_static_local_count(loc_idx, final_size);
             } else if array_size > 0 && self.is_traversable_aggregate_ty(ty) {
-                // Known-size static-local array of structs. Each element
-                // is a (possibly brace-elided, C99 6.7.8p20) struct
-                // initializer; the generic array collector below would
+                // Known-size static-local array of structs: the shared
+                // struct-array walker fills the brace list (designators at
+                // every level, positional resume at the designated rank,
+                // C99 6.7.8p17); the generic array collector below would
                 // treat the struct element as a scalar and write past the
                 // pre-allocated region.
-                let sid = struct_id_of(ty);
-                let elem_size = self.size_of_type(ty);
                 let var_offset = self.symbols[loc_idx].val;
-                // A multi-dimensional array's element is itself an array of
-                // structs; each top-level group spans the inner dimensions.
                 let inner_dims = self.inner_dims_of(loc_idx);
                 let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
-                let group_stride = elem_size as i64 * inner_product;
                 let group_count = array_size / inner_product;
                 if self.lex.tk != '{' {
                     return Err(self.compile_err("array initializer must start with `{{`"));
                 }
                 self.next()?;
-                let mut i: i64 = 0;
-                while self.lex.tk != '}' {
-                    // C99 6.7.8p6/p7 array designator. A single `[N] =`
-                    // jumps the outer cursor and fills a whole row; a
-                    // multi-dimensional `[i][j]... = { ... }` indexes every
-                    // dimension down to a single struct element.
-                    if self.lex.tk == Token::Brak {
-                        self.next()?; // `[`
-                        let desig = self.parse_constant_int_folding_const_objects()?;
-                        // GNU range designator `[lo ... hi]`.
-                        let mut desig_hi = desig;
-                        if self.lex.tk == Token::Ellipsis {
-                            self.next()?;
-                            desig_hi = self.parse_constant_int_folding_const_objects()?;
-                        }
-                        if self.lex.tk != ']' {
-                            return Err(
-                                self.compile_err("`]` expected after array designator index")
-                            );
-                        }
-                        self.next()?; // `]`
-                        if desig < 0 || desig_hi < desig || desig_hi >= group_count {
-                            return Err(self.compile_err(format!(
-                                "array designator index {desig}..{desig_hi} out of bounds [0, {group_count})"
-                            )));
-                        }
-                        if self.lex.tk == Token::Brak && desig_hi == desig {
-                            // Multi-dimensional element designator: each inner
-                            // subscript scales by the product of the dimensions
-                            // below it; the outer `desig` scales by the whole
-                            // inner product.
-                            let mut elem = desig * inner_product;
-                            let mut d = 0usize;
-                            while self.lex.tk == Token::Brak {
-                                self.next()?; // `[`
-                                let n = self.parse_constant_int_folding_const_objects()?;
-                                if self.lex.tk != ']' {
-                                    return Err(self
-                                        .compile_err("`]` expected after array designator index"));
-                                }
-                                self.next()?; // `]`
-                                if d >= inner_dims.len() || n < 0 || n >= inner_dims[d] {
-                                    return Err(self.compile_err(format!(
-                                        "array designator index {n} out of bounds"
-                                    )));
-                                }
-                                let scale: i64 =
-                                    inner_dims.iter().skip(d + 1).product::<i64>().max(1);
-                                elem += n * scale;
-                                d += 1;
-                            }
-                            if d != inner_dims.len() {
-                                return Err(self.compile_err(
-                                    "multi-dimensional `[i][j]` designator must index every dimension",
-                                ));
-                            }
-                            // C99 6.7.8p7: the designator list may continue
-                            // into the element (`[i][j].field... = v`).
-                            if self.lex.tk == Token::Dot {
-                                let here = var_offset + elem * elem_size as i64;
-                                self.fill_element_field_designator(sid, ty, here)?;
-                                i = desig + 1;
-                                self.accept(',')?;
-                                continue;
-                            }
-                            if self.lex.tk != Token::Assign {
-                                return Err(
-                                    self.compile_err("`=` expected after `[i][j]` designator")
-                                );
-                            }
-                            self.next()?; // `=`
-                            let here = var_offset + elem * elem_size as i64;
-                            self.init_struct_array_element(sid, here)?;
-                            i = desig + 1;
-                            self.accept(',')?;
-                            continue;
-                        }
-                        // C99 6.7.8p7 member chain on the designated
-                        // element(s) (`[N].field... = v`; 1-D elements only,
-                        // a row of a multi-dimensional array is not a
-                        // struct object).
-                        if self.lex.tk == Token::Dot && inner_dims.is_empty() {
-                            self.fill_element_range(
-                                sid,
-                                ty,
-                                var_offset,
-                                group_stride,
-                                desig..=desig_hi,
-                                true,
-                            )?;
-                            i = desig_hi + 1;
-                            self.accept(',')?;
-                            continue;
-                        }
-                        if self.lex.tk != Token::Assign {
-                            return Err(self.compile_err("`=` expected after `[N]` designator"));
-                        }
-                        self.next()?; // `=`
-                        // A range fills each designated element from the
-                        // same re-parsed entry.
-                        if desig_hi > desig && inner_dims.is_empty() {
-                            self.fill_element_range(
-                                sid,
-                                ty,
-                                var_offset,
-                                group_stride,
-                                desig..=desig_hi,
-                                false,
-                            )?;
-                            i = desig_hi + 1;
-                            self.accept(',')?;
-                            continue;
-                        }
-                        i = desig;
-                    }
-                    if i >= group_count {
-                        return Err(self.compile_err(format!(
-                            "too many initializers for `{}`",
-                            self.symbols[loc_idx].name
-                        )));
-                    }
-                    let here = var_offset + i * group_stride;
-                    if !inner_dims.is_empty() {
-                        if self.lex.tk == '{' {
-                            self.collect_struct_array_data(ty, here, &inner_dims)?;
-                        } else {
-                            // C99 6.7.9p20: a row whose braces are elided takes
-                            // its elements from this list and leaves the rest.
-                            self.collect_struct_array_entries_braced(ty, here, &inner_dims, false)?;
-                        }
-                    } else {
-                        self.init_struct_array_element(sid, here)?;
-                    }
-                    i += 1;
-                    self.accept(',')?;
-                }
-                self.next()?; // consume `}`
+                let mut full_dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
+                full_dims.push(group_count);
+                full_dims.extend_from_slice(&inner_dims);
+                self.collect_struct_array_entries(ty, var_offset, &full_dims)?;
             } else if array_size > 0 {
                 self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
                 self.pending.init_target_array_size = array_size;

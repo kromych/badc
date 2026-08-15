@@ -353,16 +353,15 @@ except what `$BADC_LD_FALLBACK` names:
   implement, so kbuild drops them rather than passing options that would be
   accepted and ignored.
 
-badc's `--version` prints `GNU ld (badc <version>) 2.30`, which
-`scripts/ld-version.sh` reads as a BFD-flavour linker at binutils 2.30 --
-the kernel's own floor, and deliberately no higher, so nothing gated on a
-newer linker is claimed. Two configuration symbols move as a result:
-`CONFIG_LD_VERSION` records 23000, and `CONFIG_ARM64_PTR_AUTH_KERNEL` turns
-off (`arch/arm64/Kconfig` gates it on `LD_VERSION >= 23301`). The latter
-costs nothing here: `buildcc.py` already withholds `-mbranch-protection=`
-specs naming `pac-ret`, because badc emits no pointer-authentication
-prologue. `CONFIG_DEBUG_INFO_COMPRESSED_{ZLIB,ZSTD}` also disappear, because
-badc rejects `--compress-debug-sections`.
+badc's `--version` prints `GNU ld (badc <version>) 2.33.1`, which
+`scripts/ld-version.sh` reads as a BFD-flavour linker at binutils 2.33.1 --
+the level at which `arch/arm64/Kconfig` enables `ARM64_PTR_AUTH_KERNEL`, and
+deliberately no higher, so nothing gated on a newer linker is claimed.
+`CONFIG_LD_VERSION` records 23301 as a result. On the pinned release that is
+the only `LD_VERSION` threshold in `(23000, 23301]`; the rest are 23600 and
+above, and no x86 Kconfig reads the symbol at all.
+`CONFIG_DEBUG_INFO_COMPRESSED_{ZLIB,ZSTD}` still disappear, because badc
+rejects `--compress-debug-sections`.
 
 `BADC_LD_FALLBACK` names output paths to leave to the real linker, the
 bisect tool for a suspected bad link; each is recorded as `fallback`, so a
@@ -503,7 +502,7 @@ nothing and names no linker at all.
 
 The booted image carries the same statement, so it is checked there too. The
 banner's compiler identification is followed by the one the build probed from
-`$(LD)` -- `GNU ld (badc <version>) 2.30` under `--linker badc`, the real
+`$(LD)` -- `GNU ld (badc <version>) 2.33.1` under `--linker badc`, the real
 linker's version string under `--linker reference` -- and each boot must
 agree with the run's choice. A stale image from the other lane therefore
 fails rather than passing as this one's.

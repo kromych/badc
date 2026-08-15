@@ -320,7 +320,7 @@ def _self_test() -> int:
     def line(ld: str) -> str:
         return f"Linux version 7.1.6 (u@h) ({cc}, {ld}) #1 SMP PREEMPT"
 
-    badc = line("GNU ld (badc 0.3.0) 2.30")
+    badc = line("GNU ld (badc 0.3.0) 2.33.1")
     ref = line("GNU ld version 2.46.1-1.fc44")
     assert banner_line(f"boot noise\n[    0.000000] {badc}\nmore") == badc
     assert banner_line("no banner in this log") == ""

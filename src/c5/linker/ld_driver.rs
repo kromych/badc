@@ -48,12 +48,10 @@ enum BuildId {
 ///
 /// 2.33.1 is where `arch/arm64/Kconfig` enables
 /// `ARM64_PTR_AUTH_KERNEL`, which compiles the kernel with
-/// `-mbranch-protection=pac-ret`. The property-note merging that gate
-/// is named for is implemented; the compiler flag is not, and
-/// `arch/arm64/kernel/pi/map_kernel.c` drops the shadow call stack on
-/// the strength of the claim. Reporting 2.33.1 or later waits on the
-/// flag.
-const LD_COMPAT_VERSION: &str = "2.30";
+/// `-mbranch-protection=pac-ret`. Both halves that gate names are in
+/// place: the compiler emits the signing pair and the
+/// `.note.gnu.property` PAC note, and the linker merges those notes.
+const LD_COMPAT_VERSION: &str = "2.33.1";
 
 struct LdArgs {
     relocatable: bool,
@@ -972,6 +970,26 @@ fn report_orphans(
 mod tests {
     use super::*;
     use alloc::vec;
+
+    /// `scripts/ld-version.sh`: `10000*major + 100*minor + patch`, with a
+    /// missing field zero and anything past the third ignored.
+    fn ld_canonical_version(v: &str) -> u32 {
+        let mut it = v.split('.');
+        let f = |x: Option<&str>| x.and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+        10_000 * f(it.next()) + 100 * f(it.next()) + f(it.next())
+    }
+
+    #[test]
+    fn reported_version_covers_the_ptr_auth_kernel_gate() {
+        // `arch/arm64/Kconfig` enables `ARM64_PTR_AUTH_KERNEL` at
+        // `LD_VERSION >= 23301`, and compiles the kernel with
+        // `-mbranch-protection=pac-ret` on the strength of it. Both the
+        // signing pair and the property note it names are emitted, so
+        // the claim is honest; dropping either has to drop this too.
+        assert!(ld_canonical_version(LD_COMPAT_VERSION) >= 23301);
+        assert_eq!(ld_canonical_version("2.33.1"), 23301);
+        assert_eq!(ld_canonical_version("2.30"), 23000);
+    }
 
     #[test]
     fn response_file_splitting_follows_buildargv() {

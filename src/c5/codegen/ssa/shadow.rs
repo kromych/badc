@@ -99,12 +99,23 @@ pub(crate) fn walk_program(
             optimize,
         )
         .map_err(|e| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
-                "ast::walk: function `{}` (ent_pc={}): {}",
-                f.name,
-                f.ent_pc,
-                e,
-            )))
+            // A deliberate rejection is an ordinary diagnostic; the
+            // `internal compiler error` marker stays reserved for a broken
+            // invariant, which also reports the offending node.
+            C5Error::Compile(if e.is_internal() {
+                crate::c5::error::fmt_internal_err(&alloc::format!(
+                    "ast::walk: function `{}` (ent_pc={}): {}",
+                    f.name,
+                    f.ent_pc,
+                    e,
+                ))
+            } else {
+                crate::c5::error::fmt_unsupported_err(&alloc::format!(
+                    "in function `{}`: {}",
+                    f.name,
+                    e,
+                ))
+            })
         })?;
         // `FunctionSsa::name` is the assembler name from here down: it feeds
         // `Build::func_names`, every writer's symbol table, and the bare-name

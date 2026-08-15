@@ -34,6 +34,38 @@ fn unsupported_inline_asm_reports_the_specific_form() {
     );
 }
 
+#[test]
+fn deliberate_walker_rejection_is_not_an_internal_error() {
+    use crate::{NativeOptions, Target};
+    // A construct the backend does not provide is the caller's to work
+    // around, so it reads as an ordinary error; the `internal compiler
+    // error` marker stays reserved for a broken invariant.
+    let program = super::compile_str(
+        "_Atomic __int128 g;\n\
+         int main(void){ __atomic_store_n(&g, (__int128)1, __ATOMIC_SEQ_CST); return 0; }",
+    );
+    let err = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect_err("a 16-byte atomic object has no lowering");
+    let msg = format!("{err}");
+    assert!(
+        !msg.contains("internal compiler error"),
+        "a deliberate rejection must not be tagged as an ICE: {msg}"
+    );
+    assert!(msg.starts_with("error: "), "normal error prefix: {msg}");
+    assert!(
+        msg.contains("paired compare-exchange"),
+        "names the missing lowering: {msg}"
+    );
+    assert!(
+        !msg.contains("ast::walk"),
+        "no internal locator in a user-facing diagnostic: {msg}"
+    );
+}
+
 /// Every emitted binary -- regardless of target -- carries the
 /// `OUTPUT_MARKER` at the tail of the code section so a `strings`
 /// scan reveals the badc version that produced it. The marker is

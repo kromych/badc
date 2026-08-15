@@ -35,34 +35,34 @@ fn offset_align(base: u32, off: i64) -> u32 {
     base.min(step).max(1)
 }
 
-/// Diagnostic for a shape the walker can't lower yet. Carries
-/// enough context to point at the offending AST node so the
-/// caller can route the gap back to a parser site.
+/// A shape the walker does not lower. The `Unsupported` variants are
+/// deliberate rejections of constructs the target or the backend does not
+/// provide, reachable from valid input; the `Invalid` variants mean an
+/// invariant the front end establishes did not hold, and carry the AST
+/// node so the gap can be routed back to a parser site.
 #[derive(Debug)]
 pub(crate) enum WalkError {
     UnsupportedExpr { id: ExprId, kind: &'static str },
-    UnsupportedStmt { id: StmtId, kind: &'static str },
-    UnknownSymbolClass { sym: u32, class: i64 },
-    UnsupportedSymbolShape { sym: u32, reason: &'static str },
     Unsupported(&'static str),
+    InvalidExpr { id: ExprId, kind: &'static str },
+    InvalidStmt { id: StmtId, kind: &'static str },
+    UnknownSymbolClass { sym: u32, class: i64 },
 }
 
 impl core::fmt::Display for WalkError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            WalkError::UnsupportedExpr { id, kind } => {
-                write!(f, "ast::walk: expression #{id} ({kind}) not yet supported")
+            WalkError::UnsupportedExpr { kind, .. } => write!(f, "{kind}"),
+            WalkError::Unsupported(reason) => write!(f, "{reason}"),
+            WalkError::InvalidExpr { id, kind } => {
+                write!(f, "ast::walk: expression #{id} ({kind}) not handled")
             }
-            WalkError::UnsupportedStmt { id, kind } => {
-                write!(f, "ast::walk: statement #{id} ({kind}) not yet supported")
+            WalkError::InvalidStmt { id, kind } => {
+                write!(f, "ast::walk: statement #{id} ({kind}) not handled")
             }
             WalkError::UnknownSymbolClass { sym, class } => {
                 write!(f, "ast::walk: symbol #{sym} class {class} not recognised",)
             }
-            WalkError::UnsupportedSymbolShape { sym, reason } => {
-                write!(f, "ast::walk: symbol #{sym}: {reason}")
-            }
-            WalkError::Unsupported(reason) => write!(f, "ast::walk: {reason}"),
         }
     }
 }
@@ -70,6 +70,18 @@ impl core::fmt::Display for WalkError {
 impl WalkError {
     pub(crate) fn into_string(self) -> String {
         alloc::format!("{self}")
+    }
+
+    /// `true` when the error reports a broken compiler invariant rather
+    /// than a construct the target does not provide. Only these carry the
+    /// `internal compiler error` marker.
+    pub(crate) fn is_internal(&self) -> bool {
+        matches!(
+            self,
+            WalkError::InvalidExpr { .. }
+                | WalkError::InvalidStmt { .. }
+                | WalkError::UnknownSymbolClass { .. }
+        )
     }
 }
 
@@ -1666,7 +1678,7 @@ impl<'a> Walker<'a> {
                     r
                 })
             }
-            _ => Err(WalkError::UnsupportedExpr {
+            _ => Err(WalkError::InvalidExpr {
                 id: lhs,
                 kind: "128-bit operator",
             }),
@@ -2115,14 +2127,14 @@ impl<'a> Walker<'a> {
             }
             Stmt::Break => {
                 let Some(&(brk, _)) = self.loop_ctx.last() else {
-                    return Err(WalkError::UnsupportedStmt { id, kind: "Break" });
+                    return Err(WalkError::InvalidStmt { id, kind: "Break" });
                 };
                 b.jmp(brk);
                 Ok(true)
             }
             Stmt::Continue => {
                 let Some(&(_, cont)) = self.loop_ctx.last() else {
-                    return Err(WalkError::UnsupportedStmt {
+                    return Err(WalkError::InvalidStmt {
                         id,
                         kind: "Continue",
                     });
@@ -2331,7 +2343,7 @@ impl<'a> Walker<'a> {
                 }
                 self.walk_stmt(b, body_id)
             }
-            Stmt::Asm { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Asm" }),
+            Stmt::Asm { .. } => Err(WalkError::InvalidStmt { id, kind: "Asm" }),
             Stmt::Decl(d) => {
                 let decl_id = *d;
                 self.walk_decl(b, decl_id)?;
@@ -3856,7 +3868,7 @@ impl<'a> Walker<'a> {
                     // rejects such declarations, so a tag reaching here is
                     // an error, not a generic-space store.
                     if segment_of_object_ty(*ty).is_some() {
-                        return Err(WalkError::UnsupportedExpr {
+                        return Err(WalkError::InvalidExpr {
                             id: *lhs,
                             kind: "named address space on automatic storage",
                         });
@@ -5705,7 +5717,7 @@ impl<'a> Walker<'a> {
             // A frame slot has no named address space; the parser
             // rejects such declarations.
             if seg != AsmSeg::None {
-                return Err(WalkError::UnsupportedExpr {
+                return Err(WalkError::InvalidExpr {
                     id: lvalue,
                     kind: "named address space on automatic storage",
                 });
@@ -5774,7 +5786,7 @@ impl<'a> Walker<'a> {
                 self.emit_local_init(b, slot, ty, &init)?;
                 Ok(b.local_addr(slot))
             }
-            other => Err(WalkError::UnsupportedExpr {
+            other => Err(WalkError::InvalidExpr {
                 id,
                 kind: lvalue_shape_label(other),
             }),
@@ -6362,7 +6374,7 @@ impl<'a> Walker<'a> {
             ..
         } = self.ast.expr(id)
         else {
-            return Err(WalkError::UnsupportedExpr {
+            return Err(WalkError::InvalidExpr {
                 id,
                 kind: lvalue_shape_label(self.ast.expr(id)),
             });
@@ -6490,7 +6502,7 @@ impl<'a> Walker<'a> {
             // A frame slot has no named address space; the parser
             // rejects such declarations.
             if seg != AsmSeg::None {
-                return Err(WalkError::UnsupportedExpr {
+                return Err(WalkError::InvalidExpr {
                     id,
                     kind: "named address space on automatic storage",
                 });
@@ -7456,9 +7468,9 @@ mod tests {
         assert_eq!(binops, alloc::vec![BinOp::Sub]);
     }
 
-    /// An unsupported statement (`Asm`) surfaces as a
-    /// `WalkError::UnsupportedStmt` so the validator can route
-    /// the gap back to a parser site.
+    /// A statement shape the parser never produces (`Asm`) surfaces as a
+    /// `WalkError::InvalidStmt` so the validator can route the gap back to
+    /// a parser site, and it is reported as an internal error.
     #[test]
     fn unsupported_stmt_returns_error() {
         let mut ast = Ast::new();
@@ -7484,9 +7496,7 @@ mod tests {
             false,
         )
         .expect_err("Asm must surface as unsupported");
-        assert!(matches!(
-            err,
-            WalkError::UnsupportedStmt { kind: "Asm", .. }
-        ));
+        assert!(matches!(err, WalkError::InvalidStmt { kind: "Asm", .. }));
+        assert!(err.is_internal());
     }
 }

@@ -74,6 +74,7 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "range_guard_field_reload.c",
     "zero_fill_narrow_member_guard.c",
     "range_implied_dispatch_dead_arm.c",
+    "range_minmax_constant_p_sign.c",
     "scoped_state_loop_dead_arm.c",
 ];
 

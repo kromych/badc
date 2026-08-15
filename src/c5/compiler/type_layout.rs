@@ -124,6 +124,7 @@ impl Compiler {
             size: 0,
             align: 1,
             explicit_align: 0,
+            natural_align: 0,
             fields: Vec::new(),
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -218,6 +219,7 @@ impl Compiler {
             // classification both depend on.
             align: 16,
             explicit_align: 0,
+            natural_align: 16,
             fields: alloc::vec![half("__lo", 0), half("__hi", 8)],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -308,6 +310,7 @@ impl Compiler {
             size,
             align: 8,
             explicit_align: 0,
+            natural_align: 8,
             fields: fields.iter().map(field).collect(),
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -399,6 +402,7 @@ impl Compiler {
             size: n_bytes as usize,
             align: (n_bytes as usize).min(8),
             explicit_align: 0,
+            natural_align: (n_bytes as usize).min(8),
             fields: alloc::vec![field],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -471,6 +475,7 @@ impl Compiler {
             },
             align: self.align_of_type(elem_ty),
             explicit_align: 0,
+            natural_align: self.unattributed_align_of(elem_ty),
             fields: alloc::vec![field],
             anon_bitfields: Vec::new(),
             anon_members: Vec::new(),
@@ -666,15 +671,15 @@ impl Compiler {
 
     /// The type's alignment with any `aligned(N)` it carries removed. A
     /// variable-level GNU `aligned(N)` replaces what the type asks for, so
-    /// this is the floor its placement keeps. An aggregate does not record
-    /// the field-derived value apart from the attribute-raised one, so an
-    /// attributed aggregate reports no floor.
+    /// this is the floor its placement keeps. An aggregate reports the
+    /// alignment its members require, which `align` no longer carries once
+    /// an attribute raised or lowered it.
     pub(super) fn unattributed_align_of(&self, ty: i64) -> usize {
-        if is_struct_ty(ty)
-            && struct_ptr_depth(ty) == 0
-            && self.structs[struct_id_of(ty)].explicit_align > 0
-        {
-            return 1;
+        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            let natural = self.structs[struct_id_of(ty)].natural_align;
+            if natural > 0 {
+                return natural;
+            }
         }
         self.align_of_type(ty)
     }

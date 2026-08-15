@@ -814,6 +814,16 @@ fn overaligned_data_placement() {
 }
 
 #[test]
+fn attributed_aggregate_align_floor() {
+    // A variable-level `aligned(N)` lower than the type's alignment still
+    // places at the members' attribute-free alignment, including where the
+    // aggregate's own alignment is attribute-derived. Runtime address
+    // checks, matched against clang; gcc keeps no floor for a lowered
+    // request.
+    assert_eq!(run_fixture("attributed_aggregate_align_floor.c"), 0);
+}
+
+#[test]
 fn overaligned_type_placement() {
     // An object whose alignment comes from its type (an over-aligned
     // struct member raising the aggregate), with no attribute on the

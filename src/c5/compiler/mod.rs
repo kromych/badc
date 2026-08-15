@@ -110,6 +110,12 @@ pub struct StructDef {
     /// `_Alignas` reaching the aggregate through its tag, body, members,
     /// or a member's typedef, 0 when the alignment is purely natural.
     pub explicit_align: u32,
+    /// The alignment the members require with every `aligned(N)` /
+    /// `_Alignas` / `packed` / `#pragma pack` removed, computed
+    /// recursively through nested aggregates. `align` cannot report it
+    /// once an attribute raised or lowered the aggregate, and object
+    /// placement keeps it as a floor. `0` until layout finishes.
+    pub natural_align: usize,
     pub fields: Vec<StructField>,
     /// Unnamed bit-fields, in declaration order. C99 6.7.2.1p11 makes
     /// them members that reserve storage, but they have no name, so

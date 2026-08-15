@@ -112,6 +112,7 @@ impl Compiler {
                     size: 0,
                     align: 1,
                     explicit_align: 0,
+                    natural_align: 0,
                     fields: Vec::new(),
                     anon_bitfields: Vec::new(),
                     anon_members: Vec::new(),
@@ -153,6 +154,10 @@ impl Compiler {
         // alignment. Recorded on the StructDef for the automatic-storage
         // placement decision.
         let mut struct_explicit: usize = 0;
+        // The same running max with every alignment attribute and every
+        // packing request removed -- the floor a variable-level
+        // `aligned(N)` cannot place the object below.
+        let mut struct_natural: usize = 1;
         // Bit-packing state for contiguous bitfields. `bf_bit_cursor`
         // is the next free bit position measured from the start of the
         // aggregate; the run begins at `offset * 8` when `bf_active`
@@ -442,6 +447,7 @@ impl Compiler {
                     struct_explicit = struct_explicit.max(
                         (self.structs[inner_id].explicit_align as usize).min(inner_align.max(1)),
                     );
+                    struct_natural = struct_natural.max(self.structs[inner_id].natural_align);
                     let base_offset = if is_union {
                         0
                     } else {
@@ -883,6 +889,7 @@ impl Compiler {
                     if field_align > struct_align {
                         struct_align = field_align;
                     }
+                    struct_natural = struct_natural.max(self.unattributed_align_of(field_ty));
                     // The field's explicit alignment sources; a nested
                     // aggregate contributes its own attribute-derived part.
                     let mut fe = group_align.max(decl_align);
@@ -976,6 +983,7 @@ impl Compiler {
         self.structs[struct_id].size = total;
         self.structs[struct_id].align = struct_align;
         self.structs[struct_id].explicit_align = struct_explicit.min(struct_align) as u32;
+        self.structs[struct_id].natural_align = struct_natural.min(super::MAX_STATIC_ALIGN);
         self.structs[struct_id].is_complete = true;
         // The leading spelling lays out exactly like the trailing one.
         // Threading `packed` into the per-member alignment above covers a

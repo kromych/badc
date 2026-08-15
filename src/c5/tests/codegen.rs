@@ -4827,6 +4827,66 @@ fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
     }
 }
 
+/// A `.set` / `.equ` / `.equiv` at function-body code level defines a
+/// symbol of the unit, as one inside a section does: it leaves the code
+/// stream the arch backend encodes and reaches the unit's declarations. A
+/// constant binds the name `SHN_ABS`, an assignment to another name takes
+/// that name's definition, and an assignment to a name the unit does not
+/// define emits no symbol. The entries are GNU as 2.46.1's for the same
+/// statements.
+#[test]
+fn code_level_assignment_defines_a_unit_symbol() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SHN_ABS: u16 = 0xfff1;
+    const SRC: &str = "\
+        void f(void) { \
+          asm(\".pushsection .tgt,\\\"a\\\"\\n\" \
+              \"lbl:\\n\" \
+              \".long 0\\n\" \
+              \".popsection\\n\" \
+              \".globl al\\n\" \
+              \".set al, lbl\\n\" \
+              \".globl kq\\n\" \
+              \".equiv kq, 5\\n\" \
+              \".set dangling, nowhere\\n\"); }";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let syms = elf64_symbol_records(&obj);
+        let one = |n: &str| {
+            let found: alloc::vec::Vec<_> = syms.iter().filter(|s| s.0 == n).collect();
+            assert_eq!(found.len(), 1, "{target:?}: `{n}` entries {found:?}");
+            (found[0].1, found[0].2, found[0].3)
+        };
+        assert_eq!(
+            one("kq"),
+            (0x10, SHN_ABS, 5),
+            "{target:?}: `.equiv kq, 5` is not a global absolute 5"
+        );
+        let (_, lbl_shndx, lbl_value) = one("lbl");
+        assert_eq!(
+            one("al"),
+            (0x10, lbl_shndx, lbl_value),
+            "{target:?}: `.set al, lbl` did not take the label's definition"
+        );
+        assert!(
+            !syms.iter().any(|s| s.0 == "dangling"),
+            "{target:?}: an assignment to an undefined name emitted a symbol"
+        );
+    }
+}
+
 /// The post-inline recompaction lowers prebuilt bodies, so the import
 /// table has to come from those bodies rather than from the ASTs. An
 /// import whose only source reference is a static helper the inliner

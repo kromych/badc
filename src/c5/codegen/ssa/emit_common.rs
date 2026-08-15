@@ -1648,18 +1648,30 @@ pub(crate) enum AsmSymBind {
     Weak,
 }
 
+/// The value a `.set` / `.equ` / `.equiv` outside any section assigned: a
+/// constant, which binds the name `SHN_ABS`, or another symbol, whose
+/// definition the name takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AsmSymValue {
+    Abs(i64),
+    Sym(alloc::string::String),
+}
+
 /// A symbol directive an asm template carried outside any section. GNU as
-/// scopes `.globl` / `.local` / `.weak` / `.type` / `.size` to the unit, so
-/// the name may be defined by this template's code stream, by another
-/// statement's section, by C, or by nothing in the unit. TODO `.globl` on a
-/// C symbol of the unit: the linkage split is decided from the parse, which
-/// a function-scope template runs after. The file-scope parse applies it.
+/// scopes `.globl` / `.local` / `.weak` / `.type` / `.size` and the
+/// assignments to the unit, so the name may be defined by this template's
+/// code stream, by another statement's section, by C, or by nothing in the
+/// unit. TODO `.globl` on a C symbol of the unit: the linkage split is
+/// decided from the parse, which a function-scope template runs after. The
+/// file-scope parse applies it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct AsmSymDecl {
     pub name: alloc::string::String,
     pub bind: AsmSymBind,
     pub sym_type: AsmSymType,
     pub size: Option<u64>,
+    /// Assigned value, when a `.set` family directive named it.
+    pub value: Option<AsmSymValue>,
 }
 
 /// A label defined inside a named section.
@@ -1754,12 +1766,14 @@ impl AsmSectionSink {
         items: &[AsmSectionItem],
     ) -> Result<(), alloc::string::String> {
         for item in items {
-            let (name, bind, sym_type, size) = match item {
-                AsmSectionItem::Global(n) => (n, AsmSymBind::Global, AsmSymType::NoType, None),
-                AsmSectionItem::Local(n) => (n, AsmSymBind::Local, AsmSymType::NoType, None),
-                AsmSectionItem::Weak(n) => (n, AsmSymBind::Weak, AsmSymType::NoType, None),
+            let (name, bind, sym_type, size, value) = match item {
+                AsmSectionItem::Global(n) => {
+                    (n, AsmSymBind::Global, AsmSymType::NoType, None, None)
+                }
+                AsmSectionItem::Local(n) => (n, AsmSymBind::Local, AsmSymType::NoType, None, None),
+                AsmSectionItem::Weak(n) => (n, AsmSymBind::Weak, AsmSymType::NoType, None, None),
                 AsmSectionItem::Type { name, sym_type } => {
-                    (name, AsmSymBind::Default, *sym_type, None)
+                    (name, AsmSymBind::Default, *sym_type, None, None)
                 }
                 AsmSectionItem::Size { name, expr } => {
                     let ctx = AsmExprCtx {
@@ -1782,7 +1796,59 @@ impl AsmSectionSink {
                         AsmSymBind::Default,
                         AsmSymType::NoType,
                         Some(v as u64),
+                        None,
                     )
+                }
+                // An assignment defines the name for the unit: a constant
+                // binds it `SHN_ABS`, a symbol makes it that symbol's alias.
+                AsmSectionItem::AbsSet { name, value } => (
+                    name,
+                    AsmSymBind::Default,
+                    AsmSymType::NoType,
+                    None,
+                    Some(AsmSymValue::Abs(*value)),
+                ),
+                AsmSectionItem::SymSet { name, target } => (
+                    name,
+                    AsmSymBind::Default,
+                    AsmSymType::NoType,
+                    None,
+                    Some(AsmSymValue::Sym(target.clone())),
+                ),
+                // Outside a section there is no layout to value a location
+                // expression against, so one here must fold to a constant.
+                AsmSectionItem::SetExpr { name, expr } => {
+                    let ctx = AsmExprCtx {
+                        resolve: &|_| None,
+                        const_of: &|_| None,
+                        lax_div: false,
+                    };
+                    let v = eval_asm_value(expr, &ctx)
+                        .ok()
+                        .and_then(|v| v.to_abs())
+                        .ok_or_else(|| {
+                            alloc::format!(
+                                "inline asm: `.set {name}, {expr}` outside a section needs a \
+                                 constant value"
+                            )
+                        })?;
+                    (
+                        name,
+                        AsmSymBind::Default,
+                        AsmSymType::NoType,
+                        None,
+                        Some(AsmSymValue::Abs(v)),
+                    )
+                }
+                // `.set .,` moves the location counter of the section it sits
+                // in; the code stream's is the enclosing function's, which the
+                // arch backend lays out.
+                AsmSectionItem::Org(_)
+                | AsmSectionItem::OrgLabel { .. }
+                | AsmSectionItem::OrgExpr(_) => {
+                    return Err(alloc::string::String::from(
+                        "inline asm: `.set .` outside a section",
+                    ));
                 }
                 _ => continue,
             };
@@ -1804,6 +1870,9 @@ impl AsmSectionSink {
             }
             if size.is_some() {
                 d.size = size;
+            }
+            if value.is_some() {
+                d.value = value;
             }
         }
         Ok(())
@@ -3327,11 +3396,21 @@ fn parse_reloc_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::St
 }
 
 /// Directives GNU as resolves against the unit's symbol table rather than
-/// against the section they sit in.
+/// against the section they sit in. An assignment is one: it defines a
+/// symbol of the unit, not a location in the stream it sits in.
 fn is_asm_sym_directive(tok: &str) -> bool {
     matches!(
         tok,
-        ".globl" | ".global" | ".weak" | ".local" | ".hidden" | ".type" | ".size"
+        ".globl"
+            | ".global"
+            | ".weak"
+            | ".local"
+            | ".hidden"
+            | ".type"
+            | ".size"
+            | ".set"
+            | ".equ"
+            | ".equiv"
     )
 }
 
@@ -3344,7 +3423,9 @@ fn asm_text_has_sym_directive(text: &str) -> bool {
         || text.contains(".local")
         || text.contains(".hidden")
         || text.contains(".type")
-        || text.contains(".size"))
+        || text.contains(".size")
+        || text.contains(".set")
+        || text.contains(".equ"))
     {
         return false;
     }
@@ -4177,8 +4258,9 @@ fn parse_section_item(
         // A `.set` / `.equ` names a symbol (`.set alias, target`, a unit-level
         // alias), an absolute value (a constant the expander re-emitted for a
         // name with external linkage), or an expression over section-local
-        // locations (`.set .Lsz, . - f`).
-        ".set" | ".equ" => {
+        // locations (`.set .Lsz, . - f`). `.equiv` assigns the same way and
+        // adds a redefinition error. TODO diagnose a redefinition.
+        ".set" | ".equ" | ".equiv" => {
             // `.set ., expr` moves the location counter, as `.org` does; the
             // kernel's exception-vector table places its entries that way.
             if let Some(v) = rest.trim_start().strip_prefix('.')

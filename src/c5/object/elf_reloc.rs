@@ -1613,14 +1613,54 @@ pub(super) fn write_relocatable(
     let defined_fn_names: alloc::collections::BTreeSet<&str> =
         build.func_names.iter().map(|s| s.as_str()).collect();
     // Labels the unit's assembly defines: inside an inline-asm named
-    // section, or in the main code stream. GNU as makes each a definition of
-    // the unit, so every reference to the name -- from another asm statement
-    // or from C -- binds to it and no undefined entry is emitted.
-    let asm_defined_labels: alloc::collections::BTreeSet<&str> = build
+    // section, or in the main code stream.
+    let asm_label_names: alloc::collections::BTreeSet<&str> = build
         .asm_sections
         .iter()
         .flat_map(|s| s.labels.iter().map(|l| l.name.as_str()))
         .chain(build.asm_text_labels.iter().map(|l| l.name.as_str()))
+        .collect();
+    // A `.set` / `.equ` outside any section defines a symbol of the unit: a
+    // constant, or another name whose definition it takes, following a chain
+    // of assignments to its end. An assignment to a name nothing in the unit
+    // defines is not a definition and emits no symbol, as in GNU as.
+    let asm_set_defs = {
+        use crate::c5::codegen::ssa::emit_common::AsmSymValue;
+        let value_of = |n: &str| {
+            build
+                .asm_sym_decls
+                .iter()
+                .find(|d| d.name == n)
+                .and_then(|d| d.value.as_ref())
+        };
+        build
+            .asm_sym_decls
+            .iter()
+            .filter_map(|d| {
+                let mut v = d.value.as_ref()?;
+                for _ in 0..build.asm_sym_decls.len() {
+                    let AsmSymValue::Sym(t) = v else { break };
+                    match value_of(t.as_str()) {
+                        Some(next) => v = next,
+                        None => break,
+                    }
+                }
+                match v {
+                    AsmSymValue::Abs(_) => Some((d.name.as_str(), v)),
+                    AsmSymValue::Sym(t) => (asm_label_names.contains(t.as_str())
+                        || defined_fn_names.contains(t.as_str()))
+                    .then_some((d.name.as_str(), v)),
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    // GNU as makes each a definition of the unit, so every reference to the
+    // name -- from another asm statement or from C -- binds to it and no
+    // undefined entry is emitted.
+    let asm_defined_labels: alloc::collections::BTreeSet<&str> = asm_label_names
+        .iter()
+        .copied()
+        .chain(asm_set_defs.iter().map(|&(n, _)| n))
         .collect();
     let mut user_extern_names: Vec<&str> = Vec::new();
     for site in &build.user_extern_call_sites {
@@ -1924,7 +1964,7 @@ pub(super) fn write_relocatable(
     // Labels defined inside inline-asm named sections. The value is the
     // label's offset within the section, rebased by the block's placement;
     // `.type` / `.size` directives set `st_type` / `st_size`.
-    use crate::c5::codegen::ssa::emit_common::{AsmSymBind, AsmSymDecl, AsmSymType};
+    use crate::c5::codegen::ssa::emit_common::{AsmSymBind, AsmSymDecl, AsmSymType, AsmSymValue};
     // A unit-level symbol directive an asm template carried outside any
     // section. It reaches whichever definition the unit holds for the name --
     // a section label, a main-stream label, or none at all.
@@ -2028,6 +2068,17 @@ pub(super) fn write_relocatable(
     for s in &asm_text_label_syms {
         all_names.push(s.name);
     }
+    // The assignments outside any section, less the names a section or the
+    // code stream also defines: those have their own entry above.
+    let asm_decl_set: Vec<(&str, &AsmSymValue)> = asm_set_defs
+        .iter()
+        .copied()
+        .filter(|&(n, _)| !asm_label_names.contains(n))
+        .collect();
+    let asm_decl_set_start = all_names.len();
+    for &(n, _) in &asm_decl_set {
+        all_names.push(n);
+    }
     // A `.globl` naming nothing the unit defines is an undefined global, as
     // GNU as emits for one with no definition. `.weak` is not: GNU as gives
     // an undefined weak name a symbol only where something references it,
@@ -2037,6 +2088,7 @@ pub(super) fn write_relocatable(
         .iter()
         .filter(|d| {
             d.bind == AsmSymBind::Global
+                && d.value.is_none()
                 && !defined_fn_names.contains(d.name.as_str())
                 && !program.function_aliases.iter().any(|a| a.name == d.name)
                 && !defined_data_by_name.contains_key(d.name.as_str())
@@ -2093,6 +2145,43 @@ pub(super) fn write_relocatable(
         match carve.map_text(off) {
             Some((e, new_off)) => (carve.shndx[e], new_off),
             None => (SHIDX_TEXT, off),
+        }
+    };
+    // Where an assignment's value lands: a constant is SHN_ABS, an
+    // assignment to another name takes that name's placement, which the
+    // chain resolution above narrowed to a definition of this unit.
+    let set_place = |v: &AsmSymValue| -> Result<(u16, u64, u8, u64), C5Error> {
+        let t = match v {
+            AsmSymValue::Abs(n) => return Ok((SHN_ABS, *n as u64, STT_NOTYPE, 0)),
+            AsmSymValue::Sym(t) => t.as_str(),
+        };
+        if let Some(l) = asm_labels.iter().find(|l| l.name == t) {
+            return Ok((l.shndx, l.value, l.st_type, l.st_size));
+        }
+        if let Some(s) = asm_text_label_syms.iter().find(|s| s.name == t) {
+            let (shndx, value) = text_place(s.offset as u64);
+            return Ok((shndx, value, s.st_type, s.st_size));
+        }
+        let Some(i) = func_strs.iter().position(|n| n == t) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("elf_reloc: `.set` target `{t}` has no definition"),
+            )));
+        };
+        let (lo, hi) = func_extent(i)?;
+        let (shndx, value) = text_place(lo as u64);
+        Ok((shndx, value, STT_FUNC, hi.saturating_sub(lo) as u64))
+    };
+    // Binding of an assigned name: local unless a directive of the unit
+    // declared it global or weak.
+    let set_bind = |n: &str| -> u8 {
+        match build
+            .asm_sym_decls
+            .iter()
+            .find(|d| d.name == n)
+            .map(|d| d.bind)
+        {
+            Some(AsmSymBind::Global | AsmSymBind::Weak) => bind_for(n),
+            _ => STB_LOCAL,
         }
     };
     // STB_LOCAL function symbols. Emitted before `first_global`
@@ -2168,6 +2257,23 @@ pub(super) fn write_relocatable(
             st_value: value,
             st_size: l.st_size,
             ..Default::default()
+        });
+    }
+    // Assignments outside any section that no directive bound global or
+    // weak, still inside the LOCAL block.
+    for (i, &(n, v)) in asm_decl_set.iter().enumerate() {
+        if set_bind(n) != STB_LOCAL {
+            continue;
+        }
+        let (shndx, value, st_type, st_size) = set_place(v)?;
+        asm_label_symidx.insert(n, symbols.len() as u32);
+        symbols.push(Elf64Sym {
+            st_name: name_offs[asm_decl_set_start + i],
+            st_info: pack_sym_info(STB_LOCAL, st_type),
+            st_other: vis_for(n),
+            st_shndx: shndx,
+            st_value: value,
+            st_size,
         });
     }
     // Internal-linkage data objects: STB_LOCAL + STT_OBJECT, placed
@@ -2252,6 +2358,23 @@ pub(super) fn write_relocatable(
             st_value: value,
             st_size: l.st_size,
             ..Default::default()
+        });
+    }
+    // Assignments a `.globl` / `.weak` of the unit bound.
+    for (i, &(n, v)) in asm_decl_set.iter().enumerate() {
+        let bind = set_bind(n);
+        if bind == STB_LOCAL {
+            continue;
+        }
+        let (shndx, value, st_type, st_size) = set_place(v)?;
+        asm_label_symidx.insert(n, symbols.len() as u32);
+        symbols.push(Elf64Sym {
+            st_name: name_offs[asm_decl_set_start + i],
+            st_info: pack_sym_info(bind, st_type),
+            st_other: vis_for(n),
+            st_shndx: shndx,
+            st_value: value,
+            st_size,
         });
     }
     // STB_GLOBAL (or, for `__attribute__((weak))` definitions,

@@ -24,6 +24,7 @@ pub(crate) const R_X86_64_32S: u32 = 11;
 pub(crate) const R_X86_64_16: u32 = 12;
 pub(crate) const R_X86_64_8: u32 = 14;
 pub(crate) const R_X86_64_PC16: u32 = 13;
+pub(crate) const R_X86_64_PC8: u32 = 15;
 pub(crate) const R_X86_64_DTPOFF64: u32 = 17;
 pub(crate) const R_X86_64_TPOFF32: u32 = 23;
 pub(crate) const R_X86_64_PC64: u32 = 24;

@@ -1106,9 +1106,11 @@ pub(crate) struct AsmSectionBlock {
 /// Instruction-field flavor of a section relocation. `Data` is a plain
 /// data field described by `pcrel` / `branch` / `signed`; the AArch64
 /// kinds name the instruction field the value patches. The PC-relative
-/// kinds resolve at materialize time when the target is a label of the
-/// same section (GNU as emits no relocation there); the page/lo12 kinds
-/// always reach the object writer.
+/// kinds resolve at materialize time when the target is a local label of
+/// the same section (GNU as emits no relocation there; a global or weak
+/// name may bind to another definition at link time, so a reference to
+/// one keeps its relocation); the page/lo12 kinds always reach the
+/// object writer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum AsmRelocKind {
     #[default]
@@ -1139,9 +1141,9 @@ pub(crate) enum AsmRelocKind {
         check: Option<u32>,
     },
     /// A relaxable x86 jump displacement (`jmp` / `jcc`). GNU as computes it
-    /// while relaxing the branch, which resolves a target defined in the same
-    /// section whatever its binding, unless the symbol is weak; every other
-    /// field keeps the relocation for a symbol that is not local.
+    /// while relaxing the branch, which resolves only a local label of the
+    /// same section; a global or weak target keeps the long form and its
+    /// relocation, like every other field.
     JumpRel,
     /// `.reloc`: the ELF relocation type is named in the source, and the
     /// section deposits no field for it.
@@ -5593,11 +5595,11 @@ pub(crate) fn measure_asm_section_offsets(
     if sites.is_empty() {
         return Ok(m);
     }
-    let weak = asm_weak_names(blocks, sink);
+    let non_local = asm_non_local_names(blocks, sink);
     loop {
         let grown: AsmRelaxSet = sites
             .iter()
-            .filter(|s| !long.contains(&s.site) && !short_branch_reaches(blocks, &m, &weak, s))
+            .filter(|s| !long.contains(&s.site) && !short_branch_reaches(blocks, &m, &non_local, s))
             .map(|s| s.site)
             .collect();
         if grown.is_empty() {
@@ -5617,7 +5619,7 @@ pub(crate) fn measure_asm_section_offsets(
 fn short_branch_reaches(
     blocks: &[AsmSectionBlock],
     m: &SectionLabelOffsets,
-    weak: &alloc::collections::BTreeSet<alloc::string::String>,
+    non_local: &alloc::collections::BTreeSet<alloc::string::String>,
     s: &AsmRelaxSite,
 ) -> bool {
     let Some(AsmSectionItem::CodeBytes {
@@ -5630,8 +5632,9 @@ fn short_branch_reaches(
         return false;
     };
     // A `.set` name is an absolute value, not a location in this section,
-    // and a weak name may bind to another definition at link time.
-    if m.symbol(name).is_some() || weak.contains(name.as_str()) {
+    // and a global or weak name may bind to another definition at link
+    // time, so its reference keeps a relocation at the long form's width.
+    if m.symbol(name).is_some() || non_local.contains(name.as_str()) {
         return false;
     }
     let (Some(sec), Some(off)) = (m.section(name), m.offset(name)) else {
@@ -5646,10 +5649,12 @@ fn short_branch_reaches(
     (-lim..lim).contains(&disp)
 }
 
-/// Names the unit binds weak, from the blocks and from what earlier
-/// statements recorded. A reference to one keeps its relocation, so the
-/// materializer does not resolve it in place.
-fn asm_weak_names(
+/// Names the unit binds global or weak, from the blocks and from what
+/// earlier statements recorded (a `.globl` / `.weak` may follow the
+/// reference). A reference to one keeps its relocation so the link binds
+/// the winning definition; only a local name resolves in place, as GNU
+/// as resolves it.
+fn asm_non_local_names(
     blocks: &[AsmSectionBlock],
     sink: &AsmSectionSink,
 ) -> alloc::collections::BTreeSet<alloc::string::String> {
@@ -5657,20 +5662,20 @@ fn asm_weak_names(
         .iter()
         .flat_map(|b| &b.items)
         .filter_map(|it| match it {
-            AsmSectionItem::Weak(n) => Some(n.clone()),
+            AsmSectionItem::Global(n) | AsmSectionItem::Weak(n) => Some(n.clone()),
             _ => None,
         })
         .chain(
             sink.sym_decls
                 .iter()
-                .filter(|d| d.bind == AsmSymBind::Weak)
+                .filter(|d| matches!(d.bind, AsmSymBind::Global | AsmSymBind::Weak))
                 .map(|d| d.name.clone()),
         )
         .chain(
             sink.sections
                 .iter()
                 .flat_map(|s| &s.labels)
-                .filter(|l| l.weak)
+                .filter(|l| l.global || l.weak)
                 .map(|l| l.name.clone()),
         )
         .collect()
@@ -6050,33 +6055,10 @@ pub(crate) fn materialize_asm_sections(
     // sink lengths so the offsets are the materialized ones.
     let measured = measure_asm_section_offsets(blocks, const_of, align_is_p2, sink)?;
     let mut defined: alloc::vec::Vec<MaterializedLabel> = alloc::vec::Vec::new();
-    // Names the unit gives external or weak binding, taken from the whole
-    // stream (a `.globl` may follow the reference) and from the directives
-    // earlier statements recorded. A same-section reference to one keeps its
-    // relocation so the link binds the definition that wins; only a local
-    // name resolves in place, as GNU as resolves it.
-    let weak_bound = asm_weak_names(blocks, sink);
-    let non_local: alloc::collections::BTreeSet<alloc::string::String> = blocks
-        .iter()
-        .flat_map(|b| &b.items)
-        .filter_map(|it| match it {
-            AsmSectionItem::Global(n) | AsmSectionItem::Weak(n) => Some(n.clone()),
-            _ => None,
-        })
-        .chain(
-            sink.sym_decls
-                .iter()
-                .filter(|d| matches!(d.bind, AsmSymBind::Global | AsmSymBind::Weak))
-                .map(|d| d.name.clone()),
-        )
-        .chain(
-            sink.sections
-                .iter()
-                .flat_map(|s| &s.labels)
-                .filter(|l| l.global || l.weak)
-                .map(|l| l.name.clone()),
-        )
-        .collect();
+    // A same-section reference to a global or weak name keeps its
+    // relocation; the same set drives the branch relaxation above, so a
+    // long form is in place wherever a relocation survives.
+    let non_local = asm_non_local_names(blocks, sink);
     let mut weak_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
     // `.globl` is a unit-level declaration in GNU as: the name it binds
     // external may be defined in any section of the unit, before or after.
@@ -6896,9 +6878,7 @@ pub(crate) fn materialize_asm_sections(
                                     &num_unique,
                                     label_off,
                                 ),
-                                !non_local.contains(n.as_str())
-                                    || (r.kind == AsmRelocKind::JumpRel
-                                        && !weak_bound.contains(n.as_str())),
+                                !non_local.contains(n.as_str()),
                             ),
                             _ => (None, true),
                         };

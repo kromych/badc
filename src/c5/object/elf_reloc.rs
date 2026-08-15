@@ -66,7 +66,7 @@ use super::elf_reloc_types::{
     R_AARCH64_MOVW_UABS_G2_NC, R_AARCH64_MOVW_UABS_G3, R_AARCH64_PREL32, R_AARCH64_PREL64,
     R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
     R_AARCH64_TSTBR14, R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64,
-    R_X86_64_DTPOFF64, R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
+    R_X86_64_DTPOFF64, R_X86_64_PC8, R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
     R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, i386_field_width, i386_reloc_desc,
 };
 
@@ -3031,6 +3031,9 @@ pub(super) fn write_relocatable(
                         (RelocAbi::X86_64, false, _) => R_X86_64_32,
                         (RelocAbi::X86_64, true, 8) => R_X86_64_PC64,
                         (RelocAbi::X86_64, true, 2) => R_X86_64_PC16,
+                        // A rel8-only branch (`loop`, `jcxz`) to a non-local
+                        // name; the type must match the one-byte field.
+                        (RelocAbi::X86_64, true, 1) => R_X86_64_PC8,
                         (RelocAbi::X86_64, true, _) => R_X86_64_PC32,
                         // i386 has no 64-bit field: the psABI defines no
                         // 8-byte absolute or PC-relative relocation, so a

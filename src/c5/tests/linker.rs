@@ -3119,6 +3119,180 @@ fn elf_section_bytes(bytes: &[u8], want: &[u8]) -> alloc::vec::Vec<u8> {
         .unwrap_or_default()
 }
 
+#[test]
+fn file_scope_asm_reference_to_global_or_weak_keeps_its_relocation() {
+    // GNU as resolves a same-section PC-relative reference in place only
+    // for a name local to the unit; a `.globl` or `.weak` name may bind to
+    // another definition at link time, so the reference keeps its
+    // relocation: PC32 for a data-class reference (`lea`), PLT32 for a
+    // branch at the rel32 width, PC8 for a rel8-only branch (`loop`). A
+    // numeric label stays local and resolves at the rel8 width.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+asm(".text\n"
+    ".weak wsym\n"
+    "wsym: ret\n"
+    ".globl gsym\n"
+    "gsym: ret\n"
+    ".globl user\n"
+    "user:\n\t"
+    "lea wsym(%rip), %rax\n\t"
+    "call wsym\n\t"
+    "jmp gsym\n\t"
+    "jne gsym\n\t"
+    "loop gsym\n"
+    "1:\tjmp 1b\n");
+int main(void) { return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    const R_X86_64_PC32: u32 = 2;
+    const R_X86_64_PLT32: u32 = 4;
+    const R_X86_64_PC8: u32 = 15;
+    let got: alloc::vec::Vec<(&str, u32, i64)> = obj
+        .text_relocs
+        .iter()
+        .map(|r| (obj.symbols[r.sym_idx].name.as_str(), r.rtype, r.addend))
+        .filter(|(n, _, _)| matches!(*n, "wsym" | "gsym"))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("wsym", R_X86_64_PC32, -4),
+            ("wsym", R_X86_64_PLT32, -4),
+            ("gsym", R_X86_64_PLT32, -4),
+            ("gsym", R_X86_64_PLT32, -4),
+            ("gsym", R_X86_64_PC8, -1),
+        ],
+    );
+    // The relocated branches take the long form with a zeroed field; the
+    // numeric-label jump resolves in place as `eb fe` with no relocation.
+    let t = &obj.text;
+    assert!(t.windows(5).any(|w| w == [0xe9, 0, 0, 0, 0]), "{t:02x?}");
+    assert!(
+        t.windows(6).any(|w| w == [0x0f, 0x85, 0, 0, 0, 0]),
+        "{t:02x?}"
+    );
+    let fold = t.windows(2).position(|w| w == [0xeb, 0xfe]).expect("eb fe");
+    assert!(!obj.text_relocs.iter().any(|r| r.offset == fold as u64 + 1));
+}
+
+#[test]
+fn aarch64_asm_branch_to_global_or_weak_keeps_its_relocation() {
+    // The same rule on AArch64: `bl` / `b` to a `.globl` or `.weak` name
+    // defined in the same section keep CALL26 / JUMP26 relocations; a
+    // numeric label is local and its branch word resolves in place.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+asm(".text\n"
+    ".globl gsym\n"
+    "gsym: ret\n"
+    ".weak wsym\n"
+    "wsym: nop\n"
+    ".globl user\n"
+    "user:\n\t"
+    "bl gsym\n\t"
+    "b gsym\n\t"
+    "bl wsym\n"
+    "1:\tb 1b\n");
+int main(void) { return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    const R_AARCH64_JUMP26: u32 = 282;
+    const R_AARCH64_CALL26: u32 = 283;
+    let got: alloc::vec::Vec<(&str, u32, i64)> = obj
+        .text_relocs
+        .iter()
+        .map(|r| (obj.symbols[r.sym_idx].name.as_str(), r.rtype, r.addend))
+        .filter(|(n, _, _)| matches!(*n, "wsym" | "gsym"))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("gsym", R_AARCH64_CALL26, 0),
+            ("gsym", R_AARCH64_JUMP26, 0),
+            ("wsym", R_AARCH64_CALL26, 0),
+        ],
+    );
+    // `b 1b` folds to `b .` (0x14000000) and carries no relocation.
+    let fold = obj.text.chunks_exact(4).enumerate().any(|(i, w)| {
+        w == [0, 0, 0, 0x14] && !obj.text_relocs.iter().any(|r| r.offset == 4 * i as u64)
+    });
+    assert!(fold, "{:02x?}", obj.text);
+}
+
+#[test]
+fn i386_asm_branch_to_global_keeps_a_pc32_relocation() {
+    // The i386 boot shape, through the standalone assembler driver: the
+    // unit defines `.globl memcpy` and branches to it. GNU as emits
+    // `R_386_PC32 memcpy` for the `call` and the `jmp` (REL, the -4
+    // addend lives in the field); the numeric label resolves in place.
+    use crate::c5::linker::parse_lds_object;
+    use crate::c5::{
+        CompileOptions, ElfClass, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    let src = "\t.code32\n\
+               \t.text\n\
+               \t.globl memcpy\n\
+               memcpy: ret\n\
+               \t.globl user\n\
+               user:\n\
+               \tcall memcpy\n\
+               \tjmp memcpy\n\
+               1:\tjmp 1b\n";
+    let copts = CompileOptions::default()
+        .with_no_entry_point(true)
+        .with_elf_class(ElfClass::Elf32);
+    let program = Compiler::assemble(src, Target::LinuxX64, copts).expect("assemble");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        elf_class: ElfClass::Elf32,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_lds_object("a.o", bytes).expect("parse ET_REL");
+    const EM_386: u16 = 3;
+    const R_386_PC32: u32 = 2;
+    assert_eq!(obj.machine, EM_386);
+    // The writer emits its fixed empty `.text` first; the assembled unit's
+    // bytes live in the asm-section `.text` after it.
+    let text = obj
+        .sections
+        .iter()
+        .find(|s| s.name == ".text" && s.size != 0)
+        .expect(".text");
+    let got: alloc::vec::Vec<(&str, u32, i64)> = text
+        .relocs
+        .iter()
+        .map(|r| (obj.symbols[r.sym as usize].name.as_str(), r.rtype, r.addend))
+        .collect();
+    assert_eq!(
+        got,
+        [("memcpy", R_386_PC32, -4), ("memcpy", R_386_PC32, -4)],
+    );
+    let t = &obj.bytes[text.data_off..text.data_off + text.size as usize];
+    assert!(t.windows(5).any(|w| w == [0xe8, 0xfc, 0xff, 0xff, 0xff]));
+    assert!(t.windows(5).any(|w| w == [0xe9, 0xfc, 0xff, 0xff, 0xff]));
+    assert!(t.windows(2).any(|w| w == [0xeb, 0xfe]), "{t:02x?}");
+}
+
 /// `sh_flags` of the first section named `want` in an ELF64 object, or 0.
 fn elf_section_flags(bytes: &[u8], want: &[u8]) -> u64 {
     let u16a = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;

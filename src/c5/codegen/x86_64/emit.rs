@@ -11145,9 +11145,10 @@ mod code_mode_tests {
         assert_eq!(names("call glob\n"), ["glob"]);
         assert_eq!(names("call wk\n"), ["wk"]);
         assert_eq!(names("lea glob(%rip), %rax\n"), ["glob"]);
-        // The relaxed jump resolves a global target and relocates a weak one.
-        assert!(names("jmp glob\n").is_empty());
-        assert!(names("je glob\n").is_empty());
+        // A relaxed jump to a global or weak target keeps the long form and
+        // its relocation, like every other reference.
+        assert_eq!(names("jmp glob\n"), ["glob"]);
+        assert_eq!(names("je glob\n"), ["glob"]);
         assert_eq!(names("jmp wk\n"), ["wk"]);
         // A difference of two symbols folds whatever the binding, as GNU as
         // folds it: `.long glob - .` deposits a constant.

@@ -33,8 +33,9 @@
 //! spelled: a member keeps its name and offset, and the description
 //! reports the type as unknown instead of naming a different one.
 //!
-//! The `long` base type follows the C99 data model per target: 4
-//! bytes on Windows (LLP64), 8 bytes on Linux / macOS (LP64).
+//! Pointer DIEs take their `DW_AT_byte_size` from the object's ELF
+//! class, and so does the `long` base type except on Windows, whose
+//! LLP64 model fixes it at 4 bytes.
 //! Bitfield members carry `DW_AT_data_bit_offset` + `DW_AT_bit_size`.
 //! `.debug_frame` regenerates from `synth_build`'s symbol set on the
 //! merged image rather than being carried per-`.o`.
@@ -482,9 +483,9 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_ENCODING, DW_FORM_DATA1),
         ],
     },
-    // pointer_type -- 8-byte pointer wrapping a referenced type DIE.
-    // C99 6.2.5p20 leaves pointer size implementation-defined; c5
-    // uses 8 bytes everywhere.
+    // pointer_type -- a pointer wrapping a referenced type DIE. C99
+    // 6.2.5p20 leaves the size implementation-defined; the value is
+    // the object's address width.
     AbbrevDecl {
         code: ABBREV_POINTER_TYPE,
         tag: DW_TAG_POINTER_TYPE,
@@ -910,7 +911,7 @@ fn build_debug_info(
     // resulting CU-relative offsets. Separating layout from writing
     // is what lets a member name a type whose DIE lands later in the
     // unit, so no member is dropped for want of an emission order.
-    let mut catalog = TypeCatalog::new(&program.structs, target);
+    let mut catalog = TypeCatalog::new(&program.structs, target, addr_width.bytes() as u8);
     let var_types: Vec<TypeId> = program
         .variables
         .iter()
@@ -1583,6 +1584,9 @@ impl DieBuf {
 struct TypeCatalog<'a> {
     structs: &'a [StructDef],
     target: super::Target,
+    /// The object's address width, from its ELF class. Sizes every
+    /// pointer DIE and, off Windows, the `long` base type.
+    addr_bytes: u8,
     nodes: Vec<TypeNode>,
     index: BTreeMap<TypeNode, TypeId>,
     /// Aggregates interned but whose members have not been walked.
@@ -1590,10 +1594,11 @@ struct TypeCatalog<'a> {
 }
 
 impl<'a> TypeCatalog<'a> {
-    fn new(structs: &'a [StructDef], target: super::Target) -> Self {
+    fn new(structs: &'a [StructDef], target: super::Target, addr_bytes: u8) -> Self {
         TypeCatalog {
             structs,
             target,
+            addr_bytes,
             nodes: Vec::new(),
             index: BTreeMap::new(),
             pending: Vec::new(),
@@ -1666,7 +1671,7 @@ impl<'a> TypeCatalog<'a> {
                     }
                     return cur;
                 }
-                let base = match base_type_for_leaf(leaf, self.target) {
+                let base = match base_type_for_leaf(leaf, self.target, self.addr_bytes) {
                     Some(_) => self.intern(TypeNode::Base(leaf)),
                     None => self.unspecified(),
                 };
@@ -1924,7 +1929,7 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
     match node {
         TypeNode::Base(leaf) => {
             // Every interned Base was checked to have a description.
-            let Some(base) = base_type_for_leaf(*leaf, catalog.target) else {
+            let Some(base) = base_type_for_leaf(*leaf, catalog.target, catalog.addr_bytes) else {
                 write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_TYPE);
                 return die;
             };
@@ -1935,11 +1940,11 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
         }
         TypeNode::Pointer(None) => {
             write_uleb128(&mut die.bytes, ABBREV_POINTER_TYPE_VOID);
-            die.bytes.push(8);
+            die.bytes.push(catalog.addr_bytes);
         }
         TypeNode::Pointer(Some(inner)) => {
             write_uleb128(&mut die.bytes, ABBREV_POINTER_TYPE);
-            die.bytes.push(8);
+            die.bytes.push(catalog.addr_bytes);
             die.push_ref(*inner);
         }
         TypeNode::Declaration(id) => {
@@ -2163,7 +2168,7 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
 /// attributes. Returns `None` for struct types and any tag
 /// outside the C99 scalar grid; the caller skips emitting a
 /// type DIE for those (debugger falls back to raw bytes).
-fn base_type_for_leaf(leaf: i64, target: super::Target) -> Option<BaseTypeDesc> {
+fn base_type_for_leaf(leaf: i64, target: super::Target, addr_bytes: u8) -> Option<BaseTypeDesc> {
     use crate::c5::compiler::types::{UNSIGNED_BIT, is_void_ty};
     if is_void_ty(leaf) {
         return None;
@@ -2207,11 +2212,12 @@ fn base_type_for_leaf(leaf: i64, target: super::Target) -> Option<BaseTypeDesc> 
             },
         }
     } else if bare == Ty::Long as i64 {
-        // LP64 (Linux / macOS): `long` = 8 bytes. LLP64
-        // (Windows): `long` = 4 bytes. Matches the c5
-        // codegen's load/store width pick in `load_op_for` and
-        // the amalg path's DWARF base_type emission.
-        let byte_size = if target.is_windows() { 4 } else { 8 };
+        // LLP64 (Windows) fixes `long` at 4 bytes; every other data
+        // model badc emits gives it the address width -- 8 under LP64,
+        // 4 under ILP32. Matches the c5 codegen's load/store width
+        // pick in `load_op_for` and the amalg path's DWARF base_type
+        // emission.
+        let byte_size = if target.is_windows() { 4 } else { addr_bytes };
         BaseTypeDesc {
             name: if unsigned { "unsigned long" } else { "long" },
             byte_size,
@@ -2309,5 +2315,40 @@ mod abbrev_golden {
              3f192719360b0000232e010308110112073f192719360b40180000242e0003081101\
              12072719360b0000252e010308110112072719360b4018000000"
         );
+    }
+}
+
+#[cfg(test)]
+mod address_width {
+    use super::*;
+
+    /// The `DW_AT_byte_size` a pointer DIE for `int *` carries, and the
+    /// one the `long` base type carries, for an object of `class`.
+    fn widths(target: super::super::Target, class: ElfClass) -> (u8, u8) {
+        let structs: [StructDef; 0] = [];
+        let addr_bytes = class.addr_size() as u8;
+        let mut catalog = TypeCatalog::new(&structs, target, addr_bytes);
+        let int_ptr = catalog.of_key(TypeKey::Scalar {
+            leaf: Ty::Int as i64,
+            depth: 1,
+        });
+        let node = catalog.node(int_ptr).clone();
+        assert!(matches!(node, TypeNode::Pointer(Some(_))));
+        let die = build_type_die(&mut catalog, &node);
+        // ABBREV_POINTER_TYPE is a one-byte code, then DW_AT_byte_size.
+        let long = base_type_for_leaf(Ty::Long as i64, target, addr_bytes).expect("long base type");
+        (die.bytes[1], long.byte_size)
+    }
+
+    /// A pointer DIE is as wide as the object's addresses, not
+    /// unconditionally 8. `long` follows the same width except under
+    /// LLP64, which fixes it at 4.
+    #[test]
+    fn pointer_and_long_follow_the_objects_elf_class() {
+        use super::super::Target;
+        assert_eq!(widths(Target::LinuxX64, ElfClass::Elf64), (8, 8));
+        assert_eq!(widths(Target::LinuxAarch64, ElfClass::Elf64), (8, 8));
+        assert_eq!(widths(Target::LinuxX64, ElfClass::Elf32), (4, 4));
+        assert_eq!(widths(Target::WindowsX64, ElfClass::Elf64), (8, 4));
     }
 }

@@ -1726,6 +1726,7 @@ pub(crate) fn emit_function(
         let base = code.len();
         deferred_bases.push(base);
         code.extend_from_slice(&region.bytes);
+        text_data_ranges.extend(region.data_ranges.iter().map(|&(o, n)| (base + o, n)));
         // A replacement branch to a symbol becomes a call fixup (same unit) or
         // a relocation (link-time), as a main-stream one does.
         for sb in &region.sym_branches {
@@ -2769,6 +2770,9 @@ struct DeferredAsmRegion {
     labels: alloc::vec::Vec<(u32, usize)>,
     goto_branches: alloc::vec::Vec<DeferredGotoBranch>,
     sym_branches: alloc::vec::Vec<DeferredSymBranch>,
+    /// Region-relative `(offset, length)` of each data run, recorded so the
+    /// mapping symbols cover them once the region's text base is known.
+    data_ranges: alloc::vec::Vec<(usize, usize)>,
 }
 
 /// A replacement `b` / `bl` to a symbol. The rel26 is a link-time or
@@ -2988,10 +2992,15 @@ fn encode_deferred_asm_region(
     main_label: &dyn Fn(&str) -> Option<usize>,
     sym_name: &dyn Fn(&str) -> Result<alloc::string::String, alloc::string::String>,
 ) -> Result<(DeferredAsmRegion, Vec<(usize, LabelBranch, u8)>), alloc::string::String> {
+    use super::super::map_syms::MapClass;
     use super::asm::{AsmOpndA64, parse_template};
     use super::table::{self, Opnd};
     use alloc::string::String;
     let mut bytes: Vec<u8> = Vec::new();
+    // The replacement is appended to `.text`, so it follows the same mapping
+    // rule the main stream does.
+    let mut map_state: Option<MapClass> = None;
+    let mut data_ranges: Vec<(usize, usize)> = Vec::new();
     let mut labels: Vec<(u32, usize)> = Vec::new();
     // Branches to a region-local label, patched after the loop once every
     // label offset is known: `(byte offset in the region, kind, label, forward)`.
@@ -3056,7 +3065,16 @@ fn encode_deferred_asm_region(
                 labels.push((num, bytes.len()));
                 continue;
             }
+            let class = super::ssa::emit_common::data_directive_class(&insn.mnemonic)
+                .unwrap_or(MapClass::Code);
+            if class == MapClass::Code {
+                a64_align_asm_stream(&mut bytes, &mut data_ranges, map_state);
+            }
+            map_state = Some(class);
             if !insn.bytes.is_empty() {
+                if class == MapClass::Data {
+                    data_ranges.push((bytes.len(), insn.bytes.len()));
+                }
                 bytes.extend_from_slice(&insn.bytes);
                 continue;
             }
@@ -3110,6 +3128,9 @@ fn encode_deferred_asm_region(
             }
         }
     }
+    // What follows the region in `.text` is instructions, so a replacement
+    // ending in data realigns here.
+    a64_align_asm_stream(&mut bytes, &mut data_ranges, map_state);
     // Resolve the region-local label branches: a forward reference binds the
     // next definition after the branch, a backward one the most recent at or
     // before it (GNU-as `Nf` / `Nb`). The displacement is region-relative and
@@ -3145,9 +3166,28 @@ fn encode_deferred_asm_region(
             labels,
             goto_branches: Vec::new(),
             sym_branches,
+            data_ranges,
         },
         goto_sites,
     ))
+}
+
+/// Bring an inline-asm stream to the instruction boundary out of the data
+/// mapping state, as GNU as does in an executable section. The gap is under
+/// one instruction, so the shared fill lays it down as zeros; the padding
+/// is part of the data run it follows.
+fn a64_align_asm_stream(
+    code: &mut Vec<u8>,
+    text_data_ranges: &mut Vec<(usize, usize)>,
+    state: Option<super::super::map_syms::MapClass>,
+) {
+    let gap = super::super::ssa::emit_common::insn_align_gap(code.len() as i64, state, true, true)
+        as usize;
+    if gap == 0 {
+        return;
+    }
+    text_data_ranges.push((code.len(), gap));
+    super::super::ssa::emit_common::push_a64_exec_align_fill(code, gap);
 }
 
 /// Lower an `Inst::InlineAsm` (GCC extended asm) on AArch64. Assigns each
@@ -3179,6 +3219,7 @@ fn emit_inline_asm_aarch64(
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
     use super::super::ir::AsmConstraint;
+    use super::super::map_syms::MapClass;
     use super::asm::{AsmOpndA64, assign_operand_regs, parse_template};
     use super::encode::{enc_add_imm, enc_str_imm, enc_str32_imm, enc_strh_imm, enc_sub_imm};
     use super::table::{self, Opnd};
@@ -3684,15 +3725,29 @@ fn emit_inline_asm_aarch64(
     // block).
     let mut goto_sites: Vec<(usize, LabelBranch, usize)> = Vec::new();
 
+    // The mapping state the template has left the stream in; the main
+    // stream lays its bytes into `.text`, so the section rule applies.
+    let mut map_state: Option<MapClass> = None;
+
     // Encode each template instruction; raw-byte pieces emit verbatim.
     for insn in &insns {
         if let Some(num) = insn.label_def {
             label_defs.push((num, code.len()));
             continue;
         }
-        // A raw-byte piece is an instruction word the parser encoded itself
-        // (`msr`, the barriers, the system ops), so it stays code.
+        // Every item but a data directive lays down instructions: a raw-byte
+        // piece the parser encoded itself (`msr`, the barriers, the system
+        // ops), `.inst`, and an assembled mnemonic.
+        let class = super::super::ssa::emit_common::data_directive_class(&insn.mnemonic)
+            .unwrap_or(MapClass::Code);
+        if class == MapClass::Code {
+            a64_align_asm_stream(code, text_data_ranges, map_state);
+        }
+        map_state = Some(class);
         if !insn.bytes.is_empty() {
+            if class == MapClass::Data {
+                text_data_ranges.push((code.len(), insn.bytes.len()));
+            }
             code.extend_from_slice(&insn.bytes);
             continue;
         }
@@ -3700,7 +3755,7 @@ fn emit_inline_asm_aarch64(
         // argument must resolve to a compile-time constant, emitted
         // little-endian at the directive width.
         if let Some(w) = super::super::ssa::emit_common::data_directive_width(&insn.mnemonic) {
-            if insn.mnemonic != super::super::ssa::emit_common::INST_BYTES_DIRECTIVE {
+            if class == MapClass::Data {
                 text_data_ranges.push((code.len(), w * insn.operands.len()));
             }
             for o in &insn.operands {
@@ -3930,6 +3985,9 @@ fn emit_inline_asm_aarch64(
             }
         }
     }
+    // The block's exit work is instructions, so a template ending in data
+    // realigns here.
+    a64_align_asm_stream(code, text_data_ranges, map_state);
     // Patch the label branches now that every definition's offset is known.
     // A named label has exactly one definition, so direction does not apply.
     for &(site, ref kind, num, forward) in &label_fixups {

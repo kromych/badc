@@ -14254,6 +14254,36 @@ fn aarch64_code_section_alignment_matches_gnu_as() {
             8,
             &[(0, "$d"), (8, "$x")][..],
         ),
+        (
+            "a sub-word `.byte` run in a pushed section",
+            ".text\n\t.pushsection .ps,\"ax\",@progbits\nstart:\n\t.byte 0x11\nafter:\n\tnop\n\
+             \t.popsection\n",
+            ".ps",
+            alloc::format!("11000000{NOP}"),
+            4,
+            1,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a `.short` in a pushed section",
+            ".text\n\t.pushsection .ps,\"ax\",@progbits\nstart:\n\t.short 0x1234\nafter:\n\tnop\n\
+             \t.popsection\n",
+            ".ps",
+            alloc::format!("34120000{NOP}"),
+            4,
+            2,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a pushed section whose data run ends it, which GNU as leaves short",
+            ".text\n\t.pushsection .ps,\"ax\",@progbits\nstart:\n\tnop\nafter:\n\t.byte 0x11\n\
+             \t.popsection\n",
+            ".ps",
+            alloc::format!("{NOP}11"),
+            4,
+            4,
+            &[(0, "$x"), (4, "$d")][..],
+        ),
     ];
     // A unit keeps the compiled `.text` and the assembled one in separate
     // headers of the same name; the assembled bytes are in the later.
@@ -14283,6 +14313,190 @@ fn aarch64_code_section_alignment_matches_gnu_as() {
             maps.iter().map(|&(o, n)| (o, String::from(n))).collect();
         assert_eq!(got, want_maps, "{sec} mapping symbols for {what}");
     }
+}
+
+#[test]
+fn aarch64_function_body_asm_realigns_after_data_like_gnu_as() {
+    // A function-body `asm` main stream lays its bytes into `.text`, an
+    // executable section, so GNU as's mapping rule applies there as it does
+    // to a pushed section: an instruction after a sub-word data run brings
+    // the counter to the instruction boundary first, the gap pads with
+    // zeros, and the padding belongs to the data run. The block's exit work
+    // is instructions, so a template ending in data pads too. Every
+    // expectation is the byte string `as` lays down for the same statement.
+    use crate::c5::Target;
+    const NOP: &str = "1f2003d5";
+    /// A shape: what it is, the template, the bytes it lays down, and the
+    /// `.text` mapping symbols.
+    type Shape = (
+        &'static str,
+        &'static str,
+        String,
+        &'static [(u64, &'static str)],
+    );
+    let shapes: alloc::vec::Vec<Shape> = alloc::vec![
+        (
+            "a one-byte run before an instruction",
+            ".byte 1\\n\\tnop",
+            alloc::format!("01000000{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a two-byte run before an instruction",
+            ".byte 1,2\\n\\tnop",
+            alloc::format!("01020000{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a three-byte run before an instruction",
+            ".byte 1,2,3\\n\\tnop",
+            alloc::format!("01020300{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a whole-word run, which needs no padding",
+            ".byte 1,2,3,4\\n\\tnop",
+            alloc::format!("01020304{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a `.short` before an instruction",
+            ".short 0x1234\\n\\tnop",
+            alloc::format!("34120000{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a `.short` run past a word boundary",
+            ".short 0x1234,0x5678,0x9abc\\n\\tnop",
+            alloc::format!("34127856bc9a0000{NOP}"),
+            &[(0, "$d"), (8, "$x")][..],
+        ),
+        (
+            "a `.long`, which is already aligned",
+            ".long 0x11223344\\n\\tnop",
+            alloc::format!("44332211{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a data run at the start of the template",
+            ".byte 1,2,3\\n\\tnop\\n\\tnop",
+            alloc::format!("01020300{NOP}{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "data after an instruction",
+            "nop\\n\\t.byte 1\\n\\tnop",
+            alloc::format!("{NOP}01000000{NOP}"),
+            &[(0, "$x"), (4, "$d"), (8, "$x")][..],
+        ),
+        (
+            "data with no instruction after it",
+            "nop\\n\\t.byte 1",
+            alloc::format!("{NOP}01000000"),
+            &[(0, "$x"), (4, "$d"), (8, "$x")][..],
+        ),
+        (
+            "`.inst`, whose bytes are an instruction",
+            ".byte 1\\n\\t.inst 0xd503201f\\n\\tnop",
+            alloc::format!("01000000{NOP}{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "two data runs",
+            ".byte 1\\n\\tnop\\n\\t.byte 1,2\\n\\tnop",
+            alloc::format!("01000000{NOP}01020000{NOP}"),
+            &[(0, "$d"), (4, "$x"), (8, "$d"), (12, "$x")][..],
+        ),
+        (
+            "a forward branch over the padding",
+            ".byte 1\\n\\tb 1f\\n1:\\n\\tnop",
+            alloc::format!("0100000001000014{NOP}"),
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+    ];
+    for (what, tmpl, hex, maps) in shapes {
+        let src = alloc::format!("void f(void){{ __asm__ volatile(\"{tmpl}\"); }}\n");
+        let obj = reloc_tu(&src, Target::LinuxAarch64, false);
+        let text = elf_sections(&obj)
+            .into_iter()
+            .find(|(n, ..)| n == ".text")
+            .map(|(.., b)| b)
+            .expect(".text");
+        let (_, syms) = elf_layout(&obj);
+        let at = syms["f"].1 as usize;
+        let want: alloc::vec::Vec<u8> = (0..hex.len() / 2)
+            .map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).unwrap())
+            .collect();
+        assert_eq!(&text[at..at + want.len()], &want[..], "bytes for {what}");
+        let got: alloc::vec::Vec<(u64, String)> = mapping_symbols(&obj)
+            .into_iter()
+            .filter(|(s, ..)| s == ".text")
+            .map(|(_, o, n)| (o, n))
+            .collect();
+        let want_maps: alloc::vec::Vec<(u64, String)> =
+            maps.iter().map(|&(o, n)| (o, String::from(n))).collect();
+        assert_eq!(got, want_maps, "mapping symbols for {what}");
+    }
+    // The ALTERNATIVE replacement is a second stream of the same statement,
+    // appended to `.text` after the function body, and takes the same rule.
+    let src = "void f(void){ __asm__ volatile(\"nop\\n.subsection 1\\n\
+               .byte 1\\n\\tnop\\n.previous\\n\"); }\n";
+    let obj = reloc_tu(src, Target::LinuxAarch64, false);
+    let text = elf_sections(&obj)
+        .into_iter()
+        .find(|(n, ..)| n == ".text")
+        .map(|(.., b)| b)
+        .expect(".text");
+    assert_eq!(
+        &text[text.len() - 8..],
+        &[0x01, 0, 0, 0, 0x1f, 0x20, 0x03, 0xd5],
+        "the replacement region did not realign after its data run"
+    );
+    let region = text.len() - 8;
+    let got: alloc::vec::Vec<(u64, String)> = mapping_symbols(&obj)
+        .into_iter()
+        .filter(|(s, o, _)| s == ".text" && *o as usize >= region)
+        .map(|(_, o, n)| (o, n))
+        .collect();
+    assert_eq!(
+        got,
+        alloc::vec![
+            (region as u64, String::from("$d")),
+            (region as u64 + 4, String::from("$x")),
+        ],
+        "replacement region mapping symbols"
+    );
+    // A label inside the data run keeps the unaligned offset it was written
+    // at, so a branch to it has no encoding -- the error GNU as reports.
+    let src = "void f(void){ __asm__ volatile(\".byte 1\\n1:\\n\\tnop\\n\\tb 1b\"); }\n";
+    let err = crate::Compiler::with_options(
+        String::from(src),
+        Target::LinuxAarch64,
+        crate::c5::compiler::CompileOptions {
+            no_entry_point: true,
+            gnu: true,
+            ..Default::default()
+        },
+    )
+    .compile()
+    .ok()
+    .and_then(|p| {
+        crate::c5::emit_native_with_options(
+            &p,
+            Target::LinuxAarch64,
+            crate::c5::NativeOptions {
+                output_kind: crate::c5::OutputKind::Relocatable,
+                ..Default::default()
+            },
+        )
+        .err()
+    })
+    .map(|e| alloc::format!("{e}"))
+    .unwrap_or_default();
+    assert!(
+        err.contains("not word-aligned"),
+        "branch into a data run was accepted: {err}"
+    );
 }
 
 #[test]

@@ -8129,6 +8129,20 @@ pub(crate) fn data_directive_width(tok: &str) -> Option<usize> {
     })
 }
 
+/// The mapping class a `.byte`-family directive keyword lays down, or
+/// `None` when the keyword is not one. This is the keyword-level form of
+/// the rule [`step_map_state`] applies to a parsed section item: `.inst`
+/// assembles to instructions, every other data directive to data.
+pub(crate) fn data_directive_class(tok: &str) -> Option<MapClass> {
+    data_directive_width(tok).map(|_| {
+        if tok == INST_BYTES_DIRECTIVE {
+            MapClass::Code
+        } else {
+            MapClass::Data
+        }
+    })
+}
+
 fn parse_raw_piece(piece: &str) -> Option<alloc::vec::Vec<u8>> {
     let width = data_directive_width(piece.split_whitespace().next()?);
     if let Some(w) = width {

@@ -1268,10 +1268,17 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             });
             continue;
         }
-        // Reuse the shared raw-byte recognizer for a single piece.
+        // Reuse the shared raw-byte recognizer for a single piece. A data
+        // directive of constants keeps its keyword in the mnemonic field so
+        // the emitter classifies its bytes as it does the operand-referencing
+        // form; a bare machine-byte run carries no keyword.
         if let Some(bytes) = emit_common::parse_raw_template(piece.as_bytes()) {
+            let tok = piece.split_whitespace().next().unwrap_or_default();
             insns.push(AsmInsnA64 {
-                mnemonic: String::new(),
+                mnemonic: match emit_common::data_directive_width(tok) {
+                    Some(_) => String::from(tok),
+                    None => String::new(),
+                },
                 operands: Vec::new(),
                 bytes,
                 label_def: None,
@@ -1924,11 +1931,17 @@ mod tests {
 
     #[test]
     fn parse_raw_piece_in_stream() {
+        // A data directive of constants keeps its keyword, which classifies
+        // its bytes as data; a bare machine-byte run carries none and stays
+        // code.
         let insns = parse_template(b".byte 0x1f, 0x20, 0x03, 0xd5; add %0, %0, %1").unwrap();
         assert_eq!(insns.len(), 2);
         assert_eq!(insns[0].bytes, [0x1f, 0x20, 0x03, 0xd5]);
-        assert!(insns[0].mnemonic.is_empty());
+        assert_eq!(insns[0].mnemonic, ".byte");
         assert_eq!(insns[1].mnemonic, "add");
+        let raw = parse_template(b"1f 20 03 d5").unwrap();
+        assert_eq!(raw.len(), 1);
+        assert!(raw[0].mnemonic.is_empty());
     }
 
     #[test]

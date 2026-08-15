@@ -31,6 +31,12 @@
 #define FNM_FILE_NAME  FNM_PATHNAME
 #define FNM_IGNORECASE FNM_CASEFOLD
 
+// ksh extended patterns. Only glibc's fnmatch matches them; the
+// BSD-derived libc has no such flag and the bundled engine is POSIX-only.
+#ifdef __linux__
+#define FNM_EXTMATCH 0x20
+#endif
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::fnmatch, "_fnmatch")

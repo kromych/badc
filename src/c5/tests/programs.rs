@@ -6239,6 +6239,124 @@ fn elf_header_publishes_the_abi_constant_set() {
     );
 }
 
+/// Every target badc emits for. The header-presence checks below run the
+/// same snippet through all of them, so a header that resolves on the
+/// host but nowhere else fails here rather than in a cross build.
+#[cfg(test)]
+const ALL_TARGETS: [crate::Target; 5] = [
+    crate::Target::MacOSAarch64,
+    crate::Target::LinuxAarch64,
+    crate::Target::LinuxX64,
+    crate::Target::WindowsX64,
+    crate::Target::WindowsAarch64,
+];
+
+#[test]
+fn fnmatch_flags_follow_each_platform_libc() {
+    use crate::Target;
+    // The flags every target agrees on. FNM_PATHNAME / FNM_NOESCAPE are
+    // numbered the other way round by the two platform libraries, so
+    // only their distinctness and the GNU aliases are common.
+    let common = "#include <fnmatch.h>\n\
+        int ck[(FNM_NOMATCH==1 && FNM_NOSYS==-1 && FNM_PERIOD==0x04 \
+             && FNM_LEADING_DIR==0x08 && FNM_CASEFOLD==0x10 \
+             && FNM_PATHNAME!=FNM_NOESCAPE \
+             && FNM_FILE_NAME==FNM_PATHNAME \
+             && FNM_IGNORECASE==FNM_CASEFOLD)?1:-1];\n";
+    for target in ALL_TARGETS {
+        assert!(
+            header_snippet_compiles(common, target),
+            "<fnmatch.h> on {target:?}"
+        );
+    }
+
+    // The BSD-derived libc numbers FNM_NOESCAPE first, glibc
+    // FNM_PATHNAME; Windows takes badc's engine, compiled against the
+    // glibc numbering.
+    let bsd = "#include <fnmatch.h>\nint ck[(FNM_NOESCAPE==0x01 && FNM_PATHNAME==0x02)?1:-1];\n";
+    let gnu = "#include <fnmatch.h>\nint ck[(FNM_PATHNAME==0x01 && FNM_NOESCAPE==0x02)?1:-1];\n";
+    assert!(header_snippet_compiles(bsd, Target::MacOSAarch64));
+    assert!(!header_snippet_compiles(gnu, Target::MacOSAarch64));
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(header_snippet_compiles(gnu, target), "{target:?}");
+        assert!(!header_snippet_compiles(bsd, target), "{target:?}");
+    }
+
+    // FNM_EXTMATCH selects ksh extended patterns, which only glibc's
+    // fnmatch matches; defining it elsewhere would accept a flag the
+    // implementation behind the call ignores.
+    let ext = "#include <fnmatch.h>\nint ck[(FNM_EXTMATCH==0x20)?1:-1];\n";
+    assert!(header_snippet_compiles(ext, Target::LinuxX64));
+    assert!(header_snippet_compiles(ext, Target::LinuxAarch64));
+    for target in [
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(ext, target),
+            "FNM_EXTMATCH must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn byteswap_header_needs_no_platform_library() {
+    // glibc's spelling over badc's byte-reversal builtins, which fold in
+    // a constant expression, so the values are checked at compile time.
+    let src = "#include <byteswap.h>\n\
+        int ck[(bswap_16(0x0102)==0x0201 && bswap_32(0x01020304u)==0x04030201u \
+             && bswap_64(0x0102030405060708ull)==0x0807060504030201ull \
+             && __bswap_16(0x0102)==0x0201 && __bswap_32(0x01020304u)==0x04030201u \
+             && __bswap_64(0x0102030405060708ull)==0x0807060504030201ull)?1:-1];\n";
+    for target in ALL_TARGETS {
+        assert!(
+            header_snippet_compiles(src, target),
+            "<byteswap.h> on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn sysexits_codes_are_target_independent() {
+    // sysexits(3) is a set of integer constants with no library, syscall
+    // or target dependency behind it.
+    let src = "#include <sysexits.h>\n\
+        int ck[(EX_OK==0 && EX__BASE==64 && EX_USAGE==64 && EX_DATAERR==65 \
+             && EX_NOINPUT==66 && EX_NOUSER==67 && EX_NOHOST==68 \
+             && EX_UNAVAILABLE==69 && EX_SOFTWARE==70 && EX_OSERR==71 \
+             && EX_OSFILE==72 && EX_CANTCREAT==73 && EX_IOERR==74 \
+             && EX_TEMPFAIL==75 && EX_PROTOCOL==76 && EX_NOPERM==77 \
+             && EX_CONFIG==78 && EX__MAX==78)?1:-1];\n";
+    for target in ALL_TARGETS {
+        assert!(
+            header_snippet_compiles(src, target),
+            "<sysexits.h> on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn strchrnul_memrchr_and_explicit_bzero_declare_on_every_target() {
+    // libSystem and msvcrt export none of these; there the call resolves
+    // to `libc/lib/string_ext.c`, joined to the link on demand. A
+    // successful compile is the declaration check.
+    let src = "#include <string.h>\n\
+        char *f(char *s, void *p) { explicit_bzero(p, 4); \
+        return strchrnul(s, '/') + (memrchr(s, '/', 4) - s); }\n";
+    for target in ALL_TARGETS {
+        assert!(
+            header_snippet_compiles(src, target),
+            "the GNU string extensions on {target:?}"
+        );
+    }
+}
+
 #[test]
 fn sys_types_declares_time_t() {
     use crate::Target;

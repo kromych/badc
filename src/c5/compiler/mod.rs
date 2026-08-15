@@ -1657,6 +1657,11 @@ pub struct Compiler {
     /// The directive may precede the definition, so the names are applied
     /// once the unit is complete.
     pending_asm_globl: Vec<String>,
+    /// File-scope object definitions whose aggregate tag was incomplete at
+    /// the declarator. C99 6.9.2p3 admits a tentative definition the unit
+    /// completes later, so each entry -- the symbol, its tag, and the
+    /// declarator's line -- is rechecked once the unit is complete.
+    pending_incomplete_objects: Vec<(usize, usize, usize)>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -2250,6 +2255,7 @@ impl Compiler {
             init_funcs: Vec::new(),
             function_aliases: Vec::new(),
             pending_aliases: Vec::new(),
+            pending_incomplete_objects: Vec::new(),
             pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,

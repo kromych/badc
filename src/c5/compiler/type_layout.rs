@@ -563,6 +563,14 @@ impl Compiler {
             && self.symbols[self.lex.curr_id_idx].class == Token::Typedef as i64
     }
 
+    /// The tag of an aggregate-value type whose definition has not been
+    /// parsed (C99 6.7.2.3 incomplete type), `None` for anything else.
+    /// Pointers to such a tag are complete types and are excluded.
+    pub(super) fn incomplete_aggregate_tag(&self, ty: i64) -> Option<usize> {
+        let sid = struct_id_of(ty);
+        (is_struct_value_ty(ty) && !self.structs[sid].is_complete).then_some(sid)
+    }
+
     /// Size in bytes of a value of the given `ty`.
     ///   * pointers (any base type)  -> 8
     ///   * scalar `char`             -> 1

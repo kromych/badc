@@ -2135,6 +2135,15 @@ impl Compiler {
                         // `defined_here = true` is set at each
                         // alloc site so the field tracks every
                         // path that produces real bytes.
+
+                        // C99 6.9.2p3: the type of a definition must not be
+                        // incomplete. A tentative definition's tag may be
+                        // completed further on in the unit, so the check runs
+                        // once the unit is parsed.
+                        if let Some(sid) = self.incomplete_aggregate_tag(ty) {
+                            self.pending_incomplete_objects
+                                .push((id_idx, sid, signature_line));
+                        }
                     }
                     // Deferred-size array global: the dimension
                     // comes from the initializer and storage is
@@ -2638,11 +2647,27 @@ impl Compiler {
             self.next()?;
         }
         self.resolve_pending_aliases()?;
+        self.check_incomplete_definitions()?;
         // Before the asm `.globl` sweep: that directive is an explicit
         // request to export the name and outranks the inline model.
         self.resolve_inline_linkage();
         self.resolve_file_scope_asm_globl();
         self.warn_unused_static_functions();
+        Ok(())
+    }
+
+    /// C99 6.9.2p3: a file-scope definition whose aggregate tag the unit
+    /// never completes has no storage size. The declarator's own line is
+    /// reported, not the end of the unit.
+    fn check_incomplete_definitions(&mut self) -> Result<(), C5Error> {
+        for (id_idx, sid, line) in core::mem::take(&mut self.pending_incomplete_objects) {
+            if !self.structs[sid].is_complete {
+                let name = self.symbols[id_idx].name.clone();
+                return Err(
+                    self.compile_err_at(line, format!("object `{name}` has incomplete type"))
+                );
+            }
+        }
         Ok(())
     }
 

@@ -453,6 +453,14 @@ impl Compiler {
                 self.save_scope_binding(loc_idx);
             }
 
+            // C99 6.7p7: an object declared with no linkage must have a
+            // complete type by the end of its declarator. A block-scope
+            // `extern` has linkage and declares no object, so it is exempt.
+            if !is_extern && self.incomplete_aggregate_tag(ty).is_some() {
+                let name = self.symbols[loc_idx].name.clone();
+                return Err(self.compile_err(format!("object `{name}` has incomplete type")));
+            }
+
             // A block-scope `extern` allocates no storage (C11 6.7.5).
             let decl_align = if is_extern {
                 None

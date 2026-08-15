@@ -2271,3 +2271,49 @@ fn implicit_extern_fn_binding_unbinds_at_scope_exit() {
         Ok(_) => panic!("an out-of-scope implicit binding must not resolve"),
     }
 }
+
+#[test]
+fn object_of_incomplete_type_is_diagnosed() {
+    // C99 6.7p7: an object with no linkage must have a complete type by
+    // the end of its declarator.
+    expect_compile_error(
+        "struct never_defined;\n\
+         int main(void) { struct never_defined local_obj; return (int)(long)&local_obj; }",
+        "object `local_obj` has incomplete type",
+    );
+    // A block-scope `static` has no linkage either.
+    expect_compile_error(
+        "struct never_defined;\n\
+         int main(void) { static struct never_defined s; return (int)(long)&s; }",
+        "object `s` has incomplete type",
+    );
+    // C99 6.9.2p3: a file-scope definition the unit never completes.
+    expect_compile_error(
+        "struct never_defined;\n\
+         static struct never_defined file_scope_obj;\n\
+         int main(void) { return (int)(long)&file_scope_obj; }",
+        "object `file_scope_obj` has incomplete type",
+    );
+    // An array of an incomplete element type is incomplete too.
+    expect_compile_error(
+        "struct never_defined;\n\
+         struct never_defined arr[4];\n\
+         int main(void) { return (int)(long)&arr; }",
+        "object `arr` has incomplete type",
+    );
+    // A tentative definition the unit completes later stands, as do a
+    // block-scope `extern` (it has linkage and defines nothing) and a
+    // pointer to an incomplete tag.
+    Compiler::new(
+        "struct later;\n\
+         struct later tentative;\n\
+         struct later { int x; };\n\
+         struct undef;\n\
+         struct undef *p;\n\
+         int main(void) { extern struct undef e; tentative.x = 1;\n\
+         return tentative.x - 1 + (int)(long)(&p == 0) + (int)(long)(&e == 0); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("a completed tentative definition, a block extern, and a pointer stay legal");
+}

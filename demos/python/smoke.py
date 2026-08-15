@@ -66,7 +66,10 @@ BASELINE_FAILURES = 0
 # The last group (`test_pickle` onwards) covers the `dlopen`'d extension
 # modules that bind the interpreter's data globals -- `_pickle`, `_ssl`,
 # `pyexpat` and `_elementtree` all resolve `_PyByteArray_empty_string`
-# or `_Py_HashSecret`, both zero-initialized.
+# or `_Py_HashSecret`, both zero-initialized. `test_coroutines` adds
+# `_asyncio`, which computes field offsets into the interpreter's thread
+# state; it holds only while badc's pthread types match the platform
+# layout the reference compiler used for the module.
 #
 # `test_generators` needs the process to start with SIGINT at its default
 # disposition: one case raises SIGINT and expects `KeyboardInterrupt` in a
@@ -75,8 +78,6 @@ BASELINE_FAILURES = 0
 # too.
 #
 # Deliberately absent, each with a tracked cause:
-#   test_coroutines (macOS)-- an async comprehension faults in the
-#     badc-built interpreter on macos-aarch64; passes on linux-x64.
 #   test_time              -- <time.h> lacks CLOCK_THREAD_CPUTIME_ID, so
 #     time.thread_time() is absent.
 #   test_json              -- json.tool's colour cases spawn an isolated
@@ -109,10 +110,8 @@ TEST_SLICE = [
     "test_ssl",
     "test_pyexpat",
     "test_xml_etree",
+    "test_coroutines",
 ]
-# Runs everywhere but macos-aarch64; see the note above.
-if sys.platform != "darwin":
-    TEST_SLICE.append("test_coroutines")
 
 
 def run(cmd, **kw):

@@ -74,7 +74,7 @@
 #pragma binding(libc::pthread_getspecific,      "_pthread_getspecific")
 #pragma binding(libc::pthread_once,             "_pthread_once")
 
-// pthread_mutex_t = 64 bytes on macOS (16-byte sig + 56-byte body).
+// pthread_mutex_t = 64 bytes on macOS (8-byte sig + 56-byte body).
 #define PTHREAD_MUTEX_SIZE 64
 // pthread_t is an opaque pointer-sized handle.
 #define PTHREAD_T_SIZE     8
@@ -183,10 +183,11 @@
 // per `bits/pthreadtypes-arch.h` (Linux) and `<sys/_pthread/*>` (macOS).
 #if defined(__APPLE__)
 struct __c5_pthread_mutex { long __sig; char __opaque[56]; };     // 64
-struct __c5_pthread_cond { long __sig; char __opaque[56]; };      // 64
-struct __c5_pthread_mutexattr { char __opaque[16]; };             // 16
-struct __c5_pthread_condattr { char __opaque[16]; };              // 16
-struct __c5_pthread_attr { char __opaque[64]; };                  // 64
+struct __c5_pthread_cond { long __sig; char __opaque[40]; };      // 48
+struct __c5_pthread_mutexattr { long __sig; char __opaque[8]; };  // 16
+struct __c5_pthread_condattr { long __sig; char __opaque[8]; };   // 16
+struct __c5_pthread_attr { long __sig; char __opaque[56]; };      // 64
+struct __c5_pthread_once { long __sig; char __opaque[8]; };       // 16
 #elif defined(__aarch64__) && defined(__linux__)
 struct __c5_pthread_mutex { long __align; char __size[40]; };     // 48
 struct __c5_pthread_cond { long __align; char __size[40]; };      // 48
@@ -212,11 +213,12 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 #if defined(__APPLE__)
 #define PTHREAD_MUTEX_INITIALIZER { 0x32AAABA7, {0} }
 #define PTHREAD_COND_INITIALIZER  { 0x3CB0B1BB, {0} }
+#define PTHREAD_ONCE_INIT         { 0x30B1BCBA, {0} }
 #else
 #define PTHREAD_MUTEX_INITIALIZER { 0, {0} }
 #define PTHREAD_COND_INITIALIZER  { 0, {0} }
-#endif
 #define PTHREAD_ONCE_INIT          0
+#endif
 
 // `pthread_t` is pointer-sized on every supported POSIX target
 // (an opaque struct pointer on macOS, `unsigned long` on
@@ -228,17 +230,16 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 // 8 bytes into a 4-byte slot, smashing the next handle).
 //
 // `pthread_key_t` and `pthread_once_t` must match the platform
-// width exactly, not a wider catch-all: they appear inside
+// layout exactly, not a wider catch-all: they appear inside
 // structs whose layout a program reads back (CPython's `Py_tss_t`
 // wraps `pthread_key_t` in `_PyRuntime`, and a dlopen'd extension
 // computes field offsets against the host's struct). macOS uses
-// `unsigned long` / `long` (8 bytes); Linux uses `unsigned int` /
-// `int` (4). An over-wide slot shifts every later field and
-// breaks the shared layout.
+// `unsigned long` for the key and the 16-byte signature-carrying
+// struct for the once control; Linux uses `unsigned int` / `int`.
 typedef long long pthread_t;
 #ifdef __APPLE__
 typedef unsigned long pthread_key_t;
-typedef long pthread_once_t;
+typedef struct __c5_pthread_once pthread_once_t;
 #else
 typedef unsigned int pthread_key_t;
 typedef int pthread_once_t;

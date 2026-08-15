@@ -317,6 +317,8 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("init_paren_cond_operator_chain.c", 0),
     ("gcc_vector_size_attribute.c", 0),
     ("gcc_vector_bitwise_ops.c", 0),
+    ("gcc_vector_arith_ops.c", 0),
+    ("gcc_vector_arith_float.c", 0),
     ("gcc_vector_subscript.c", 0),
     ("ioctl_request_encoding.c", 0),
     ("computed_goto.c", 0),

@@ -15,10 +15,12 @@ use super::super::codegen::offset_align;
 use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
     STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_vector_ty, is_volatile_object_ty, is_volatile_ty, load_kind,
-    segment_of_object_ty, strip_unsigned, struct_ptr_depth,
+    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_volatile_object_ty, is_volatile_ty,
+    load_kind, segment_of_object_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
 };
-use super::super::ir::{AsmSeg, AtomicRmwOp, BinOp, FunctionSsa, LoadKind, StoreKind, ValueId};
+use super::super::ir::{
+    AsmSeg, AtomicRmwOp, BinOp, FpCastKind, FunctionSsa, LoadKind, StoreKind, ValueId,
+};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::{AtomicKind, Expr, ExprId, FinishedFunction, SLOT_ALIGN, Stmt, StmtId, UnOp};
@@ -931,6 +933,165 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Element type and lane count of the GCC vector type `ty`.
+    fn vector_lanes(&self, ty: i64) -> (i64, i64) {
+        let f = &self.structs[struct_id_of(ty)].fields[0];
+        (f.ty, f.array_size.max(1))
+    }
+
+    /// True when the node's own type is a GCC vector type; the broadcast
+    /// scalar of a mixed operand pair is the one for which this is false.
+    fn expr_is_vector(&self, id: ExprId) -> bool {
+        expr_ty(self.ast.expr(id)).is_some_and(|t| is_vector_ty(self.structs, t))
+    }
+
+    /// Convert a broadcast scalar to the lane type (C99 6.3.1.4 / 6.3.1.5),
+    /// once rather than per lane, so `/ % >>` see the converted value and
+    /// not the operand's own width.
+    fn vector_broadcast_operand(
+        &mut self,
+        b: &mut SsaBuilder,
+        id: ExprId,
+        elem_ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let v = self.walk_expr_rvalue(b, id)?;
+        let src_ty = expr_ty(self.ast.expr(id)).unwrap_or(Ty::Int as i64);
+        if is_floating_scalar(elem_ty) {
+            let to_f32 = is_float_ty(elem_ty);
+            let conv = if is_floating_scalar(src_ty) {
+                v
+            } else {
+                let kind = if is_unsigned_ty(src_ty) {
+                    FpCastKind::UIntToFp
+                } else {
+                    FpCastKind::IntToFp
+                };
+                if to_f32 {
+                    b.fp_cast_to_f32(kind, v)
+                } else {
+                    b.fp_cast(kind, v)
+                }
+            };
+            return Ok(if to_f32 {
+                b.fp_narrow_to_f32(conv)
+            } else {
+                b.fp_widen_to_f64(conv)
+            });
+        }
+        Ok(match load_kind_for(elem_ty, self.target) {
+            LoadKind::U8 => b.binop_imm(BinOp::And, v, 0xff),
+            LoadKind::U16 => b.binop_imm(BinOp::And, v, 0xffff),
+            LoadKind::U32 => b.binop_imm(BinOp::And, v, 0xffff_ffff),
+            k @ (LoadKind::I8 | LoadKind::I16 | LoadKind::I32) => b.extend(v, k),
+            _ => v,
+        })
+    }
+
+    /// GCC vector extension: element-wise `op` over two vectors, or over a
+    /// vector and a scalar broadcast to every lane. The result is a fresh
+    /// synthetic aggregate whose address is returned, matching how a struct
+    /// rvalue is produced.
+    ///
+    /// One scalar operation per lane at the element width: the SSA value
+    /// model has no vector class, so each lane emits the load / binop / store
+    /// the equivalent scalar C expression emits for the element type.
+    /// `^`/`&`/`|` on two vectors carry no value between lanes and take the
+    /// wider chunk cover instead.
+    fn walk_vector_binop(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        self.reject_seg_aggregate_copy(lhs)?;
+        self.reject_seg_aggregate_copy(rhs)?;
+        let lhs_vec = self.expr_is_vector(lhs);
+        let rhs_vec = self.expr_is_vector(rhs);
+        if lhs_vec && rhs_vec && matches!(op, BinOp::And | BinOp::Or | BinOp::Xor) {
+            return self.walk_vector_chunked(b, op, lhs, rhs, ty);
+        }
+        let (elem_ty, lanes) = self.vector_lanes(ty);
+        let size = self.struct_size(ty);
+        let elem_size = size / lanes;
+        let lane_op = vector_lane_binop(op, elem_ty);
+        let lk = load_kind_for(elem_ty, self.target);
+        let sk = store_kind_for(elem_ty, self.target);
+        let lv = if lhs_vec {
+            self.walk_expr_rvalue(b, lhs)?
+        } else {
+            self.vector_broadcast_operand(b, lhs, elem_ty)?
+        };
+        let rv = if rhs_vec {
+            self.walk_expr_rvalue(b, rhs)?
+        } else {
+            self.vector_broadcast_operand(b, rhs, elem_ty)?
+        };
+        let slot = b.alloc_synthetic_struct(size);
+        let dst = b.local_addr(slot);
+        for i in 0..lanes {
+            let off = i * elem_size;
+            let a = if lhs_vec {
+                let addr = lane_addr(b, lv, off);
+                b.load(addr, lk)
+            } else {
+                lv
+            };
+            let c = if rhs_vec {
+                let addr = lane_addr(b, rv, off);
+                b.load(addr, lk)
+            } else {
+                rv
+            };
+            let mut r = b.binop(lane_op, a, c);
+            if b.is_f32(a) && b.is_f32(c) {
+                r = b.mark_f32(r);
+            }
+            let da = lane_addr(b, dst, off);
+            b.store(da, r, sk);
+        }
+        Ok(dst)
+    }
+
+    /// GCC vector extension: element-wise unary `-` / `~` over a vector,
+    /// lowered per lane like [`Self::walk_vector_binop`].
+    fn walk_vector_unary(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: UnOp,
+        child: ExprId,
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        self.reject_seg_aggregate_copy(child)?;
+        let (elem_ty, lanes) = self.vector_lanes(ty);
+        let size = self.struct_size(ty);
+        let elem_size = size / lanes;
+        let lk = load_kind_for(elem_ty, self.target);
+        let sk = store_kind_for(elem_ty, self.target);
+        let src = self.walk_expr_rvalue(b, child)?;
+        let slot = b.alloc_synthetic_struct(size);
+        let dst = b.local_addr(slot);
+        for i in 0..lanes {
+            let off = i * elem_size;
+            let sa = lane_addr(b, src, off);
+            let v = b.load(sa, lk);
+            let r = if matches!(op, UnOp::BitNot) {
+                b.binop_imm(BinOp::Xor, v, -1)
+            } else if is_floating_scalar(elem_ty) {
+                // A sign-bit flip, not `0 - x`: the latter turns -0.0 into 0.0.
+                let n = b.fneg(v);
+                if b.is_f32(v) { b.mark_f32(n) } else { n }
+            } else {
+                let zero = b.imm(0);
+                b.binop(BinOp::Sub, zero, v)
+            };
+            let da = lane_addr(b, dst, off);
+            b.store(da, r, sk);
+        }
+        Ok(dst)
+    }
+
     /// Lower a bitwise operator (`^`/`&`/`|`) on two same-width GCC vector
     /// values into a result temporary. Bitwise ops carry no value between
     /// lanes, so the byte block is combined in the widest chunks that fit
@@ -938,7 +1099,7 @@ impl<'a> Walker<'a> {
     /// rvalues (their address lands on the accumulator); the result is a fresh
     /// synthetic aggregate whose address is returned, matching how a struct
     /// rvalue is produced.
-    fn walk_vector_bitwise(
+    fn walk_vector_chunked(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         op: BinOp,
@@ -946,8 +1107,6 @@ impl<'a> Walker<'a> {
         rhs: ExprId,
         ty: i64,
     ) -> Result<super::super::ir::ValueId, WalkError> {
-        self.reject_seg_aggregate_copy(lhs)?;
-        self.reject_seg_aggregate_copy(rhs)?;
         let lhs_addr = self.walk_expr_rvalue(b, lhs)?;
         let rhs_addr = self.walk_expr_rvalue(b, rhs)?;
         let size = self.struct_size(ty);
@@ -3560,12 +3719,11 @@ impl<'a> Walker<'a> {
             ),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => {
-                // GCC vector extension: a bitwise operator on same-width vector
-                // values is element-wise. The parser only tags a Binary node
-                // with a vector type for `^`/`&`/`|`; lower it as wide chunks
-                // into a result temporary (no inter-lane carry for bitwise ops).
+                // GCC vector extension: the parser tags a Binary node with a
+                // vector type for the element-wise operators, including a
+                // vector / scalar pair the scalar broadcasts across.
                 if is_vector_ty(self.structs, *ty) {
-                    return self.walk_vector_bitwise(b, *op, *lhs, *rhs, *ty);
+                    return self.walk_vector_binop(b, *op, *lhs, *rhs, *ty);
                 }
                 // A 128-bit operand makes the node a 128-bit operation,
                 // whatever the node's own type: a comparison's result is
@@ -6349,6 +6507,10 @@ impl<'a> Walker<'a> {
         child: ExprId,
         ty: i64,
     ) -> Result<super::super::ir::ValueId, WalkError> {
+        // GCC vector extension: `-v` / `~v` are element-wise.
+        if matches!(op, UnOp::Neg | UnOp::BitNot) && is_vector_ty(self.structs, ty) {
+            return self.walk_vector_unary(b, op, child, ty);
+        }
         match op {
             UnOp::Neg => {
                 let v = self.walk_expr_rvalue(b, child)?;
@@ -6751,6 +6913,46 @@ fn load_kind_for_width(width: u32) -> LoadKind {
         2 => LoadKind::U16,
         4 => LoadKind::U32,
         _ => LoadKind::I64,
+    }
+}
+
+/// Address of lane byte `off` within the vector object at `base`.
+fn lane_addr(b: &mut SsaBuilder, base: ValueId, off: i64) -> ValueId {
+    if off == 0 {
+        base
+    } else {
+        b.binop_imm(BinOp::Add, base, off)
+    }
+}
+
+/// Concrete lane opcode for a GCC vector operator. The parser tags the node
+/// with the nominal opcode; the element type picks the floating flavour and
+/// the signedness of divide / modulo / right shift.
+fn vector_lane_binop(op: BinOp, elem_ty: i64) -> BinOp {
+    use BinOp as B;
+    if is_floating_scalar(elem_ty) {
+        return match op {
+            B::Add | B::Fadd => B::Fadd,
+            B::Sub | B::Fsub => B::Fsub,
+            B::Mul | B::Fmul => B::Fmul,
+            B::Div | B::Divu | B::Fdiv => B::Fdiv,
+            other => other,
+        };
+    }
+    if elem_ty & UNSIGNED_BIT != 0 {
+        match op {
+            B::Div => B::Divu,
+            B::Mod => B::Modu,
+            B::Shr => B::Shru,
+            other => other,
+        }
+    } else {
+        match op {
+            B::Divu => B::Div,
+            B::Modu => B::Mod,
+            B::Shru => B::Shr,
+            other => other,
+        }
     }
 }
 

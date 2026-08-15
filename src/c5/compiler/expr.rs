@@ -662,15 +662,10 @@ impl Compiler {
     /// silently operating on the operand's address. Called by each
     /// value-computing binary branch after both operand types are known.
     fn reject_aggregate_binop(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Result<(), C5Error> {
-        // GCC vector extension: a bitwise operator on two same-width vector
-        // values is element-wise (no inter-lane carry, so the walker lowers it
-        // as wide chunks). Mixed vector/scalar, mismatched widths, and the
-        // arithmetic / shift / relational operators still reject here.
-        if matches!(op, "^" | "&" | "|")
-            && is_vector_ty(&self.structs, lhs_ty)
-            && is_vector_ty(&self.structs, rhs_ty)
-            && self.structs[struct_id_of(lhs_ty)].size == self.structs[struct_id_of(rhs_ty)].size
-        {
+        // GCC vector extension: the element-wise operators take a vector
+        // operand pair or a vector against a broadcast scalar. The relational
+        // and logical operators, and every other aggregate operand, reject.
+        if self.vector_binop_ty(lhs_ty, rhs_ty, op).is_some() {
             return Ok(());
         }
         // The GCC 128-bit integer shares the aggregate layout machinery
@@ -683,6 +678,56 @@ impl Compiler {
             return Err(self.compile_err(format!("invalid operands to binary `{op}`")));
         }
         Ok(())
+    }
+
+    /// Result type of a GCC vector-extension binary operation, or `None` when
+    /// the operand pair is not one. `+ - * / %`, `& | ^` and the shifts take
+    /// two vectors of the same byte width and the same element width and
+    /// kind, or a vector against a scalar that broadcasts to every lane.
+    /// `% & | ^ << >>` need integer elements, and an integer-element vector
+    /// does not take a floating scalar. The relational and equality operators
+    /// are not lowered and are excluded so they keep rejecting.
+    fn vector_binop_ty(&self, lhs_ty: i64, rhs_ty: i64, op: &str) -> Option<i64> {
+        if !matches!(
+            op,
+            "+" | "-" | "*" | "/" | "%" | "&" | "|" | "^" | "<<" | ">>"
+        ) {
+            return None;
+        }
+        let lhs_vec = is_vector_ty(&self.structs, lhs_ty);
+        let rhs_vec = is_vector_ty(&self.structs, rhs_ty);
+        let vec_ty = if lhs_vec {
+            lhs_ty
+        } else if rhs_vec {
+            rhs_ty
+        } else {
+            return None;
+        };
+        let elem_ty = self.structs[struct_id_of(vec_ty)].fields[0].ty;
+        let integer_only = matches!(op, "%" | "&" | "|" | "^" | "<<" | ">>");
+        if integer_only && is_floating_scalar(elem_ty) {
+            return None;
+        }
+        if lhs_vec && rhs_vec {
+            let (l, r) = (struct_id_of(lhs_ty), struct_id_of(rhs_ty));
+            let (le, re) = (self.structs[l].fields[0].ty, self.structs[r].fields[0].ty);
+            if self.structs[l].size != self.structs[r].size
+                || self.size_of_type(le) != self.size_of_type(re)
+                || is_floating_scalar(le) != is_floating_scalar(re)
+            {
+                return None;
+            }
+            return Some(lhs_ty);
+        }
+        let scalar_ty = if lhs_vec { rhs_ty } else { lhs_ty };
+        if is_struct_value_ty(scalar_ty)
+            || is_pointer_ty(scalar_ty)
+            || self.is_int128_ty(scalar_ty)
+            || (!is_floating_scalar(elem_ty) && is_floating_scalar(scalar_ty))
+        {
+            return None;
+        }
+        Some(vec_ty)
     }
 
     /// Opcode for `E1 op= E2` given the operand types. C99 6.5.16.2p3:
@@ -2790,26 +2835,41 @@ impl Compiler {
         } else if self.lex.tk == '!' {
             self.next()?;
             self.expr(Token::Inc as i64)?;
+            // C99 6.5.3.3p1 requires a scalar operand; the GCC vector
+            // extension does not extend `!` to a vector either.
+            if is_struct_value_ty(self.ty) && !self.is_int128_ty(self.ty) {
+                return Err(self.compile_err("invalid operand to unary `!` (aggregate type)"));
+            }
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Eq, 0);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == '~' {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
-            // C99 6.5.3.3p4: `~` applies the integer promotions and the
-            // result has the promoted operand type. `unsigned char` /
-            // `unsigned short` promote to signed `int`. A `long` /
-            // `long long` (signed or unsigned) keeps its width and
-            // signedness -- forcing `Ty::Int` here would both narrow it
-            // and drop the unsigned bit, so a following `>>` would pick
-            // an arithmetic shift on `~(unsigned long)x`. A 4-byte
-            // unsigned result needs the high half masked back to 32
-            // bits because `XOR -1` sets the full 64-bit register.
-            let promoted = integer_promote(self.ty);
-            if is_unsigned_ty(promoted) && self.size_of_type(promoted) == 4 {
-                self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
+            // GCC vector extension: `~v` is element-wise over an integer
+            // vector and the result keeps the vector type (no promotion).
+            if is_vector_ty(&self.structs, self.ty) {
+                let elem_ty = self.structs[struct_id_of(self.ty)].fields[0].ty;
+                if is_floating_scalar(elem_ty) {
+                    return Err(self.compile_err("invalid operand to unary `~` (vector of float)"));
+                }
+                self.ast_apply_unary(super::super::ast::UnOp::BitNot);
+            } else {
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
+                // C99 6.5.3.3p4: `~` applies the integer promotions and the
+                // result has the promoted operand type. `unsigned char` /
+                // `unsigned short` promote to signed `int`. A `long` /
+                // `long long` (signed or unsigned) keeps its width and
+                // signedness -- forcing `Ty::Int` here would both narrow it
+                // and drop the unsigned bit, so a following `>>` would pick
+                // an arithmetic shift on `~(unsigned long)x`. A 4-byte
+                // unsigned result needs the high half masked back to 32
+                // bits because `XOR -1` sets the full 64-bit register.
+                let promoted = integer_promote(self.ty);
+                if is_unsigned_ty(promoted) && self.size_of_type(promoted) == 4 {
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
+                }
+                self.ty = promoted;
             }
-            self.ty = promoted;
         } else if self.lex.tk == Token::AddOp {
             // Unary `+`: a no-op per C99 6.5.3.3p2; the result has the
             // integer-promoted operand type. Integer promotion only
@@ -2854,7 +2914,11 @@ impl Compiler {
                 self.next()?;
             } else {
                 self.expr(Token::Inc as i64)?;
-                if is_floating_scalar(self.ty) {
+                if is_vector_ty(&self.structs, self.ty) {
+                    // GCC vector extension: `-v` is element-wise and the
+                    // result keeps the vector type (no promotion).
+                    self.ast_apply_unary(super::super::ast::UnOp::Neg);
+                } else if is_floating_scalar(self.ty) {
                     self.ast_fneg();
                     // self.ty already matches the operand's FP type
                 } else {
@@ -2988,16 +3052,10 @@ impl Compiler {
             if is_struct_value_ty(t)
                 && self.lex.tk >= Token::Lor as i64
                 && self.lex.tk <= Token::ModOp as i64
-                // GCC vector extension: a vector LHS with a bitwise operator is
-                // element-wise; let it reach the per-operator branch, which
-                // does the same-width check. Other operators still reject.
-                && !(is_vector_ty(&self.structs, t)
-                    && matches!(
-                        self.lex.tk,
-                        x if x == Token::XorOp as i64
-                            || x == Token::AndOp as i64
-                            || x == Token::OrOp as i64
-                    ))
+                // GCC vector extension: a vector LHS with an element-wise
+                // operator reaches the per-operator branch, which checks the
+                // RHS. The relational and logical operators still reject.
+                && !(is_vector_ty(&self.structs, t) && is_vector_binop_token(self.lex.tk.raw()))
                 // The GCC 128-bit integer is an integer type; the
                 // per-operator branch below routes it to the walker's
                 // half-pair expansion.
@@ -3374,17 +3432,14 @@ impl Compiler {
                 // in c5.
                 let binop = self.lex.ival;
                 let compound_lhs_ast = self.ast_acc;
-                // GCC vector extension: `v OP= w` for a bitwise OP on same-width
-                // vectors is `v = v OP w`. Build that node pair directly (the
-                // scalar compound path below handles only scalar / pointer
-                // lvalues). The lhs is a side-effect-free operand reused as both
-                // the store target and the binop's left operand.
-                if is_vector_ty(&self.structs, t)
-                    && (binop == Token::XorOp as i64
-                        || binop == Token::AndOp as i64
-                        || binop == Token::OrOp as i64)
-                {
+                // GCC vector extension: `v OP= w` is `v = v OP w` (C99
+                // 6.5.16.2p3) for every element-wise OP. The scalar path below
+                // takes only scalar / pointer lvalues, so build the node pair
+                // here, reusing the side-effect-free lhs as both the store
+                // target and the binop's left operand.
+                if is_vector_ty(&self.structs, t) && is_vector_binop_token(binop) {
                     let vec_ty = t;
+                    let op_name = vector_binop_name(binop);
                     let lhs_node = compound_lhs_ast
                         .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
                     let pos = self.ast_src_pos();
@@ -3393,20 +3448,14 @@ impl Compiler {
                     let rhs_node = self
                         .ast_acc
                         .ok_or_else(|| self.compile_err("bad operand in compound assignment"))?;
-                    if !(is_vector_ty(&self.structs, self.ty)
-                        && self.structs[struct_id_of(self.ty)].size
-                            == self.structs[struct_id_of(vec_ty)].size)
-                    {
-                        return Err(self.compile_err("invalid operands to vector compound `^=`"));
+                    if self.vector_binop_ty(vec_ty, self.ty, op_name) != Some(vec_ty) {
+                        return Err(self.compile_err(format!(
+                            "invalid operands to vector compound `{op_name}=`"
+                        )));
                     }
-                    use super::super::ir::BinOp as B;
-                    let bop = if binop == Token::XorOp as i64 {
-                        B::Xor
-                    } else if binop == Token::AndOp as i64 {
-                        B::And
-                    } else {
-                        B::Or
-                    };
+                    // The nominal opcode; the walker picks the signed /
+                    // unsigned / floating flavour from the element type.
+                    let bop = vector_binop_op(binop);
                     let bin = self.ast.push_expr(
                         super::super::ast::Expr::Binary {
                             op: bop,
@@ -3802,10 +3851,9 @@ impl Compiler {
                 // `ty` as the cast source type, so an order-dependent tag
                 // breaks `(int)(unsigned | int)` sign extension. Mirrors
                 // the additive path.
-                self.ty = if is_vector_ty(&self.structs, lhs_ty) {
-                    lhs_ty
-                } else {
-                    self.arith_common_ty(lhs_ty, self.ty)
+                self.ty = match self.vector_binop_ty(lhs_ty, self.ty, "|") {
+                    Some(vty) => vty,
+                    None => self.arith_common_ty(lhs_ty, self.ty),
                 };
                 self.ast_binop(crate::c5::ir::BinOp::Or);
             } else if self.lex.tk == Token::XorOp {
@@ -3815,10 +3863,9 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::AndOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "^")?;
-                self.ty = if is_vector_ty(&self.structs, lhs_ty) {
-                    lhs_ty
-                } else {
-                    self.arith_common_ty(lhs_ty, self.ty)
+                self.ty = match self.vector_binop_ty(lhs_ty, self.ty, "^") {
+                    Some(vty) => vty,
+                    None => self.arith_common_ty(lhs_ty, self.ty),
                 };
                 self.ast_binop(crate::c5::ir::BinOp::Xor);
             } else if self.lex.tk == Token::AndOp {
@@ -3828,10 +3875,9 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::EqOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "&")?;
-                self.ty = if is_vector_ty(&self.structs, lhs_ty) {
-                    lhs_ty
-                } else {
-                    self.arith_common_ty(lhs_ty, self.ty)
+                self.ty = match self.vector_binop_ty(lhs_ty, self.ty, "&") {
+                    Some(vty) => vty,
+                    None => self.arith_common_ty(lhs_ty, self.ty),
                 };
                 self.ast_binop(crate::c5::ir::BinOp::And);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
@@ -3884,6 +3930,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "<<")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "<<") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Shl);
+                    continue;
+                }
                 // C99 6.5.7: `E1 << E2` has the type of `E1` after
                 // integer promotion, not `E2` (the shift count).
                 // `char` / `short` (signed or unsigned, size 1 or 2)
@@ -3910,6 +3961,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, ">>")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, ">>") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Shr);
+                    continue;
+                }
                 // Pick logical (Shru) for unsigned LHS, arithmetic (Shr)
                 // otherwise; the RHS is the shift count and does not
                 // participate. C99 6.5.7p3: the result has the promoted
@@ -3934,6 +3990,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "+")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "+") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Add);
+                    continue;
+                }
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "+")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fadd);
@@ -4063,6 +4124,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "-")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "-") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Sub);
+                    continue;
+                }
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "-")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fsub);
@@ -4120,6 +4186,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "*")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "*") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Mul);
+                    continue;
+                }
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "*")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fmul);
@@ -4141,6 +4212,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "/")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "/") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Div);
+                    continue;
+                }
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "/")?;
                     self.ast_binop(crate::c5::ir::BinOp::Fdiv);
@@ -4212,6 +4288,11 @@ impl Compiler {
                 self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 self.reject_aggregate_binop(t, self.ty, "%")?;
+                if let Some(vty) = self.vector_binop_ty(t, self.ty, "%") {
+                    self.ty = vty;
+                    self.ast_binop(crate::c5::ir::BinOp::Mod);
+                    continue;
+                }
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("`%` is not defined on floating-point operands"));
                 }
@@ -5369,6 +5450,41 @@ impl Compiler {
 /// `unsigned int` and `T *` select distinct associations.
 fn generic_type_match(ctrl: i64, assoc: i64) -> bool {
     (ctrl & !super::types::VOLATILE_MASK) == (assoc & !super::types::VOLATILE_MASK)
+}
+
+/// The operators the GCC vector extension lowers element-wise: token,
+/// spelling, and the nominal opcode. The walker picks the signed /
+/// unsigned / floating flavour of the opcode from the element type.
+const VECTOR_BINOPS: [(Token, &str, super::super::ir::BinOp); 10] = {
+    use super::super::ir::BinOp as B;
+    [
+        (Token::AddOp, "+", B::Add),
+        (Token::SubOp, "-", B::Sub),
+        (Token::MulOp, "*", B::Mul),
+        (Token::DivOp, "/", B::Div),
+        (Token::ModOp, "%", B::Mod),
+        (Token::AndOp, "&", B::And),
+        (Token::OrOp, "|", B::Or),
+        (Token::XorOp, "^", B::Xor),
+        (Token::ShlOp, "<<", B::Shl),
+        (Token::ShrOp, ">>", B::Shr),
+    ]
+};
+
+fn vector_binop_entry(tk: i64) -> Option<&'static (Token, &'static str, super::super::ir::BinOp)> {
+    VECTOR_BINOPS.iter().find(|(t, ..)| *t as i64 == tk)
+}
+
+fn is_vector_binop_token(tk: i64) -> bool {
+    vector_binop_entry(tk).is_some()
+}
+
+fn vector_binop_name(tk: i64) -> &'static str {
+    vector_binop_entry(tk).map_or("", |(_, n, _)| *n)
+}
+
+fn vector_binop_op(tk: i64) -> super::super::ir::BinOp {
+    vector_binop_entry(tk).map_or(super::super::ir::BinOp::Add, |(.., op)| *op)
 }
 
 /// A function type named by a type name. The flat type tag carries only

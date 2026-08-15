@@ -142,6 +142,109 @@ fn block_scope_array_and_vector_typedef_keep_dimension() {
     .expect("block-scope array / vector typedefs must keep their dimension across decls");
 }
 
+/// Prefix declaring the vector typedefs the operand-rule tests operate on.
+const VEC_DECLS: &str = "typedef __attribute__((vector_size(16))) unsigned char u8x16; \
+     typedef __attribute__((vector_size(8))) unsigned char u8x8; \
+     typedef __attribute__((vector_size(16))) unsigned int u32x4; \
+     typedef __attribute__((vector_size(16))) int i32x4; \
+     typedef __attribute__((vector_size(16))) float f32x4; \
+     u8x16 a; u8x8 h; u32x4 u4; i32x4 i4; f32x4 e; int n;";
+
+fn expect_vector_error(body: &str, needle: &str) {
+    expect_compile_error(&alloc::format!("{VEC_DECLS} {body}"), needle);
+}
+
+#[test]
+fn vector_relational_operators_are_rejected() {
+    // The GCC vector extension defines the relational and equality operators
+    // over vectors, yielding an integer vector of 0 / -1 per lane. That result
+    // type is not lowered, so both spellings reject rather than operating on
+    // the operand's address.
+    expect_vector_error(
+        "int main(void) { i32x4 r = i4 < i4; return r[0]; }",
+        "invalid operands to binary operator (aggregate type)",
+    );
+    expect_vector_error(
+        "int main(void) { i32x4 r = i4 == i4; return r[0]; }",
+        "invalid operands to binary operator (aggregate type)",
+    );
+}
+
+#[test]
+fn vector_logical_operators_are_rejected() {
+    // C99 6.5.3.3p1 / 6.5.13: `!`, `&&` and `||` need a scalar operand, and
+    // the extension does not extend them to a vector. `!v` used to compare
+    // the vector's address against zero.
+    expect_vector_error(
+        "int main(void) { return !a; }",
+        "invalid operand to unary `!` (aggregate type)",
+    );
+    expect_vector_error(
+        "int main(void) { return a && n; }",
+        "invalid operands to binary operator (aggregate type)",
+    );
+}
+
+#[test]
+fn vector_operand_shape_mismatches_are_rejected() {
+    // Two vector operands must agree on byte width and on element width and
+    // kind; a pointer is not a broadcast scalar, and an integer-element
+    // vector does not take a floating scalar.
+    expect_vector_error(
+        "int main(void) { u8x8 q = h; u8x16 r = a + q; return r[0]; }",
+        "invalid operands to binary `+`",
+    );
+    expect_vector_error(
+        "int main(void) { i32x4 r = i4 + e; return r[0]; }",
+        "invalid operands to binary `+`",
+    );
+    expect_vector_error(
+        "int main(void) { i32x4 r = i4 * 2.5; return r[0]; }",
+        "invalid operands to binary `*`",
+    );
+    expect_vector_error(
+        "int main(void) { char *p = 0; u8x16 r = a + p; return r[0]; }",
+        "invalid operands to binary `+`",
+    );
+    expect_vector_error(
+        "int main(void) { u8x16 v = a; v += h; return v[0]; }",
+        "invalid operands to vector compound `+=`",
+    );
+    // Same byte width, different element width: the bitwise operators used
+    // to admit this pair because the chunked lowering only needed the byte
+    // count, but it is not a legal operand pair.
+    expect_vector_error(
+        "int main(void) { u8x16 r = a ^ u4; return r[0]; }",
+        "invalid operands to binary `^`",
+    );
+}
+
+#[test]
+fn vector_of_float_rejects_the_integer_only_operators() {
+    // `%`, the bitwise operators and the shifts are not defined on a
+    // floating-element vector.
+    expect_vector_error(
+        "int main(void) { f32x4 r = e % e; return (int) r[0]; }",
+        "invalid operands to binary `%`",
+    );
+    expect_vector_error(
+        "int main(void) { f32x4 r = e & e; return (int) r[0]; }",
+        "invalid operands to binary `&`",
+    );
+    expect_vector_error(
+        "int main(void) { f32x4 r = e << 1; return (int) r[0]; }",
+        "invalid operands to binary `<<`",
+    );
+    expect_vector_error(
+        "int main(void) { f32x4 r = ~e; return (int) r[0]; }",
+        "invalid operand to unary `~` (vector of float)",
+    );
+    expect_vector_error(
+        "int main(void) { f32x4 v = e; v %= e; return (int) v[0]; }",
+        "invalid operands to vector compound `%=`",
+    );
+}
+
 #[test]
 fn asm_memory_operand_rvalue_is_rejected() {
     // A memory (`"m"`) operand is reached through its address, so it must be an

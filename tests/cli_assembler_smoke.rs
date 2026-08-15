@@ -1136,10 +1136,111 @@ fn section64(bytes: &[u8], want: &str) -> Vec<u8> {
 
 /// Assemble `src` for x86_64 and return its `.text`.
 fn text_of(name: &str, src: &str) -> Vec<u8> {
+    section64(&object_of(name, src), ".text")
+}
+
+/// Assemble `src` for x86_64 and return the object bytes.
+fn object_of(name: &str, src: &str) -> Vec<u8> {
     let d = dir(name);
     write(&d, "b.s", src);
     run_ok(&d, &["-q", "-c", "--target=linux-x64", "b.s", "-o", "b.o"]);
-    section64(&std::fs::read(d.join("b.o")).expect("object"), ".text")
+    std::fs::read(d.join("b.o")).expect("object")
+}
+
+/// `(offset, type, symbol name, addend)` of every `.rela.text` entry.
+fn text_relocs(name: &str, src: &str) -> Vec<(u64, u32, String, i64)> {
+    let bytes = object_of(name, src);
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let shentsize = u16at(0x3a);
+    let shnum = u16at(0x3c);
+    // The symbol table `.rela.text` indexes, with the string table it names.
+    let (symtab, stroff) = (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| u32at(sh + 4) == 2)
+        .map(|sh| {
+            let strsh = shoff + u32at(sh + 0x28) * shentsize;
+            (u64at(sh + 0x18) as usize, u64at(strsh + 0x18) as usize)
+        })
+        .expect(".symtab");
+    let shstrndx = u16at(0x3e);
+    let strtab = u64at(shoff + shstrndx * shentsize + 0x18) as usize;
+    let str_at = |base: usize, off: usize| {
+        let n = base + off;
+        let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+        String::from_utf8(bytes[n..n + end].to_vec()).unwrap()
+    };
+    // A section symbol carries no name of its own; readers take the
+    // section's, so name it that way here too.
+    let sym_name = |i: usize| {
+        let sym = symtab + i * 24;
+        if u32at(sym) == 0 {
+            let sh = shoff + u16at(sym + 6) * shentsize;
+            return str_at(strtab, u32at(sh));
+        }
+        str_at(stroff, u32at(sym))
+    };
+    let named = (0..shnum)
+        .map(|i| shoff + i * shentsize)
+        .find(|&sh| str_at(strtab, u32at(sh)) == ".rela.text");
+    let Some(sh) = named else {
+        return Vec::new();
+    };
+    let (off, size) = (u64at(sh + 0x18) as usize, u64at(sh + 0x20) as usize);
+    (0..size)
+        .step_by(24)
+        .map(|e| {
+            let r = off + e;
+            let info = u64at(r + 8);
+            (
+                u64at(r),
+                (info & 0xffff_ffff) as u32,
+                sym_name((info >> 32) as usize),
+                u64at(r + 16) as i64,
+            )
+        })
+        .collect()
+}
+
+/// A direct branch takes `R_X86_64_PLT32` only where the link may bind it
+/// through a PLT slot -- a named function symbol. A target the assembler
+/// reduces to a section symbol takes `R_X86_64_PC32`, which is what GNU as
+/// 2.46.1 emits for the same source; it is the shape `entry_64.o`,
+/// `memmove_64.o` and `retpoline.o` carry.
+#[test]
+fn a_branch_against_a_section_symbol_takes_pc32() {
+    const PC32: u32 = 2;
+    const PLT32: u32 = 4;
+    assert_eq!(
+        text_relocs(
+            "reloc-xsec",
+            "\t.text\nf:\n\tjmp o\n\t.section .other,\"ax\"\no:\n\tnop\n",
+        ),
+        [(1, PC32, String::from(".other"), -4)],
+    );
+    // A local label of a third section reduces the same way, and a `call`
+    // to one does too: the reduction, not the mnemonic, picks the type.
+    assert_eq!(
+        text_relocs(
+            "reloc-xsec-call",
+            "\t.text\nf:\n\tcall o\n\t.section .other,\"ax\"\no:\n\tnop\n",
+        ),
+        [(1, PC32, String::from(".other"), -4)],
+    );
+    // A named symbol keeps PLT32, defined or not.
+    assert_eq!(
+        text_relocs("reloc-undef", "\t.text\nf:\n\tjmp undef\n"),
+        [(1, PLT32, String::from("undef"), -4)],
+    );
+    assert_eq!(
+        text_relocs(
+            "reloc-glob",
+            "\t.text\n\t.globl g\nf:\n\tjmp g\n\tnop\ng:\n\tnop\n",
+        ),
+        [(1, PLT32, String::from("g"), -4)],
+    );
 }
 
 /// `rel8` reaches a displacement in `-128..=127` measured from the end of

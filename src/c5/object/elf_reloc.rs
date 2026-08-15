@@ -2993,6 +2993,18 @@ pub(super) fn write_relocatable(
     // undefined symbol.
     {
         use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
+        // The STT_SECTION symbols a reduction can land on. A branch against
+        // one names no function, so no PLT slot can carry it.
+        let section_syms: alloc::collections::BTreeSet<u64> = [
+            text_sym_idx,
+            data_sym_idx,
+            bss_sym_idx,
+            debug_line_sym_idx,
+            debug_abbrev_sym_idx,
+        ]
+        .into_iter()
+        .chain(carve.sym_idx.iter().copied())
+        .collect();
         for (&(e, base), s) in asm_placements.iter().zip(build.asm_sections.iter()) {
             for r in &s.relocs {
                 let (sym_idx, addend) = match &r.target {
@@ -3081,9 +3093,15 @@ pub(super) fn write_relocatable(
                 let rtype = match r.kind {
                     RK::Data | RK::JumpRel => match (abi, r.pcrel, r.width) {
                         // A replacement instruction's direct `call` / `jmp` to a
-                        // symbol reaches it through the PLT slot, like a compiler-
-                        // emitted call: `R_X86_64_PLT32`, not a data `PC32`.
-                        (RelocAbi::X86_64, true, 4) if r.branch => R_X86_64_PLT32,
+                        // named symbol reaches it through the PLT slot, like a
+                        // compiler-emitted call: `R_X86_64_PLT32`, not a data
+                        // `PC32`. A target reduced to a section symbol binds no
+                        // slot, so GNU as leaves it `PC32`.
+                        (RelocAbi::X86_64, true, 4)
+                            if r.branch && !section_syms.contains(&sym_idx) =>
+                        {
+                            R_X86_64_PLT32
+                        }
                         (RelocAbi::X86_64, false, 8) => R_X86_64_64,
                         // A `push $symbol` imm32 the CPU sign-extends takes 32S.
                         (RelocAbi::X86_64, false, 4) if r.signed => R_X86_64_32S,

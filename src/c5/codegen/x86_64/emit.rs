@@ -6565,6 +6565,18 @@ pub(crate) fn short_branch_opcode(mnem: &str) -> Option<u8> {
     })
 }
 
+/// A branch target's section target: a bare name resolves through the label,
+/// section and `.set` maps; an expression over them (`jmp sym + 4`) is valued
+/// where the section materializes.
+fn branch_section_target(text: &str) -> super::ssa::emit_common::AsmSectionTarget {
+    use super::ssa::emit_common::{AsmSectionTarget, is_asm_symbol_name};
+    if is_asm_symbol_name(text) {
+        AsmSectionTarget::Symbol(alloc::string::String::from(text))
+    } else {
+        AsmSectionTarget::Expr(alloc::string::String::from(text))
+    }
+}
+
 /// The `rel8` encoding of a direct branch: `EB` for `jmp`, `70+cc` for a
 /// `jcc`. GNU as takes it whenever the target is a label of the branch's own
 /// section within a signed-byte displacement, in every code-size mode; the
@@ -6764,14 +6776,17 @@ fn encode_one_x86_section_insn(
     // mode-width one the other branches take.
     if let Some(op) = short_branch_opcode(mnem) {
         let target = if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
-            Some(alloc::format!("{num}{}", if forward { 'f' } else { 'b' }))
+            Some(AsmSectionTarget::Symbol(alloc::format!(
+                "{num}{}",
+                if forward { 'f' } else { 'b' }
+            )))
         } else {
             insn.sym_exprs
                 .first()
                 .filter(|n| insn.operands.is_empty() && !n.contains('%'))
-                .cloned()
+                .map(|t| branch_section_target(t))
         };
-        if let Some(name) = target {
+        if let Some(target) = target {
             return Ok(AsmSectionItem::CodeBytes {
                 bytes: alloc::vec![op, 0],
                 relocs: alloc::vec![AsmSectionReloc {
@@ -6781,7 +6796,7 @@ fn encode_one_x86_section_insn(
                     pcrel: true,
                     branch: false,
                     signed: false,
-                    target: AsmSectionTarget::Symbol(name),
+                    target,
                     addend: -1,
                 }],
                 short: None,
@@ -6800,7 +6815,7 @@ fn encode_one_x86_section_insn(
                     "inline asm: replacement `{text}` call target embeds an operand"
                 ));
             }
-            Some(AsmSectionTarget::Symbol(name.clone()))
+            Some(branch_section_target(name))
         } else if let Some(&AsmOpnd::RefConst { idx, .. }) = insn.operands.first() {
             Some(operand_target(idx).ok_or_else(|| {
                 alloc::format!("inline asm: replacement `{text}` call target is not a symbol")
@@ -6862,13 +6877,16 @@ fn encode_one_x86_section_insn(
                     "inline asm: replacement `{text}` branch target embeds an operand"
                 ));
             }
-            Some(name.clone())
+            Some(branch_section_target(name))
         } else if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
-            Some(alloc::format!("{num}{}", if forward { 'f' } else { 'b' }))
+            Some(AsmSectionTarget::Symbol(alloc::format!(
+                "{num}{}",
+                if forward { 'f' } else { 'b' }
+            )))
         } else {
             None
         };
-        if let Some(name) = target {
+        if let Some(target) = target {
             let (rel, prefixed) = branch_rel_width(mode, insn.suffix);
             let mut bytes = alloc::vec::Vec::new();
             if prefixed {
@@ -6884,7 +6902,7 @@ fn encode_one_x86_section_insn(
                 pcrel: true,
                 branch: mode == super::table::Mode::Bits64,
                 signed: false,
-                target: AsmSectionTarget::Symbol(name),
+                target,
                 addend: -(rel as i64),
             };
             let short = (!prefixed).then(|| short_branch_form(0x70 | (cc as u8), &reloc.target));
@@ -8157,6 +8175,13 @@ fn emit_inline_asm(
                 Ok(n) => n,
                 Err(e) => return fail(&e),
             };
+            // The code stream's branch channels name a symbol with no addend.
+            // TODO carry an addend on the call site and the fixup.
+            if !super::super::ssa::emit_common::is_asm_symbol_name(&name) {
+                return fail(
+                    "inline asm: a branch to a symbol expression is only supported in a section",
+                );
+            }
             // native_offset is the opcode byte; the fixup pass patches the
             // rel32 at +1 and computes the displacement from the 5-byte end.
             let native_offset = code.len();

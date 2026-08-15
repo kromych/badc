@@ -1412,6 +1412,39 @@ fn a_data_reference_to_a_set_alias_names_the_written_symbol() {
     assert_eq!(named_relocs(&o, ".rela.text"), []);
 }
 
+/// A branch target may be an expression over symbols and labels, as every
+/// other operand may. A reference to a symbol at an offset takes `PC32`: the
+/// offset is no entry point, so it binds no PLT slot. A plain reference keeps
+/// `PLT32`, and so does one whose expression leaves no offset. A target in
+/// the branch's own section resolves in place and takes the short form,
+/// through a `.set` alias as a bare name does. The bytes and the relocations
+/// are GNU as 2.46.1's for the same source.
+#[test]
+fn a_branch_takes_an_expression_target() {
+    let src = "\t.text\nf:\n\tjmp sym+4\n\tcall sym+8\n\tje sym+4\n\tjmp sym+0\n";
+    assert_eq!(
+        text_of("branch-expr", src),
+        [
+            0xe9, 0, 0, 0, 0, 0xe8, 0, 0, 0, 0, 0x0f, 0x84, 0, 0, 0, 0, 0xe9, 0, 0, 0, 0,
+        ],
+    );
+    assert_eq!(
+        text_relocs("branch-expr-rel", src),
+        [
+            (1, 2, String::from("sym"), 0),
+            (6, 2, String::from("sym"), 4),
+            (0xc, 2, String::from("sym"), 0),
+            (0x11, 4, String::from("sym"), -4),
+        ],
+    );
+    let src = "\t.text\nf:\n\tjmp lo+4\n\tnop\nlo:\n\tnop\n";
+    assert_eq!(text_of("branch-expr-local", src), [0xeb, 0x05, 0x90, 0x90]);
+    assert_eq!(text_relocs("branch-expr-local-rel", src), []);
+    let src = "\t.text\nf:\n\tnop\n\tjmp a+1\n\t.set a, t\nt:\n\tnop\n";
+    assert_eq!(text_of("branch-expr-alias", src), [0x90, 0xeb, 0x01, 0x90]);
+    assert_eq!(text_relocs("branch-expr-alias-rel", src), []);
+}
+
 /// `call` has no `rel8` form, so it keeps `e8 rel32` at any distance.
 #[test]
 fn a_near_call_is_not_shortened() {

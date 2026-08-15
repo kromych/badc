@@ -3219,9 +3219,13 @@ pub(super) fn write_relocatable(
                         // named symbol reaches it through the PLT slot, like a
                         // compiler-emitted call: `R_X86_64_PLT32`, not a data
                         // `PC32`. A target reduced to a section symbol binds no
-                        // slot, so GNU as leaves it `PC32`.
+                        // slot, so GNU as leaves it `PC32`, and so does a
+                        // target naming the symbol at an offset (`jmp sym+4`),
+                        // which is no entry point.
                         (RelocAbi::X86_64, true, 4)
-                            if r.branch && !section_syms.contains(&sym_idx) =>
+                            if r.branch
+                                && !section_syms.contains(&sym_idx)
+                                && r.addend == -(r.width as i64) =>
                         {
                             R_X86_64_PLT32
                         }

@@ -1344,6 +1344,20 @@ pub(crate) enum AsmResolved {
     },
 }
 
+/// What an instruction field's expression target resolves to against the
+/// layout. `pcrel` is `None` where the encoding's own PC-relativity stands:
+/// the reference names a symbol the link binds, so the field keeps the
+/// relocation the encoding asked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AsmFieldTarget {
+    Abs(i64),
+    Reloc {
+        target: AsmSectionTarget,
+        addend: i64,
+        pcrel: Option<bool>,
+    },
+}
+
 impl AsmExprValue {
     fn abs(v: i64) -> Self {
         AsmExprValue {
@@ -1455,6 +1469,58 @@ pub(crate) fn resolve_asm_value(
             "expression subtracts a symbol from a constant",
         )),
     }
+}
+
+/// Resolve an instruction field's expression target at `place` in `space`:
+/// the expression plus the encoding's own addend, made PC-relative where the
+/// field measures from itself. GNU as folds a difference of symbols whatever
+/// their binding, but a lone symbol the link binds keeps its relocation, so
+/// naming it leaves the encoding's PC-relativity in place.
+pub(crate) fn resolve_asm_field_expr(
+    text: &str,
+    ctx: &AsmExprCtx,
+    space: &AsmSpace,
+    place: i64,
+    addend: i64,
+    self_rel: bool,
+    non_local: &alloc::collections::BTreeSet<alloc::string::String>,
+) -> Result<AsmFieldTarget, alloc::string::String> {
+    let named = |e: alloc::string::String| alloc::format!("inline asm: `{text}`: {e}");
+    let mut v = eval_asm_value(text, ctx)
+        .and_then(|v| v.combine(AsmExprValue::abs(addend), false))
+        .map_err(named)?;
+    if let Some(n) = v.lone_symbol().filter(|n| non_local.contains(*n)) {
+        return Ok(AsmFieldTarget::Reloc {
+            target: AsmSectionTarget::Symbol(alloc::string::String::from(n)),
+            addend: v.constant(),
+            pcrel: None,
+        });
+    }
+    if self_rel {
+        v = v
+            .combine(
+                AsmExprValue::from_term(AsmExprTerm {
+                    space: Some((space.clone(), place)),
+                    target: AsmSectionTarget::OwnSection(place as u32),
+                }),
+                true,
+            )
+            .map_err(named)?;
+    }
+    Ok(
+        match resolve_asm_value(v, Some((space, place))).map_err(named)? {
+            AsmResolved::Abs(c) => AsmFieldTarget::Abs(c),
+            AsmResolved::Reloc {
+                target,
+                addend,
+                pcrel,
+            } => AsmFieldTarget::Reloc {
+                target,
+                addend,
+                pcrel: Some(pcrel),
+            },
+        },
+    )
 }
 
 /// Split an operand expression into one symbol and a constant addend. This
@@ -5796,7 +5862,10 @@ pub(crate) fn measure_asm_section_offsets(
     loop {
         let grown: AsmRelaxSet = sites
             .iter()
-            .filter(|s| !long.contains(&s.site) && !short_branch_reaches(blocks, &m, &non_local, s))
+            .filter(|s| {
+                !long.contains(&s.site)
+                    && !short_branch_reaches(blocks, &m, &non_local, s, const_of, sink)
+            })
             .map(|s| s.site)
             .collect();
         if grown.is_empty() {
@@ -5810,14 +5879,16 @@ pub(crate) fn measure_asm_section_offsets(
 }
 
 /// Whether the short form of the branch at `site` reaches its target under
-/// `m`. Only a label of the branch's own section that the materializer
-/// resolves in place can be reached: any other target keeps a relocation,
-/// which the link fills at the long form's width.
+/// `m`. Only a target the materializer resolves in place can be reached:
+/// any other keeps a relocation, which the link fills at the long form's
+/// width.
 fn short_branch_reaches(
     blocks: &[AsmSectionBlock],
     m: &SectionLabelOffsets,
     non_local: &alloc::collections::BTreeSet<alloc::string::String>,
     s: &AsmRelaxSite,
+    const_of: &dyn Fn(u8) -> Option<i64>,
+    sink: &AsmSectionSink,
 ) -> bool {
     let Some(AsmSectionItem::CodeBytes {
         short: Some(short), ..
@@ -5825,26 +5896,56 @@ fn short_branch_reaches(
     else {
         return false;
     };
-    let AsmSectionTarget::Symbol(name) = &short.reloc.target else {
-        return false;
-    };
-    // The reference takes the location and the binding of the name its
-    // `.set` chain ends at. A `.set` expression name is an absolute value,
-    // not a location in this section, and a global or weak name may bind to
-    // another definition at link time, so either keeps a relocation at the
-    // long form's width.
-    let name = m.alias_target(name.as_str());
-    if m.symbol(name).is_some() || non_local.contains(name) {
-        return false;
-    }
-    let (Some(sec), Some(off)) = (m.section(name), m.offset(name)) else {
-        return false;
-    };
-    if sec != section_key(&blocks[s.site.0]) {
-        return false;
-    }
+    let key = section_key(&blocks[s.site.0]);
     let place = s.at + short.reloc.offset as i64;
-    let disp = off + short.reloc.addend - place;
+    let disp = match &short.reloc.target {
+        AsmSectionTarget::Symbol(name) => {
+            // The reference takes the location and the binding of the name
+            // its `.set` chain ends at. A `.set` expression name is an
+            // absolute value, not a location in this section, and a global or
+            // weak name may bind to another definition at link time, so
+            // either keeps a relocation at the long form's width.
+            let name = m.alias_target(name.as_str());
+            if m.symbol(name).is_some() || non_local.contains(name) {
+                return false;
+            }
+            let (Some(sec), Some(off)) = (m.section(name), m.offset(name)) else {
+                return false;
+            };
+            if sec != key {
+                return false;
+            }
+            off + short.reloc.addend - place
+        }
+        // An expression target reaches where the materializer folds it to a
+        // constant; a symbol left in the value keeps its relocation. The
+        // main stream's labels are not laid out yet, so a target naming one
+        // takes the long form.
+        AsmSectionTarget::Expr(text) => {
+            let num_unique = alloc::collections::BTreeMap::new();
+            let resolve =
+                |t: &str| section_expr_leaf(t, &key, s.at, m, &sink.labels, &num_unique, &|_| None);
+            let ctx = AsmExprCtx {
+                resolve: &resolve,
+                const_of,
+                lax_div: false,
+            };
+            let space = AsmSpace::Section(key.clone());
+            match resolve_asm_field_expr(
+                text,
+                &ctx,
+                &space,
+                place,
+                short.reloc.addend,
+                true,
+                non_local,
+            ) {
+                Ok(AsmFieldTarget::Abs(c)) => c,
+                _ => return false,
+            }
+        }
+        _ => return false,
+    };
     let lim = 1i64 << (8 * short.reloc.width as u32 - 1);
     (-lim..lim).contains(&disp)
 }
@@ -7012,62 +7113,37 @@ pub(crate) fn materialize_asm_sections(
                                 lax_div: false,
                             };
                             let space = AsmSpace::Section(key.clone());
-                            let named = |e: alloc::string::String| {
-                                alloc::format!("inline asm: `{text}`: {e}")
-                            };
-                            // The field's value is the expression plus the
-                            // encoding's own addend, less the field's location
-                            // where the encoding measures from it.
-                            let mut v = eval_asm_value(text, &ctx)
-                                .and_then(|v| v.combine(AsmExprValue::abs(r.addend), false))
-                                .map_err(named)?;
-                            // GNU as folds a difference of symbols whatever
-                            // their binding, but a PC-relativity the encoding
-                            // supplies keeps the relocation unless the symbol
-                            // is local. Naming the symbol hands the reference
-                            // to the shared path below.
-                            let external = v
-                                .lone_symbol()
-                                .filter(|n| non_local.contains(*n))
-                                .map(|n| (alloc::string::String::from(n), v.constant()));
-                            if let Some((n, add)) = external {
-                                r.target = AsmSectionTarget::Symbol(n);
-                                r.addend = add;
-                            } else {
-                                if r.pcrel || r.kind.self_relative() {
-                                    v = v
-                                        .combine(
-                                            AsmExprValue::from_term(AsmExprTerm {
-                                                space: Some((space.clone(), place)),
-                                                target: AsmSectionTarget::OwnSection(place as u32),
-                                            }),
-                                            true,
-                                        )
-                                        .map_err(named)?;
+                            match resolve_asm_field_expr(
+                                text,
+                                &ctx,
+                                &space,
+                                place,
+                                r.addend,
+                                r.pcrel || r.kind.self_relative(),
+                                &non_local,
+                            )? {
+                                AsmFieldTarget::Abs(c) => {
+                                    store_asm_insn_const(&mut buf, r.offset as usize, &r, c)
+                                        .map_err(|e| alloc::format!("inline asm: `{text}`: {e}"))?;
+                                    continue;
                                 }
-                                match resolve_asm_value(v, Some((&space, place))).map_err(named)? {
-                                    AsmResolved::Abs(c) => {
-                                        store_asm_insn_const(&mut buf, r.offset as usize, &r, c)
-                                            .map_err(named)?;
-                                        continue;
-                                    }
-                                    AsmResolved::Reloc {
-                                        target,
-                                        addend,
-                                        pcrel,
-                                    } => {
-                                        r.target = target;
-                                        r.addend = addend;
-                                        // A data field's PC-relativity rides
-                                        // the relocation; an instruction
-                                        // field's is its kind's and stays as
-                                        // encoded.
-                                        if matches!(
+                                AsmFieldTarget::Reloc {
+                                    target,
+                                    addend,
+                                    pcrel,
+                                } => {
+                                    r.target = target;
+                                    r.addend = addend;
+                                    // A data field's PC-relativity rides the
+                                    // relocation; an instruction field's is
+                                    // its kind's and stays as encoded.
+                                    if let Some(p) = pcrel
+                                        && matches!(
                                             r.kind,
                                             AsmRelocKind::Data | AsmRelocKind::JumpRel
-                                        ) {
-                                            r.pcrel = pcrel;
-                                        }
+                                        )
+                                    {
+                                        r.pcrel = p;
                                     }
                                 }
                             }
@@ -7428,6 +7504,29 @@ pub(crate) fn is_asm_symbol_template(s: &str) -> bool {
         }
     }
     rest.bytes().all(sym_char)
+}
+
+/// True when `s` can spell a branch-target expression: a location
+/// expression whose first character starts a symbol name, which keeps the
+/// operand forms (`*%rax`, `$1`, `(%rax)`, a numeric label) out. An operand
+/// reference is not part of the expression grammar, so a target embedding
+/// one is a name and takes [`is_asm_symbol_template`]. Every leaf resolves
+/// here: this tests the grammar, not the layout.
+pub(crate) fn is_asm_branch_expr(s: &str) -> bool {
+    let s = s.trim();
+    if !s
+        .bytes()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_' || c == b'.')
+    {
+        return false;
+    }
+    let ctx = AsmExprCtx {
+        resolve: &|_| Some(AsmExprLeaf::Abs(1)),
+        const_of: &|_| Some(1),
+        lax_div: true,
+    };
+    eval_asm_value(s, &ctx).is_ok()
 }
 
 /// Substitute the operand references in a branch-target symbol name, so the

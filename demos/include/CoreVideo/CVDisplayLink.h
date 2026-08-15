@@ -1,28 +1,15 @@
-/* CoreVideo display-link API. RGFW uses it to drive a vsync callback;
- * the timestamp structs are opaque to the caller (only pointers are
- * passed through the callback). */
+/* CoreVideo display-link API. RGFW uses it to drive a vsync callback.
+ * The time and status types come from the bundled <CoreVideo/CVBase.h>
+ * and <CoreVideo/CVReturn.h>; only the declarations that need a
+ * CoreGraphics type live here. */
 #ifndef _CV_DISPLAY_LINK_H
 #define _CV_DISPLAY_LINK_H
 
 #include <CoreGraphics/CoreGraphics.h>
-#include <stdint.h>
+#include <CoreVideo/CVBase.h>
+#include <CoreVideo/CVReturn.h>
 
 typedef struct __CVDisplayLink *CVDisplayLinkRef;
-typedef int32_t CVReturn;
-typedef uint64_t CVOptionFlags;
-
-#define kCVReturnSuccess 0
-
-typedef struct {
-    int32_t version;
-    int32_t flags;
-    int64_t hostTime;
-    double rateScalar;
-    int64_t videoTime;
-    int64_t videoRefreshPeriod;
-    int32_t smpteTime[8];
-    uint64_t reserved[2];
-} CVTimeStamp;
 
 typedef CVReturn (*CVDisplayLinkOutputCallback)(
     CVDisplayLinkRef displayLink, const CVTimeStamp *inNow,

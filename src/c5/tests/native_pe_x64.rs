@@ -213,6 +213,34 @@ fn return_zero() {
 }
 
 #[test]
+fn string_literal_store_faults() {
+    // The literal lives in `.rdata`; the store hits a page mapped
+    // without write access and dies with STATUS_ACCESS_VIOLATION.
+    // Windows-native only: WINE's crash handling blocks in winedbg
+    // instead of terminating the process, hanging the runner.
+    #[cfg(target_os = "windows")]
+    {
+        let src = "int main(void) { char *p = \"immutable\"; p[0] = 'X'; return 0; }";
+        match build_and_run(src, "lit_store", &[]) {
+            RunOutcome::Exit(0) => panic!("store through a string literal must not exit 0"),
+            RunOutcome::Exit(_) | RunOutcome::Signal(_) => {}
+            RunOutcome::BuildError(e) => panic!("lit_store: {e}"),
+            RunOutcome::HostCannotRun => eprintln!("skip lit_store: no PE runner on this host"),
+        }
+    }
+    // The pointer read crosses from the writable `.data` slot into
+    // `.rdata`; the loader's base relocation of the slot must land on
+    // the literal.
+    assert_exit(
+        "const char *const cp = \"readback\"; \
+         int main(void) { return cp[0] == 'r' ? 0 : 1; }",
+        "lit_readback",
+        &[],
+        0,
+    );
+}
+
+#[test]
 fn return_42() {
     assert_exit("int main() { return 42; }", "ret42", &[], 42);
 }

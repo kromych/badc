@@ -201,6 +201,7 @@ const NUM_DATA_DIRS: u32 = 16;
 /// address-of-static initializers, so `.reloc` follows their
 /// presence.
 struct SectionPlan {
+    rdata: bool,
     data: bool,
     reloc: bool,
     edata: bool,
@@ -211,7 +212,11 @@ impl SectionPlan {
     /// Headers the image carries: `.text`, `.pdata` and `.idata`
     /// unconditionally, plus each optional section this plan names.
     fn count(&self) -> usize {
-        3 + self.data as usize + self.reloc as usize + self.edata as usize + self.dwarf
+        3 + self.rdata as usize
+            + self.data as usize
+            + self.reloc as usize
+            + self.edata as usize
+            + self.dwarf
     }
 }
 
@@ -362,15 +367,31 @@ pub(super) fn write(
         stub_len
     };
 
+    // `.rdata` carries the read-only data prefix
+    // (`build.data[..data_ro_len]`, no relocated slot in it) and the
+    // switch-table blob at an 8-aligned tail past it; both were
+    // previously left writable (the prefix) or folded into `.text`
+    // (the tables).
+    let ro_len: u32 = build.data_ro_len.min(build.data.len()) as u32;
+    let jt_base_in_rdata: u32 = if build.rodata.bytes.is_empty() {
+        ro_len
+    } else {
+        round_up(ro_len, 8)
+    };
+    let rdata_size: u32 = jt_base_in_rdata + build.rodata.bytes.len() as u32;
+    let rdata_section_present = rdata_size > 0;
     // The `.data` section is present when the c5 program has
-    // initialized data OR any `_Thread_local` globals (the TLS
-    // directory + `_tls_index` slot live at the tail of `.data`).
+    // writable initialized or zero-fill data OR any `_Thread_local`
+    // globals (the TLS directory + `_tls_index` slot live at the
+    // tail of `.data`). A wholly read-only data image leaves it out
+    // -- the loader rejects a zero-extent section.
     // The `.reloc` section is present when the program declares
     // any `_Thread_local` global -- those are the only absolute
     // VAs the writer emits (inside `IMAGE_TLS_DIRECTORY64`), and
     // the ASLR-aware loader uses `.reloc` to fix them up after
     // sliding the image.
-    let data_section_present = !build.data.is_empty() || !build.tls_data.is_empty();
+    let data_section_present =
+        build.data.len() > ro_len as usize || !build.tls_data.is_empty() || build.bss_size > 0;
     // `.reloc` is needed when the image carries any absolute
     // pointer the loader has to fix up after sliding -- today
     // that's the three TLS-directory VAs (when TLS is
@@ -474,6 +495,7 @@ pub(super) fn write(
     // size, the COFF header's count and the emitted table all read it, so
     // adding a section cannot leave one of the three behind.
     let plan = SectionPlan {
+        rdata: rdata_section_present,
         data: data_section_present,
         reloc: reloc_section_present,
         edata: edata_section_present,
@@ -482,15 +504,7 @@ pub(super) fn write(
     let headers_size = headers_raw_size(&plan) as u32;
 
     let text_file_off: u32 = headers_size;
-    // The read-only blob (switch dispatch tables) rides at an
-    // 8-aligned tail of the code section; MEM_READ covers it and the
-    // loader needs no separate section.
-    let rodata_base_in_text: u32 = if build.rodata.bytes.is_empty() {
-        text_prologue_len + build.text.len() as u32
-    } else {
-        round_up(text_prologue_len + build.text.len() as u32, 8)
-    };
-    let text_size: u32 = rodata_base_in_text + build.rodata.bytes.len() as u32;
+    let text_size: u32 = text_prologue_len + build.text.len() as u32;
     let text_raw_size: u32 = round_up(text_size, FILE_ALIGNMENT);
 
     // 64-bit Windows requires a `.pdata` Exception Directory
@@ -547,19 +561,36 @@ pub(super) fn write(
     // (`build.tls_data.len() - build.tls_init_size`) live only
     // in `IMAGE_TLS_DIRECTORY64.SizeOfZeroFill`; the loader
     // zero-fills them per-thread.
-    let tls_layout = compute_tls_layout(build);
-    // File-backed content of `.data` (program data + the TLS blob);
-    // `data_vsize` adds the no-file zero-init `.bss` tail past it.
-    let data_size: u32 = build.data.len() as u32 + tls_layout.tls_blob_size;
+    // `.rdata` sits between `.idata` and `.data`.
+    let rdata_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
+    let rdata_file_off: u32 = idata_file_off + idata_raw_size;
+    let rdata_raw_size: u32 = if rdata_section_present {
+        round_up(rdata_size, FILE_ALIGNMENT)
+    } else {
+        0
+    };
+    // `.data` carries the writable remainder past the `.rdata` prefix.
+    let writable_data_size: u32 = build.data.len() as u32 - ro_len;
+    let tls_layout = compute_tls_layout(build, writable_data_size);
+    // File-backed content of `.data` (writable program data + the TLS
+    // blob); `data_vsize` adds the no-file zero-init `.bss` tail past it.
+    let data_size: u32 = writable_data_size + tls_layout.tls_blob_size;
     let data_vsize: u32 = data_size + build.bss_size as u32;
-    let data_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
-    // A data offset past the program data (`build.data`) names a byte in
-    // the zero-fill `.bss` region, which sits at the `.data` section
-    // tail past both the program data and the TLS blob.
+    let data_rva: u32 = if rdata_section_present {
+        round_up(rdata_rva + rdata_size, SECTION_ALIGNMENT)
+    } else {
+        rdata_rva
+    };
+    // A data offset below `ro_len` names a byte of the `.rdata` prefix;
+    // one past the program data (`build.data`) names a byte in the
+    // zero-fill `.bss` region, which sits at the `.data` section tail
+    // past both the writable data and the TLS blob.
     let data_off_to_rva = |off: u32| -> u32 {
         let file_len = build.data.len() as u32;
-        if off < file_len {
-            data_rva + off
+        if off < ro_len {
+            rdata_rva + off
+        } else if off < file_len {
+            data_rva + (off - ro_len)
         } else {
             data_rva + data_size + (off - file_len)
         }
@@ -573,7 +604,7 @@ pub(super) fn write(
             super::apply_merged_dwarf_data_reloc(&mut dwarf_blobs[0].1, r, &to_vmaddr)?;
         }
     }
-    let data_file_off: u32 = idata_file_off + idata_raw_size;
+    let data_file_off: u32 = rdata_file_off + rdata_raw_size;
     let data_raw_size: u32 = if data_section_present {
         round_up(data_size, FILE_ALIGNMENT)
     } else {
@@ -601,6 +632,7 @@ pub(super) fn write(
     let reloc_bytes: Vec<u8> = if reloc_section_present {
         build_reloc_section(
             data_rva,
+            ro_len,
             &tls_layout,
             !build.tls_data.is_empty(),
             &build.data_relocs,
@@ -629,6 +661,8 @@ pub(super) fn write(
                 reloc_rva + reloc_size
             } else if data_section_present {
                 data_rva + data_vsize
+            } else if rdata_section_present {
+                rdata_rva + rdata_size
             } else {
                 idata_rva + idata_size
             },
@@ -643,7 +677,7 @@ pub(super) fn write(
         } else if data_section_present {
             data_file_off + data_raw_size
         } else {
-            idata_file_off + idata_raw_size
+            rdata_file_off + rdata_raw_size
         }
     } else {
         0
@@ -715,7 +749,7 @@ pub(super) fn write(
     } else if data_section_present {
         data_file_off + data_raw_size
     } else {
-        idata_file_off + idata_raw_size
+        rdata_file_off + rdata_raw_size
     };
     let pre_dwarf_end_rva: u32 = if edata_section_present {
         edata_rva + edata_size
@@ -723,6 +757,8 @@ pub(super) fn write(
         reloc_rva + reloc_size
     } else if data_section_present {
         data_rva + data_vsize
+    } else if rdata_section_present {
+        rdata_rva + rdata_size
     } else {
         idata_rva + idata_size
     };
@@ -902,6 +938,8 @@ pub(super) fn write(
         round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT)
     } else if data_section_present {
         round_up(data_rva + data_vsize, SECTION_ALIGNMENT)
+    } else if rdata_section_present {
+        round_up(rdata_rva + rdata_size, SECTION_ALIGNMENT)
     } else {
         round_up(idata_rva + idata_size, SECTION_ALIGNMENT)
     };
@@ -914,16 +952,12 @@ pub(super) fn write(
     // (the stub exits through its own tail).
     text_bytes.resize(text_prologue_len as usize, 0xCC);
     text_bytes.extend_from_slice(&build.text);
-    if !build.rodata.bytes.is_empty() {
-        // The absolute-slot form is relocatable-only; an image build
-        // carries difference slots exclusively.
-        if !build.rodata.abs64.is_empty() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                "PE: absolute table slots reached a final-image build",
-            )));
-        }
-        text_bytes.resize(rodata_base_in_text as usize, 0);
-        text_bytes.extend_from_slice(&build.rodata.bytes);
+    // The absolute-slot form is relocatable-only; an image build
+    // carries difference slots exclusively.
+    if !build.rodata.abs64.is_empty() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "PE: absolute table slots reached a final-image build",
+        )));
     }
 
     // Stub-internal fixup: the direct call to main. Only
@@ -1041,10 +1075,11 @@ pub(super) fn write(
     }
 
     // Read-only blob references (switch dispatch): the site
-    // materializes the table base at the code section's tail.
+    // materializes the table base inside `.rdata`.
+    let jt_rva = rdata_rva + jt_base_in_rdata;
     for f in &build.rodata.addr_fixups {
         let instr_off = (f.code_offset as u32) + text_prologue_len;
-        let target_rva = text_rva + rodata_base_in_text + f.rodata_offset as u32;
+        let target_rva = jt_rva + f.rodata_offset as u32;
         patch_addr_load(
             machine,
             &mut text_bytes,
@@ -1054,12 +1089,13 @@ pub(super) fn write(
             AddrPart::Whole,
         )?;
     }
-    // Table entries: `target - table_base`, both inside `.text`, so
-    // the value is a pure offset difference (ASLR-invariant, no
-    // `.reloc` entry).
+    // Table entries: `target - table_base` as RVAs -- the image base
+    // cancels, so the value is ASLR-invariant and needs no `.reloc`
+    // entry. Patched into the table blob before it lands in `.rdata`.
+    let mut jt_bytes = build.rodata.bytes.clone();
     for r in &build.rodata.rel32 {
-        let value = (text_prologue_len as i64 + r.text_offset as i64)
-            - (rodata_base_in_text as i64 + r.base_offset as i64);
+        let value = (text_rva as i64 + text_prologue_len as i64 + r.text_offset as i64)
+            - (jt_rva as i64 + r.base_offset as i64);
         let Ok(v) = i32::try_from(value) else {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -1068,8 +1104,8 @@ pub(super) fn write(
                 ),
             )));
         };
-        let off = (rodata_base_in_text + r.slot_offset as u32) as usize;
-        text_bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
+        let off = r.slot_offset as usize;
+        jt_bytes[off..off + 4].copy_from_slice(&v.to_le_bytes());
     }
 
     // TLS-index fixups. Every `Inst::TlsAddr` lowering recorded
@@ -1142,7 +1178,7 @@ pub(super) fn write(
             entry_rva,
             base_of_code: text_rva,
             size_of_code: text_size,
-            size_of_initialized_data: idata_size + data_size + reloc_size,
+            size_of_initialized_data: idata_size + rdata_size + data_size + reloc_size,
             size_of_image: image_size,
             size_of_headers: headers_size,
             import_table_rva: idata_layout.import_directory_rva,
@@ -1187,6 +1223,16 @@ pub(super) fn write(
         pointer_to_raw_data: idata_file_off,
         characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,
     });
+    if rdata_section_present {
+        sections.push(SectionHeader {
+            name: *b".rdata\0\0",
+            virtual_size: rdata_size,
+            virtual_address: rdata_rva,
+            size_of_raw_data: rdata_raw_size,
+            pointer_to_raw_data: rdata_file_off,
+            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+        });
+    }
     if data_section_present {
         sections.push(SectionHeader {
             name: *b".data\0\0\0",
@@ -1256,20 +1302,29 @@ pub(super) fn write(
     pad_to(&mut out, (pdata_file_off + pdata_raw_size) as usize)?;
     out.extend_from_slice(&idata_bytes);
     pad_to(&mut out, (idata_file_off + idata_raw_size) as usize)?;
+    if rdata_section_present {
+        // `.rdata`: the read-only data prefix, then the switch-table
+        // blob at its 8-aligned tail. Neither holds a relocated slot,
+        // so the bytes are final at emission.
+        out.extend_from_slice(&build.data[..ro_len as usize]);
+        pad_to(&mut out, (rdata_file_off + jt_base_in_rdata) as usize)?;
+        out.extend_from_slice(&jt_bytes);
+        pad_to(&mut out, (rdata_file_off + rdata_raw_size) as usize)?;
+    }
     if data_section_present {
         // Apply pointer-to-global initializers in `.data`:
         // each `int *p = &x;` slot holds the preferred VA
         // (ImageBase + data_rva + target_offset). The
         // `.reloc` block lists each slot so the loader adds
         // the slide delta after mapping.
-        let mut data_with_relocs = build.data.clone();
+        let mut data_with_relocs = build.data[ro_len as usize..].to_vec();
         for r in &build.data_relocs {
             // `.data` and its zero-fill tail are separated by the TLS
             // blob; the anchor picks the region, the signed
             // displacement rides on the address.
             let preferred_va = (IMAGE_BASE + data_off_to_rva(r.target_anchor as u32) as u64)
                 .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor));
-            let off = r.data_offset as usize;
+            let off = super::reloc_slot_in_data("PE", r.data_offset, ro_len as u64, "data")?;
             if off + 8 > data_with_relocs.len() {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                     &format!(
@@ -1301,7 +1356,7 @@ pub(super) fn write(
             }
             let preferred_va =
                 IMAGE_BASE + (text_rva + text_prologue_len + native_off as u32) as u64;
-            let off = r.data_offset as usize;
+            let off = super::reloc_slot_in_data("PE", r.data_offset, ro_len as u64, "code")?;
             if off + 8 > data_with_relocs.len() {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                     &format!(
@@ -1318,7 +1373,7 @@ pub(super) fn write(
         for r in &build.label_relocs {
             let preferred_va =
                 IMAGE_BASE + (text_rva + text_prologue_len + r.text_offset as u32) as u64;
-            let off = r.data_offset as usize;
+            let off = super::reloc_slot_in_data("PE", r.data_offset, ro_len as u64, "label")?;
             if off + 8 > data_with_relocs.len() {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                     &format!(
@@ -1342,8 +1397,8 @@ pub(super) fn write(
             } else {
                 (text_rva + text_prologue_len) as i64 + r.target_offset as i64
             };
-            let slot_rva = data_rva as i64 + r.slot_data_offset as i64;
-            let off = r.slot_data_offset as usize;
+            let slot_rva = data_off_to_rva(r.slot_data_offset as u32) as i64;
+            let off = super::reloc_slot_in_data("PE", r.slot_data_offset, ro_len as u64, "pcrel")?;
             let width = r.width as usize;
             if off + width > data_with_relocs.len() {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1612,8 +1667,13 @@ fn build_export_directory(
     Ok(out)
 }
 
+/// `ro_len` is the `.rdata`-resident prefix of the data-byte space;
+/// slot offsets are `.data`-relative past it. A slot below `ro_len`
+/// is rejected by the writer's data patch pass before this stream is
+/// consumed.
 fn build_reloc_section(
     data_rva: u32,
+    ro_len: u32,
     tls_layout: &TlsLayout,
     tls_present: bool,
     data_relocs: &[crate::c5::program::DataReloc],
@@ -1638,7 +1698,7 @@ fn build_reloc_section(
         bucket.push((dir_rva + 16) & 0xFFF); // AddressOfIndex
     }
     for r in data_relocs {
-        let target_rva = data_rva + r.data_offset as u32;
+        let target_rva = data_rva + (r.data_offset as u32).saturating_sub(ro_len);
         let page = target_rva & !0xFFF;
         by_page.entry(page).or_default().push(target_rva & 0xFFF);
     }
@@ -1647,14 +1707,14 @@ fn build_reloc_section(
     // the slide. The kind of pointer (data vs code) doesn't
     // matter to PE's `.reloc`, so we use the same DIR64 entry.
     for r in code_relocs {
-        let target_rva = data_rva + r.data_offset as u32;
+        let target_rva = data_rva + (r.data_offset as u32).saturating_sub(ro_len);
         let page = target_rva & !0xFFF;
         by_page.entry(page).or_default().push(target_rva & 0xFFF);
     }
     // `&&label` initializers hold a code pointer in the data segment,
     // so they take the same DIR64 entry.
     for r in label_relocs {
-        let target_rva = data_rva + r.data_offset as u32;
+        let target_rva = data_rva + (r.data_offset as u32).saturating_sub(ro_len);
         let page = target_rva & !0xFFF;
         by_page.entry(page).or_default().push(target_rva & 0xFFF);
     }
@@ -1710,7 +1770,7 @@ struct TlsLayout {
     tls_init_offset_in_data: u32,
 }
 
-fn compute_tls_layout(build: &Build) -> TlsLayout {
+fn compute_tls_layout(build: &Build, writable_data_size: u32) -> TlsLayout {
     if build.tls_data.is_empty() {
         return TlsLayout {
             tls_blob_size: 0,
@@ -1719,7 +1779,7 @@ fn compute_tls_layout(build: &Build) -> TlsLayout {
             tls_init_offset_in_data: 0,
         };
     }
-    let user_data_end = build.data.len() as u32;
+    let user_data_end = writable_data_size;
     // 4-byte align the _tls_index slot (DWORD).
     let tls_index_offset = round_up(user_data_end, 4);
     // 8-byte align IMAGE_TLS_DIRECTORY64 (it carries u64s).

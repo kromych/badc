@@ -162,6 +162,183 @@ fn with_debug_info_false_strips_dwarf_for_every_target() {
     }
 }
 
+/// Byte range of every PT_LOAD in an ELF image, with its p_flags.
+fn elf_load_file_ranges(bytes: &[u8]) -> alloc::vec::Vec<(u32, usize, usize)> {
+    let u16at = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let (phoff, phentsize, phnum) = (u64at(0x20), u16at(0x36), u16at(0x38));
+    (0..phnum)
+        .map(|i| phoff + i * phentsize)
+        .filter(|&p| u32at(p) == 1) // PT_LOAD
+        .map(|p| (u32at(p + 4), u64at(p + 8), u64at(p + 32)))
+        .collect()
+}
+
+/// `(file_offset, size)` of a Mach-O section, plus the byte range of a
+/// segment, located by name.
+fn macho_section_range(bytes: &[u8], seg: &str, sect: &str) -> Option<(usize, usize)> {
+    let ncmds = u32::from_le_bytes(bytes[16..20].try_into().unwrap());
+    let mut p = 32usize;
+    for _ in 0..ncmds {
+        let cmd = u32::from_le_bytes(bytes[p..p + 4].try_into().unwrap());
+        let cmdsize = u32::from_le_bytes(bytes[p + 4..p + 8].try_into().unwrap()) as usize;
+        if cmd == 0x19 {
+            // LC_SEGMENT_64
+            let name = &bytes[p + 8..p + 24];
+            if name.starts_with(seg.as_bytes()) && name[seg.len()] == 0 {
+                let nsects = u32::from_le_bytes(bytes[p + 64..p + 68].try_into().unwrap());
+                for s in 0..nsects as usize {
+                    let so = p + 72 + s * 80;
+                    let sname = &bytes[so..so + 16];
+                    if sname.starts_with(sect.as_bytes()) && sname[sect.len()] == 0 {
+                        let size = u64::from_le_bytes(bytes[so + 40..so + 48].try_into().unwrap());
+                        let off = u32::from_le_bytes(bytes[so + 48..so + 52].try_into().unwrap());
+                        return Some((off as usize, size as usize));
+                    }
+                }
+                return None;
+            }
+        }
+        p += cmdsize;
+    }
+    None
+}
+
+/// `(characteristics, file_offset, raw_size)` of a PE section by name.
+fn pe_section(bytes: &[u8], name: &str) -> Option<(u32, usize, usize)> {
+    let u16at = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let pe = u32at(0x3C) as usize;
+    let nsects = u16at(pe + 6);
+    let opt_size = u16at(pe + 20);
+    let table = pe + 24 + opt_size;
+    let mut field = [0u8; 8];
+    field[..name.len()].copy_from_slice(name.as_bytes());
+    (0..nsects).map(|i| table + i * 40).find_map(|h| {
+        (bytes[h..h + 8] == field).then(|| {
+            (
+                u32at(h + 36),
+                u32at(h + 20) as usize,
+                u32at(h + 16) as usize,
+            )
+        })
+    })
+}
+
+fn contains(hay: &[u8], needle: &[u8]) -> bool {
+    hay.windows(needle.len()).any(|w| w == needle)
+}
+
+/// C99 6.4.5p6 leaves writing through a string literal undefined, and
+/// every production toolchain enforces it with a read-only mapping.
+/// The direct single-TU image places `Build::data[..data_ro_len]` --
+/// literals and other const storage with no relocated slot -- in an
+/// ELF PF_R load, Mach-O `__TEXT,__const`, or PE `.rdata`; no
+/// writable section carries those bytes.
+#[test]
+fn string_literals_land_read_only_in_every_target() {
+    use crate::{NativeOptions, Target};
+    let program = super::compile_str_bare(
+        "int wglobal = 5; \
+         int main(void) { char *p = \"roseg-probe\"; wglobal += p[0]; return wglobal; }",
+    );
+    let needle = b"roseg-probe";
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        match target {
+            Target::LinuxAarch64 | Target::LinuxX64 => {
+                let loads = elf_load_file_ranges(&bytes);
+                const PF_R: u32 = 4;
+                let ro = loads
+                    .iter()
+                    .find(|&&(flags, off, len)| {
+                        flags == PF_R && contains(&bytes[off..off + len], needle)
+                    })
+                    .is_some();
+                assert!(ro, "{target:?}: literal not in any PF_R-only load");
+                for &(flags, off, len) in &loads {
+                    if flags & 2 != 0 {
+                        assert!(
+                            !contains(&bytes[off..off + len], needle),
+                            "{target:?}: literal also present in a PF_W load"
+                        );
+                    }
+                }
+            }
+            Target::MacOSAarch64 => {
+                let (off, len) = macho_section_range(&bytes, "__TEXT", "__const")
+                    .expect("__TEXT,__const section");
+                assert!(
+                    contains(&bytes[off..off + len], needle),
+                    "literal not in __TEXT,__const"
+                );
+                let (doff, dlen) =
+                    macho_section_range(&bytes, "__DATA", "__data").expect("__DATA,__data");
+                assert!(
+                    !contains(&bytes[doff..doff + dlen], needle),
+                    "literal also present in writable __DATA,__data"
+                );
+            }
+            Target::WindowsX64 | Target::WindowsAarch64 => {
+                const MEM_READ: u32 = 0x4000_0000;
+                const MEM_WRITE: u32 = 0x8000_0000;
+                let (chars, off, len) = pe_section(&bytes, ".rdata").expect(".rdata section");
+                assert_eq!(
+                    chars & MEM_READ,
+                    MEM_READ,
+                    "{target:?}: .rdata not MEM_READ"
+                );
+                assert_eq!(chars & MEM_WRITE, 0, "{target:?}: .rdata is writable");
+                assert!(
+                    contains(&bytes[off..off + len], needle),
+                    "{target:?}: literal not in .rdata"
+                );
+                let (dchars, doff, dlen) = pe_section(&bytes, ".data").expect(".data section");
+                assert_eq!(
+                    dchars & MEM_WRITE,
+                    MEM_WRITE,
+                    "{target:?}: .data not writable"
+                );
+                assert!(
+                    !contains(&bytes[doff..doff + dlen], needle),
+                    "{target:?}: literal also present in .data"
+                );
+            }
+        }
+    }
+}
+
+/// x86_64 switch dispatch tables (`Build::rodata`) belong to the
+/// read-only image: the ELF writer already places them in the PF_R
+/// load; the PE writer carries them at the 8-aligned tail of
+/// `.rdata` instead of folding them into `.text`.
+#[test]
+fn pe_switch_tables_ride_rdata_not_text() {
+    use crate::{NativeOptions, Target};
+    let program = super::compile_fixture_bare("switch_jump_table_dense.c");
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::WindowsX64,
+        NativeOptions::default(),
+    )
+    .expect("emit WindowsX64");
+    let (chars, _, len) = pe_section(&bytes, ".rdata").expect(".rdata section");
+    assert_eq!(chars & 0x8000_0000, 0, ".rdata is writable");
+    assert!(len > 0, ".rdata carries the dispatch tables");
+}
+
 /// Every emitted target gets one PLT trampoline per import
 /// plus a matching local-name symbol table entry. The
 /// trampoline lets `gdb b malloc` resolve into the produced

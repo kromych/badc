@@ -470,6 +470,8 @@ impl Compiler {
                 let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
                 if typedef_fpi > 0 {
                     self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                    self.pending.fn_ptr_ret_indirection =
+                        self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
                     self.pending.base_is_function_type =
                         self.symbols[self.lex.curr_id_idx].is_function_type;
                     // A function-pointer typedef records the pointed-to
@@ -607,6 +609,7 @@ impl Compiler {
             // first declarator keeps the lineage and a call through a later
             // one defaults its result type to int.
             let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+            let base_fn_ptr_ret_indirection = self.pending.fn_ptr_ret_indirection;
             let base_is_function_type = self.pending.base_is_function_type;
             let base_typedef_fn_proto = self.pending.typedef_fn_proto;
             let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
@@ -623,6 +626,7 @@ impl Compiler {
                 }
                 declarator_count += 1;
                 self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
+                self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
                 self.pending.base_is_function_type = base_is_function_type;
                 self.pending.typedef_fn_proto = base_typedef_fn_proto;
                 self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
@@ -685,6 +689,8 @@ impl Compiler {
                 // recorded, and store it on the symbol so a later
                 // identifier load can seed the chain-depth tracker.
                 let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+                let fn_ptr_ret_indirection =
+                    core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
                 // A typedef whose alias is an array contributes its
                 // dimension when the declarator did not supply
                 // one. The multi-dim composition rule (`arr_t
@@ -748,6 +754,7 @@ impl Compiler {
                     || (self.pending.base_is_const && !super::types::is_pointer_ty(ty));
                 if fn_ptr_indirection > 0 {
                     self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
+                    self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
                 }
                 // Inherit a variadic function-pointer prototype onto the
                 // bound declarator so an indirect call through it knows
@@ -894,6 +901,7 @@ impl Compiler {
                     self.symbols[id_idx].type_align = alias_align;
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
+                        self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
                     }
                     // The `typedef RET NAME(args)` / `typedef RET (*NAME)(args)`
                     // spellings parse their own list; an alias of an existing

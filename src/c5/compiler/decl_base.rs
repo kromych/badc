@@ -300,6 +300,7 @@ impl Compiler {
             if class == Token::Fun as i64 || class == Token::Sys as i64 {
                 let fty = self.symbols[idx].type_ + Ty::Ptr as i64;
                 self.pending.fn_ptr_indirection = Some(1);
+                self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = true;
                 self.pending.typedef_fn_proto = Some((
                     self.symbols[idx].params.len(),
@@ -547,6 +548,7 @@ impl Compiler {
         let saved_callee_params = self.pending.indirect_callee_params.take();
         let saved_callee_variadic = core::mem::take(&mut self.pending.indirect_callee_is_variadic);
         let saved_callee_depth = core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
+        let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         // Parse at assignment precedence so binary, conditional, and
         // assignment operators are consumed.
         self.expr(Token::Assign as i64)?;
@@ -559,6 +561,7 @@ impl Compiler {
                 self.pending.indirect_callee_params = None;
                 self.pending.indirect_callee_is_variadic = false;
                 self.pending.indirect_callee_fn_ptr_depth = 0;
+                self.pending.indirect_callee_ret_fn_ptr = 0;
                 self.expr(Token::Assign as i64)?;
             }
         }
@@ -570,6 +573,7 @@ impl Compiler {
         let expr_ty = match self.addressed_function_symbol() {
             Some(idx) => {
                 self.pending.fn_ptr_indirection = Some(1);
+                self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = false;
                 self.pending.typedef_fn_proto = Some((
                     self.symbols[idx].params.len(),
@@ -591,6 +595,7 @@ impl Compiler {
                     )
                 {
                     self.pending.fn_ptr_indirection = Some(depth);
+                    self.pending.fn_ptr_ret_indirection = 0;
                     self.pending.base_is_function_type = false;
                     self.pending.typedef_fn_proto = Some((params.len(), variadic));
                     self.pending.fn_ptr_param_types = Some(params);
@@ -606,6 +611,7 @@ impl Compiler {
                     // signature, which the flat tag (return type only)
                     // cannot spell.
                     self.pending.fn_ptr_indirection = Some(depth);
+                    self.pending.fn_ptr_ret_indirection = 0;
                     self.pending.base_is_function_type = false;
                     self.pending.typedef_fn_proto = Some((params.len(), variadic));
                     self.pending.fn_ptr_param_types = Some(params);
@@ -639,6 +645,7 @@ impl Compiler {
         self.pending.indirect_callee_params = saved_callee_params;
         self.pending.indirect_callee_is_variadic = saved_callee_variadic;
         self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
+        self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
@@ -1649,6 +1656,8 @@ impl Compiler {
             let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
             if typedef_fpi > 0 {
                 self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                self.pending.fn_ptr_ret_indirection =
+                    self.symbols[self.lex.curr_id_idx].fn_ptr_ret_indirection;
                 self.pending.base_is_function_type =
                     self.symbols[self.lex.curr_id_idx].is_function_type;
                 // A function-pointer typedef records the pointed-to

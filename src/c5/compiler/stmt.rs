@@ -56,6 +56,7 @@ pub(super) struct BlockShadow {
     type_: i64,
     val: i64,
     fn_ptr_indirection: i64,
+    fn_ptr_ret_indirection: i64,
     params: Vec<i64>,
     is_variadic: bool,
     array_size: i64,
@@ -85,6 +86,7 @@ impl Compiler {
             type_: s.type_,
             val: s.val,
             fn_ptr_indirection: s.fn_ptr_indirection,
+            fn_ptr_ret_indirection: s.fn_ptr_ret_indirection,
             params: s.params.clone(),
             is_variadic: s.is_variadic,
             array_size: s.array_size,
@@ -110,6 +112,7 @@ impl Compiler {
         s.type_ = b.type_;
         s.val = b.val;
         s.fn_ptr_indirection = b.fn_ptr_indirection;
+        s.fn_ptr_ret_indirection = b.fn_ptr_ret_indirection;
         s.params = b.params;
         s.is_variadic = b.is_variadic;
         s.array_size = b.array_size;
@@ -428,6 +431,7 @@ impl Compiler {
                 ty = self.apply_mode_to_type(ty, m)?;
             }
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+            let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             let bare_fn_type = core::mem::take(&mut self.pending.bare_function_type_declarator);
             // C99 function-type typedef: `typedef RET NAME(args);`
             // declared at block scope. Same handling as run_compile's
@@ -493,6 +497,7 @@ impl Compiler {
             self.symbols[id_idx].is_function_type = typedef_is_fn_type;
             if typedef_fpi > 0 {
                 self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
+                self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
             }
             if let Some(pp) = typedef_params {
                 self.symbols[id_idx].params = pp.types;
@@ -2628,6 +2633,7 @@ impl Compiler {
         self.pending.indirect_callee_params = None;
         self.pending.indirect_callee_is_variadic = false;
         self.pending.indirect_callee_fn_ptr_depth = 0;
+        self.pending.indirect_callee_ret_fn_ptr = 0;
         // The function-pointer-decay depth (C99 6.3.2.1p4) is intra-
         // expression state: a function name used as a call argument seeds
         // it, and without this reset it leaks into the next statement's

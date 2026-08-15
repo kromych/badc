@@ -1950,6 +1950,7 @@ impl Compiler {
                 self.pending.base_is_function_type = false;
                 self.pending.bare_function_type_declarator = false;
                 self.pending.fn_ptr_indirection = None;
+                self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.typedef_fn_proto = None;
                 self.pending.fn_ptr_param_types = None;
                 while self.lex.tk == Token::MulOp {

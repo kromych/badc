@@ -749,6 +749,7 @@ impl Compiler {
         s.h_type = s.type_;
         s.h_val = s.val;
         s.h_fn_ptr_indirection = s.fn_ptr_indirection;
+        s.h_fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
         s.h_params = s.params.clone();
         s.h_is_variadic = s.is_variadic;
         s.h_array_size = s.array_size;
@@ -788,6 +789,7 @@ impl Compiler {
         sym.type_ = sym.h_type;
         sym.val = sym.h_val;
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
+        sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
         sym.params = core::mem::take(&mut sym.h_params);
         sym.is_variadic = sym.h_is_variadic;
         sym.array_size = sym.h_array_size;
@@ -820,6 +822,7 @@ impl Compiler {
             && sym.type_ == sym.h_type
             && sym.val == sym.h_val
             && sym.fn_ptr_indirection == sym.h_fn_ptr_indirection
+            && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
             && sym.params == sym.h_params
             && sym.is_variadic == sym.h_is_variadic
             && sym.array_size == sym.h_array_size

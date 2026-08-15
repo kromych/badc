@@ -1813,11 +1813,16 @@ impl Compiler {
                     // pointer (`int (*f())()`) leaves a fn-pointer
                     // rvalue, so a following unary `*` is the C99
                     // 6.3.2.1p4 decay no-op. The lineage is recorded on
-                    // the function symbol by the declarator.
+                    // the function symbol by the declarator; for a call
+                    // through a fn-pointer variable the return lineage
+                    // rides its own field.
                     if self.symbols[id_idx].class == Token::Fun as i64
                         && self.symbols[id_idx].fn_ptr_indirection > 0
                     {
                         self.pending.fn_ptr_chain_depth = 0;
+                    } else if is_var_call && self.symbols[id_idx].fn_ptr_ret_indirection > 0 {
+                        self.pending.fn_ptr_chain_depth =
+                            self.symbols[id_idx].fn_ptr_ret_indirection - 1;
                     }
                 } // close intrinsic-vs-normal-call else branch
             } else if self.symbols[id_idx].class == Token::Num as i64 {
@@ -1970,6 +1975,8 @@ impl Compiler {
                     self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
                     self.pending.indirect_callee_fn_ptr_depth =
                         self.symbols[id_idx].fn_ptr_indirection;
+                    self.pending.indirect_callee_ret_fn_ptr =
+                        self.symbols[id_idx].fn_ptr_ret_indirection;
                 }
                 // Array variables decay to a pointer to the first
                 // element: the symbol's address IS its value, no
@@ -2071,6 +2078,8 @@ impl Compiler {
                             Some(self.symbols[id_idx].params.clone());
                         self.pending.indirect_callee_is_variadic = self.symbols[id_idx].is_variadic;
                         self.pending.indirect_callee_fn_ptr_depth = fpi;
+                        self.pending.indirect_callee_ret_fn_ptr =
+                            self.symbols[id_idx].fn_ptr_ret_indirection;
                     }
                 } else if is_struct_value {
                     if identifier_is_local {
@@ -2192,6 +2201,9 @@ impl Compiler {
                 // fn-ptr branch further down overrides this when a
                 // `(*)(args)` shape is present in the cast.
                 let mut cast_fpi = self.pending.fn_ptr_indirection.take();
+                // The cast spells a flat type; its result carries no
+                // declarator-recorded return lineage.
+                self.pending.fn_ptr_ret_indirection = 0;
                 // A function-TYPE typedef already encodes one pointer
                 // level, so the first `*` in `(F *)x` forms the
                 // pointer-to-function rather than adding a level (matching
@@ -2409,6 +2421,7 @@ impl Compiler {
                         ));
                         self.pending.indirect_callee_is_variadic = pp.is_variadic;
                         self.pending.indirect_callee_fn_ptr_depth = cast_fpi.unwrap_or(1).max(1);
+                        self.pending.indirect_callee_ret_fn_ptr = 0;
                         self.pending.indirect_callee_params = if pp.types.is_empty() {
                             None
                         } else {
@@ -3068,6 +3081,8 @@ impl Compiler {
                 // for the walker's host-ABI tail placement.
                 let callee_is_variadic =
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
+                let callee_ret_fn_ptr =
+                    core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
                 let callee_fixed = callee_params.as_ref().map_or(0, |p| p.len()) as u32;
                 let mut arg_idx: usize = 0;
                 while self.lex.tk != ')' {
@@ -3095,6 +3110,13 @@ impl Compiler {
                 // regardless; the tag lets a following `->` / `[` / `*`
                 // see the right pointer level.
                 self.ty = indirect_ret_ty;
+                // A callee whose return type is itself a function pointer
+                // leaves a fn-pointer rvalue: seed the chain depth so a
+                // following unary `*` is the C99 6.3.2.1p4 decay no-op,
+                // matching the direct-call arm.
+                if callee_ret_fn_ptr > 0 {
+                    self.pending.fn_ptr_chain_depth = callee_ret_fn_ptr - 1;
+                }
                 // Same as the direct call: the result is the return type, so
                 // drop any array-decay hint an argument left pending.
                 self.drop_operand_array_decay();
@@ -4302,6 +4324,7 @@ impl Compiler {
                     core::mem::take(&mut self.pending.indirect_callee_is_variadic);
                 let saved_callee_depth =
                     core::mem::take(&mut self.pending.indirect_callee_fn_ptr_depth);
+                let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
                 let saved_fn_ptr_chain = self.pending.fn_ptr_chain_depth;
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
@@ -4309,6 +4332,7 @@ impl Compiler {
                 self.pending.indirect_callee_params = saved_callee_params;
                 self.pending.indirect_callee_is_variadic = saved_callee_variadic;
                 self.pending.indirect_callee_fn_ptr_depth = saved_callee_depth;
+                self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
                 self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
                 // Restore the queue and shift one level down so
                 // the next `[i]` sees the stride for that level
@@ -4474,6 +4498,11 @@ impl Compiler {
                 self.pending.indirect_callee_is_variadic = field_is_fn_ptr && field.is_variadic;
                 self.pending.indirect_callee_fn_ptr_depth = if field_is_fn_ptr {
                     field.fn_ptr_indirection
+                } else {
+                    0
+                };
+                self.pending.indirect_callee_ret_fn_ptr = if field_is_fn_ptr {
+                    field.fn_ptr_ret_indirection
                 } else {
                     0
                 };
@@ -5166,6 +5195,7 @@ impl Compiler {
         let base_is_fn = self.pending.base_is_function_type;
         let base_variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
         let base_params = self.pending.fn_ptr_param_types.take();
+        self.pending.fn_ptr_ret_indirection = 0;
         let mut fn_ty = self
             .pending
             .fn_ptr_indirection

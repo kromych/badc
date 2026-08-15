@@ -64,17 +64,21 @@ so a program that modifies a `const` object compiles without the required
 diagnostic. `restrict` is accepted as a sound no-op -- it is only an
 aliasing hint with no observable semantics.
 
-### Function-pointer return through a function-pointer variable, severity 5
+### Function-pointer return lineage carries one call level, severity 5
 
-A function whose return type is itself a function pointer is called
-correctly when the callee is named: `int (*f(void))(int)` then `(*f())(3)`,
-`f()(3)`, or `int (*q)(int) = f(); q(3)`. The unhandled shape is calling
-such a function *through a function-pointer variable*
-(`int (*(*p)(int))(int) = f; (*p)(0)(3)`): c5 records a function pointer's
-indirection as a single scalar on the flat type, so `p` and `int (**)(int)`
-collapse to the same encoding. The shape is accepted rather than diagnosed,
-and the call branches to a word read out of the callee's own instruction
-stream. TODO: reject it, then carry the extra level in the encoding.
+A pointer to a function returning a function pointer
+(`int (*(*p)(int))(int) = f`) is called correctly in every spelling --
+`(*p)(0)(3)`, `p(0)(3)`, `(*(*p)(0))(3)` -- for local, global, typedef,
+struct-member, and parameter carriers. The flat tag holds only the total
+pointer depth (shared with `int (**)(int)`); the symbol carries the split
+as two scalars, the derefs down to the function pointer and the return
+value's own lineage, and the call sites seed the decay tracking from them
+(C99 6.3.2.1p4). One scalar per side covers one function-pointer level per
+call: a return chain that is *itself* a pointer to a
+function-pointer-returning function (`int (*(*(*p)(int))(int))(int)`)
+calls correctly without `*` between the later calls, while a
+star-decorated later call (`(*(*(*p)(0))(0))(3)`) is rejected with a
+diagnostic rather than compiled. TODO: carry the full per-level lineage.
 
 ### An inline definition is materialized unit-locally, severity 5
 

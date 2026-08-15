@@ -363,6 +363,7 @@ impl Compiler {
         // every declarator (`fn_t a, b;`), but per-declarator symbol
         // creation consumes the carriers, so re-seed them each iteration.
         let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
+        let base_fn_ptr_ret_indirection = self.pending.fn_ptr_ret_indirection;
         let base_is_function_type = self.pending.base_is_function_type;
         let base_typedef_fn_proto = self.pending.typedef_fn_proto;
         let base_fn_ptr_param_types = self.pending.fn_ptr_param_types.clone();
@@ -377,6 +378,7 @@ impl Compiler {
         let leading_cleanup = self.pending.attr_cleanup.take();
         while self.lex.tk != ';' {
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
+            self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
             self.pending.base_is_function_type = base_is_function_type;
             self.pending.typedef_fn_proto = base_typedef_fn_proto;
             self.pending.fn_ptr_param_types = base_fn_ptr_param_types.clone();
@@ -402,6 +404,7 @@ impl Compiler {
                     .map(|(_, variadic)| variadic)
                     .unwrap_or(false);
                 self.pending.fn_ptr_indirection = None;
+                self.pending.fn_ptr_ret_indirection = 0;
                 if loc_idx == usize::MAX {
                     self.accept_declarator_separator()?;
                     continue;
@@ -444,6 +447,7 @@ impl Compiler {
             // an initializer cast runs a base-type parse that clears them,
             // which would drop a variadic fn-pointer's prototype.
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+            let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             let fnptr_proto = self.pending.typedef_fn_proto.take();
             let fnptr_param_types = self.pending.fn_ptr_param_types.take();
             // C99 6.7.7p3 + 6.7.6.1: an array typedef contributes its
@@ -630,6 +634,7 @@ impl Compiler {
                 self.symbols[loc_idx].is_zero_len_array =
                     array_size == -1 && self.symbols[loc_idx].array_size == 0;
                 self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
+                self.symbols[loc_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
                 if let Some(types) = fnptr_param_types {
                     self.symbols[loc_idx].params = types;
                     self.symbols[loc_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));

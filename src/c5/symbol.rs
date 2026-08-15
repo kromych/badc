@@ -309,6 +309,18 @@ pub(crate) struct Symbol {
     /// `*p = ...` against the rebound scalar pointer is treated
     /// as a fn-ptr decay no-op.
     pub h_fn_ptr_indirection: i64,
+    /// Fn-pointer lineage of the value a call through this variable
+    /// returns, in `fn_ptr_indirection`'s plus-1 convention: 0 when the
+    /// call result has no fn-pointer lineage, 1 when it IS a function
+    /// pointer (`int (*(*p)(int))(int)`), 2 when one deref above one.
+    /// The flat tag holds only the total pointer depth, which cannot
+    /// separate `int (*(*)(int))(int)` from `int (**)(int)`; this field
+    /// carries the split. The call arms read it to seed
+    /// `fn_ptr_chain_depth` after an indirect call so a following
+    /// unary `*` is the C99 6.3.2.1p4 decay no-op.
+    pub fn_ptr_ret_indirection: i64,
+    /// Scope-restore shadow for `fn_ptr_ret_indirection`.
+    pub h_fn_ptr_ret_indirection: i64,
     /// True for a typedef of a function TYPE (`typedef RET F(args)`),
     /// as opposed to a function POINTER (`typedef RET (*F)(args)`). The
     /// type encoding pre-decays both to a function pointer (`RET` plus
@@ -700,6 +712,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             runtime_initialized: _,
             fn_ptr_indirection: _,
             h_fn_ptr_indirection: _,
+            fn_ptr_ret_indirection: _,
+            h_fn_ptr_ret_indirection: _,
             is_function_type: _,
             returns_void: _,
             is_void_typedef: _,

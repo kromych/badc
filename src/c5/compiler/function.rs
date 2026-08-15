@@ -48,12 +48,13 @@ impl Compiler {
     /// declarator to bind it) leaks into the next declaration -- e.g. the
     /// first field of a following struct definition would record a phantom
     /// function-pointer prototype.
-    fn take_param_fn_ptr_carriers(&mut self) -> (i64, Option<Vec<i64>>, bool) {
+    fn take_param_fn_ptr_carriers(&mut self) -> (i64, i64, Option<Vec<i64>>, bool) {
         let indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+        let ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
         let params = self.pending.fn_ptr_param_types.take();
         let variadic = matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
         self.pending.base_is_function_type = false;
-        (indirection, params, variadic)
+        (indirection, ret_indirection, params, variadic)
     }
 
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
@@ -240,7 +241,8 @@ impl Compiler {
             // populated. Drained even if the declarator didn't
             // set anything so they don't leak into the next
             // parameter or expression.
-            let (fn_ptr_indirection, fnptr_pp, fnptr_variadic) = self.take_param_fn_ptr_carriers();
+            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, fnptr_variadic) =
+                self.take_param_fn_ptr_carriers();
             self.ty = full_ty;
             // An unnamed parameter, or any parameter of a function-pointer
             // declarator's prototype, records its type without binding a
@@ -286,6 +288,7 @@ impl Compiler {
             // `*p = ...` against the rebind looks like a fn-ptr
             // decay no-op to the unary `*` handler.
             self.symbols[param_idx].fn_ptr_indirection = fn_ptr_indirection;
+            self.symbols[param_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
             // A function-pointer parameter records its pointee signature's
             // parameter types so an indirect call through it narrows each
             // argument to its declared type (the common callback shape).

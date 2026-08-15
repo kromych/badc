@@ -241,6 +241,12 @@ pub struct StructField {
     /// function-to-pointer no-op decay instead of emitting a
     /// spurious `Li` that loads through code memory.
     pub fn_ptr_indirection: i64,
+    /// Fn-pointer lineage of the value a call through this field
+    /// returns (mirrors `Symbol::fn_ptr_ret_indirection`, same plus-1
+    /// convention). The postfix call arm seeds `fn_ptr_chain_depth`
+    /// from it so `(*s.cb(x))(y)`-style chains decay instead of
+    /// loading through the returned function pointer.
+    pub fn_ptr_ret_indirection: i64,
     /// Parameter type tags of a function-pointer field, captured from
     /// the field declarator's prototype (mirrors `Symbol::params`).
     /// Empty for a non-function-pointer field or one declared without a
@@ -564,6 +570,23 @@ pub(in crate::c5::compiler) struct Pending {
     /// symbol.
     pub fn_ptr_indirection: Option<i64>,
 
+    /// Companion to `fn_ptr_indirection`: fn-pointer lineage of the
+    /// value a call through the declared pointer returns, in the same
+    /// plus-1 convention (0 = no lineage, 1 = the result IS a fn
+    /// pointer). Set by `parse_declarator` when signature-bearing
+    /// declarator groups enclose the innermost one
+    /// (`int (*(*p)(int))(int)` records indirection 1, return
+    /// lineage 1), taken alongside `fn_ptr_indirection`.
+    pub fn_ptr_ret_indirection: i64,
+
+    /// Set by a `parse_declarator` frame whose parenthesised group
+    /// carried its own function signature; the enclosing frame takes it
+    /// after the nested recursion to learn the fn-pointer lineage was
+    /// already fixed by an inner group, so the enclosing pointer levels
+    /// belong to the return type (`fn_ptr_ret_indirection`), not to
+    /// `fn_ptr_indirection`.
+    pub fn_ptr_group_resolved: bool,
+
     /// Set when the base type of the declarator currently being parsed
     /// came from a function-TYPE typedef (`typedef RET F(args)`), so the
     /// declarator absorbs the first `*` (it forms the pointer-to-function
@@ -739,6 +762,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// convention (1: the value is the function pointer). Threaded at the
     /// same sites; `typeof` reads it to spell the operand's indirection.
     pub indirect_callee_fn_ptr_depth: i64,
+    /// Fn-pointer lineage of the indirect callee's return value, in the
+    /// same plus-1 convention (`Symbol::fn_ptr_ret_indirection`).
+    /// Threaded at the same sites; the postfix call arm takes it to
+    /// seed `fn_ptr_chain_depth` when the call result is itself a
+    /// function pointer, matching the direct-call arm.
+    pub indirect_callee_ret_fn_ptr: i64,
     /// Signature of the last completed function-pointer cast: (cast
     /// result tag, parameter types, variadic, pointer depth). The flat
     /// tag carries only the return type, so `typeof(<cast>)` recovers
@@ -1069,6 +1098,7 @@ impl Pending {
             base_was_long_double: core::mem::take(&mut self.base_was_long_double),
             base_is_function_type: core::mem::take(&mut self.base_is_function_type),
             fn_ptr_indirection: self.fn_ptr_indirection.take(),
+            fn_ptr_ret_indirection: core::mem::take(&mut self.fn_ptr_ret_indirection),
             typedef_fn_proto: self.typedef_fn_proto.take(),
             fn_ptr_param_types: self.fn_ptr_param_types.take(),
             typedef_base_array_size: core::mem::take(&mut self.typedef_base_array_size),
@@ -1085,6 +1115,7 @@ impl Pending {
         self.base_was_long_double = s.base_was_long_double;
         self.base_is_function_type = s.base_is_function_type;
         self.fn_ptr_indirection = s.fn_ptr_indirection;
+        self.fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
         self.typedef_fn_proto = s.typedef_fn_proto;
         self.fn_ptr_param_types = s.fn_ptr_param_types;
         self.typedef_base_array_size = s.typedef_base_array_size;
@@ -1104,6 +1135,7 @@ pub(super) struct DeclTypeCarriers {
     base_was_long_double: bool,
     base_is_function_type: bool,
     fn_ptr_indirection: Option<i64>,
+    fn_ptr_ret_indirection: i64,
     typedef_fn_proto: Option<(usize, bool)>,
     fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
     typedef_base_array_size: i64,
@@ -1121,6 +1153,8 @@ impl Default for Pending {
             base_was_long_double: false,
             fn_params: None,
             fn_ptr_indirection: None,
+            fn_ptr_ret_indirection: 0,
+            fn_ptr_group_resolved: false,
             base_is_function_type: false,
             bare_function_type_declarator: false,
             index_stride: 0,
@@ -1144,6 +1178,7 @@ impl Default for Pending {
             indirect_callee_params: None,
             indirect_callee_is_variadic: false,
             indirect_callee_fn_ptr_depth: 0,
+            indirect_callee_ret_fn_ptr: 0,
             last_fn_ptr_cast: None,
             parsing_fn_ptr_proto: false,
             member_decl_save: None,

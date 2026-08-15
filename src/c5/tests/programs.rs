@@ -2389,6 +2389,15 @@ fn fn_returning_fn_ptr() {
 }
 
 #[test]
+fn fn_ptr_return_via_fn_ptr_var() {
+    // A pointer to a function returning a function pointer
+    // (`int (*(*p)(int))(int)`): `(*p)` decays, and the call result is
+    // itself callable, for local / global / typedef / member /
+    // parameter carriers of the type.
+    assert_eq!(run_fixture("fn_ptr_return_via_fn_ptr_var.c"), 0);
+}
+
+#[test]
 fn duff_switch_into_loop() {
     // Duff's device: case labels inside a loop nested in the switch,
     // plus K&R parameters and C89 implicit-int locals.

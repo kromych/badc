@@ -377,7 +377,18 @@ impl Compiler {
         {
             self.next()?; // consume the outer `(`
             let outer_ty_before_inner = ty;
+            // Discard any stale marker, then read what this recursion's
+            // subtree produced: true when an inner group already fixed
+            // the identifier's fn-pointer lineage, so this frame's
+            // pointer levels describe the return type instead.
+            core::mem::take(&mut self.pending.fn_ptr_group_resolved);
             let (idx, mut inner_ty, inner_array_size) = self.parse_declarator(ty)?;
+            let inner_resolved = core::mem::take(&mut self.pending.fn_ptr_group_resolved);
+            // Pending count right after the inner declarator: a fn-pointer
+            // typedef base seeded it and the inner leading `*`s added to
+            // it. Captured here because the signature parses below drain
+            // the pending carriers per parameter.
+            let prior_pending_fpi = self.pending.fn_ptr_indirection.unwrap_or(0);
             // Function-pointer lineage trace: the inner
             // declarator's leading `*`s plus the fn-pointer's own
             // pointer level give the indirection count from the
@@ -464,8 +475,11 @@ impl Compiler {
                     // first function-signature paren so a fn-pointer
                     // declarator records its callee's variadic-ness and
                     // named-parameter count. Subsequent signatures
-                    // (function-returning-fp shapes) keep skipping.
-                    if !saw_fn_signature {
+                    // (function-returning-fp shapes) keep skipping, as
+                    // does an enclosing frame when an inner group
+                    // already captured the innermost signature -- the
+                    // prototype a call through the variable uses.
+                    if !saw_fn_signature && !inner_resolved {
                         // Capture the pointee signature's parameter types (not
                         // just the count) so an indirect call through the
                         // pointer narrows each argument to its declared
@@ -533,18 +547,33 @@ impl Compiler {
             // handler treats `*p` on `T (*p)[N]` as the fn-ptr
             // decay no-op and the row deref never fires).
             if saw_fn_signature && inner_ptr_levels > 0 {
-                // Only set the side-channel for the OUTERMOST
-                // fn-ptr declarator: the inner recursive call may
-                // itself have set it for a nested fn-ptr declarator
-                // (function-returning-fp shape), and the outer
-                // call's value is the right one to expose.
-                self.pending.fn_ptr_indirection = Some(inner_ptr_levels);
+                if inner_resolved {
+                    // An inner group already fixed the identifier's
+                    // lineage; the levels above it belong to the return
+                    // type. The outermost signature frame writes last,
+                    // recording the whole return-side chain.
+                    self.pending.fn_ptr_ret_indirection = inner_ptr_levels - prior_pending_fpi;
+                } else {
+                    // The innermost signature frame fixes the lineage:
+                    // the levels between the identifier and this
+                    // signature are the derefs from the variable's
+                    // value down to the fn-pointer rvalue, plus 1. A
+                    // pending count above that came from a fn-pointer
+                    // typedef base (`fn_t (*tp)(int)`), whose lineage
+                    // is the return type's.
+                    if prior_pending_fpi > inner_ptr_levels {
+                        self.pending.fn_ptr_ret_indirection = prior_pending_fpi - inner_ptr_levels;
+                    }
+                    self.pending.fn_ptr_indirection = Some(inner_ptr_levels);
+                }
+                self.pending.fn_ptr_group_resolved = true;
             } else if saw_fn_signature && inner_ptr_levels == 0 && param_ctx {
                 // `RET (name)(args)` parameter: the function type decays
                 // to a pointer to function, the same encoding as
                 // `RET (*name)(args)` (one indirection level).
                 inner_ty += Ty::Ptr as i64;
                 self.pending.fn_ptr_indirection = Some(1);
+                self.pending.fn_ptr_group_resolved = true;
             }
             if !pointee_dims.is_empty() {
                 if !saw_fn_signature && inner_ptr_levels > 0 {

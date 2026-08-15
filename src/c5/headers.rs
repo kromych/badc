@@ -185,6 +185,14 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../libc/include/CoreFoundation/CoreFoundation.h"),
     ),
     (
+        "CommonCrypto/CommonCryptoError.h",
+        include_str!("../../libc/include/CommonCrypto/CommonCryptoError.h"),
+    ),
+    (
+        "CommonCrypto/CommonRandom.h",
+        include_str!("../../libc/include/CommonCrypto/CommonRandom.h"),
+    ),
+    (
         "CoreVideo/CoreVideo.h",
         include_str!("../../libc/include/CoreVideo/CoreVideo.h"),
     ),

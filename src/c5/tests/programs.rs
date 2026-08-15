@@ -6479,6 +6479,38 @@ fn vm_region_basic_info_keeps_the_kernel_packing() {
 }
 
 #[test]
+fn commoncrypto_random_is_bound_to_libsystem() {
+    use crate::Target;
+    // mimalloc's Unix layer reaches for both headers to draw entropy:
+    // <AvailabilityMacros.h> puts MAC_OS_X_VERSION_MAX_ALLOWED past
+    // 10.15, which selects CCRandomGenerateBytes over arc4random_buf.
+    let src = "#include <AvailabilityMacros.h>\n\
+        #include <CommonCrypto/CommonCryptoError.h>\n\
+        #include <CommonCrypto/CommonRandom.h>\n\
+        #include <stddef.h>\n\
+        int ck[(sizeof(CCStatus)==4 && sizeof(CCCryptorStatus)==4 \
+             && sizeof(CCRNGStatus)==4 \
+             && kCCSuccess==0 && kCCParamError==-4300 \
+             && kCCBufferTooSmall==-4301 && kCCRNGFailure==-4307 \
+             && kCCInvalidKey==-4311 \
+             && MAC_OS_X_VERSION_MAX_ALLOWED>=MAC_OS_X_VERSION_10_15)?1:-1];\n\
+        int f(void *buf, size_t n) {\n\
+            return CCRandomGenerateBytes(buf, n) == kCCSuccess; }\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "the CommonCrypto surface must be absent on {target:?}"
+        );
+    }
+}
+
+#[test]
 fn mach_time_declares_the_sdk_clock_set() {
     use crate::Target;
     // The SDK's declaration set, all bound to libSystem. The struct tag

@@ -14,12 +14,11 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
+               	sub	sp, sp, #0x40
                	mov	x0, #0x2a               // =42
                	mov	x1, #0x0                // =0
                	stur	x1, [x29, #-0x10]
                	sub	x1, x29, #0x10
-               	sub	sp, sp, #0x30
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
                	str	d0, [sp, #0x20]
@@ -33,9 +32,8 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
                	ldr	d0, [sp, #0x20]
-               	add	sp, sp, #0x30
                	ldur	x0, [x29, #-0x10]
                	sxtw	x0, w0
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -20,14 +20,17 @@ Disassembly of section .text:
                	ret
 
 <main>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x30, [sp]
                	stp	x29, x30, [sp, #-0x10]!
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
                	ldr	x30, [sp]
-               	add	sp, sp, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret

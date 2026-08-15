@@ -7745,7 +7745,9 @@ fn emit_inline_asm(
     // the label's block instead of a teardown trampoline, so the template
     // branch and a `.long %lK - .` section field name one address. Runtime
     // patchers that read the section entry and rewrite the branch require
-    // that.
+    // that. TODO with exit work pending, a section field still names the
+    // block, so a patched-in branch skips the store-backs and restores; the
+    // aarch64 lowering rewrites such fields to the restore trampoline.
     let goto_direct = save_list.is_empty()
         && fp_save_list.is_empty()
         && !asm.operands.iter().any(|op| {

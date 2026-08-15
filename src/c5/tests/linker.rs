@@ -9560,6 +9560,69 @@ fn asm_goto_branch_and_section_field_name_one_address() {
 }
 
 #[test]
+fn aarch64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
+    // The same patching contract with exit work pending: a register operand
+    // forces a save the label edge must restore, so the template branch
+    // leaves through the restore trampoline -- and the section field must
+    // name that same address, or a patched-in branch would skip the restores.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "static int probe(int b) {\n\
+             __asm__ goto(\"1:\\tb %l[l_yes]\\n\"\n\
+                 \".pushsection .jt,\\\"aw\\\"\\n\"\n\
+                 \".balign 8\\n\"\n\
+                 \".long 1b - .\\n\"\n\
+                 \".long %l[l_yes] - .\\n\"\n\
+                 \".popsection\\n\" : : \"r\"(b) : : l_yes);\n\
+             return 0;\n\
+         l_yes:\n\
+             return 1;\n\
+         }\n\
+         int main(void) { return probe(1); }\n";
+    let program = Compiler::with_target(String::from(src), Target::LinuxAarch64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let sections = elf_sections(&bytes);
+    let text = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".text")
+        .expect(".text missing")
+        .3;
+    let rela = &sections
+        .iter()
+        .find(|(n, _, _, _)| n == ".rela.jt")
+        .expect(".rela.jt missing")
+        .3;
+    assert_eq!(rela.len(), 2 * 24, "two `.long` relocs");
+    let addend = |k: usize| i64::from_le_bytes(rela[k * 24 + 16..k * 24 + 24].try_into().unwrap());
+    let (code_off, label_off) = (addend(0) as usize, addend(1));
+    let w = u32::from_le_bytes(text[code_off..code_off + 4].try_into().unwrap());
+    assert_eq!(w & 0xfc00_0000, 0x1400_0000, "`1b` holds a `b`");
+    let off = ((w & 0x03ff_ffff) << 6) as i32 >> 6;
+    let reached = code_off as i64 + off as i64 * 4;
+    assert_eq!(
+        reached, label_off,
+        "the template branch and the section field name different addresses"
+    );
+    // The shared address is the trampoline (a region reload off sp), not the
+    // label block.
+    let t = u32::from_le_bytes(
+        text[label_off as usize..label_off as usize + 4]
+            .try_into()
+            .unwrap(),
+    );
+    assert_eq!(
+        t & 0xFFC0_03E0,
+        0xF940_03E0,
+        "the shared address opens with the region reload: {t:08x}"
+    );
+}
+
+#[test]
 fn x64_asm_m_operand_on_a_global_is_rip_relative() {
     // `call *%[op]` on a file-scope object encodes `FF 15 disp32` with a
     // PC-relative relocation, gcc's form and the one an indirect-call patcher

@@ -3974,6 +3974,151 @@ fn asm_goto_emits_for_both_targets() {
     }
 }
 
+/// Kernel jump-label source: a `1: nop` patch site whose `%l[l_yes]` is
+/// published to `__jump_table` and never branched by the template.
+/// `extra_op` adds operands after the `"i"` key reference.
+fn a64_jump_label_object(extra_op: &str) -> crate::c5::linker::object::NativeObject {
+    use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = alloc::format!(
+        r#"
+static int g;
+static int probe(void) {{
+    __asm__ goto("1: nop\n\t"
+                 ".pushsection __jump_table, \"aw\"\n\t"
+                 ".align 3\n\t"
+                 ".long 1b - ., %l[l_yes] - .\n\t"
+                 ".quad %c0 - .\n\t"
+                 ".popsection\n\t"
+                 : : "i"(&g){extra_op} : : l_yes);
+    return 0;
+l_yes:
+    return 1;
+}}
+int main(void) {{ return probe(); }}
+"#
+    );
+    let program = Compiler::with_target(src, Target::LinuxAarch64)
+        .compile()
+        .expect("jump-label shape compiles");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    crate::c5::linker::parse_native_elf(&bytes).expect("parse ET_REL")
+}
+
+/// The two `.long 1b - ., %l[l_yes] - .` fields of the jump-table entry,
+/// resolved to text offsets: (patch site, published label target).
+fn a64_jump_table_entry(obj: &crate::c5::linker::object::NativeObject) -> (usize, usize) {
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::object::elf_reloc_types::R_AARCH64_PREL32;
+    let mut fields = obj.data_relocs.iter().filter(|r| {
+        r.rtype == R_AARCH64_PREL32
+            && matches!(obj.symbols[r.sym_idx].section, NativeSymSection::Text)
+    });
+    let mut off = |name: &str| {
+        let r = fields.next().unwrap_or_else(|| panic!("{name} reloc"));
+        (obj.symbols[r.sym_idx].value as i64 + r.addend) as usize
+    };
+    (off("patch-site"), off("published-label"))
+}
+
+/// The aarch64 inline-asm operand region (captures + register saves) is
+/// static frame storage, not an sp carve around the template: a published
+/// `%l` (jump-label site) is reached by a branch patched in at run time,
+/// which bypasses every template exit path, so sp must already be balanced
+/// there. Locks, for the mixed shape (register operand + published label,
+/// no template branch): sp moves only in the prologue / epilogue, and the
+/// published entry names the restore trampoline -- a region reload then
+/// the label branch -- rather than the raw label block.
+#[test]
+fn a64_asm_goto_published_label_static_frame_region() {
+    use crate::c5::linker::object::NativeSymSection;
+    let obj = a64_jump_label_object(", \"r\"(g)");
+    let probe = obj
+        .symbols
+        .iter()
+        .find(|s| s.name == "probe" && matches!(s.section, NativeSymSection::Text))
+        .expect("probe symbol");
+    let (lo, hi) = (probe.value as usize, (probe.value + probe.size) as usize);
+    let words: alloc::vec::Vec<u32> = obj.text[lo..hi]
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    let count = |base: u32| words.iter().filter(|&&w| w & 0xFF80_03FF == base).count();
+    assert_eq!(
+        count(0xD100_03FF),
+        1,
+        "one `sub sp, sp, #imm` (the prologue frame): {words:08x?}"
+    );
+    assert_eq!(
+        count(0x9100_03FF),
+        2,
+        "one `add sp, sp, #imm` per return: {words:08x?}"
+    );
+    let word = |off: usize| u32::from_le_bytes(obj.text[off..off + 4].try_into().unwrap());
+    let (site, target) = a64_jump_table_entry(&obj);
+    assert_eq!(word(site), 0xD503_201F, "patch site is the template nop");
+    assert!(
+        (lo..hi).contains(&target),
+        "published target {target:#x} inside probe {lo:#x}..{hi:#x}"
+    );
+    assert_eq!(
+        word(target) & 0xFFC0_03E0,
+        0xF940_03E0,
+        "published target opens with the region reload `ldr xN, [sp, #..]`: {:08x}",
+        word(target)
+    );
+    assert_eq!(
+        word(target + 4) & 0xFC00_0000,
+        0x1400_0000,
+        "the reload is followed by the label branch: {:08x}",
+        word(target + 4)
+    );
+}
+
+/// The kernel jump-label macro's own shape -- every operand an immediate --
+/// takes no operand region: the function stays frameless (no sp adjustment,
+/// no frame record) and the published `%l` names the label's block itself.
+#[test]
+fn a64_asm_goto_immediate_jump_label_frameless() {
+    use crate::c5::linker::object::NativeSymSection;
+    let obj = a64_jump_label_object("");
+    let probe = obj
+        .symbols
+        .iter()
+        .find(|s| s.name == "probe" && matches!(s.section, NativeSymSection::Text))
+        .expect("probe symbol");
+    let (lo, hi) = (probe.value as usize, (probe.value + probe.size) as usize);
+    let words: alloc::vec::Vec<u32> = obj.text[lo..hi]
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    assert!(
+        words
+            .iter()
+            .all(|&w| w & 0xFF80_03FF != 0xD100_03FF && w & 0xFF80_03FF != 0x9100_03FF),
+        "no sp adjustment anywhere: {words:08x?}"
+    );
+    assert!(
+        words.iter().all(|&w| w & 0xFFC0_0000 != 0xA980_0000),
+        "no frame record: {words:08x?}"
+    );
+    let word = |off: usize| u32::from_le_bytes(obj.text[off..off + 4].try_into().unwrap());
+    let (site, target) = a64_jump_table_entry(&obj);
+    assert_eq!(word(site), 0xD503_201F, "patch site is the template nop");
+    assert!(
+        (lo..hi).contains(&target),
+        "published target {target:#x} inside probe {lo:#x}..{hi:#x}"
+    );
+    assert_eq!(
+        word(target),
+        0xD280_0020,
+        "published target is the `l_yes` block (`mov x0, #1`)"
+    );
+}
+
 /// Every symbol name in an ELF64 `.symtab`, paired with `st_shndx`
 /// (`0` == SHN_UNDEF). Complements [`elf_func_symbols`], which reports
 /// only defined `STT_FUNC` entries.

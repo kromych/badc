@@ -14,18 +14,16 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
+               	sub	sp, sp, #0x20
                	mov	x0, #0x2a               // =42
                	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
-               	sub	sp, sp, #0x10
                	str	x0, [sp, #0x8]
                	str	x0, [sp]
                	ldr	x0, [sp]
                	dc	cvac, x0
                	ldr	x0, [sp, #0x8]
-               	add	sp, sp, #0x10
                	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x10
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

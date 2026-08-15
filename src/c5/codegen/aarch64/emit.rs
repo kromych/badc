@@ -115,6 +115,16 @@ pub(crate) struct Frame {
     /// with no sp move; its bytes are counted in `frame_bytes` and the objects
     /// live at `[fp + align_region_off + region_off]`.
     pub align_region_off: i64,
+    /// fp-relative byte offset (negative) of the inline-asm scratch region
+    /// (operand captures plus register saves), or 0 when the function has no
+    /// inline asm. Frame storage rather than an sp carve around the template:
+    /// an `asm goto` label published to a data section (a jump-label site) is
+    /// reached by a branch patched in at run time, which bypasses every
+    /// teardown path, so sp must already be balanced there. The bytes are
+    /// counted in `frame_bytes`; slot `off` lives at
+    /// `[sp + frame_bytes + asm_scratch_off + off]`, addressed like the
+    /// allocator spill slots (fp-based when `dynamic_sp`).
+    pub asm_scratch_off: i64,
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target: Target) -> Frame {
@@ -146,11 +156,21 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
     } else {
         0
     };
+    // Inline-asm scratch, directly below the spill region and above the
+    // over-aligned region and the sp-addressed saved registers. Sized for the
+    // largest statement in the function. A naked function emits no prologue,
+    // so it has no frame to host the region and keeps the sp carve.
+    let asm_bytes = if func.is_naked {
+        0
+    } else {
+        asm_scratch_bytes(func)
+    };
     let frame_bytes = locals_bytes
         + alloc_spill_bytes
         + saved_gpr_bytes
         + saved_fpr_bytes
         + x19_save_bytes
+        + asm_bytes
         + static_region_bytes;
     // A Windows-on-ARM64 variadic callee (Microsoft ARM64 calling
     // convention) receives every argument (named and variadic) in a
@@ -201,11 +221,72 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
             0
         },
         align_region_off: if static_region_bytes > 0 {
-            -((locals_bytes + alloc_spill_bytes + static_region_bytes) as i64)
+            -((locals_bytes + alloc_spill_bytes + asm_bytes + static_region_bytes) as i64)
+        } else {
+            0
+        },
+        asm_scratch_off: if asm_bytes > 0 {
+            -((locals_bytes + alloc_spill_bytes + asm_bytes) as i64)
         } else {
             0
         },
     }
+}
+
+/// Bytes of frame scratch the function's largest inline-asm statement
+/// needs: 8 per operand capture and 8 per saved GP / FP register.
+/// Derived from [`asm_save_masks`], which the emitter also saves from,
+/// so the region always covers the emitted layout.
+fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
+    use super::super::ir::AsmConstraint;
+    let mut max = 0u32;
+    for inst in &func.insts {
+        let Inst::InlineAsm { asm, .. } = inst else {
+            continue;
+        };
+        let Ok(op_reg) =
+            super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
+        else {
+            continue;
+        };
+        let Ok((used, fp_used)) = asm_save_masks(asm, &op_reg) else {
+            continue;
+        };
+        let n_cap = asm
+            .operands
+            .iter()
+            .filter(|o| !matches!(o.constraint, AsmConstraint::Imm))
+            .count() as u32;
+        max = max.max((n_cap + used.count_ones() + fp_used.count_ones()) * 8);
+    }
+    (max + 15) & !15
+}
+
+/// The GP / FP register masks an inline-asm statement saves around its
+/// template: the clobber list (minus the emitter's x16/x17 scratch and
+/// bit 31) plus every operand register. `w` operands must be a double
+/// or a 16-byte vector (the SSA model's only FP shapes).
+fn asm_save_masks(
+    asm: &super::super::ir::AsmBlock,
+    op_reg: &[Option<u8>],
+) -> Result<(u32, u32), alloc::string::String> {
+    use super::super::ir::AsmConstraint;
+    let mut used: u32 = asm.clobber_regs & 0x7FFF_FFFF & !0x0003_0000;
+    let mut fp_used: u32 = asm.clobber_fp_regs & 0xFF;
+    for (i, op) in asm.operands.iter().enumerate() {
+        let Some(r) = op_reg[i] else { continue };
+        if matches!(op.constraint, AsmConstraint::Fp) {
+            if op.width != 8 && op.width != 16 {
+                return Err(alloc::string::String::from(
+                    "aarch64 inline asm: `w` operands must be 8 or 16 bytes",
+                ));
+            }
+            fp_used |= 1 << r;
+        } else {
+            used |= 1 << r;
+        }
+    }
+    Ok((used, fp_used))
 }
 
 /// Bytes the Windows-on-ARM64 variadic prologue reserves above the
@@ -3187,24 +3268,15 @@ fn emit_inline_asm_aarch64(
     // allocator may hold a live value in any of them; x16 / x17 are this
     // lowering's own scratch, reloaded after the template rather than carried
     // across it. `w` operands and FP clobbers are in the independent d0..d7
-    // file and are saved separately, and must be doubles (the SSA model's only
-    // FP width is f64).
-    let mut used_mask: u32 = asm.clobber_regs & 0x7FFF_FFFF & !0x0003_0000;
-    let mut fp_used_mask: u32 = asm.clobber_fp_regs & 0xFF;
-    for (i, op) in asm.operands.iter().enumerate() {
-        let Some(r) = op_reg[i] else { continue };
-        if matches!(op.constraint, AsmConstraint::Fp) {
-            // A `w` operand is a double (the SSA model's FP width) or a
-            // 16-byte vector (reached through its address, like an output).
-            if op.width != 8 && op.width != 16 {
-                bail_msg("aarch64 inline asm: `w` operands must be 8 or 16 bytes");
-                return false;
-            }
-            fp_used_mask |= 1 << r;
-        } else {
-            used_mask |= 1 << r;
+    // file and are saved separately. `asm_save_masks` is shared with the
+    // frame-region sizing in `compute_frame`.
+    let (used_mask, fp_used_mask) = match asm_save_masks(asm, &op_reg) {
+        Ok(m) => m,
+        Err(m) => {
+            bail_msg(&m);
+            return false;
         }
-    }
+    };
     let save_list: Vec<u8> = (0u8..31).filter(|r| used_mask & (1 << r) != 0).collect();
     let fp_save_list: Vec<u8> = (0u8..8).filter(|r| fp_used_mask & (1 << r) != 0).collect();
 
@@ -3232,27 +3304,73 @@ fn emit_inline_asm_aarch64(
             n_cap += 1;
         }
     }
-    // Stack region: captures first, then the saved GP registers, then the
-    // saved FP registers. Kept 16-byte aligned per AAPCS64.
+    // Region layout: captures first, then the saved GP registers, then the
+    // saved FP registers, a 16-byte multiple. The region is frame storage at
+    // `[sp + region_base + off]` (`Frame::asm_scratch_off`): sp does not move,
+    // so an `asm goto` label reached by a run-time-patched branch -- a
+    // published `%l` in a jump table, which bypasses every exit path of the
+    // template -- leaves sp balanced. A naked function has no frame, so its
+    // region is carved from sp around the template as a self-contained pair.
     let size = (((n_cap + n_saved + n_fp_saved) * 8) as u32 + 15) & !15;
-    if size > MAX_UNPROBED_STACK_STEP {
-        bail_msg("aarch64 inline asm: operand frame too large");
-        return false;
-    }
-    if size > 0 {
+    let carve = func.is_naked && size > 0;
+    let region_base: u32 = if carve {
+        if size > MAX_UNPROBED_STACK_STEP {
+            bail_msg("aarch64 inline asm: operand frame too large");
+            return false;
+        }
         emit(code, enc_sub_imm(Reg(31), Reg(31), size));
-    }
-    let cap_off = |i: usize| (cap_slot[i] * 8) as u32;
-    let save_off = |j: usize| ((n_cap + j) * 8) as u32;
-    let fp_save_off = |k: usize| ((n_cap + n_saved + k) * 8) as u32;
+        0
+    } else {
+        debug_assert!(
+            size == 0 || (frame.asm_scratch_off + size as i64) <= 0,
+            "inline asm without a frame scratch region"
+        );
+        (frame.frame_bytes as i64 + frame.asm_scratch_off) as u32
+    };
+    // The carve moved sp under the allocator's sp-relative spill slots; frame
+    // storage leaves sp alone.
+    let spill_shift = if carve { size } else { 0 };
+    let cap_off = |i: usize| region_base + (cap_slot[i] * 8) as u32;
+    let save_off = |j: usize| region_base + ((n_cap + j) * 8) as u32;
+    let fp_save_off = |k: usize| region_base + ((n_cap + n_saved + k) * 8) as u32;
+    // Region slot accessors: the carve is always sp-based; frame storage
+    // follows the spill addressing (sp-based, fp-based when `dynamic_sp`).
+    let reg_ldr_x = |code: &mut Vec<u8>, rt: Reg, off: u32| {
+        if carve {
+            emit_sp_ldr_x(code, rt, off);
+        } else {
+            emit_spill_ldr_x(code, frame, rt, off);
+        }
+    };
+    let reg_str_x = |code: &mut Vec<u8>, rt: Reg, off: u32| {
+        if carve {
+            emit_sp_str_x_auto(code, rt, off);
+        } else {
+            emit_spill_str_x_auto(code, frame, rt, off);
+        }
+    };
+    let reg_ldr_d = |code: &mut Vec<u8>, dt: u8, off: u32| {
+        if carve {
+            emit_sp_ldr_d_auto(code, dt, off);
+        } else {
+            emit_spill_ldr_d_auto(code, frame, dt, off);
+        }
+    };
+    let reg_str_d = |code: &mut Vec<u8>, dt: u8, off: u32| {
+        if carve {
+            emit_sp_str_d_auto(code, dt, off);
+        } else {
+            emit_spill_str_d_auto(code, frame, dt, off);
+        }
+    };
 
     // Save the clobbered registers, then capture each operand's value (input) /
     // address (output) -- both before any operand register is overwritten.
     for (j, &r) in save_list.iter().enumerate() {
-        emit_sp_str_x_auto(code, Reg(r), save_off(j));
+        reg_str_x(code, Reg(r), save_off(j));
     }
     for (k, &r) in fp_save_list.iter().enumerate() {
-        emit_sp_str_d_auto(code, r, fp_save_off(k));
+        reg_str_d(code, r, fp_save_off(k));
     }
     for (i, &a) in args.iter().enumerate() {
         if !needs_cap.get(i).copied().unwrap_or(true) {
@@ -3265,24 +3383,22 @@ fn emit_inline_asm_aarch64(
         // A double `w` input captures its FP value; a 16-byte `w` operand's
         // SSA value is its address, so it captures like the integer operands.
         // Every other operand captures an integer value (input) or a
-        // destination address (output). sp has moved by `size` since the
-        // allocator laid out its sp-relative spill slots, so a spilled place
-        // must be read through the shifted form.
+        // destination address (output).
         if matches!(asm.operands[i].constraint, AsmConstraint::Fp)
             && !asm.operands[i].is_output
             && asm.operands[i].width == 8
         {
-            let Some(d) = materialize_fp_shifted(code, place, 16, frame, size) else {
+            let Some(d) = materialize_fp_shifted(code, place, 16, frame, spill_shift) else {
                 bail_msg("aarch64 inline asm: `w` operand not a floating-point place");
                 return false;
             };
-            emit_sp_str_d_auto(code, d, cap_off(i));
+            reg_str_d(code, d, cap_off(i));
         } else {
-            let Some(r) = materialize_int_shifted(code, place, Reg(16), frame, size) else {
+            let Some(r) = materialize_int_shifted(code, place, Reg(16), frame, spill_shift) else {
                 bail_msg("aarch64 inline asm: operand not an integer place");
                 return false;
             };
-            emit_sp_str_x_auto(code, r, cap_off(i));
+            reg_str_x(code, r, cap_off(i));
         }
     }
     // Load inputs and memory addresses into their assigned registers; a `+`
@@ -3296,21 +3412,21 @@ fn emit_inline_asm_aarch64(
             // read-write double output loads the current value the same way.
             if op.width == 16 {
                 if !op.is_output || op.is_rw {
-                    emit_sp_ldr_x(code, Reg(16), cap_off(i)); // x16 = operand address
+                    reg_ldr_x(code, Reg(16), cap_off(i)); // x16 = operand address
                     emit(code, super::encode::enc_ldr_q_imm(r, Reg(16), 0));
                 }
             } else if !op.is_output {
-                emit_sp_ldr_d_auto(code, r, cap_off(i));
+                reg_ldr_d(code, r, cap_off(i));
             } else if op.is_rw {
-                emit_sp_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
+                reg_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
                 emit(code, super::encode::enc_ldr_d_imm(r, Reg(16), 0));
             }
             continue;
         }
         if matches!(op.constraint, AsmConstraint::Mem | AsmConstraint::MemBase) || !op.is_output {
-            emit_sp_ldr_x(code, Reg(r), cap_off(i));
+            reg_ldr_x(code, Reg(r), cap_off(i));
         } else if op.is_rw {
-            emit_sp_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
+            reg_ldr_x(code, Reg(16), cap_off(i)); // x16 = destination address
             let ok = match op.width {
                 8 => {
                     emit(code, super::encode::enc_ldr_imm(Reg(r), Reg(16), 0));
@@ -3854,6 +3970,20 @@ fn emit_inline_asm_aarch64(
             }
         }
     };
+    // `%lK` label indices a section field references (`.long %l0 - .`), and
+    // the per-section reloc counts before this statement's contribution. A
+    // statement with exit work rewrites those relocs below, so the published
+    // address is the same trampoline a template `%lK` branch takes.
+    let data_goto_ks = core::cell::RefCell::new(Vec::<usize>::new());
+    let sect_reloc_marks: Vec<usize> = if goto_ctx.is_some() && size > 0 {
+        asm_sections
+            .relocs_mut()
+            .iter()
+            .map(|s| s.relocs.len())
+            .collect()
+    } else {
+        Vec::new()
+    };
     // Materialize the `.pushsection` blocks now that every label's text
     // offset is known. A reference that names a numeric template label
     // resolves to its offset; any other name is a symbol relocation.
@@ -3901,7 +4031,9 @@ fn emit_inline_asm_aarch64(
         // block and is rewritten after layout (see resolve_asm_goto_relocs).
         let goto_block = |idx: u8| -> Option<u32> {
             let ctx = goto_ctx.as_ref()?;
-            ctx.row.get(1 + idx as usize).copied()
+            let bid = ctx.row.get(1 + idx as usize).copied()?;
+            data_goto_ks.borrow_mut().push(idx as usize);
+            Some(bid)
         };
         if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
             section_blocks,
@@ -3927,7 +4059,7 @@ fn emit_inline_asm_aarch64(
                 continue;
             }
             let Some(r) = op_reg[i] else { continue };
-            emit_sp_ldr_x(code, Reg(16), cap_off(i));
+            reg_ldr_x(code, Reg(16), cap_off(i));
             if matches!(op.constraint, AsmConstraint::Fp) {
                 if op.width == 16 {
                     emit(code, super::encode::enc_str_q_imm(r, Reg(16), 0));
@@ -3946,15 +4078,15 @@ fn emit_inline_asm_aarch64(
         }
         true
     };
-    // Restore the saved registers and free the frame.
+    // Restore the saved registers; only the naked carve moves sp back.
     let emit_restore = |code: &mut Vec<u8>| {
         for (j, &r) in save_list.iter().enumerate() {
-            emit_sp_ldr_x(code, Reg(r), save_off(j));
+            reg_ldr_x(code, Reg(r), save_off(j));
         }
         for (k, &r) in fp_save_list.iter().enumerate() {
-            emit_sp_ldr_d_auto(code, r, fp_save_off(k));
+            reg_ldr_d(code, r, fp_save_off(k));
         }
-        if size > 0 {
+        if carve {
             emit(code, enc_add_imm(Reg(31), Reg(31), size));
         }
     };
@@ -3972,14 +4104,17 @@ fn emit_inline_asm_aarch64(
     // fall-through exit sequence instead.
     if let Some(ctx) = goto_ctx {
         let mut tramp_at: Vec<Option<usize>> = alloc::vec![None; ctx.row.len() - 1];
-        // Label indices needing a teardown trampoline. Frameless, a `%lK`
-        // branch -- in the template or in an out-of-line replacement
-        // (`.subsection`) -- reaches its block directly; with an operand frame
-        // to release, both go through the trampolines built here.
+        // Label indices needing a restore trampoline. With no exit work, a
+        // `%lK` reference -- a template or replacement (`.subsection`) branch,
+        // or a section data field -- names its block directly; with captures
+        // or saves, every one routes through the trampolines built here, so a
+        // branch a run-time patcher plants from a section field runs the same
+        // store-backs and restores a template branch does.
         let mut tramp_ks: Vec<usize> = Vec::new();
         if size > 0 {
             tramp_ks.extend(goto_sites.iter().map(|&(_, _, k)| k));
             tramp_ks.extend(deferred_goto_sites.iter().map(|&(_, _, k)| k as usize));
+            tramp_ks.extend(data_goto_ks.borrow().iter().copied());
         }
         if tramp_ks.iter().any(|&k| ctx.row[1 + k] != ctx.row[0]) {
             let skip_site = code.len();
@@ -4047,6 +4182,29 @@ fn emit_inline_asm_aarch64(
                         kind,
                         target,
                     });
+            }
+        }
+        // Rewrite this statement's section `%l` fields from the label's block
+        // to its trampoline (or the fall-through exit) while exit work is
+        // pending; frameless fields keep the block and resolve with the
+        // function's layout (`resolve_asm_goto_relocs`).
+        if size > 0 && !data_goto_ks.borrow().is_empty() {
+            use super::ssa::emit_common::AsmSectionTarget;
+            let ks = data_goto_ks.borrow();
+            let target_of = |bid: u32| -> Option<usize> {
+                ks.iter()
+                    .find(|&&k| ctx.row.get(1 + k).copied() == Some(bid))
+                    .map(|&k| tramp_at[k].unwrap_or(exit_start))
+            };
+            for (i, s) in asm_sections.relocs_mut().iter_mut().enumerate() {
+                let start = sect_reloc_marks.get(i).copied().unwrap_or(0);
+                for r in s.relocs.iter_mut().skip(start) {
+                    if let AsmSectionTarget::TextBlock(bid) = r.target
+                        && let Some(off) = target_of(bid)
+                    {
+                        r.target = AsmSectionTarget::Text(off);
+                    }
+                }
             }
         }
     } else if !deferred_goto_sites.is_empty() {

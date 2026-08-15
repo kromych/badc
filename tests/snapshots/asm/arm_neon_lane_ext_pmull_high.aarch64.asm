@@ -116,23 +116,21 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x350
+               	sub	sp, sp, #0x380
                	stp	x20, x21, [sp]
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
                	sub	x0, x29, #0x30
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x20, [sp, #0x8]
-               	ldr	x0, [sp, #0x8]
+               	str	x20, [sp, #0x18]
+               	ldr	x0, [sp, #0x18]
                	ldr	q0, [x0]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	q0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x1, x29, #0x30
                	sub	x0, x29, #0xe0
                	ldr	x2, [x1]
@@ -151,18 +149,16 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	sub	x1, x29, #0x30
-               	sub	sp, sp, #0x20
-               	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
-               	ldr	x0, [sp, #0x8]
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
+               	str	x1, [sp, #0x10]
+               	str	x0, [sp, #0x18]
+               	ldr	x0, [sp, #0x18]
                	ldr	q0, [x0]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	q0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x1, x29, #0x30
                	sub	x0, x29, #0xf0
                	ldr	x2, [x1]
@@ -189,19 +185,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x328
                	sub	x1, x29, #0x2a8
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[0]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x328
                	ldr	x0, [x16]
                	mov	x17, #0xbeef            // =48879
@@ -222,19 +216,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x320
                	sub	x1, x29, #0x298
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[1]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x320
                	ldr	x0, [x16]
                	mov	x17, #0xcdef            // =52719
@@ -246,7 +238,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x350
+               	add	sp, sp, #0x380
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x2b8
@@ -270,24 +262,22 @@ Disassembly of section .text:
                	sub	x0, x29, #0x278
                	sub	x1, x29, #0x258
                	sub	x2, x29, #0x268
-               	sub	sp, sp, #0x30
-               	str	d0, [sp, #0x18]
-               	str	d1, [sp, #0x20]
-               	str	d2, [sp, #0x28]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	str	x2, [sp, #0x10]
-               	ldr	x16, [sp, #0x8]
+               	str	d0, [sp, #0x28]
+               	str	d1, [sp, #0x30]
+               	str	d2, [sp, #0x38]
+               	str	x0, [sp, #0x10]
+               	str	x1, [sp, #0x18]
+               	str	x2, [sp, #0x20]
+               	ldr	x16, [sp, #0x18]
                	ldr	q1, [x16]
-               	ldr	x16, [sp, #0x10]
+               	ldr	x16, [sp, #0x20]
                	ldr	q2, [x16]
                	ext	v0.16b, v1.16b, v2.16b, #0x8
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x18]
-               	ldr	d1, [sp, #0x20]
-               	ldr	d2, [sp, #0x28]
-               	add	sp, sp, #0x30
+               	ldr	d0, [sp, #0x28]
+               	ldr	d1, [sp, #0x30]
+               	ldr	d2, [sp, #0x38]
                	sub	x0, x29, #0x278
                	sub	x1, x29, #0x248
                	str	x10, [sp, #-0x10]!
@@ -308,19 +298,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x318
                	sub	x1, x29, #0x288
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[0]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x318
                	ldr	x0, [x16]
                	mov	x17, #0xcdef            // =52719
@@ -341,19 +329,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x310
                	sub	x1, x29, #0x238
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[1]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x310
                	ldr	x0, [x16]
                	mov	x17, #0x7788            // =30600
@@ -365,7 +351,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x350
+               	add	sp, sp, #0x380
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x248
@@ -390,24 +376,22 @@ Disassembly of section .text:
                	sub	x1, x29, #0x218
                	sub	x2, x29, #0x1f8
                	sub	x3, x29, #0x208
-               	sub	sp, sp, #0x30
-               	str	d0, [sp, #0x18]
-               	str	d1, [sp, #0x20]
-               	str	d2, [sp, #0x28]
-               	str	x1, [sp]
-               	str	x2, [sp, #0x8]
-               	str	x3, [sp, #0x10]
-               	ldr	x16, [sp, #0x8]
+               	str	d0, [sp, #0x28]
+               	str	d1, [sp, #0x30]
+               	str	d2, [sp, #0x38]
+               	str	x1, [sp, #0x10]
+               	str	x2, [sp, #0x18]
+               	str	x3, [sp, #0x20]
+               	ldr	x16, [sp, #0x18]
                	ldr	q1, [x16]
-               	ldr	x16, [sp, #0x10]
+               	ldr	x16, [sp, #0x20]
                	ldr	q2, [x16]
                	ext	v0.16b, v1.16b, v2.16b, #0x0
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x18]
-               	ldr	d1, [sp, #0x20]
-               	ldr	d2, [sp, #0x28]
-               	add	sp, sp, #0x30
+               	ldr	d0, [sp, #0x28]
+               	ldr	d1, [sp, #0x30]
+               	ldr	d2, [sp, #0x38]
                	sub	x1, x29, #0x218
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
@@ -426,19 +410,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x308
                	sub	x1, x29, #0x228
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[0]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x308
                	ldr	x0, [x16]
                	mov	x17, #0xbeef            // =48879
@@ -459,19 +441,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x300
                	sub	x1, x29, #0x1e8
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[1]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x300
                	ldr	x0, [x16]
                	mov	x17, #0xcdef            // =52719
@@ -483,7 +463,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x350
+               	add	sp, sp, #0x380
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x2b8
@@ -503,24 +483,22 @@ Disassembly of section .text:
                	str	x1, [x16, #0x8]
                	sub	x0, x29, #0xb0
                	sub	x1, x29, #0x50
-               	sub	sp, sp, #0x30
-               	str	d0, [sp, #0x18]
-               	str	d1, [sp, #0x20]
-               	str	d2, [sp, #0x28]
-               	str	x1, [sp]
-               	str	x21, [sp, #0x8]
-               	str	x0, [sp, #0x10]
-               	ldr	x16, [sp, #0x8]
+               	str	d0, [sp, #0x28]
+               	str	d1, [sp, #0x30]
+               	str	d2, [sp, #0x38]
+               	str	x1, [sp, #0x10]
+               	str	x21, [sp, #0x18]
+               	str	x0, [sp, #0x20]
+               	ldr	x16, [sp, #0x18]
                	ldr	q1, [x16]
-               	ldr	x16, [sp, #0x10]
+               	ldr	x16, [sp, #0x20]
                	ldr	q2, [x16]
                	pmull2	v0.1q, v1.2d, v2.2d
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x18]
-               	ldr	d1, [sp, #0x20]
-               	ldr	d2, [sp, #0x28]
-               	add	sp, sp, #0x30
+               	ldr	d0, [sp, #0x28]
+               	ldr	d1, [sp, #0x30]
+               	ldr	d2, [sp, #0x38]
                	sub	x0, x29, #0x50
                	ldr	x8, [x0]
                	ldr	x9, [x0, #0x8]
@@ -533,24 +511,22 @@ Disassembly of section .text:
                	movk	x1, #0xbbcc, lsl #32
                	movk	x1, #0x99aa, lsl #48
                	sub	x2, x29, #0x30
-               	sub	sp, sp, #0x30
-               	str	d0, [sp, #0x18]
-               	str	d1, [sp, #0x20]
-               	str	d2, [sp, #0x28]
-               	str	x2, [sp]
+               	str	d0, [sp, #0x28]
+               	str	d1, [sp, #0x30]
+               	str	d2, [sp, #0x38]
+               	str	x2, [sp, #0x10]
                	fmov	d16, x0
-               	str	d16, [sp, #0x8]
+               	str	d16, [sp, #0x18]
                	fmov	d16, x1
-               	str	d16, [sp, #0x10]
-               	ldr	d1, [sp, #0x8]
-               	ldr	d2, [sp, #0x10]
+               	str	d16, [sp, #0x20]
+               	ldr	d1, [sp, #0x18]
+               	ldr	d2, [sp, #0x20]
                	pmull	v0.1q, v1.1d, v2.1d
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	q0, [x16]
-               	ldr	d0, [sp, #0x18]
-               	ldr	d1, [sp, #0x20]
-               	ldr	d2, [sp, #0x28]
-               	add	sp, sp, #0x30
+               	ldr	d0, [sp, #0x28]
+               	ldr	d1, [sp, #0x30]
+               	ldr	d2, [sp, #0x38]
                	sub	x0, x29, #0x30
                	ldr	x10, [x0]
                	ldr	x11, [x0, #0x8]
@@ -600,7 +576,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x350
+               	add	sp, sp, #0x380
                	ldp	x29, x30, [sp], #0x10
                	ret
                	cmp	x8, x10
@@ -611,7 +587,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x350
+               	add	sp, sp, #0x380
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x2b8
@@ -648,19 +624,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x1c8
                	sub	x1, x29, #0x1c0
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[0]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x1c8
                	ldr	x0, [x16]
                	mov	x17, #0xbeef            // =48879
@@ -681,19 +655,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x2f8
                	sub	x1, x29, #0x1d8
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[1]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x2f8
                	ldr	x0, [x16]
                	mov	x17, #0xcdef            // =52719
@@ -705,7 +677,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
                	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x350
+               	add	sp, sp, #0x380
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x20, x29, #0x1a0
@@ -742,19 +714,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x140
                	sub	x1, x29, #0x138
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[0]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x140
                	ldr	x0, [x16]
                	mov	x17, #0x7788            // =30600
@@ -775,19 +745,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x2f0
                	sub	x1, x29, #0x150
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[1]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x2f0
                	ldr	x0, [x16]
                	mov	x17, #0xff00            // =65280
@@ -799,7 +767,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
                	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x350
+               	add	sp, sp, #0x380
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x20, x29, #0x1a0
@@ -836,19 +804,17 @@ Disassembly of section .text:
                	mov	x0, x1
                	sub	x0, x29, #0x118
                	sub	x1, x29, #0x110
-               	sub	sp, sp, #0x20
+               	str	x0, [sp, #0x20]
+               	str	d0, [sp, #0x28]
                	str	x0, [sp, #0x10]
-               	str	d0, [sp, #0x18]
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	ldr	x16, [sp, #0x8]
+               	str	x1, [sp, #0x18]
+               	ldr	x16, [sp, #0x18]
                	ldr	q0, [x16]
                	mov	x0, v0.d[0]
-               	ldr	x16, [sp]
+               	ldr	x16, [sp, #0x10]
                	str	x0, [x16]
-               	ldr	x0, [sp, #0x10]
-               	ldr	d0, [sp, #0x18]
-               	add	sp, sp, #0x20
+               	ldr	x0, [sp, #0x20]
+               	ldr	d0, [sp, #0x28]
                	sub	x16, x29, #0x118
                	ldr	x0, [x16]
                	mov	x17, #0xbeef            // =48879
@@ -859,12 +825,12 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x350
+               	add	sp, sp, #0x380
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2a               // =42
                	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x350
+               	add	sp, sp, #0x380
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

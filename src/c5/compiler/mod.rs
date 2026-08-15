@@ -958,8 +958,9 @@ pub(in crate::c5::compiler) struct Pending {
     /// A consumed `__declspec(dllexport)`. Read after the declarator to add the
     /// declared name to the export list -- the equivalent of `#pragma export`.
     pub attr_dllexport: bool,
-    /// A consumed `__attribute__((constructor))`. Read at function-body
-    /// close to record the function in `Compiler::init_funcs`.
+    /// A consumed `__attribute__((constructor))`. Merged onto
+    /// `Symbol::is_constructor`, which the function-body open reads to
+    /// record the function in `Compiler::init_funcs`.
     pub attr_constructor: bool,
     /// A consumed `__attribute__((destructor))`.
     pub attr_destructor: bool,
@@ -1581,8 +1582,8 @@ pub struct Compiler {
     pending_exports: Vec<String>,
     /// Functions defined with `__attribute__((constructor))` /
     /// `((destructor))`, accumulated in source order and copied onto
-    /// `Program::init_funcs`. Populated at each function-body close
-    /// when `pending.attr_constructor` / `attr_destructor` is set.
+    /// `Program::init_funcs`. Populated at each function-body open
+    /// when the symbol carries `is_constructor` / `is_destructor`.
     init_funcs: Vec<crate::c5::program::InitFunc>,
     /// `__attribute__((alias("target")))` function declarations, moved
     /// onto `Program::function_aliases`.

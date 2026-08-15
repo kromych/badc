@@ -135,6 +135,16 @@ pub(crate) struct Symbol {
     /// `.bss` placement.
     pub section_name: Option<String>,
 
+    /// `__attribute__((constructor))` seen on any declaration of the
+    /// name. Sticky like `is_weak`, so a prototype's attribute reaches
+    /// the definition, which registers the `InitFunc` at body open.
+    pub is_constructor: bool,
+    /// `__attribute__((destructor))`, same carry as `is_constructor`.
+    pub is_destructor: bool,
+    /// Explicit `constructor(N)` / `destructor(N)` priority; `None`
+    /// for the bare form.
+    pub init_priority: Option<u32>,
+
     /// Placement alignment of a `Token::Glo` object with storage: the
     /// widest of the declarator's `aligned(N)` / `_Alignas` request, the
     /// type's natural alignment, and a typedef's `aligned(N)` type
@@ -663,6 +673,9 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_used,
             is_hidden: _,
             section_name,
+            is_constructor: _,
+            is_destructor: _,
+            init_priority: _,
             data_align: _, // an alignment, not an offset
             is_alias: _,
             array_size: _,

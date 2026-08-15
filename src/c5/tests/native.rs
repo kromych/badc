@@ -178,6 +178,45 @@ fn constructor_priority_and_destructor_order() {
 }
 
 #[test]
+fn constructor_on_prototype_runs_before_main() {
+    // The attribute sits on a separate prototype and the definition is
+    // bare; the declaration's attributes merge onto the definition, so
+    // the `.init_array` entry is still emitted.
+    let (code, _) = link_run_capture(
+        "static int g;\n\
+         static void ctor(void) __attribute__((constructor));\n\
+         static void ctor(void) { g = 42; }\n\
+         int main(void) { return g; }\n",
+        "mac-ctor-proto",
+    );
+    assert_eq!(
+        code, 42,
+        "prototype-declared constructor must run before main"
+    );
+}
+
+#[test]
+fn constructor_prototype_priority_and_destructor_order() {
+    // Priority and destructor forms declared on prototypes, defined
+    // bare: prioritized constructors ascending, unprioritized last,
+    // main, then the destructor at exit.
+    let (_, stdout) = link_run_capture(
+        "#include <stdio.h>\n\
+         static void c2(void) __attribute__((constructor(102)));\n\
+         static void c2(void) { printf(\"c2\\n\"); }\n\
+         static void c1(void) __attribute__((constructor(101)));\n\
+         static void c1(void) { printf(\"c1\\n\"); }\n\
+         static void c3(void) __attribute__((constructor));\n\
+         static void c3(void) { printf(\"c3\\n\"); }\n\
+         static void d1(void) __attribute__((destructor));\n\
+         static void d1(void) { printf(\"d1\\n\"); }\n\
+         int main(void) { printf(\"main\\n\"); return 0; }\n",
+        "mac-ctor-proto-order",
+    );
+    assert_eq!(stdout, "c1\nc2\nc3\nmain\nd1\n");
+}
+
+#[test]
 fn return_zero() {
     assert_eq!(build_and_run("int main() { return 0; }", "ret0"), 0);
 }

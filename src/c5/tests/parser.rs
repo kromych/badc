@@ -1161,6 +1161,46 @@ fn constructor_attribute_is_recorded() {
 }
 
 #[test]
+fn constructor_attribute_on_prototype_reaches_definition() {
+    // The attribute on a separate declaration merges onto the later
+    // definition, as gcc's composite type does, for the bare, priority
+    // and destructor forms. A repeat on both declarations registers
+    // once, and a static prototype-form constructor is not unused.
+    let src = "
+        void a(void) __attribute__((constructor));
+        void a(void) {}
+        void b(void) __attribute__((constructor(101)));
+        void b(void) {}
+        void c(void) __attribute__((destructor));
+        void c(void) {}
+        void d(void) __attribute__((constructor));
+        __attribute__((constructor)) void d(void) {}
+        static void e(void) __attribute__((constructor));
+        static void e(void) {}
+        int main(void) { return 0; }
+    ";
+    let prog = super::compile_str_bare(src);
+    let by_name = |n: &str| prog.init_funcs.iter().find(|f| f.name == n);
+    let a = by_name("a").expect("a is a constructor");
+    assert!(!a.is_destructor && a.priority.is_none());
+    let b = by_name("b").expect("b is a constructor");
+    assert!(!b.is_destructor && b.priority == Some(101));
+    let c = by_name("c").expect("c is a destructor");
+    assert!(c.is_destructor && c.priority.is_none());
+    assert_eq!(
+        prog.init_funcs.iter().filter(|f| f.name == "d").count(),
+        1,
+        "attribute on both declarations registers once"
+    );
+    assert!(by_name("e").is_some(), "e is a constructor");
+    let warns = prog.warnings.join("\n");
+    assert!(
+        !warns.contains("unused function `e`"),
+        "prototype-declared constructor must not be flagged unused; got:\n{warns}"
+    );
+}
+
+#[test]
 fn constructor_is_not_reported_unused() {
     // A `static` constructor / destructor has no in-source call site but
     // runs at startup / exit, so it must not draw the unused-function

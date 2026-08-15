@@ -1415,21 +1415,19 @@ impl Compiler {
                     self.symbols[id_idx].is_extern_decl = false;
 
                     // `__attribute__((constructor))` / `((destructor))` on
-                    // this definition: record it so the emit path lowers it
-                    // into `.init_array` / `.fini_array` and the VM / JIT run
-                    // it around `main`. The pending flags were set by the
-                    // leading or trailing attribute specifier.
-                    if self.pending.attr_constructor || self.pending.attr_destructor {
-                        let is_destructor = self.pending.attr_destructor;
+                    // any declaration of this name: record it so the emit
+                    // path lowers it into `.init_array` / `.fini_array` and
+                    // the VM / JIT run it around `main`. The symbol carries
+                    // the merged attributes, so a prototype-only attribute
+                    // reaches this definition.
+                    if self.symbols[id_idx].is_constructor || self.symbols[id_idx].is_destructor {
+                        let is_destructor = self.symbols[id_idx].is_destructor;
                         self.init_funcs.push(crate::c5::program::InitFunc {
                             name: self.symbols[id_idx].name.clone(),
                             ent_pc,
-                            priority: self.pending.attr_init_priority,
+                            priority: self.symbols[id_idx].init_priority,
                             is_destructor,
                         });
-                        self.pending.attr_constructor = false;
-                        self.pending.attr_destructor = false;
-                        self.pending.attr_init_priority = None;
                     }
 
                     // Struct-value parameters: the caller pushed
@@ -2917,16 +2915,27 @@ impl Compiler {
         }
     }
 
-    /// Move the `weak` / `used` / `visibility` / `section("name")` attribute
-    /// carriers collected for the current declarator onto its symbol. Shared
-    /// by the function and file-scope-object paths; the object writers read
-    /// the fields off the symbol.
+    /// Move the `weak` / `used` / `constructor` / `destructor` /
+    /// `visibility` / `section("name")` attribute carriers collected for
+    /// the current declarator onto its symbol. Shared by the function and
+    /// file-scope-object paths; the object writers and the body-open
+    /// `InitFunc` registration read the fields off the symbol, so an
+    /// attribute written on a prototype reaches the later definition.
     pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) {
         if self.pending.attr_weak {
             self.symbols[id_idx].is_weak = true;
         }
         if self.pending.attr_used {
             self.symbols[id_idx].is_used = true;
+        }
+        if self.pending.attr_constructor {
+            self.symbols[id_idx].is_constructor = true;
+        }
+        if self.pending.attr_destructor {
+            self.symbols[id_idx].is_destructor = true;
+        }
+        if let Some(p) = self.pending.attr_init_priority {
+            self.symbols[id_idx].init_priority = Some(p);
         }
         // Sticky like the rest: `gnu_inline` on any declaration selects
         // the GNU89 model for the name, whichever side of the declarator

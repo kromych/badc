@@ -324,6 +324,9 @@ impl Compiler {
         self.pending.attr_section = None;
         self.pending.attr_weak = false;
         self.pending.attr_visibility = None;
+        self.pending.attr_constructor = false;
+        self.pending.attr_destructor = false;
+        self.pending.attr_init_priority = None;
         saw_specifier |= self.consume_local_decl_specifiers(
             &mut is_static,
             &mut is_extern,

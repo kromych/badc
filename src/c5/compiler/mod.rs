@@ -40,8 +40,8 @@ pub(crate) mod types;
 /// `_Alignas` / the GCC `aligned` attribute, whether the request comes
 /// from the declarator or the object's type. Static objects (file-scope,
 /// block-scope static, and initialised or zero-init alike) are placed at
-/// this alignment in `.data` / `.bss`; automatic objects stay capped lower
-/// because stack-frame realignment is not implemented. 64 KiB is the
+/// this alignment in `.data` / `.bss`; automatic objects stay capped at
+/// `MAX_FRAME_ALIGN`. 64 KiB is the
 /// largest page size in common use (the aarch64 max-page-size) and covers
 /// cache-line, page, and page-multiple requests such as a per-CPU stack.
 /// The self-contained ELF writer raises the read-write segment `p_align`
@@ -108,9 +108,7 @@ pub struct StructDef {
     pub align: usize,
     /// The attribute-derived part of `align`: the widest `aligned(N)` /
     /// `_Alignas` reaching the aggregate through its tag, body, members,
-    /// or a member's typedef, 0 when the alignment is purely natural. An
-    /// automatic object of the type treats this like its own explicit
-    /// request when deciding on the realigned frame region.
+    /// or a member's typedef, 0 when the alignment is purely natural.
     pub explicit_align: u32,
     pub fields: Vec<StructField>,
     /// Unnamed bit-fields, in declaration order. C99 6.7.2.1p11 makes

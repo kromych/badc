@@ -2601,8 +2601,12 @@ fn run_intrinsic(
                     "vm_ssa: Alloca: negative size {n_raw}",
                 )));
             }
+            // 16-byte size rounding and base alignment, matching the native
+            // lowering where sp stays 16-aligned: the storage is suitably
+            // aligned for any object type (C11 6.2.8), 16-aligned VLA
+            // element types included.
             let rounded = ((n_raw as usize) + 15) & !15;
-            let base = mem.alloc_frame(rounded)?;
+            let base = mem.alloc_aligned_frame(16, rounded)?;
             frame.regs[v as usize] = base as i64;
             Ok(())
         }

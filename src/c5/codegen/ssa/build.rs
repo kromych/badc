@@ -229,7 +229,7 @@ impl SsaBuilder {
         self.func.end_pc = end_pc;
     }
 
-    /// Record the prologue-realigned region for over-aligned automatic
+    /// Record the over-aligned frame region for over-aligned automatic
     /// objects: the `(slot_off, region_off)` placements, the region alignment,
     /// and its byte size. Consumed by the per-arch frame layout and the VM.
     pub(crate) fn set_realign(&mut self, placed: Vec<(i64, i64)>, align: i64, region_bytes: i64) {

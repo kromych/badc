@@ -888,6 +888,21 @@ fn overaligned_automatic_boundaries() {
 }
 
 #[test]
+fn overaligned_automatic_type_derived_16() {
+    // An automatic object whose type alignment is exactly 16 -- `__int128`,
+    // an aligned(16) aggregate, a member-derived 16 -- lands on 16 at a
+    // static frame offset, at both frame parities and across call depths.
+    assert_eq!(run_fixture("overaligned_automatic16.c"), 0);
+}
+
+#[test]
+fn overaligned_automatic_beside_vla() {
+    // A 16-aligned automatic coexists with a VLA (the region needs no sp
+    // move), and a VLA of a 16-aligned element type lands on 16.
+    assert_eq!(run_fixture("overaligned_vla_int128.c"), 0);
+}
+
+#[test]
 fn packed_enum() {
     // `enum __attribute__((packed))` uses the smallest integer type holding
     // its values, changing the layout of an embedding struct (a real-world

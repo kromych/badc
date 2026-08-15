@@ -101,11 +101,12 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         return BTreeMap::new();
     }
 
-    // Leave a realigning function (an over-aligned automatic object, C11
-    // 6.7.5) uncoalesced: its objects are addressed sp-relative in the
-    // prologue-realigned region keyed by their declared slot, so renumbering
-    // the frame would desynchronise `FunctionSsa::over_aligned`.
-    if f.frame_align > 0 {
+    // Leave a realigning function (an automatic object aligned above 16,
+    // C11 6.7.5) uncoalesced: its dynamic-sp frame is the expensive shape
+    // already and stays as emitted. A 16-aligned region keeps the static
+    // frame; its member slots are held out of sharing below and
+    // `FunctionSsa::over_aligned` is renumbered in lockstep.
+    if f.frame_align > 16 {
         return BTreeMap::new();
     }
 
@@ -260,6 +261,21 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
     for &off in &field_slots {
         if !agg_cells.contains(&off) {
             reserved_single.insert(off);
+        }
+    }
+    // An accessed over-aligned region member keeps dedicated storage: sharing
+    // its slot with a scalar would put the scalar in the region too, and the
+    // entry's renumbering below is 1:1 only for reserved slots and aggregate
+    // runs. An unaccessed member stays out of every set, so the repack drops
+    // its slot and the entry follows.
+    let region_slots: BTreeSet<i64> = f.over_aligned.iter().map(|&(s, _)| s).collect();
+    for (_, inst) in f.insts.iter().enumerate().filter(|(i, _)| in_block[*i]) {
+        if let Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } = inst
+            && region_slots.contains(off)
+            && movable(*off)
+            && !agg_cells.contains(off)
+        {
+            reserved_single.insert(*off);
         }
     }
     for (_, inst) in f.insts.iter().enumerate().filter(|(i, _)| in_block[*i]) {
@@ -548,6 +564,21 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
             *s = nn;
         }
     }
+    // Renumber the over-aligned region members in lockstep. A movable member
+    // absent from `new_off` was dropped by the compact repack (no surviving
+    // reference), so its entry goes too; the region bytes stay reserved
+    // unless every member dropped.
+    f.over_aligned
+        .retain(|&(s, _)| !movable(s) || new_off.contains_key(&s));
+    for e in &mut f.over_aligned {
+        if let Some(&nn) = new_off.get(&e.0) {
+            e.0 = nn;
+        }
+    }
+    if f.over_aligned.is_empty() {
+        f.frame_align = 0;
+        f.realign_region_bytes = 0;
+    }
     f.multi_cell_slots.clear();
     f.locals = new_locals;
 
@@ -628,6 +659,57 @@ mod tests {
         let mut f = build();
         assert!(coalesce(&mut f, false).is_empty());
         assert_eq!(f.locals, 10);
+    }
+
+    /// A 16-aligned over-aligned region coalesces: member entries are
+    /// renumbered in lockstep with their slots, a dropped member's entry
+    /// goes with it, and an emptied region clears the frame fields. Above
+    /// 16 (a realigning frame) the function is left untouched.
+    #[test]
+    fn region_slots_renumber_in_lockstep() {
+        let build = |align: i64| {
+            let mut f = one_block(
+                alloc::vec![
+                    Inst::LocalAddr(-7),
+                    Inst::Load {
+                        addr: 0,
+                        disp: 0,
+                        kind: LoadKind::I64,
+                        volatile: false,
+                    },
+                ],
+                1,
+                10,
+            );
+            // Slot -7 is live (the region member); slot -3's member has no
+            // reference left and drops under compact.
+            f.over_aligned = alloc::vec![(-7, 0), (-3, 16)];
+            f.frame_align = align;
+            f.realign_region_bytes = 32;
+            f
+        };
+        let mut f = build(16);
+        coalesce(&mut f, true);
+        assert!(matches!(f.insts[0], Inst::LocalAddr(-1)));
+        assert_eq!(
+            f.over_aligned,
+            alloc::vec![(-1, 0)],
+            "the live member follows its slot; the dead member's entry drops"
+        );
+        assert_eq!((f.frame_align, f.realign_region_bytes), (16, 32));
+
+        let mut f = build(32);
+        assert!(coalesce(&mut f, true).is_empty());
+        assert_eq!(f.locals, 10, "a realigning frame stays as emitted");
+
+        // Every member dropped: the region clears entirely.
+        let mut f = one_block(alloc::vec![Inst::Imm(0)], 0, 4);
+        f.over_aligned = alloc::vec![(-2, 0)];
+        f.frame_align = 16;
+        f.realign_region_bytes = 16;
+        coalesce(&mut f, true);
+        assert!(f.over_aligned.is_empty());
+        assert_eq!((f.frame_align, f.realign_region_bytes), (0, 0));
     }
 
     /// Stack-pointer asm pins every slot: resume points and parked

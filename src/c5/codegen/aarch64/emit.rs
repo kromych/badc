@@ -24,6 +24,7 @@
 //!   saved fp, saved lr            [fp +  0]
 //!   locals area                   [fp - locals_bytes .. fp]
 //!   allocator spill slots         ...
+//!   over-aligned region           [fp + align_region_off ..]  (16-mode only)
 //!   saved callee-saved GPRs
 //!   saved callee-saved FP regs    sp
 //! ```
@@ -97,16 +98,23 @@ pub(crate) struct Frame {
     /// ABI carried for the redirect's slot mapping.
     pub va_abi: super::Abi,
     /// The body moves sp at runtime (`alloca` / C99 6.7.6.2 VLA), or the
-    /// prologue realigns sp for an over-aligned automatic object, so spill
+    /// prologue realigns sp for an automatic object aligned above 16, so spill
     /// slots are addressed through fp and the epilogue re-establishes sp from
     /// fp before tearing the frame down.
     pub dynamic_sp: bool,
-    /// Alignment the prologue forces on sp for over-aligned automatic objects
-    /// (C11 6.7.5), a power of two > 16, or 0 when none. The realigned region
-    /// sits below the static frame; the objects live at `[sp + region_off]`.
+    /// Alignment the prologue forces on sp for automatic objects aligned above
+    /// 16 (C11 6.7.5), a power of two > 16, or 0 when none. The realigned
+    /// region sits below the static frame; the objects live at
+    /// `[sp + region_off]`.
     pub realign_align: u32,
-    /// Byte size of the realigned region, a multiple of `realign_align`.
+    /// Byte size of the realigned region, a multiple of 16.
     pub realign_region_bytes: u32,
+    /// fp-relative byte offset (negative) of the over-aligned region when the
+    /// region alignment is exactly 16, or 0 when none. fp and every frame
+    /// region above it are 16-byte multiples, so the region base is 16-aligned
+    /// with no sp move; its bytes are counted in `frame_bytes` and the objects
+    /// live at `[fp + align_region_off + region_off]`.
+    pub align_region_off: i64,
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target: Target) -> Frame {
@@ -125,8 +133,25 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
         !super::ssa::reg_alloc::function_clobbers_scratch(func, target, alloc.spill_count)
             .is_empty();
     let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
-    let frame_bytes =
-        locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
+    // An over-aligned region whose alignment is exactly 16 joins the static
+    // frame between the spill region and the saved-register block: every
+    // region above it is a 16-byte multiple, so its base is 16-aligned with
+    // no sp move. Above 16 the prologue realigns sp instead. A region whose
+    // members have no emitted access needs no bytes, the same decision
+    // `compute_frame_base` makes for the locals region (`locals_bytes` is 0
+    // exactly when no local access survives).
+    let region_bytes = func.realign_region_bytes.max(0) as u32;
+    let static_region_bytes = if func.frame_align == 16 && locals_bytes > 0 {
+        region_bytes
+    } else {
+        0
+    };
+    let frame_bytes = locals_bytes
+        + alloc_spill_bytes
+        + saved_gpr_bytes
+        + saved_fpr_bytes
+        + x19_save_bytes
+        + static_region_bytes;
     // A Windows-on-ARM64 variadic callee (Microsoft ARM64 calling
     // convention) receives every argument (named and variadic) in a
     // contiguous 8-byte-per-argument region: the first eight in
@@ -159,13 +184,27 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi, target
         va_param_fp_mask: func.param_fp_mask,
         va_n_params: func.n_params,
         va_abi: abi,
-        // An over-aligned automatic object realigns sp in the prologue and lives
-        // in a region below the static frame, addressed sp-relative; the frame
-        // is dynamic-sp so spills go through fp and the epilogue restores sp
-        // from fp (C11 6.7.5).
-        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 0,
-        realign_align: func.frame_align.max(0) as u32,
-        realign_region_bytes: func.realign_region_bytes.max(0) as u32,
+        // An automatic object aligned above 16 realigns sp in the prologue
+        // and lives in a region below the static frame, addressed sp-relative;
+        // the frame is dynamic-sp so spills go through fp and the epilogue
+        // restores sp from fp (C11 6.7.5). An alignment of exactly 16 keeps
+        // the static frame and addresses the region fp-relative.
+        dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16,
+        realign_align: if func.frame_align > 16 {
+            func.frame_align as u32
+        } else {
+            0
+        },
+        realign_region_bytes: if func.frame_align > 16 {
+            region_bytes
+        } else {
+            0
+        },
+        align_region_off: if static_region_bytes > 0 {
+            -((locals_bytes + alloc_spill_bytes + static_region_bytes) as i64)
+        } else {
+            0
+        },
     }
 }
 
@@ -7060,10 +7099,12 @@ fn local_slot_off(off: i64, frame: Frame) -> i64 {
     }
 }
 
-/// SP-relative byte offset of an over-aligned automatic object's storage in the
-/// frame's realigned region (C11 6.7.5), or None for an ordinary slot.
+/// Region byte offset of an over-aligned automatic object's storage in the
+/// frame's over-aligned region (C11 6.7.5), or None for an ordinary slot. The
+/// region base is sp when the prologue realigned (`realign_align` > 0) and
+/// `fp + align_region_off` for the static 16-aligned placement.
 fn over_aligned_region_off(off: i64, func: &FunctionSsa, frame: Frame) -> Option<i64> {
-    if off >= 0 || frame.realign_align == 0 {
+    if off >= 0 || (frame.realign_align == 0 && frame.align_region_off == 0) {
         return None;
     }
     func.over_aligned
@@ -7073,7 +7114,7 @@ fn over_aligned_region_off(off: i64, func: &FunctionSsa, frame: Frame) -> Option
 }
 
 /// Address of a local slot, redirecting an over-aligned automatic object to its
-/// sp-relative storage in the realigned region (C11 6.7.5). Callers that only
+/// storage in the over-aligned region (C11 6.7.5). Callers that only
 /// address synthetic / parameter slots (never over-aligned) use
 /// [`emit_local_addr_fp`] directly and need no `func`.
 fn emit_local_addr(
@@ -7086,6 +7127,9 @@ fn emit_local_addr(
     let Some(region_off) = over_aligned_region_off(off, func, frame) else {
         return emit_local_addr_fp(code, dst, off, frame);
     };
+    if frame.align_region_off != 0 {
+        return emit_fp_addr_bytes(code, dst, frame.align_region_off + region_off, frame);
+    }
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => Reg(16),
@@ -7102,6 +7146,11 @@ fn emit_local_addr(
 }
 
 fn emit_local_addr_fp(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bool {
+    emit_fp_addr_bytes(code, dst, local_slot_off(off, frame), frame)
+}
+
+/// Materialise `fp + bytes` into `dst` for any signed byte displacement.
+fn emit_fp_addr_bytes(code: &mut Vec<u8>, dst: Place, bytes: i64, frame: Frame) -> bool {
     // Materialise the address through scratch.primary when the
     // allocator chose a spill slot for this LocalAddr, then store
     // the computed value into the spill slot. Register places
@@ -7114,7 +7163,6 @@ fn emit_local_addr_fp(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) ->
             return false;
         }
     };
-    let bytes = local_slot_off(off, frame);
     let abs = bytes.unsigned_abs();
     // Up to imm12 fits in a single add/sub-imm.
     if abs < 4096 {

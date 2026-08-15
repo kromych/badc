@@ -110,16 +110,11 @@ pub(crate) fn walk_function(
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
     // C11 6.7.5: automatic objects whose alignment exceeds the 8-byte frame
-    // slot live in a prologue-realigned region. Pack them (widest
-    // alignment first) into that region; every backend addresses these slots
-    // as `region_base + region_off`. The region and `alloca` both move sp, so
-    // the combination is rejected.
+    // slot live in the over-aligned region. Pack them (widest alignment
+    // first); every backend addresses these slots as `region_base +
+    // region_off`. At `frame_align` 16 the region sits at a static frame
+    // offset; above 16 the prologue realigns sp, which `alloca` precludes.
     if !over_aligned_slots.is_empty() {
-        if alloca_top_slot != 0 {
-            return Err(WalkError::Unsupported(
-                "an over-aligned automatic object cannot share a function with alloca/VLA",
-            ));
-        }
         let mut items: alloc::vec::Vec<(i64, i64, i64)> = over_aligned_slots.to_vec();
         items.sort_by_key(|&(_, align, _)| core::cmp::Reverse(align));
         let mut frame_align: i64 = 16;
@@ -130,6 +125,11 @@ pub(crate) fn walk_function(
             cursor = (cursor + align - 1) & -align;
             placed.push((slot, cursor));
             cursor += size;
+        }
+        if frame_align > 16 && alloca_top_slot != 0 {
+            return Err(WalkError::Unsupported(
+                "an automatic object aligned above 16 cannot share a function with alloca/VLA",
+            ));
         }
         let region_bytes = (cursor + frame_align - 1) & -frame_align;
         b.set_realign(placed, frame_align, region_bytes);

@@ -98,21 +98,23 @@ fn overaligned_text(src: &str, target: crate::c5::Target) -> Vec<u8> {
 }
 
 #[test]
-fn overaligned_automatic_realigns_at_the_16_byte_boundary() {
-    // 16 is the narrowest boundary the 8-byte frame slots cannot place, so it
-    // realigns like the wider ones: `and rsp, -16` is 48 83 E4 F0, and
-    // `and sp, x16, #-16` is the word 0x927CEE1F.
+fn overaligned_automatic_at_16_stays_on_the_static_frame() {
+    // 16 is met at a static frame offset: the frame base is 16-aligned and
+    // every frame region a 16-byte multiple, so no realigning prologue is
+    // emitted (`and rsp, -16` is 48 83 E4 F0; `and sp, x16, #-16` is the
+    // word 0x927CEE1F). gcc and clang place a 16-aligned automatic the same
+    // way on both targets, relying on the ABI's sp-at-call alignment.
     use crate::c5::Target;
     let src = overaligned_source_at(16);
     let x64 = overaligned_text(&src, Target::LinuxX64);
     assert!(
-        x64.windows(4).any(|w| w == [0x48, 0x83, 0xE4, 0xF0]),
-        "x86_64 realigning prologue `and rsp, -0x10` not emitted"
+        !x64.windows(4).any(|w| w == [0x48, 0x83, 0xE4, 0xF0]),
+        "16-aligned automatic must not emit the x86_64 realigning prologue"
     );
     let a64 = overaligned_text(&src, Target::LinuxAarch64);
     assert!(
-        a64.windows(4).any(|w| w == [0x1F, 0xEE, 0x7C, 0x92]),
-        "aarch64 realigning prologue `and sp, x16, #-16` not emitted"
+        !a64.windows(4).any(|w| w == [0x1F, 0xEE, 0x7C, 0x92]),
+        "16-aligned automatic must not emit the aarch64 realigning prologue"
     );
 }
 
@@ -5958,9 +5960,10 @@ fn alignas_places_objects_at_requested_alignment() {
         big.section,
         big.value
     );
-    // An automatic object's own request is placed from 16 up, in the
-    // prologue-realigned region (the overaligned_automatic fixtures check the
-    // resulting addresses at run time).
+    // An automatic object's own request is placed from 16 up: exactly 16 at
+    // a static frame offset, above 16 in the prologue-realigned region (the
+    // overaligned_automatic fixtures check the resulting addresses at run
+    // time).
     assert!(
         Compiler::new("int main(void) { _Alignas(16) char buf[8]; return buf[0]; }\n".to_string())
             .compile()

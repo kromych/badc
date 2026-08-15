@@ -29,14 +29,26 @@ fn empty_source_has_no_main() {
 
 #[test]
 fn overaligned_automatic_beside_a_vla_is_diagnosed() {
-    // The realigned region and a variable-length array (C99 6.7.6.2) both move
-    // sp, so they cannot share a frame. The rejection is a source-level
-    // diagnostic, not the walker's internal error.
+    // The realigned region (alignment above 16) and a variable-length array
+    // (C99 6.7.6.2) both move sp, so they cannot share a frame. The rejection
+    // is a source-level diagnostic, not the walker's internal error.
     expect_compile_error(
         "int use(void *, void *);\n\
-         int f(int n) { int v[n]; _Alignas(16) char c[16]; return use(v, c); }",
+         int f(int n) { int v[n]; _Alignas(32) char c[32]; return use(v, c); }",
         "cannot share a function with `alloca` or a variable-length array",
     );
+    // An alignment of exactly 16 is met at a static frame offset, so it
+    // coexists with a VLA; a VLA whose own element needs 16 is met by the
+    // 16-byte-rounded sp carve.
+    Compiler::new(
+        "int use(void *, void *);\n\
+         int f(int n) { int v[n]; _Alignas(16) char c[16]; return use(v, c); }\n\
+         int g(int n) { __int128 w[n]; w[0] = n; return (int)(long)w[0]; }\n\
+         int main(void) { return g(1) - 1; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("16-aligned automatic and VLA share a frame");
     // An over-aligned VLA itself has no fixed extent to place in the region.
     expect_compile_error(
         "int use(void *);\n\

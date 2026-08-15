@@ -167,7 +167,13 @@ fn region_key(
         .any(|i| matches!(i, Inst::CallIndirect { .. }));
     if sp || indirect || cyclic.contains(&callee.ent_pc) {
         None
-    } else if !callee.insts.iter().any(|i| matches!(i, Inst::Call { .. })) {
+    } else if callee.over_aligned.is_empty()
+        && !callee.insts.iter().any(|i| matches!(i, Inst::Call { .. }))
+    {
+        // A callee with over-aligned slots keeps a per-callee record even when
+        // call-free: the pool overlays different callees' slots, and a slot
+        // that is a region member for one callee and plain (or differently
+        // sized) storage for another cannot share bytes.
         Some(RegionKey::Pool)
     } else {
         Some(RegionKey::Callee(callee.ent_pc))
@@ -462,11 +468,13 @@ fn is_inline_candidate(
         say(format_args!("weak definition"));
         return false;
     }
-    // An over-aligned automatic object lives in the callee's prologue-realigned
-    // region; the splice cannot reproduce that region in the caller frame, so
-    // the body stays out of line.
-    if !func.over_aligned.is_empty() {
-        say(format_args!("over-aligned automatic object"));
+    // An automatic object aligned above 16 lives in the callee's prologue-
+    // realigned region; the splice cannot reproduce the sp realignment in the
+    // caller frame, so the body stays out of line. A 16-aligned region sits at
+    // a static frame offset and relocates with the callee's slots (the splice
+    // merges `over_aligned` into the caller's region).
+    if func.frame_align > 16 {
+        say(format_args!("automatic object aligned above 16"));
         return false;
     }
     // A self-recursive callee stays out of line: splicing it does not
@@ -2526,6 +2534,30 @@ fn splice_multi_block(
             merged_multi_cell.push(rec);
         }
     }
+    // Merge the callee's over-aligned region (16-aligned only; the candidate
+    // filter rejects above 16) behind the caller's: the callee's packed
+    // offsets shift by the caller's region size, a 16-byte multiple, so every
+    // member keeps a 16-aligned base. A shared per-callee record replays the
+    // same relocated slots at a later site; those entries already exist and
+    // grow nothing.
+    let mut merged_over_aligned = core::mem::take(&mut original.over_aligned);
+    let mut merged_frame_align = original.frame_align;
+    let mut merged_region_bytes = original.realign_region_bytes;
+    if !callee.over_aligned.is_empty() {
+        let base_off = merged_region_bytes;
+        let mut appended = false;
+        for &(slot, region_off) in &callee.over_aligned {
+            let rec = (slot - region_base, base_off + region_off);
+            if !merged_over_aligned.iter().any(|&(s, _)| s == rec.0) {
+                merged_over_aligned.push(rec);
+                appended = true;
+            }
+        }
+        if appended {
+            merged_frame_align = merged_frame_align.max(callee.frame_align);
+            merged_region_bytes += callee.realign_region_bytes;
+        }
+    }
 
     // Shift the caller's own rows -- switch tables and asm-goto edge
     // lists alike -- across the block-id shift, then append the callee's,
@@ -2592,11 +2624,9 @@ fn splice_multi_block(
         jump_tables: merged_jump_tables,
         synthetic_base: original.synthetic_base,
         multi_cell_slots: merged_multi_cell,
-        // The candidate filter rejects over-aligned callees, so only the
-        // caller's own realigned region carries through.
-        over_aligned: original.over_aligned,
-        frame_align: original.frame_align,
-        realign_region_bytes: original.realign_region_bytes,
+        over_aligned: merged_over_aligned,
+        frame_align: merged_frame_align,
+        realign_region_bytes: merged_region_bytes,
         // The candidate filter rejects returns-twice callees, so only
         // the caller's own flag can be set here.
         has_returns_twice_call: original.has_returns_twice_call,
@@ -4485,6 +4515,61 @@ mod tests {
             large < small * 6,
             "4x the module materialized {large} candidate entries against \
              {small}, past the 6x headroom over linear",
+        );
+    }
+
+    /// A callee whose over-aligned region needs exactly 16 splices; its
+    /// entries relocate into the caller's region behind the caller's own,
+    /// and repeated sites of the shared per-callee record add nothing.
+    #[test]
+    fn region_16_callee_merges_into_caller() {
+        let abi = Target::LinuxX64.abi();
+        let mut callee = asm_callee(100, 2);
+        callee.over_aligned = alloc::vec![(-1, 0)];
+        callee.frame_align = 16;
+        callee.realign_region_bytes = 16;
+        let mut caller = multi_call_caller(1, 2, 100, 2);
+        caller.over_aligned = alloc::vec![(-2, 0)];
+        caller.frame_align = 16;
+        caller.realign_region_bytes = 16;
+        let mut funcs = alloc::vec![caller, callee];
+        run(&mut funcs, 32, abi);
+        assert!(
+            funcs[0]
+                .insts
+                .iter()
+                .all(|i| !matches!(i, Inst::Call { .. })),
+            "a 16-aligned-region callee must inline"
+        );
+        assert_eq!(
+            funcs[0].over_aligned,
+            alloc::vec![(-2, 0), (-3, 16)],
+            "callee entry must relocate behind the caller's region"
+        );
+        assert_eq!(funcs[0].frame_align, 16);
+        assert_eq!(
+            funcs[0].realign_region_bytes, 32,
+            "two sites of one shared record must add the region once"
+        );
+    }
+
+    /// A callee whose region alignment is above 16 needs the realigning
+    /// prologue the splice cannot reproduce; it stays out of line.
+    #[test]
+    fn region_above_16_callee_stays_out_of_line() {
+        let abi = Target::LinuxX64.abi();
+        let mut callee = asm_callee(100, 2);
+        callee.over_aligned = alloc::vec![(-1, 0)];
+        callee.frame_align = 32;
+        callee.realign_region_bytes = 32;
+        let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 1), callee];
+        run(&mut funcs, 32, abi);
+        assert!(
+            funcs[0]
+                .insts
+                .iter()
+                .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 100)),
+            "an above-16 region callee must not inline"
         );
     }
 }

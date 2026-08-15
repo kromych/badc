@@ -449,9 +449,9 @@ Disassembly of section .text:
                	ret
 
 <chk_from_fp>:
-               	stp	x20, x21, [sp, #-0xa0]!
-               	stp	x29, x30, [sp, #0x90]
-               	add	x29, sp, #0x90
+               	stp	x20, x21, [sp, #-0xc0]!
+               	stp	x29, x30, [sp, #0xb0]
+               	add	x29, sp, #0xb0
                	mov	x8, x0
                	mov	x5, x2
                	mov	x9, x1
@@ -546,8 +546,8 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	sxtw	x0, w5
-               	ldp	x29, x30, [sp, #0x90]
-               	ldp	x20, x21, [sp], #0xa0
+               	ldp	x29, x30, [sp, #0xb0]
+               	ldp	x20, x21, [sp], #0xc0
                	ret
                	ldr	d0, [x4]
                	sub	x0, x29, #0x38
@@ -645,20 +645,20 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	add	x0, x5, #0x1
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x90]
-               	ldp	x20, x21, [sp], #0xa0
+               	ldp	x29, x30, [sp, #0xb0]
+               	ldp	x20, x21, [sp], #0xc0
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x90]
-               	ldp	x20, x21, [sp], #0xa0
+               	ldp	x29, x30, [sp, #0xb0]
+               	ldp	x20, x21, [sp], #0xc0
                	ret
                	b	<addr>
                	b	<addr>
 
 <chk_from_fp_neg>:
-               	str	x20, [sp, #-0x60]!
-               	stp	x29, x30, [sp, #0x50]
-               	add	x29, sp, #0x50
+               	str	x20, [sp, #-0x70]!
+               	stp	x29, x30, [sp, #0x60]
+               	add	x29, sp, #0x60
                	mov	x12, x0
                	mov	x7, x2
                	mov	x13, x1
@@ -760,12 +760,12 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	sxtw	x0, w7
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x20, [sp], #0x60
+               	ldp	x29, x30, [sp, #0x60]
+               	ldr	x20, [sp], #0x70
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x20, [sp], #0x60
+               	ldp	x29, x30, [sp, #0x60]
+               	ldr	x20, [sp], #0x70
                	ret
                	b	<addr>
 

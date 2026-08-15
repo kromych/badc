@@ -51,8 +51,8 @@ pub(super) struct DeclAlign {
     /// Required alignment of the object when it has automatic storage.
     pub auto_align: i64,
     /// `auto_align` exceeds the 8-byte frame slot, so the object needs the
-    /// prologue-realigned region.
-    pub realign_auto: bool,
+    /// over-aligned frame region.
+    pub region_auto: bool,
 }
 
 impl Compiler {
@@ -145,10 +145,9 @@ impl Compiler {
     /// C11 6.7.5 alignment of a block-scope declarator, shared by the
     /// function-body-top and inside-block declaration paths. A static
     /// local's `.data` slot honors the request like a file-scope object; an
-    /// automatic object lives in 8-byte frame slots, so a wider request goes to
-    /// the region the prologue realigns sp down to. Consumes
-    /// `pending.attr_align` either way, so a request cannot leak onto the
-    /// next declarator.
+    /// automatic object lives in 8-byte frame slots, so a wider requirement
+    /// goes to the over-aligned frame region. Consumes `pending.attr_align`
+    /// either way, so a request cannot leak onto the next declarator.
     pub(super) fn resolve_decl_align(
         &mut self,
         ty: i64,
@@ -186,28 +185,12 @@ impl Compiler {
         } else {
             core::cmp::max(obj_align, self.align_of_type(ty) as i64)
         };
-        // The region takes an explicit request above 8 -- from the
-        // declarator, a typedef carrier, or an attribute reaching the
-        // object's aggregate type -- and any alignment above 16.
-        // `auto_align` is 0 for a static local and for a pointer object,
-        // so neither reaches it however wide the attribute.
-        // TODO: a natural type alignment of exactly 16 with no explicit
-        // request still uses the 8-byte slots; placing the region at a
-        // static frame offset when 16 suffices would cover it without the
-        // sp move a realigning frame needs.
-        let type_explicit = if !obj_is_pointer && is_struct_value_ty(ty) {
-            self.structs[struct_id_of(ty)].explicit_align as i64
-        } else {
-            0
-        };
-        // A declarator request replaces both the typedef carrier and an
-        // aggregate's attribute-derived alignment (GNU set semantics).
-        let explicit = if req_align > 0 {
-            req_align
-        } else {
-            type_align.max(type_explicit)
-        };
-        let realign_auto = auto_align > 16 || (auto_align > 8 && explicit > 8);
+        // Any alignment above the 8-byte frame slot -- requested or derived
+        // from the type, `__int128` and 16-aligned aggregates included --
+        // goes to the over-aligned region. `auto_align` is 0 for a static
+        // local and for a pointer object, so neither reaches it however wide
+        // the attribute.
+        let region_auto = auto_align > 8;
         if auto_align > super::MAX_FRAME_ALIGN {
             return Err(self.compile_err(format!(
                 "requested alignment {auto_align} exceeds the maximum for an \
@@ -229,7 +212,7 @@ impl Compiler {
             type_align,
             obj_align,
             auto_align,
-            realign_auto,
+            region_auto,
         })
     }
 
@@ -249,9 +232,11 @@ impl Compiler {
         }
     }
 
-    /// Record an over-aligned automatic object's frame slot so the prologue
-    /// places it in the realigned region. Rejects the VLA combination: a
-    /// variable-length array moves sp itself and cannot share the region.
+    /// Record an over-aligned automatic object's frame slot so it is placed
+    /// in the over-aligned frame region. A variable-length array's storage is
+    /// carved by a 16-byte-rounded sp move, so an element alignment up to 16
+    /// is already met and needs no record; above 16 the storage cannot be
+    /// placed and is rejected.
     pub(super) fn record_over_aligned_local(
         &mut self,
         loc_idx: usize,
@@ -259,6 +244,9 @@ impl Compiler {
         auto_align: i64,
     ) -> Result<(), C5Error> {
         if self.symbols[loc_idx].is_vla {
+            if auto_align <= 16 {
+                return Ok(());
+            }
             return Err(self.compile_err(
                 "an over-aligned variable-length array is not supported; \
                  use static storage or a fixed size",
@@ -580,10 +568,10 @@ impl Compiler {
                 }
                 self.restore_pending_local_carriers(saved);
                 r?;
-                // C11 6.7.5: an automatic object aligned past the frame's
-                // 16-byte guarantee goes in the prologue-realigned region,
-                // recorded now that its slot is assigned.
-                if let Some(a) = decl_align.as_ref().filter(|a| a.realign_auto) {
+                // C11 6.7.5: an automatic object aligned past the 8-byte
+                // frame slot goes in the over-aligned frame region, recorded
+                // now that its slot is assigned.
+                if let Some(a) = decl_align.as_ref().filter(|a| a.region_auto) {
                     self.record_over_aligned_local(loc_idx, ty, a.auto_align)?;
                 }
             }

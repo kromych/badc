@@ -58,27 +58,27 @@ Disassembly of section .text:
                	cbz	x4, <addr>
                	sxtw	x0, w4
                	ret
-               	mov	x5, #0x0                // =0
-               	mov	w4, w0
+               	mov	x4, #0x0                // =0
+               	mov	w5, w0
                	lsr	x6, x0, #32
                	mov	w7, w1
                	lsr	x8, x1, #32
-               	mul	x9, x4, x7
+               	mul	x9, x5, x7
                	lsr	x9, x9, #32
                	mul	x7, x6, x7
                	add	x7, x7, x9
                	mov	w9, w7
                	lsr	x7, x7, #32
-               	mul	x4, x4, x8
-               	add	x4, x4, x9
-               	lsr	x4, x4, #32
+               	mul	x5, x5, x8
+               	add	x5, x5, x9
+               	lsr	x5, x5, #32
                	mul	x6, x6, x8
                	add	x6, x6, x7
-               	add	x4, x6, x4
-               	mul	x6, x0, x5
-               	mul	x5, x5, x1
-               	add	x4, x4, x6
-               	add	x5, x4, x5
+               	add	x5, x6, x5
+               	mul	x6, x0, x4
+               	mul	x4, x4, x1
+               	add	x5, x5, x6
+               	add	x5, x5, x4
                	mov	x17, #0x3a3b            // =14907
                	movk	x17, #0x9b83, lsl #16
                	movk	x17, #0x6474, lsl #32

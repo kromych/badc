@@ -25,6 +25,7 @@
 //!   saved rbp, ret address        [rbp]
 //!   locals area                   [rbp - locals_bytes .. rbp]
 //!   allocator spill slots         ...
+//!   over-aligned region           [rbp + align_region_off ..]  (16-mode only)
 //!   saved callee-saved GPRs       rsp
 //! ```
 //!
@@ -97,16 +98,23 @@ pub(crate) struct Frame {
     /// was reused, so nothing the block needs afterwards may live there.
     pub asm_scratch_off: i32,
     /// The body moves rsp at runtime (`alloca` / C99 6.7.6.2 VLA), or the
-    /// prologue realigns rsp for an over-aligned automatic object, so spill
-    /// slots are addressed through rbp and the epilogue re-establishes rsp
-    /// from rbp before tearing the frame down.
+    /// prologue realigns rsp for an automatic object aligned above 16, so
+    /// spill slots are addressed through rbp and the epilogue re-establishes
+    /// rsp from rbp before tearing the frame down.
     pub dynamic_sp: bool,
-    /// Alignment the prologue forces on rsp for over-aligned automatic objects
-    /// (C11 6.7.5), a power of two > 16, or 0 when none. The realigned region
-    /// sits below the static frame; the objects live at `[rsp + region_off]`.
+    /// Alignment the prologue forces on rsp for automatic objects aligned
+    /// above 16 (C11 6.7.5), a power of two > 16, or 0 when none. The
+    /// realigned region sits below the static frame; the objects live at
+    /// `[rsp + region_off]`.
     pub realign_align: u32,
-    /// Byte size of the realigned region, a multiple of `realign_align`.
+    /// Byte size of the realigned region, a multiple of 16.
     pub realign_region_bytes: u32,
+    /// rbp-relative byte offset (negative) of the over-aligned region when the
+    /// region alignment is exactly 16, or 0 when none. rbp and every frame
+    /// region above it are 16-byte multiples, so the region base is 16-aligned
+    /// with no rsp move; its bytes are counted in `frame_bytes` and the
+    /// objects live at `[rbp + align_region_off + region_off]`.
+    pub align_region_off: i64,
 }
 
 fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Frame {
@@ -145,12 +153,26 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
     } else {
         0
     };
+    // An over-aligned region whose alignment is exactly 16 joins the static
+    // frame between the rbp-addressed regions and the rsp-addressed saved-
+    // register block: every region above it is a 16-byte multiple, so its
+    // base is 16-aligned with no rsp move. Above 16 the prologue realigns
+    // rsp instead. A region whose members have no emitted access needs no
+    // bytes, the same decision `compute_frame_base` makes for the locals
+    // region (`locals_bytes` is 0 exactly when no local access survives).
+    let region_bytes = func.realign_region_bytes.max(0) as u32;
+    let static_region_bytes = if func.frame_align == 16 && locals_bytes > 0 {
+        region_bytes
+    } else {
+        0
+    };
     let frame_bytes = locals_bytes
         + alloc_spill_bytes
         + saved_gpr_bytes
         + va_save_bytes
         + saved_fpr_bytes
-        + asm_bytes;
+        + asm_bytes
+        + static_region_bytes;
     let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
     // A Win64 variadic callee receives every argument (named and
     // variadic) in a contiguous 8-byte-per-argument region: the
@@ -166,12 +188,16 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
     } else {
         16
     };
-    // An over-aligned automatic object realigns rsp in the prologue and lives
-    // in a region below the static frame, addressed sp-relative; the frame is
-    // dynamic-sp so spills go through rbp and the epilogue restores rsp from
-    // rbp (C11 6.7.5).
-    let realign_align = func.frame_align.max(0) as u32;
-    let realign_region_bytes = func.realign_region_bytes.max(0) as u32;
+    // An automatic object aligned above 16 realigns rsp in the prologue and
+    // lives in a region below the static frame, addressed sp-relative; the
+    // frame is dynamic-sp so spills go through rbp and the epilogue restores
+    // rsp from rbp (C11 6.7.5). An alignment of exactly 16 keeps the static
+    // frame and addresses the region rbp-relative.
+    let realign_align = if func.frame_align > 16 {
+        func.frame_align as u32
+    } else {
+        0
+    };
     Frame {
         frame_bytes,
         alloc_spill_base: locals_bytes,
@@ -182,7 +208,13 @@ fn compute_frame(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Fra
         asm_scratch_off,
         dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || realign_align > 0,
         realign_align,
-        realign_region_bytes,
+        realign_region_bytes: if realign_align > 0 { region_bytes } else { 0 },
+        align_region_off: if static_region_bytes > 0 {
+            -((locals_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes + static_region_bytes)
+                as i64)
+        } else {
+            0
+        },
     }
 }
 
@@ -3946,14 +3978,20 @@ fn emit_store_fp_mem(
 /// directly, skipping the `LocalAddr` materialisation the
 /// `LocalAddr` + `Load` pair would have required.
 /// Base register and byte displacement for addressing a local slot. An
-/// over-aligned automatic object lives in the realigned region at
-/// `[rsp + region_off]` (rsp aligned to `frame.realign_align`); every other
-/// slot is `[rbp + local_slot_off]` (C11 6.7.5).
+/// over-aligned automatic object lives in the over-aligned region: at
+/// `[rsp + region_off]` when the prologue realigned rsp (alignment above 16),
+/// at `[rbp + align_region_off + region_off]` for the static 16-aligned
+/// placement; every other slot is `[rbp + local_slot_off]` (C11 6.7.5).
 fn local_slot_base_disp(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -> (Reg, i64) {
     if off < 0
+        && (frame.align_region_off != 0 || frame.realign_align > 0)
         && let Some(&(_, region_off)) = func.over_aligned.iter().find(|&&(s, _)| s == off)
     {
-        (Reg::RSP, region_off)
+        if frame.align_region_off != 0 {
+            (Reg::RBP, frame.align_region_off + region_off)
+        } else {
+            (Reg::RSP, region_off)
+        }
     } else {
         (Reg::RBP, local_slot_off(off, func, frame, abi))
     }

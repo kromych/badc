@@ -770,6 +770,9 @@ fn collect_subprograms(
                     // +32). Negative (locals) use 8-byte stride. Mirror
                     // of `aarch64::lea_offset_bytes`. The x86_64 backend
                     // matches; both arches share this layout.
+                    // TODO: an over-aligned automatic lives in the frame's
+                    // over-aligned region, not at this slot offset; its
+                    // location needs the per-function region base.
                     fp_byte_offset: if eff >= 2 { (eff - 1) * 16 } else { eff * 8 },
                     promoted: build
                         .promoted_local_slots

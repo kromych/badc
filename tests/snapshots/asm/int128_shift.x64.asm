@@ -20,15 +20,15 @@ Disassembly of section .text:
                	movq	%r14, 0x18(%rsp)
                	movq	%r15, 0x20(%rsp)
                	leaq	<rip>, %rax
-               	movq	(%rax), %rcx
+               	movq	(%rax), %rax
                	xorq	%rdx, %rdx
                	leaq	<rip>, %r10
-               	movq	%r10, 0x38(%rsp)
-               	movq	0x38(%rsp), %r10
-               	movq	(%r10), %rax
+               	movq	%r10, 0x40(%rsp)
+               	movq	0x40(%rsp), %r10
+               	movq	(%r10), %rcx
                	movq	%rdx, %rdi
-               	orq	%rax, %rdi
-               	movq	%rcx, %r9
+               	orq	%rcx, %rdi
+               	movq	%rax, %r9
                	orq	%rdx, %r9
                	movl	$0x1, %r14d
                	movabsq	$-0x8000000000000000, %rbx # imm = 0x8000000000000000
@@ -345,11 +345,10 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	movq	%rdi, %rcx
-               	shlq	%rcx
+               	movq	%rdi, %rax
+               	shlq	%rax
                	movabsq	$0x22446688aaccee, %r11 # imm = 0x22446688AACCEE
-               	movq	%rcx, %rax
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -366,11 +365,10 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	movq	%rdi, %rcx
-               	shlq	$0x3f, %rcx
+               	movq	%rdi, %rax
+               	shlq	$0x3f, %rax
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	movq	%rcx, %rax
-               	cmpq	%r11, %rcx
+               	cmpq	%r11, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -509,7 +507,7 @@ Disassembly of section .text:
                	movq	%r8, %rcx
                	andq	%rsi, %rcx
                	orq	$0x0, %rcx
-               	movq	0x38(%rsp), %r10
+               	movq	0x40(%rsp), %r10
                	movq	(%r10), %rdx
                	cmpq	%rdx, %rax
                	setne	%al

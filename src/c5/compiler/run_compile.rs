@@ -1845,15 +1845,18 @@ impl Compiler {
                     // literals); these never appear in the variable list.
                     multi_cell.extend_from_slice(&self.multi_cell_temps);
                     let over_aligned = core::mem::take(&mut self.func_over_aligned);
-                    // C11 6.7.5 + C99 6.7.6.2: the over-aligned region is
-                    // reserved by moving sp in the prologue, which `alloca` and
-                    // a variable-length array also do, so the two cannot share
-                    // a frame. Diagnosed here, where both facts are known, so
-                    // the combination reads as a source-level rejection rather
+                    // C11 6.7.5 + C99 6.7.6.2: an alignment above 16 is met by
+                    // realigning sp in the prologue, which `alloca` and a
+                    // variable-length array preclude (both move sp). Exactly 16
+                    // is met at a static frame offset and coexists with both.
+                    // Diagnosed here, where both facts are known, so the
+                    // combination reads as a source-level rejection rather
                     // than reaching the walker's internal error.
-                    if !over_aligned.is_empty() && self.uses_alloca_in_current_fn {
+                    if over_aligned.iter().any(|&(_, align, _)| align > 16)
+                        && self.uses_alloca_in_current_fn
+                    {
                         return Err(self.compile_err(
-                            "an over-aligned automatic object cannot share a function \
+                            "an automatic object aligned above 16 cannot share a function \
                              with `alloca` or a variable-length array; use static storage",
                         ));
                     }

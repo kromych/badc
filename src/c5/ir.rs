@@ -1332,17 +1332,19 @@ pub(crate) struct FunctionSsa {
     /// built outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
     /// Automatic objects whose required alignment exceeds the 8-byte frame
-    /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`), as `(slot_off,
-    /// region_off)`. The prologue reserves a `frame_align`-aligned region
-    /// below the static frame; every backend resolves these slots to
-    /// `region_base + region_off` rather than the fp-relative slot. Empty for
-    /// the common case.
+    /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`, or a type whose natural
+    /// alignment is 16), as `(slot_off, region_off)`. The prologue reserves a
+    /// `frame_align`-aligned region below the static frame; every backend
+    /// resolves these slots to `region_base + region_off` rather than the
+    /// fp-relative slot. Empty for the common case.
     pub over_aligned: Vec<(i64, i64)>,
-    /// Alignment of the realigned region (max over `over_aligned`, a power of
-    /// two >= 16), or 0 when no automatic object needs realignment. Non-zero
-    /// forces the dynamic-sp frame model.
+    /// Alignment of the over-aligned region (max over `over_aligned`, a power
+    /// of two >= 16), or 0 when no automatic object needs it. Exactly 16 keeps
+    /// a static frame: the frame base is 16-aligned and every frame region a
+    /// 16-byte multiple, so the region sits at a fixed frame offset. Above 16
+    /// the prologue realigns sp, which forces the dynamic-sp frame model.
     pub frame_align: i64,
-    /// Byte size of the realigned region, a multiple of `frame_align`; 0 when
+    /// Byte size of the over-aligned region, a multiple of 16; 0 when
     /// `over_aligned` is empty.
     pub realign_region_bytes: i64,
     /// True when the body calls a function that may return twice into

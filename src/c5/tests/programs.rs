@@ -4220,6 +4220,15 @@ fn multi_dim_array_typedef_object() {
 }
 
 #[test]
+fn inner_binding_keeps_outer_array_shape() {
+    // A parameter or block local of the same name binds for its own scope
+    // only (C99 6.2.1p4). The declarator writes the shared symbol slot
+    // before the scope save runs, so the outer array's stride list has to
+    // be saved from before that write.
+    assert_eq!(run_fixture("inner_binding_keeps_outer_array_shape.c"), 0);
+}
+
+#[test]
 fn ptr_to_array_typedef_roundtrip() {
     // End-to-end fixture for the pointer-to-array type layer: typedef
     // alias deref, pointer-to-pointer store, subscripts, sizeof, and a

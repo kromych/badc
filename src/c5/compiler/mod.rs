@@ -806,6 +806,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// own declaration.
     pub member_decl_save: Option<(usize, alloc::boxed::Box<crate::c5::symbol::Symbol>)>,
     pub in_member_declarator: bool,
+    /// Array shape (`inner_array_size`, `array_dims`) the identifier a
+    /// declarator just bound carried before that declarator overwrote it.
+    /// The scope save runs after the declarator, so it would otherwise
+    /// record the new binding's shape as the outer one's (C99 6.2.1p4).
+    /// Taken by `shadow_symbol` / `capture_block_shadow` for that symbol.
+    pub declarator_prior_shape: Option<(usize, i64, alloc::vec::Vec<i64>)>,
     /// Set by `parse_function_params` immediately before the per-parameter
     /// `parse_declarator` call and taken (cleared) at the top of that call,
     /// so it applies only to the parameter's own declarator and not to any
@@ -1199,6 +1205,7 @@ impl Default for Pending {
             parsing_fn_ptr_proto: false,
             member_decl_save: None,
             in_member_declarator: false,
+            declarator_prior_shape: None,
             param_decl_context: false,
             last_array_decay_size: 0,
             last_array_decay_dims: alloc::vec::Vec::new(),

@@ -33,6 +33,13 @@ use super::Compiler;
 use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier, strip_unsigned};
 
 impl Compiler {
+    /// Record the array shape `idx` holds before this declarator
+    /// overwrites it, for the scope save that runs after the declarator.
+    fn record_prior_shape(&mut self, idx: usize) {
+        let s = &self.symbols[idx];
+        self.pending.declarator_prior_shape = Some((idx, s.inner_array_size, s.array_dims.clone()));
+    }
+
     /// Speculatively parse a block-scope function prototype
     /// `[*]name(params);`. C99 6.7p1 / 6.2.2p5: with no storage-class
     /// specifier or `extern`, such a name has external linkage
@@ -872,6 +879,7 @@ impl Compiler {
                 // scopes: each new binding starts fresh, so any
                 // per-symbol shape metadata must be cleared when the
                 // binding's scope begins.
+                self.record_prior_shape(idx);
                 self.symbols[idx].inner_array_size = inner_dim;
                 self.symbols[idx].array_dims = if full_dims.len() >= 2 {
                     full_dims
@@ -886,6 +894,7 @@ impl Compiler {
             // binding of the same name. A pointer over an array
             // typedef needs no symbol-side shape: the leading-`*`
             // epilogue already folded the array layer into the type.
+            self.record_prior_shape(idx);
             self.symbols[idx].inner_array_size = 0;
             self.symbols[idx].array_dims = alloc::vec::Vec::new();
         }

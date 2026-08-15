@@ -78,7 +78,10 @@ impl Compiler {
     /// carries the field the unwind reads.
     pub(super) fn capture_block_shadow(&mut self, idx: usize) -> BlockShadow {
         self.scope_bound.push(idx as u32);
+        let prior = self.take_prior_shape(idx);
         let s = &self.symbols[idx];
+        let (inner_array_size, array_dims) =
+            prior.unwrap_or_else(|| (s.inner_array_size, s.array_dims.clone()));
         BlockShadow {
             idx,
             class: s.class,
@@ -90,8 +93,8 @@ impl Compiler {
             is_variadic: s.is_variadic,
             array_size: s.array_size,
             type_align: s.type_align,
-            inner_array_size: s.inner_array_size,
-            array_dims: s.array_dims.clone(),
+            inner_array_size,
+            array_dims,
             is_vla: s.is_vla,
             vla_ptr_slot: s.vla_ptr_slot,
             vla_size_slot: s.vla_size_slot,

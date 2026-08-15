@@ -752,8 +752,22 @@ impl Compiler {
     /// scope when a parameter or local declaration shadows an
     /// outer name; the function-exit cleanup pass restores the
     /// outer binding by reading the shadow fields back.
+    /// The array shape `idx` held before its own declarator overwrote it,
+    /// consumed so it applies to one save only.
+    pub(super) fn take_prior_shape(&mut self, idx: usize) -> Option<(i64, alloc::vec::Vec<i64>)> {
+        match self.pending.declarator_prior_shape {
+            Some((i, _, _)) if i == idx => self
+                .pending
+                .declarator_prior_shape
+                .take()
+                .map(|(_, inner, dims)| (inner, dims)),
+            _ => None,
+        }
+    }
+
     pub(super) fn shadow_symbol(&mut self, idx: usize) {
         self.scope_bound.push(idx as u32);
+        let prior = self.take_prior_shape(idx);
         let s = &mut self.symbols[idx];
         s.h_class = s.class;
         s.h_type = s.type_;
@@ -764,12 +778,20 @@ impl Compiler {
         s.h_is_variadic = s.is_variadic;
         s.h_array_size = s.array_size;
         s.h_type_align = s.type_align;
-        s.h_inner_array_size = s.inner_array_size;
         // Clone rather than `mem::take`: the inner-scope binding
         // (parameter or block local) keeps using the live
         // `array_dims` for the duration of its scope. Restore
         // copies the shadow back on scope exit.
-        s.h_array_dims = s.array_dims.clone();
+        match prior {
+            Some((inner, dims)) => {
+                s.h_inner_array_size = inner;
+                s.h_array_dims = dims;
+            }
+            None => {
+                s.h_inner_array_size = s.inner_array_size;
+                s.h_array_dims = s.array_dims.clone();
+            }
+        }
         s.h_is_vla = s.is_vla;
         s.h_vla_ptr_slot = s.vla_ptr_slot;
         s.h_vla_size_slot = s.vla_size_slot;

@@ -6546,6 +6546,27 @@ fn closefrom_is_a_linux_binding() {
 }
 
 #[test]
+fn underscore_putenv_is_an_msvcrt_binding() {
+    use crate::Target;
+    // msvcrt spells POSIX putenv `_putenv`; code written against the CRT
+    // uses that name directly. The Unix targets keep only `putenv`.
+    let src = "#include <stdlib.h>\nint f(char *s) { return _putenv(s); }\n";
+    assert!(header_snippet_compiles(src, Target::WindowsX64));
+    assert!(header_snippet_compiles(src, Target::WindowsAarch64));
+    for target in [Target::MacOSAarch64, Target::LinuxX64, Target::LinuxAarch64] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "_putenv must be absent on {target:?}"
+        );
+    }
+    // `putenv` itself stays available everywhere.
+    let posix = "#include <stdlib.h>\nint f(char *s) { return putenv(s); }\n";
+    for target in ALL_TARGETS {
+        assert!(header_snippet_compiles(posix, target), "{target:?}");
+    }
+}
+
+#[test]
 fn sys_types_declares_time_t() {
     use crate::Target;
     // POSIX-2017 requires <sys/types.h> to define `time_t`; system

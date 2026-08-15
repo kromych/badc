@@ -193,6 +193,7 @@ int mergesort(char *base, int n, int size, int *cmp);
 // always replaces; setenv honors POSIX overwrite via the inline wrapper
 // below (declared here, defined after getenv/_putenv_s are in scope).
 #pragma binding(msvcrt::putenv,    "_putenv")
+#pragma binding(msvcrt::_putenv,   "_putenv")
 #pragma binding(msvcrt::_putenv_s, "_putenv_s")
 #pragma binding(msvcrt::_wputenv_s, "_wputenv_s")
 #pragma binding(msvcrt::qsort,     "qsort")
@@ -362,6 +363,9 @@ _Noreturn void exit(int status);
 int system(char *cmd);
 char *getenv(char *name);
 #ifdef _WIN32
+// msvcrt spells POSIX putenv `_putenv`; code written against the CRT
+// calls that name directly.
+int _putenv(char *string);
 int _putenv_s(char *name, char *value);
 // POSIX setenv (IEEE Std 1003.1): overwrite == 0 leaves an existing
 // binding untouched and returns 0. Inline so the compiled, JIT, and

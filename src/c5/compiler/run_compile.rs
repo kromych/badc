@@ -321,6 +321,7 @@ impl Compiler {
             // Reset the const carrier so a prior declaration's `const`
             // base does not leak onto this iteration's declarators.
             self.pending.base_is_const = false;
+            let _ = self.take_base_spelling();
             // Storage-class prefixes -- can appear in any order
             // and any combination before the type. C lets you
             // mix `static extern` (silly but legal in some
@@ -417,6 +418,8 @@ impl Compiler {
                     // `const` is recorded out-of-band for value folding.
                     qual_bits |= self.lex_qualifier_bits();
                     self.pending.base_is_const |= self.lex_is_const_qual();
+                    self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+                    self.pending.spell_base_const |= self.lex_is_const_qual();
                     self.next()?;
                 } else {
                     break;
@@ -463,6 +466,7 @@ impl Compiler {
                 // Typedef-name as base type at file scope: `Foo bar;`
                 // where `Foo` was bound by a prior `typedef`.
                 bt = self.symbols[self.lex.curr_id_idx].type_;
+                self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
                 // Carry the typedef's fn-ptr lineage forward so a
                 // declarator like `fn_t fp` (no leading `*`) still
                 // gets `Symbol::fn_ptr_indirection = 1`. The
@@ -552,6 +556,8 @@ impl Compiler {
                 }
                 qual_bits |= self.lex_qualifier_bits();
                 self.pending.base_is_const |= self.lex_is_const_qual();
+                self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+                self.pending.spell_base_const |= self.lex_is_const_qual();
                 self.next()?;
             }
             // `__attribute__((vector_size(N)))` rebuilds the base type into a
@@ -592,6 +598,8 @@ impl Compiler {
                 } else if self.lex.tk == Token::TypeQual {
                     qual_bits |= self.lex_qualifier_bits();
                     self.pending.base_is_const |= self.lex_is_const_qual();
+                    self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+                    self.pending.spell_base_const |= self.lex_is_const_qual();
                     self.next()?;
                 } else if self.lex.tk == Token::Attribute
                     || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
@@ -602,6 +610,7 @@ impl Compiler {
                 }
             }
             bt = apply_qual_bits(bt, qual_bits);
+            let base_spelling = self.take_base_spelling();
 
             // A function-pointer typedef base type contributes its lineage
             // to every declarator in the list (`fn_t a, b;`). The
@@ -1011,6 +1020,10 @@ impl Compiler {
                 let prior_params = self.symbols[id_idx].params.clone();
                 let prior_is_variadic = self.symbols[id_idx].is_variadic;
                 self.symbols[id_idx].type_ = ty;
+                // Covers both branches below: for an object the spelling
+                // is the object's, for a function it is the return
+                // type's.
+                self.symbols[id_idx].decl_spelling = self.decl_spelling(base_spelling);
                 // An explicit return type replaces the implicit-`int`
                 // default (Sys binding without a prior prototype).
                 self.symbols[id_idx].implicit_return_int = false;
@@ -1801,6 +1814,7 @@ impl Compiler {
                                 } else {
                                     sym.array_dims.clone()
                                 },
+                                decl_spelling: sym.decl_spelling,
                             });
                         }
                     }

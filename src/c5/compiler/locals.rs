@@ -312,6 +312,7 @@ impl Compiler {
         // Reset the per-declaration carriers; a stale one from the
         // enclosing function would bleed onto a static's emission record.
         self.pending.base_is_const = false;
+        let _ = self.take_base_spelling();
         self.pending.saw_register_storage = false;
         self.pending.attr_used = false;
         self.pending.attr_section = None;
@@ -348,6 +349,7 @@ impl Compiler {
             is_static = true;
         }
         let lbt = apply_qual_bits(base, qual_bits);
+        let base_spelling = self.take_base_spelling();
         // A typedef-carried type alignment applies to every declarator of
         // this declaration; an initializer's own type parses (casts,
         // `sizeof`) reset the pending carrier, so capture it once here.
@@ -509,6 +511,7 @@ impl Compiler {
                 if convert_extern {
                     self.symbols[loc_idx].class = Token::Glo as i64;
                     self.symbols[loc_idx].type_ = ty;
+                    self.symbols[loc_idx].decl_spelling = self.decl_spelling(base_spelling);
                     // Record the dimension so a subscript sees an array
                     // (6.7.6.2). `-1` (unsized `extern T name[];`) is kept as
                     // at file scope: an incomplete array still decays to a
@@ -536,6 +539,7 @@ impl Compiler {
             } else if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
+                self.symbols[loc_idx].decl_spelling = self.decl_spelling(base_spelling);
                 self.symbols[loc_idx].is_thread_local = is_thread_local;
                 // C99 6.2.4p3: static storage, block scope. The function-body
                 // scope's restore pass is gated on class `Loc`, which a
@@ -574,6 +578,7 @@ impl Compiler {
                 }
                 self.symbols[loc_idx].class = Token::Loc as i64;
                 self.symbols[loc_idx].type_ = ty;
+                self.symbols[loc_idx].decl_spelling = self.decl_spelling(base_spelling);
                 self.symbols[loc_idx].was_referenced = false;
                 self.symbols[loc_idx].decl_line = self.lex.line;
                 let decl_file = self.intern_source_file() as u32;
@@ -700,6 +705,8 @@ impl Compiler {
             // out of band for value folding.
             *qual_bits |= self.lex_qualifier_bits();
             self.pending.base_is_const |= self.lex_is_const_qual();
+            self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+            self.pending.spell_base_const |= self.lex_is_const_qual();
             saw = true;
             self.next()?;
         }

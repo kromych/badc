@@ -1,6 +1,30 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+/// The part of a declaration's type that the `i64` type tag does not
+/// carry: the typedef it was spelled through, and the `const` /
+/// `restrict` qualifiers. DWARF describes each with its own DIE
+/// (DWARF 4 5.2, 5.3), so the debug-info writers read this to name a
+/// type the way the source did instead of naming the type it resolves
+/// to. `volatile` is absent because the tag already records it
+/// (`types::VOLATILE_BIT`), and nothing outside debug info reads any
+/// of it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DeclSpelling {
+    /// Index in the unit's symbol table of the typedef the base type
+    /// was named through. The slot keeps its name for the whole unit
+    /// even where a block-scope binding reverts its class.
+    pub typedef: Option<u32>,
+    /// Qualifiers on the base type. Under a pointer declarator these
+    /// are the pointee's (`const T *p`).
+    pub base_const: bool,
+    pub base_restrict: bool,
+    /// Qualifiers on the declared object itself (`T *const p`), which
+    /// C99 6.7.5.1p1 takes from the outermost derivation.
+    pub outer_const: bool,
+    pub outer_restrict: bool,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Symbol {
     pub name: String,
@@ -238,6 +262,10 @@ pub(crate) struct Symbol {
     pub is_zero_len_array: bool,
     /// Shadow slot for `is_zero_len_array`. See `h_array_size`.
     pub h_is_zero_len_array: bool,
+
+    /// How the declaration spelled the type; see [`DeclSpelling`].
+    /// Debug info only.
+    pub decl_spelling: DeclSpelling,
 
     /// True for a `const`-qualified plain integer object with static
     /// storage (`static const int N = ...`, a file-scope `const`). C99 6.6
@@ -716,6 +744,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_vla_size_slot: _,
             is_zero_len_array: _,
             h_is_zero_len_array: _,
+            decl_spelling: _, // debug-info spelling, not an offset
             is_const_qualified: _,
             const_object_value: _,
             h_const_object_value: _, // scope-restore shadow

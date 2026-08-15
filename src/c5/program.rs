@@ -504,6 +504,9 @@ pub struct VariableInfo {
     /// first (mirrors `Symbol::array_dims`). Empty for a scalar or a
     /// one-dimensional array, whose extent `array_size` already gives.
     pub array_dims: Vec<i64>,
+    /// How the declaration spelled the type; see
+    /// [`crate::c5::symbol::DeclSpelling`]. Debug info only.
+    pub decl_spelling: crate::c5::symbol::DeclSpelling,
 }
 
 // ---- Data-offset surface ----

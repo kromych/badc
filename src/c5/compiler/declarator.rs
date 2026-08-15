@@ -281,11 +281,13 @@ impl Compiler {
         // A `const` after the outermost `*` qualifies the declared object,
         // so only the last derivation's qualifiers count.
         let mut outer_const = false;
+        let mut outer_restrict = false;
         while self.lex.tk == Token::MulOp {
             self.next()?;
             ty = add_ptr_level(ty);
             leading_ptr_count += 1;
             outer_const = false;
+            outer_restrict = false;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
             // `char *restrict s`. A `volatile` here qualifies the pointer
             // object, which is what `apply_qual_bits` records by clearing
@@ -295,6 +297,7 @@ impl Compiler {
             loop {
                 if self.lex.tk == Token::TypeQual {
                     outer_const |= self.lex_is_const_qual();
+                    outer_restrict |= self.lex_is_restrict_qual();
                     ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                     self.next()?;
                 } else if self.at_attribute_specifier() {
@@ -305,6 +308,7 @@ impl Compiler {
             }
         }
         self.pending.declarator_outer_const = outer_const;
+        self.pending.declarator_outer_restrict = outer_restrict;
         // Record the leading `*` count so a use of an array typedef can
         // tell `A x` (fold the dimension onto `x`) from `A *p` (pointer to
         // the array) even when the typedef's element type is itself a

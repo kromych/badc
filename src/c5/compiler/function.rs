@@ -101,11 +101,13 @@ impl Compiler {
             // cannot leak; the base-type parse below sets it for the
             // leading form, the post-declarator skip for the trailing.
             self.pending.attr_maybe_unused = false;
+            let _ = self.take_base_spelling();
             let base = if self.lex_is_type_start() {
                 self.parse_decl_base_type()?
             } else {
                 Ty::Int as i64
             };
+            let base_spelling = self.take_base_spelling();
             // `(void)` via a typedef alias. The early check above
             // matches only the bare `void` keyword; aliases reach
             // here with `base_was_void` set by `parse_decl_base_type`.
@@ -288,6 +290,7 @@ impl Compiler {
             self.shadow_symbol(param_idx);
             self.symbols[param_idx].class = Token::Loc as i64;
             self.symbols[param_idx].type_ = full_ty;
+            self.symbols[param_idx].decl_spelling = self.decl_spelling(base_spelling);
             self.symbols[param_idx].array_size = 0;
             self.symbols[param_idx].was_referenced = false;
             self.symbols[param_idx].decl_line = self.lex.line;

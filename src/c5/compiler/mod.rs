@@ -286,6 +286,9 @@ pub struct StructField {
     /// typedef-carried `aligned(N)` the flat field type cannot express.
     /// `__alignof__` on a member lvalue reports it. 0 for bitfields.
     pub align: u32,
+    /// How the member declaration spelled the type; see
+    /// [`crate::c5::symbol::DeclSpelling`]. Debug info only.
+    pub decl_spelling: crate::c5::symbol::DeclSpelling,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler
@@ -562,6 +565,15 @@ pub(in crate::c5::compiler) struct Pending {
     /// implementation; GCC and common practice fold `const int N = ...`).
     pub base_is_const: bool,
 
+    /// Side channel from `parse_decl_base_type`: the base specifiers
+    /// included `restrict`, and the symbol-table index of the typedef
+    /// they named the base type through. Debug info only -- nothing
+    /// else reads either, so neither reaching a declaration it does
+    /// not belong to can change generated code.
+    pub spell_base_const: bool,
+    pub spell_base_restrict: bool,
+    pub spell_base_typedef: Option<u32>,
+
     /// Side channel from `parse_decl_base_type` to the function-
     /// prototype path: the base type was spelled `long double`,
     /// not bare `double`. Cleared at the start of every base-type
@@ -718,6 +730,9 @@ pub(in crate::c5::compiler) struct Pending {
     /// declared object itself, unlike a `const` in the specifiers of a
     /// pointer declaration (`const T *p`), which applies to the pointee.
     pub declarator_outer_const: bool,
+    /// `declarator_outer_const` for `restrict` (`T *restrict p`).
+    /// Debug info only.
+    pub declarator_outer_restrict: bool,
     /// Set true while parsing a block-scope object declarator, where
     /// a non-constant array dimension is a C99 6.7.6.2 variable-length
     /// array. Elsewhere (file scope, struct member, typedef, cast,
@@ -1135,6 +1150,9 @@ impl Pending {
         DeclTypeCarriers {
             base_was_void: core::mem::take(&mut self.base_was_void),
             base_is_const: core::mem::take(&mut self.base_is_const),
+            spell_base_const: core::mem::take(&mut self.spell_base_const),
+            spell_base_restrict: core::mem::take(&mut self.spell_base_restrict),
+            spell_base_typedef: self.spell_base_typedef.take(),
             base_was_long_double: core::mem::take(&mut self.base_was_long_double),
             base_is_function_type: core::mem::take(&mut self.base_is_function_type),
             fn_ptr_indirection: self.fn_ptr_indirection.take(),
@@ -1152,6 +1170,9 @@ impl Pending {
     pub(super) fn restore_decl_type_carriers(&mut self, s: DeclTypeCarriers) {
         self.base_was_void = s.base_was_void;
         self.base_is_const = s.base_is_const;
+        self.spell_base_const = s.spell_base_const;
+        self.spell_base_restrict = s.spell_base_restrict;
+        self.spell_base_typedef = s.spell_base_typedef;
         self.base_was_long_double = s.base_was_long_double;
         self.base_is_function_type = s.base_is_function_type;
         self.fn_ptr_indirection = s.fn_ptr_indirection;
@@ -1172,6 +1193,9 @@ impl Pending {
 pub(super) struct DeclTypeCarriers {
     base_was_void: bool,
     base_is_const: bool,
+    spell_base_const: bool,
+    spell_base_restrict: bool,
+    spell_base_typedef: Option<u32>,
     base_was_long_double: bool,
     base_is_function_type: bool,
     fn_ptr_indirection: Option<i64>,
@@ -1190,6 +1214,9 @@ impl Default for Pending {
         Self {
             base_was_void: false,
             base_is_const: false,
+            spell_base_const: false,
+            spell_base_restrict: false,
+            spell_base_typedef: None,
             base_was_long_double: false,
             fn_params: None,
             fn_ptr_indirection: None,
@@ -1208,6 +1235,7 @@ impl Default for Pending {
             typedef_base_array_dims: alloc::vec::Vec::new(),
             declarator_leading_ptr_count: 0,
             declarator_outer_const: false,
+            declarator_outer_restrict: false,
             vla_allowed: false,
             vla_dim_expr: None,
             declarator_zero_len_array: false,

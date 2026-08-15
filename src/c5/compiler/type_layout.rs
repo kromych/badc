@@ -207,6 +207,7 @@ impl Compiler {
             anon_struct_group: 0,
             explicit_align: 0,
             align: 0,
+            decl_spelling: Default::default(),
         };
         self.structs.push(StructDef {
             name: "__int128".to_string(),
@@ -300,6 +301,7 @@ impl Compiler {
             anon_struct_group: 0,
             explicit_align: 0,
             align: 0,
+            decl_spelling: Default::default(),
         };
         self.structs.push(StructDef {
             name: "__builtin_va_list".to_string(),
@@ -390,6 +392,7 @@ impl Compiler {
             anon_struct_group: 0,
             explicit_align: 0,
             align: 0,
+            decl_spelling: Default::default(),
         };
         self.structs.push(StructDef {
             name,
@@ -457,6 +460,7 @@ impl Compiler {
             anon_struct_group: 0,
             explicit_align: 0,
             align: 0,
+            decl_spelling: Default::default(),
         };
         self.structs.push(StructDef {
             name,

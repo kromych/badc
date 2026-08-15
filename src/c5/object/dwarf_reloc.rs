@@ -53,6 +53,7 @@ use super::Build;
 use super::elf_class::ElfClass;
 use crate::c5::compiler::{StructDef, StructField};
 use crate::c5::layout::write_struct;
+use crate::c5::symbol::DeclSpelling;
 
 /// Section that an emitted reloc lives in. Used to route the
 /// reloc into the matching `.rela.<section>` table in the ELF
@@ -159,6 +160,10 @@ const DW_TAG_ENUMERATION_TYPE: u8 = 0x04;
 const DW_TAG_ENUMERATOR: u8 = 0x28;
 const DW_TAG_SUBROUTINE_TYPE: u8 = 0x15;
 const DW_TAG_UNSPECIFIED_TYPE: u8 = 0x3b;
+const DW_TAG_TYPEDEF: u8 = 0x16;
+const DW_TAG_CONST_TYPE: u8 = 0x26;
+const DW_TAG_VOLATILE_TYPE: u8 = 0x35;
+const DW_TAG_RESTRICT_TYPE: u8 = 0x37;
 
 const DW_AT_NAME: u8 = 0x03;
 const DW_AT_STMT_LIST: u8 = 0x10;
@@ -265,6 +270,16 @@ const ABBREV_SUBPROGRAM_LEAF_VOID: u64 = 34;
 const ABBREV_SUBPROGRAM_WITH_CHILDREN_VOID: u64 = 35;
 const ABBREV_SUBPROGRAM_LEAF_INTERNAL_VOID: u64 = 36;
 const ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL_VOID: u64 = 37;
+// Typedef and qualifier DIEs. The `_VOID` form of each is the shape
+// DWARF 4 5.2 gives one applied to `void`, which has no DIE to name.
+const ABBREV_TYPEDEF: u64 = 38;
+const ABBREV_TYPEDEF_VOID: u64 = 39;
+const ABBREV_CONST_TYPE: u64 = 40;
+const ABBREV_CONST_TYPE_VOID: u64 = 41;
+const ABBREV_VOLATILE_TYPE: u64 = 42;
+const ABBREV_VOLATILE_TYPE_VOID: u64 = 43;
+const ABBREV_RESTRICT_TYPE: u64 = 44;
+const ABBREV_RESTRICT_TYPE_VOID: u64 = 45;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -798,6 +813,58 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
     },
+    // typedef (DWARF 4 5.3) -- the name a declaration spelled the
+    // type with, over the type it resolves to.
+    AbbrevDecl {
+        code: ABBREV_TYPEDEF,
+        tag: DW_TAG_TYPEDEF,
+        has_children: false,
+        attrs: &[(DW_AT_NAME, DW_FORM_STRING), (DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    AbbrevDecl {
+        code: ABBREV_TYPEDEF_VOID,
+        tag: DW_TAG_TYPEDEF,
+        has_children: false,
+        attrs: &[(DW_AT_NAME, DW_FORM_STRING)],
+    },
+    // Qualified types (DWARF 4 5.2). Each wraps the type it
+    // qualifies and carries no size of its own.
+    AbbrevDecl {
+        code: ABBREV_CONST_TYPE,
+        tag: DW_TAG_CONST_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    AbbrevDecl {
+        code: ABBREV_CONST_TYPE_VOID,
+        tag: DW_TAG_CONST_TYPE,
+        has_children: false,
+        attrs: &[],
+    },
+    AbbrevDecl {
+        code: ABBREV_VOLATILE_TYPE,
+        tag: DW_TAG_VOLATILE_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    AbbrevDecl {
+        code: ABBREV_VOLATILE_TYPE_VOID,
+        tag: DW_TAG_VOLATILE_TYPE,
+        has_children: false,
+        attrs: &[],
+    },
+    AbbrevDecl {
+        code: ABBREV_RESTRICT_TYPE,
+        tag: DW_TAG_RESTRICT_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    AbbrevDecl {
+        code: ABBREV_RESTRICT_TYPE_VOID,
+        tag: DW_TAG_RESTRICT_TYPE,
+        has_children: false,
+        attrs: &[],
+    },
 ];
 
 fn build_debug_abbrev() -> Vec<u8> {
@@ -911,7 +978,12 @@ fn build_debug_info(
     // resulting CU-relative offsets. Separating layout from writing
     // is what lets a member name a type whose DIE lands later in the
     // unit, so no member is dropped for want of an emission order.
-    let mut catalog = TypeCatalog::new(&program.structs, target, addr_width.bytes() as u8);
+    let mut catalog = TypeCatalog::new(
+        &program.structs,
+        &program.symbols,
+        target,
+        addr_width.bytes() as u8,
+    );
     let var_types: Vec<TypeId> = program
         .variables
         .iter()
@@ -939,7 +1011,7 @@ fn build_debug_info(
                 is_variadic: sym.is_some_and(|s| s.is_variadic),
                 external: sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal),
                 ret: match sym {
-                    Some(s) => catalog.of_return(s.type_),
+                    Some(s) => catalog.of_return(s.type_, s.decl_spelling),
                     None => Some(catalog.unspecified()),
                 },
             }
@@ -1549,11 +1621,71 @@ enum TypeNode {
         params: Vec<TypeId>,
         variadic: bool,
     },
+    /// `DW_TAG_typedef` (DWARF 4 5.3): the name a declaration spelled
+    /// the type with. `None` is a typedef of `void`, which has no DIE.
+    Typedef { name: String, inner: Option<TypeId> },
+    /// `DW_TAG_const_type` / `_volatile_type` / `_restrict_type`
+    /// (DWARF 4 5.2). `None` qualifies `void`.
+    Qualified { qual: Qual, inner: Option<TypeId> },
     /// `DW_TAG_unspecified_type` (DWARF 4 5.2): a type this emitter
     /// cannot describe. A member keeps its name and offset and the
     /// description reports the type as unknown rather than naming a
     /// different one.
     Unspecified,
+}
+
+/// A C99 6.7.3 type qualifier, which DWARF describes with a wrapper
+/// DIE rather than an attribute.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Qual {
+    Const,
+    Volatile,
+    Restrict,
+}
+
+/// The qualifiers applying at one derivation level.
+#[derive(Clone, Copy, Default)]
+struct Quals {
+    constant: bool,
+    volatile: bool,
+    restrict: bool,
+}
+
+/// A declaration's spelling resolved for the type catalog: the alias
+/// name to emit and the qualifiers at each of the two levels the
+/// declaration distinguishes.
+#[derive(Clone, Copy, Default)]
+struct Spelled<'a> {
+    typedef: Option<&'a str>,
+    /// Qualifiers on the base type -- the pointee's, under a pointer
+    /// declarator.
+    base: Quals,
+    /// Qualifiers on the declared object itself.
+    outer: Quals,
+}
+
+impl<'a> Spelled<'a> {
+    /// `volatile` rides the type tag rather than [`DeclSpelling`], and
+    /// its inner marker answers the same base-vs-object question the
+    /// two `const` carriers do (C99 6.7.5.1p1).
+    fn of(tag: i64, spelling: DeclSpelling, typedef: Option<&'a str>) -> Self {
+        use crate::c5::compiler::types::{is_volatile_object_ty, is_volatile_ty};
+        let volatile_object = is_volatile_object_ty(tag);
+        let volatile_base = is_volatile_ty(tag) && !volatile_object;
+        Spelled {
+            typedef,
+            base: Quals {
+                constant: spelling.base_const,
+                volatile: volatile_base,
+                restrict: spelling.base_restrict,
+            },
+            outer: Quals {
+                constant: spelling.outer_const,
+                volatile: volatile_object,
+                restrict: spelling.outer_restrict,
+            },
+        }
+    }
 }
 
 /// One DIE (with its children) as bytes, plus the byte offsets of its
@@ -1583,6 +1715,9 @@ impl DieBuf {
 /// structural, so `int *` on ten members shares one DIE.
 struct TypeCatalog<'a> {
     structs: &'a [StructDef],
+    /// The unit's symbol table, which `DeclSpelling::typedef` indexes
+    /// for the alias name.
+    symbols: &'a [crate::c5::symbol::Symbol],
     target: super::Target,
     /// The object's address width, from its ELF class. Sizes every
     /// pointer DIE and, off Windows, the `long` base type.
@@ -1594,9 +1729,15 @@ struct TypeCatalog<'a> {
 }
 
 impl<'a> TypeCatalog<'a> {
-    fn new(structs: &'a [StructDef], target: super::Target, addr_bytes: u8) -> Self {
+    fn new(
+        structs: &'a [StructDef],
+        symbols: &'a [crate::c5::symbol::Symbol],
+        target: super::Target,
+        addr_bytes: u8,
+    ) -> Self {
         TypeCatalog {
             structs,
+            symbols,
             target,
             addr_bytes,
             nodes: Vec::new(),
@@ -1656,32 +1797,66 @@ impl<'a> TypeCatalog<'a> {
         }
     }
 
-    fn of_key(&mut self, key: TypeKey) -> TypeId {
+    /// The DIE for the key's base type, before the declarator's
+    /// pointer levels. `None` is `void`, which has no DIE.
+    fn of_key_base(&mut self, key: TypeKey) -> Option<TypeId> {
         match key {
-            TypeKey::Scalar { leaf, depth } => {
+            TypeKey::Scalar { leaf, .. } => {
                 if crate::c5::compiler::types::is_void_ty(leaf) {
-                    // `void` itself has no DIE; the shallowest pointer
-                    // over it is the untyped `void *`.
-                    if depth == 0 {
-                        return self.unspecified();
-                    }
-                    let mut cur = self.intern(TypeNode::Pointer(None));
-                    for _ in 1..depth {
-                        cur = self.intern(TypeNode::Pointer(Some(cur)));
-                    }
-                    return cur;
+                    return None;
                 }
-                let base = match base_type_for_leaf(leaf, self.target, self.addr_bytes) {
-                    Some(_) => self.intern(TypeNode::Base(leaf)),
-                    None => self.unspecified(),
-                };
-                self.pointer_chain(base, depth)
+                Some(
+                    match base_type_for_leaf(leaf, self.target, self.addr_bytes) {
+                        Some(_) => self.intern(TypeNode::Base(leaf)),
+                        None => self.unspecified(),
+                    },
+                )
             }
-            TypeKey::Aggregate { id, depth } => {
-                let base = self.of_aggregate(id);
-                self.pointer_chain(base, depth)
+            TypeKey::Aggregate { id, .. } => Some(self.of_aggregate(id)),
+        }
+    }
+
+    /// Wrap `inner` in one `DW_TAG_*_type` DIE per qualifier present,
+    /// in the order C99 6.7.3 gives them no significance and gcc
+    /// emits them.
+    fn qualify(&mut self, inner: Option<TypeId>, q: Quals) -> Option<TypeId> {
+        let mut cur = inner;
+        for (present, qual) in [
+            (q.volatile, Qual::Volatile),
+            (q.restrict, Qual::Restrict),
+            (q.constant, Qual::Const),
+        ] {
+            if present {
+                cur = Some(self.intern(TypeNode::Qualified { qual, inner: cur }));
             }
         }
+        cur
+    }
+
+    /// The DIE for a declared type: the base as spelled, then the
+    /// declarator's pointer levels, then the qualifiers on the object
+    /// itself. A `void` base with no qualifier and no typedef has no
+    /// DIE, so the shallowest pointer over it is the untyped `void *`.
+    fn of_key_spelled(&mut self, key: TypeKey, sp: Spelled) -> TypeId {
+        let depth = key.depth();
+        let mut cur = self.of_key_base(key);
+        if let Some(name) = sp.typedef {
+            cur = Some(self.intern(TypeNode::Typedef {
+                name: String::from(name),
+                inner: cur,
+            }));
+        }
+        cur = self.qualify(cur, sp.base);
+        for _ in 0..depth {
+            cur = Some(self.intern(TypeNode::Pointer(cur)));
+        }
+        cur = self.qualify(cur, sp.outer);
+        // Only a bare `void` value type reaches here as `None`.
+        cur.unwrap_or_else(|| self.unspecified())
+    }
+
+    fn of_key(&mut self, key: TypeKey) -> TypeId {
+        self.of_key_spelled(key, Spelled::default())
     }
 
     fn of_tag(&mut self, tag: i64) -> TypeId {
@@ -1689,6 +1864,28 @@ impl<'a> TypeCatalog<'a> {
             Some(key) => self.of_key(key),
             None => self.unspecified(),
         }
+    }
+
+    /// The alias name `spelling` names, unless the typedef is an array
+    /// type: an array typedef names the array rather than its element,
+    /// and the declaration cannot say which of the two the dimensions
+    /// on it came from. Naming nothing is the honest answer there.
+    fn typedef_name(&self, spelling: DeclSpelling) -> Option<&'a str> {
+        let sym = self.symbols.get(spelling.typedef? as usize)?;
+        if sym.array_size != 0 || sym.name.is_empty() {
+            return None;
+        }
+        Some(&sym.name)
+    }
+
+    /// The declared type of an object or member: its tag decomposed,
+    /// then `spelling` and the tag's own volatile markers applied.
+    fn of_declared(&mut self, tag: i64, spelling: DeclSpelling) -> TypeId {
+        let Some(key) = decompose_pointer_chain(tag) else {
+            return self.unspecified();
+        };
+        let sp = Spelled::of(tag, spelling, self.typedef_name(spelling));
+        self.of_key_spelled(key, sp)
     }
 
     fn of_aggregate(&mut self, id: usize) -> TypeId {
@@ -1722,9 +1919,15 @@ impl<'a> TypeCatalog<'a> {
     /// through a `DW_TAG_array_type` over the element type.
     fn of_field(&mut self, f: &StructField) -> TypeId {
         let base = if f.fn_ptr_indirection >= 1 {
-            self.of_function_pointer(f.ty, f.fn_ptr_indirection, &f.params, f.is_variadic)
+            self.of_function_pointer(
+                f.ty,
+                f.fn_ptr_indirection,
+                &f.params,
+                f.is_variadic,
+                f.decl_spelling,
+            )
         } else {
-            self.of_tag(f.ty)
+            self.of_declared(f.ty, f.decl_spelling)
         };
         let dims = array_dims(f.array_size, &f.array_dims);
         if dims.is_empty() {
@@ -1742,9 +1945,10 @@ impl<'a> TypeCatalog<'a> {
                 sym.fn_ptr_indirection,
                 &sym.params,
                 sym.is_variadic,
+                sym.decl_spelling,
             )
         } else {
-            self.of_tag(sym.type_)
+            self.of_declared(sym.type_, sym.decl_spelling)
         };
         let dims = array_dims(sym.array_size, &sym.array_dims);
         if dims.is_empty() {
@@ -1757,10 +1961,10 @@ impl<'a> TypeCatalog<'a> {
     /// The return type of a function definition, from the `Token::Fun`
     /// symbol's `type_`. `None` is a void-returning function, which
     /// DWARF 4 3.3.2 describes by the absence of `DW_AT_type`.
-    fn of_return(&mut self, tag: i64) -> Option<TypeId> {
+    fn of_return(&mut self, tag: i64, spelling: DeclSpelling) -> Option<TypeId> {
         match decompose_pointer_chain(tag) {
             Some(k) if k.is_void_value() => None,
-            Some(k) => Some(self.of_key(k)),
+            Some(_) => Some(self.of_declared(tag, spelling)),
             None => Some(self.unspecified()),
         }
     }
@@ -1770,9 +1974,15 @@ impl<'a> TypeCatalog<'a> {
     /// an array type.
     fn of_variable(&mut self, v: &super::super::program::VariableInfo) -> TypeId {
         let base = if v.fn_ptr_indirection >= 1 {
-            self.of_function_pointer(v.type_tag, v.fn_ptr_indirection, &v.params, v.is_variadic)
+            self.of_function_pointer(
+                v.type_tag,
+                v.fn_ptr_indirection,
+                &v.params,
+                v.is_variadic,
+                v.decl_spelling,
+            )
         } else {
-            self.of_tag(v.type_tag)
+            self.of_declared(v.type_tag, v.decl_spelling)
         };
         if v.is_parameter {
             return base;
@@ -1795,6 +2005,7 @@ impl<'a> TypeCatalog<'a> {
         indirection: i64,
         param_tags: &[i64],
         variadic: bool,
+        spelling: DeclSpelling,
     ) -> TypeId {
         let depth = indirection.clamp(0, 32) as u8;
         let Some(key) = decompose_pointer_chain(tag) else {
@@ -1820,7 +2031,23 @@ impl<'a> TypeCatalog<'a> {
             params,
             variadic,
         });
-        self.pointer_chain(fn_ty, depth)
+        // A function-pointer typedef names the pointer type as a whole
+        // (`typedef int (*fn_t)(int)`), so the alias sits over the
+        // finished chain rather than over the return type.
+        let mut cur = Some(self.pointer_chain(fn_ty, depth));
+        if let Some(name) = self.typedef_name(spelling) {
+            cur = Some(self.intern(TypeNode::Typedef {
+                name: String::from(name),
+                inner: cur,
+            }));
+        }
+        let outer = Quals {
+            constant: spelling.outer_const,
+            volatile: crate::c5::compiler::types::is_volatile_object_ty(tag),
+            restrict: spelling.outer_restrict,
+        };
+        self.qualify(cur, outer)
+            .unwrap_or_else(|| self.unspecified())
     }
 }
 
@@ -2043,6 +2270,31 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
             }
             die.bytes.push(0);
         }
+        TypeNode::Typedef { name, inner } => {
+            let abbrev = match inner {
+                Some(_) => ABBREV_TYPEDEF,
+                None => ABBREV_TYPEDEF_VOID,
+            };
+            write_uleb128(&mut die.bytes, abbrev);
+            push_string(&mut die.bytes, name);
+            if let Some(id) = inner {
+                die.push_ref(*id);
+            }
+        }
+        TypeNode::Qualified { qual, inner } => {
+            let abbrev = match (qual, inner.is_some()) {
+                (Qual::Const, true) => ABBREV_CONST_TYPE,
+                (Qual::Const, false) => ABBREV_CONST_TYPE_VOID,
+                (Qual::Volatile, true) => ABBREV_VOLATILE_TYPE,
+                (Qual::Volatile, false) => ABBREV_VOLATILE_TYPE_VOID,
+                (Qual::Restrict, true) => ABBREV_RESTRICT_TYPE,
+                (Qual::Restrict, false) => ABBREV_RESTRICT_TYPE_VOID,
+            };
+            write_uleb128(&mut die.bytes, abbrev);
+            if let Some(id) = inner {
+                die.push_ref(*id);
+            }
+        }
         TypeNode::Unspecified => write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_TYPE),
     }
     die
@@ -2076,6 +2328,13 @@ enum TypeKey {
 }
 
 impl TypeKey {
+    /// The declarator's pointer level count.
+    fn depth(self) -> u8 {
+        match self {
+            TypeKey::Scalar { depth, .. } | TypeKey::Aggregate { depth, .. } => depth,
+        }
+    }
+
     /// The same type with `n` pointer levels removed, or `None` when
     /// it does not have that many.
     fn peel(self, n: u8) -> Option<TypeKey> {
@@ -2313,7 +2572,9 @@ mod abbrev_golden {
              3400030849133f1902183a0f3b0f00001c34000308491302183a0f3b0f0000203400\
              030849133f193a0f3b0f0000213400030849133a0f3b0f0000222e00030811011207\
              3f192719360b0000232e010308110112073f192719360b40180000242e0003081101\
-             12072719360b0000252e010308110112072719360b4018000000"
+             12072719360b0000252e010308110112072719360b40180000261600030849130000\
+             271600030800002826004913000029260000002a3500491300002b350000002c3700\
+             491300002d3700000000"
         );
     }
 }
@@ -2326,8 +2587,9 @@ mod address_width {
     /// one the `long` base type carries, for an object of `class`.
     fn widths(target: super::super::Target, class: ElfClass) -> (u8, u8) {
         let structs: [StructDef; 0] = [];
+        let symbols: [crate::c5::symbol::Symbol; 0] = [];
         let addr_bytes = class.addr_size() as u8;
-        let mut catalog = TypeCatalog::new(&structs, target, addr_bytes);
+        let mut catalog = TypeCatalog::new(&structs, &symbols, target, addr_bytes);
         let int_ptr = catalog.of_key(TypeKey::Scalar {
             leaf: Ty::Int as i64,
             depth: 1,

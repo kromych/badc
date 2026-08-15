@@ -170,6 +170,7 @@ impl Compiler {
                         params: sym.params.clone(),
                         is_variadic: sym.is_variadic,
                         array_dims: sym.array_dims.clone(),
+                        decl_spelling: sym.decl_spelling,
                     });
             }
         }

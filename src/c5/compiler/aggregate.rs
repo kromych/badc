@@ -188,6 +188,9 @@ impl Compiler {
             self.pending.typedef_base_array_size = 0;
             self.pending.typedef_base_zero_len = false;
             self.pending.type_align = 0;
+            // Same for the debug-info spelling carriers, which the
+            // inline reader below seeds itself.
+            let _ = self.take_base_spelling();
             // Field type prefix: int, char, float, double, or struct Name.
             // Leading qualifiers / int modifiers / function specifiers
             // (`const`, `unsigned`, ...) are no-ops; track if any int
@@ -208,6 +211,10 @@ impl Compiler {
             // alignment of every field in the group; a per-declarator one
             // (below) adds to it. Applied at field placement, not dropped.
             let mut group_align: usize = 0;
+            // Qualifiers ahead of the type (`volatile int x;`). C99
+            // 6.7.2p2 admits them in any order, and the trailing form
+            // already folds in below, so collect the leading one too.
+            let mut leading_quals: i64 = 0;
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::Attribute {
                     self.skip_attribute_specifiers()?;
@@ -227,6 +234,9 @@ impl Compiler {
                 if self.try_consume_int_modifier(&mut mods)? {
                     continue;
                 }
+                leading_quals |= self.lex_qualifier_bits();
+                self.pending.spell_base_const |= self.lex_is_const_qual();
+                self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
                 self.next()?;
             }
             // Set when the field's base type is an `enum` (directly or
@@ -327,6 +337,7 @@ impl Compiler {
                     field_base_is_enum = true;
                 }
                 let aliased = self.symbols[self.lex.curr_id_idx].type_;
+                self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
                 // C99 6.7.7 paragraph 3: a typedef name carries
                 // through any array dimension on its alias. Stash
                 // the count so the field-binding code below can
@@ -392,7 +403,8 @@ impl Compiler {
                     field_base = mods.char_tag(self.target.plain_char_signed());
                 }
             }
-            field_base |= trailing_quals;
+            field_base = super::types::apply_qual_bits(field_base, leading_quals | trailing_quals);
+            let base_spelling = self.take_base_spelling();
 
             // Explicit type alignment carried by a typedef base (GNU
             // `aligned(N)`), consumed once for every declarator sharing
@@ -502,6 +514,7 @@ impl Compiler {
                             anon_struct_group: struct_group,
                             explicit_align: inner_field.explicit_align,
                             align: inner_field.align,
+                            decl_spelling: inner_field.decl_spelling,
                         });
                     }
 
@@ -900,6 +913,7 @@ impl Compiler {
                 if let Some((idx, saved)) = self.pending.member_decl_save.take() {
                     self.symbols[idx] = *saved;
                 }
+                let field_spelling = self.decl_spelling(base_spelling);
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,
@@ -918,6 +932,7 @@ impl Compiler {
                     anon_struct_group: 0,
                     explicit_align: group_align.max(decl_align) as u32,
                     align: placed_align as u32,
+                    decl_spelling: field_spelling,
                 });
 
                 if self.lex.tk == ',' {

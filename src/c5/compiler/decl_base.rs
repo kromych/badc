@@ -1522,6 +1522,47 @@ impl Compiler {
             )
     }
 
+    /// Snapshot the base type's spelling and clear the carriers. A
+    /// declaration context calls this twice: once before its leading
+    /// specifiers, discarding whatever a nested parse left behind, and
+    /// once the moment the base type is complete. The second call has
+    /// to precede the declarator, which can nest a parse of its own
+    /// (an inner parameter list, a `sizeof` in an array bound).
+    pub(super) fn take_base_spelling(&mut self) -> crate::c5::symbol::DeclSpelling {
+        crate::c5::symbol::DeclSpelling {
+            typedef: self.pending.spell_base_typedef.take(),
+            base_const: core::mem::take(&mut self.pending.spell_base_const),
+            base_restrict: core::mem::take(&mut self.pending.spell_base_restrict),
+            outer_const: false,
+            outer_restrict: false,
+        }
+    }
+
+    /// Complete a [`Self::take_base_spelling`] snapshot with the
+    /// qualifiers the declarator just parsed onto its outermost
+    /// derivation.
+    pub(super) fn decl_spelling(
+        &self,
+        base: crate::c5::symbol::DeclSpelling,
+    ) -> crate::c5::symbol::DeclSpelling {
+        crate::c5::symbol::DeclSpelling {
+            outer_const: self.pending.declarator_outer_const,
+            outer_restrict: self.pending.declarator_outer_restrict,
+            ..base
+        }
+    }
+
+    /// True when the current token is the `restrict` type qualifier
+    /// (C99 6.7.3). It constrains aliasing, which badc does not act
+    /// on; the spelling is recorded for debug info.
+    pub(super) fn lex_is_restrict_qual(&self) -> bool {
+        self.lex.tk == Token::TypeQual
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "restrict" | "__restrict" | "__restrict__"
+            )
+    }
+
     /// Fold a multi-dim typedef alias's dimension list onto the bound
     /// symbol, mirroring what a literal `T x[A][B]` declarator records.
     /// Callers gate on the same condition as the element-count fold
@@ -1606,6 +1647,8 @@ impl Compiler {
                 // restrict / _Atomic / etc. are no-ops.
                 qual_bits |= self.lex_qualifier_bits();
                 self.pending.base_is_const |= self.lex_is_const_qual();
+                self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+                self.pending.spell_base_const |= self.lex_is_const_qual();
                 self.next()?;
             }
         }
@@ -1659,6 +1702,10 @@ impl Compiler {
             // typedef-name is the declarator identifier (a redeclared
             // name), not a second type-specifier.
             let aliased = self.symbols[self.lex.curr_id_idx].type_;
+            // The alias resolves to its underlying type here, so the
+            // spelling would otherwise be lost; record it for debug
+            // info (DWARF 4 5.3 names it with a DW_TAG_typedef DIE).
+            self.pending.spell_base_typedef = Some(self.lex.curr_id_idx as u32);
             // Carry the typedef's fn-pointer lineage forward (gh
             // #19) so a later `fn_t fp` declaration ends up with
             // the right indirection count.
@@ -1790,6 +1837,8 @@ impl Compiler {
             }
             qual_bits |= self.lex_qualifier_bits();
             self.pending.base_is_const |= self.lex_is_const_qual();
+            self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+            self.pending.spell_base_const |= self.lex_is_const_qual();
             self.next()?;
         }
         Ok((saw_int_mod, qual_bits))

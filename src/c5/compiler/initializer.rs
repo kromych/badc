@@ -643,6 +643,16 @@ impl Compiler {
             // per element plus a terminator at the target's `wchar_t`
             // width; read them back at that stride.
             let w = self.lex.str_elem_bytes;
+            // C99 6.7.8p15: the element type must be compatible with the
+            // literal's. A wider element would store `size_of_type(elem_ty)`
+            // bytes per decoded code point and run past the array; a narrower
+            // one cannot hold the code point. The struct-member sinks apply
+            // the same rule.
+            if self.size_of_type(elem_ty) != w {
+                return Err(self.compile_err(
+                    "wide string initializer requires a wchar_t-width array element",
+                ));
+            }
             let start_addr = self.take_concat_string_literal()?;
             let byte_count = self.data.len() - start_addr;
             let mut elem_count = byte_count / w;
@@ -661,8 +671,10 @@ impl Compiler {
                 .map(|k| {
                     let base = start_addr + k * w;
                     let mut v: i64 = 0;
-                    for b in 0..w {
-                        v |= (self.data[base + b] as i64) << (b * 8);
+                    if base + w <= self.data.len() {
+                        for b in 0..w {
+                            v |= (self.data[base + b] as i64) << (b * 8);
+                        }
                     }
                     (v as i128, InitElemReloc::None)
                 })

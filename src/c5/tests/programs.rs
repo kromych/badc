@@ -4774,6 +4774,15 @@ fn static_locals() {
 }
 
 #[test]
+fn static_local_array_init_bounds() {
+    // C99 6.7.8p2/p14/p21: a static-local array initializer fills the storage
+    // reserved for the declared bound and no more -- an over-long list is
+    // rejected (see `tests::parser`), and the legal shapes leave the
+    // neighbouring statics untouched.
+    assert_eq!(run_fixture("static_local_array_init_bounds.c"), 0);
+}
+
+#[test]
 fn bitfields_basic() {
     // bitfields pack into shared 8-byte storage units;
     // reads use Li/Shr/And; writes use load-clear-shift-or-store.

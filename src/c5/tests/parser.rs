@@ -2406,3 +2406,69 @@ fn address_of_a_block_scope_compound_literal_is_not_constant() {
     .expect("static-duration and automatic-object compound literals stay legal");
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }
+
+#[test]
+fn static_local_array_initializer_over_bound_rejected() {
+    // C99 6.7.8p2: an initializer may not provide a value for an object
+    // outside the entity being initialized. The static-local allocator
+    // reserves storage from the declared bound, so a longer list was written
+    // past it, over whatever the initializer's own parse had staged above the
+    // reservation -- and off the end of `.data` when nothing had been, which
+    // panicked on the write index. The file-scope, automatic and
+    // compound-literal paths already rejected the same shapes.
+    expect_compile_error(
+        "int main(void) { static int a[1] = {1, 2, 3, 4}; return a[0]; }",
+        "too many initializers for array `a` (4 > 1)",
+    );
+    expect_compile_error(
+        "int main(void) { static char c[2] = \"abcdef\"; return c[0]; }",
+        "too many initializers for array `c` (6 > 2)",
+    );
+    expect_compile_error(
+        "int main(void) { static int a[1] = {1, 2}; static int b[2] = {3, 4};\n\
+         return a[0] + b[0]; }",
+        "too many initializers for array `a` (2 > 1)",
+    );
+    // The exactly-filling and short forms stay legal: 6.7.8p14 drops the
+    // terminator on an exact fit, 6.7.8p21 zero-fills the tail.
+    let prog = Compiler::new(
+        "int main(void) { static int a[2] = {1, 2}; static char c[3] = \"abc\";\n\
+         static char d[4] = \"ab\";\n\
+         return a[1] + c[2] + d[2] + d[3] - 101; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("an exactly-filling or short static-local initializer stays legal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn wide_string_array_initializer_requires_matching_element_width() {
+    // C99 6.7.8p15: a wide string literal initializes an array whose element
+    // type is compatible with the literal's. A wider element stored one
+    // decoded code point per element at the element's own width and ran past
+    // the array; the struct-member sinks already applied the rule.
+    for src in [
+        "int main(void) { static long long a[1] = L\"abc\"; return (int)a[0]; }",
+        "int main(void) { static long long a[] = L\"abc\"; return (int)a[0]; }",
+        "int main(void) { static char a[] = L\"abc\"; return a[0]; }",
+        "int main(void) { static char a[] = { L\"abc\" }; return a[0]; }",
+        "int main(void) { static int a[4] = u\"ab\" L\"cd\"; return a[0]; }",
+    ] {
+        expect_compile_error(
+            src,
+            "wide string initializer requires a wchar_t-width array",
+        );
+    }
+    // The matching-width forms stay legal, bounded and unbounded alike.
+    let prog = Compiler::new(
+        "#include <stddef.h>\n\
+         int main(void) { static wchar_t a[] = L\"ab\"; static wchar_t b[4] = L\"cd\";\n\
+         static wchar_t c[2] = L\"ef\";\n\
+         return (int)(a[2] + b[2] + b[3] + (c[0] - L'e')); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("a wchar_t-width array takes a wide string literal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}

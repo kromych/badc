@@ -1009,6 +1009,19 @@ impl Compiler {
                 self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
                 self.pending.init_target_array_size = array_size;
                 let elements = self.collect_array_initializer(ty)?;
+                // C99 6.7.8p2: the initializer may not provide a value for an
+                // object outside the entity being initialized. The storage
+                // reserved above holds `array_size` elements, so a longer list
+                // would be written past it (the file-scope, automatic and
+                // compound-literal paths reject it here too).
+                if elements.len() as i64 > array_size {
+                    return Err(self.compile_err(format!(
+                        "too many initializers for array `{}` ({} > {})",
+                        self.symbols[loc_idx].name,
+                        elements.len(),
+                        array_size
+                    )));
+                }
                 let var_offset = self.symbols[loc_idx].val;
                 self.write_array_init_into_data(var_offset, ty, &elements);
             } else if self.is_traversable_aggregate_ty(ty) {

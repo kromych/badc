@@ -4726,3 +4726,307 @@ fn gc_sections_drops_unreachable_named_sections() {
     assert!(!swept.iter().any(|s| s.0 == "deadtab"), "{swept:?}");
     assert!(swept.iter().any(|s| s.0 == "livetab"), "{swept:?}");
 }
+
+// COMDAT groups reach the linker from C++ inline functions and from
+// gcc's PIC thunks, and no compiler here emits one, so the inputs are
+// written out directly. x86-64 only: the bodies are machine code.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+mod comdat {
+    use super::{badc, run, tempdir};
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    const SHT_PROGBITS: u32 = 1;
+    const SHT_SYMTAB: u32 = 2;
+    const SHT_STRTAB: u32 = 3;
+    const SHT_RELA: u32 = 4;
+    const SHT_GROUP: u32 = 17;
+    const SHF_ALLOC: u64 = 0x2;
+    const SHF_EXECINSTR: u64 = 0x4;
+    const SHF_GROUP: u64 = 0x200;
+    const GRP_COMDAT: u32 = 1;
+    const R_X86_64_PLT32: u32 = 4;
+
+    struct Sec<'a> {
+        name: &'a str,
+        flags: u64,
+        body: &'a [u8],
+        /// `(offset, symbol index, type, addend)`.
+        relocs: &'a [(u64, u32, u32, i64)],
+    }
+
+    /// `(name, st_info, one-based section index)`.
+    struct Sym<'a>(&'a str, u8, u16);
+
+    /// Write an ELF64 x86-64 ET_REL object. `group`, where given, is
+    /// `(flags, signature symbol index, zero-based member sections)`.
+    fn write_object(
+        path: &Path,
+        secs: &[Sec<'_>],
+        syms: &[Sym<'_>],
+        group: Option<(u32, u32, &[u32])>,
+    ) {
+        let n = secs.len();
+        let group_shndx = 1 + n as u32;
+        let has_group = group.is_some();
+        let symtab_shndx = group_shndx + u32::from(has_group);
+        let mut shstr = vec![0u8];
+        let name_of = |s: &str, tab: &mut Vec<u8>| -> u32 {
+            let at = tab.len() as u32;
+            tab.extend_from_slice(s.as_bytes());
+            tab.push(0);
+            at
+        };
+        let sec_names: Vec<u32> = secs.iter().map(|s| name_of(s.name, &mut shstr)).collect();
+        let n_group = has_group.then(|| name_of(".group", &mut shstr));
+        let n_symtab = name_of(".symtab", &mut shstr);
+        let n_strtab = name_of(".strtab", &mut shstr);
+        let rela_of: Vec<usize> = (0..n).filter(|&i| !secs[i].relocs.is_empty()).collect();
+        let n_rela: Vec<u32> = rela_of
+            .iter()
+            .map(|&i| name_of(&format!(".rela{}", secs[i].name), &mut shstr))
+            .collect();
+        let n_shstr = name_of(".shstrtab", &mut shstr);
+
+        let mut strtab = vec![0u8];
+        let sym_names: Vec<u32> = syms.iter().map(|s| name_of(s.0, &mut strtab)).collect();
+        let mut symtab = vec![0u8; 24];
+        for (k, s) in syms.iter().enumerate() {
+            let mut e = [0u8; 24];
+            e[0..4].copy_from_slice(&sym_names[k].to_le_bytes());
+            e[4] = s.1;
+            e[6..8].copy_from_slice(&s.2.to_le_bytes());
+            symtab.extend_from_slice(&e);
+        }
+
+        let mut out = vec![0u8; 64];
+        let mut off = Vec::new();
+        for s in secs {
+            off.push(out.len());
+            out.extend_from_slice(s.body);
+            while out.len() % 8 != 0 {
+                out.push(0);
+            }
+        }
+        let group_at = out.len();
+        if let Some((flags, _, members)) = group {
+            out.extend_from_slice(&flags.to_le_bytes());
+            for &m in members {
+                out.extend_from_slice(&(m + 1).to_le_bytes());
+            }
+        }
+        let symtab_at = out.len();
+        out.extend_from_slice(&symtab);
+        let strtab_at = out.len();
+        out.extend_from_slice(&strtab);
+        let mut rela_at = Vec::new();
+        for &i in &rela_of {
+            rela_at.push(out.len());
+            for &(o, sym, ty, add) in secs[i].relocs {
+                out.extend_from_slice(&o.to_le_bytes());
+                out.extend_from_slice(&(((sym as u64) << 32) | ty as u64).to_le_bytes());
+                out.extend_from_slice(&(add as u64).to_le_bytes());
+            }
+        }
+        let shstr_at = out.len();
+        out.extend_from_slice(&shstr);
+        while out.len() % 8 != 0 {
+            out.push(0);
+        }
+        let shoff = out.len();
+
+        let mut hdr = |name: u32,
+                       ty: u32,
+                       flags: u64,
+                       offset: usize,
+                       size: usize,
+                       link: u32,
+                       info: u32,
+                       align: u64,
+                       entsize: u64| {
+            let mut h = [0u8; 64];
+            h[0..4].copy_from_slice(&name.to_le_bytes());
+            h[4..8].copy_from_slice(&ty.to_le_bytes());
+            h[8..16].copy_from_slice(&flags.to_le_bytes());
+            h[24..32].copy_from_slice(&(offset as u64).to_le_bytes());
+            h[32..40].copy_from_slice(&(size as u64).to_le_bytes());
+            h[40..44].copy_from_slice(&link.to_le_bytes());
+            h[44..48].copy_from_slice(&info.to_le_bytes());
+            h[48..56].copy_from_slice(&align.to_le_bytes());
+            h[56..64].copy_from_slice(&entsize.to_le_bytes());
+            out.extend_from_slice(&h);
+        };
+        hdr(0, 0, 0, 0, 0, 0, 0, 0, 0);
+        for (i, s) in secs.iter().enumerate() {
+            hdr(
+                sec_names[i],
+                SHT_PROGBITS,
+                s.flags,
+                off[i],
+                s.body.len(),
+                0,
+                0,
+                1,
+                0,
+            );
+        }
+        if let Some((_, sig, members)) = group {
+            hdr(
+                n_group.unwrap(),
+                SHT_GROUP,
+                0,
+                group_at,
+                4 + 4 * members.len(),
+                symtab_shndx,
+                sig,
+                4,
+                4,
+            );
+        }
+        hdr(
+            n_symtab,
+            SHT_SYMTAB,
+            0,
+            symtab_at,
+            symtab.len(),
+            symtab_shndx + 1,
+            1,
+            8,
+            24,
+        );
+        hdr(n_strtab, SHT_STRTAB, 0, strtab_at, strtab.len(), 0, 0, 1, 0);
+        for (k, &i) in rela_of.iter().enumerate() {
+            hdr(
+                n_rela[k],
+                SHT_RELA,
+                0,
+                rela_at[k],
+                secs[i].relocs.len() * 24,
+                symtab_shndx,
+                1 + i as u32,
+                8,
+                24,
+            );
+        }
+        hdr(n_shstr, SHT_STRTAB, 0, shstr_at, shstr.len(), 0, 0, 1, 0);
+
+        let shnum = 1 + n + usize::from(has_group) + 2 + rela_of.len() + 1;
+        out[0..16].copy_from_slice(&[0x7f, b'E', b'L', b'F', 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        out[16..18].copy_from_slice(&1u16.to_le_bytes()); // ET_REL
+        out[18..20].copy_from_slice(&62u16.to_le_bytes()); // EM_X86_64
+        out[20..24].copy_from_slice(&1u32.to_le_bytes());
+        out[40..48].copy_from_slice(&(shoff as u64).to_le_bytes());
+        out[52..54].copy_from_slice(&64u16.to_le_bytes());
+        out[58..60].copy_from_slice(&64u16.to_le_bytes());
+        out[60..62].copy_from_slice(&(shnum as u16).to_le_bytes());
+        out[62..64].copy_from_slice(&((shnum - 1) as u16).to_le_bytes());
+        std::fs::write(path, out).expect("write object");
+    }
+
+    /// One translation unit's copy of an inline function: `scale`
+    /// multiplies by `k` and sits in its own COMDAT group, and the
+    /// unit's own entry tail-calls it with `arg`.
+    fn unit(dir: &Path, name: &str, caller: &str, k: u8, arg: u8) -> PathBuf {
+        let scale = [0x89, 0xf8, 0x6b, 0xc0, k, 0xc3];
+        let call = [0xbf, arg, 0x00, 0x00, 0x00, 0xe9, 0, 0, 0, 0];
+        let p = dir.join(name);
+        write_object(
+            &p,
+            &[
+                Sec {
+                    name: ".text.scale",
+                    flags: SHF_ALLOC | SHF_EXECINSTR | SHF_GROUP,
+                    body: &scale,
+                    relocs: &[],
+                },
+                Sec {
+                    name: ".text.caller",
+                    flags: SHF_ALLOC | SHF_EXECINSTR,
+                    body: &call,
+                    relocs: &[(6, 1, R_X86_64_PLT32, -4)],
+                },
+            ],
+            &[Sym("scale", 0x22, 1), Sym(caller, 0x12, 2)],
+            Some((GRP_COMDAT, 1, &[0])),
+        );
+        p
+    }
+
+    /// `_start` sums the two units' results and exits with the total.
+    fn main_object(dir: &Path) -> PathBuf {
+        let body = [
+            0xe8, 0, 0, 0, 0, // call from_a
+            0x89, 0xc3, // mov %eax,%ebx
+            0xe8, 0, 0, 0, 0, // call from_b
+            0x01, 0xd8, // add %ebx,%eax
+            0x89, 0xc7, // mov %eax,%edi
+            0xb8, 0x3c, 0x00, 0x00, 0x00, // mov $60,%eax
+            0x0f, 0x05, // syscall
+        ];
+        let p = dir.join("m.o");
+        write_object(
+            &p,
+            &[Sec {
+                name: ".text",
+                flags: SHF_ALLOC | SHF_EXECINSTR,
+                body: &body,
+                relocs: &[(1, 2, R_X86_64_PLT32, -4), (8, 3, R_X86_64_PLT32, -4)],
+            }],
+            &[
+                Sym("_start", 0x12, 1),
+                Sym("from_a", 0x12, 0),
+                Sym("from_b", 0x12, 0),
+            ],
+            None,
+        );
+        p
+    }
+
+    /// Two objects carry the same inline function, each in its own
+    /// COMDAT group, and the bodies differ so the exit status names
+    /// the copy that survived. Without the dedup the link fails on the
+    /// duplicate; with it, the first copy serves both call sites.
+    #[test]
+    fn one_copy_of_a_comdat_inline_function_serves_every_caller() {
+        let dir = tempdir("comdat-inline");
+        let m = main_object(&dir);
+        let a = unit(&dir, "a.o", "from_a", 3, 10);
+        let b = unit(&dir, "b.o", "from_b", 7, 20);
+        let exe = dir.join("prog");
+        run(
+            Command::new(badc())
+                .arg("--ld")
+                .arg("-static")
+                .arg("-e")
+                .arg("_start")
+                .args([&m, &a, &b])
+                .arg("-o")
+                .arg(&exe),
+            "link with comdat groups",
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(
+            out.status.code(),
+            Some(90),
+            "10*3 + 20*3: the first group's body serves both callers"
+        );
+        let swapped = dir.join("swapped");
+        run(
+            Command::new(badc())
+                .arg("--ld")
+                .arg("-static")
+                .arg("-e")
+                .arg("_start")
+                .args([&m, &b, &a])
+                .arg("-o")
+                .arg(&swapped),
+            "link with the groups in the other order",
+        );
+        let out = Command::new(&swapped).output().expect("run swapped");
+        assert_eq!(
+            out.status.code(),
+            Some(210),
+            "10*7 + 20*7: first in link order wins"
+        );
+    }
+}

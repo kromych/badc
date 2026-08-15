@@ -31,6 +31,7 @@ type PoolMemberMaps = HashMap<usize, (Vec<u64>, Vec<u64>)>;
 
 use crate::c5::error::C5Error;
 
+use super::comdat::{self, SecId};
 use super::dynamic::{self, DynSym, DynTables, HashStyle, VerDef};
 use super::eh_frame;
 use super::gnu_property;
@@ -247,6 +248,16 @@ pub struct RawSection {
     pub link: u32,
 }
 
+/// One `SHT_GROUP` section: the flag word, the signature symbol's
+/// name, and the members that survived the section filter.
+#[derive(Debug, Clone)]
+pub struct RawGroup {
+    pub flags: u32,
+    pub signature: String,
+    /// Members as indices into [`LdsObject::sections`].
+    pub members: Vec<usize>,
+}
+
 /// One ET_REL input at full fidelity.
 pub struct LdsObject {
     pub source: String,
@@ -255,6 +266,7 @@ pub struct LdsObject {
     pub class: ElfClass,
     pub sections: Vec<RawSection>,
     pub symbols: Vec<RawSym>,
+    pub groups: Vec<RawGroup>,
     /// Original section header index -> `sections` index.
     pub shndx_map: HashMap<u32, usize>,
 }
@@ -269,8 +281,8 @@ impl LdsObject {
 }
 
 /// Parse a little-endian ET_REL object of either ELF class preserving
-/// every section. Symbol/string/reloc tables are consumed into
-/// structured form; group and addrsig metadata is dropped.
+/// every section. Symbol/string/reloc/group tables are consumed into
+/// structured form; addrsig metadata is dropped.
 pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Error> {
     if bytes.len() < 52 || &bytes[0..4] != b"\x7fELF" {
         return Err(err(&format!("{source}: not an ELF object")));
@@ -471,6 +483,32 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
         }
         sections[target].relocs.extend(list);
     }
+    // Section groups. The body is a flag word followed by member
+    // section indices; entries naming a section the filter above
+    // dropped (a group's own relocation table) have no member.
+    let mut groups: Vec<RawGroup> = Vec::new();
+    for sh in &shdrs {
+        if sh.sh_type != SHT_GROUP {
+            continue;
+        }
+        let raw = section_bytes(&bytes, Some(sh), source)?;
+        if raw.len() < 4 || raw.len() % 4 != 0 {
+            return Err(err(&format!("{source}: malformed SHT_GROUP body")));
+        }
+        let word = |i: usize| u32::from_le_bytes(raw[i..i + 4].try_into().unwrap());
+        let signature = symbols
+            .get(sh.sh_info as usize)
+            .map(|s| s.name.clone())
+            .unwrap_or_default();
+        let members: Vec<usize> = (1..raw.len() / 4)
+            .filter_map(|i| shndx_map.get(&word(i * 4)).copied())
+            .collect();
+        groups.push(RawGroup {
+            flags: word(0),
+            signature,
+            members,
+        });
+    }
     Ok(LdsObject {
         source: source.to_string(),
         bytes,
@@ -478,6 +516,7 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
         class,
         sections,
         symbols,
+        groups,
         shndx_map,
     })
 }
@@ -946,6 +985,10 @@ pub struct LdsLinker<'a> {
     /// First `insecs` index of each object.
     obj_base: Vec<usize>,
     fates: Vec<SecFate>,
+    /// Sections a losing COMDAT group or `.gnu.linkonce` duplicate
+    /// owns. They contribute nothing: no bytes, no symbols, no
+    /// garbage-collection roots or edges.
+    comdat_dropped: HashSet<SecId>,
     /// insec index -> merge pool key, for merged sections.
     merge_of: HashMap<usize, usize>,
     /// Orphan class -> the output section later orphans stack after.
@@ -1160,6 +1203,7 @@ impl<'a> LdsLinker<'a> {
             if !o.sections.iter().any(drop_input) {
                 continue;
             }
+            let orig: Vec<u32> = o.sections.iter().map(|s| s.orig_shndx).collect();
             o.sections.retain(|s| !drop_input(s));
             o.shndx_map = o
                 .sections
@@ -1167,6 +1211,16 @@ impl<'a> LdsLinker<'a> {
                 .enumerate()
                 .map(|(i, s)| (s.orig_shndx, i))
                 .collect();
+            for g in &mut o.groups {
+                g.members
+                    .retain_mut(|m| match o.shndx_map.get(&orig[*m]).copied() {
+                        Some(i) => {
+                            *m = i;
+                            true
+                        }
+                        None => false,
+                    });
+            }
         }
         // Pseudo-object for linker-synthesized sections.
         let synth_obj = objects.len();
@@ -1177,6 +1231,7 @@ impl<'a> LdsLinker<'a> {
             class: class_for_machine(machine),
             sections: Vec::new(),
             symbols: Vec::new(),
+            groups: Vec::new(),
             shndx_map: HashMap::new(),
         });
 
@@ -1190,6 +1245,7 @@ impl<'a> LdsLinker<'a> {
             insecs: Vec::new(),
             obj_base: Vec::new(),
             fates: Vec::new(),
+            comdat_dropped: HashSet::new(),
             merge_of: HashMap::new(),
             orphan_anchor: HashMap::new(),
             pools: Vec::new(),
@@ -1233,6 +1289,7 @@ impl<'a> LdsLinker<'a> {
             sym_index: SymIndex::default(),
             gnu_property,
         };
+        linker.dedup_groups();
         linker.resolve_globals()?;
         linker.synthesize_sections();
         linker.flatten_inputs();
@@ -1248,6 +1305,41 @@ impl<'a> LdsLinker<'a> {
 
     // ---------------------------------------------------- symbol prep
 
+    /// Keep one copy of each COMDAT group and of each `.gnu.linkonce`
+    /// section. Runs before symbol resolution so a losing copy's
+    /// definitions never collide with the surviving one's.
+    fn dedup_groups(&mut self) {
+        let dropped = {
+            let views: Vec<comdat::ObjView<'_>> = self
+                .objects
+                .iter()
+                .map(|o| comdat::ObjView {
+                    groups: o
+                        .groups
+                        .iter()
+                        .map(|g| comdat::GroupView {
+                            flags: g.flags,
+                            signature: &g.signature,
+                            members: &g.members,
+                        })
+                        .collect(),
+                    section_names: o.sections.iter().map(|s| s.name.as_str()).collect(),
+                })
+                .collect();
+            comdat::dedup(&views).dropped
+        };
+        self.comdat_dropped = dropped;
+    }
+
+    /// The name of the section defining `sym` of object `oi`, if the
+    /// dedup dropped it.
+    fn dropped_home(&self, oi: usize, sym: &RawSym) -> Option<&str> {
+        let sec = *self.objects[oi].shndx_map.get(&sym.shndx)?;
+        self.comdat_dropped
+            .contains(&(oi, sec))
+            .then(|| self.objects[oi].sections[sec].name.as_str())
+    }
+
     fn resolve_globals(&mut self) -> Result<(), C5Error> {
         // Strong definitions win over weak; two strongs collide.
         let mut strong: HashMap<String, (usize, usize)> = HashMap::new();
@@ -1257,6 +1349,12 @@ impl<'a> LdsLinker<'a> {
             for (si, s) in o.symbols.iter().enumerate() {
                 if s.name.is_empty() || s.binding() == STB_LOCAL {
                     continue;
+                }
+                if o.shndx_map
+                    .get(&s.shndx)
+                    .is_some_and(|&sec| self.comdat_dropped.contains(&(oi, sec)))
+                {
+                    continue; // the surviving copy owns the definition
                 }
                 match s.shndx as u16 {
                     SHN_UNDEF => {
@@ -1485,7 +1583,11 @@ impl<'a> LdsLinker<'a> {
             self.obj_base.push(self.insecs.len());
             for si in 0..o.sections.len() {
                 self.insecs.push(InSecId { obj: oi, sec: si });
-                self.fates.push(SecFate::Unclaimed);
+                self.fates.push(if self.comdat_dropped.contains(&(oi, si)) {
+                    SecFate::Discarded
+                } else {
+                    SecFate::Unclaimed
+                });
             }
         }
         self.placements = alloc::vec![Placement::default(); self.insecs.len()];
@@ -1610,8 +1712,15 @@ impl<'a> LdsLinker<'a> {
         }
         let mut live = alloc::vec![false; self.insecs.len()];
         let mut work: Vec<usize> = Vec::new();
+        // A section the group dedup dropped is not part of the link:
+        // it is neither a root nor a path to one, whatever names it.
+        let gone: Vec<bool> = self
+            .insecs
+            .iter()
+            .map(|id| self.comdat_dropped.contains(&(id.obj, id.sec)))
+            .collect();
         let mark = |live: &mut [bool], work: &mut Vec<usize>, i: usize| {
-            if !live[i] {
+            if !live[i] && !gone[i] {
                 live[i] = true;
                 work.push(i);
             }
@@ -1625,12 +1734,13 @@ impl<'a> LdsLinker<'a> {
         for (i, keep) in live.iter_mut().enumerate() {
             let id = self.insecs[i];
             let s = &self.objects[id.obj].sections[id.sec];
-            let collectable = s.flags & SHF_ALLOC != 0 && s.shtype != SHT_GROUP;
-            *keep = !collectable
-                || s.flags & SHF_GNU_RETAIN != 0
-                || is_debug_section(&s.name)
-                || is_unwind_section(&s.name)
-                || id.obj == self.synth_obj;
+            let collectable = s.flags & SHF_ALLOC != 0;
+            *keep = !gone[i]
+                && (!collectable
+                    || s.flags & SHF_GNU_RETAIN != 0
+                    || is_debug_section(&s.name)
+                    || is_unwind_section(&s.name)
+                    || id.obj == self.synth_obj);
         }
         // `KEEP()` roots, matched the way the claim would match them.
         let specs = self.keep_specs();
@@ -2384,6 +2494,40 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
+    /// Whether the first relocated field in `[off, off + len)` of
+    /// input section `i` names a definition that leaves the link. In
+    /// an FDE that field is the initial location, which is what
+    /// decides whether the entry still describes anything.
+    fn covers_discarded(&self, i: usize, off: usize, len: usize) -> bool {
+        let id = self.insecs[i];
+        let o = &self.objects[id.obj];
+        o.sections[id.sec]
+            .relocs
+            .iter()
+            .filter(|r| (r.offset as usize) >= off && (r.offset as usize) < off + len)
+            .min_by_key(|r| r.offset)
+            .is_some_and(|r| self.defines_discarded(id.obj, r.sym as usize))
+    }
+
+    fn defines_discarded(&self, oi: usize, si: usize) -> bool {
+        let Some(sym) = self.objects[oi].symbols.get(si) else {
+            return false;
+        };
+        let (doi, dsi) = if sym.binding() != STB_LOCAL && !sym.name.is_empty() {
+            match self.globals.get(&sym.name) {
+                Some(&d) => d,
+                None => return self.dropped_home(oi, sym).is_some(),
+            }
+        } else {
+            (oi, si)
+        };
+        let home = &self.objects[doi].symbols[dsi].shndx;
+        match self.objects[doi].shndx_map.get(home) {
+            Some(&sec) => self.fates[self.insec_index(doi, sec)] == SecFate::Discarded,
+            None => false,
+        }
+    }
+
     /// Rewrite one `.eh_frame` input against the CIEs already seen in
     /// its output section, registering its own. `None` when it keeps
     /// every CIE, which leaves its bytes and offsets untouched.
@@ -2403,6 +2547,12 @@ impl<'a> LdsLinker<'a> {
         let mut cies: HashMap<usize, (usize, u64)> = HashMap::new();
         let mut dropped = false;
         for e in &ents {
+            // An FDE describing code that left the link describes
+            // nothing; bfd drops the entry rather than relocate it.
+            if e.cie.is_some() && self.covers_discarded(i, e.off, e.len) {
+                dropped = true;
+                continue;
+            }
             match e.cie {
                 None => {
                     let here = (i, bytes.len() as u64);
@@ -3987,6 +4137,11 @@ impl<'a> LdsLinker<'a> {
                 continue;
             }
             let id = self.insecs[i];
+            // A group the dedup dropped is gone before bfd reaches
+            // check_relocs, so it reserves nothing.
+            if self.comdat_dropped.contains(&(id.obj, id.sec)) {
+                continue;
+            }
             let s = &self.objects[id.obj].sections[id.sec];
             if s.flags & SHF_ALLOC == 0 {
                 continue;
@@ -4676,7 +4831,27 @@ impl<'a> LdsLinker<'a> {
             }
             // Local / section reference into this object; a discarded
             // target resolves to nothing and the site keeps its bytes.
-            _ => self.resolve_sym_prevpass(oi, r.sym as usize, r.addend),
+            _ => {
+                // The surviving copy of a deduplicated group need bear
+                // no relation to the dropped one, so a reference that
+                // name resolution above could not place has nowhere to
+                // go. GNU ld reports it rather than redirecting.
+                if let Some(home) = self.dropped_home(oi, sym) {
+                    if tolerant || (by_name && sym.binding() == STB_WEAK) {
+                        return Some(r.addend as u64);
+                    }
+                    let what = if by_name {
+                        format!("undefined reference to `{}'", sym.name)
+                    } else if sym.name.is_empty() {
+                        format!("reference to discarded section `{home}'")
+                    } else {
+                        format!("`{}' is defined in discarded section `{home}'", sym.name)
+                    };
+                    errors.push(format!("{}: {what}", self.objects[oi].source));
+                    return None;
+                }
+                self.resolve_sym_prevpass(oi, r.sym as usize, r.addend)
+            }
         }
     }
 
@@ -6624,6 +6799,10 @@ mod tests {
         sym_vis: Vec<(usize, u8)>,
         // Section index -> sh_link.
         links: Vec<(usize, u32)>,
+        // Section index -> sh_info.
+        infos: Vec<(usize, u32)>,
+        // Flag word, signature symbol (index into `syms`), members.
+        groups: Vec<(u32, usize, Vec<usize>)>,
     }
 
     impl TestObj {
@@ -6634,7 +6813,15 @@ mod tests {
                 entsizes: Vec::new(),
                 sym_vis: Vec::new(),
                 links: Vec::new(),
+                infos: Vec::new(),
+                groups: Vec::new(),
             }
+        }
+        /// An `SHT_GROUP` section over `members`, signed by the symbol
+        /// at `sig` in the order `sym` added them.
+        fn group(mut self, flags: u32, sig: usize, members: &[usize]) -> Self {
+            self.groups.push((flags, sig, members.to_vec()));
+            self
         }
         fn sec(mut self, name: &str, shtype: u32, flags: u64, align: u64, body: &[u8]) -> Self {
             self.secs.push((
@@ -6709,7 +6896,26 @@ mod tests {
                     }
                 }
             }
+            // A group becomes a section: the flag word followed by its
+            // members' section indices, `sh_link` the symbol table and
+            // `sh_info` the signature symbol.
+            let specs = core::mem::take(&mut self.groups);
+            let first_group = self.secs.len();
+            for (flags, _, members) in &specs {
+                let mut body = flags.to_le_bytes().to_vec();
+                for &m in members {
+                    body.extend_from_slice(&(m as u32 + 1).to_le_bytes());
+                    self.secs[m].2 |= SHF_GROUP;
+                }
+                self.secs
+                    .push((".group".to_string(), SHT_GROUP, 0, 4, body, Vec::new()));
+            }
             let nsec = self.secs.len();
+            for (k, (_, sig, _)) in specs.iter().enumerate() {
+                self.links.push((first_group + k, 1 + nsec as u32));
+                self.infos.push((first_group + k, (1 + nsec + sig) as u32));
+                self.entsizes.push((first_group + k, 4));
+            }
             let mut bodies: Vec<u8> = Vec::new();
             let mut body_off: Vec<usize> = Vec::new();
             for (_, shtype, _, _, body, _) in &self.secs {
@@ -6854,20 +7060,20 @@ mod tests {
                     .find(|(s, _)| *s == k)
                     .map(|(_, e)| *e)
                     .unwrap_or(0);
-                let link = self
-                    .links
-                    .iter()
-                    .find(|(s, _)| *s == k)
-                    .map(|(_, l)| *l)
-                    .unwrap_or(0);
+                let find = |v: &[(usize, u32)]| {
+                    v.iter()
+                        .find(|(s, _)| *s == k)
+                        .map(|(_, l)| *l)
+                        .unwrap_or(0)
+                };
                 shdrs.push(hdr(
                     names[k],
                     *shtype,
                     *flags,
                     body_off[k],
                     body.len(),
-                    link,
-                    0,
+                    find(&self.links),
+                    find(&self.infos),
                     *align,
                     entsize,
                 ));
@@ -10185,5 +10391,416 @@ VERSION { LINUX_2.6 { global: exported; local: *; }; }
         let e = link_with_script(&script, objs, &LdsOptions::default())
             .expect_err("an ELF32 x86-64 object has no emulation here");
         assert!(format!("{e}").contains("ELF class"), "{e}");
+    }
+
+    // ------------------------------------------- COMDAT / linkonce
+
+    const GROUP_SCRIPT: &str = r#"
+SECTIONS {
+  . = 0x1000;
+  .text : { *(.text .text.*) *(.gnu.linkonce.t.*) }
+  .rodata : { *(.rodata .rodata.*) }
+  .data : { *(.data .data.*) }
+  .eh_frame : { *(.eh_frame) }
+}
+"#;
+
+    fn link_group(objs: Vec<Vec<u8>>, opts: &LdsOptions) -> Result<LdsResult, C5Error> {
+        let script = parse_linker_script(GROUP_SCRIPT).expect("script parses");
+        let inputs: Vec<LdsObject> = objs
+            .into_iter()
+            .enumerate()
+            .map(|(i, b)| {
+                parse_lds_object(&format!("{}.o", (b'a' + i as u8) as char), b).expect("parses")
+            })
+            .collect();
+        link_with_script(&script, inputs, opts)
+    }
+
+    fn body_has(image: &[u8], section: &str, pat: &[u8]) -> bool {
+        image_section(image, section)
+            .1
+            .windows(pat.len())
+            .any(|w| w == pat)
+    }
+
+    /// A COMDAT group is keyed on its signature symbol's name alone.
+    /// The later group loses every member whatever the members are
+    /// named and however large they are, and nothing is diagnosed.
+    #[test]
+    fn a_comdat_group_is_kept_once_per_signature() {
+        let a = TestObj::new()
+            .sec(
+                ".text.aaa",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xa1; 4],
+            )
+            .sec(".rodata.aaa", SHT_PROGBITS, SHF_ALLOC, 4, &[0xa2; 4])
+            .sym("sig", STB_WEAK, STT_FUNC, 0, 0, 4)
+            .sym("aonly", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+            .group(comdat::GRP_COMDAT, 0, &[0, 1])
+            .build(EM_X86_64);
+        let b = TestObj::new()
+            .sec(
+                ".text.bbb",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xb1; 8],
+            )
+            .sec(".rodata.bbb", SHT_PROGBITS, SHF_ALLOC, 4, &[0xb2; 8])
+            .sec(
+                ".data.bbb",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_WRITE,
+                4,
+                &[0xb5; 4],
+            )
+            .sym("sig", STB_WEAK, STT_FUNC, 0, 0, 8)
+            .sym("bonly", STB_GLOBAL, STT_OBJECT, 2, 0, 4)
+            .group(comdat::GRP_COMDAT, 0, &[0, 1, 2])
+            .build(EM_X86_64);
+        let res = link_group(alloc::vec![a, b], &LdsOptions::default()).expect("links");
+        assert!(
+            body_has(&res.image, ".text", &[0xa1; 4]),
+            "the first copy stays"
+        );
+        assert!(
+            !body_has(&res.image, ".text", &[0xb1; 8]),
+            "the later copy is gone"
+        );
+        assert!(
+            !body_has(&res.image, ".rodata", &[0xb2; 8]),
+            "and so is every member"
+        );
+        let secs = readelf_sections(&res.image);
+        assert!(
+            !secs.iter().any(|s| s.0 == ".data"),
+            "a member the kept group has no counterpart for is dropped too"
+        );
+        let names: Vec<String> = image_symbols(&res.image)
+            .into_iter()
+            .map(|(n, _, _)| n)
+            .collect();
+        assert!(names.iter().any(|n| n == "aonly"), "{names:?}");
+        assert!(
+            !names.iter().any(|n| n == "bonly"),
+            "a dropped member defines nothing"
+        );
+    }
+
+    /// The dedup runs on `GRP_COMDAT`, not on the presence of a group:
+    /// a plain group keeps both copies, and duplicate definitions in
+    /// them collide as they would outside any group.
+    #[test]
+    fn a_group_without_grp_comdat_is_not_deduplicated() {
+        let unit = |flags: u32, fill: u8| {
+            TestObj::new()
+                .sec(
+                    ".text.g",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    4,
+                    &[fill; 4],
+                )
+                .sym("gsig", STB_LOCAL, STT_NOTYPE, 0, 0, 0)
+                .sym("dup", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+                .group(flags, 0, &[0])
+                .build(EM_X86_64)
+        };
+        let e = link_group(
+            alloc::vec![unit(0, 0xa1), unit(0, 0xb1)],
+            &LdsOptions::default(),
+        )
+        .expect_err("a plain group deduplicates nothing");
+        assert!(
+            format!("{e}").contains("multiple definition of `dup`"),
+            "{e}"
+        );
+        let res = link_group(
+            alloc::vec![
+                unit(comdat::GRP_COMDAT, 0xa1),
+                unit(comdat::GRP_COMDAT, 0xb1)
+            ],
+            &LdsOptions::default(),
+        )
+        .expect("the same objects with GRP_COMDAT set link");
+        assert!(!body_has(&res.image, ".text", &[0xb1; 4]));
+    }
+
+    /// A reference by name reaches the surviving definition; a local or
+    /// section-relative reference into a dropped member has nowhere to
+    /// go and is reported, because the surviving group's contents need
+    /// bear no relation to the dropped one's.
+    #[test]
+    fn a_reference_into_a_dropped_group_resolves_by_name_or_is_reported() {
+        let a = TestObj::new()
+            .sec(
+                ".text.f",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xa1; 8],
+            )
+            .sym("f", STB_WEAK, STT_FUNC, 0, 0, 8)
+            .group(comdat::GRP_COMDAT, 0, &[0])
+            .build(EM_X86_64);
+        // Symtab: null, section symbols 1..=3, then f(4), bloc(5).
+        let b = |sym: u32, refsec: &str, flags: u64| {
+            TestObj::new()
+                .sec(
+                    ".text.f",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    4,
+                    &[0xb1; 8],
+                )
+                .sec(refsec, SHT_PROGBITS, flags, 8, &[0u8; 8])
+                .sym("f", STB_WEAK, STT_FUNC, 0, 0, 8)
+                .sym("bloc", STB_LOCAL, STT_NOTYPE, 0, 4, 0)
+                .group(comdat::GRP_COMDAT, 0, &[0])
+                .reloc(1, 0, sym, rt::R_X86_64_64, 0)
+                .build(EM_X86_64)
+        };
+        let res = link_group(
+            alloc::vec![a.clone(), b(4, ".data.b", SHF_ALLOC | SHF_WRITE)],
+            &LdsOptions::default(),
+        )
+        .expect("a named reference binds to the kept copy");
+        let f = find_sym(&image_symbols(&res.image), "f");
+        assert_eq!(
+            u64::from_le_bytes(
+                image_section(&res.image, ".data").1[..8]
+                    .try_into()
+                    .unwrap()
+            ),
+            f,
+        );
+        for sym in [5u32, 1u32] {
+            let e = link_group(
+                alloc::vec![a.clone(), b(sym, ".data.b", SHF_ALLOC | SHF_WRITE)],
+                &LdsOptions::default(),
+            )
+            .expect_err("a local or section reference into a dropped member");
+            assert!(
+                format!("{e}").contains("discarded section `.text.f'"),
+                "{e}"
+            );
+        }
+        // A section describing the image rather than taking part in it
+        // resolves the same reference to nothing instead.
+        let res = link_group(
+            alloc::vec![a, b(5, ".debug_info", 0)],
+            &LdsOptions::default(),
+        )
+        .expect("a debug reference is tolerated");
+        assert_eq!(
+            image_section(&res.image, ".debug_info").1,
+            alloc::vec![0u8; 8]
+        );
+    }
+
+    /// `.gnu.linkonce.*` is the older form of the same rule, keyed on
+    /// the section's own name. The key spaces do not meet: a linkonce
+    /// section and a COMDAT group both defining one symbol collide.
+    #[test]
+    fn gnu_linkonce_sections_deduplicate_by_section_name() {
+        let linkonce = |fill: u8, only: &str| {
+            TestObj::new()
+                .sec(
+                    ".gnu.linkonce.t.foo",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    4,
+                    &[fill; 4],
+                )
+                .sym("foo", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+                .sym(only, STB_GLOBAL, STT_FUNC, 0, 2, 0)
+                .build(EM_X86_64)
+        };
+        let res = link_group(
+            alloc::vec![linkonce(0xa1, "aonly_lo"), linkonce(0xb1, "bonly_lo")],
+            &LdsOptions::default(),
+        )
+        .expect("links");
+        assert!(body_has(&res.image, ".text", &[0xa1; 4]));
+        assert!(!body_has(&res.image, ".text", &[0xb1; 4]));
+        let names: Vec<String> = image_symbols(&res.image)
+            .into_iter()
+            .map(|(n, _, _)| n)
+            .collect();
+        assert!(names.iter().any(|n| n == "aonly_lo") && !names.iter().any(|n| n == "bonly_lo"));
+        let grouped = TestObj::new()
+            .sec(
+                ".text.foo",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xc1; 4],
+            )
+            .sym("foo", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+            .group(comdat::GRP_COMDAT, 0, &[0])
+            .build(EM_X86_64);
+        let e = link_group(
+            alloc::vec![linkonce(0xa1, "aonly_lo"), grouped],
+            &LdsOptions::default(),
+        )
+        .expect_err("the two mechanisms do not deduplicate against each other");
+        assert!(
+            format!("{e}").contains("multiple definition of `foo`"),
+            "{e}"
+        );
+    }
+
+    /// Group dedup runs before garbage collection, so a dropped member
+    /// is neither a root nor a path to one.
+    #[test]
+    fn a_dropped_group_member_is_no_garbage_collection_root() {
+        let root = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0u8; 8],
+            )
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .sym("f", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+            .reloc(0, 0, 3, rt::R_X86_64_64, 0)
+            .build(EM_X86_64);
+        // `.text.only` exists only in the object whose group member
+        // names it, so the two members define no symbol in common.
+        // Symtab there: null, sections 1..=3, f(4), only(5).
+        let member = |fill: u8, refs_only: bool| {
+            let mut o = TestObj::new().sec(
+                ".text.f",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                8,
+                &[fill; 8],
+            );
+            if refs_only {
+                o = o.sec(
+                    ".text.only",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    8,
+                    &[0xbb; 8],
+                );
+            }
+            o = o.sym("f", STB_WEAK, STT_FUNC, 0, 0, 8);
+            if refs_only {
+                o = o.sym("only", STB_GLOBAL, STT_FUNC, 1, 0, 8);
+            }
+            o = o.group(comdat::GRP_COMDAT, 0, &[0]);
+            if refs_only {
+                o = o.reloc(0, 0, 5, rt::R_X86_64_64, 0);
+            }
+            o.build(EM_X86_64)
+        };
+        let opts = |gc: bool| LdsOptions {
+            gc_sections: gc,
+            entry_override: Some("_start".to_string()),
+            ..Default::default()
+        };
+        let objs = || alloc::vec![root.clone(), member(0xa1, false), member(0xb1, true)];
+        let kept = link_group(objs(), &opts(false)).expect("links");
+        assert!(
+            body_has(&kept.image, ".text", &[0xbb; 8]),
+            "nothing collects it"
+        );
+        let collected = link_group(objs(), &opts(true)).expect("links");
+        assert!(
+            !body_has(&collected.image, ".text", &[0xbb; 8]),
+            "the only reference lived in a dropped member"
+        );
+        let live = link_group(alloc::vec![root, member(0xa1, true)], &opts(true)).expect("links");
+        assert!(
+            body_has(&live.image, ".text", &[0xbb; 8]),
+            "the same reference from the winning group keeps it"
+        );
+    }
+
+    /// An FDE describing code that left the link describes nothing, so
+    /// the entry goes with it rather than being relocated.
+    #[test]
+    fn an_fde_for_a_dropped_group_member_is_dropped() {
+        let unit = |fill: u8| {
+            let mut eh = eh_cie_zr();
+            eh.extend_from_slice(&eh_fde(0x1c));
+            TestObj::new()
+                .sec(
+                    ".text.f",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    8,
+                    &[fill; 8],
+                )
+                .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh)
+                .sym("f", STB_WEAK, STT_FUNC, 0, 0, 8)
+                .group(comdat::GRP_COMDAT, 0, &[0])
+                .reloc(1, 0x20, 1, rt::R_X86_64_PC32, 0)
+                .build(EM_X86_64)
+        };
+        let res =
+            link_group(alloc::vec![unit(0xa1), unit(0xb1)], &LdsOptions::default()).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24, "one CIE and the surviving copy's FDE");
+        let fdes = eh_frame::scan(&body, addr).expect("scans");
+        assert_eq!(
+            fdes.iter().map(|e| e.pc).collect::<Vec<_>>(),
+            alloc::vec![find_sym(&image_symbols(&res.image), "f")],
+        );
+    }
+
+    /// The i386 shape the gcc PIC thunk arrives in: an ELF32 `SHT_REL`
+    /// object whose group holds one section signed by the thunk.
+    #[test]
+    fn an_elf32_group_parses_and_deduplicates() {
+        let thunk = "__x86.get_pc_thunk.ax";
+        let unit = |fill: u8| {
+            TestObj::new()
+                .sec(
+                    ".text",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    4,
+                    &[fill; 4],
+                )
+                .sec(
+                    ".text.__x86.get_pc_thunk.ax",
+                    SHT_PROGBITS,
+                    SHF_ALLOC | SHF_EXECINSTR,
+                    1,
+                    &[0x8b, 0x04, 0x24, 0xc3],
+                )
+                .sym(thunk, STB_GLOBAL, STT_FUNC, 1, 0, 4)
+                .vis(2)
+                .group(comdat::GRP_COMDAT, 0, &[1])
+                .build_class(EM_386, ElfClass::Elf32, false)
+        };
+        let parsed = parse_lds_object("a.o", unit(0xa1)).expect("parses");
+        assert_eq!(parsed.groups.len(), 1);
+        assert_eq!(parsed.groups[0].flags, comdat::GRP_COMDAT);
+        assert_eq!(parsed.groups[0].signature, thunk);
+        assert_eq!(
+            parsed.sections[parsed.groups[0].members[0]].name,
+            ".text.__x86.get_pc_thunk.ax"
+        );
+        let opts = LdsOptions {
+            entry_override: Some(thunk.to_string()),
+            ..Default::default()
+        };
+        let res = link_group(alloc::vec![unit(0xa1), unit(0xb1)], &opts).expect("links");
+        let text = elf32_body(&res.image, ".text");
+        assert_eq!(
+            text.windows(4)
+                .filter(|w| *w == [0x8b, 0x04, 0x24, 0xc3])
+                .count(),
+            1,
+            "one thunk body: {text:02x?}"
+        );
     }
 }

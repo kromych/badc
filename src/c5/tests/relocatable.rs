@@ -4,8 +4,8 @@
 //! relocation rewriting, script handling).
 
 use crate::c5::linker::relocatable::{
-    EM_AARCH64, EtRel, EtSection, EtSymRef, RelinkOptions, glob_match, link_relocatable,
-    parse_et_rel, parse_module_script,
+    EM_AARCH64, EtGroup, EtRel, EtReloc, EtSection, EtSym, EtSymRef, RelinkOptions, glob_match,
+    link_relocatable, parse_et_rel, parse_module_script,
 };
 use crate::c5::{
     CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
@@ -849,4 +849,158 @@ fn ld_invocation_detection() {
     assert!(is_ld_invocation("badc", Some("--ld")));
     assert!(!is_ld_invocation("badc", Some("-r")));
     assert!(!is_ld_invocation("/usr/bin/badc", None));
+}
+
+// ---------------------------------------------- COMDAT / linkonce
+
+/// One ET_REL input built section by section, for the group rules.
+fn group_obj(source: &str, secs: &[(&str, u64, &[u8])]) -> EtRel {
+    EtRel {
+        source: source.to_string(),
+        machine: 62,
+        osabi: 0,
+        abiversion: 0,
+        eflags: 0,
+        sections: secs
+            .iter()
+            .map(|(name, flags, bytes)| EtSection {
+                name: name.to_string(),
+                sh_type: 1,
+                flags: *flags,
+                addralign: 4,
+                entsize: 0,
+                bytes: bytes.to_vec(),
+                nobits_size: 0,
+                link_target: None,
+                relocs: Vec::new(),
+                group: None,
+            })
+            .collect(),
+        symbols: Vec::new(),
+        groups: Vec::new(),
+    }
+}
+
+fn sym(name: &str, binding: u8, sec: usize, value: u64) -> EtSym {
+    EtSym {
+        name: name.to_string(),
+        binding,
+        kind: 2,
+        other: 0,
+        sec: EtSymRef::Section(sec),
+        value,
+        size: 0,
+    }
+}
+
+const SHF_A: u64 = 0x2;
+const SHF_AX: u64 = 0x6;
+const STB_LOCAL: u8 = 0;
+const STB_GLOBAL: u8 = 1;
+const R_X86_64_64: u32 = 1;
+
+/// The relocatable merge deduplicates COMDAT groups on the signature
+/// symbol's name, as a final link does: the later group loses every
+/// member and the symbols it defined go with it.
+#[test]
+fn a_comdat_group_survives_a_relocatable_merge_once() {
+    let unit = |source: &str, fill: u8, only: &str| {
+        let mut o = group_obj(source, &[(".text.f", SHF_AX, &[fill; 8])]);
+        o.symbols.push(sym("f", STB_GLOBAL, 0, 0));
+        o.symbols.push(sym(only, STB_GLOBAL, 0, 4));
+        o.groups.push(EtGroup {
+            flags: 1,
+            signature: "f".to_string(),
+            members: alloc::vec![0],
+        });
+        o.sections[0].group = Some(0);
+        o
+    };
+    let bytes = link_relocatable(
+        &[unit("a.o", 0xa1, "aonly"), unit("b.o", 0xb1, "bonly")],
+        &RelinkOptions::default(),
+    )
+    .expect("link");
+    let merged = parse_et_rel(&bytes, "merged").expect("parse merged");
+    let text = merged
+        .sections
+        .iter()
+        .find(|s| s.name == ".text.f")
+        .expect(".text.f");
+    assert_eq!(text.bytes, alloc::vec![0xa1u8; 8], "the first copy stays");
+    let names: Vec<&str> = merged.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(names.contains(&"aonly"), "{names:?}");
+    assert!(
+        !names.contains(&"bonly"),
+        "a dropped member defines nothing"
+    );
+}
+
+/// `.gnu.linkonce.*` deduplicates by section name here too. GNU ld's
+/// `-r` keeps the first copy and drops the later one whole.
+#[test]
+fn gnu_linkonce_deduplicates_in_a_relocatable_merge() {
+    let unit = |source: &str, fill: u8, only: &str| {
+        let mut o = group_obj(source, &[(".gnu.linkonce.t.foo", SHF_AX, &[fill; 4])]);
+        o.symbols.push(sym("foo", STB_GLOBAL, 0, 0));
+        o.symbols.push(sym(only, STB_GLOBAL, 0, 2));
+        o
+    };
+    let bytes = link_relocatable(
+        &[unit("a.o", 0xa1, "aonly"), unit("b.o", 0xb1, "bonly")],
+        &RelinkOptions::default(),
+    )
+    .expect("link");
+    let merged = parse_et_rel(&bytes, "merged").expect("parse merged");
+    let sec = merged
+        .sections
+        .iter()
+        .find(|s| s.name == ".gnu.linkonce.t.foo")
+        .expect("kept once");
+    assert_eq!(sec.bytes, alloc::vec![0xa1u8; 4]);
+    let names: Vec<&str> = merged.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(
+        names.contains(&"aonly") && !names.contains(&"bonly"),
+        "{names:?}"
+    );
+}
+
+/// A local reference into a dropped member is reported rather than
+/// redirected onto the surviving copy, which is what GNU ld's `-r`
+/// does; the surviving group's contents need bear no relation to the
+/// dropped one's.
+#[test]
+fn a_local_reference_into_a_dropped_group_fails_the_merge() {
+    let unit = |source: &str, fill: u8, refs: bool| {
+        let mut o = group_obj(
+            source,
+            &[
+                (".text.f", SHF_AX, &[fill; 8]),
+                (".data.b", SHF_A, &[0u8; 8]),
+            ],
+        );
+        o.symbols.push(sym("f", STB_GLOBAL, 0, 0));
+        o.symbols.push(sym("bloc", STB_LOCAL, 0, 4));
+        o.groups.push(EtGroup {
+            flags: 1,
+            signature: "f".to_string(),
+            members: alloc::vec![0],
+        });
+        o.sections[0].group = Some(0);
+        if refs {
+            o.sections[1].relocs.push(EtReloc {
+                offset: 0,
+                sym: 1,
+                rtype: R_X86_64_64,
+                addend: 0,
+            });
+        }
+        o
+    };
+    let e = link_relocatable(
+        &[unit("a.o", 0xa1, false), unit("b.o", 0xb1, true)],
+        &RelinkOptions::default(),
+    )
+    .expect_err("the reference has nowhere to land");
+    assert!(format!("{e}").contains("discarded local `bloc'"), "{e}");
 }

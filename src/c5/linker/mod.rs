@@ -35,6 +35,8 @@ mod archive;
 #[cfg(feature = "std")]
 pub(crate) mod attributes;
 #[cfg(feature = "std")]
+pub(crate) mod comdat;
+#[cfg(feature = "std")]
 pub(crate) mod default_script;
 #[cfg(feature = "std")]
 pub(crate) mod dynamic;

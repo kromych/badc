@@ -25,6 +25,7 @@ use hashbrown::{HashMap, HashSet};
 use crate::c5::error::C5Error;
 
 use super::attributes;
+use super::comdat::{self, SecId};
 use super::gnu_property;
 use super::lds::{
     BinOp, DataWidth, Expr, LinkerScript, SectionContent, SectionsItem, SortKind, UnOp,
@@ -51,7 +52,6 @@ const SHF_MERGE: u64 = 0x10;
 const SHF_INFO_LINK: u64 = 0x40;
 const SHF_LINK_ORDER: u64 = 0x80;
 const SHF_GROUP: u64 = 0x200;
-const GRP_COMDAT: u32 = 1;
 
 const SHN_UNDEF: u16 = 0;
 const SHN_LORESERVE: u16 = 0xff00;
@@ -681,9 +681,6 @@ pub struct RelinkOptions {
     pub expect_machine: Option<u16>,
 }
 
-/// (object index, carried-section index) of one input section.
-type SecId = (usize, usize);
-
 #[derive(Debug, Clone, Copy)]
 struct Contribution {
     obj: usize,
@@ -871,42 +868,25 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
         }
     }
 
-    // COMDAT dedup: first group with a signature wins; later ones drop
-    // their member sections. `twin` maps a dropped member to the kept
-    // group's same-name member so stray relocations can retarget.
-    let mut kept_groups: Vec<(usize, usize)> = Vec::new(); // (obj, group idx)
-    let mut sig_first: HashMap<&str, usize> = HashMap::new(); // -> kept_groups idx
-    let mut dropped: HashSet<SecId> = HashSet::new();
-    let mut twin: HashMap<SecId, SecId> = HashMap::new();
-    for (oi, o) in objs.iter().enumerate() {
-        for (gi, g) in o.groups.iter().enumerate() {
-            if g.flags & GRP_COMDAT == 0 {
-                kept_groups.push((oi, gi));
-                continue;
-            }
-            match sig_first.get(g.signature.as_str()) {
-                None => {
-                    sig_first.insert(g.signature.as_str(), kept_groups.len());
-                    kept_groups.push((oi, gi));
-                }
-                Some(&kept) => {
-                    let (koi, kgi) = kept_groups[kept];
-                    let kept_members = &objs[koi].groups[kgi].members;
-                    for (mi, &sec) in g.members.iter().enumerate() {
-                        dropped.insert((oi, sec));
-                        let name = &o.sections[sec].name;
-                        let t = kept_members
-                            .iter()
-                            .find(|&&ks| objs[koi].sections[ks].name == *name)
-                            .or(kept_members.get(mi));
-                        if let Some(&ks) = t {
-                            twin.insert((oi, sec), (koi, ks));
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let views: Vec<comdat::ObjView<'_>> = objs
+        .iter()
+        .map(|o| comdat::ObjView {
+            groups: o
+                .groups
+                .iter()
+                .map(|g| comdat::GroupView {
+                    flags: g.flags,
+                    signature: &g.signature,
+                    members: &g.members,
+                })
+                .collect(),
+            section_names: o.sections.iter().map(|s| s.name.as_str()).collect(),
+        })
+        .collect();
+    let comdat::Dedup {
+        kept: kept_groups,
+        mut dropped,
+    } = comdat::dedup(&views);
 
     // Property notes leave the generic name-merge; script discards and
     // --strip-debug drop sections outright.
@@ -1431,8 +1411,7 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                     o.source, r.sym
                 )));
             };
-            let (tobj, tsec) = twin.get(&(oi, si)).copied().unwrap_or((oi, si));
-            let Some(&(outsec, off)) = placed.get(&(tobj, tsec)) else {
+            let Some(&(outsec, off)) = placed.get(&(oi, si)) else {
                 if !allocated {
                     return Ok((0, 0));
                 }
@@ -1449,14 +1428,13 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             }
             // Discarded local: convert to the containing section's
             // symbol with the local's value folded into the addend.
-            if let EtSymRef::Section(si) = sym.sec {
-                let (tobj, tsec) = twin.get(&(oi, si)).copied().unwrap_or((oi, si));
-                if let Some(&(outsec, off)) = placed.get(&(tobj, tsec)) {
-                    return Ok((
-                        secsym_of_outsec[outsec],
-                        r.addend + off as i64 + sym.value as i64,
-                    ));
-                }
+            if let EtSymRef::Section(si) = sym.sec
+                && let Some(&(outsec, off)) = placed.get(&(oi, si))
+            {
+                return Ok((
+                    secsym_of_outsec[outsec],
+                    r.addend + off as i64 + sym.value as i64,
+                ));
             }
             if !allocated {
                 return Ok((0, 0));

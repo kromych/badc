@@ -446,20 +446,24 @@ fn emit_modrm_mem(code: &mut InsnBuf, reg: u8, base: u8, index: Option<u8>, scal
     }
 }
 
-/// ModRM for a 16-bit address. There is no SIB byte: the r/m field names one
-/// of the fixed base / index pairs over bx, bp, si and di, and the
-/// displacement is 8- or 16-bit.
-fn emit_modrm_mem16(
-    code: &mut InsnBuf,
+/// ModRM + displacement bytes of a 16-bit address, as `(bytes, length)`.
+/// There is no SIB byte: the r/m field names one of the fixed base / index
+/// pairs over bx, bp, si and di, and the displacement is 8- or 16-bit.
+pub(super) fn modrm_mem16(
     reg: u8,
     base: Option<u8>,
-    index: Option<u8>,
+    index: Option<(u8, u8)>,
     disp: i32,
-) -> Result<(), String> {
+) -> Result<([u8; 3], usize), String> {
     const BX: u8 = 3;
     const BP: u8 = 5;
     const SI: u8 = 6;
     const DI: u8 = 7;
+    if index.is_some_and(|(_, scale)| scale != 1) {
+        return Err(String::from("inline asm: 16-bit addressing has no scale"));
+    }
+    let index = index.map(|(i, _)| i);
+    let mut out = [0u8; 3];
     // The pair is unordered: `(%bx,%si)` and `(%si,%bx)` name one address.
     let pair = match (base, index) {
         (Some(b), Some(i)) if i == BX || i == BP => (i, b),
@@ -476,9 +480,9 @@ fn emit_modrm_mem16(
         (Some(BX), None, _) => 7,
         (None, None, _) => {
             // mod=00 rm=110 is the base-less disp16 form.
-            code.push(((reg & 7) << 3) | 6);
-            code.extend_from_slice(&(disp as u16).to_le_bytes());
-            return Ok(());
+            out[0] = ((reg & 7) << 3) | 6;
+            out[1..3].copy_from_slice(&(disp as u16).to_le_bytes());
+            return Ok((out, 3));
         }
         _ => {
             return Err(String::from(
@@ -494,13 +498,18 @@ fn emit_modrm_mem16(
     } else {
         2
     };
-    code.push((mod_ << 6) | ((reg & 7) << 3) | rm);
+    out[0] = (mod_ << 6) | ((reg & 7) << 3) | rm;
     match mod_ {
-        1 => code.push(disp as u8),
-        2 => code.extend_from_slice(&(disp as u16).to_le_bytes()),
-        _ => {}
+        1 => {
+            out[1] = disp as u8;
+            Ok((out, 2))
+        }
+        2 => {
+            out[1..3].copy_from_slice(&(disp as u16).to_le_bytes());
+            Ok((out, 3))
+        }
+        _ => Ok((out, 1)),
     }
-    Ok(())
 }
 
 fn reg_num(o: Opnd) -> u8 {
@@ -1170,10 +1179,9 @@ fn encode_form(
                 disp,
                 ..
             }) if addr == 2 => {
-                if scale != 1 {
-                    return Err(String::from("inline asm: 16-bit addressing has no scale"));
-                }
-                emit_modrm_mem16(&mut code, regfield, Some(base), index, disp)?
+                let (bytes, n) =
+                    modrm_mem16(regfield, Some(base), index.map(|i| (i, scale)), disp)?;
+                code.extend_from_slice(&bytes[..n]);
             }
             Some(Opnd::Mem {
                 base,
@@ -1193,7 +1201,8 @@ fn encode_form(
                 code.extend_from_slice(&disp.to_le_bytes());
             }
             Some(Opnd::AbsMem { disp, .. }) if addr == 2 => {
-                emit_modrm_mem16(&mut code, regfield, None, None, disp)?
+                let (bytes, n) = modrm_mem16(regfield, None, None, disp)?;
+                code.extend_from_slice(&bytes[..n]);
             }
             Some(Opnd::AbsMem { disp, .. }) if mode != Mode::Bits64 => {
                 // mod=00 rm=101 is the plain disp32 form; only long mode reads

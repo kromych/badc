@@ -11675,4 +11675,48 @@ mod code_mode_tests {
             assert_eq!(assemble(src), want, "{src}");
         }
     }
+
+    /// Bespoke-path memory forms (x87, mxcsr, cmpxchg16b, the MMX / SSE
+    /// quadword moves, segment moves, crc32, and the indirect far branches)
+    /// follow the address size: a 16-bit address takes the 16-bit r/m
+    /// numbering and a non-default one the `67` prefix, ahead of any
+    /// operand-size or mandatory prefix. Bytes measured with GNU as 2.46.1
+    /// and clang for the same source.
+    #[test]
+    fn bespoke_memory_forms_follow_the_address_size() {
+        #[rustfmt::skip]
+        let cases: &[(&str, &[u8])] = &[
+            (".code16\nljmp *(%bx)\n",           &[0xff, 0x2f]),
+            (".code16\nljmpw *(%bx)\n",          &[0xff, 0x2f]),
+            (".code16\nlcall *8(%bp,%si)\n",     &[0xff, 0x5a, 0x08]),
+            (".code16\nlcalll *(%bx)\n",         &[0x66, 0xff, 0x1f]),
+            (".code16\nljmpl *(%eax)\n",         &[0x67, 0x66, 0xff, 0x28]),
+            (".code16\nfnstsw (%bx)\n",          &[0xdd, 0x3f]),
+            (".code16\nfnstsw 2(%bx,%si)\n",     &[0xdd, 0x78, 0x02]),
+            (".code16\nfnstcw -2(%bp)\n",        &[0xd9, 0x7e, 0xfe]),
+            (".code16\nfldl (%si)\n",            &[0xdd, 0x04]),
+            (".code16\nfstpl 6(%di)\n",          &[0xdd, 0x5d, 0x06]),
+            (".code16\nfistpl -4(%bp,%di)\n",    &[0xdb, 0x5b, 0xfc]),
+            (".code16\nldmxcsr (%bx,%si)\n",     &[0x0f, 0xae, 0x10]),
+            (".code16\nstmxcsr (%bp)\n",         &[0x0f, 0xae, 0x5e, 0x00]),
+            (".code32\nfnstsw (%bx)\n",          &[0x67, 0xdd, 0x3f]),
+            (".code32\nlcall *8(%bp,%si)\n",     &[0x67, 0xff, 0x5a, 0x08]),
+            (".code32\nljmp *(%bx)\n",           &[0x67, 0xff, 0x2f]),
+            ("fnstsw (%eax)\n",                  &[0x67, 0xdd, 0x38]),
+            ("ldmxcsr (%ebx)\n",                 &[0x67, 0x0f, 0xae, 0x13]),
+            ("cmpxchg16b (%ebx)\n",              &[0x67, 0x48, 0x0f, 0xc7, 0x0b]),
+            ("movq (%ebx), %mm0\n",              &[0x67, 0x0f, 0x6f, 0x03]),
+            ("movq %xmm3, (%edi)\n",             &[0x67, 0x66, 0x0f, 0xd6, 0x1f]),
+            ("movq (%ecx), %xmm2\n",             &[0x67, 0xf3, 0x0f, 0x7e, 0x11]),
+            ("mov %ds, (%eax)\n",                &[0x67, 0x8c, 0x18]),
+            ("mov (%eax), %ds\n",                &[0x67, 0x8e, 0x18]),
+            ("crc32w (%ebx), %ecx\n",            &[0x67, 0x66, 0xf2, 0x0f, 0x38, 0xf1, 0x0b]),
+        ];
+        for (src, want) in cases {
+            assert_eq!(assemble(src), *want, "{src}");
+        }
+        // The 16-bit r/m forms carry no scale and only bx / bp with si / di.
+        assert!(assemble_err(".code16\nfnstsw (%bx,%bp)\n").contains("bx / bp with si / di"));
+        assert!(assemble_err(".code16\nfnstsw (%bx,%si,2)\n").contains("no scale"));
+    }
 }

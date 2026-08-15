@@ -1548,7 +1548,7 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
 /// return true; otherwise (a plain GP move) return false. The forms: GP64<->xmm
 /// (66 REX.W 0F 6E/7E), xmm<->xmm and mem->xmm load (F3 0F 7E), xmm->mem store
 /// (66 0F D6). The xmm is always ModRM.reg; the other operand is r/m.
-fn movq_xmm(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
+fn movq_xmm(code: &mut Vec<u8>, addr: u8, src: Concrete, dst: Concrete) -> Result<bool, String> {
     let xmm = |c: &Concrete| match c {
         Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
             Some(*reg - XMM_BASE)
@@ -1582,35 +1582,39 @@ fn movq_xmm(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
         }
         // mem -> xmm (load).
         (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else { return false };
+            let Some(mr) = MemRm::of(m) else {
+                return Ok(false);
+            };
             code.push(0xF3);
             if d >= 8 || mr.rex_x() || mr.rex_b() {
                 code.push(rex(false, d >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x7E]);
-            mr.emit(code, d & 7);
+            mr.emit(code, addr, d & 7)?;
         }
         // xmm -> mem (store).
         (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else { return false };
+            let Some(mr) = MemRm::of(m) else {
+                return Ok(false);
+            };
             code.push(0x66);
             if s >= 8 || mr.rex_x() || mr.rex_b() {
                 code.push(rex(false, s >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0xD6]);
-            mr.emit(code, s & 7);
+            mr.emit(code, addr, s & 7)?;
         }
         // No xmm operand: a plain GP move.
-        _ => return false,
+        _ => return Ok(false),
     }
-    true
+    Ok(true)
 }
 
 /// If `movq src, dst` involves an MMX register, encode the MMX quadword move
 /// and return true. The forms: mm<->mm and mem->mm load (0F 6F), mm->mem
 /// store (0F 7F), GP64<->mm (REX.W 0F 6E/7E). The mm register is always
 /// ModRM.reg; the other operand is r/m.
-fn movq_mmx(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
+fn movq_mmx(code: &mut Vec<u8>, addr: u8, src: Concrete, dst: Concrete) -> Result<bool, String> {
     let mm = |c: &Concrete| match c {
         Concrete::Reg { reg, .. } if (MMX_BASE..MMX_BASE + 8).contains(reg) => {
             Some(*reg - MMX_BASE)
@@ -1624,20 +1628,24 @@ fn movq_mmx(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
             code.push(modrm_reg(d, s));
         }
         (None, Some(d), ref m, _) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else { return false };
+            let Some(mr) = MemRm::of(m) else {
+                return Ok(false);
+            };
             if mr.rex_x() || mr.rex_b() {
                 code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x6F]);
-            mr.emit(code, d);
+            mr.emit(code, addr, d)?;
         }
         (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
-            let Some(mr) = MemRm::of(m) else { return false };
+            let Some(mr) = MemRm::of(m) else {
+                return Ok(false);
+            };
             if mr.rex_x() || mr.rex_b() {
                 code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x7F]);
-            mr.emit(code, s);
+            mr.emit(code, addr, s)?;
         }
         (None, Some(d), Concrete::Reg { reg: g, .. }, _) if g < MMX_BASE => {
             code.push(rex(true, false, false, g >= 8));
@@ -1649,9 +1657,9 @@ fn movq_mmx(code: &mut Vec<u8>, src: Concrete, dst: Concrete) -> bool {
             code.extend_from_slice(&[0x0F, 0x7E]);
             code.push(modrm_reg(s, g & 7));
         }
-        _ => return false,
+        _ => return Ok(false),
     }
-    true
+    Ok(true)
 }
 
 /// The catalogue mnemonic matching `name`, as a `'static` string, or `None`.
@@ -2910,10 +2918,22 @@ impl MemRm {
         self.index.is_some_and(|(i, _)| i >= 8)
     }
 
-    /// Emit the ModR/M (plus SIB / displacement) with ModRM.reg = `reg`.
-    /// RIP-relative is mod=00, r/m=101 with a disp32.
-    fn emit(self, code: &mut Vec<u8>, reg: u8) {
-        self.emit_scaled(code, reg, 1);
+    /// Emit the ModR/M (plus SIB / displacement) with ModRM.reg = `reg` at
+    /// address size `addr`, routing a 16-bit address through the fixed
+    /// base / index pairs. RIP-relative is mod=00, r/m=101 with a disp32.
+    fn emit(self, code: &mut Vec<u8>, addr: u8, reg: u8) -> Result<(), String> {
+        if addr == 2 {
+            if self.riprel {
+                return Err(String::from(
+                    "inline asm: RIP-relative addressing exists only in 64-bit mode",
+                ));
+            }
+            let (bytes, n) = super::table::modrm_mem16(reg, self.base, self.index, self.disp)?;
+            code.extend_from_slice(&bytes[..n]);
+        } else {
+            self.emit_scaled(code, reg, 1);
+        }
+        Ok(())
     }
 
     /// As [`MemRm::emit`], with `n` the EVEX disp8 scale (see [`disp8_of`]).
@@ -3374,6 +3394,19 @@ fn encode_bespoke(
     suffix: Option<AsmRegSize>,
     ops: &[Concrete],
 ) -> Result<(), String> {
+    // Address-size prefix: `67` selects the non-default address size, ahead
+    // of any operand-size prefix an arm emits. A form with no memory operand
+    // addresses nothing and takes none.
+    if addr != mode.addrsize()
+        && ops.iter().any(|o| {
+            matches!(
+                o,
+                Concrete::Mem { .. } | Concrete::AbsMem { .. } | Concrete::IndexMem { .. }
+            )
+        })
+    {
+        code.push(0x67);
+    }
     match mnemonic {
         // Raw bytes carry their payload on the `AsmInsn`, not in `ops`; the
         // caller emits them directly and never routes them here.
@@ -3454,7 +3487,7 @@ fn encode_bespoke(
             code.extend_from_slice(&[0x0F, 0x38, opcode]);
             match rm {
                 Ok(reg) => code.push(modrm_reg(acc, reg)),
-                Err(mr) => mr.emit(code, acc),
+                Err(mr) => mr.emit(code, addr, acc)?,
             }
             Ok(())
         }
@@ -3505,7 +3538,7 @@ fn encode_bespoke(
                 code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
             }
             code.push(opcode);
-            mr.emit(code, ext);
+            mr.emit(code, addr, ext)?;
             Ok(())
         }
         Mnemonic::FarBranch { ext, far, opw } => {
@@ -3552,7 +3585,7 @@ fn encode_bespoke(
                 code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
             }
             code.push(0xFF);
-            mr.emit(code, ext);
+            mr.emit(code, addr, ext)?;
             Ok(())
         }
         Mnemonic::MemExt0F { opcode, ext, rex_w } => {
@@ -3566,7 +3599,7 @@ fn encode_bespoke(
             }
             code.push(0x0F);
             code.push(opcode);
-            mr.emit(code, ext);
+            mr.emit(code, addr, ext)?;
             Ok(())
         }
         Mnemonic::InvMem { opcode } => {
@@ -3590,7 +3623,7 @@ fn encode_bespoke(
                 code.push(rex(false, gpr >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x38, opcode]);
-            mr.emit(code, gpr & 7);
+            mr.emit(code, addr, gpr & 7)?;
             Ok(())
         }
         Mnemonic::SizedNullary { opcode, opw, stack } => {
@@ -3662,7 +3695,7 @@ fn encode_bespoke(
                         code.push(rex(false, v_field >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
-                    mr.emit(code, v_field & 7);
+                    mr.emit(code, addr, v_field & 7)?;
                 }
             }
             Ok(())
@@ -3715,7 +3748,7 @@ fn encode_bespoke(
                     }
                     escape(code);
                     code.push(opcode);
-                    mr.emit(code, d & 7);
+                    mr.emit(code, addr, d & 7)?;
                 }
                 (None, None) => {
                     return Err(String::from(
@@ -3769,7 +3802,7 @@ fn encode_bespoke(
                         code.push(rex(false, dn >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     opcode(code, op);
-                    mr.emit(code, dn & 7);
+                    mr.emit(code, addr, dn & 7)?;
                 }
                 (Some(sn), _, None, Some(mr)) => {
                     let op = dir(store_op, "store")?;
@@ -3777,7 +3810,7 @@ fn encode_bespoke(
                         code.push(rex(false, sn >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     opcode(code, op);
-                    mr.emit(code, sn & 7);
+                    mr.emit(code, addr, sn & 7)?;
                 }
                 _ => {
                     return Err(String::from(
@@ -3854,7 +3887,7 @@ fn encode_bespoke(
                     }
                     escape(code);
                     code.push(opcode);
-                    mr.emit(code, v & 7);
+                    mr.emit(code, addr, v & 7)?;
                 }
                 (None, None) => {
                     return Err(String::from(
@@ -3920,7 +3953,7 @@ fn encode_bespoke(
                     let l = u8::from(dy || s1y);
                     emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, w, s1, l, pp);
                     code.push(opcode);
-                    mr.emit(code, d & 7);
+                    mr.emit(code, addr, d & 7)?;
                 }
             }
             Ok(())
@@ -3971,7 +4004,7 @@ fn encode_bespoke(
                         let pp = if w { 2 } else { 1 };
                         vex(code, d >= 8, mr.rex_x(), mr.rex_b(), pp, false);
                         code.push(if w { 0x7E } else { 0x6E });
-                        mr.emit(code, d & 7);
+                        mr.emit(code, addr, d & 7)?;
                     }
                 },
                 (Some(s), None) => match gpr(&dst) {
@@ -3984,7 +4017,7 @@ fn encode_bespoke(
                         let mr = MemRm::of(&dst).ok_or(BAD_VMOV_OPND)?;
                         vex(code, s >= 8, mr.rex_x(), mr.rex_b(), 1, false);
                         code.push(if w { 0xD6 } else { 0x7E });
-                        mr.emit(code, s & 7);
+                        mr.emit(code, addr, s & 7)?;
                     }
                 },
                 _ => {
@@ -4048,7 +4081,7 @@ fn encode_bespoke(
                             pp,
                         );
                         code.push(load_op);
-                        mr.emit(code, d & 7);
+                        mr.emit(code, addr, d & 7)?;
                     }
                 }
             } else if let (Some((s, sy)), Some(mr)) = (vec_reg(&src), MemRm::of(&dst)) {
@@ -4065,7 +4098,7 @@ fn encode_bespoke(
                     pp,
                 );
                 code.push(store_op);
-                mr.emit(code, s & 7);
+                mr.emit(code, addr, s & 7)?;
             } else {
                 return Err(String::from("inline asm: unsupported VEX move operands"));
             }
@@ -4122,7 +4155,7 @@ fn encode_bespoke(
                         pp,
                     );
                     code.push(opcode);
-                    mr.emit(code, d & 7);
+                    mr.emit(code, addr, d & 7)?;
                 }
             }
             Ok(())
@@ -4177,7 +4210,7 @@ fn encode_bespoke(
                     let l = u8::from(dy || s1y || leady);
                     emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, false, s1, l, pp);
                     code.push(opcode);
-                    mr.emit(code, d & 7);
+                    mr.emit(code, addr, d & 7)?;
                 }
             }
             code.push(tail);
@@ -4234,7 +4267,7 @@ fn encode_bespoke(
                         pp,
                     );
                     code.push(opcode);
-                    mr.emit(code, r & 7);
+                    mr.emit(code, addr, r & 7)?;
                 }
             }
             code.push(*ib as u8);
@@ -4313,7 +4346,7 @@ fn encode_bespoke(
                     };
                     emit_vex(code, s >= 8, mr.rex_x(), mr.rex_b(), map, w, 0, 0, 1);
                     code.push(opcode);
-                    mr.emit(code, s & 7);
+                    mr.emit(code, addr, s & 7)?;
                 }
             }
             code.push(*ib as u8);
@@ -4345,7 +4378,7 @@ fn encode_bespoke(
                     };
                     emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, w, s1, 0, 1);
                     code.push(opcode);
-                    mr.emit(code, d & 7);
+                    mr.emit(code, addr, d & 7)?;
                 }
             }
             code.push(*ib as u8);
@@ -4414,7 +4447,7 @@ fn encode_bespoke(
                     };
                     emit_vex(code, dn >= 8, mr.rex_x(), mr.rex_b(), map, w, vvvv, 0, pp);
                     code.push(opcode);
-                    mr.emit(code, dn & 7);
+                    mr.emit(code, addr, dn & 7)?;
                 }
             }
             if let Some(Concrete::Imm(v)) = ib {
@@ -4514,7 +4547,7 @@ fn encode_bespoke(
             let [src, dst] = two(ops)?;
             // `movq` with an XMM operand is the SSE quadword move, with an
             // MMX operand the MMX quadword move; neither is a GP mov.
-            if movq_xmm(code, src, dst) || movq_mmx(code, src, dst) {
+            if movq_xmm(code, addr, src, dst)? || movq_mmx(code, addr, src, dst)? {
                 return Ok(());
             }
             {
@@ -4550,14 +4583,11 @@ fn encode_bespoke(
                     if kind == b's'
                         && let Some(mr) = MemRm::of(&other)
                     {
-                        if addr != mode.addrsize() {
-                            code.push(0x67);
-                        }
                         if mr.rex_x() || mr.rex_b() {
                             code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
                         }
                         code.push(if spec_is_src { 0x8C } else { 0x8E });
-                        mr.emit(code, spec_idx);
+                        mr.emit(code, addr, spec_idx)?;
                         return Ok(());
                     }
                     let (gp, gp_size) = as_reg(other)?;

@@ -2318,6 +2318,7 @@ pub(crate) fn lower(
         data_fixups,
         rodata: super::RodataBuild::default(),
         data_pcrel_relocs: Vec::new(),
+        text_pcrel_relocs: Vec::new(),
         func_fixups,
         pc_to_native,
         func_ent_pcs,

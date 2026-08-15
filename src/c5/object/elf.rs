@@ -3575,6 +3575,37 @@ pub(super) fn write(
         )?;
     }
 
+    // Assembler pc-relative data words in executable sections
+    // (`.long x - .` / `.quad x - .`) targeting the data-byte space:
+    // the field receives `S + A - P` at the recorded width. A pure
+    // difference slides with the image, so no `.rela.dyn` entry.
+    for r in &build.text_pcrel_relocs {
+        let site_vmaddr = code_vmaddr + stub_len + r.site_text_offset;
+        let value = data_off_to_vaddr(r.target_data_offset) as i64 - site_vmaddr as i64;
+        let file_off = code_place.file_at(stub_len + r.site_text_offset);
+        let width = r.width as usize;
+        if file_off + width > out.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: text pcrel field {file_off:#x} past end of image ({})",
+                    out.len()
+                ),
+            )));
+        }
+        if width == 8 {
+            out[file_off..file_off + 8].copy_from_slice(&value.to_le_bytes());
+            continue;
+        }
+        let Ok(v) = i32::try_from(value) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: text pcrel field {file_off:#x}: displacement {value:#x} exceeds 32 bits"
+                ),
+            )));
+        };
+        out[file_off..file_off + 4].copy_from_slice(&v.to_le_bytes());
+    }
+
     // Switch-table base materializations (the lea feeding the
     // dispatch); the blob sits in the PF_R load at `jt_vmaddr`.
     for fx in &build.rodata.addr_fixups {
@@ -3774,6 +3805,7 @@ mod tests {
             elf_class: Default::default(),
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
+            text_pcrel_relocs: Vec::new(),
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),

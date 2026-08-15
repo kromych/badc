@@ -8452,6 +8452,216 @@ fn asm_section_operand_extern_symbol_relocates_to_symbol() {
     }
 }
 
+/// `(sh_addr, body)` of the named section in a final ELF image.
+fn elf_image_section(bytes: &[u8], name: &str) -> Option<(u64, alloc::vec::Vec<u8>)> {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64le(0x28) as usize;
+    let shentsize = u16le(0x3A);
+    let shnum = u16le(0x3C);
+    let strtab_off = u64le(shoff + u16le(0x3E) * shentsize + 0x18) as usize;
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        let name_off = strtab_off + u32le(sh);
+        let end = bytes[name_off..].iter().position(|&b| b == 0)? + name_off;
+        if &bytes[name_off..end] != name.as_bytes() {
+            continue;
+        }
+        let addr = u64le(sh + 0x10);
+        let off = u64le(sh + 0x18) as usize;
+        let size = u64le(sh + 0x20) as usize;
+        return Some((addr, bytes[off..off + size].to_vec()));
+    }
+    None
+}
+
+/// Self-link the operand-symbol section shape and return
+/// `(image, merged)` for the field-value checks below.
+fn self_link_operand_symbol_shape(
+    target: crate::c5::Target,
+    flags: &str,
+) -> (alloc::vec::Vec<u8>, crate::c5::linker::MergedNative) {
+    use crate::c5::linker::{
+        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
+    let src = alloc::format!(
+        "struct sk {{ int x; }};\n\
+         struct sk key = {{ 42 }};\n\
+         int probe(void) {{\n\
+             __asm__ volatile(\n\
+                 \"1:\\tnop\\n\"\n\
+                 \".pushsection .optab,\\\"{flags}\\\"\\n\"\n\
+                 \".balign 8\\n\"\n\
+                 \".globl optab\\n\"\n\
+                 \"optab:\\n\"\n\
+                 \".ascii \\\"OpTaB9mk\\\"\\n\"\n\
+                 \".long %c0 - .\\n\"\n\
+                 \".long 0\\n\"\n\
+                 \".quad %c1 + %c2 - .\\n\"\n\
+                 \".popsection\\n\" : : \"i\"(\"probe9.c\"), \"i\"(&key), \"i\"(4));\n\
+             return 0;\n\
+         }}\n\
+         int main(void) {{ return probe(); }}\n"
+    );
+    let program = Compiler::with_target(src.to_string(), target)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(core::slice::from_ref(&obj)).expect("link");
+    let plt = match target {
+        crate::c5::Target::LinuxAarch64 => emit_aarch64_plt(&mut merged).expect("plt"),
+        _ => emit_x86_64_plt(&mut merged).expect("plt"),
+    };
+    let image = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        target,
+        None,
+    )
+    .expect("write executable");
+    (image, merged)
+}
+
+#[test]
+fn asm_section_operand_symbol_self_link_matches_ld() {
+    // Self-linked counterpart of `asm_section_operand_symbol_relocates_to_data`:
+    // the fields of the writable `.optab` fold into the merged data stream and
+    // must resolve to the values GNU ld produces from the same object --
+    // `S + A - P` against the operand string and `&key + 4`. The merge used to
+    // patch these pc-relative words as 8-byte absolutes, corrupting the fields.
+    use crate::c5::Target;
+    use crate::c5::linker::NativeSymSection;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let (image, merged) = self_link_operand_symbol_shape(target, "aw");
+        let optab = merged.defined.get("optab").expect("optab in merged");
+        assert!(
+            matches!(optab.section, NativeSymSection::Data),
+            "{target:?}: writable .optab joins the data stream"
+        );
+        let key = merged.defined.get("key").expect("key in merged");
+        let ro_len = merged.data_ro_len as u64;
+        let (rodata_addr, rodata) = elf_image_section(&image, ".rodata").expect("image .rodata");
+        let (data_addr, data) = elf_image_section(&image, ".data").expect("image .data");
+        let addr_of = |off: u64| {
+            if off < ro_len {
+                rodata_addr + off
+            } else {
+                data_addr + (off - ro_len)
+            }
+        };
+        let str_pos = rodata
+            .windows(9)
+            .position(|w| w == b"probe9.c\0")
+            .expect("operand string in image .rodata") as u64;
+        let str_vaddr = rodata_addr + str_pos;
+        let body_at = |off: u64| (off - ro_len) as usize;
+        assert_eq!(
+            &data[body_at(optab.value)..body_at(optab.value) + 8],
+            b"OpTaB9mk",
+            "{target:?}: the section payload survives the merge"
+        );
+        let l_off = optab.value + 8;
+        let q_off = optab.value + 16;
+        let field_l =
+            i32::from_le_bytes(data[body_at(l_off)..body_at(l_off) + 4].try_into().unwrap()) as i64;
+        let field_q =
+            i64::from_le_bytes(data[body_at(q_off)..body_at(q_off) + 8].try_into().unwrap());
+        assert_ne!(field_l, 0, "{target:?}: `.long %c0 - .` left unresolved");
+        assert_eq!(
+            addr_of(l_off) as i64 + field_l,
+            str_vaddr as i64,
+            "{target:?}: `.long %c0 - .` reaches the operand string"
+        );
+        assert_eq!(
+            &data[body_at(l_off + 4)..body_at(l_off + 8)],
+            &[0u8; 4],
+            "{target:?}: the `.long 0` spacer is untouched"
+        );
+        let key_vaddr = addr_of(key.value) as i64;
+        assert_eq!(
+            addr_of(q_off) as i64 + field_q,
+            key_vaddr + 4,
+            "{target:?}: `.quad %c1 + %c2 - .` reaches key + 4"
+        );
+        assert_ne!(
+            addr_of(q_off) as i64 + field_q,
+            key_vaddr,
+            "{target:?}: the `+ %c2` operand addend must not be dropped"
+        );
+    }
+}
+
+#[test]
+fn asm_section_operand_symbol_in_exec_section_self_links() {
+    // Same fields inside an executable `.optab` (`"ax"`): the section joins
+    // the merged text, the data-target pc-relative words park, and the image
+    // writer resolves each plain field to `S + A - P` -- GNU ld's values.
+    // These used to be declined as unsupported relocations.
+    use crate::c5::Target;
+    use crate::c5::linker::NativeSymSection;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let (image, merged) = self_link_operand_symbol_shape(target, "ax");
+        let optab = merged.defined.get("optab").expect("optab in merged");
+        assert!(
+            matches!(optab.section, NativeSymSection::Text),
+            "{target:?}: executable .optab joins the text stream"
+        );
+        let key = merged.defined.get("key").expect("key in merged");
+        let ro_len = merged.data_ro_len as u64;
+        let (rodata_addr, rodata) = elf_image_section(&image, ".rodata").expect("image .rodata");
+        let (data_addr, _) = elf_image_section(&image, ".data").expect("image .data");
+        let (text_addr, text) = elf_image_section(&image, ".text").expect("image .text");
+        let str_pos = rodata
+            .windows(9)
+            .position(|w| w == b"probe9.c\0")
+            .expect("operand string in image .rodata") as u64;
+        let str_vaddr = rodata_addr + str_pos;
+        // The section's leading marker locates the fields in the image
+        // text independently of the writer's start-stub placement.
+        let marker = text
+            .windows(8)
+            .position(|w| w == b"OpTaB9mk")
+            .expect("section payload in image .text");
+        let l_idx = marker + 8;
+        let q_idx = marker + 16;
+        let field_l = i32::from_le_bytes(text[l_idx..l_idx + 4].try_into().unwrap()) as i64;
+        let field_q = i64::from_le_bytes(text[q_idx..q_idx + 8].try_into().unwrap());
+        assert_ne!(field_l, 0, "{target:?}: `.long %c0 - .` left unresolved");
+        assert_eq!(
+            (text_addr + l_idx as u64) as i64 + field_l,
+            str_vaddr as i64,
+            "{target:?}: `.long %c0 - .` reaches the operand string"
+        );
+        assert_eq!(
+            &text[l_idx + 4..l_idx + 8],
+            &[0u8; 4],
+            "{target:?}: the `.long 0` spacer is untouched"
+        );
+        let key_vaddr = (data_addr + (key.value - ro_len)) as i64;
+        assert_eq!(
+            (text_addr + q_idx as u64) as i64 + field_q,
+            key_vaddr + 4,
+            "{target:?}: `.quad %c1 + %c2 - .` reaches key + 4"
+        );
+        assert_ne!(
+            (text_addr + q_idx as u64) as i64 + field_q,
+            key_vaddr,
+            "{target:?}: the `+ %c2` operand addend must not be dropped"
+        );
+    }
+}
+
 #[test]
 fn asm_section_pcrel_extern_with_addend_relocates_like_gas() {
     // A static-call trampoline emits `jmp.d32 func` as section data:

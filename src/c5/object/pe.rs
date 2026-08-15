@@ -1010,6 +1010,36 @@ pub(super) fn write(
         )?;
     }
 
+    // Assembler pc-relative data words in executable sections
+    // (`.long x - .` / `.quad x - .`): the field receives `S + A - P`
+    // as RVAs (the image base cancels), so ASLR needs no `.reloc`.
+    for r in &build.text_pcrel_relocs {
+        let site = r.site_text_offset as usize + text_prologue_len as usize;
+        let width = r.width as usize;
+        if site + width > text_bytes.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "PE: text pcrel field {site:#x} past end of .text ({})",
+                    text_bytes.len()
+                ),
+            )));
+        }
+        let site_rva = text_rva as i64 + site as i64;
+        let value = data_off_to_rva(r.target_data_offset as u32) as i64 - site_rva;
+        if width == 8 {
+            text_bytes[site..site + 8].copy_from_slice(&value.to_le_bytes());
+        } else {
+            let Ok(v) = i32::try_from(value) else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "PE: text pcrel field {site:#x}: displacement {value:#x} exceeds 32 bits"
+                    ),
+                )));
+            };
+            text_bytes[site..site + 4].copy_from_slice(&v.to_le_bytes());
+        }
+    }
+
     // Read-only blob references (switch dispatch): the site
     // materializes the table base at the code section's tail.
     for f in &build.rodata.addr_fixups {

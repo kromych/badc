@@ -1490,6 +1490,10 @@ pub(crate) struct Build {
     /// Populated only by the multi-object synthesizer; see
     /// [`DataPcRelReloc`].
     pub data_pcrel_relocs: Vec<DataPcRelReloc>,
+    /// Object-link pc-relative fields in `Build::text` targeting the
+    /// data-byte space. Populated only by the multi-object
+    /// synthesizer; see [`TextPcRelReloc`].
+    pub text_pcrel_relocs: Vec<TextPcRelReloc>,
     /// Each entry records an `adrp + add` placeholder pair the codegen
     /// left for a function-pointer literal. The writer patches it with
     /// the page-relative address of `__text + target_native_offset`.
@@ -2046,6 +2050,23 @@ pub(crate) struct DataPcRelReloc {
     pub target_anchor: u64,
     pub target_in_data: bool,
     /// Slot width in bytes: 4 or 8.
+    pub width: u8,
+}
+
+/// Text-sited counterpart of [`DataPcRelReloc`]: a plain 4- or 8-byte
+/// field inside `Build::text` (an assembler `value - .` record in a
+/// pushed executable section) whose final value is
+/// `target_vaddr - site_vaddr`, the target in the data-byte space.
+/// Produced by the multi-object synthesizer from parked pc-relative
+/// data-word relocations; text-target ones resolve during the merge.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TextPcRelReloc {
+    /// Byte offset of the field within `Build::text`.
+    pub site_text_offset: u64,
+    /// Target byte offset within the data-byte space (zero-fill tail
+    /// included), `S + A` of the source relocation.
+    pub target_data_offset: u64,
+    /// Field width in bytes: 4 or 8.
     pub width: u8,
 }
 

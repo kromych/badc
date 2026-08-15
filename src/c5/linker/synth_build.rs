@@ -139,6 +139,7 @@ fn synth_program_and_build(
         got: got_fixups,
         data: data_fixups,
         func: func_fixups,
+        text_pcrel: text_pcrel_relocs,
     } = synth_fixups(merged, plt, TextAbsolute::for_output(target, output_kind))?;
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt)?;
@@ -489,6 +490,7 @@ fn synth_program_and_build(
                 }
             })
             .collect(),
+        text_pcrel_relocs,
         func_fixups,
         pc_to_native,
         func_ent_pcs,
@@ -752,6 +754,7 @@ struct SynthFixups {
     got: Vec<GotFixup>,
     data: Vec<DataFixup>,
     func: Vec<FuncFixup>,
+    text_pcrel: Vec<crate::c5::codegen::TextPcRelReloc>,
 }
 
 fn synth_fixups(
@@ -762,6 +765,7 @@ fn synth_fixups(
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
+    let mut text_pcrel: Vec<crate::c5::codegen::TextPcRelReloc> = Vec::new();
 
     for tramp in plt {
         got_fixups.push(GotFixup {
@@ -775,6 +779,23 @@ fn synth_fixups(
     }
 
     for reloc in &merged.pending_imports {
+        // A parked pc-relative data word (`.long x - .` / `.quad x - .`
+        // in an executable section, target in the data-byte space) is a
+        // plain field, not one of the per-arch instruction shapes below.
+        if reloc.import_index == usize::MAX
+            && matches!(
+                reloc.target_section,
+                NativeSymSection::RoData | NativeSymSection::Data | NativeSymSection::Bss
+            )
+            && let Some((width, _)) = super::link::pcrel_data_field(merged.machine, reloc.rtype)
+        {
+            text_pcrel.push(crate::c5::codegen::TextPcRelReloc {
+                site_text_offset: reloc.text_offset,
+                target_data_offset: reloc.addend as u64,
+                width: width as u8,
+            });
+            continue;
+        }
         match merged.machine {
             NativeMachine::Aarch64 => {
                 project_aarch64_pending(
@@ -803,6 +824,7 @@ fn synth_fixups(
         got: got_fixups,
         data: data_fixups,
         func: func_fixups,
+        text_pcrel,
     })
 }
 

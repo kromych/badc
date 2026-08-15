@@ -1784,9 +1784,12 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // The aarch64 lowering keeps switch tables in `.text`, so these
     // carriers are empty on every build that reaches this writer.
     // Fail loud rather than drop them if that changes. TODO
-    if !build.rodata.bytes.is_empty() || !build.data_pcrel_relocs.is_empty() {
+    if !build.rodata.bytes.is_empty()
+        || !build.data_pcrel_relocs.is_empty()
+        || !build.text_pcrel_relocs.is_empty()
+    {
         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            "Mach-O writer: read-only blob / data rel32 slots not implemented",
+            "Mach-O writer: read-only blob / pc-relative data-word slots not implemented",
         )));
     }
 
@@ -2830,6 +2833,7 @@ mod tests {
             data_fixups: Vec::new(),
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
+            text_pcrel_relocs: Vec::new(),
             func_fixups: Vec::new(),
             pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),

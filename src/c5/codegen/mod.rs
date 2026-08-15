@@ -1382,7 +1382,7 @@ pub(crate) enum DynamicExportSection {
     /// Byte offset within [`Build::text`].
     Text,
     /// Byte offset within the merged data-byte space
-    /// `[read-only prefix][writable data][zero-fill tail]`: the same
+    /// `[read-only prefix][relro][writable data][zero-fill tail]`: the same
     /// space [`DataFixup`] addresses, so an offset at or past
     /// `Build::data.len()` names a `.bss` byte.
     Data,
@@ -1448,6 +1448,13 @@ pub(crate) struct Build {
     /// without write permission; the rest stays writable. Zero when
     /// the producer segregated nothing.
     pub data_ro_len: usize,
+    /// End of the relro region: `data[data_ro_len..data_relro_len]`
+    /// is read-only storage with loader-written slots. The ELF image
+    /// writer covers it by `PT_GNU_RELRO`; writers without such a
+    /// mechanism keep it writable. Equals [`Self::data_ro_len`] when
+    /// the producer segregated no such region (the direct single-TU
+    /// path routes relocated const storage to the writable side).
+    pub data_relro_len: usize,
     /// Base alignment `data` requires in the image, at least 8.
     /// Raised past 8 only by linked foreign sections with a larger
     /// sh_addralign (e.g. `.rodata.cst16`); the writers place the

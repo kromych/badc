@@ -900,9 +900,10 @@ fn patch_data_refs(
         // writable data and the zero-fill tail share one base.
         let target_base = match r.target_section {
             NativeSymSection::Text => text_vaddr as i64,
-            NativeSymSection::RoData | NativeSymSection::Data | NativeSymSection::Bss => {
-                data_vaddr as i64
-            }
+            NativeSymSection::RoData
+            | NativeSymSection::RelRo
+            | NativeSymSection::Data
+            | NativeSymSection::Bss => data_vaddr as i64,
             NativeSymSection::Undef
             | NativeSymSection::Abs
             | NativeSymSection::Common
@@ -1208,6 +1209,7 @@ mod tests {
             text: alloc::vec![0xb8, 0x2a, 0x00, 0x00, 0x00, 0xc3],
             data: alloc::vec![],
             data_ro_len: 0,
+            data_relro_len: 0,
             data_align: 8,
             bss_size: 0,
             defined,

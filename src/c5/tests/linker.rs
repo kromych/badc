@@ -2905,15 +2905,17 @@ fn file_scope_asm_symbol_riprel_displacement_relocates_pc32() {
         0x48, 0x8b, 0x0d, 0, 0, 0, 0,
         0x48, 0x8d, 0x15, 0, 0, 0, 0,
     ];
+    // The relocated `.rodata` joins the relro stream: the template is
+    // read-only at runtime once the link resolves the fields.
     let base = obj
-        .data
+        .relro
         .windows(template.len())
         .position(|w| w == template)
         .expect("the template instructions must encode byte-identically to gas");
     // (field offset within the template, addend).
     for (field, addend) in [(4, 3), (12, -4), (19, -4), (26, 4), (33, -12)] {
         let r = obj
-            .data_relocs
+            .relro_relocs
             .iter()
             .find(|r| r.offset == (base + field) as u64)
             .unwrap_or_else(|| panic!("disp32 at template offset {field} must carry a reloc"));
@@ -5101,6 +5103,9 @@ fn unrouted_weak_undef_resolves_to_zero() {
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
+            relro: Vec::new(),
+            relro_align: 1,
+            relro_relocs: Vec::new(),
             machine,
             text,
             data,
@@ -5293,6 +5298,9 @@ fn aarch64_data_ref_object_ex(
         text_align: 16,
         rodata: alloc::vec::Vec::new(),
         rodata_align: 8,
+        relro: Vec::new(),
+        relro_align: 1,
+        relro_relocs: Vec::new(),
         data: alloc::vec![0u8; data_len],
         data_align: 0x1000,
         bss_size: 0,
@@ -5542,6 +5550,9 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         text_align: 16,
         rodata: alloc::vec::Vec::new(),
         rodata_align: 8,
+        relro: Vec::new(),
+        relro_align: 1,
+        relro_relocs: Vec::new(),
         data: alloc::vec::Vec::new(),
         data_align: 8,
         bss_size: 0,
@@ -12694,6 +12705,258 @@ fn relocated_const_storage_follows_the_pic_model() {
                 );
             }
         }
+    }
+}
+
+/// ELF64 program headers of an image: `(p_type, p_flags, p_offset,
+/// p_vaddr, p_filesz, p_memsz)`.
+#[cfg(feature = "native-emit")]
+fn elf_phdrs(bytes: &[u8]) -> alloc::vec::Vec<(u32, u32, u64, u64, u64, u64)> {
+    let phoff = u64::from_le_bytes(bytes[0x20..0x28].try_into().unwrap()) as usize;
+    let phentsize = u16::from_le_bytes(bytes[0x36..0x38].try_into().unwrap()) as usize;
+    let phnum = u16::from_le_bytes(bytes[0x38..0x3a].try_into().unwrap()) as usize;
+    (0..phnum)
+        .map(|i| {
+            let b = phoff + i * phentsize;
+            let f = |o: usize| u64::from_le_bytes(bytes[b + o..b + o + 8].try_into().unwrap());
+            (
+                u32::from_le_bytes(bytes[b..b + 4].try_into().unwrap()),
+                u32::from_le_bytes(bytes[b + 4..b + 8].try_into().unwrap()),
+                f(0x08),
+                f(0x10),
+                f(0x20),
+                f(0x28),
+            )
+        })
+        .collect()
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn relro_stream_separates_relocated_const_from_read_only() {
+    // Two units: one whose `.rodata` carries no relocation, one whose
+    // `.rodata` holds a relocated initializer. The clean unit's const
+    // content stays in the PF_R load; the relocated unit's joins the
+    // relro region at the head of the RW segment, covered together
+    // with `.dynamic` and `.got` by PT_GNU_RELRO, whose end falls on
+    // the max-page boundary so the loader's re-protection holds under
+    // every runtime page size.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{
+        NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
+        emit_x86_64_plt,
+    };
+    const PT_LOAD: u32 = 1;
+    const PT_DYNAMIC: u32 = 2;
+    const PT_GNU_RELRO: u32 = 0x6474_E552;
+    const PF_W: u32 = 2;
+    const PF_R: u32 = 4;
+    let src_clean = "const char clean_tab[16] = \"CLEANTBLCLEANTB\";\n";
+    let src_mixed = "\
+        extern const char clean_tab[16];\n\
+        static int probe(void) { return 1; }\n\
+        struct ops { int (*p)(void); const char *n; };\n\
+        const struct ops mixer = { probe, \"MXOPNAME\" };\n\
+        const char mixed_tab[16] = \"MIXEDTBLMIXEDTB\";\n\
+        int wglob = 5;\n\
+        int main(void) { return mixer.p() + mixed_tab[0] + clean_tab[0] + wglob; }\n";
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let unit = |src: &str, entry: bool| {
+            let copts = if entry {
+                CompileOptions::default()
+            } else {
+                CompileOptions::default().with_no_entry_point(true)
+            };
+            let program = Compiler::with_options(String::from(src), target, copts)
+                .compile()
+                .expect("compile");
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            parse_native_elf(&bytes).expect("parse")
+        };
+        let mut merged =
+            link_native_objects(&[unit(src_clean, false), unit(src_mixed, true)]).expect("link");
+        let ro_len = merged.data_ro_len as u64;
+        let relro_len = merged.data_relro_len as u64;
+        assert!(
+            ro_len < relro_len && relro_len <= merged.data.len() as u64,
+            "{target:?}: relro region must sit between the prefix and the writable data"
+        );
+        let sym = |n: &str| merged.defined[n].value;
+        assert!(
+            sym("clean_tab") < ro_len,
+            "{target:?}: clean const stays RO"
+        );
+        for n in ["mixer", "mixed_tab"] {
+            assert!(
+                (ro_len..relro_len).contains(&sym(n)),
+                "{target:?}: relocated unit's const `{n}` joins the relro region"
+            );
+        }
+        assert!(
+            sym("wglob") >= relro_len,
+            "{target:?}: writable data past relro"
+        );
+        let plt = match merged.machine {
+            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        }
+        .expect("plt");
+        let image = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let phdrs = elf_phdrs(&image);
+        let (_, _, relro_off, relro_vaddr, relro_filesz, relro_memsz) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_GNU_RELRO)
+            .expect("image carries PT_GNU_RELRO");
+        assert_eq!(
+            relro_filesz, relro_memsz,
+            "{target:?}: relro is file-backed"
+        );
+        let seg = match target {
+            Target::LinuxAarch64 => 0x1_0000u64,
+            _ => 0x1000u64,
+        };
+        assert_eq!(
+            (relro_vaddr + relro_memsz) % seg,
+            0,
+            "{target:?}: relro end must fall on the max-page boundary"
+        );
+        let (_, _, rw_off, rw_vaddr, rw_filesz, _) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_LOAD && p.1 & PF_W != 0)
+            .expect("RW load");
+        assert_eq!((relro_off, relro_vaddr), (rw_off, rw_vaddr), "{target:?}");
+        assert!(
+            relro_filesz <= rw_filesz,
+            "{target:?}: relro within the RW load"
+        );
+        let (_, _, dyn_off, _, dyn_filesz, _) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_DYNAMIC)
+            .expect("PT_DYNAMIC");
+        assert!(
+            dyn_off >= relro_off && dyn_off + dyn_filesz <= relro_off + relro_filesz,
+            "{target:?}: .dynamic inside the relro span"
+        );
+        let contains = |lo: usize, len: usize, needle: &[u8]| {
+            image[lo..lo + len]
+                .windows(needle.len())
+                .any(|w| w == needle)
+        };
+        let (_, _, ro_off, _, ro_filesz, _) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_LOAD && p.1 == PF_R)
+            .expect("PF_R load");
+        assert!(
+            contains(ro_off as usize, ro_filesz as usize, b"CLEANTBL"),
+            "{target:?}: clean const table in the PF_R load"
+        );
+        assert!(
+            !contains(ro_off as usize, ro_filesz as usize, b"MIXEDTBL"),
+            "{target:?}: relocated unit's const out of the PF_R load"
+        );
+        assert!(
+            contains(relro_off as usize, relro_filesz as usize, b"MIXEDTBL"),
+            "{target:?}: relocated unit's const inside the relro span"
+        );
+        assert!(
+            !contains(
+                (rw_off + relro_filesz) as usize,
+                (rw_filesz - relro_filesz) as usize,
+                b"MIXEDTBL"
+            ),
+            "{target:?}: relro content out of the writable remainder"
+        );
+        let (relro_addr, relro_sec) =
+            elf_image_section(&image, ".data.rel.ro").expect(".data.rel.ro section");
+        assert!(
+            relro_sec.windows(8).any(|w| w == b"MIXEDTBL"),
+            "{target:?}: .data.rel.ro carries the relocated const"
+        );
+        assert!(
+            relro_addr >= relro_vaddr
+                && relro_addr + relro_sec.len() as u64 <= relro_vaddr + relro_memsz,
+            "{target:?}: .data.rel.ro within the PT_GNU_RELRO span"
+        );
+        let (data_addr, _) = elf_image_section(&image, ".data").expect(".data section");
+        assert!(
+            data_addr >= relro_vaddr + relro_memsz,
+            "{target:?}: writable .data starts past the relro span"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn relro_segment_covers_dynamic_and_got_without_relro_content() {
+    // With no relocated const anywhere the relro stream is empty, but
+    // PT_GNU_RELRO still protects `.dynamic` and `.got`, as ld does.
+    use crate::c5::linker::{
+        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{
+        NativeOptions, OutputKind, emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt,
+    };
+    const PT_DYNAMIC: u32 = 2;
+    const PT_GNU_RELRO: u32 = 0x6474_E552;
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let program = Compiler::with_target("int main(void){return 0;}".to_string(), target)
+            .compile()
+            .expect("compile");
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let mut merged =
+            link_native_objects(&[parse_native_elf(&bytes).expect("parse")]).expect("link");
+        assert_eq!(
+            merged.data_ro_len, merged.data_relro_len,
+            "{target:?}: no relocated const, empty relro stream"
+        );
+        let plt = match merged.machine {
+            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        }
+        .expect("plt");
+        let image = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let phdrs = elf_phdrs(&image);
+        let (_, _, relro_off, _, relro_filesz, _) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_GNU_RELRO)
+            .expect("image carries PT_GNU_RELRO");
+        let (_, _, dyn_off, _, dyn_filesz, _) = *phdrs
+            .iter()
+            .find(|p| p.0 == PT_DYNAMIC)
+            .expect("PT_DYNAMIC");
+        assert!(
+            dyn_off >= relro_off && dyn_off + dyn_filesz <= relro_off + relro_filesz,
+            "{target:?}: .dynamic inside the relro span"
+        );
     }
 }
 

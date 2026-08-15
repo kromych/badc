@@ -4449,7 +4449,7 @@ Disassembly of section .text:
                	str	x28, [sp, #0x40]
                	str	x19, [sp, #0x50]
                	adrp	x20, <addr>
-               	add	x20, x20, #0x3c0
+               	add	x20, x20, #0x3f0
                	adrp	x21, <page>
                	add	x21, x21, <lo12>
                	mov	x0, #0x0                // =0

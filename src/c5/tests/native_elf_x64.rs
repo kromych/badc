@@ -120,6 +120,81 @@ fn set_executable(path: &Path) {
     std::fs::set_permissions(path, perms).unwrap();
 }
 
+/// Build through the multi-object link path (ET_REL merge +
+/// `write_native_image_from_merged`) and run the produced image.
+/// Exercises the merged stream layout -- the direct
+/// `emit_native` path above never produces a relro region.
+#[cfg(feature = "full")]
+fn link_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
+    let program = match Compiler::with_target(src.to_string(), Target::LinuxX64).compile() {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
+    let bytes = match super::link_executable_with_runtime(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::default(),
+    ) {
+        Ok(b) => b,
+        Err(e) => return RunOutcome::BuildError(format!("link: {e}")),
+    };
+    let path = super::unique_temp_path("badc-elf64-test", stem, ".bin");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path);
+    let _ = std::fs::remove_file(&path);
+    match output {
+        Ok(o) => {
+            if let Some(code) = o.status.code() {
+                RunOutcome::Exit(code)
+            } else {
+                use std::os::unix::process::ExitStatusExt;
+                RunOutcome::Signal(o.status.signal().unwrap_or(0))
+            }
+        }
+        Err(e) => panic!("could not exec the produced binary: {e}"),
+    }
+}
+
+/// A relocated `const` initializer routes its unit's read-only
+/// content to the relro region; after the loader's fixups the pages
+/// are re-protected (PT_GNU_RELRO), so a store faults while a
+/// writable global stays writable.
+#[test]
+#[cfg(feature = "full")]
+fn relro_const_store_faults() {
+    let decls = "const unsigned char tab[2048] = {7, 7, 7, 7};\n\
+                 const char *const cp = \"hello\";\n\
+                 int wglobal = 5;\n";
+    let read = format!("{decls}int main(void) {{ return cp[0] == 'h' && tab[3] == 7 ? 0 : 1; }}");
+    match link_and_run_outcome(&read, "relro_read") {
+        RunOutcome::Exit(0) => {}
+        other => panic!("relocated-pointer read must exit 0, got {other:?}"),
+    }
+    let tab_store =
+        format!("{decls}int main(void) {{ *(unsigned char *)&tab[5] = 9; return tab[5]; }}");
+    match link_and_run_outcome(&tab_store, "relro_tab_store") {
+        RunOutcome::Signal(_) => {}
+        other => panic!("store to relro const table must fault, got {other:?}"),
+    }
+    let slot_store = format!(
+        "{decls}int main(void) {{ *(const char **)&cp = (const char *)tab; return cp == 0; }}"
+    );
+    match link_and_run_outcome(&slot_store, "relro_slot_store") {
+        RunOutcome::Signal(_) => {}
+        other => panic!("store to the relocated pointer slot must fault, got {other:?}"),
+    }
+    let control = format!("{decls}int main(void) {{ wglobal = 6; return wglobal == 6 ? 0 : 2; }}");
+    match link_and_run_outcome(&control, "relro_control") {
+        RunOutcome::Exit(0) => {}
+        other => panic!("writable global must stay writable, got {other:?}"),
+    }
+}
+
 // ---- Smoke tests -- mirror the aarch64 module's shapes. ----
 
 #[test]

@@ -78,15 +78,22 @@ pub struct MergedNative {
     /// text stream at a multiple of this.
     pub text_align: usize,
     /// Concatenated file-backed data bytes, read-only payload first:
-    /// `[.rodata of every unit][.data of every unit]`. One offset
-    /// space, so every parked reference and every data relocation
-    /// speaks the same kind of offset.
+    /// `[.rodata of every unit][relro of every unit][.data of every
+    /// unit]`. One offset space, so every parked reference and every
+    /// data relocation speaks the same kind of offset.
     pub data: Vec<u8>,
     /// Length of the read-only prefix of [`Self::data`]. The image
     /// writers place `data[..data_ro_len]` in a section the loader
-    /// maps without write permission and `data[data_ro_len..]` plus
-    /// the `.bss` tail in the writable one.
+    /// maps without write permission and `data[data_relro_len..]`
+    /// plus the `.bss` tail in the writable one.
     pub data_ro_len: usize,
+    /// End of the relro region: `data[data_ro_len..data_relro_len]`
+    /// holds read-only content with loader-written slots. The ELF
+    /// writer covers it (with `.dynamic` and `.got`) by a
+    /// `PT_GNU_RELRO` header; writers without such a mechanism fold
+    /// it into the writable stream. Always within
+    /// `data_ro_len..=data.len()`.
+    pub data_relro_len: usize,
     /// Base alignment the merged `.data` requires: the largest input
     /// section alignment, at least 8. The image writers place the
     /// data stream at a multiple of this.
@@ -347,7 +354,7 @@ pub enum MergedTarget {
     /// Byte offset within `MergedNative::text`.
     Text(i64),
     /// Byte offset within the merged data-byte space:
-    /// `[read-only prefix][writable data][zero-fill tail]`.
+    /// `[read-only prefix][relro][writable data][zero-fill tail]`.
     Data(i64),
 }
 
@@ -366,7 +373,9 @@ fn merged_target(
 ) -> Result<MergedTarget, C5Error> {
     match section {
         NativeSymSection::Text => Ok(MergedTarget::Text(value + addend)),
-        NativeSymSection::RoData | NativeSymSection::Data => Ok(MergedTarget::Data(value + addend)),
+        NativeSymSection::RoData | NativeSymSection::RelRo | NativeSymSection::Data => {
+            Ok(MergedTarget::Data(value + addend))
+        }
         NativeSymSection::Bss => Ok(MergedTarget::Data(data_len as i64 + value + addend)),
         NativeSymSection::Undef
         | NativeSymSection::Abs
@@ -611,13 +620,16 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // (a foreign object's high-align sections, e.g. `.rodata.cst16`).
     //
     // The file-backed data of every unit forms one offset space:
-    // every unit's read-only payload first, then every unit's writable
-    // payload, then the zero-fill tail. `data_ro_len` marks the
-    // boundary, which is what the image writers place on a read-only
-    // page. Keeping one space means a parked data reference carries
-    // one kind of offset no matter which side of the boundary it hits.
+    // every unit's read-only payload first, then every unit's relro
+    // payload, then every unit's writable payload, then the zero-fill
+    // tail. `data_ro_len` / `data_relro_len` mark the boundaries: the
+    // image writers map the prefix read-only from the file and cover
+    // the relro region with `PT_GNU_RELRO`. Keeping one space means a
+    // parked data reference carries one kind of offset no matter
+    // which region it hits.
     let mut text_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut rodata_bases: Vec<usize> = Vec::with_capacity(objs.len());
+    let mut relro_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut data_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut bss_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut text: Vec<u8> = Vec::new();
@@ -625,6 +637,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
     let mut bss_size: usize = 0;
     let mut data_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
     let mut rodata_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
+    let mut relro_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
     let mut text_align: usize = 16;
     for obj in objs {
         align_up(&mut text, obj.text_align.max(16));
@@ -636,17 +649,28 @@ pub fn link_native_objects_with_shared_libs<'a>(
             crate::c5::layout::data_image_align(obj.rodata_align),
         );
         rodata_align = rodata_align.max(obj.rodata_align);
+        relro_align = relro_align.max(obj.relro_align);
         rodata_bases.push(data.len());
         data.extend_from_slice(&obj.rodata);
         data_align = data_align.max(obj.data_align);
     }
-    // One alignment covers the whole data image: the writers place both
-    // regions from it, and the writable side starts at a multiple of it
+    // One alignment covers the whole data image: the writers place
+    // every region from it, and each region starts at a multiple of it
     // so a unit's data base keeps the residue its `sh_addralign` asked
     // for once the region is placed.
-    data_align = crate::c5::layout::data_image_align(data_align.max(rodata_align));
+    data_align = crate::c5::layout::data_image_align(data_align.max(rodata_align).max(relro_align));
     align_up(&mut data, data_align);
     let data_ro_len = data.len();
+    for obj in objs {
+        align_up(
+            &mut data,
+            crate::c5::layout::data_image_align(obj.relro_align),
+        );
+        relro_bases.push(data.len());
+        data.extend_from_slice(&obj.relro);
+    }
+    align_up(&mut data, data_align);
+    let data_relro_len = data.len();
     for obj in objs {
         align_up(
             &mut data,
@@ -676,6 +700,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             let (list, base) = match s.family {
                 SectionFamily::Text => (&mut section_map.text, text_bases[i] as u64),
                 SectionFamily::RoData => (&mut section_map.data, rodata_bases[i] as u64),
+                SectionFamily::RelRo => (&mut section_map.data, relro_bases[i] as u64),
                 SectionFamily::Data => (&mut section_map.data, data_bases[i] as u64),
                 SectionFamily::Bss => (&mut section_map.bss, bss_bases[i] as u64),
                 SectionFamily::Tdata | SectionFamily::Tbss => {
@@ -802,12 +827,14 @@ pub fn link_native_objects_with_shared_libs<'a>(
             if sym.name.is_empty() {
                 continue;
             }
-            // `RoData` normalises to `Data`: Pass 1 laid the read-only
-            // payload down first, so a rodata offset is already a
-            // data-byte offset and the merged table speaks one space.
+            // `RoData` / `RelRo` normalise to `Data`: Pass 1 laid both
+            // payloads into the data-byte space, so their offsets are
+            // already data-byte offsets and the merged table speaks
+            // one space.
             let (section, base) = match sym.section {
                 NativeSymSection::Text => (NativeSymSection::Text, text_bases[i]),
                 NativeSymSection::RoData => (NativeSymSection::Data, rodata_bases[i]),
+                NativeSymSection::RelRo => (NativeSymSection::Data, relro_bases[i]),
                 NativeSymSection::Data => (NativeSymSection::Data, data_bases[i]),
                 NativeSymSection::Bss => (NativeSymSection::Bss, bss_bases[i]),
                 // A `_Thread_local` definition reaches the merged image
@@ -1107,11 +1134,13 @@ pub fn link_native_objects_with_shared_libs<'a>(
             match sym_section {
                 NativeSymSection::Text
                 | NativeSymSection::RoData
+                | NativeSymSection::RelRo
                 | NativeSymSection::Data
                 | NativeSymSection::Bss => {
                     let base = match sym_section {
                         NativeSymSection::Text => text_bases[i],
                         NativeSymSection::RoData => rodata_bases[i],
+                        NativeSymSection::RelRo => relro_bases[i],
                         NativeSymSection::Data => data_bases[i],
                         _ => bss_bases[i],
                     };
@@ -1418,18 +1447,24 @@ pub fn link_native_objects_with_shared_libs<'a>(
         }
     }
 
-    // Pass 5 -- `.rela.data` entries. Each unit's data_relocs
-    // points at an 8-byte slot in its own `.data` whose final
-    // value is the runtime VA of another global. Resolve the
-    // target to a merged-image data offset and queue it for
-    // the writer to patch once `data_vaddr` is committed.
+    // Pass 5 -- `.rela.data` / relro entries. Each unit's data_relocs
+    // (relro_relocs) points at an 8-byte slot in its own `.data`
+    // (relro blob) whose final value is the runtime VA of another
+    // global. Resolve the target to a merged-image data offset and
+    // queue it for the writer to patch once `data_vaddr` is
+    // committed.
     let mut data_abs_relocs: Vec<DataAbsReloc> = Vec::new();
     let mut data_pcrel_relocs: Vec<DataPcRel> = Vec::new();
     // Data slots that name an imported function; the PLT pass turns each
     // into a stub-targeting `DataAbsReloc` (see `data_import_refs`).
     let mut data_import_refs: Vec<(u64, usize)> = Vec::new();
     for (i, obj) in objs.iter().enumerate() {
-        for reloc in &obj.data_relocs {
+        let sited = obj
+            .data_relocs
+            .iter()
+            .map(|r| (r, data_bases[i]))
+            .chain(obj.relro_relocs.iter().map(|r| (r, relro_bases[i])));
+        for (reloc, site_base) in sited {
             if reloc.sym_idx >= obj.symbols.len() {
                 return Err(err(&format!(
                     "link_native_objects: .rela.data sym_idx {} out of range in object {i}",
@@ -1437,7 +1472,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 )));
             }
             let sym = &obj.symbols[reloc.sym_idx];
-            let slot_offset = data_bases[i] as u64 + reloc.offset;
+            let slot_offset = site_base as u64 + reloc.offset;
             // A pc-relative slot in the data stream (a switch dispatch
             // table in folded `.rodata`, an assembler `label - .`
             // record in a folded named section): the value is
@@ -1467,6 +1502,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
                     }
                     NativeSymSection::RoData => {
                         (sym.section, rodata_bases[i] as i64 + sym.value as i64)
+                    }
+                    NativeSymSection::RelRo => {
+                        (sym.section, relro_bases[i] as i64 + sym.value as i64)
                     }
                     NativeSymSection::Data => {
                         (sym.section, data_bases[i] as i64 + sym.value as i64)
@@ -1563,6 +1601,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                     .map(|d| d.value as i64)
                     .unwrap(),
                 NativeSymSection::RoData => rodata_bases[i] as i64 + sym.value as i64,
+                NativeSymSection::RelRo => relro_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Data => data_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Bss => bss_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Text => text_bases[i] as i64 + sym.value as i64,
@@ -1857,6 +1896,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             sym,
             &text_bases,
             &rodata_bases,
+            &relro_bases,
             &data_bases,
             &bss_bases,
             merged_data_len,
@@ -1887,6 +1927,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             sym,
             &text_bases,
             &rodata_bases,
+            &relro_bases,
             &data_bases,
             &bss_bases,
             merged_data_len,
@@ -1910,6 +1951,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
         text_align,
         data,
         data_ro_len,
+        data_relro_len,
         data_align,
         bss_size,
         defined,
@@ -2010,6 +2052,7 @@ fn resolve_debug_reloc(
     sym: &super::object::NativeSymbol,
     text_bases: &[usize],
     rodata_bases: &[usize],
+    relro_bases: &[usize],
     data_bases: &[usize],
     bss_bases: &[usize],
     data_len: usize,
@@ -2058,11 +2101,15 @@ fn resolve_debug_reloc(
     // link-time address is left null rather than aborting the link.
     let in_data = matches!(
         sym.section,
-        NativeSymSection::RoData | NativeSymSection::Data | NativeSymSection::Bss
+        NativeSymSection::RoData
+            | NativeSymSection::RelRo
+            | NativeSymSection::Data
+            | NativeSymSection::Bss
     );
     let (merged_value, in_text, resolvable) = match sym.section {
         NativeSymSection::Text => (text_bases[unit_idx] as u64 + sym.value, true, true),
         NativeSymSection::RoData => (rodata_bases[unit_idx] as u64 + sym.value, false, true),
+        NativeSymSection::RelRo => (relro_bases[unit_idx] as u64 + sym.value, false, true),
         NativeSymSection::Data => (data_bases[unit_idx] as u64 + sym.value, false, true),
         NativeSymSection::Bss => (
             data_len as u64 + bss_bases[unit_idx] as u64 + sym.value,
@@ -3585,6 +3632,9 @@ mod tests {
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
+            relro: Vec::new(),
+            relro_align: 1,
+            relro_relocs: Vec::new(),
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
@@ -3738,6 +3788,9 @@ mod tests {
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
+            relro: Vec::new(),
+            relro_align: 1,
+            relro_relocs: Vec::new(),
             machine: NativeMachine::X86_64,
             text: alloc::vec![0u8; 16],
             data,
@@ -3832,6 +3885,9 @@ mod tests {
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
+            relro: Vec::new(),
+            relro_align: 1,
+            relro_relocs: Vec::new(),
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
@@ -3888,6 +3944,9 @@ mod tests {
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
+            relro: Vec::new(),
+            relro_align: 1,
+            relro_relocs: Vec::new(),
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec![0u8; 4],
@@ -3975,6 +4034,9 @@ mod tests {
                 text_align: 16,
                 rodata: Vec::new(),
                 rodata_align: 8,
+                relro: Vec::new(),
+                relro_align: 1,
+                relro_relocs: Vec::new(),
                 machine: NativeMachine::X86_64,
                 text,
                 data,
@@ -4150,6 +4212,9 @@ mod tests {
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
+            relro: Vec::new(),
+            relro_align: 1,
+            relro_relocs: Vec::new(),
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
@@ -4233,6 +4298,9 @@ mod tests {
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
+            relro: Vec::new(),
+            relro_align: 1,
+            relro_relocs: Vec::new(),
             machine: NativeMachine::X86_64,
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),

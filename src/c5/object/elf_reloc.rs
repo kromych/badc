@@ -1336,11 +1336,11 @@ pub(super) fn write_relocatable(
     // Switch dispatch tables: a read-only entry of their own. The
     // name keeps the `.rodata` prefix consumers that discover
     // compiler jump tables key on, and stays apart from the carved
-    // `.rodata` so its pc-relative entry relocations don't demote
-    // that section's const objects to the writable stream on
-    // re-ingestion. No named symbol covers the tables: the same
-    // consumers require the region anonymous, addressed only through
-    // the section symbol.
+    // `.rodata` so its pc-relative entry relocations don't pull that
+    // section's const objects into the relro stream on re-ingestion.
+    // No named symbol covers the tables: the same consumers require
+    // the region anonymous, addressed only through the section
+    // symbol.
     let jt_placement: Option<(usize, u64)> = if build.rodata.bytes.is_empty() {
         None
     } else {
@@ -4908,6 +4908,7 @@ mod tests {
             text: Vec::new(),
             data: Vec::new(),
             data_ro_len: 0,
+            data_relro_len: 0,
             pic: false,
             code_model: Default::default(),
             elf_class: Default::default(),

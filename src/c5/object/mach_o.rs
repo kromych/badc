@@ -2891,6 +2891,7 @@ mod tests {
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
             data_ro_len: 0,
+            data_relro_len: 0,
             pic: false,
             code_model: Default::default(),
             elf_class: Default::default(),

@@ -2495,8 +2495,10 @@ pub(crate) fn lower(
         text: code,
         data: program.data.clone(),
         // Read-only prefix boundary the data compaction produced;
-        // zero when the pass did not run (JIT, empty data).
+        // zero when the pass did not run (JIT, empty data). The
+        // direct path segregates no relro region.
         data_ro_len: program.data_ro_len.min(program.data.len()),
+        data_relro_len: program.data_ro_len.min(program.data.len()),
         data_align: program.data_align,
         text_align,
         bss_size: 0,

@@ -17,17 +17,20 @@
 //!            <pad to page>                               /
 //!   0x1000   .dynamic (DT_* entries terminated DT_NULL)  \
 //!            .got (8 bytes per import, zero-filled)      | rw  PT_LOAD
+//!            .data.rel.ro (relro data, pad to max page)  |
 //!            build.data (program's static data segment)  |
 //!            <pad to page>                               /
 //! ```
 //!
-//! Six program headers describe the above:
+//! Seven program headers describe the above:
 //!   * PT_PHDR       -- the phdr table self-locating itself
 //!   * PT_INTERP     -- "/lib/ld-linux-aarch64.so.1"
 //!   * PT_LOAD r-x   -- header through code
-//!   * PT_LOAD rw    -- .dynamic, .got, .data
+//!   * PT_LOAD rw    -- .dynamic, .got, .data.rel.ro, .data
 //!   * PT_DYNAMIC    -- mirrors the .dynamic location
 //!   * PT_GNU_STACK  -- non-exec stack marker
+//!   * PT_GNU_RELRO  -- .dynamic through the relro region's padded
+//!                      end; re-protected read-only after relocation
 //!
 //! ## Dynamic linking
 //!
@@ -86,6 +89,7 @@ const PT_INTERP: u32 = 3;
 const PT_PHDR: u32 = 6;
 const PT_TLS: u32 = 7;
 const PT_GNU_STACK: u32 = 0x6474_E551;
+const PT_GNU_RELRO: u32 = 0x6474_E552;
 // PT_TLS alignment. The thread-pointer-relative offsets the codegen
 // bakes / the linker patches assume an 8-byte-aligned TLS block, which
 // also satisfies the ELF gABI `p_vaddr % p_align == 0` rule.
@@ -179,10 +183,19 @@ const TEXT_VMADDR_BASE: u64 = 0x40_0000;
 
 const ELF_HEADER_SIZE: u64 = 64;
 const PROGRAM_HEADER_SIZE: u64 = 56;
-/// Without TLS in the program. Programs that declare a
-/// `_Thread_local` global add one more PT_TLS header (so a total of
-/// 7).
-const N_BASE_PROGRAM_HEADERS: u64 = 6;
+/// PHDR, INTERP, the R+X load, the RW load, DYNAMIC, GNU_STACK and
+/// GNU_RELRO. A read-only data prefix adds one more PF_R load, a
+/// `_Thread_local` global one more PT_TLS header.
+const N_BASE_PROGRAM_HEADERS: u64 = 7;
+
+/// `PT_GNU_RELRO` end alignment for an image with no relro data. The
+/// loader re-protects the span with page granularity after applying
+/// relocations, aligning its end down to the runtime page size; a
+/// common-page end protects `.dynamic` / `.got` on 4K kernels at a
+/// bounded pad. An image carrying relro data instead anchors the end
+/// on [`seg_align`] -- the maximum page the psABI allows, ld's
+/// choice -- so the protection holds under every runtime page size.
+const RELRO_EMPTY_END_ALIGN: u64 = 0x1000;
 
 const ELF64_SYM_SIZE: u64 = 24;
 const ELF64_RELA_SIZE: u64 = 24;
@@ -343,6 +356,7 @@ enum Sec {
     Tdata,
     Dynamic,
     Got,
+    RelRo,
     Data,
     Tbss,
     Bss,
@@ -356,7 +370,7 @@ enum Sec {
 }
 
 /// Emission order. `Sec::Debug` stands for the whole `.debug_*` run.
-const SECTION_ORDER: [Sec; 23] = [
+const SECTION_ORDER: [Sec; 24] = [
     Sec::Null,
     Sec::Interp,
     Sec::Dynsym,
@@ -370,6 +384,7 @@ const SECTION_ORDER: [Sec; 23] = [
     Sec::Tdata,
     Sec::Dynamic,
     Sec::Got,
+    Sec::RelRo,
     Sec::Data,
     Sec::Tbss,
     Sec::Bss,
@@ -384,7 +399,7 @@ const SECTION_ORDER: [Sec; 23] = [
 
 struct SectionPlan {
     /// Headers each slot of [`SECTION_ORDER`] contributes.
-    counts: [usize; 23],
+    counts: [usize; 24],
 }
 
 /// Which optional sections an image carries. `dwarf` is a count because
@@ -394,6 +409,7 @@ struct SectionsPresent {
     versions: bool,
     rodata: bool,
     tdata: bool,
+    relro: bool,
     data: bool,
     tbss: bool,
     bss: bool,
@@ -405,13 +421,14 @@ struct SectionsPresent {
 
 impl SectionPlan {
     fn new(p: SectionsPresent) -> Self {
-        let mut counts = [1usize; 23];
+        let mut counts = [1usize; 24];
         let mut set =
             |s: Sec, n: usize| counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()] = n;
         set(Sec::GnuVersion, p.versions as usize);
         set(Sec::GnuVersionR, p.versions as usize);
         set(Sec::RoData, p.rodata as usize);
         set(Sec::Tdata, p.tdata as usize);
+        set(Sec::RelRo, p.relro as usize);
         set(Sec::Data, p.data as usize);
         set(Sec::Tbss, p.tbss as usize);
         set(Sec::Bss, p.bss as usize);
@@ -1788,7 +1805,14 @@ pub(super) fn write(
     // read-only layout pass); an empty prefix emits no header. The
     // emit-produced read-only blob (switch dispatch tables) rides in
     // the same load at an 8-aligned tail past the prefix.
+    // `build.data[data_ro_len..data_relro_len]` is the relro region:
+    // read-only content with loader-written slots, placed at the head
+    // of the RW segment and covered by PT_GNU_RELRO.
     let ro_len = build.data_ro_len.min(build.data.len()) as u64;
+    let relro_total = build
+        .data_relro_len
+        .clamp(build.data_ro_len, build.data.len()) as u64;
+    let relro_size = relro_total - ro_len;
     let jt_len = build.rodata.bytes.len() as u64;
     let jt_off = if jt_len > 0 {
         round_up(ro_len, 8)
@@ -1912,8 +1936,23 @@ pub(super) fn write(
     // `.data`'s base alignment: p_vaddr == p_offset within the RW
     // segment, so aligning the file offset aligns the vaddr.
     let data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
-    let data_off = round_up(got_off + got_size, data_align);
-    let data_size = build.data.len() as u64 - ro_len;
+    // The relro region follows `.got`; PT_GNU_RELRO covers
+    // `.dynamic`, `.got` and the region, ending on an aligned
+    // boundary ahead of the writable data (see RELRO_EMPTY_END_ALIGN
+    // for the end-alignment rule).
+    let relro_off = if relro_size > 0 {
+        round_up(got_off + got_size, data_align)
+    } else {
+        got_off + got_size
+    };
+    let relro_end_align = if relro_size > 0 {
+        seg
+    } else {
+        RELRO_EMPTY_END_ALIGN
+    };
+    let relro_end = round_up(relro_off + relro_size, relro_end_align);
+    let data_off = round_up(relro_end, data_align);
+    let data_size = build.data.len() as u64 - relro_total;
     // An object wider than the arch page size needs the RW segment's
     // p_align raised to it: the image is a PIE, and the loader aligns the
     // load bias down to the maximum PT_LOAD p_align, so a page-only value
@@ -1965,16 +2004,20 @@ pub(super) fn write(
     let code_vmaddr = TEXT_VMADDR_BASE + code_off;
     let dynamic_vmaddr = TEXT_VMADDR_BASE + dynamic_off;
     let got_vmaddr = TEXT_VMADDR_BASE + got_off;
+    let relro_vmaddr = TEXT_VMADDR_BASE + relro_off;
     let data_vmaddr = TEXT_VMADDR_BASE + data_off;
     let tdata_vmaddr = TEXT_VMADDR_BASE + tdata_off;
 
-    // Runtime VA of a data-segment byte: `.data` for an offset within the
-    // file image, otherwise the zero-fill `.bss` tail past it.
+    // Runtime VA of a data-segment byte: the read-only prefix, the
+    // relro region, `.data`, or the zero-fill `.bss` tail past the
+    // file image.
     let data_off_to_vaddr = |off: u64| -> u64 {
         if off < ro_len {
             rodata_vmaddr + off
+        } else if off < relro_total {
+            relro_vmaddr + (off - ro_len)
         } else if off < file_data_len {
-            data_vmaddr + (off - ro_len)
+            data_vmaddr + (off - relro_total)
         } else {
             bss_vmaddr + (off - file_data_len)
         }
@@ -2111,6 +2154,7 @@ pub(super) fn write(
     let has_rela_text = !er_text.is_empty();
     let has_rela_data = !er_data.is_empty();
     let emit_symtab = emit_plt_symtab || has_rela_text || has_rela_data;
+    let has_relro = relro_size > 0;
     let has_data = data_size > 0;
     let has_tdata = has_tls && tdata_size > 0;
     let has_tbss = has_tls && tbss_size > 0;
@@ -2119,6 +2163,7 @@ pub(super) fn write(
         versions: has_versions,
         rodata: has_rodata,
         tdata: has_tdata,
+        relro: has_relro,
         data: has_data,
         tbss: has_tbss,
         bss: has_bss,
@@ -2133,6 +2178,9 @@ pub(super) fn write(
         let mut v = alloc::vec![(Sec::Text, code_vmaddr)];
         if has_rodata {
             v.push((Sec::RoData, rodata_vmaddr));
+        }
+        if has_relro {
+            v.push((Sec::RelRo, relro_vmaddr));
         }
         if has_data {
             v.push((Sec::Data, data_vmaddr));
@@ -2152,8 +2200,10 @@ pub(super) fn write(
     let map_data_off = |d: u64| -> (Sec, u64) {
         if d < ro_len {
             (Sec::RoData, d)
+        } else if d < relro_total {
+            (Sec::RelRo, d - ro_len)
         } else if d < file_data_len {
-            (Sec::Data, d - ro_len)
+            (Sec::Data, d - relro_total)
         } else {
             (Sec::Bss, d - file_data_len)
         }
@@ -2284,6 +2334,7 @@ pub(super) fn write(
         ".tdata",
         ".dynamic",
         ".got",
+        ".data.rel.ro",
         ".data",
         ".tbss",
         ".bss",
@@ -2340,6 +2391,7 @@ pub(super) fn write(
     // .dynamic + .got + (optional .data) + (optional .tbss) +
     // (optional .bss) + 5 .debug_* + .shstrtab. Counted dynamically.
     let rodata_shndx: u16 = plan.index_of(Sec::RoData);
+    let relro_shndx: u16 = plan.index_of(Sec::RelRo);
     let data_shndx: u16 = plan.index_of(Sec::Data);
     let bss_shndx: u16 = plan.index_of(Sec::Bss);
     let n_section_headers: u64 = plan.len() as u64;
@@ -2486,6 +2538,20 @@ pub(super) fn write(
     // PT_GNU_STACK rw- (no x).
     write_phdr(&mut out, PT_GNU_STACK, PF_R | PF_W, 0, 0, 0, 0, 16);
 
+    // PT_GNU_RELRO -- .dynamic, .got and the relro data region. The
+    // loader applies the relocations, then re-protects the span
+    // read-only (glibc `_dl_protect_relro`).
+    write_phdr(
+        &mut out,
+        PT_GNU_RELRO,
+        PF_R,
+        segment2_off,
+        TEXT_VMADDR_BASE + segment2_off,
+        relro_end - segment2_off,
+        relro_end - segment2_off,
+        1,
+    );
+
     debug_assert_eq!(out.len() as u64, phoff + phsize);
 
     // .interp
@@ -2514,6 +2580,8 @@ pub(super) fn write(
                     data_off_to_vaddr(e.offset),
                     if e.offset < ro_len {
                         rodata_shndx
+                    } else if e.offset < relro_total {
+                        relro_shndx
                     } else if e.offset < file_data_len {
                         data_shndx
                     } else {
@@ -2753,11 +2821,6 @@ pub(super) fn write(
     // .got -- one zero-filled u64 per import. Loader fills these in
     // via .rela.dyn / R_AARCH64_GLOB_DAT before _start runs.
     out.extend(vec![0u8; got_size as usize]);
-    // Pad to the aligned `data_off` (see the layout).
-    while (out.len() as u64) < data_off {
-        out.push(0);
-    }
-    debug_assert_eq!(out.len() as u64, data_off);
 
     // build.data -- the program's static data segment, with
     // pointer-to-global initializers resolved to their link-time absolute
@@ -2830,9 +2893,9 @@ pub(super) fn write(
     // Object-linked pc-relative slots (switch tables, assembler
     // `label - .` records): each holds `target - slot` as link-time
     // vaddrs at the recorded width. A pure difference slides with the
-    // image, so no `.rela.dyn` entry is needed. The reader demotes a
-    // reloc-bearing read-only section into the writable stream, so
-    // the slots sit past `ro_len`.
+    // image, so no `.rela.dyn` entry is needed. The reader routes a
+    // reloc-bearing read-only section to the relro stream, so the
+    // slots sit past `ro_len`.
     for r in &build.data_pcrel_relocs {
         let target = if r.target_in_data {
             // `.rodata` / `.data` / `.bss` occupy separate runtime
@@ -2866,7 +2929,20 @@ pub(super) fn write(
         };
         data_with_relocs[off..off + 4].copy_from_slice(&v.to_le_bytes());
     }
-    out.extend_from_slice(&data_with_relocs);
+    // The patched tail splits at `relro_size`: the relro slice lands
+    // after `.got`, padded to `relro_end` so PT_GNU_RELRO's span ends
+    // on its page boundary; the writable remainder starts at the
+    // aligned `data_off`.
+    while (out.len() as u64) < relro_off {
+        out.push(0);
+    }
+    debug_assert_eq!(out.len() as u64, relro_off);
+    out.extend_from_slice(&data_with_relocs[..relro_size as usize]);
+    while (out.len() as u64) < data_off {
+        out.push(0);
+    }
+    debug_assert_eq!(out.len() as u64, data_off);
+    out.extend_from_slice(&data_with_relocs[relro_size as usize..]);
 
     // .tdata -- initialised TLS image. The first `tls_init_size`
     // bytes of `build.tls_data`. The loader copies these into each
@@ -3225,6 +3301,30 @@ pub(super) fn write(
             sh_entsize: 8,
         },
     );
+
+    // [optional] .data.rel.ro -- read-only data with loader-written
+    // slots, inside the PT_GNU_RELRO span. SHF_WRITE like ld's: the
+    // page is writable until the loader re-protects it.
+    if has_relro {
+        emit_shdr(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::RelRo,
+            &Elf64Shdr {
+                sh_name: name_off(".data.rel.ro"),
+                sh_type: SHT_PROGBITS,
+                sh_flags: SHF_ALLOC | SHF_WRITE,
+                sh_addr: relro_vmaddr,
+                sh_offset: relro_off,
+                sh_size: relro_size,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: data_align,
+                sh_entsize: 0,
+            },
+        );
+    }
 
     // [optional] .data -- the initialised data segment.
     if has_data {
@@ -3728,11 +3828,12 @@ mod tests {
     /// used to be hand-summed against a separate emission list.
     #[test]
     fn section_indices_resolve_to_their_own_section() {
-        for bits in 0u8..128 {
+        for bits in 0u16..256 {
             let plan = SectionPlan::new(SectionsPresent {
                 versions: bits & 1 != 0,
                 rodata: bits & 64 != 0,
                 tdata: bits & 2 != 0,
+                relro: bits & 128 != 0,
                 data: bits & 4 != 0,
                 tbss: bits & 8 != 0,
                 bss: bits & 16 != 0,
@@ -3748,6 +3849,7 @@ mod tests {
             expected += 2 * (bits & 1 != 0) as usize; // .gnu.version{,_r}
             expected += (bits & 64 != 0) as usize; // .rodata
             expected += (bits & 2 != 0) as usize; // .tdata
+            expected += (bits & 128 != 0) as usize; // .data.rel.ro
             expected += (bits & 4 != 0) as usize; // .data
             expected += (bits & 8 != 0) as usize; // .tbss
             expected += (bits & 16 != 0) as usize; // .bss
@@ -3824,6 +3926,7 @@ mod tests {
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
             data_ro_len: 0,
+            data_relro_len: 0,
             pic: false,
             code_model: Default::default(),
             elf_class: Default::default(),

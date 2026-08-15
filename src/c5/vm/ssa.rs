@@ -560,7 +560,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         let ctor = prog
             .lookup(pc)
             .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no constructor at ent_pc {pc}")))?;
-        if let Err(e) = run_func(&prog, &mut mem, host, ctor, &[]) {
+        if let Err(e) = run_func(&prog, &mut mem, host, ctor, &[], &[]) {
             return match exit_status_of(&e) {
                 Some(status) => Ok(status),
                 None => Err(e),
@@ -578,7 +578,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     } else {
         &entry_args
     };
-    let status = match run_func(&prog, &mut mem, host, entry, slice) {
+    let status = match run_func(&prog, &mut mem, host, entry, slice, &[]) {
         Err(e) => match exit_status_of(&e) {
             Some(status) => status,
             None => return Err(e),
@@ -592,7 +592,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         let dtor = prog
             .lookup(pc)
             .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no destructor at ent_pc {pc}")))?;
-        if let Err(e) = run_func(&prog, &mut mem, host, dtor, &[]) {
+        if let Err(e) = run_func(&prog, &mut mem, host, dtor, &[], &[]) {
             match exit_status_of(&e) {
                 Some(s) => return Ok(s),
                 None => return Err(e),
@@ -688,12 +688,20 @@ impl Host for NullHost {
 /// Run one function in the program context. `args` lands in the
 /// parameter byte slots per the c5 cdecl: arg `i` at
 /// `stack_base + (locals + i) * 8`.
+///
+/// `arg_aggs` is the call site's per-argument aggregate tagging, which
+/// says how an aggregate argument was passed: an entry names the
+/// layout when the operand is the address of the caller's copy, and is
+/// unset when the operand is the aggregate's value in one machine
+/// word. Empty for a call with no aggregate argument and for the
+/// program entry.
 fn run_func<H: Host>(
     prog: &Program<'_>,
     mem: &mut Memory,
     host: &mut H,
     func: &FunctionSsa,
     args: &[i64],
+    arg_aggs: &[Option<u32>],
 ) -> Result<i64, C5Error> {
     let locals = func.locals.max(0) as usize;
     let n_params = func.n_params.max(args.len());
@@ -710,16 +718,25 @@ fn run_func<H: Host>(
         )?
     };
     for (i, &v) in args.iter().enumerate() {
-        // Host-ABI register-passed aggregate parameter: `v` is the
-        // source struct's address. The callee body reads the aggregate
-        // from a parser-reserved body local (no entry copy in the SSA),
-        // so copy `size` bytes there directly -- the native prologue's
-        // register scatter, in interpreter terms.
+        // Host-ABI register-passed aggregate parameter. The callee body
+        // reads the aggregate from a parser-reserved body local (no entry
+        // copy in the SSA), so fill that local here -- the native
+        // prologue's register scatter, in interpreter terms.
         if let Some(Some(idx)) = func.param_aggs.get(i).copied() {
             let size = func.agg_descs[idx as usize].size as usize;
             let slot = func.param_local_slots[i];
             let dst = (stack_base as i64 + (locals as i64 + slot) * 8) as usize;
-            mem.copy_within(dst, v as usize, size)?;
+            if arg_aggs.get(i).copied().flatten().is_some() {
+                // Address form: `v` is the caller's copy.
+                mem.copy_within(dst, v as usize, size)?;
+            } else {
+                // Value form: the callee's parameter list was not in scope
+                // at the call site, so the walker loaded an aggregate of at
+                // most one machine word into `v`. The word is the object's
+                // bytes, not its address.
+                let bytes = v.to_le_bytes();
+                mem.write_bytes(dst, &bytes[..size.min(bytes.len())])?;
+            }
             continue;
         }
         let addr = stack_base + (locals + i) * 8;
@@ -1171,7 +1188,7 @@ fn run_inst<H: Host>(
                 C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
             })?;
             let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
-            let ret = run_func(prog, mem, host, callee, &arg_vals)?;
+            let ret = run_func(prog, mem, host, callee, &arg_vals, arg_aggs)?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
@@ -1221,7 +1238,7 @@ fn run_inst<H: Host>(
                 ))
             })?;
             let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
-            let ret = run_func(prog, mem, host, callee, &arg_vals)?;
+            let ret = run_func(prog, mem, host, callee, &arg_vals, arg_aggs)?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }

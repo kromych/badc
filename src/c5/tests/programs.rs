@@ -4794,6 +4794,15 @@ fn string_initializer_copy_rules() {
 }
 
 #[test]
+fn struct_arg_value_form() {
+    // A by-value aggregate argument has two call-site forms: the address of
+    // the caller's copy, and -- when the callee's parameter list is not in
+    // scope -- the object's bytes in one machine word. The interpreter read
+    // the second form's word as an address; the native backends take both.
+    assert_eq!(run_fixture("struct_arg_value_form.c"), 0);
+}
+
+#[test]
 fn bitfields_basic() {
     // bitfields pack into shared 8-byte storage units;
     // reads use Li/Shr/And; writes use load-clear-shift-or-store.

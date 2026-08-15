@@ -5131,17 +5131,25 @@ fn asm_operand_const_rec(func: &crate::c5::ir::FunctionSsa, arg: u32, depth: u32
     }
 }
 
-/// Fold a link-time data-address expression to its base `ImmData` value-id and
-/// the constant byte offset added to it, walking a chain of constant `Add`s
-/// (`&global`, `&global.field`, `&global.field[const]`). Returns `None` for a
-/// non-constant or non-address shape. SSA operands precede their defs, so the
-/// walk strictly decreases the value-id and terminates.
-fn asm_operand_data_base(insts: &[crate::c5::ir::Inst], arg: u32) -> Option<(u32, i64)> {
+/// Fold a C99 6.6p9 address constant to the value-id naming its object or
+/// function and the constant byte offset added to it, walking a chain of
+/// constant `Add`s (`&global`, `&global.field`, `&global.field[const]`).
+/// Returns `None` for a non-constant or non-address shape.
+///
+/// A cast between object-pointer and integer types of the same width leaves
+/// no instruction of its own, so a cast chain reaches this walk as its base
+/// alone. A cast that narrows lowers to a mask or an `Extend`, neither of
+/// which the walk crosses -- the truncated value is not the address.
+///
+/// SSA operands precede their defs, so the walk strictly decreases the
+/// value-id and terminates. The base's own payload stays with the caller:
+/// `ImmData` carries a data-byte offset, `ImmCode` an entry PC.
+fn asm_operand_addr_base(insts: &[crate::c5::ir::Inst], arg: u32) -> Option<(u32, i64)> {
     use crate::c5::ir::{BinOp, Inst};
     let (mut vid, mut off) = (arg, 0i64);
     loop {
         let (next, add) = match insts.get(vid as usize)? {
-            Inst::ImmData(o) => return Some((vid, off + *o)),
+            Inst::ImmData(_) | Inst::ImmCode(_) => return Some((vid, off)),
             Inst::BinopI {
                 op: BinOp::Add,
                 lhs,
@@ -5163,6 +5171,29 @@ fn asm_operand_data_base(insts: &[crate::c5::ir::Inst], arg: u32) -> Option<(u32
         }
         off += add;
         vid = next;
+    }
+}
+
+/// [`asm_operand_addr_base`] restricted to a data object: the base `ImmData`
+/// value-id and the total byte offset, the object's own offset included.
+fn asm_operand_data_base(insts: &[crate::c5::ir::Inst], arg: u32) -> Option<(u32, i64)> {
+    let (vid, off) = asm_operand_addr_base(insts, arg)?;
+    match insts.get(vid as usize)? {
+        crate::c5::ir::Inst::ImmData(o) => Some((vid, off + *o)),
+        _ => None,
+    }
+}
+
+/// [`asm_operand_addr_base`] restricted to a function: the base `ImmCode`
+/// value-id, the function's entry PC, and the byte offset added to it.
+pub(crate) fn asm_operand_code_base(
+    insts: &[crate::c5::ir::Inst],
+    arg: u32,
+) -> Option<(u32, usize, i64)> {
+    let (vid, off) = asm_operand_addr_base(insts, arg)?;
+    match insts.get(vid as usize)? {
+        crate::c5::ir::Inst::ImmCode(pc) => Some((vid, *pc, off)),
+        _ => None,
     }
 }
 

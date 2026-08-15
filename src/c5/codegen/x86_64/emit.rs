@@ -1999,6 +1999,7 @@ pub(crate) fn emit_function(
                         asm_sections,
                         asm_extern_call_sites,
                         data_fixups,
+                        pending_func_fixups,
                         user_extern_data_refs,
                         asm_section_text_refs,
                         asm_text_abs_refs,
@@ -3539,6 +3540,7 @@ fn emit_inst(
             asm_sections,
             asm_extern_call_sites,
             data_fixups,
+            pending_func_fixups,
             user_extern_data_refs,
             asm_section_text_refs,
             asm_text_abs_refs,
@@ -6385,49 +6387,54 @@ enum AsmRipSym {
     /// Global defined in this unit: `data_offset` is its byte offset in the
     /// merged data segment.
     Local { data_offset: i64 },
+    /// Function defined in this unit, named by its entry PC. Resolved
+    /// through the same channel as an `Inst::ImmCode` function-pointer
+    /// literal, so the reference reaches the function's own body.
+    Text { ent_pc: usize },
 }
 
-/// Resolve an inline-asm `%a` address operand to a RIP-relative relocation
-/// target. `arg` is the operand's SSA value-id; the accepted shapes are an
-/// `Inst::ImmData` (a global's address) and that address plus a constant
-/// (`&global + k`, the struct-field case). Returns `None` when the operand
-/// is not a link-time data address.
+/// Resolve an inline-asm `%a` / `%c` address operand to a RIP-relative
+/// relocation target. `arg` is the operand's SSA value-id; the accepted
+/// shape is a C99 6.6p9 address constant -- the address of a static-storage
+/// object or of a function, plus a constant byte offset. Returns `None`
+/// when the operand is not a link-time address.
 fn asm_riprel_target(
     func: &FunctionSsa,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     arg: u32,
 ) -> Option<AsmRipSym> {
-    use super::super::ir::{BinOp, Inst};
-    let (base_vid, offset) = match func.insts.get(arg as usize)? {
-        Inst::ImmData(off) => (arg, *off),
-        Inst::BinopI {
-            op: BinOp::Add,
-            lhs,
-            rhs_imm,
-        } => match func.insts.get(*lhs as usize) {
-            Some(Inst::ImmData(off)) => (*lhs, off + rhs_imm),
+    use super::ssa::emit_common::{asm_operand_code_base, asm_operand_data_target};
+    if let Some((target, addend)) =
+        asm_operand_data_target(&func.insts, arg, &|v| extern_data_names.get(&v).cloned())
+    {
+        use super::ssa::emit_common::AsmSectionTarget;
+        return Some(match target {
+            AsmSectionTarget::Symbol(name) => AsmRipSym::Extern {
+                name,
+                offset: addend,
+            },
+            AsmSectionTarget::Data(off) => AsmRipSym::Local {
+                data_offset: off as i64,
+            },
             _ => return None,
-        },
-        Inst::Binop {
-            op: BinOp::Add,
-            lhs,
-            rhs,
-        } => match (func.insts.get(*lhs as usize), func.insts.get(*rhs as usize)) {
-            (Some(Inst::ImmData(off)), Some(Inst::Imm(c))) => (*lhs, off + c),
-            (Some(Inst::Imm(c)), Some(Inst::ImmData(off))) => (*rhs, off + c),
-            _ => return None,
-        },
-        _ => return None,
-    };
-    match extern_data_names.get(&base_vid) {
-        Some(name) => Some(AsmRipSym::Extern {
+        });
+    }
+    let (base_vid, ent_pc, offset) = asm_operand_code_base(&func.insts, arg)?;
+    // `name2entpc` holds the unit's own definitions. One of them takes the
+    // entry-PC channel, which reaches the emitted body; every other name is
+    // cross-TU and relocates by name. The in-unit channel names the entry,
+    // so a byte offset into the body has nowhere to ride.
+    if name2entpc.values().any(|&pc| pc == ent_pc) {
+        return (offset == 0).then_some(AsmRipSym::Text { ent_pc });
+    }
+    extern_code_names
+        .get(&base_vid)
+        .map(|name| AsmRipSym::Extern {
             name: name.clone(),
             offset,
-        }),
-        None => Some(AsmRipSym::Local {
-            data_offset: offset,
-        }),
-    }
+        })
 }
 
 /// Encode replacement instructions in an executable inline-asm section
@@ -7572,6 +7579,7 @@ fn emit_inline_asm(
     asm_sections: &mut super::ssa::emit_common::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
@@ -8228,10 +8236,15 @@ fn emit_inline_asm(
                                 return fail("inline asm: absolute displacement out of range");
                             }
                         },
-                        None => match args
-                            .get(idx as usize)
-                            .and_then(|a| asm_riprel_target(func, extern_data_names, *a))
-                        {
+                        None => match args.get(idx as usize).and_then(|a| {
+                            asm_riprel_target(
+                                func,
+                                name2entpc,
+                                extern_data_names,
+                                extern_code_names,
+                                *a,
+                            )
+                        }) {
                             Some(sym) => {
                                 riprel_reloc = Some((sym, 0));
                                 Concrete::RipRel { disp: 0, size }
@@ -8271,8 +8284,15 @@ fn emit_inline_asm(
                             {
                                 None
                             } else {
-                                args.get(idx as usize)
-                                    .and_then(|a| asm_riprel_target(func, extern_data_names, *a))
+                                args.get(idx as usize).and_then(|a| {
+                                    asm_riprel_target(
+                                        func,
+                                        name2entpc,
+                                        extern_data_names,
+                                        extern_code_names,
+                                        *a,
+                                    )
+                                })
                             };
                             match sym {
                                 Some(sym) => {
@@ -8338,9 +8358,17 @@ fn emit_inline_asm(
                     // the symbol, as gcc does for `%a` (`sym(%rip)`). A scaled
                     // index cannot ride the RIP-relative form.
                     let sym = match base {
-                        super::asm::AsmMemBase::Ref(bi) if index.is_none() => args
-                            .get(bi as usize)
-                            .and_then(|a| asm_riprel_target(func, extern_data_names, *a)),
+                        super::asm::AsmMemBase::Ref(bi) if index.is_none() => {
+                            args.get(bi as usize).and_then(|a| {
+                                asm_riprel_target(
+                                    func,
+                                    name2entpc,
+                                    extern_data_names,
+                                    extern_code_names,
+                                    *a,
+                                )
+                            })
+                        }
                         _ => None,
                     };
                     let base = match (resolve(base), sym) {
@@ -8414,10 +8442,15 @@ fn emit_inline_asm(
                                 return fail("inline asm: RIP-relative displacement out of range");
                             }
                         },
-                        None => match args
-                            .get(idx as usize)
-                            .and_then(|a| asm_riprel_target(func, extern_data_names, *a))
-                        {
+                        None => match args.get(idx as usize).and_then(|a| {
+                            asm_riprel_target(
+                                func,
+                                name2entpc,
+                                extern_data_names,
+                                extern_code_names,
+                                *a,
+                            )
+                        }) {
                             Some(sym) => {
                                 riprel_reloc = Some((sym, 0));
                                 Concrete::RipRel { disp: 0, size }
@@ -8574,6 +8607,14 @@ fn emit_inline_asm(
                         data_offset: (data_offset + disp) as u64,
                         part: AddrPart::Whole,
                     });
+                }
+                AsmRipSym::Text { ent_pc } if disp == 0 => {
+                    pending_func_fixups.push((instr_offset, ent_pc));
+                }
+                AsmRipSym::Text { .. } => {
+                    return fail(
+                        "inline asm: a displacement on an in-unit function address is not supported",
+                    );
                 }
             }
         }

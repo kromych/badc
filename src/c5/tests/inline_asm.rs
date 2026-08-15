@@ -1042,6 +1042,101 @@ fn aarch64_function_body_symbol_operands_relocate() {
 // Emits a relocatable object, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
+fn x86_64_riprel_const_operand_takes_any_address_constant() {
+    use crate::c5::linker::relocatable::EtSymRef;
+    use crate::c5::object::elf_reloc_types::R_X86_64_PC32;
+    // `arch/x86/include/asm/asm.h`'s `rip_rel_ptr` names its `i`-class
+    // operand under `%c`. The operand is a C99 6.6p9 address constant --
+    // the address of a function or of a static-storage object, reached
+    // through casts between object-pointer and integer types of the same
+    // width. GNU as 2.46.1 assembles each site as
+    // `leaq <symbol>(%rip), %reg`: a same-unit definition resolves
+    // section-relative, a cross-TU name keeps its own symbol.
+    let src = "extern int e_fn(void);\n\
+               __attribute__((used)) static int s_fn(void) { return 1; }\n\
+               static struct { char pad[16]; int v; } obj;\n\
+               #define REL(x) ({ void *p_;\\\n\
+                 __asm__(\"leaq %c1(%%rip), %0\" : \"=r\"(p_) : \"i\"((void *)(x)));\\\n\
+                 p_; })\n\
+               void *a(void) { return REL((unsigned long)&s_fn); }\n\
+               void *b(void) { return REL((unsigned long)e_fn); }\n\
+               void *c(void) { return REL((unsigned long)&obj.v); }\n";
+    let o = asm_obj(src, crate::Target::LinuxX64);
+    let text_idx = o
+        .sections
+        .iter()
+        .position(|s| s.name == ".text")
+        .expect(".text");
+    let bss_idx = o
+        .sections
+        .iter()
+        .position(|s| s.name == ".bss")
+        .expect(".bss");
+    let obj_off = o
+        .symbols
+        .iter()
+        .find(|s| s.name == "obj")
+        .expect("local `obj` symbol")
+        .value as i64;
+    // The `leaq` sites carry a `%c` operand each; every other row in
+    // `.text` belongs to the operand's own value materialisation.
+    let rows: alloc::vec::Vec<(u32, alloc::string::String, i64)> = o.sections[text_idx]
+        .relocs
+        .iter()
+        .map(|r| {
+            let sym = &o.symbols[r.sym as usize];
+            let who = if sym.name.is_empty() {
+                match sym.sec {
+                    EtSymRef::Section(i) => o.sections[i].name.clone(),
+                    _ => alloc::string::String::new(),
+                }
+            } else {
+                sym.name.clone()
+            };
+            (r.rtype, who, r.addend)
+        })
+        .collect();
+    let text = o.sections[text_idx].name.clone();
+    let bss = o.sections[bss_idx].name.clone();
+    for want in [
+        (R_X86_64_PC32, text.as_str(), -4),
+        (R_X86_64_PC32, "e_fn", -4),
+        (R_X86_64_PC32, bss.as_str(), obj_off + 16 - 4),
+    ] {
+        assert!(
+            rows.iter()
+                .any(|r| (r.0, r.1.as_str(), r.2) == (want.0, want.1, want.2)),
+            "missing {want:?} in {rows:?}"
+        );
+    }
+    // A cast that narrows drops the high half, so the value is no
+    // longer the address and the operand is refused.
+    let narrowed = "static int obj;\n\
+                    void *a(void) { void *p;\n\
+                      __asm__(\"leaq %c1(%%rip), %0\" : \"=r\"(p) : \"i\"((void *)(unsigned)&obj));\n\
+                      return p; }\n";
+    let copts = crate::CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program =
+        crate::Compiler::with_options(narrowed.to_string(), crate::Target::LinuxX64, copts)
+            .compile()
+            .expect("compile");
+    let opts = crate::NativeOptions {
+        output_kind: crate::OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let err = crate::emit_native_with_options(&program, crate::Target::LinuxX64, opts)
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(err.contains("not a constant or address"), "{err}");
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
 fn aarch64_symbol_operand_layout_expression_is_refused() {
     use crate::{NativeOptions, OutputKind, emit_native_with_options};
     // A label-difference addend has no value before a section layout;

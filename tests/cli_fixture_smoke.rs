@@ -133,13 +133,14 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_sib_nobase.c", "linux-aarch64"), // x86-64 no-base scaled-index memory operands
     ("inline_asm_x64_port_dx.c", "linux-aarch64"),    // x86-64 `(%dx)` port in/out
     ("inline_asm_x64_c_mem.c", "linux-aarch64"),      // x86-64 `%c` RIP-relative memory forms
+    ("inline_asm_x64_riprel_addr_const.c", "linux-aarch64"), // x86-64 `%c` RIP-relative address constants
     ("inline_asm_x64_seg_c_percpu.c", "linux-aarch64"), // x86-64 `%%gs:` percpu accessor shapes
-    ("inline_asm_x64_sym_riprel.c", "linux-aarch64"), // x86-64 sym(%rip) displacement forms
-    ("inline_asm_x64_align.c", "linux-aarch64"),      // x86-64 `.align` in the code stream
-    ("cpuid_partial_outputs.c", "linux-aarch64"),     // x86-64 cpuid
-    ("cpuid_xgetbv_output_width.c", "linux-aarch64"), // x86-64 cpuid / xgetbv output widths
+    ("inline_asm_x64_sym_riprel.c", "linux-aarch64"),   // x86-64 sym(%rip) displacement forms
+    ("inline_asm_x64_align.c", "linux-aarch64"),        // x86-64 `.align` in the code stream
+    ("cpuid_partial_outputs.c", "linux-aarch64"),       // x86-64 cpuid
+    ("cpuid_xgetbv_output_width.c", "linux-aarch64"),   // x86-64 cpuid / xgetbv output widths
     ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs
-    ("inline_asm_x64_string_ops.c", "linux-aarch64"), // x86-64 string primitives / prefixes
+    ("inline_asm_x64_string_ops.c", "linux-aarch64"),   // x86-64 string primitives / prefixes
     ("inline_asm_x64_system_ext.c", "linux-aarch64"), // x86-64 invpcid/invvpid/invlpga/cmpxchg16b/fldl/fstpl/mxcsr/ljmp/fs-gs push
     ("inline_asm_x64_port_io.c", "linux-aarch64"),    // x86-64 string port-I/O (ins / outs)
     ("inline_asm_a64_comments.c", "linux-x64"),       // aarch64 comment syntax

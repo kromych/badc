@@ -13777,3 +13777,169 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
         ]
     );
 }
+
+/// Mapping symbols of an aarch64 `-c` object as `(section, offset, name)`,
+/// in section then offset order.
+fn mapping_symbols(bytes: &[u8]) -> alloc::vec::Vec<(String, u64, String)> {
+    let sections = elf_sections(bytes);
+    let mut out: alloc::vec::Vec<(String, u64, String)> = elf_symbols(bytes)
+        .into_iter()
+        .filter(|(n, ..)| n == "$x" || n == "$d")
+        .map(|(n, info, shndx, value, size)| {
+            // The ABI fixes the binding and type: STB_LOCAL, STT_NOTYPE,
+            // and no extent.
+            assert_eq!(info, 0, "{n} is not STB_LOCAL / STT_NOTYPE");
+            assert_eq!(size, 0, "{n} carries a size");
+            (sections[shndx as usize].0.clone(), value, n)
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// `-c` object bytes for an assembled unit.
+fn asm_reloc_tu(src: &str, target: crate::c5::Target) -> alloc::vec::Vec<u8> {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
+    let copts = CompileOptions {
+        no_entry_point: true,
+        gnu: true,
+        asm_source: true,
+        ..Default::default()
+    };
+    let program = Compiler::assemble(src, target, copts).expect("assemble");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    emit_native_with_options(&program, target, opts).expect("emit")
+}
+
+#[test]
+fn aarch64_assembled_shapes_carry_the_mapping_symbols_gnu_as_emits() {
+    // `$x` opens a run of A64 instructions and `$d` a run of data, each
+    // reaching the next mapping symbol or the end of its section. Every
+    // expectation below was read off `as` (binutils 2.46) for the same
+    // input. x86_64 has no mapping symbols, so a unit of it carries none.
+    use crate::c5::Target;
+    /// A shape: what it is, its source, and the mapping symbols GNU as
+    /// gives it as `(section, offset, name)`.
+    type Shape = (
+        &'static str,
+        &'static str,
+        &'static [(&'static str, u64, &'static str)],
+    );
+    let shapes: &[Shape] = &[
+        (
+            "a function alone",
+            ".text\n.globl f\nf:\n\tmov w0, #1\n\tret\n",
+            &[(".text", 0, "$x")],
+        ),
+        (
+            "a function and its literal pool",
+            ".text\nf:\n\tret\n\t.word 0xdeadbeef\n\t.word 1\n\tnop\n\tret\n",
+            &[(".text", 0, "$x"), (".text", 4, "$d"), (".text", 12, "$x")],
+        ),
+        (
+            "a data-only section",
+            ".section .ro,\"a\",@progbits\n\t.word 7\n",
+            &[],
+        ),
+        (
+            "a data-only section placed at an alignment",
+            ".section .ro,\"a\",@progbits\n\t.align 3\n\t.word 7\n",
+            &[(".ro", 0, "$d")],
+        ),
+        (
+            "alternating runs",
+            ".section .mix,\"ax\",@progbits\n\tnop\n\t.word 1\n\tnop\n\t.word 2\n\tret\n",
+            &[
+                (".mix", 0, "$x"),
+                (".mix", 4, "$d"),
+                (".mix", 8, "$x"),
+                (".mix", 12, "$d"),
+                (".mix", 16, "$x"),
+            ],
+        ),
+        (
+            "an empty section",
+            ".section .empty,\"ax\",@progbits\n.text\n\tnop\n",
+            &[(".text", 0, "$x")],
+        ),
+        (
+            "a section that opens with data",
+            ".section .df,\"ax\",@progbits\n\t.word 5\n\tnop\n",
+            &[(".df", 0, "$d"), (".df", 4, "$x")],
+        ),
+        (
+            "alignment padding filled with instructions",
+            ".text\n\tnop\n\t.align 4\n\tret\n",
+            &[(".text", 0, "$x")],
+        ),
+        (
+            "instructions in a section that is not executable",
+            ".section .idmap.text,\"a\",@progbits\n\tnop\n\tnop\n\t.balign 4\n\tnop\n\
+             \t.balign 16\n\tnop\n",
+            &[
+                (".idmap.text", 0, "$x"),
+                (".idmap.text", 8, "$x"),
+                (".idmap.text", 12, "$d"),
+                (".idmap.text", 16, "$x"),
+            ],
+        ),
+        (
+            "a `.org` gap, which GNU as leaves inside the run around it",
+            ".section .o1,\"ax\",@progbits\nS:\n\tnop\n\t.org S + 32\n\tret\n",
+            &[(".o1", 0, "$x")],
+        ),
+        (
+            "`.inst`, whose bytes are an instruction",
+            ".text\n\tnop\n\t.inst 0xd503201f\n\tret\n",
+            &[(".text", 0, "$x")],
+        ),
+    ];
+    for (what, src, want) in shapes {
+        let want: alloc::vec::Vec<(String, u64, String)> = want
+            .iter()
+            .map(|&(s, o, n)| (String::from(s), o, String::from(n)))
+            .collect();
+        let got = mapping_symbols(&asm_reloc_tu(src, Target::LinuxAarch64));
+        assert_eq!(got, want, "aarch64 mapping symbols for {what}");
+    }
+    assert!(
+        mapping_symbols(&asm_reloc_tu(".text\n\tnop\n", Target::LinuxX64)).is_empty(),
+        "x86_64 carries mapping symbols"
+    );
+}
+
+#[test]
+fn aarch64_compiled_objects_mark_their_code_and_data() {
+    // A compiled unit: `.text` opens with `$x`, an embedded jump table is a
+    // `$d` run with `$x` past it, and each non-empty allocatable data
+    // section opens with `$d`. gcc -O2 marks the same places.
+    use crate::c5::Target;
+    let mut src = String::from("int g(int x){switch(x){");
+    for i in 1..25 {
+        src.push_str(&alloc::format!("case {i}:return {};", i * 7));
+    }
+    src.push_str("default:return 0;}}\nconst int t[4]={1,2,3,4};\nint d[4]={5,6,7,8};\n");
+    let got = mapping_symbols(&reloc_tu(&src, Target::LinuxAarch64, true));
+    let text: alloc::vec::Vec<&(String, u64, String)> =
+        got.iter().filter(|(s, ..)| s == ".text").collect();
+    assert_eq!(
+        text.len(),
+        3,
+        "expected $x / $d / $x in .text, got {text:?}"
+    );
+    assert_eq!((text[0].1, text[0].2.as_str()), (0, "$x"));
+    assert_eq!(text[1].2, "$d");
+    assert_eq!(text[2].2, "$x");
+    // The table is the 24 four-byte entries between the two.
+    assert_eq!(text[2].1 - text[1].1, 24 * 4);
+    for want in [".data", ".rodata"] {
+        assert!(
+            got.contains(&(String::from(want), 0, String::from("$d"))),
+            "{want} has no $d at 0, got {got:?}"
+        );
+    }
+}

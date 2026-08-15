@@ -30,6 +30,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use super::super::codegen::map_syms::{self, MapClass, MapMark};
 use super::super::error::C5Error;
 use super::super::program::{ExportedFunction, Program};
 use super::Machine;
@@ -1270,6 +1271,9 @@ pub(super) fn write_relocatable(
         }
         plan_data_layout(program, build, &named_objs, &mut sizes, internal)?
     };
+    // Per-entry length of the attribute-placed content, before any
+    // inline-asm payload is appended past it.
+    let attr_sizes = sizes.clone();
     // Inline-asm `.pushsection` payloads join the same table. Letter
     // flags and the `@type` argument map to sh_flags / sh_type; a
     // block sharing a name with an attribute placement merges into the
@@ -2103,6 +2107,13 @@ pub(super) fn write_relocatable(
     for d in &asm_decl_undef {
         all_names.push(d.name.as_str());
     }
+    // Mapping-symbol names, on the one architecture that has them, so no
+    // other target's string table carries them.
+    let map_names_start = all_names.len();
+    if machine == Machine::Aarch64 {
+        all_names.push(MapClass::Code.symbol_name());
+        all_names.push(MapClass::Data.symbol_name());
+    }
     let (strtab_bytes, name_offs) = build_strtab(&all_names);
     // Patch the file symbol's name offset against the final
     // strtab.
@@ -2327,6 +2338,105 @@ pub(super) fn write_relocatable(
             st_size: *size,
             ..Default::default()
         });
+    }
+    // AArch64 mapping symbols. Every producer records the class of the
+    // bytes it lays down; the marks are gathered per output section here,
+    // since they arrive in section-independent passes, and folded once.
+    if machine == Machine::Aarch64 {
+        let mut marks: Vec<(u16, MapMark)> = Vec::new();
+        let mut sec_len: alloc::collections::BTreeMap<u16, u64> =
+            alloc::collections::BTreeMap::new();
+        sec_len.insert(SHIDX_TEXT, carve.text_keep_len as u64);
+        sec_len.insert(SHIDX_DATA, plan.data_len);
+        sec_len.insert(SHIDX_BSS, plan.bss_len);
+        for k in 0..carve.table.entries.len() {
+            sec_len.insert(carve.shndx[k], sizes.get(k).copied().unwrap_or(0));
+        }
+        // The text stream holds instructions apart from the data ranges the
+        // backend recorded. Each mark is split at the carve boundaries it
+        // crosses, so a function placed in a named section opens a run in
+        // that section rather than in `.text`.
+        for m in map_syms::code_stream_marks(build.text.len(), &build.text_data_ranges) {
+            let (mut lo, hi) = (u64::from(m.at), u64::from(m.at + m.len));
+            while lo < hi {
+                let end = carve
+                    .text_ranges
+                    .iter()
+                    .find_map(|r| match () {
+                        _ if lo < r.old_lo => Some(r.old_lo),
+                        _ if lo < r.old_hi => Some(r.old_hi),
+                        _ => None,
+                    })
+                    .map_or(hi, |b| b.min(hi));
+                let (shndx, value) = text_place(lo);
+                marks.push((
+                    shndx,
+                    MapMark {
+                        at: value as u32,
+                        len: (end - lo) as u32,
+                        class: m.class,
+                        opens: false,
+                    },
+                ));
+                lo = end;
+            }
+        }
+        // Content the writer places at a section's own alignment opens a
+        // data run at its start, as the alignment ahead of it does in an
+        // assembled unit: the unified data image, the switch-table blob,
+        // and the attribute-placed content of a named section.
+        let mut data_start = |shndx: u16, at: u64, len: u64| {
+            if len > 0 {
+                marks.push((
+                    shndx,
+                    MapMark {
+                        at: at as u32,
+                        len: 0,
+                        class: MapClass::Data,
+                        opens: true,
+                    },
+                ));
+            }
+        };
+        data_start(SHIDX_DATA, 0, plan.data_len);
+        data_start(SHIDX_BSS, 0, plan.bss_len);
+        for k in 0..carve.table.entries.len() {
+            // Carved text is placed first in its entry; the attribute
+            // content that follows starts past it.
+            let text_end = carve
+                .text_ranges
+                .iter()
+                .filter(|r| r.entry == k)
+                .map(|r| r.new_base + (r.old_hi - r.old_lo))
+                .max()
+                .unwrap_or(0);
+            let attr = attr_sizes.get(k).copied().unwrap_or(0);
+            data_start(carve.shndx[k], text_end, attr.saturating_sub(text_end));
+        }
+        if let Some((e, base)) = jt_placement {
+            data_start(carve.shndx[e], base, build.rodata.bytes.len() as u64);
+        }
+        for (&(e, base), s) in asm_placements.iter().zip(build.asm_sections.iter()) {
+            marks.extend(s.map.shifted(base as u32).map(|m| (carve.shndx[e], m)));
+        }
+        marks.sort_by_key(|&(shndx, _)| shndx);
+        let mut i = 0;
+        while i < marks.len() {
+            let shndx = marks[i].0;
+            let j = i + marks[i..].partition_point(|&(s, _)| s == shndx);
+            let mut group: Vec<MapMark> = marks[i..j].iter().map(|&(_, m)| m).collect();
+            let len = sec_len.get(&shndx).copied().unwrap_or(0) as usize;
+            for (at, class) in map_syms::fold(&mut group, len) {
+                symbols.push(Elf64Sym {
+                    st_name: name_offs[map_names_start + usize::from(class == MapClass::Data)],
+                    st_info: pack_sym_info(STB_LOCAL, STT_NOTYPE),
+                    st_shndx: shndx,
+                    st_value: u64::from(at),
+                    ..Default::default()
+                });
+            }
+            i = j;
+        }
     }
     let first_global = symbols.len() as u32;
     // Global (`.globl`) and weak (`.weak`) inline-asm section labels.
@@ -5038,6 +5148,7 @@ mod tests {
     fn empty_build_for(_machine: Machine) -> Build {
         use super::super::{Abi, OutputKind, ResolvedImports};
         Build {
+            text_data_ranges: alloc::vec::Vec::new(),
             emitted_relocs: Vec::new(),
             text_align: 16,
             orphaned_data: None,

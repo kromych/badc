@@ -5,6 +5,8 @@
 //! (`ssa_emit_x86_64.rs`, `ssa_emit_aarch64.rs`) don't carry
 //! parallel copies.
 
+use crate::c5::codegen::map_syms::{MapClass, MapMarks};
+
 /// Mutable emit output the two backends thread identically through their
 /// per-instruction lowering: the machine-code buffer and the relocation/fixup
 /// vectors whose element types are target-neutral. Bundling them collapses the
@@ -41,6 +43,11 @@ pub(crate) struct EmitCtx<'a> {
     /// resolved to text offsets once the function's block layout is
     /// final.
     pub(crate) label_relocs: &'a mut alloc::vec::Vec<super::super::LabelReloc>,
+    /// `(offset, len)` of every run of data the backend puts in the text
+    /// stream -- an embedded jump table, an inline-asm data directive --
+    /// in ascending order. Everything else in the stream is instructions,
+    /// so this is what the AArch64 mapping symbols mark.
+    pub(crate) text_data_ranges: &'a mut alloc::vec::Vec<(usize, usize)>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
@@ -1691,6 +1698,9 @@ pub(crate) struct AsmSection {
     /// that merge into one section. A fresh section starts at the
     /// assembler's section-start boundary.
     pub after_insn: bool,
+    /// Code / data run starts, for the AArch64 mapping symbols the object
+    /// writer emits.
+    pub map: MapMarks,
 }
 
 /// Offset marking a `.globl` seen before its label definition.
@@ -1966,6 +1976,7 @@ impl AsmSectionSink {
             labels: alloc::vec::Vec::new(),
             align: 1,
             after_insn: true,
+            map: MapMarks::default(),
         });
         let i = self.sections.len() - 1;
         self.by_key.insert(key, i);
@@ -2024,6 +2035,7 @@ impl AsmSectionSink {
             self.sections.iter_mut().zip(&snap.per_section)
         {
             s.bytes.truncate(bytes);
+            s.map.truncate(bytes);
             s.relocs.truncate(relocs);
             for l in s.labels.drain(labels.min(s.labels.len())..) {
                 self.labels.remove(&l.name);
@@ -2552,7 +2564,8 @@ fn expand_gas_statements(
                         || alloc::format!("inline asm: `.inst` operand `{arg}` is not constant"),
                     )?;
                     let bytes = (v as u64).to_le_bytes();
-                    out.push_str(".byte ");
+                    out.push_str(INST_BYTES_DIRECTIVE);
+                    out.push(' ');
                     for (k, b) in bytes.iter().take(inst_width).enumerate() {
                         if k > 0 {
                             out.push_str(", ");
@@ -4183,6 +4196,22 @@ fn parse_section_item(
     rest: &str,
     is_aarch64: bool,
 ) -> Result<AsmSectionItem, alloc::string::String> {
+    // `.inst`'s bytes are an instruction, not a data directive.
+    if tok == INST_BYTES_DIRECTIVE {
+        let mut bytes = alloc::vec::Vec::new();
+        for arg in split_top_commas(rest) {
+            bytes.push(
+                eval_const_expr(arg).ok_or_else(|| {
+                    alloc::format!("inline asm: `.inst` byte `{arg}` is not constant")
+                })? as u8,
+            );
+        }
+        return Ok(AsmSectionItem::CodeBytes {
+            bytes,
+            relocs: alloc::vec::Vec::new(),
+            short: None,
+        });
+    }
     if let Some(w) = data_directive_width(tok) {
         // `.word` is target-dependent: 2 bytes on x86 ELF, 4 on AArch64.
         let w = if tok == ".word" && is_aarch64 { 4 } else { w };
@@ -6410,6 +6439,7 @@ pub(crate) fn materialize_asm_sections(
                 }
                 other => other,
             };
+            let map_at = sec.bytes.len();
             match item {
                 AsmSectionItem::AlignArch { .. } => unreachable!("resolved above"),
                 AsmSectionItem::Align { n, fill, max } => {
@@ -6419,6 +6449,23 @@ pub(crate) fn materialize_asm_sections(
                     if max.is_none_or(|m| gap <= m as usize) {
                         sec.align = sec.align.max(*n);
                         let nop_fill = matches!(fill, None | Some(X86_NOP_OPCODE));
+                        // The padding holds instructions only where the
+                        // fill is the target NOP; an explicit fill byte is
+                        // data, and AArch64 has no one-byte NOP to spell it.
+                        sec.map.align(
+                            map_at,
+                            if b.flags.contains('x')
+                                && if align_is_p2 {
+                                    fill.is_none()
+                                } else {
+                                    nop_fill
+                                }
+                            {
+                                MapClass::Code
+                            } else {
+                                MapClass::Data
+                            },
+                        );
                         if nop_fill && b.flags.contains('x') && !align_is_p2 {
                             push_x86_exec_align_fill(&mut sec.bytes, gap, sec.after_insn);
                         } else {
@@ -6500,6 +6547,7 @@ pub(crate) fn materialize_asm_sections(
                     })?;
                     for _ in 0..n.max(0) {
                         for it in items {
+                            let rept_at = sec.bytes.len();
                             match it {
                                 AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
                                 AsmSectionItem::CodeBytes { bytes, relocs, .. }
@@ -6527,6 +6575,15 @@ pub(crate) fn materialize_asm_sections(
                                     ));
                                 }
                             }
+                            let laid = sec.bytes.len() - rept_at;
+                            sec.map.content(
+                                rept_at,
+                                laid,
+                                match it {
+                                    AsmSectionItem::CodeBytes { .. } => MapClass::Code,
+                                    _ => MapClass::Data,
+                                },
+                            );
                         }
                     }
                 }
@@ -7244,6 +7301,22 @@ pub(crate) fn materialize_asm_sections(
                 | AsmSectionItem::OrgLabel { .. } => sec.after_insn = false,
                 _ => {}
             }
+            // Everything an item lays down other than an instruction is
+            // data. `.align` recorded its own class above and `.rept` each
+            // repetition's. A `.org` moves the location counter without
+            // recording a run, as in GNU as, so the surrounding run covers
+            // the gap.
+            let laid = sec.bytes.len().saturating_sub(map_at);
+            match item {
+                AsmSectionItem::CodeBytes { .. } => sec.map.content(map_at, laid, MapClass::Code),
+                AsmSectionItem::Align { .. }
+                | AsmSectionItem::AlignArch { .. }
+                | AsmSectionItem::Rept { .. }
+                | AsmSectionItem::Org(_)
+                | AsmSectionItem::OrgLabel { .. }
+                | AsmSectionItem::OrgExpr(_) => {}
+                _ => sec.map.content(map_at, laid, MapClass::Data),
+            }
         }
     }
     // `.weak` binds a matching section label weak; a name defined in no
@@ -7748,10 +7821,15 @@ pub(crate) fn parse_raw_template(template: &[u8]) -> Option<alloc::vec::Vec<u8>>
     any.then_some(out)
 }
 
+/// Byte list `.inst` expands to. GNU as assembles `.inst` into
+/// instructions, so the bytes carry the code class a `.byte` list does not;
+/// the name is internal and cannot collide with a source directive.
+pub(crate) const INST_BYTES_DIRECTIVE: &str = ".c5_inst_bytes";
+
 /// Element width of a `.byte`-family data directive keyword, or `None`.
 pub(crate) fn data_directive_width(tok: &str) -> Option<usize> {
     Some(match tok {
-        ".byte" => 1,
+        ".byte" | INST_BYTES_DIRECTIVE => 1,
         ".word" | ".2byte" | ".short" | ".hword" => 2,
         ".long" | ".4byte" | ".int" => 4,
         ".quad" | ".8byte" => 8,
@@ -10103,7 +10181,11 @@ mod asm_section_tests {
         let subst = |t: &str| (t == "%0").then(|| alloc::string::String::from("x1"));
         let out = expand_asm_gas_macros(text, 4, &subst).unwrap().unwrap();
         // sys_reg(3,0,0,0,0) is 0x180000, mrs base 0xd5200000, Rt=1: 0xd5380001.
-        assert_eq!(out.trim(), ".byte 0x01, 0x00, 0x38, 0xd5", "{out}");
+        assert_eq!(
+            out.trim(),
+            alloc::format!("{INST_BYTES_DIRECTIVE} 0x01, 0x00, 0x38, 0xd5"),
+            "{out}"
+        );
     }
 
     /// A comma with no argument before it supplies an empty one, so the
@@ -10174,10 +10256,13 @@ mod asm_section_tests {
                 .trim()
                 .to_string()
         };
-        assert_eq!(block("(3 << 19)", "x1"), ".byte 0x01, 0x00, 0x38, 0xd5");
+        assert_eq!(
+            block("(3 << 19)", "x1"),
+            alloc::format!("{INST_BYTES_DIRECTIVE} 0x01, 0x00, 0x38, 0xd5")
+        );
         assert_eq!(
             block("((3 << 19) | (4 << 8))", "x0"),
-            ".byte 0x00, 0x04, 0x38, 0xd5"
+            alloc::format!("{INST_BYTES_DIRECTIVE} 0x00, 0x04, 0x38, 0xd5")
         );
     }
 

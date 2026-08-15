@@ -456,6 +456,7 @@ fn synth_program_and_build(
         asm_text_labels: Vec::new(),
         asm_sym_fixups: Vec::new(),
         asm_sym_decls: Vec::new(),
+        text_data_ranges: Vec::new(),
         copy_relocs,
         dynamic_exports,
         text: merged.text.clone(),

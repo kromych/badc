@@ -872,6 +872,7 @@ pub(crate) fn emit_function(
     let asm_sym_fixups = &mut *cx.asm_sym_fixups;
     let text_align = &mut *cx.text_align;
     let label_relocs = &mut *cx.label_relocs;
+    let text_data_ranges = &mut *cx.text_data_ranges;
     let abi = {
         let mut a = target.abi();
         a.no_fp_varargs = no_fp_regs;
@@ -1204,6 +1205,7 @@ pub(crate) fn emit_function(
                     asm_extern_call_sites,
                     asm_sym_fixups,
                     &mut deferred_regions,
+                    text_data_ranges,
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
                         branch_fixups: &mut branch_fixups,
@@ -1245,6 +1247,7 @@ pub(crate) fn emit_function(
                     asm_sym_fixups: &mut *asm_sym_fixups,
                     text_align: &mut *text_align,
                     label_relocs: &mut *label_relocs,
+                    text_data_ranges: &mut *text_data_ranges,
                 };
                 let fcx = FnCtx {
                     func,
@@ -1589,6 +1592,7 @@ pub(crate) fn emit_function(
                 emit(code, enc_br(tbl));
                 jump_table_fixups.push((code.len(), table));
                 let entries = func.jump_tables[table as usize].len();
+                text_data_ranges.push((code.len(), entries * 4));
                 code.resize(code.len() + entries * 4, 0);
             }
             Terminator::AsmGoto { table } => {
@@ -3137,6 +3141,7 @@ fn emit_inline_asm_aarch64(
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
     deferred_regions: &mut Vec<DeferredAsmRegion>,
+    text_data_ranges: &mut Vec<(usize, usize)>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
     use super::super::ir::AsmConstraint;
@@ -3651,6 +3656,8 @@ fn emit_inline_asm_aarch64(
             label_defs.push((num, code.len()));
             continue;
         }
+        // A raw-byte piece is an instruction word the parser encoded itself
+        // (`msr`, the barriers, the system ops), so it stays code.
         if !insn.bytes.is_empty() {
             code.extend_from_slice(&insn.bytes);
             continue;
@@ -3659,6 +3666,9 @@ fn emit_inline_asm_aarch64(
         // argument must resolve to a compile-time constant, emitted
         // little-endian at the directive width.
         if let Some(w) = super::super::ssa::emit_common::data_directive_width(&insn.mnemonic) {
+            if insn.mnemonic != super::super::ssa::emit_common::INST_BYTES_DIRECTIVE {
+                text_data_ranges.push((code.len(), w * insn.operands.len()));
+            }
             for o in &insn.operands {
                 let v = match *o {
                     AsmOpndA64::Imm(v) => v,
@@ -4253,6 +4263,7 @@ fn emit_inst(
     let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
     let asm_sym_fixups = &mut *cx.asm_sym_fixups;
+    let text_data_ranges = &mut *cx.text_data_ranges;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca. Non-zero:
@@ -4862,6 +4873,7 @@ fn emit_inst(
             asm_extern_call_sites,
             asm_sym_fixups,
             deferred_regions,
+            text_data_ranges,
             None,
         ),
         // `BlockAddr` is materialized in `emit_function`'s block loop and
@@ -11800,6 +11812,7 @@ mod tests {
         let mut asm_sym_fixups = Vec::new();
         let mut text_align: usize = 16;
         let mut label_relocs = Vec::new();
+        let mut text_data_ranges = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -11817,6 +11830,7 @@ mod tests {
                 asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
+                text_data_ranges: &mut text_data_ranges,
             };
             emit_function(
                 &func,
@@ -11982,6 +11996,7 @@ mod tests {
         let mut asm_sym_fixups = Vec::new();
         let mut text_align: usize = 16;
         let mut label_relocs = Vec::new();
+        let mut text_data_ranges = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -11999,6 +12014,7 @@ mod tests {
                 asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
+                text_data_ranges: &mut text_data_ranges,
             };
             emit_function(
                 &func,
@@ -12063,6 +12079,7 @@ mod tests {
         let mut asm_sym_fixups = Vec::new();
         let mut text_align: usize = 16;
         let mut label_relocs = Vec::new();
+        let mut text_data_ranges = Vec::new();
         let ok = {
             let mut cx = super::super::ssa::emit_common::EmitCtx {
                 code: &mut code,
@@ -12080,6 +12097,7 @@ mod tests {
                 asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
+                text_data_ranges: &mut text_data_ranges,
             };
             emit_function(
                 &func,

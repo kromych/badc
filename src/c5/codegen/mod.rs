@@ -43,6 +43,7 @@ pub(crate) mod aarch64;
 #[allow(dead_code)]
 pub(crate) mod abi_classify;
 mod jit;
+pub(crate) mod map_syms;
 pub(crate) mod passes;
 pub(crate) mod ssa;
 pub(crate) mod x86_64;
@@ -1852,6 +1853,11 @@ pub(crate) struct Build {
     /// them to the unit; the writers apply each to the definition the unit
     /// holds, or emit an undefined symbol when it holds none.
     pub asm_sym_decls: Vec<ssa::emit_common::AsmSymDecl>,
+    /// `(offset, len)` of every run of data placed in `text`, ascending: an
+    /// aarch64 jump table, a function-body inline-asm data directive. The
+    /// rest of the stream is instructions, so the AArch64 mapping symbols
+    /// follow from this.
+    pub text_data_ranges: Vec<(usize, usize)>,
 }
 
 /// A named label an inline-asm template defines in the emitted code stream

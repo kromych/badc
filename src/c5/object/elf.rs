@@ -3921,6 +3921,7 @@ mod tests {
         use super::super::{ResolvedImport, ResolvedImports};
         use crate::c5::codegen::ResolvedDylib;
         Build {
+            text_data_ranges: alloc::vec::Vec::new(),
             emitted_relocs: Vec::new(),
             text_align: 16,
             orphaned_data: None,

@@ -77,6 +77,7 @@ pub(crate) fn compile_function_to_bytes(
             let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
             let mut label_relocs = Vec::new();
             let mut text_align: usize = 16;
+            let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
             let ok = {
                 let mut cx = super::emit_common::EmitCtx {
                     code: &mut code,
@@ -94,6 +95,7 @@ pub(crate) fn compile_function_to_bytes(
                     asm_sym_fixups: &mut asm_sym_fixups,
                     text_align: &mut text_align,
                     label_relocs: &mut label_relocs,
+                    text_data_ranges: &mut text_data_ranges,
                 };
                 super::aarch64::emit::emit_function(
                     func,
@@ -159,6 +161,7 @@ pub(crate) fn compile_function_to_bytes(
             let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
             let mut label_relocs = Vec::new();
             let mut text_align: usize = 16;
+            let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
             // The JIT single-function path builds no PE; the unwind
             // descriptor is discarded.
             let mut fn_unwind: Vec<super::FnUnwind> = Vec::new();
@@ -180,6 +183,7 @@ pub(crate) fn compile_function_to_bytes(
                     asm_sym_fixups: &mut asm_sym_fixups,
                     text_align: &mut text_align,
                     label_relocs: &mut label_relocs,
+                    text_data_ranges: &mut text_data_ranges,
                 };
                 super::x86_64::emit::emit_function(
                     func,

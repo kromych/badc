@@ -2048,6 +2048,7 @@ pub(crate) fn lower(
     let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
     let mut text_align: usize = 16;
     let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
+    let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
@@ -2111,6 +2112,7 @@ pub(crate) fn lower(
                 asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
+                text_data_ranges: &mut text_data_ranges,
             };
             #[cfg(feature = "std")]
             let _ = super::ssa::emit_common::take_bail();
@@ -2337,6 +2339,7 @@ pub(crate) fn lower(
         emitted_relocs: Vec::new(),
         asm_sections: asm_section_list,
         asm_sym_decls,
+        text_data_ranges,
         // The aarch64 ALTERNATIVE replacement is appended to `.text` (a
         // deferred region), not a separately loaded section, so no
         // main-stream reference crosses into a pushed section here.

@@ -1709,6 +1709,7 @@ pub(crate) fn emit_function(
     let asm_sym_fixups = &mut *cx.asm_sym_fixups;
     let text_align = &mut *cx.text_align;
     let label_relocs = &mut *cx.label_relocs;
+    let text_data_ranges = &mut *cx.text_data_ranges;
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
@@ -2081,6 +2082,7 @@ pub(crate) fn emit_function(
                         asm_sym_fixups: &mut *asm_sym_fixups,
                         text_align: &mut *text_align,
                         label_relocs: &mut *label_relocs,
+                        text_data_ranges: &mut *text_data_ranges,
                     };
                     let fcx = FnCtx {
                         func,

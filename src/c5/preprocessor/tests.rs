@@ -304,24 +304,27 @@ fn lp64_predefined_for_lp64_targets_only() {
     }
 }
 
-/// `set_elf_class` re-selects the whole data-model group, so an ILP32
+/// `set_code_model` re-selects the whole data-model group, so an ILP32
 /// unit carries no macro from the LP64 one and back again is exact.
 /// Values are gcc 16.1.1's for `-m32` / `-m64` on `linux-x64`.
 #[test]
 fn elf_class_selects_the_data_model_predefines() {
-    use crate::c5::ElfClass;
+    use crate::c5::{CodeModel, ElfClass};
     let probe = concat!(
         "#ifdef __x86_64__\nx86_64\n#endif\n#ifdef __amd64__\namd64\n#endif\n",
         "#ifdef __i386__\ni386\n#endif\n#ifdef __i386\ni386_bare\n#endif\n",
         "#ifdef __LP64__\nlp64\n#endif\n#ifdef __ILP32__\nilp32\n#endif\n",
         "#ifdef __SIZEOF_INT128__\nint128\n#endif\n",
+        "#ifdef __code_model_32__\ncm32\n#endif\n",
+        "#ifdef __code_model_small__\ncmsmall\n#endif\n",
         "sizes __SIZEOF_POINTER__ __SIZEOF_LONG__ __SIZEOF_SIZE_T__ __SIZEOF_PTRDIFF_T__\n",
         "types __SIZE_TYPE__ / __PTRDIFF_TYPE__\n",
+        "wchar __WCHAR_TYPE__ .\n",
     );
-    let names64 = ["x86_64", "amd64", "lp64", "int128"];
-    let names32 = ["i386", "i386_bare", "ilp32"];
+    let names64 = ["x86_64", "amd64", "lp64", "int128", "cmsmall"];
+    let names32 = ["i386", "i386_bare", "ilp32", "cm32"];
     let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
-    pp.set_elf_class(ElfClass::Elf32);
+    pp.set_code_model(ElfClass::Elf32, CodeModel::Small);
     let out = pp.process(probe).expect("preprocessor failed");
     for n in names32 {
         assert!(out.contains(n), "ELFCLASS32 must define {n}: {out}");
@@ -334,10 +337,11 @@ fn elf_class_selects_the_data_model_predefines() {
         out.contains("types unsigned int / int"),
         "ILP32 size_t / ptrdiff_t: {out}"
     );
+    assert!(out.contains("wchar long int ."), "i386 wchar_t: {out}");
     // Back to ELFCLASS64: no i386 macro survives the round trip.
     let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
-    pp.set_elf_class(ElfClass::Elf32);
-    pp.set_elf_class(ElfClass::Elf64);
+    pp.set_code_model(ElfClass::Elf32, CodeModel::Small);
+    pp.set_code_model(ElfClass::Elf64, CodeModel::Small);
     let out = pp.process(probe).expect("preprocessor failed");
     for n in names64 {
         assert!(out.contains(n), "ELFCLASS64 must define {n}: {out}");
@@ -350,13 +354,90 @@ fn elf_class_selects_the_data_model_predefines() {
         out.contains("types unsigned long / long"),
         "LP64 size_t / ptrdiff_t: {out}"
     );
+    assert!(out.contains("wchar int ."), "LP64 wchar_t: {out}");
     // An ELFCLASS32 AArch64 object would be AArch32, which badc neither
     // encodes nor describes; the target's own model stands.
     let mut pp = Preprocessor::new(Target::LinuxAarch64.id_str(), Target::LinuxAarch64, "0.1.0");
-    pp.set_elf_class(ElfClass::Elf32);
+    pp.set_code_model(ElfClass::Elf32, CodeModel::Small);
     let out = pp.process(probe).expect("preprocessor failed");
     assert!(out.contains("lp64") && !out.contains("ilp32"), "{out}");
     assert!(out.contains("sizes 8 8 8 8"), "{out}");
+}
+
+/// The `__code_model_*__` name follows `-mcmodel` on the x86-64
+/// targets, `-m16` / `-m32` override it to the 32-bit model, and the
+/// aarch64 targets define none, all as gcc 16.1.1 does.
+#[test]
+fn the_code_model_predefine_names_the_selected_model() {
+    use crate::c5::{CodeModel, ElfClass};
+    let probe = concat!(
+        "#ifdef __code_model_32__\ncm32\n#endif\n",
+        "#ifdef __code_model_small__\ncmsmall\n#endif\n",
+        "#ifdef __code_model_kernel__\ncmkernel\n#endif\n",
+    );
+    let cases = [
+        (ElfClass::Elf64, CodeModel::Small, "cmsmall"),
+        (ElfClass::Elf64, CodeModel::Kernel, "cmkernel"),
+        (ElfClass::Elf32, CodeModel::Small, "cm32"),
+    ];
+    for (class, model, want) in cases {
+        for t in [Target::LinuxX64, Target::WindowsX64] {
+            let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+            pp.set_code_model(class, model);
+            let out = pp.process(probe).expect("preprocessor failed");
+            for n in ["cm32", "cmsmall", "cmkernel"] {
+                assert_eq!(
+                    out.contains(n),
+                    n == want,
+                    "{t:?} {class:?} {model:?}: {out}"
+                );
+            }
+        }
+    }
+    for t in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+        let out = pp.process(probe).expect("preprocessor failed");
+        assert!(
+            !out.contains("cm"),
+            "{t:?} must define no code-model macro: {out}"
+        );
+    }
+}
+
+/// Sizes and underlying types the layout engine fixes across targets:
+/// `long double` is laid out as `double` (8, not gcc's x87 12 / 16, and
+/// no `__float80` / `__float128` exists to describe), `wint_t` is the
+/// bundled <wchar.h>'s `int`, a bare `__attribute__((aligned))`
+/// resolves to 16, and `__WCHAR_TYPE__` agrees with
+/// `__SIZEOF_WCHAR_T__` on every target.
+#[test]
+fn type_size_predefines_match_the_layout_engine() {
+    let probe = concat!(
+        "ld __SIZEOF_LONG_DOUBLE__ wint __SIZEOF_WINT_T__ ",
+        "align __BIGGEST_ALIGNMENT__ .\n",
+        "winttype __WINT_TYPE__ .\n",
+        "wchar __WCHAR_TYPE__ = __SIZEOF_WCHAR_T__ .\n",
+        "#if defined(__SIZEOF_FLOAT80__) || defined(__SIZEOF_FLOAT128__)\n",
+        "phantom-float\n#endif\n",
+    );
+    for (t, wchar) in [
+        (Target::LinuxX64, "int = 4"),
+        (Target::LinuxAarch64, "int = 4"),
+        (Target::MacOSAarch64, "int = 4"),
+        (Target::WindowsX64, "unsigned short = 2"),
+        (Target::WindowsAarch64, "unsigned short = 2"),
+    ] {
+        let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+        let out = pp.process(probe).expect("preprocessor failed");
+        assert!(out.contains("ld 8 wint 4 align 16 ."), "{t:?}: {out}");
+        assert!(out.contains("winttype int ."), "{t:?}: {out}");
+        assert!(out.contains(&format!("wchar {wchar} .")), "{t:?}: {out}");
+        assert!(!out.contains("phantom-float"), "{t:?}: {out}");
+    }
 }
 
 #[test]

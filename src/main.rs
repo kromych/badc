@@ -1854,7 +1854,8 @@ fn run() {
                 .with_force_includes(force_includes.clone())
                 .with_source_label(src.clone())
                 .with_track_includes(true)
-                .with_elf_class(object_elf_class);
+                .with_elf_class(object_elf_class)
+                .with_code_model(code_model);
             let compiler = badc::Compiler::with_options(contents, target, copts);
             let mut log = TuLog::default();
             if show_includes {
@@ -2017,7 +2018,8 @@ fn run() {
                 .with_own_header_roots(own_header_roots.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(label.clone())
-                .with_elf_class(object_elf_class);
+                .with_elf_class(object_elf_class)
+                .with_code_model(code_model);
             match Compiler::preprocess(contents, target, opts) {
                 Ok(s) => {
                     if multi_tu {
@@ -3414,6 +3416,7 @@ fn tu_compile_options(
         .with_implicit_extern_fns(implicit_externs.to_vec())
         .with_no_entry_point(true)
         .with_elf_class(cfg.reloc_opts.elf_class)
+        .with_code_model(cfg.reloc_opts.code_model)
 }
 
 /// GNU line markers (`# <line> "<file>" [flags]`) blanked in place. gas reads

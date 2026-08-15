@@ -390,6 +390,9 @@ pub struct CompileOptions {
     /// preprocessor's data-model predefines follow it as well, as gcc's
     /// do under `-m16` / `-m32`.
     pub elf_class: crate::c5::ElfClass,
+    /// Mirror of [`crate::NativeOptions::code_model`] (`-mcmodel`).
+    /// The preprocessor's `__code_model_*__` predefine follows it.
+    pub code_model: crate::c5::CodeModel,
 }
 
 impl CompileOptions {
@@ -402,6 +405,11 @@ impl CompileOptions {
     /// starting code mode follows it.
     pub fn with_elf_class(mut self, class: crate::c5::ElfClass) -> Self {
         self.elf_class = class;
+        self
+    }
+    /// x86-64 code model of the object being produced (`-mcmodel`).
+    pub fn with_code_model(mut self, model: crate::c5::CodeModel) -> Self {
+        self.code_model = model;
         self
     }
     /// Select the GNU89 inline linkage model as the unit default
@@ -2000,7 +2008,8 @@ impl Compiler {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         // `-m16` / `-m32` reach the front end as an ELFCLASS32 object;
         // gcc preprocesses those units with the i386 predefine set.
-        pp.set_elf_class(opts.elf_class);
+        // `-mcmodel` moves the `__code_model_*__` name the same way.
+        pp.set_code_model(opts.elf_class, opts.code_model);
         if opts.gnu {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }

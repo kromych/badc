@@ -853,6 +853,8 @@ fn m32_predefines_the_ilp32_data_model() {
         "ilp32-ok\n#endif\n",
         "#ifndef __SIZEOF_INT128__\nno-int128\n#endif\n",
         "#ifdef __GCC_ASM_FLAG_OUTPUTS__\ncc-outputs\n#endif\n",
+        "wchar S(__WCHAR_TYPE__)\n",
+        "#ifdef __code_model_32__\ncm32-ok\n#endif\n",
     );
     let d = dir("m32-data-model");
     write(&d, "dm.S", SRC);
@@ -866,9 +868,44 @@ fn m32_predefines_the_ilp32_data_model() {
         body.contains(r#""unsigned int" "int""#),
         "ILP32 size_t / ptrdiff_t: {body}"
     );
-    for want in ["ilp32-ok", "no-int128", "cc-outputs"] {
+    assert!(body.contains(r#"wchar "long int""#), "i386 wchar_t: {body}");
+    for want in ["ilp32-ok", "no-int128", "cc-outputs", "cm32-ok"] {
         assert!(body.contains(want), "missing {want}: {body}");
     }
+}
+
+/// `-mcmodel` names the selected x86-64 model in a predefine and
+/// `-m16` / `-m32` override the name to the 32-bit model; the aarch64
+/// targets name none. Names are gcc 16.1.1's.
+#[test]
+fn the_code_model_macro_follows_mcmodel() {
+    const SRC: &str = concat!(
+        "#ifdef __code_model_32__\ncm-32\n#endif\n",
+        "#ifdef __code_model_small__\ncm-small\n#endif\n",
+        "#ifdef __code_model_kernel__\ncm-kernel\n#endif\n",
+    );
+    let d = dir("mcmodel-predefine");
+    write(&d, "cm.S", SRC);
+    let x64 = ["-q", "-E", "--target=linux-x64"];
+    for (extra, want) in [
+        (None, "cm-small"),
+        (Some("-mcmodel=kernel"), "cm-kernel"),
+        (Some("-m32"), "cm-32"),
+        (Some("-m16"), "cm-32"),
+    ] {
+        let mut args = x64.to_vec();
+        args.extend(extra);
+        args.push("cm.S");
+        let out = run_ok(&d, &args);
+        for n in ["cm-32", "cm-small", "cm-kernel"] {
+            assert_eq!(out.contains(n), n == want, "{extra:?}: {out}");
+        }
+    }
+    let out = run_ok(&d, &["-q", "-E", "--target=linux-aarch64", "cm.S"]);
+    assert!(
+        !out.contains("cm-"),
+        "aarch64 must name no code model: {out}"
+    );
 }
 
 /// Which headers a unit opens depends on the predefine set, so the

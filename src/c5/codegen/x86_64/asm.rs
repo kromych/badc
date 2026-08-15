@@ -1702,7 +1702,12 @@ fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     if let Some(m) = mnemonic_by_name(tok) {
         return Some((m, None));
     }
-    if let Some(name) = table_mnemonic(tok) {
+    // AT&T reads the size letter on a stack op as a suffix of `push` / `pop`.
+    // The catalogue also carries Intel's own `pushw` spelling (its imm16 row
+    // only), which must not swallow the suffix, so these skip the whole-name
+    // match and take the split below.
+    let att_suffixed = matches!(tok, "pushw" | "pushl" | "pushq" | "popw" | "popl" | "popq");
+    if !att_suffixed && let Some(name) = table_mnemonic(tok) {
         return Some((Mnemonic::Table(name), None));
     }
     // Unsuffixed flag push / pop: in 64-bit mode the operand size defaults to
@@ -3201,28 +3206,6 @@ fn table_opnd(c: &Concrete) -> super::table::Opnd {
     }
 }
 
-/// Re-read a catalogue mnemonic that matched as written (`suffix` is `None`)
-/// as an AT&T base plus size suffix, for the case where the two spellings name
-/// different form sets. Yields the base name, its width, and the operands, or
-/// `None` when the token does not split into another catalogue mnemonic.
-fn retry_as_suffixed(
-    name: &str,
-    suffix: Option<AsmRegSize>,
-    ops: &[Concrete],
-) -> Option<(&'static str, Option<u8>, Vec<super::table::Opnd>)> {
-    if suffix.is_some() {
-        return None;
-    }
-    let (base, size) = match name.as_bytes().last()? {
-        b'b' => (&name[..name.len() - 1], AsmRegSize::Byte),
-        b'w' => (&name[..name.len() - 1], AsmRegSize::Word),
-        b'l' => (&name[..name.len() - 1], AsmRegSize::Long),
-        b'q' => (&name[..name.len() - 1], AsmRegSize::Quad),
-        _ => return None,
-    };
-    to_table_generic(table_mnemonic(base)?, Some(size), ops)
-}
-
 /// Bytes an encoding places after its immediate field. x86 puts the immediate
 /// last, save for the direct far branch, whose 16-bit selector trails the
 /// offset. The emitter needs it to settle a symbol immediate's field width by
@@ -3336,27 +3319,8 @@ pub(crate) fn encode_in(
         // it to the catalogue enum at this one boundary.
         let mnem = super::table::Mnem::from_name(name)
             .ok_or_else(|| format!("inline asm: unknown catalogue mnemonic `{name}`"))?;
-        match super::table::encode_in(mode, addr, mnem, width, &tops) {
-            Ok(bytes) => {
-                code.extend_from_slice(&bytes);
-                return Ok(());
-            }
-            // A catalogue name matched as written may still be an AT&T
-            // suffixed spelling of a shorter one whose forms differ: the
-            // Intel-syntax `pushw` covers only the imm16 row, while AT&T
-            // `pushw %ax` is `push` at word width. Retry that reading before
-            // reporting the operands unencodable.
-            Err(e) => match retry_as_suffixed(name, suffix, ops) {
-                Some((base, w, btops)) => {
-                    let bm = super::table::Mnem::from_name(base).ok_or_else(|| {
-                        format!("inline asm: unknown catalogue mnemonic `{base}`")
-                    })?;
-                    code.extend_from_slice(&super::table::encode_in(mode, addr, bm, w, &btops)?);
-                    return Ok(());
-                }
-                None => return Err(e),
-            },
-        }
+        code.extend_from_slice(&super::table::encode_in(mode, addr, mnem, width, &tops)?);
+        return Ok(());
     }
     let at = code.len();
     encode_bespoke(code, mode, addr, mnemonic, suffix, ops)?;

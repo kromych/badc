@@ -527,6 +527,51 @@ fn code16_operand_size_prefix_matches_gnu_as() {
     assert_eq!(e("clflush", None, &[m(3, 2)]), [0x0f, 0xae, 0x3f]);
 }
 
+/// The stack group's immediate follows the operation width: an operand-width
+/// (`iv`) field for the `68` form, the `66` prefix when the width is not the
+/// mode's stack default, and no 32-bit member in long mode nor a 64-bit one
+/// elsewhere. Bytes measured with GNU as 2.46.1 under each `.code` directive.
+#[test]
+fn stack_group_immediates_follow_the_operation_width() {
+    let i = Opnd::Imm;
+    assert_eq!(
+        enc_in(Mode::Bits16, 2, "push", Some(2), &[i(0)]),
+        [0x6a, 0x00]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits16, 2, "push", Some(4), &[i(0)]),
+        [0x66, 0x6a, 0x00]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits16, 2, "push", None, &[i(0x1234)]),
+        [0x68, 0x34, 0x12]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits16, 2, "push", Some(4), &[i(0x12345)]),
+        [0x66, 0x68, 0x45, 0x23, 0x01, 0x00]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits32, 4, "push", Some(2), &[i(0)]),
+        [0x66, 0x6a, 0x00]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits64, 8, "push", Some(2), &[i(0)]),
+        [0x66, 0x6a, 0x00]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits64, 8, "push", Some(2), &[i(-129)]),
+        [0x66, 0x68, 0x7f, 0xff]
+    );
+    assert_eq!(
+        enc_in(Mode::Bits64, 8, "push", Some(8), &[i(0)]),
+        [0x6a, 0x00]
+    );
+    let push = Mnem::from_name("push").unwrap();
+    assert!(encode_in(Mode::Bits64, 8, push, Some(4), &[i(0)]).is_err());
+    assert!(encode_in(Mode::Bits16, 2, push, Some(8), &[i(0)]).is_err());
+    assert!(encode_in(Mode::Bits32, 4, push, Some(8), &[i(0)]).is_err());
+}
+
 #[test]
 fn code16_addressing_matches_gnu_as() {
     let e = |addr: u8, mnem: &str, ops: &[Opnd]| enc_in(Mode::Bits16, addr, mnem, None, ops);

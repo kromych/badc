@@ -562,6 +562,9 @@ fn mode_pat(p: OpPat, f: &Form, opw: u8, mode: Mode) -> OpPat {
         OpPat::Mem(w) => OpPat::Mem(eff_w(w, f.rexw, mode)),
         OpPat::Fixed(n, w) => OpPat::Fixed(n, eff_w(w, f.rexw, mode)),
         OpPat::Rel(sz) => OpPat::Rel(rel_bytes(sz, f, opw)),
+        // The stack group's imm32 is generated for long mode; its field
+        // follows the operand size (`iv`), 16-bit under the 16-bit one.
+        OpPat::Imm(ImmC::Id) if f.rexw == RexW::Default64 => OpPat::Imm(ImmC::Iv),
         other => other,
     }
 }
@@ -1078,12 +1081,25 @@ fn encode_form(
     } else {
         mode.opsize()
     };
+    // The stack / near-branch group encodes 16- and 64-bit operands in long
+    // mode and 16- and 32-bit ones elsewhere.
+    if f.rexw == RexW::Default64 && opw_known && opw == (if mode == Mode::Bits64 { 4 } else { 8 }) {
+        return Err(format!(
+            "inline asm: operand size {opw} is not encodable for this group in this mode"
+        ));
+    }
     // An operandless form, and a descriptor-table op, take their width from
     // the mnemonic's size suffix (`retl` and `lgdtl` in a `.code16` stub);
     // with no suffix it is the mode default, which the 64-bit exclusion below
     // leaves unprefixed.
     let desc_table = matches!(f.mnem, Mnem::Lgdt | Mnem::Lidt | Mnem::Sgdt | Mnem::Sidt);
-    let sized = has_v || pp66 || desc_table || pinned_width(f) || (f.ops.is_empty() && opw_known);
+    // A stack-group form with an established width is operand-sized even when
+    // no slot carries the `v` class (`push imm8`).
+    let sized = has_v
+        || pp66
+        || desc_table
+        || pinned_width(f)
+        || (opw_known && (f.ops.is_empty() || f.rexw == RexW::Default64));
     if sized && fopw != dflt && fopw != 8 {
         code.push(0x66);
     }
@@ -1234,8 +1250,14 @@ fn encode_form(
         }
     }
 
-    // Immediate.
+    // Immediate. The stack group's imm32 field follows the operand size, as
+    // in `mode_pat`.
     if let Some(c) = f.imm {
+        let c = if f.rexw == RexW::Default64 && c == ImmC::Id {
+            ImmC::Iv
+        } else {
+            c
+        };
         let val = if f.imm_op == 255 {
             1
         } else {

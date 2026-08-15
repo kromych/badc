@@ -11719,4 +11719,63 @@ mod code_mode_tests {
         assert!(assemble_err(".code16\nfnstsw (%bx,%bp)\n").contains("bx / bp with si / di"));
         assert!(assemble_err(".code16\nfnstsw (%bx,%si,2)\n").contains("no scale"));
     }
+
+    /// An explicit size suffix on `push` / `pop` selects the stack operand
+    /// size in every mode: the `66` prefix when it is not the mode default,
+    /// the immediate field width, and the shortest immediate form. Long mode
+    /// has no 32-bit stack operand and the other modes no 64-bit one. Bytes
+    /// measured with GNU as 2.46.1 and clang for the same source.
+    #[test]
+    fn push_pop_suffix_selects_the_stack_operand_size() {
+        #[rustfmt::skip]
+        let cases: &[(&str, &[u8])] = &[
+            ("pushw (%rax)\n",           &[0x66, 0xff, 0x30]),
+            ("popw (%rax)\n",            &[0x66, 0x8f, 0x00]),
+            (".code16\npushl $0\n",      &[0x66, 0x6a, 0x00]),
+            (".code16\npushw $0\n",      &[0x6a, 0x00]),
+            (".code32\npushw $0\n",      &[0x66, 0x6a, 0x00]),
+            ("pushw $0\n",               &[0x66, 0x6a, 0x00]),
+            ("pushq $0\n",               &[0x6a, 0x00]),
+            ("pushw $-129\n",            &[0x66, 0x68, 0x7f, 0xff]),
+            (".code16\npushw $0x1234\n", &[0x68, 0x34, 0x12]),
+            (".code16\npush $0x1234\n",  &[0x68, 0x34, 0x12]),
+            (".code16\npushl $0x12345\n", &[0x66, 0x68, 0x45, 0x23, 0x01, 0x00]),
+            (".code16\npushw (%bx)\n",   &[0xff, 0x37]),
+            (".code16\npushl (%bx)\n",   &[0x66, 0xff, 0x37]),
+            (".code16\npopl (%bx)\n",    &[0x66, 0x8f, 0x07]),
+            (".code32\npushw (%eax)\n",  &[0x66, 0xff, 0x30]),
+            (".code16\npushw %ax\n",     &[0x50]),
+            (".code16\npushl %eax\n",    &[0x66, 0x50]),
+            (".code16\npopl %eax\n",     &[0x66, 0x58]),
+            ("pushw %ax\n",              &[0x66, 0x50]),
+            ("popw %ax\n",               &[0x66, 0x58]),
+        ];
+        for (src, want) in cases {
+            assert_eq!(assemble(src), *want, "{src}");
+        }
+        for src in [
+            "pushl $0\n",
+            ".code16\npushq $0\n",
+            ".code32\npushq $0\n",
+            ".code16\npushq %rax\n",
+        ] {
+            assert!(assemble_err(src).contains("not encodable"), "{src}");
+        }
+    }
+
+    /// A `push` symbol immediate's field is the spelled operand size wide,
+    /// so its relocation is too.
+    #[test]
+    fn push_symbol_immediate_field_follows_the_operand_size() {
+        let s = alloc::string::String::from("s");
+        let (bytes, relocs) = assemble_relocs(".code16\npushw $s\n");
+        assert_eq!(bytes, [0x68, 0, 0]);
+        assert_eq!(relocs, [(1, 2, false, s.clone(), 0)]);
+        let (bytes, relocs) = assemble_relocs(".code16\npushl $s\n");
+        assert_eq!(bytes, [0x66, 0x68, 0, 0, 0, 0]);
+        assert_eq!(relocs, [(2, 4, false, s.clone(), 0)]);
+        let (bytes, relocs) = assemble_relocs("pushw $s\n");
+        assert_eq!(bytes, [0x66, 0x68, 0, 0]);
+        assert_eq!(relocs, [(2, 2, false, s, 0)]);
+    }
 }

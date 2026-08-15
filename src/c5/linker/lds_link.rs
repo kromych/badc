@@ -826,6 +826,10 @@ pub struct LdsLinker<'a> {
     /// Common symbols coalesced into a synthetic bss chunk:
     /// name -> (insec index, offset, size, align).
     commons: HashMap<String, (usize, u64)>,
+    /// Every symbol the script assigns anywhere. A script assignment
+    /// outranks a synthesized section bound whatever order the two
+    /// reach the symbol table in.
+    script_assigned: HashSet<String>,
 
     // Per-pass state.
     placements: Vec<Placement>,
@@ -1040,6 +1044,7 @@ impl<'a> LdsLinker<'a> {
             stmts: Vec::new(),
             globals: HashMap::new(),
             commons: HashMap::new(),
+            script_assigned: HashSet::new(),
             placements: Vec::new(),
             script_now: HashMap::new(),
             script_prev: HashMap::new(),
@@ -1072,6 +1077,7 @@ impl<'a> LdsLinker<'a> {
         linker.synthesize_sections();
         linker.flatten_inputs();
         linker.build_statements()?;
+        linker.collect_script_assigned();
         linker.claim_inputs()?;
         linker.build_merge_pools();
         Ok(linker)
@@ -2284,6 +2290,30 @@ impl<'a> LdsLinker<'a> {
         self.cur_out = None;
     }
 
+    /// Every symbol the script assigns, at file scope, in the
+    /// statement stream, or inside an output section.
+    fn collect_script_assigned(&mut self) {
+        let mut out: HashSet<String> = HashSet::new();
+        for c in &self.script.commands {
+            if let Command::Assign(a) = c {
+                out.insert(a.symbol.clone());
+            }
+        }
+        for st in &self.stmts {
+            if let Stmt::Assign(a) = st {
+                out.insert(a.symbol.clone());
+            }
+        }
+        for o in &self.outs {
+            for p in &o.pieces {
+                if let Piece::Assign(a) = p {
+                    out.insert(a.symbol.clone());
+                }
+            }
+        }
+        self.script_assigned = out;
+    }
+
     /// Bound an output section whose name is a C identifier with
     /// `__start_<name>` / `__stop_<name>`, as bfd's
     /// `lang_init_start_stop` does. Both follow PROVIDE's rule -- a
@@ -2301,7 +2331,10 @@ impl<'a> LdsLinker<'a> {
         }
         for (prefix, value) in [("__start_", addr), ("__stop_", addr + size)] {
             let sym = alloc::format!("{prefix}{name}");
-            if self.globals.contains_key(&sym) || !self.referenced.contains(&sym) {
+            if self.globals.contains_key(&sym)
+                || self.script_assigned.contains(&sym)
+                || !self.referenced.contains(&sym)
+            {
                 continue;
             }
             self.script_now.insert(
@@ -6568,6 +6601,41 @@ SECTIONS {
             .expect(".text");
         let start = syms.iter().find(|s| s.0 == "__start_tty").expect("kept");
         assert_eq!(start.1, text.2 + 4);
+    }
+
+    /// A script assignment outranks the synthesized bound, keeping the
+    /// script symbol's own visibility. The kernel script bounds its
+    /// tables this way.
+    #[test]
+    fn a_script_assignment_outranks_the_synthesized_bound() {
+        let script_text = SCRIPT.replace(
+            ".data : AT(ADDR(.data) - 0x400000) { *(.data .data.*) LONG(0xdeadbeef) } :data",
+            "mytab : { __start_mytab = .; *(mytab) . += 8; __stop_mytab = .; }\n\
+             .data : AT(ADDR(.data) - 0x400000) { *(.data .data.*) LONG(0xdeadbeef) } :data",
+        );
+        let script = parse_linker_script(&script_text).expect("script parses");
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90],
+            )
+            .sec("mytab", SHT_PROGBITS, SHF_ALLOC, 8, &[7u8; 16])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .sym("__stop_mytab", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let sec = readelf_sections(&res.image)
+            .into_iter()
+            .find(|s| s.0 == "mytab")
+            .expect("mytab");
+        let syms = image_symbols(&res.image);
+        let stop = syms.iter().find(|s| s.0 == "__stop_mytab").expect("stop");
+        // The script's `. += 8` puts its own bound past the input's end.
+        assert_eq!(stop.1, sec.2 + 24);
     }
 
     /// A name carrying a `.` is not an identifier, so it gets no pair.

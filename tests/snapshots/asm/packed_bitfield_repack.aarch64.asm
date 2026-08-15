@@ -183,10 +183,48 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x29, #0x28
+               	mov	x1, #0x6                // =6
+               	strb	w1, [x0]
+               	sub	x0, x29, #0x28
+               	ldr	w1, [x0]
+               	mov	x17, #0xff              // =255
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	and	x1, x1, x17
+               	mov	x17, #0xef00            // =61184
+               	movk	x17, #0xabcd, lsl #16
+               	orr	x1, x1, x17
+               	str	w1, [x0]
+               	sub	x0, x29, #0x28
+               	ldrb	w0, [x0]
+               	mov	x17, #0x6               // =6
+               	eor	x0, x0, x17
+               	mov	w0, w0
+               	cmp	x0, #0x0
+               	cset	x0, ne
+               	cbnz	x0, <addr>
+               	mov	w0, w1
+               	asr	x0, x0, #8
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xff, lsl #16
+               	and	x0, x0, x17
+               	mov	x17, #0xcdef            // =52719
+               	movk	x17, #0xab, lsl #16
+               	eor	x0, x0, x17
+               	mov	w0, w0
+               	cmp	x0, #0x0
+               	cset	x0, ne
+               	cbz	x0, <addr>
+               	mov	x0, #0xc                // =12
+               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

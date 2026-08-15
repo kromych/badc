@@ -962,6 +962,13 @@ impl Compiler {
         self.structs[struct_id].align = struct_align;
         self.structs[struct_id].explicit_align = struct_explicit.min(struct_align) as u32;
         self.structs[struct_id].is_complete = true;
+        // The leading spelling lays out exactly like the trailing one.
+        // Threading `packed` into the per-member alignment above covers a
+        // non-bitfield member; the bit-level packing and the alignment-1
+        // result come from the same re-lay the trailing form runs.
+        if packed {
+            self.repack_struct(struct_id);
+        }
         Ok(struct_id)
     }
 

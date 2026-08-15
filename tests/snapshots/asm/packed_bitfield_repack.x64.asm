@@ -167,10 +167,42 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	leaq	-0x28(%rbp), %rax
+               	movl	$0x6, %ecx
+               	movb	%cl, (%rax)
+               	leaq	-0x28(%rbp), %rax
+               	movl	(%rax), %ecx
+               	movabsq	$-0xffffff01, %r11      # imm = 0xFFFFFFFF000000FF
+               	andq	%r11, %rcx
+               	movl	$0xabcdef00, %r11d      # imm = 0xABCDEF00
+               	orq	%r11, %rcx
+               	movl	%ecx, (%rax)
+               	leaq	-0x28(%rbp), %rax
+               	movsbq	(%rax), %rax
+               	cmpq	$0x6, %rax
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	movl	%ecx, %eax
+               	sarq	$0x8, %rax
+               	andq	$0xffffff, %rax         # imm = 0xFFFFFF
+               	xorq	$0xabcdef, %rax         # imm = 0xABCDEF
+               	movl	%eax, %eax
+               	testq	%rax, %rax
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0xc, %eax
+               	addq	$0x30, %rsp
+               	popq	%rbp
+               	retq
                	xorq	%rax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

@@ -260,6 +260,18 @@ and gas assembles the unit. gas taking what badc's assembler does not yet
 implement is the expected state, so the counts are the measurement rather
 than a gate. A unit badc assembles is recorded `badc-asm`.
 
+The mitigation flags are forwarded verbatim rather than dropped
+(`-mindirect-branch*`, `-mfunction-return=`, `-mharden-sls=`,
+`-fcf-protection=`, `-mbranch-protection=`): each changes what the object
+guarantees, and the flags are probed with `cc-option`, which the shim
+delegates to the reference compiler -- so a flag the shim withheld would
+leave the unit unprotected under a configuration that says otherwise.
+`arch/arm64/kernel/pi/map_kernel.c` drops the shadow call stack on the
+strength of `CONFIG_ARM64_PTR_AUTH_KERNEL`, so the flag behind it has to
+reach badc. badc rejects the argument sets it does not implement, so a
+spelling it does not cover fails the unit rather than building it
+unprotected. `buildcc.py --self-test` checks the rewrite and takes no tree.
+
 Everything else (probes, `-E`, `-S`, links, the host tools under
 `scripts/` and `tools/`) goes to gcc untouched, so the configuration and
 object population match the reference corpus. Linking is `ldshim.py`'s,

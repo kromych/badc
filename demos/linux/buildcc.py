@@ -84,40 +84,22 @@ DEBUG_PREFIX = ("-gdwarf", "-ggdb")
 # Valued forms are matched by prefix; badc accepts the argument set it
 # implements and rejects the rest, so a spelling it does not cover fails the
 # unit instead of building it unprotected.
+#
+# `-mbranch-protection=` is one of them. kbuild probes it with `cc-option`,
+# which this shim delegates to the reference compiler, so the probe answers
+# yes whatever badc does; withholding the flag would leave every unit
+# unsigned under a configuration that says otherwise, and
+# `arch/arm64/kernel/pi/map_kernel.c` drops the shadow call stack on the
+# strength of that configuration.
 HARDENING_EXACT = {"-mindirect-branch-register", "-mindirect-branch-cs-prefix"}
 HARDENING_PREFIX = ("-mindirect-branch=", "-mfunction-return=", "-mharden-sls=",
-                    "-fcf-protection=")
-
-# Return-address signing has no badc spelling: badc emits no
-# pointer-authentication prologue/epilogue pair, so `-mbranch-protection`
-# specs naming `pac-ret` (directly or through `standard`) are reported and
-# withheld rather than forwarded, which would fail every unit, or dropped,
-# which would hide the gap. `bti` and `none` are forwarded.
-BRANCH_PROT_PREFIX = "-mbranch-protection="
-BRANCH_PROT_IMPLEMENTED = {"none", "bti"}
-_reported_unimplemented: set[str] = set()
+                    "-fcf-protection=", "-mbranch-protection=")
 
 
 def hardening_arg(a: str) -> str | None:
-    """The badc spelling of a mitigation flag, or None to withhold it.
-
-    Withholding is announced once per distinct flag on stderr so a build log
-    records which mitigation the objects do not carry.
-    """
+    """The badc spelling of a mitigation flag, or None if it is not one."""
     if a in HARDENING_EXACT or a.startswith(HARDENING_PREFIX):
         return a
-    if a.startswith(BRANCH_PROT_PREFIX):
-        spec = a[len(BRANCH_PROT_PREFIX):]
-        if all(f in BRANCH_PROT_IMPLEMENTED for f in spec.split("+")):
-            return a
-        if a not in _reported_unimplemented:
-            _reported_unimplemented.add(a)
-            print(
-                f"badc: note: `{a}` has no badc spelling; objects built by badc "
-                "carry no return-address signing",
-                file=sys.stderr,
-            )
-        return None
     return None
 
 
@@ -351,5 +333,27 @@ def main(argv: list[str]) -> int:
     return rc or 1
 
 
+def _self_test() -> int:
+    """Check the flag rewrite. Pure, and the gate reaches a kernel unit
+    only after a tree is configured, so it is checked where a push can
+    afford to say so."""
+    kept = rewrite(["-c", "-O2", "-Wall", "-D__KERNEL__", "-mcmodel=kernel",
+                    "-mbranch-protection=pac-ret", "-mharden-sls=all",
+                    "-fcf-protection=branch", "-mindirect-branch=thunk-extern"])
+    # A mitigation reaches badc verbatim: kbuild probed it against the
+    # reference compiler, so withholding it would leave the unit
+    # unprotected under a configuration that says otherwise.
+    for flag in ("-mbranch-protection=pac-ret", "-mharden-sls=all",
+                 "-fcf-protection=branch", "-mindirect-branch=thunk-extern"):
+        assert flag in kept, flag
+    assert "-Wall" not in kept
+    for spec in ("none", "bti", "standard", "pac-ret+bti"):
+        assert f"-mbranch-protection={spec}" in rewrite([f"-mbranch-protection={spec}"])
+    print("linux buildcc: self-test ok", flush=True)
+    return 0
+
+
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--self-test"]:
+        raise SystemExit(_self_test())
     raise SystemExit(main(sys.argv[1:]))

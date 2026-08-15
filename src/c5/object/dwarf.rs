@@ -187,13 +187,8 @@ const OPCODE_BASE: u8 = 13;
 /// tells an unwinder it has reached the bottom of the stack.
 use crate::c5::codegen::ssa::cfi::{
     DW_CFA_ADVANCE_LOC_HI, DW_CFA_ADVANCE_LOC1, DW_CFA_ADVANCE_LOC2, DW_CFA_ADVANCE_LOC4,
-    DW_CFA_DEF_CFA, DW_CFA_OFFSET_HI, DW_CFA_UNDEFINED,
+    DW_CFA_DEF_CFA, DW_CFA_NEGATE_RA_STATE, DW_CFA_OFFSET_HI, DW_CFA_UNDEFINED,
 };
-
-/// `DW_CFA_AARCH64_negate_ra_state` -- toggles the row's RA_SIGN_STATE
-/// (AArch64 ELF ABI). Set, the unwinder strips the authentication code
-/// from the saved return address before using it.
-const DW_CFA_AARCH64_NEGATE_RA_STATE: u8 = 0x2d;
 
 // Architecture-specific register codes used in CFI rules.
 //
@@ -2402,7 +2397,7 @@ fn build_debug_frame(
         // (the frame teardown is not described either).
         if sub.ra_signed && sub.prologue_size >= 4 {
             write_advance_loc(&mut fde_body, arch, 4);
-            fde_body.push(DW_CFA_AARCH64_NEGATE_RA_STATE);
+            fde_body.push(DW_CFA_NEGATE_RA_STATE);
             write_advance_loc(&mut fde_body, arch, sub.prologue_size - 4);
         } else if sub.prologue_size > 0 {
             write_advance_loc(&mut fde_body, arch, sub.prologue_size);
@@ -3077,7 +3072,7 @@ mod tests {
         let plain = body(false);
         let signed = body(true);
         assert!(
-            !plain.contains(&DW_CFA_AARCH64_NEGATE_RA_STATE),
+            !plain.contains(&DW_CFA_NEGATE_RA_STATE),
             "an unsigned frame claims nothing"
         );
         // advance_loc(1 unit), negate, advance_loc(2 units), then the
@@ -3087,7 +3082,7 @@ mod tests {
             &signed[..3],
             &[
                 DW_CFA_ADVANCE_LOC_HI | 1,
-                DW_CFA_AARCH64_NEGATE_RA_STATE,
+                DW_CFA_NEGATE_RA_STATE,
                 DW_CFA_ADVANCE_LOC_HI | 2,
             ]
         );

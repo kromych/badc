@@ -2096,19 +2096,19 @@ impl Compiler {
 
     /// Parse a C99 6.5.2.5 block-scope compound literal `(type){
     /// init }`. The `(type)` has already been parsed (`t` is the
-    /// element / scalar / struct type; `is_array` / `decl_array_size`
-    /// describe an array declarator, with `decl_array_size == -1`
-    /// for the size-from-initializer `[]` form). The lexer is at the
-    /// opening `{`. Reserves an anonymous frame slot (automatic
-    /// storage, 6.5.2.5p5), captures the initializer through the
-    /// shared local-init helpers, and emits an `Expr::CompoundLiteral`
-    /// whose value is the object's address (array decays per 6.3.2.1p3,
-    /// struct yields its address) or the loaded scalar.
+    /// element / scalar / struct type; `array_dims` lists the bracket
+    /// counts outermost first, empty for a non-array literal, with
+    /// `array_dims[0] == -1` for the size-from-initializer `[]` form).
+    /// The lexer is at the opening `{`. Reserves an anonymous frame
+    /// slot (automatic storage, 6.5.2.5p5), captures the initializer
+    /// through the shared local-init helpers, and emits an
+    /// `Expr::CompoundLiteral` whose value is the object's address
+    /// (array decays per 6.3.2.1p3, struct yields its address) or the
+    /// loaded scalar.
     pub(super) fn parse_block_compound_literal(
         &mut self,
         t: i64,
-        is_array: bool,
-        decl_array_size: i64,
+        array_dims: &[i64],
     ) -> Result<(), C5Error> {
         // A compound literal reuses the three pending-init carriers as
         // scratch for its own initializer (drained below). When it appears
@@ -2138,21 +2138,22 @@ impl Compiler {
         let final_array_size;
         let slot;
 
-        if is_array {
+        if !array_dims.is_empty() {
             let elem_ty = t;
             let elem_size = self.size_of_type(elem_ty);
-            if decl_array_size == -1 {
+            let inner_dims = &array_dims[1..];
+            let inner_span: i64 = inner_dims.iter().product::<i64>().max(1);
+            let count;
+            if array_dims[0] == -1 {
                 if self.lex.tk != '{' {
                     return Err(self.compile_err("`{` expected in compound literal"));
                 }
                 let (scan_count, needs_runtime) = self.scan_array_init()?;
                 // C99 6.7.8p22: designators can push the size past the
-                // positional entry count.
-                let count = if needs_runtime {
-                    self.designated_array_count(scan_count, 1)?
-                } else {
-                    scan_count
-                };
+                // positional entry count; brace elision folds a flat run
+                // into one row of the inner span.
+                let rows = self.designated_array_count(scan_count, inner_span)?;
+                count = rows * inner_span;
                 slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 if needs_runtime {
                     let full = elem_size * count as usize;
@@ -2167,17 +2168,28 @@ impl Compiler {
                         0,
                         elem_ty,
                         count,
-                        &[],
+                        inner_dims,
                         "<compound literal>",
                     )?;
                 } else {
+                    self.pending.init_inner_dims = inner_dims.to_vec();
                     let elements = self.collect_array_initializer(elem_ty)?;
-                    let (start, bytes) = self.pack_initializer_into_data(elem_ty, &elements);
-                    self.emit_local_array_init(slot, start, bytes);
+                    let full = elem_size * count as usize;
+                    let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements);
+                    // C99 6.7.8p21: positions the list leaves out are
+                    // zero; pad so the single Mcpy covers the object.
+                    let total = if packed < full {
+                        for _ in 0..(full - packed) {
+                            self.data.push(0);
+                        }
+                        full
+                    } else {
+                        packed
+                    };
+                    self.emit_local_array_init(slot, start, total);
                 }
-                final_array_size = count;
             } else {
-                let count = decl_array_size;
+                count = array_dims[0] * inner_span;
                 let full = elem_size * count as usize;
                 slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 if self.lex.tk == '{' && self.array_init_needs_runtime()? {
@@ -2192,11 +2204,12 @@ impl Compiler {
                         0,
                         elem_ty,
                         count,
-                        &[],
+                        inner_dims,
                         "<compound literal>",
                     )?;
                 } else {
                     self.pending.init_target_array_size = count;
+                    self.pending.init_inner_dims = inner_dims.to_vec();
                     let elements = self.collect_array_initializer(elem_ty)?;
                     if elements.len() as i64 > count {
                         return Err(self.compile_err(format!(
@@ -2215,11 +2228,16 @@ impl Compiler {
                     };
                     self.emit_local_array_init(slot, start, total);
                 }
-                final_array_size = count;
             }
-            // C99 6.3.2.1p3: an array compound literal used as a
-            // value decays to a pointer to its first element.
-            value_ty = elem_ty + Ty::Ptr as i64;
+            final_array_size = count;
+            // C99 6.3.2.1p3: an array compound literal used as a value
+            // decays to a pointer to its first element -- a row for a
+            // multi-dimensional literal.
+            value_ty = if inner_dims.is_empty() {
+                elem_ty + Ty::Ptr as i64
+            } else {
+                self.array_agg_type(elem_ty, inner_dims) + Ty::Ptr as i64
+            };
         } else if self.is_traversable_aggregate_ty(t) {
             let sid = struct_id_of(t);
             let elem_size = self.size_of_type(t);
@@ -2276,8 +2294,17 @@ impl Compiler {
         self.restore_pending_local_carriers(saved_carriers);
         // C99 6.3.2.1p3 exempts a `sizeof` / `typeof` operand from
         // array-to-pointer conversion, so publish the undecayed extent the
-        // way a string literal does; `-1` marks a genuine zero count.
-        if is_array {
+        // way a string literal does; `-1` marks a genuine zero count. A
+        // multi-dimensional literal publishes the byte width and dims (the
+        // element-count form cannot spell a row-typed pointee).
+        if array_dims.len() > 1 {
+            self.pending.last_array_decay_bytes = final_array_size * self.size_of_type(t) as i64;
+            let inner_span: i64 = array_dims[1..].iter().product::<i64>().max(1);
+            let mut dims = alloc::vec::Vec::with_capacity(array_dims.len());
+            dims.push(final_array_size / inner_span);
+            dims.extend_from_slice(&array_dims[1..]);
+            self.pending.last_array_decay_dims = dims;
+        } else if !array_dims.is_empty() {
             self.pending.last_array_decay_size = if final_array_size > 0 {
                 final_array_size
             } else {

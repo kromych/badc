@@ -1920,19 +1920,27 @@ impl Compiler {
         &mut self,
         elem_ty: i64,
     ) -> Result<(i128, InitElemReloc), C5Error> {
-        self.next()?; // consume `[`
-        let declared_size: i64 = if self.lex.tk == ']' {
-            -1
-        } else {
-            // A type dimension: the const-object fold stays masked so
-            // `(int[h]){...}` with a const local `h` is rejected as a
-            // variably sized literal, as gcc rejects it.
-            self.with_const_object_fold_masked(|c| c.parse_constant_int())?
-        };
-        if self.lex.tk != ']' {
-            return Err(self.compile_err("`]` expected in array compound-literal type"));
+        // Bracket run, outermost first; only the leading dimension may be
+        // omitted (C99 6.7.5.2) and is then completed by the initializer.
+        let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+        while self.lex.tk == Token::Brak {
+            self.next()?; // consume `[`
+            if self.lex.tk == ']' {
+                if !dims.is_empty() {
+                    return Err(self.compile_err("array type has an incomplete inner dimension"));
+                }
+                dims.push(-1);
+            } else {
+                // A type dimension: the const-object fold stays masked so
+                // `(int[h]){...}` with a const local `h` is rejected as a
+                // variably sized literal, as gcc rejects it.
+                dims.push(self.with_const_object_fold_masked(|c| c.parse_constant_int())?);
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("`]` expected in array compound-literal type"));
+                }
+            }
+            self.next()?; // consume `]`
         }
-        self.next()?; // consume `]`
         if self.lex.tk != ')' {
             return Err(self.compile_err("`)` expected to close compound-literal type"));
         }
@@ -1942,6 +1950,7 @@ impl Compiler {
         }
         let elem_size = self.size_of_type(elem_ty);
         let elem_is_struct = is_struct_value_ty(elem_ty);
+        let inner_span: i64 = dims[1..].iter().product::<i64>().max(1);
         // The element count must be known before the storage is reserved:
         // a struct element with a string-literal or `&global` field
         // appends to the data segment as it is filled, so per-element
@@ -1949,17 +1958,22 @@ impl Compiler {
         // live `self.data` length. A `[N]` designator can push the count
         // past the positional entry total (C99 6.7.8p22).
         let (scanned, _) = self.scan_array_init()?;
-        let scanned = self.designated_array_count(scanned, 1)?;
-        let count = scanned.max(declared_size).max(0) as usize;
+        let rows = self.designated_array_count(scanned, inner_span)?;
+        let rows = rows.max(dims[0]).max(0);
+        let count = (rows * inner_span) as usize;
         self.align_data_to_8();
         let off = self.data.len() as i64;
         for _ in 0..(count * elem_size) {
             self.data.push(0);
         }
         if elem_is_struct {
-            self.collect_struct_array_data(elem_ty, off, &[count as i64])?;
+            let mut full_dims = alloc::vec::Vec::with_capacity(dims.len());
+            full_dims.push(rows);
+            full_dims.extend_from_slice(&dims[1..]);
+            self.collect_struct_array_data(elem_ty, off, &full_dims)?;
         } else {
             self.pending.init_target_array_size = count as i64;
+            self.pending.init_inner_dims = dims[1..].to_vec();
             let elements = self.collect_array_initializer(elem_ty)?;
             if elements.len() > count {
                 return Err(self.compile_err("too many initializers for array compound literal"));

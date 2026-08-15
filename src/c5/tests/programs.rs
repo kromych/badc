@@ -3211,6 +3211,13 @@ fn compound_literal_array_init() {
 }
 
 #[test]
+fn compound_literal_multidim() {
+    // C99 6.5.2.5: every bracket dimension of an array-typed compound
+    // literal shapes its initializer; the value decays to a row pointer.
+    assert_eq!(run_fixture("compound_literal_multidim.c"), 0);
+}
+
+#[test]
 fn struct_array_brace_elision() {
     // C99 6.7.9p20/p21: a sub-array of structs whose braces are elided
     // takes what it holds from the enclosing list; the rest stays zero.

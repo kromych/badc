@@ -2233,22 +2233,27 @@ impl Compiler {
                         self.next()?;
                     }
                 }
-                // Top-level array brackets in the abstract
-                // declarator: `(int[]){...}` / `(char[N]){...}`.
-                // Only a compound literal (detected after the `)`)
-                // gives these meaning; `t` stays the element type and
-                // `cast_array_size` records the count (`-1` when the
-                // bracket is empty and the initializer determines it).
-                let mut cast_is_array = false;
-                let mut cast_array_size: i64 = 0;
+                // Top-level array brackets in the abstract declarator:
+                // `(int[]){...}` / `(char[N]){...}` / `(s8[2][3]){...}`.
+                // Only a compound literal (detected after the `)`) gives
+                // these meaning; `t` stays the element type and
+                // `cast_array_dims` records the counts outermost first
+                // (`-1` when the leading bracket is empty and the
+                // initializer determines it; C99 6.7.5.2 completes only
+                // the outermost dimension that way).
+                let mut cast_array_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
                 while self.lex.tk == Token::Brak {
-                    cast_is_array = true;
                     self.next()?;
                     if self.lex.tk == ']' {
-                        cast_array_size = -1;
+                        if !cast_array_dims.is_empty() {
+                            return Err(
+                                self.compile_err("array type has an incomplete inner dimension")
+                            );
+                        }
+                        cast_array_dims.push(-1);
                         self.next()?;
                     } else {
-                        cast_array_size = self.parse_constant_int()?;
+                        cast_array_dims.push(self.parse_constant_int()?);
                         self.accept(']')?;
                     }
                 }
@@ -2293,7 +2298,7 @@ impl Compiler {
                     // C99 6.5.2.5 compound literal: `(type){ init }`.
                     // The `(type)` parsed above is the literal's
                     // type, not a cast operator.
-                    self.parse_block_compound_literal(t, cast_is_array, cast_array_size)?;
+                    self.parse_block_compound_literal(t, &cast_array_dims)?;
                 } else {
                     self.expr(Token::Inc as i64)?;
                     let cast_child_ast = self.ast_acc;
@@ -2373,7 +2378,7 @@ impl Compiler {
                     if cast_typedef_array > 0
                         && cast_ptr_levels >= 1
                         && cast_fn_proto.is_none()
-                        && !cast_is_array
+                        && cast_array_dims.is_empty()
                     {
                         let dims: alloc::vec::Vec<i64> = if cast_typedef_dims.len() >= 2 {
                             cast_typedef_dims.clone()

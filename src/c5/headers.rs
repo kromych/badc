@@ -222,6 +222,24 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "mach/vm_statistics.h",
         include_str!("../../libc/include/mach/vm_statistics.h"),
     ),
+    (
+        "mach/machine.h",
+        include_str!("../../libc/include/mach/machine.h"),
+    ),
+    (
+        "mach/vm_prot.h",
+        include_str!("../../libc/include/mach/vm_prot.h"),
+    ),
+    (
+        "mach/vm_region.h",
+        include_str!("../../libc/include/mach/vm_region.h"),
+    ),
+    (
+        "mach/mach_vm.h",
+        include_str!("../../libc/include/mach/mach_vm.h"),
+    ),
+    ("libproc.h", include_str!("../../libc/include/libproc.h")),
+    ("sys/proc.h", include_str!("../../libc/include/sys/proc.h")),
     ("sysexits.h", include_str!("../../libc/include/sysexits.h")),
     (
         "sys/sys_domain.h",
@@ -238,6 +256,14 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     (
         "mach-o/loader.h",
         include_str!("../../libc/include/mach-o/loader.h"),
+    ),
+    (
+        "mach-o/fat.h",
+        include_str!("../../libc/include/mach-o/fat.h"),
+    ),
+    (
+        "mach-o/nlist.h",
+        include_str!("../../libc/include/mach-o/nlist.h"),
     ),
     ("sys/stat.h", include_str!("../../libc/include/sys/stat.h")),
     ("sys/mman.h", include_str!("../../libc/include/sys/mman.h")),

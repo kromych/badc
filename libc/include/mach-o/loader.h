@@ -6,11 +6,9 @@
 #pragma once
 
 #include <stdint.h>
-
-// <mach/machine.h> integer_t-based ids; <mach/vm_prot.h> protection bits.
-typedef int cpu_type_t;
-typedef int cpu_subtype_t;
-typedef int vm_prot_t;
+// cpu_type_t / cpu_subtype_t, and the segment protection bits.
+#include <mach/machine.h>
+#include <mach/vm_prot.h>
 
 struct mach_header {
     uint32_t magic;

@@ -6394,6 +6394,82 @@ fn mach_vm_statistics_carries_the_user_memory_tags() {
 }
 
 #[test]
+fn the_mach_process_inspection_headers_are_macos_only() {
+    use crate::Target;
+    // The include set a remote-memory reader pulls in: the process
+    // introspection calls, the Mach-O fat and symbol-table layouts, and
+    // the 64-bit VM routines with their region-info flavours.
+    let src = "#include <libproc.h>\n\
+        #include <mach-o/fat.h>\n\
+        #include <mach-o/loader.h>\n\
+        #include <mach-o/nlist.h>\n\
+        #include <mach/mach.h>\n\
+        #include <mach/mach_vm.h>\n\
+        #include <mach/machine.h>\n\
+        #include <sys/proc.h>\n\
+        #include <sys/sysctl.h>\n\
+        int f(int pid, char *buf) {\n\
+            mach_vm_address_t a = 0; mach_vm_size_t n = 0;\n\
+            vm_region_basic_info_data_64_t info;\n\
+            mach_msg_type_number_t c = VM_REGION_BASIC_INFO_COUNT_64;\n\
+            mach_port_t obj = 0;\n\
+            mach_vm_region(mach_task_self(), &a, &n, VM_REGION_BASIC_INFO_64,\n\
+                           (vm_region_info_t)&info, &c, &obj);\n\
+            mach_vm_read_overwrite(mach_task_self(), a, n, (mach_vm_address_t)buf, &n);\n\
+            proc_pidpath(pid, buf, PROC_PIDPATHINFO_MAXSIZE);\n\
+            return proc_regionfilename(pid, a, buf, 1024) + info.protection; }\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+    for target in [
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert!(
+            !header_snippet_compiles(src, target),
+            "the Mach introspection surface must be absent on {target:?}"
+        );
+    }
+
+    // The file-format layouts describe fixed on-disk records, so they are
+    // readable from any host. Sizes are what clang reports against the
+    // macOS SDK; `struct nlist` keeps its 12-byte on-disk shape because
+    // the SDK gates the in-core `char *n_name` on !__LP64__.
+    let layout = "#include <mach-o/fat.h>\n#include <mach-o/nlist.h>\n\
+        #include <mach/machine.h>\n\
+        int ck[(sizeof(struct fat_header)==8 && sizeof(struct fat_arch)==20 \
+             && sizeof(struct fat_arch_64)==32 \
+             && sizeof(struct nlist)==12 && sizeof(struct nlist_64)==16 \
+             && FAT_MAGIC==0xcafebabe && FAT_CIGAM==0xbebafeca \
+             && FAT_MAGIC_64==0xcafebabf && FAT_CIGAM_64==0xbfbafeca \
+             && N_STAB==0xe0 && N_TYPE==0x0e && N_EXT==0x01 && N_SECT==0xe \
+             && NO_SECT==0 && MAX_SECT==255 && DYNAMIC_LOOKUP_ORDINAL==0xfe \
+             && CPU_TYPE_X86_64==0x01000007 && CPU_TYPE_ARM64==0x0100000c \
+             && CPU_SUBTYPE_ARM64E==2 && CPU_SUBTYPE_X86_64_ALL==3)?1:-1];\n";
+    for target in ALL_TARGETS {
+        assert!(
+            header_snippet_compiles(layout, target),
+            "the Mach-O record layouts on {target:?}"
+        );
+    }
+}
+
+#[test]
+fn vm_region_basic_info_keeps_the_kernel_packing() {
+    use crate::Target;
+    // <mach/vm_region.h> is 4-byte packed. Without it the 64-bit flavour
+    // pads to 40 bytes and VM_REGION_BASIC_INFO_COUNT_64 reports 10, so
+    // mach_vm_region would be handed a reply size the kernel rejects.
+    let src = "#include <mach/vm_region.h>\n\
+        int ck[(sizeof(vm_region_basic_info_data_64_t)==36 \
+             && sizeof(vm_region_basic_info_data_t)==32 \
+             && VM_REGION_BASIC_INFO_COUNT_64==9 \
+             && VM_REGION_BASIC_INFO_COUNT==8 \
+             && VM_REGION_BASIC_INFO_64==9 && VM_REGION_BASIC_INFO==10)?1:-1];\n";
+    assert!(header_snippet_compiles(src, Target::MacOSAarch64));
+}
+
+#[test]
 fn sys_types_declares_time_t() {
     use crate::Target;
     // POSIX-2017 requires <sys/types.h> to define `time_t`; system

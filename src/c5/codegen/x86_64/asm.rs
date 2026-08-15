@@ -45,6 +45,8 @@ pub(crate) enum Mnemonic {
     Bswap,
     Rdtscp,
     Rdtsc,
+    Cpuid,
+    Xgetbv,
     Nop,
     /// Port input `in al/ax/eax, dx` (variable-port form). The
     /// accumulator and DX are implicit; the operands' `a`/`d`
@@ -927,6 +929,8 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "bswap" => Mnemonic::Bswap,
         "rdtscp" => Mnemonic::Rdtscp,
         "rdtsc" => Mnemonic::Rdtsc,
+        "cpuid" => Mnemonic::Cpuid,
+        "xgetbv" => Mnemonic::Xgetbv,
         "nop" => Mnemonic::Nop,
         "in" => Mnemonic::In,
         "out" => Mnemonic::Out,
@@ -3019,6 +3023,8 @@ fn to_table(
         M::Dec => "dec",
         M::Rdtsc => "rdtsc",
         M::Rdtscp => "rdtscp",
+        M::Cpuid => "cpuid",
+        M::Xgetbv => "xgetbv",
         M::Nop => "nop",
         M::Cli => "cli",
         M::Sti => "sti",
@@ -3042,6 +3048,8 @@ fn to_table(
     let tops: Vec<Opnd> = match mnemonic {
         M::Rdtsc
         | M::Rdtscp
+        | M::Cpuid
+        | M::Xgetbv
         | M::Nop
         | M::Cli
         | M::Sti

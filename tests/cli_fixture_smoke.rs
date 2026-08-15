@@ -136,6 +136,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_sym_riprel.c", "linux-aarch64"), // x86-64 sym(%rip) displacement forms
     ("inline_asm_x64_align.c", "linux-aarch64"),      // x86-64 `.align` in the code stream
     ("cpuid_partial_outputs.c", "linux-aarch64"),     // x86-64 cpuid
+    ("cpuid_xgetbv_output_width.c", "linux-aarch64"), // x86-64 cpuid / xgetbv output widths
     ("inline_asm_x64_flag_outputs.c", "linux-aarch64"), // x86-64 `=@cc` flag outputs
     ("inline_asm_x64_string_ops.c", "linux-aarch64"), // x86-64 string primitives / prefixes
     ("inline_asm_x64_system_ext.c", "linux-aarch64"), // x86-64 invpcid/invvpid/invlpga/cmpxchg16b/fldl/fstpl/mxcsr/ljmp/fs-gs push

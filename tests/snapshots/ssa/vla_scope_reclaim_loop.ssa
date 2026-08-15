@@ -9,7 +9,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v3   Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v1)
   block 1  start_pc=0
-    v11  Intrinsic { kind=46, args=[] }                   -> x3
+    v11  Intrinsic { kind=44, args=[] }                   -> x3
     v12  Imm(0)                                           -> x0
     v13  Imm(64)                                          -> x0
     v14  Imm(0)                                           -> x0
@@ -50,7 +50,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v44  Binop { op=add, lhs=v5, rhs=v43 }                -> x9
     v45  Imm(0)                                           -> x0
     v46  LoadLocal { off=-7, kind=I64 }                   -> x0
-    v47  Intrinsic { kind=47, args=[v11] }                -> x0
+    v47  Intrinsic { kind=45, args=[v11] }                -> x0
     terminator Jmp(b6)   (exit_acc=v47)
   block 6  start_pc=0
     v8   Extend { value=v4, kind=I32 }                    -> x0

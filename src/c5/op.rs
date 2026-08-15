@@ -164,36 +164,25 @@ pub enum Intrinsic {
     /// `mfence` (x86_64); takes no argument and produces no value.
     /// A no-op in the single-threaded interpreter.
     AtomicThreadFence = 43,
-    /// `asm("cpuid" : "=a"(o0), "=b"(o1), "=c"(o2), "=d"(o3) : "a"(leaf),
-    /// "c"(sub))` -- x86 CPU identification. The six args are, in order,
-    /// the four output addresses (eax/ebx/ecx/edx destinations) then the
-    /// two input values (eax = leaf, ecx = subleaf). x86_64 only. The
-    /// interpreter zeroes the outputs (no host CPUID).
-    Cpuid = 44,
-    /// `asm("xgetbv" : "=a"(lo), "=d"(hi) : "c"(reg))` -- read an extended
-    /// control register. Three args: the low and high output addresses
-    /// (eax/edx destinations) then the input value (ecx = register index).
-    /// x86_64 only. The interpreter zeroes the outputs.
-    Xgetbv = 45,
     /// Read the current stack pointer (the VM's frame bump cursor).
     /// Takes no argument, returns the value. Snapshots the stack on
     /// entry to a block that declares a variable-length array (C99
     /// 6.7.6.2) so the storage is reclaimed on block exit.
-    AllocaSave = 46,
+    AllocaSave = 44,
     /// Restore the stack pointer to a value a prior `AllocaSave`
     /// captured. One argument (the saved value); returns nothing.
     /// Reclaims a VLA block's storage on exit.
-    AllocaRestore = 47,
+    AllocaRestore = 45,
     /// `__builtin_clrsb(x)` / `__builtin_clrsbll(x)` -- count leading
     /// redundant sign bits of a 32-bit / 64-bit signed value: the number
     /// of bits after the sign bit that equal it. The result is `int`.
     /// Lowered in the walker as `clz(x ^ (x >> (w-1))) - 1`.
-    Clrsb = 48,
-    Clrsbll = 49,
+    Clrsb = 46,
+    Clrsbll = 47,
     /// `__builtin_parity(x)` / `__builtin_parityll(x)` -- 1 when the value
     /// has an odd number of set bits, else 0. Lowered as `popcount(x) & 1`.
-    Parity = 50,
-    Parityll = 51,
+    Parity = 48,
+    Parityll = 49,
     /// `asm("divq %4" : "=a"(q), "=d"(*r) : "0"(n0), "1"(n1), "rm"(d))` --
     /// x86-64 unsigned 128/64 division (the `udiv_qrnnd` assembly-macro
     /// shape). Five args: the quotient output address, the remainder
@@ -201,7 +190,7 @@ pub enum Intrinsic {
     /// and the divisor (`d`). Computes `(n1:n0) / d` -> quotient and
     /// `(n1:n0) % d` -> remainder. x86_64 only (the source gates it on
     /// `__x86_64__`); the interpreter uses 128-bit host arithmetic.
-    Divq128 = 52,
+    Divq128 = 50,
     /// AArch64 cache maintenance and barriers, each a fixed-encoding
     /// instruction. `ReadCacheType` = `mrs %0,
     /// ctr_el0` (one output address); `DcCvau` = `dc cvau, %0` and
@@ -209,18 +198,18 @@ pub enum Intrinsic {
     /// `dsb ish` and `Isb` = `isb` (no operands). AArch64 only; the
     /// interpreter treats the barriers and cache ops as no-ops and
     /// returns a fixed CTR_EL0 for the read.
-    AArch64ReadCacheType = 53,
-    AArch64DcCvau = 54,
-    AArch64IcIvau = 55,
-    AArch64DsbIsh = 56,
-    AArch64Isb = 57,
+    AArch64ReadCacheType = 51,
+    AArch64DcCvau = 52,
+    AArch64IcIvau = 53,
+    AArch64DsbIsh = 54,
+    AArch64Isb = 55,
     /// `__builtin_ffs(x)` / `__builtin_ffsll(x)` -- one plus the index of
     /// the least-significant set bit, or 0 when `x` is 0 (POSIX `ffs`, GCC
     /// builtin). The result is `int`. Lowered in the walker as
     /// `(ctz(x) + 1) * (x != 0)`, reusing the portable ctz sequence; the
     /// `(x != 0)` factor forces the zero case (ctz(0) is the bit width).
-    Ffs = 58,
-    Ffsll = 59,
+    Ffs = 56,
+    Ffsll = 57,
     /// 128-bit atomic read-modify-write via the AArch64 `ldaxp`/`stlxp`
     /// exclusive-pair retry loop (the shape GCC/clang inline asm emits for
     /// `Int128` atomics, since aarch64 has no native 128-bit CAS through
@@ -229,10 +218,10 @@ pub enum Intrinsic {
     /// operand halves as inputs: `CmpXchg` compares against `cmp{l,h}` and
     /// stores `new{l,h}` on a match; `Xchg` stores unconditionally;
     /// `FetchAnd`/`FetchOr` store `old & new` / `old | new`. AArch64 only.
-    Atomic128CmpXchg = 60,
-    Atomic128Xchg = 61,
-    Atomic128FetchAnd = 62,
-    Atomic128FetchOr = 63,
+    Atomic128CmpXchg = 58,
+    Atomic128Xchg = 59,
+    Atomic128FetchAnd = 60,
+    Atomic128FetchOr = 61,
     /// 128-bit atomic load / store, the AArch64 inline-asm idiom for a
     /// 16-byte access with no native LSE2 support. `Load`/`Store` are the
     /// plain `LDP`/`STP` forms; `LoadEx`/`StoreEx` are the pre-LSE2 forms
@@ -240,57 +229,57 @@ pub enum Intrinsic {
     /// pointer to the object and the addresses of the two 64-bit result
     /// halves (written back); stores take the pointer and the two halves as
     /// inputs. AArch64 only.
-    Atomic128Load = 64,
-    Atomic128Store = 65,
-    Atomic128LoadEx = 66,
-    Atomic128StoreEx = 67,
+    Atomic128Load = 62,
+    Atomic128Store = 63,
+    Atomic128LoadEx = 64,
+    Atomic128StoreEx = 65,
     /// `__builtin_return_address(0)` -- the current function's return
     /// address, read from the saved slot just above the frame pointer
     /// (`[fp + 8]` under both the AAPCS64 and SysV prologues). Only level
     /// 0 is supported. The interpreter returns a stable per-frame proxy.
-    ReturnAddress = 68,
+    ReturnAddress = 66,
     /// 128-bit masked store-insert: `*mem = (*mem & ~msk) | val`, built from
     /// an `LDXP` / `BIC` / `ORR` / `STXP` exclusive retry loop. Takes the
     /// pointer and the value and mask halves (`vl`, `vh`, `ml`, `mh`) as
     /// inputs; there is no result. AArch64 only.
-    Atomic128StoreInsert = 69,
+    Atomic128StoreInsert = 67,
     /// `asm("fxsave %0" : "=m"(buf))` -- save the x87/SSE state to the
     /// 512-byte memory operand. The op takes the operand's address;
     /// codegen emits `fxsave m` (0F AE /0, x86_64 only). A no-op in the
     /// interpreter (no modelled FPU/SSE state).
-    X86FxSave = 70,
+    X86FxSave = 68,
     /// `asm("fxrstor %0" : : "m"(buf))` -- restore the x87/SSE state from
     /// the 512-byte memory operand. Codegen emits `fxrstor m` (0F AE /1,
     /// x86_64 only). A no-op in the interpreter.
-    X86FxRestore = 71,
+    X86FxRestore = 69,
     /// x86 descriptor-table / clflush forms, each with a single memory
     /// operand (the op takes its address, like the x87 control-word forms).
     /// `sgdt`/`sidt`/`sldt`/`str` store the GDTR/IDTR/LDTR/TR; `lgdt`/`lidt`
     /// load the GDTR/IDTR; `clflush` flushes a cache line. All x86_64 only;
     /// the interpreter stores zero (loads / flushes are no-ops).
-    X86Sgdt = 72,
-    X86Sidt = 73,
-    X86Sldt = 74,
-    X86Str = 75,
-    X86Lgdt = 76,
-    X86Lidt = 77,
-    X86Clflush = 78,
+    X86Sgdt = 70,
+    X86Sidt = 71,
+    X86Sldt = 72,
+    X86Str = 73,
+    X86Lgdt = 74,
+    X86Lidt = 75,
+    X86Clflush = 76,
     /// `asm("lldtw %0" : : "g"(Ldtr))` -- load the LDTR from the 16-bit
     /// operand (0F 00 /2). The op takes the operand's address; the
     /// interpreter treats it as a no-op (no modelled LDTR).
-    X86Lldt = 79,
+    X86Lldt = 77,
     /// Read of a `register T name asm("rsp"/"sp")` variable -- the
     /// current stack pointer, as a `void *`-shaped value. No arguments.
     /// The interpreter returns the frame's arena base (the same proxy
     /// `FrameAddress` uses); native code reads rsp / sp directly.
-    StackPointer = 80,
+    StackPointer = 78,
     /// Deferred `__builtin_constant_p(x)` whose operand did not fold at
     /// parse time. `args[0]` is the operand. The constant folder rewrites
     /// the node to `Imm(1)` once that operand becomes an integer
     /// immediate; the branch-fold fixed point resolves every survivor to
     /// `Imm(0)`. Produced only under `-O` -- the walker answers 0 itself
     /// otherwise -- so no emitter or the interpreter ever sees one.
-    ConstantP = 81,
+    ConstantP = 79,
 }
 
 impl Intrinsic {
@@ -339,44 +328,42 @@ impl Intrinsic {
             41 => Some(Intrinsic::X87StoreControlWord),
             42 => Some(Intrinsic::X87LoadControlWord),
             43 => Some(Intrinsic::AtomicThreadFence),
-            44 => Some(Intrinsic::Cpuid),
-            45 => Some(Intrinsic::Xgetbv),
-            46 => Some(Intrinsic::AllocaSave),
-            47 => Some(Intrinsic::AllocaRestore),
-            48 => Some(Intrinsic::Clrsb),
-            49 => Some(Intrinsic::Clrsbll),
-            50 => Some(Intrinsic::Parity),
-            51 => Some(Intrinsic::Parityll),
-            52 => Some(Intrinsic::Divq128),
-            53 => Some(Intrinsic::AArch64ReadCacheType),
-            54 => Some(Intrinsic::AArch64DcCvau),
-            55 => Some(Intrinsic::AArch64IcIvau),
-            56 => Some(Intrinsic::AArch64DsbIsh),
-            57 => Some(Intrinsic::AArch64Isb),
-            58 => Some(Intrinsic::Ffs),
-            59 => Some(Intrinsic::Ffsll),
-            60 => Some(Intrinsic::Atomic128CmpXchg),
-            61 => Some(Intrinsic::Atomic128Xchg),
-            62 => Some(Intrinsic::Atomic128FetchAnd),
-            63 => Some(Intrinsic::Atomic128FetchOr),
-            64 => Some(Intrinsic::Atomic128Load),
-            65 => Some(Intrinsic::Atomic128Store),
-            66 => Some(Intrinsic::Atomic128LoadEx),
-            67 => Some(Intrinsic::Atomic128StoreEx),
-            68 => Some(Intrinsic::ReturnAddress),
-            69 => Some(Intrinsic::Atomic128StoreInsert),
-            70 => Some(Intrinsic::X86FxSave),
-            71 => Some(Intrinsic::X86FxRestore),
-            72 => Some(Intrinsic::X86Sgdt),
-            73 => Some(Intrinsic::X86Sidt),
-            74 => Some(Intrinsic::X86Sldt),
-            75 => Some(Intrinsic::X86Str),
-            76 => Some(Intrinsic::X86Lgdt),
-            77 => Some(Intrinsic::X86Lidt),
-            78 => Some(Intrinsic::X86Clflush),
-            79 => Some(Intrinsic::X86Lldt),
-            80 => Some(Intrinsic::StackPointer),
-            81 => Some(Intrinsic::ConstantP),
+            44 => Some(Intrinsic::AllocaSave),
+            45 => Some(Intrinsic::AllocaRestore),
+            46 => Some(Intrinsic::Clrsb),
+            47 => Some(Intrinsic::Clrsbll),
+            48 => Some(Intrinsic::Parity),
+            49 => Some(Intrinsic::Parityll),
+            50 => Some(Intrinsic::Divq128),
+            51 => Some(Intrinsic::AArch64ReadCacheType),
+            52 => Some(Intrinsic::AArch64DcCvau),
+            53 => Some(Intrinsic::AArch64IcIvau),
+            54 => Some(Intrinsic::AArch64DsbIsh),
+            55 => Some(Intrinsic::AArch64Isb),
+            56 => Some(Intrinsic::Ffs),
+            57 => Some(Intrinsic::Ffsll),
+            58 => Some(Intrinsic::Atomic128CmpXchg),
+            59 => Some(Intrinsic::Atomic128Xchg),
+            60 => Some(Intrinsic::Atomic128FetchAnd),
+            61 => Some(Intrinsic::Atomic128FetchOr),
+            62 => Some(Intrinsic::Atomic128Load),
+            63 => Some(Intrinsic::Atomic128Store),
+            64 => Some(Intrinsic::Atomic128LoadEx),
+            65 => Some(Intrinsic::Atomic128StoreEx),
+            66 => Some(Intrinsic::ReturnAddress),
+            67 => Some(Intrinsic::Atomic128StoreInsert),
+            68 => Some(Intrinsic::X86FxSave),
+            69 => Some(Intrinsic::X86FxRestore),
+            70 => Some(Intrinsic::X86Sgdt),
+            71 => Some(Intrinsic::X86Sidt),
+            72 => Some(Intrinsic::X86Sldt),
+            73 => Some(Intrinsic::X86Str),
+            74 => Some(Intrinsic::X86Lgdt),
+            75 => Some(Intrinsic::X86Lidt),
+            76 => Some(Intrinsic::X86Clflush),
+            77 => Some(Intrinsic::X86Lldt),
+            78 => Some(Intrinsic::StackPointer),
+            79 => Some(Intrinsic::ConstantP),
             _ => None,
         }
     }

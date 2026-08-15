@@ -15,7 +15,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v53  Imm(0)                                           -> x7
     v54  Imm(0)                                           -> x7
     v55  LocalAddr(-1)                                    -> x7
-    v56  Intrinsic { kind=52, args=[v55, v1, v3, v2, v4] } -> x0
+    v56  Intrinsic { kind=50, args=[v55, v1, v3, v2, v4] } -> x0
     v57  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b2)   (exit_acc=v57)
   block 2  start_pc=0
@@ -46,7 +46,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v60  Imm(0)                                           -> x7
     v61  Imm(0)                                           -> x7
     v62  LocalAddr(-1)                                    -> x7
-    v63  Intrinsic { kind=52, args=[v62, v13, v15, v14, v16] } -> x0
+    v63  Intrinsic { kind=50, args=[v62, v13, v15, v14, v16] } -> x0
     v64  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b8)   (exit_acc=v64)
   block 8  start_pc=0
@@ -77,7 +77,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v67  Imm(0)                                           -> x7
     v68  Imm(0)                                           -> x7
     v69  LocalAddr(-1)                                    -> x7
-    v70  Intrinsic { kind=52, args=[v69, v25, v27, v26, v28] } -> x0
+    v70  Intrinsic { kind=50, args=[v69, v25, v27, v26, v28] } -> x0
     v71  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b14)   (exit_acc=v71)
   block 14  start_pc=0
@@ -109,7 +109,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v74  Imm(0)                                           -> x7
     v75  Imm(0)                                           -> x7
     v76  LocalAddr(-1)                                    -> x7
-    v77  Intrinsic { kind=52, args=[v76, v38, v40, v39, v41] } -> x0
+    v77  Intrinsic { kind=50, args=[v76, v38, v40, v39, v41] } -> x0
     v78  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b20)   (exit_acc=v78)
   block 20  start_pc=0

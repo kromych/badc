@@ -192,7 +192,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v307 LocalAddr(-47)                                   -> x7
     v308 Imm(1)                                           -> x8
     v309 Imm(0)                                           -> x9
-    v310 Intrinsic { kind=44, args=[v304, v305, v306, v307, v308, v309] } -> x1
+    v310 InlineAsm { template="cpuid", ops=6, args=[v304, v305, v306, v307, v308, v309] } -> -
     v311 LoadLocal { off=-44, kind=U32 }                  -> x1
     v312 BinopI { op=and, lhs=v311, rhs_imm=255 }         -> x1
     v313 LoadLocal { off=-45, kind=U32 }                  -> x1
@@ -249,7 +249,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v327 LocalAddr(-47)                                   -> x7
     v328 Imm(1)                                           -> x8
     v329 Imm(0)                                           -> x9
-    v330 Intrinsic { kind=44, args=[v324, v325, v326, v327, v328, v329] } -> x1
+    v330 InlineAsm { template="cpuid", ops=6, args=[v324, v325, v326, v327, v328, v329] } -> -
     v331 LoadLocal { off=-44, kind=U32 }                  -> x1
     v332 BinopI { op=and, lhs=v331, rhs_imm=255 }         -> x1
     v333 LoadLocal { off=-45, kind=U32 }                  -> x1
@@ -321,7 +321,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v347 LocalAddr(-47)                                   -> x7
     v348 Imm(1)                                           -> x8
     v349 Imm(0)                                           -> x9
-    v350 Intrinsic { kind=44, args=[v344, v345, v346, v347, v348, v349] } -> x1
+    v350 InlineAsm { template="cpuid", ops=6, args=[v344, v345, v346, v347, v348, v349] } -> -
     v351 LoadLocal { off=-44, kind=U32 }                  -> x1
     v352 BinopI { op=and, lhs=v351, rhs_imm=255 }         -> x1
     v353 LoadLocal { off=-45, kind=U32 }                  -> x1
@@ -380,7 +380,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v367 LocalAddr(-55)                                   -> x8
     v368 Imm(1)                                           -> x9
     v369 Imm(0)                                           -> x0
-    v370 Intrinsic { kind=44, args=[v364, v365, v366, v367, v368, v369] } -> x2
+    v370 InlineAsm { template="cpuid", ops=6, args=[v364, v365, v366, v367, v368, v369] } -> -
     v371 LoadLocal { off=-58, kind=U32 }                  -> x2
     v372 BinopI { op=and, lhs=v371, rhs_imm=255 }         -> x2
     v373 LoadLocal { off=-57, kind=U32 }                  -> x2
@@ -395,7 +395,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v459 LocalAddr(-47)                                   -> x8
     v460 Imm(1)                                           -> x9
     v461 Imm(0)                                           -> x3
-    v462 Intrinsic { kind=44, args=[v456, v457, v458, v459, v460, v461] } -> x2
+    v462 InlineAsm { template="cpuid", ops=6, args=[v456, v457, v458, v459, v460, v461] } -> -
     v463 LoadLocal { off=-44, kind=U32 }                  -> x2
     v464 BinopI { op=and, lhs=v463, rhs_imm=255 }         -> x2
     v465 LoadLocal { off=-45, kind=U32 }                  -> x2
@@ -472,7 +472,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v390 LocalAddr(-51)                                   -> x8
     v391 Imm(7)                                           -> x9
     v392 Imm(0)                                           -> x0
-    v393 Intrinsic { kind=44, args=[v387, v388, v389, v390, v391, v392] } -> x2
+    v393 InlineAsm { template="cpuid", ops=6, args=[v387, v388, v389, v390, v391, v392] } -> -
     v394 LoadLocal { off=-54, kind=U32 }                  -> x2
     v395 BinopI { op=and, lhs=v394, rhs_imm=255 }         -> x2
     v396 LoadLocal { off=-52, kind=U32 }                  -> x2
@@ -487,7 +487,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v479 LocalAddr(-47)                                   -> x8
     v480 Imm(1)                                           -> x9
     v481 Imm(0)                                           -> x3
-    v482 Intrinsic { kind=44, args=[v476, v477, v478, v479, v480, v481] } -> x2
+    v482 InlineAsm { template="cpuid", ops=6, args=[v476, v477, v478, v479, v480, v481] } -> -
     v483 LoadLocal { off=-44, kind=U32 }                  -> x2
     v484 BinopI { op=and, lhs=v483, rhs_imm=255 }         -> x2
     v485 LoadLocal { off=-45, kind=U32 }                  -> x2
@@ -553,7 +553,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v413 LocalAddr(-51)                                   -> x8
     v414 Imm(7)                                           -> x9
     v415 Imm(0)                                           -> x0
-    v416 Intrinsic { kind=44, args=[v410, v411, v412, v413, v414, v415] } -> x2
+    v416 InlineAsm { template="cpuid", ops=6, args=[v410, v411, v412, v413, v414, v415] } -> -
     v417 LoadLocal { off=-54, kind=U32 }                  -> x2
     v418 BinopI { op=and, lhs=v417, rhs_imm=255 }         -> x2
     v419 LoadLocal { off=-52, kind=U32 }                  -> x2
@@ -568,7 +568,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v499 LocalAddr(-47)                                   -> x8
     v500 Imm(1)                                           -> x9
     v501 Imm(0)                                           -> x3
-    v502 Intrinsic { kind=44, args=[v496, v497, v498, v499, v500, v501] } -> x2
+    v502 InlineAsm { template="cpuid", ops=6, args=[v496, v497, v498, v499, v500, v501] } -> -
     v503 LoadLocal { off=-44, kind=U32 }                  -> x2
     v504 BinopI { op=and, lhs=v503, rhs_imm=255 }         -> x2
     v505 LoadLocal { off=-45, kind=U32 }                  -> x2
@@ -641,7 +641,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v436 LocalAddr(-51)                                   -> x8
     v437 Imm(7)                                           -> x9
     v438 Imm(0)                                           -> x0
-    v439 Intrinsic { kind=44, args=[v433, v434, v435, v436, v437, v438] } -> x2
+    v439 InlineAsm { template="cpuid", ops=6, args=[v433, v434, v435, v436, v437, v438] } -> -
     v440 LoadLocal { off=-54, kind=U32 }                  -> x2
     v441 BinopI { op=and, lhs=v440, rhs_imm=255 }         -> x2
     v442 LoadLocal { off=-52, kind=U32 }                  -> x2
@@ -656,7 +656,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=59
     v519 LocalAddr(-47)                                   -> x8
     v520 Imm(1)                                           -> x9
     v521 Imm(0)                                           -> x3
-    v522 Intrinsic { kind=44, args=[v516, v517, v518, v519, v520, v521] } -> x2
+    v522 InlineAsm { template="cpuid", ops=6, args=[v516, v517, v518, v519, v520, v521] } -> -
     v523 LoadLocal { off=-44, kind=U32 }                  -> x2
     v524 BinopI { op=and, lhs=v523, rhs_imm=255 }         -> x2
     v525 LoadLocal { off=-45, kind=U32 }                  -> x2

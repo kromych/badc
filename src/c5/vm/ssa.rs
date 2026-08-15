@@ -2302,6 +2302,20 @@ fn run_inline_asm(
                     xregs[1] = 0;
                 }
             }
+            Mnemonic::Cpuid => {
+                // No host CPUID: the identification read produces zero
+                // (feature-absent) in rax/rbx/rcx/rdx.
+                xregs[0] = 0;
+                xregs[3] = 0;
+                xregs[1] = 0;
+                xregs[2] = 0;
+            }
+            Mnemonic::Xgetbv => {
+                // No extended control registers: the read produces zero
+                // in rax/rdx.
+                xregs[0] = 0;
+                xregs[2] = 0;
+            }
             Mnemonic::Bswap => {
                 let (val, size) = value_of(&ops[0], &xregs);
                 let w = insn.suffix.unwrap_or(size);
@@ -2734,22 +2748,6 @@ fn run_intrinsic(
         Intrinsic::X86Lgdt | Intrinsic::X86Lidt | Intrinsic::X86Lldt | Intrinsic::X86Clflush => {
             // Load a descriptor-table register / flush a cache line: no
             // observable effect on the interpreter's memory or register model.
-            Ok(())
-        }
-        Intrinsic::Cpuid => {
-            // No host CPUID; zero the four output words so a caller reads a
-            // defined (feature-absent) result rather than uninitialized data.
-            for &a in &args[0..4] {
-                let addr = frame.regs[a as usize] as usize;
-                store_to_memory(mem, addr, 0, StoreKind::I32)?;
-            }
-            Ok(())
-        }
-        Intrinsic::Xgetbv => {
-            for &a in &args[0..2] {
-                let addr = frame.regs[a as usize] as usize;
-                store_to_memory(mem, addr, 0, StoreKind::I32)?;
-            }
             Ok(())
         }
         Intrinsic::Divq128 => {

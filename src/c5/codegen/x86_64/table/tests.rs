@@ -108,6 +108,7 @@ fn atomics_and_system() {
     assert_eq!(enc("cli", &[]), [0xfa]);
     assert_eq!(enc("hlt", &[]), [0xf4]);
     assert_eq!(enc("cpuid", &[]), [0x0f, 0xa2]);
+    assert_eq!(enc("xgetbv", &[]), [0x0f, 0x01, 0xd0]);
 }
 
 #[test]

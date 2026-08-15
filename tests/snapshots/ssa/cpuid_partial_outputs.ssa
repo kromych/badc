@@ -6,28 +6,25 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)
   block 1  start_pc=0
-    v10  LocalAddr(-2)                                    -> x1
-    v11  LocalAddr(-3)                                    -> x2
-    v12  LocalAddr(-4)                                    -> x6
-    v13  LocalAddr(-5)                                    -> x7
-    v14  Imm(0)                                           -> x0
-    v15  Intrinsic { kind=44, args=[v10, v11, v12, v13, v14, v14] } -> x0
-    v16  LoadLocal { off=-2, kind=U32 }                   -> x1
-    terminator Jmp(b2)   (exit_acc=v16)
+    v10  LocalAddr(-2)                                    -> x0
+    v11  Imm(0)                                           -> x1
+    v12  InlineAsm { template="cpuid", ops=2, args=[v10, v11] } -> -
+    v13  LoadLocal { off=-2, kind=U32 }                   -> x1
+    terminator Jmp(b2)   (exit_acc=v13)
   block 2  start_pc=0
-    v17  LocalAddr(-2)                                    -> x2
-    v18  LocalAddr(-3)                                    -> x6
-    v19  LocalAddr(-4)                                    -> x7
-    v20  LocalAddr(-5)                                    -> x8
-    v21  Imm(0)                                           -> x0
-    v22  Intrinsic { kind=44, args=[v17, v18, v19, v20, v21, v21] } -> x0
-    v23  LoadLocal { off=-2, kind=U32 }                   -> x0
-    v24  LoadLocal { off=-3, kind=U32 }                   -> x2
-    v25  LoadLocal { off=-4, kind=U32 }                   -> x2
-    v26  LoadLocal { off=-5, kind=U32 }                   -> x2
-    terminator Jmp(b3)   (exit_acc=v23)
+    v14  LocalAddr(-2)                                    -> x2
+    v15  LocalAddr(-3)                                    -> x6
+    v16  LocalAddr(-4)                                    -> x7
+    v17  LocalAddr(-5)                                    -> x8
+    v18  Imm(0)                                           -> x0
+    v19  InlineAsm { template="cpuid", ops=6, args=[v14, v15, v16, v17, v18, v18] } -> -
+    v20  LoadLocal { off=-2, kind=U32 }                   -> x0
+    v21  LoadLocal { off=-3, kind=U32 }                   -> x2
+    v22  LoadLocal { off=-4, kind=U32 }                   -> x2
+    v23  LoadLocal { off=-5, kind=U32 }                   -> x2
+    terminator Jmp(b3)   (exit_acc=v20)
   block 3  start_pc=0
-    v1   Binop { op=eq, lhs=v16, rhs=v23 }                -> x0
+    v1   Binop { op=eq, lhs=v13, rhs=v20 }                -> x0
     terminator Bz { cond=v1, target=b6, fall=b4 }   (exit_acc=v1)
   block 4  start_pc=0
     v2   Imm(0)                                           -> x0

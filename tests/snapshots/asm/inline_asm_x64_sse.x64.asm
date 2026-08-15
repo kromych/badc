@@ -273,35 +273,31 @@ Disassembly of section .text:
                	leaq	-0x178(%rbp), %rdi
                	movl	$0x1, %r8d
                	xorq	%r9, %r9
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rcx, %r10
-               	pushq	%r10
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	movq	%r9, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rcx, -0x250(%rbp)
+               	movq	%rdx, -0x248(%rbp)
+               	movq	%rsi, -0x240(%rbp)
+               	movq	%rdi, -0x238(%rbp)
+               	movq	%r8, -0x230(%rbp)
+               	movq	%r9, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	movl	-0x170(%rbp), %ecx
                	shrq	$0x1c, %rcx
                	andq	$0x1, %rcx
@@ -360,35 +356,31 @@ Disassembly of section .text:
                	leaq	-0x178(%rbp), %rdi
                	movl	$0x1, %r8d
                	xorq	%r9, %r9
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rcx, %r10
-               	pushq	%r10
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	movq	%r9, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rcx, -0x250(%rbp)
+               	movq	%rdx, -0x248(%rbp)
+               	movq	%rsi, -0x240(%rbp)
+               	movq	%rdi, -0x238(%rbp)
+               	movq	%r8, -0x230(%rbp)
+               	movq	%r9, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	movl	-0x170(%rbp), %ecx
                	shrq	$0x1c, %rcx
                	andq	$0x1, %rcx
@@ -460,35 +452,31 @@ Disassembly of section .text:
                	leaq	-0x178(%rbp), %rdi
                	movl	$0x1, %r8d
                	xorq	%r9, %r9
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rcx, %r10
-               	pushq	%r10
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	movq	%r9, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rcx, -0x250(%rbp)
+               	movq	%rdx, -0x248(%rbp)
+               	movq	%rsi, -0x240(%rbp)
+               	movq	%rdi, -0x238(%rbp)
+               	movq	%r8, -0x230(%rbp)
+               	movq	%r9, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	movl	-0x170(%rbp), %ecx
                	shrq	$0x1c, %rcx
                	andq	$0x1, %rcx
@@ -560,70 +548,62 @@ Disassembly of section .text:
                	leaq	-0x1b8(%rbp), %r8
                	movl	$0x1, %r9d
                	xorq	%rax, %rax
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	pushq	%r10
-               	movq	%r9, %r10
-               	movq	%rax, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rdx, -0x250(%rbp)
+               	movq	%rsi, -0x248(%rbp)
+               	movq	%rdi, -0x240(%rbp)
+               	movq	%r8, -0x238(%rbp)
+               	movq	%r9, -0x230(%rbp)
+               	movq	%rax, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	leaq	-0x160(%rbp), %rdx
                	leaq	-0x168(%rbp), %rsi
                	leaq	-0x170(%rbp), %rdi
                	leaq	-0x178(%rbp), %r8
                	movl	$0x1, %r9d
                	xorq	%rbx, %rbx
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	pushq	%r10
-               	movq	%r9, %r10
-               	movq	%rbx, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rdx, -0x250(%rbp)
+               	movq	%rsi, -0x248(%rbp)
+               	movq	%rdi, -0x240(%rbp)
+               	movq	%r8, -0x238(%rbp)
+               	movq	%r9, -0x230(%rbp)
+               	movq	%rbx, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	movl	-0x170(%rbp), %edx
                	shrq	$0x1c, %rdx
                	andq	$0x1, %rdx
@@ -715,70 +695,62 @@ Disassembly of section .text:
                	leaq	-0x198(%rbp), %r8
                	movl	$0x7, %r9d
                	xorq	%rax, %rax
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	pushq	%r10
-               	movq	%r9, %r10
-               	movq	%rax, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rdx, -0x250(%rbp)
+               	movq	%rsi, -0x248(%rbp)
+               	movq	%rdi, -0x240(%rbp)
+               	movq	%r8, -0x238(%rbp)
+               	movq	%r9, -0x230(%rbp)
+               	movq	%rax, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	leaq	-0x160(%rbp), %rdx
                	leaq	-0x168(%rbp), %rsi
                	leaq	-0x170(%rbp), %rdi
                	leaq	-0x178(%rbp), %r8
                	movl	$0x1, %r9d
                	xorq	%rbx, %rbx
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	pushq	%r10
-               	movq	%r9, %r10
-               	movq	%rbx, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rdx, -0x250(%rbp)
+               	movq	%rsi, -0x248(%rbp)
+               	movq	%rdi, -0x240(%rbp)
+               	movq	%r8, -0x238(%rbp)
+               	movq	%r9, -0x230(%rbp)
+               	movq	%rbx, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	movl	-0x170(%rbp), %edx
                	shrq	$0x1c, %rdx
                	andq	$0x1, %rdx
@@ -829,70 +801,62 @@ Disassembly of section .text:
                	leaq	-0x198(%rbp), %r8
                	movl	$0x7, %r9d
                	xorq	%rax, %rax
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	pushq	%r10
-               	movq	%r9, %r10
-               	movq	%rax, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rdx, -0x250(%rbp)
+               	movq	%rsi, -0x248(%rbp)
+               	movq	%rdi, -0x240(%rbp)
+               	movq	%r8, -0x238(%rbp)
+               	movq	%r9, -0x230(%rbp)
+               	movq	%rax, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	leaq	-0x160(%rbp), %rdx
                	leaq	-0x168(%rbp), %rsi
                	leaq	-0x170(%rbp), %rdi
                	leaq	-0x178(%rbp), %r8
                	movl	$0x1, %r9d
                	xorq	%rbx, %rbx
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	pushq	%r10
-               	movq	%r9, %r10
-               	movq	%rbx, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rdx, -0x250(%rbp)
+               	movq	%rsi, -0x248(%rbp)
+               	movq	%rdi, -0x240(%rbp)
+               	movq	%r8, -0x238(%rbp)
+               	movq	%r9, -0x230(%rbp)
+               	movq	%rbx, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	movl	-0x170(%rbp), %edx
                	shrq	$0x1c, %rdx
                	andq	$0x1, %rdx
@@ -960,70 +924,62 @@ Disassembly of section .text:
                	leaq	-0x198(%rbp), %r8
                	movl	$0x7, %r9d
                	xorq	%rax, %rax
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	pushq	%r10
-               	movq	%r9, %r10
-               	movq	%rax, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rdx, -0x250(%rbp)
+               	movq	%rsi, -0x248(%rbp)
+               	movq	%rdi, -0x240(%rbp)
+               	movq	%r8, -0x238(%rbp)
+               	movq	%r9, -0x230(%rbp)
+               	movq	%rax, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	leaq	-0x160(%rbp), %rdx
                	leaq	-0x168(%rbp), %rsi
                	leaq	-0x170(%rbp), %rdi
                	leaq	-0x178(%rbp), %r8
                	movl	$0x1, %r9d
                	xorq	%rbx, %rbx
-               	pushq	%rax
-               	pushq	%rbx
-               	pushq	%rcx
-               	pushq	%rdx
-               	movq	%rdx, %r10
-               	pushq	%r10
-               	movq	%rsi, %r10
-               	pushq	%r10
-               	movq	%rdi, %r10
-               	pushq	%r10
-               	movq	%r8, %r10
-               	pushq	%r10
-               	movq	%r9, %r10
-               	movq	%rbx, %r11
-               	movq	%r10, %rax
-               	movq	%r11, %rcx
+               	movq	%rax, -0x270(%rbp)
+               	movq	%rcx, -0x268(%rbp)
+               	movq	%rdx, -0x260(%rbp)
+               	movq	%rbx, -0x258(%rbp)
+               	movq	%rdx, -0x250(%rbp)
+               	movq	%rsi, -0x248(%rbp)
+               	movq	%rdi, -0x240(%rbp)
+               	movq	%r8, -0x238(%rbp)
+               	movq	%r9, -0x230(%rbp)
+               	movq	%rbx, -0x228(%rbp)
+               	movq	-0x230(%rbp), %rax
+               	movq	-0x228(%rbp), %rcx
                	cpuid
-               	popq	%r10
-               	movl	%edx, (%r10)
-               	popq	%r10
-               	movl	%ecx, (%r10)
-               	popq	%r10
-               	movl	%ebx, (%r10)
-               	popq	%r10
+               	movq	-0x250(%rbp), %r10
                	movl	%eax, (%r10)
-               	popq	%rdx
-               	popq	%rcx
-               	popq	%rbx
-               	popq	%rax
+               	movq	-0x248(%rbp), %r10
+               	movl	%ebx, (%r10)
+               	movq	-0x240(%rbp), %r10
+               	movl	%ecx, (%r10)
+               	movq	-0x238(%rbp), %r10
+               	movl	%edx, (%r10)
+               	movq	-0x270(%rbp), %rax
+               	movq	-0x268(%rbp), %rcx
+               	movq	-0x260(%rbp), %rdx
+               	movq	-0x258(%rbp), %rbx
                	movl	-0x170(%rbp), %edx
                	shrq	$0x1c, %rdx
                	andq	$0x1, %rdx

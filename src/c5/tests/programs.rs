@@ -426,10 +426,17 @@ fn inline_asm_fixed_reg_output_width() {
 #[test]
 fn cpuid_partial_outputs() {
     // A `cpuid` asm with one output and the remaining implicit outputs
-    // listed as clobbers lowers to the same Intrinsic::Cpuid as the
-    // full four-output form; the VM zeroes every output, including the
-    // synthesized scratch slots of the clobbered registers.
+    // listed as clobbers takes the same generic extended-asm path as the
+    // full four-output form; the VM zeroes every register cpuid defines.
     assert_eq!(run_fixture("cpuid_partial_outputs.c"), 0);
+}
+
+#[test]
+fn cpuid_xgetbv_output_width() {
+    // `cpuid` / `xgetbv` outputs store back at the width of the C
+    // operand: a `long` output takes all eight bytes (the instruction
+    // clears the register's upper half), an `unsigned` output four.
+    assert_eq!(run_fixture("cpuid_xgetbv_output_width.c"), 0);
 }
 
 #[test]

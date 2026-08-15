@@ -1,10 +1,10 @@
 /* x86-64 `cpuid` inline-asm with a partial output set: registers not
    captured as outputs are listed as clobbers, and no subleaf input is
-   given. Lowers to Intrinsic::Cpuid like the full four-output form; the
-   uncaptured registers store to synthesized scratch slots and the
-   missing subleaf defaults to 0. The VM zeroes every output, so both
-   forms agree on 0 there; native x86-64 executes the instruction and
-   both forms read the same leaf. Other native targets gate it out. */
+   given (leaf 0 ignores ecx). Takes the generic extended-asm path like
+   the full four-output form. The VM zeroes every register cpuid
+   defines, so both forms agree on 0 there; native x86-64 executes the
+   instruction and both forms read the same leaf. Other native targets
+   reject the mnemonic. */
 
 static unsigned leaf_max_partial(void) {
     unsigned m;

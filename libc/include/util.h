@@ -4,6 +4,9 @@
 
 #pragma once
 
+// The BSD <util.h> includes <termios.h>, as glibc's <pty.h> does.
+#include <termios.h>
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::openpty,   "_openpty")

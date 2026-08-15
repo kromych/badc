@@ -2769,6 +2769,31 @@ fn zero_length_array() {
 }
 
 #[test]
+fn the_pty_headers_complete_struct_termios() {
+    use crate::{CompileOptions, Compiler, Target};
+    // glibc's <pty.h> and the BSD <util.h> include <termios.h>, so a unit
+    // that reaches the pty helpers through either header alone still sees
+    // the struct definition. QEMU's chardev/char-pty.c is such a unit.
+    let compiles = |header: &str, target: Target| -> bool {
+        let src = alloc::format!(
+            "#include <{header}>\nint f(void) {{ struct termios t; t.c_iflag = 0; \
+             return (int)t.c_iflag; }}\n"
+        );
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src, target, opts).compile().is_ok()
+    };
+    assert!(compiles("pty.h", Target::LinuxX64), "<pty.h> on linux-x64");
+    assert!(
+        compiles("pty.h", Target::LinuxAarch64),
+        "<pty.h> on linux-aarch64"
+    );
+    assert!(
+        compiles("util.h", Target::MacOSAarch64),
+        "<util.h> on macos"
+    );
+}
+
+#[test]
 fn setbuffer_is_a_unix_stdio_binding() {
     use crate::{CompileOptions, Compiler, Target};
     // The BSD `setbuffer` is bound on the Unix targets (glibc / macOS) and

@@ -4000,9 +4000,10 @@ fn aarch64_low12_references_sharing_one_adrp_are_all_patched() {
     // serving several in-page references at -O2. Assembling and linking
     // the sequence through the driver must patch every in-page site.
     //
-    // The expected words are GNU ld 2.46.1's for the same two objects
-    // from GNU as 2.46.1, whose `.o` bytes badc's assembler reproduces;
-    // `gdata` lands at in-page offset 0xd0 in both links.
+    // The instruction forms are GNU ld 2.46.1's for the same two objects
+    // from GNU as 2.46.1, whose `.o` bytes badc's assembler reproduces.
+    // Each field is checked against `gdata`'s own in-page offset, so a
+    // site left unpatched fails whatever the data layout is.
     let dir = tempdir("a64-shared-adrp");
     // The image writer prepends its own entry stub, so the sequence is
     // located by the unrelocated trailer parked behind it.
@@ -4049,16 +4050,31 @@ fn aarch64_low12_references_sharing_one_adrp_are_all_patched() {
     );
     let image = std::fs::read(&exe).expect("read the linked image");
     let words = words_before_marker(&image, MARKER, 5);
+    // `add` carries the in-page offset unscaled, so it names what the two
+    // loads must reach through their own scales. A site the linker leaves
+    // unpatched keeps the assembler's zero field, so the assertion is that
+    // all three agree on one non-zero offset.
+    let off = words[3] >> 10 & 0xfff;
     assert_eq!(
-        words[3] >> 10 & 0xfff,
-        0xd0,
-        "the reference words assume `gdata` at in-page offset 0xd0; \
-         this link placed it at {:#x}",
-        words[3] >> 10 & 0xfff
+        words[3] & !(0xfff << 10),
+        0x9100_0024,
+        "add x4, x1, #:lo12:gdata"
     );
-    assert_eq!(words[1], 0xf940_6822, "ldr x2, [x1, #208]");
-    assert_eq!(words[2], 0x3dc0_3423, "ldr q3, [x1, #208]");
-    assert_eq!(words[3], 0x9103_4024, "add x4, x1, #0xd0");
+    assert!(
+        off != 0 && off % 16 == 0,
+        "`gdata` is `.balign 16` behind other data, so its in-page offset \
+         is a non-zero multiple of 16; got {off:#x}"
+    );
+    assert_eq!(
+        words[1],
+        0xf940_0022 | (off / 8) << 10,
+        "ldr x2, [x1, #{off}]"
+    );
+    assert_eq!(
+        words[2],
+        0x3dc0_0023 | (off / 16) << 10,
+        "ldr q3, [x1, #{off}]"
+    );
     assert_eq!(words[4], 0xd65f_03c0, "ret");
 }
 

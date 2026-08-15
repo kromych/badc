@@ -12,18 +12,27 @@
 //! definition.
 //!
 //! The two rules are inverted, so every cell below is spelled out. Each
-//! case asserts what the emitted object holds for the name: an external
-//! definition, a unit-local definition, or nothing.
+//! case asserts what the emitted object holds for the name against two
+//! tables: badc's answer, and the one gcc 16.1.1 and clang 21 both give
+//! for the same source on linux-x64 `-c`.
 //!
-//! Where badc emits [`Sym::Local`] gcc emits an undefined reference:
-//! badc materialises the inline definition it already holds rather than
-//! leaving a reference that only links when the program supplies an
-//! out-of-line copy. C99 6.7.4p6 permits that outright ("an alternative
-//! to an external definition, which a translator may use to implement
-//! any call to the function in the same translation unit"); it also
-//! keeps a call the inliner declined from becoming an undefined symbol.
-//! The name is never externally visible in either model, which is the
-//! property the link depends on.
+//! The tables differ under one rule. For a referenced inline definition
+//! badc emits a unit-local body where those two leave an undefined
+//! reference; every other cell agrees, including every absent one. C99
+//! 6.7.4p6 permits it ("an alternative to an external definition, which
+//! a translator may use to implement any call to the function in the
+//! same translation unit"), and badc's code generation relies on it:
+//! the inliner runs only under `-O`, and `always_inline` is a warning
+//! rather than an error when the candidate filter declines it, so
+//! dropping the body would leave undefined the calls gcc resolves by
+//! inlining them unconditionally. The name is never externally visible
+//! in either model, which is the property the link depends on.
+//!
+//! TODO: that licence covers calls, not the address. `f` keeps external
+//! linkage, so C99 6.2.2p2 requires `&f` to denote one function across
+//! the program; against a unit-local body it does not. Emitting the
+//! body under a private name would leave the address an external
+//! reference while direct calls stay resolvable.
 
 use crate::c5::compiler::CompileOptions;
 use crate::c5::linker::{NativeSymSection, parse_native_elf};
@@ -36,6 +45,8 @@ enum Sym {
     External,
     /// `STB_LOCAL` definition -- no external definition.
     Local,
+    /// An undefined reference, to be satisfied by another unit.
+    Undef,
     /// No entry at all.
     Absent,
 }
@@ -69,14 +80,18 @@ fn probe(src: &str, model: Model, optimize: bool) -> Sym {
     let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     const STB_LOCAL: u8 = 0;
-    match obj
-        .symbols
-        .iter()
-        .find(|s| s.name == "f" && s.section != NativeSymSection::Undef)
+    let mut entries = obj.symbols.iter().filter(|s| s.name == "f").peekable();
+    if entries.peek().is_none() {
+        return Sym::Absent;
+    }
+    // A definition outranks an undefined entry for the same name.
+    match entries
+        .clone()
+        .find(|s| s.section != NativeSymSection::Undef)
     {
         Some(s) if s.binding == STB_LOCAL => Sym::Local,
         Some(_) => Sym::External,
-        None => Sym::Absent,
+        None => Sym::Undef,
     }
 }
 
@@ -161,11 +176,54 @@ const GNU89: &[(Sym, Sym, Sym)] = &[
     (Sym::Local, Sym::Local, Sym::Absent),
 ];
 
-fn check_matrix(label: &str, attr: &str, model: Model, expect: &[(Sym, Sym, Sym)]) {
+/// gcc 16.1.1 and clang 21 on the same shapes, `-std=gnu99 -O0 -c`.
+/// Both give these, so one table stands for the pair.
+const C99_REFERENCE: &[(Sym, Sym, Sym)] = &[
+    (Sym::Undef, Sym::Undef, Sym::Absent),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::Local, Sym::Local, Sym::Absent),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+];
+
+/// The same pair under `-fgnu89-inline`, and under the per-function
+/// attribute, which agree cell for cell.
+const GNU89_REFERENCE: &[(Sym, Sym, Sym)] = &[
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::Undef, Sym::Undef, Sym::Absent),
+    (Sym::Local, Sym::Local, Sym::Absent),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::External, Sym::External, Sym::External),
+    (Sym::Undef, Sym::Undef, Sym::Absent),
+];
+
+/// Assert badc's cell, and that it stands in the one permitted relation
+/// to the reference: equal, or badc's unit-local body against their
+/// undefined reference. Returns the number of cells in the latter.
+fn check_matrix(
+    label: &str,
+    attr: &str,
+    model: Model,
+    expect: &[(Sym, Sym, Sym)],
+    reference: &[(Sym, Sym, Sym)],
+) -> usize {
     assert_eq!(SHAPES.len(), expect.len(), "{label}: expectation length");
+    assert_eq!(SHAPES.len(), reference.len(), "{label}: reference length");
+    let mut diverged = 0;
     for (shape_idx, (shape_name, shape)) in SHAPES.iter().enumerate() {
         let row = expect[shape_idx];
         let want = [row.0, row.1, row.2];
+        let refrow = reference[shape_idx];
+        let refs = [refrow.0, refrow.1, refrow.2];
         for (use_idx, (use_name, use_src)) in USES.iter().enumerate() {
             let src = shape.replace("{A}", attr) + use_src;
             let got = probe(&src, model, false);
@@ -173,28 +231,56 @@ fn check_matrix(label: &str, attr: &str, model: Model, expect: &[(Sym, Sym, Sym)
                 got, want[use_idx],
                 "{label} / {shape_name} / {use_name}\n{src}"
             );
+            let want_ref = refs[use_idx];
+            if got == want_ref {
+                continue;
+            }
+            assert!(
+                got == Sym::Local && want_ref == Sym::Undef,
+                "{label} / {shape_name} / {use_name}: badc {got:?} against \
+                 gcc/clang {want_ref:?} is not the documented divergence\n{src}"
+            );
+            diverged += 1;
         }
     }
+    diverged
 }
 
 #[test]
 fn c99_inline_model_is_the_default() {
-    check_matrix("C99 default", "", Model::C99, C99_DEFAULT);
+    // Only the inline definition's two referenced cells diverge.
+    let n = check_matrix("C99 default", "", Model::C99, C99_DEFAULT, C99_REFERENCE);
+    assert_eq!(n, 2);
 }
 
 #[test]
 fn gnu_inline_attribute_selects_the_gnu89_model_per_function() {
-    check_matrix("gnu_inline attribute", GNU_ATTR, Model::C99, GNU89);
+    let n = check_matrix(
+        "gnu_inline attribute",
+        GNU_ATTR,
+        Model::C99,
+        GNU89,
+        GNU89_REFERENCE,
+    );
+    assert_eq!(n, 4);
 }
 
 #[test]
 fn fgnu89_inline_selects_the_gnu89_model_for_the_unit() {
-    check_matrix("-fgnu89-inline", "", Model::Gnu89, GNU89);
+    let n = check_matrix("-fgnu89-inline", "", Model::Gnu89, GNU89, GNU89_REFERENCE);
+    assert_eq!(n, 4);
 }
 
 #[test]
 fn gnu_inline_attribute_is_a_no_op_under_fgnu89_inline() {
-    check_matrix("-fgnu89-inline + attribute", GNU_ATTR, Model::Gnu89, GNU89);
+    let n = check_matrix(
+        "-fgnu89-inline + attribute",
+        GNU_ATTR,
+        Model::Gnu89,
+        GNU89,
+        GNU89_REFERENCE,
+    );
+    assert_eq!(n, 4);
 }
 
 #[test]
@@ -239,21 +325,31 @@ fn gnu_inline_attribute_on_any_declaration_selects_the_model() {
 fn an_inline_only_body_is_still_available_to_the_inliner() {
     // The out-of-line copy is dropped once every call is absorbed, and
     // an `always_inline` request is honored even though the definition
-    // provides no external definition.
+    // provides no external definition. Without `-O` the inliner does not
+    // run, so the body stays and the call binds to it -- the cell that
+    // would leave a call undefined under gcc's linkage rule.
     let src = "extern __attribute__((__gnu_inline__)) inline \
                __attribute__((always_inline)) int f(int x) { return x + 1; }\n\
                int g(int x) { return f(x); }\n";
     assert_eq!(probe(src, Model::C99, true), Sym::Absent);
+    assert_eq!(probe(src, Model::C99, false), Sym::Local);
 }
 
 #[test]
 fn used_keeps_an_inline_only_body_without_exporting_it() {
     // `used` keeps the definition in the object; the inline model still
     // decides whether the name is externally visible, so the kept copy
-    // is unit-local.
+    // is unit-local. gcc and clang leave the reference undefined under
+    // both models, `used` or not.
     let src = "extern __attribute__((__gnu_inline__)) inline __attribute__((used)) \
                int f(int x) { return x + 1; }\n";
     assert_eq!(probe(src, Model::C99, false), Sym::Local);
+    let c99_called = "inline __attribute__((used)) int f(int x) { return x + 1; }\n\
+                      int g(int x) { return f(x); }\n";
+    assert_eq!(probe(c99_called, Model::C99, false), Sym::Local);
+    let gnu89_called = "extern inline __attribute__((used)) int f(int x) { return x + 1; }\n\
+                        int g(int x) { return f(x); }\n";
+    assert_eq!(probe(gnu89_called, Model::Gnu89, false), Sym::Local);
 }
 
 #[test]
@@ -305,4 +401,17 @@ fn an_uninlined_inline_only_call_binds_to_the_unit_local_body() {
     let src = "extern __attribute__((__gnu_inline__)) inline int f(int x) { return x + 1; }\n\
                int (*p)(int) = f;\n";
     assert_eq!(probe(src, Model::C99, true), Sym::Local);
+}
+
+#[test]
+fn an_inline_only_definitions_address_is_the_unit_local_body() {
+    // Taking the address pins the body and the pointer denotes it, in
+    // both models and at either optimization level, where gcc's pointer
+    // denotes the program's external definition. See the TODO above.
+    let c99 = "inline int f(int x) { return x + 1; }\nint (*p)(int) = f;\n";
+    let gnu89 = "extern inline int f(int x) { return x + 1; }\nint (*p)(int) = f;\n";
+    for optimize in [false, true] {
+        assert_eq!(probe(c99, Model::C99, optimize), Sym::Local);
+        assert_eq!(probe(gnu89, Model::Gnu89, optimize), Sym::Local);
+    }
 }

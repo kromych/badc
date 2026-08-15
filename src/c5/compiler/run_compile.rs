@@ -2779,8 +2779,17 @@ impl Compiler {
     /// copy rather than to an undefined symbol. C99 6.7.4p6 states that
     /// choice outright ("provides an alternative to an external
     /// definition, which a translator may use to implement any call to
-    /// the function in the same translation unit"); under GNU89 it is
-    /// narrower than gcc, which leaves an external reference instead.
+    /// the function in the same translation unit"); gcc leaves an
+    /// external reference instead, which it can because it inlines an
+    /// `always_inline` body at every optimization level. badc's inliner
+    /// runs only under `-O` and declines a body its candidate filter
+    /// rejects, so the copy is what keeps those calls resolvable.
+    ///
+    /// TODO: the licence covers calls, not the address. The name keeps
+    /// external linkage, so C99 6.2.2p2 requires `&f` to denote one
+    /// function program-wide; against a unit-local body it does not.
+    /// Emitting the body under a private name would leave the address
+    /// an external reference while direct calls stay resolvable.
     fn resolve_inline_linkage(&mut self) {
         use crate::c5::symbol::{Linkage, inline_definition};
         let model = self.inline_model;

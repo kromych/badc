@@ -2032,12 +2032,35 @@ pub(crate) fn lower(
     // Function name -> entry PC, so an inline-asm `bl` / `b` to a bare
     // identifier resolves to the target's fixup like a compiler-emitted call.
     let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
+    let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
     let mut text_align: usize = 16;
     let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
         .collect();
+    // Internal-linkage data object name -> unified data offset, so a
+    // function-body inline-asm symbol operand naming a static resolves to
+    // its storage; an external-linkage name stays symbolic and keeps its
+    // own symbol's binding. First record wins, matching the writer's
+    // local-symbol dedup for a block-scope static sharing a file-scope name.
+    let data_sym_offsets: alloc::collections::BTreeMap<alloc::string::String, i64> = {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        let mut m = alloc::collections::BTreeMap::new();
+        for s in program.symbols.iter().filter(|s| {
+            s.class == Token::Glo as i64
+                && s.defined_here
+                && !s.is_thread_local
+                && !s.is_alias
+                && !s.name.is_empty()
+                && s.linkage == Linkage::Internal
+        }) {
+            m.entry(alloc::string::String::from(s.link_name()))
+                .or_insert(s.val);
+        }
+        m
+    };
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         pc_to_native[ent_pc] = code.len();
@@ -2072,6 +2095,7 @@ pub(crate) fn lower(
                 prologue_native: &mut func_prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
             };
@@ -2090,6 +2114,7 @@ pub(crate) fn lower(
                 &mut macho_tlv_fixups,
                 &mut macho_tlv_descriptors,
                 &name2entpc,
+                &data_sym_offsets,
                 native.no_fp_regs,
                 native.strict_align,
                 native.hardening,
@@ -2305,6 +2330,7 @@ pub(crate) fn lower(
         asm_section_text_refs: Vec::new(),
         // No aarch64 form takes a label address as an absolute immediate.
         asm_text_abs_refs: Vec::new(),
+        asm_sym_fixups,
         // The A64 template parser accepts numeric local labels only, so no
         // main-stream label can carry a name a C reference spells.
         asm_text_labels: Vec::new(),

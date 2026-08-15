@@ -953,6 +953,122 @@ fn inline_asm_global_directive_declares_an_undefined_symbol() {
     }
 }
 
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_function_body_symbol_operands_relocate() {
+    use crate::c5::linker::relocatable::EtSymRef;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21,
+        R_AARCH64_LDST8_ABS_LO12_NC, R_AARCH64_LDST32_ABS_LO12_NC, R_AARCH64_MOVW_UABS_G0_NC,
+        R_AARCH64_MOVW_UABS_G1,
+    };
+    // Each admitted operand shape, one instruction per site: `adrp`, the
+    // sized `:lo12:` load/store immediates, the `add :lo12:` form, a
+    // symbol addend, `movz`/`movk` `:abs_gN:`, and `adr` of a function.
+    // The rows match GNU as 2.46.1 for the same template: a static
+    // resolves section-relative, an external-linkage or undefined name
+    // keeps its own symbol.
+    let src = "static int s_arr[4] = {1, 2, 3, 4};\n\
+               int g_obj;\n\
+               extern int e_obj;\n\
+               __attribute__((used)) static int helper(void) { return 7; }\n\
+               long f(void) {\n\
+                 long a, b, c, d, e, g;\n\
+                 __asm__(\"adrp %x0, s_arr\" : \"=r\"(a));\n\
+                 __asm__(\"ldr %w0, [%x0, :lo12:s_arr + 8]\" : \"=r\"(b));\n\
+                 __asm__(\"add %x0, %x0, :lo12:s_arr\" : \"=r\"(c));\n\
+                 __asm__(\"movz %x0, :abs_g1:e_obj\\n\\tmovk %x0, :abs_g0_nc:e_obj\" : \"=r\"(d));\n\
+                 __asm__(\"ldrb %w0, [%x0, :lo12:g_obj]\" : \"=r\"(e));\n\
+                 __asm__(\"adr %x0, helper\" : \"=r\"(g));\n\
+                 return a + b + c + d + e + g;\n\
+               }\n";
+    let o = asm_obj(src, crate::Target::LinuxAarch64);
+    let text_idx = o
+        .sections
+        .iter()
+        .position(|s| s.name == ".text")
+        .expect(".text");
+    let data_idx = o
+        .sections
+        .iter()
+        .position(|s| s.name == ".data")
+        .expect(".data");
+    let s_arr = o
+        .symbols
+        .iter()
+        .find(|s| s.name == "s_arr")
+        .expect("local `s_arr` symbol")
+        .value as i64;
+    // (rtype, target name or owning section, addend) per row, in site order.
+    let rows: alloc::vec::Vec<(u32, alloc::string::String, i64)> = o.sections[text_idx]
+        .relocs
+        .iter()
+        .map(|r| {
+            let sym = &o.symbols[r.sym as usize];
+            let who = if sym.name.is_empty() {
+                match sym.sec {
+                    EtSymRef::Section(i) => o.sections[i].name.clone(),
+                    _ => alloc::string::String::new(),
+                }
+            } else {
+                sym.name.clone()
+            };
+            (r.rtype, who, r.addend)
+        })
+        .collect();
+    let data = o.sections[data_idx].name.clone();
+    let expect = [
+        (R_AARCH64_ADR_PREL_PG_HI21, data.as_str(), s_arr),
+        (R_AARCH64_LDST32_ABS_LO12_NC, data.as_str(), s_arr + 8),
+        (R_AARCH64_ADD_ABS_LO12_NC, data.as_str(), s_arr),
+        (R_AARCH64_MOVW_UABS_G1, "e_obj", 0),
+        (R_AARCH64_MOVW_UABS_G0_NC, "e_obj", 0),
+        (R_AARCH64_LDST8_ABS_LO12_NC, "g_obj", 0),
+        (R_AARCH64_ADR_PREL_LO21, "helper", 0),
+    ];
+    assert_eq!(rows.len(), expect.len(), "rows: {rows:?}");
+    for (row, want) in rows.iter().zip(expect.iter()) {
+        assert_eq!((row.0, row.1.as_str(), row.2), *want, "rows: {rows:?}");
+    }
+    // The undefined extern keeps a symbol entry; the defined global its own.
+    assert!(
+        o.symbols
+            .iter()
+            .any(|s| s.name == "e_obj" && matches!(s.sec, EtSymRef::Undef))
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_symbol_operand_layout_expression_is_refused() {
+    use crate::{NativeOptions, OutputKind, emit_native_with_options};
+    // A label-difference addend has no value before a section layout;
+    // the function-body path refuses it rather than encode a wrong one.
+    let src = "static int s;\n\
+               long f(void) { long v;\n\
+                 __asm__(\"1:\\n\\t2:\\n\\tadrp %x0, s + (2b - 1b)\" : \"=r\"(v));\n\
+                 return v; }\n";
+    let copts = crate::CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program =
+        crate::Compiler::with_options(src.to_string(), crate::Target::LinuxAarch64, copts)
+            .compile()
+            .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let err = emit_native_with_options(&program, crate::Target::LinuxAarch64, opts)
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(err.contains("needs a section layout"), "{err}");
+}
+
 // Emits a native image, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]

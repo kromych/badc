@@ -768,6 +768,7 @@ pub(crate) fn emit_function(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
     no_fp_regs: bool,
     strict_align: bool,
     hardening: super::Hardening,
@@ -787,6 +788,7 @@ pub(crate) fn emit_function(
     let prologue_native = &mut *cx.prologue_native;
     let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
+    let asm_sym_fixups = &mut *cx.asm_sym_fixups;
     let text_align = &mut *cx.text_align;
     let label_relocs = &mut *cx.label_relocs;
     let abi = {
@@ -819,6 +821,7 @@ pub(crate) fn emit_function(
     let data_fixups_snapshot = data_fixups.len();
     let user_extern_data_refs_snapshot = user_extern_data_refs.len();
     let asm_extern_call_sites_snapshot = asm_extern_call_sites.len();
+    let asm_sym_fixups_snapshot = asm_sym_fixups.len();
     // The section sink merges by name, so a rollback restores its full
     // per-section state rather than a length (see [`AsmSectionSink::restore`]).
     let asm_sections_snapshot = asm_sections.snapshot();
@@ -1079,6 +1082,7 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                        asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                         asm_sections.restore(&asm_sections_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1114,8 +1118,10 @@ pub(crate) fn emit_function(
                     fixups,
                     name2entpc,
                     extern_data_names,
+                    data_sym_offsets,
                     asm_sections,
                     asm_extern_call_sites,
+                    asm_sym_fixups,
                     &mut deferred_regions,
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
@@ -1129,6 +1135,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                     asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1154,6 +1161,7 @@ pub(crate) fn emit_function(
                     prologue_native: &mut *prologue_native,
                     asm_sections: &mut *asm_sections,
                     asm_extern_call_sites: &mut *asm_extern_call_sites,
+                    asm_sym_fixups: &mut *asm_sym_fixups,
                     text_align: &mut *text_align,
                     label_relocs: &mut *label_relocs,
                 };
@@ -1170,6 +1178,7 @@ pub(crate) fn emit_function(
                     extern_data_names,
                     param_plan: &emit_param_plan,
                     name2entpc,
+                    data_sym_offsets,
                 };
                 emit_inst(
                     &mut cx,
@@ -1197,6 +1206,7 @@ pub(crate) fn emit_function(
                 data_fixups.truncate(data_fixups_snapshot);
                 user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                 asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                 asm_sections.restore(&asm_sections_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1243,6 +1253,7 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+            asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
             asm_sections.restore(&asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1316,6 +1327,7 @@ pub(crate) fn emit_function(
                             data_fixups.truncate(data_fixups_snapshot);
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                            asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                             asm_sections.restore(&asm_sections_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1389,6 +1401,7 @@ pub(crate) fn emit_function(
                             data_fixups.truncate(data_fixups_snapshot);
                             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                            asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                             asm_sections.restore(&asm_sections_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1443,6 +1456,7 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                        asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                         asm_sections.restore(&asm_sections_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1475,6 +1489,7 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                        asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                         asm_sections.restore(&asm_sections_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1524,6 +1539,7 @@ pub(crate) fn emit_function(
                         data_fixups.truncate(data_fixups_snapshot);
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                        asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                         asm_sections.restore(&asm_sections_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1554,6 +1570,7 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+            asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
             asm_sections.restore(&asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1647,6 +1664,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                     asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1672,6 +1690,7 @@ pub(crate) fn emit_function(
                 data_fixups.truncate(data_fixups_snapshot);
                 user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                 asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                 asm_sections.restore(&asm_sections_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1707,6 +1726,7 @@ pub(crate) fn emit_function(
             data_fixups.truncate(data_fixups_snapshot);
             user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+            asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
             asm_sections.restore(&asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1725,6 +1745,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                     asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1744,6 +1765,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                     asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1763,6 +1785,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                     asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -1782,6 +1805,7 @@ pub(crate) fn emit_function(
                     data_fixups.truncate(data_fixups_snapshot);
                     user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+                    asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
                     asm_sections.restore(&asm_sections_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
@@ -2589,6 +2613,9 @@ struct FnCtx<'a> {
     /// Function name -> entry PC, for resolving an inline-asm `bl` / `b` to a
     /// named symbol.
     name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
+    /// Internal-linkage data object name -> unified data offset, for a
+    /// function-body inline-asm symbol operand naming a static.
+    data_sym_offsets: &'a alloc::collections::BTreeMap<alloc::string::String, i64>,
 }
 
 /// Block-target branch context for an `asm goto` statement: the
@@ -3024,8 +3051,10 @@ fn emit_inline_asm_aarch64(
     fixups: &mut Vec<super::encode::Fixup>,
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
     asm_sections: &mut super::ssa::emit_common::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
+    asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
     deferred_regions: &mut Vec<DeferredAsmRegion>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
@@ -3462,8 +3491,11 @@ fn emit_inline_asm_aarch64(
                     "aarch64 inline asm: `.` reference outside a branch",
                 ));
             }
-            // TODO symbol relocations in function-body asm; the file-scope
-            // section encoder handles them.
+            // The main-stream encoder routes a trailing symbol operand
+            // through `encode_a64_sym_insn` before operand conversion; one
+            // reaching here sits in an unsupported position (a deferred
+            // ALTERNATIVE replacement, a non-final operand).
+            // TODO symbol relocations in deferred replacement regions.
             AsmOpndA64::Sym { .. } | AsmOpndA64::MemSymLo12 { .. } => {
                 return Err(String::from(
                     "aarch64 inline asm: symbol operand needs a relocation",
@@ -3677,6 +3709,47 @@ fn emit_inline_asm_aarch64(
                     return false;
                 }
             }
+            continue;
+        }
+        // A symbol operand (`adrp %x0, sym`, `add ..., :lo12:sym`, a `:lo12:`
+        // load/store, `movz`/`movk` `:abs_gN:sym`, a branch / `adr` / literal
+        // `ldr` naming a symbol) takes the section path's shape encoder; the
+        // site records a per-instruction relocation against the name, an
+        // internal-linkage data object resolved to its offset.
+        if matches!(
+            insn.operands.last(),
+            Some(AsmOpndA64::Sym { .. } | AsmOpndA64::MemSymLo12 { .. })
+        ) {
+            let (word, kind, expr) = match encode_a64_sym_insn(insn, &conv) {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    bail_msg("aarch64 inline asm: unsupported symbol operand");
+                    return false;
+                }
+                Err(m) => {
+                    bail_msg(&alloc::format!("aarch64 {m}"));
+                    return false;
+                }
+            };
+            // A function body has no section layout, so only `sym + constant`
+            // resolves here; a label-difference expression does not.
+            let Some((name, addend)) = super::ssa::emit_common::asm_expr_sym_addend(&expr) else {
+                bail_msg(&alloc::format!(
+                    "aarch64 inline asm: operand expression `{expr}` needs a section layout"
+                ));
+                return false;
+            };
+            let target = match data_sym_offsets.get(name.as_str()) {
+                Some(&off) => super::ssa::emit_common::AsmSectionTarget::Data(off as u64),
+                None => super::ssa::emit_common::AsmSectionTarget::Symbol(name),
+            };
+            asm_sym_fixups.push(super::AsmSymFixup {
+                instr_offset: code.len(),
+                kind,
+                target,
+                addend,
+            });
+            emit(code, word);
             continue;
         }
         let mut ops: Vec<Opnd> = Vec::new();
@@ -4009,6 +4082,7 @@ fn emit_inst(
         extern_data_names,
         param_plan,
         name2entpc,
+        data_sym_offsets,
     } = *fcx;
     // The bundled emit output now arrives in `cx`; recreate the per-field
     // names as disjoint reborrows so the per-`Inst` lowering below is unchanged.
@@ -4020,6 +4094,7 @@ fn emit_inst(
     let elf_tpoff_fixups = &mut *cx.elf_tpoff_fixups;
     let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
+    let asm_sym_fixups = &mut *cx.asm_sym_fixups;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca. Non-zero:
@@ -4609,8 +4684,10 @@ fn emit_inst(
             fixups,
             name2entpc,
             extern_data_names,
+            data_sym_offsets,
             asm_sections,
             asm_extern_call_sites,
+            asm_sym_fixups,
             deferred_regions,
             None,
         ),
@@ -9629,11 +9706,32 @@ fn a64_movw_placeholder(
     Ok(if is64 { word } else { word & !(1 << 31) })
 }
 
-/// Encode a file-scope section instruction that references a symbol to its
-/// placeholder word plus the relocation kind and symbol name: `b` / `bl` /
-/// `b.cond` / `cbz` / `cbnz` / `tbz` / `tbnz` / `adr` to a symbol, `adrp`,
-/// `add ..., :lo12:`, a load/store with a `:lo12:` immediate, and the `ldr`
-/// literal form. `Ok(None)` when the instruction references no symbol.
+/// The register shape of `o` after operand-reference resolution, for the
+/// helpers that select an encoding from the register class (`%0` resolves
+/// to the operand's assigned register in a function body; file-scope code
+/// has none and the operand is already concrete).
+fn concrete_reg_shape(
+    o: &super::asm::AsmOpndA64,
+    conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
+) -> super::asm::AsmOpndA64 {
+    use super::asm::AsmOpndA64 as A;
+    use super::table::Opnd;
+    if matches!(o, A::Ref { .. } | A::RefQ(_)) {
+        match conv(o) {
+            Ok(Opnd::Reg { num, is64, sp }) => return A::Reg { num, is64, sp },
+            Ok(Opnd::VReg { num, is_d }) => return A::VReg { num, is_d },
+            Ok(Opnd::QReg(n)) => return A::QReg(n),
+            _ => {}
+        }
+    }
+    o.clone()
+}
+
+/// Encode a section or function-body instruction that references a symbol to
+/// its placeholder word plus the relocation kind and symbol expression: `b` /
+/// `bl` / `b.cond` / `cbz` / `cbnz` / `tbz` / `tbnz` / `adr` to a symbol,
+/// `adrp`, `add ..., :lo12:`, a load/store with a `:lo12:` immediate, and the
+/// `ldr` literal form. `Ok(None)` when the instruction references no symbol.
 fn encode_a64_sym_insn(
     insn: &super::asm::AsmInsnA64,
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
@@ -9666,16 +9764,17 @@ fn encode_a64_sym_insn(
     // A load/store whose immediate is `:lo12:sym`: encode with a zero
     // offset; the access size names the LDST reloc width.
     if let Some(AsmOpndA64::MemSymLo12 { base, expr }) = insn.operands.last() {
-        let size = a64_access_size(&insn.mnemonic, insn.operands.first())?;
+        let rt = insn.operands.first().map(|o| concrete_reg_shape(o, conv));
+        let size = a64_access_size(&insn.mnemonic, rt.as_ref())?;
         let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
         for o in &insn.operands[..insn.operands.len() - 1] {
             ops.push(conv(o)?);
         }
-        ops.push(Opnd::Mem {
+        ops.push(conv(&AsmOpndA64::Mem {
             base: *base,
             off: 0,
             pre: false,
-        });
+        })?);
         let word = super::table::encode(&insn.mnemonic, &ops)?;
         return Ok(Some((word, K::A64LdstLo12(size), expr.clone())));
     }
@@ -9783,12 +9882,12 @@ fn encode_a64_sym_insn(
         }
         // `ldr Rt, sym` / `ldrsw Xt, sym`: a PC-relative literal load.
         "ldr" | "ldrsw" if insn.operands.len() == 2 => {
-            let (word, _) =
-                a64_ldr_literal_word(&insn.mnemonic, &insn.operands[0]).ok_or_else(|| {
-                    alloc::string::String::from(
-                        "inline asm: `ldr` literal needs a register destination",
-                    )
-                })?;
+            let rt = concrete_reg_shape(&insn.operands[0], conv);
+            let (word, _) = a64_ldr_literal_word(&insn.mnemonic, &rt).ok_or_else(|| {
+                alloc::string::String::from(
+                    "inline asm: `ldr` literal needs a register destination",
+                )
+            })?;
             Ok(Some((word, K::A64LdrLit19, name.clone())))
         }
         _ => {
@@ -11131,6 +11230,7 @@ mod tests {
         let mut elf_tpoff = Vec::new();
         let mut asm_sections = AsmSectionSink::default();
         let mut asm_extern_call_sites = Vec::new();
+        let mut asm_sym_fixups = Vec::new();
         let mut text_align: usize = 16;
         let mut label_relocs = Vec::new();
         let ok = {
@@ -11147,6 +11247,7 @@ mod tests {
                 prologue_native: &mut prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
             };
@@ -11162,6 +11263,7 @@ mod tests {
                 &variadic_targets,
                 &mut tlv_fx,
                 &mut tlv_desc,
+                &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
                 false,
                 false,
@@ -11310,6 +11412,7 @@ mod tests {
         let mut elf_tpoff = Vec::new();
         let mut asm_sections = AsmSectionSink::default();
         let mut asm_extern_call_sites = Vec::new();
+        let mut asm_sym_fixups = Vec::new();
         let mut text_align: usize = 16;
         let mut label_relocs = Vec::new();
         let ok = {
@@ -11326,6 +11429,7 @@ mod tests {
                 prologue_native: &mut prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
             };
@@ -11341,6 +11445,7 @@ mod tests {
                 &variadic_targets,
                 &mut tlv_fx,
                 &mut tlv_desc,
+                &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
                 false,
                 false,
@@ -11388,6 +11493,7 @@ mod tests {
         let mut elf_tpoff = Vec::new();
         let mut asm_sections = AsmSectionSink::default();
         let mut asm_extern_call_sites = Vec::new();
+        let mut asm_sym_fixups = Vec::new();
         let mut text_align: usize = 16;
         let mut label_relocs = Vec::new();
         let ok = {
@@ -11404,6 +11510,7 @@ mod tests {
                 prologue_native: &mut prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
             };
@@ -11419,6 +11526,7 @@ mod tests {
                 &variadic_targets,
                 &mut tlv_fx,
                 &mut tlv_desc,
+                &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
                 false,
                 false,

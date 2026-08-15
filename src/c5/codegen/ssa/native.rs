@@ -74,6 +74,7 @@ pub(crate) fn compile_function_to_bytes(
             let mut elf_tpoff_fixups: Vec<super::ElfTpoffFixup> = Vec::new();
             let mut asm_sections = super::emit_common::AsmSectionSink::default();
             let mut asm_extern_call_sites = Vec::new();
+            let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
             let mut label_relocs = Vec::new();
             let mut text_align: usize = 16;
             let ok = {
@@ -90,6 +91,7 @@ pub(crate) fn compile_function_to_bytes(
                     prologue_native: &mut prologue_native,
                     asm_sections: &mut asm_sections,
                     asm_extern_call_sites: &mut asm_extern_call_sites,
+                    asm_sym_fixups: &mut asm_sym_fixups,
                     text_align: &mut text_align,
                     label_relocs: &mut label_relocs,
                 };
@@ -106,6 +108,7 @@ pub(crate) fn compile_function_to_bytes(
                     &mut macho_tlv_fixups,
                     &mut macho_tlv_descriptors,
                     &alloc::collections::BTreeMap::new(),
+                    &alloc::collections::BTreeMap::new(),
                     false,
                     false,
                     super::super::Hardening::NONE,
@@ -120,7 +123,8 @@ pub(crate) fn compile_function_to_bytes(
                 + pending_func_fixups.len()
                 + tls_index_fixups.len()
                 + macho_tlv_fixups.len()
-                + macho_tlv_descriptors.len();
+                + macho_tlv_descriptors.len()
+                + asm_sym_fixups.len();
             if outer != 0 {
                 return Err(format!(
                     "ssa_native: function produces {outer} cross-function fixup(s); only self-contained functions are supported",
@@ -152,6 +156,7 @@ pub(crate) fn compile_function_to_bytes(
             let mut asm_text_abs_refs: Vec<super::AsmTextAbsRef> = Vec::new();
             let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
             let mut asm_extern_call_sites = Vec::new();
+            let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
             let mut label_relocs = Vec::new();
             let mut text_align: usize = 16;
             // The JIT single-function path builds no PE; the unwind
@@ -172,6 +177,7 @@ pub(crate) fn compile_function_to_bytes(
                     prologue_native: &mut prologue_native,
                     asm_sections: &mut asm_sections,
                     asm_extern_call_sites: &mut asm_extern_call_sites,
+                    asm_sym_fixups: &mut asm_sym_fixups,
                     text_align: &mut text_align,
                     label_relocs: &mut label_relocs,
                 };

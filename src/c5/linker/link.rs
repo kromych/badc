@@ -38,12 +38,12 @@ use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 use crate::c5::object::elf_reloc_types::AbsCheck;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
-    R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC,
-    R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12,
-    R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF64,
-    R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
-    R_X86_64_TPOFF32, aarch64_ldst_lo12_scale, aarch64_movw_field, aarch64_pcrel_data_field,
-    aarch64_pcrel_imm_field, x86_64_abs_field, x86_64_pcrel_data_field,
+    R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26,
+    R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64, R_AARCH64_TLS_DTPREL64,
+    R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_X86_64_32, R_X86_64_64,
+    R_X86_64_DTPOFF64, R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
+    R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, aarch64_ldst_lo12_scale, aarch64_movw_field,
+    aarch64_pcrel_data_field, aarch64_pcrel_imm_field, x86_64_abs_field, x86_64_pcrel_data_field,
 };
 
 /// A relocation whose site reads a GOT slot: the value it wants is the
@@ -2605,6 +2605,21 @@ fn apply_reloc(
         (NativeMachine::Aarch64, R_AARCH64_ADD_ABS_LO12_NC) => {
             patch_aarch64_add_lo12(text, patch_offset, target)
         }
+        // `adr`: a byte-granular 21-bit displacement split across
+        // immlo (30:29) and immhi (23:5), so it cannot ride the
+        // contiguous-field table above.
+        (NativeMachine::Aarch64, R_AARCH64_ADR_PREL_LO21) => {
+            let disp = target - patch_offset as i64;
+            if !(-(1i64 << 20)..(1i64 << 20)).contains(&disp) {
+                return Err(site.truncated(disp));
+            }
+            let d = disp as u32;
+            let mut instr =
+                u32::from_le_bytes(text[patch_offset..patch_offset + 4].try_into().unwrap());
+            instr = (instr & 0x9f00_001f) | ((d & 3) << 29) | (((d >> 2) & 0x7_ffff) << 5);
+            text[patch_offset..patch_offset + 4].copy_from_slice(&instr.to_le_bytes());
+            Ok(())
+        }
         // An object carrying a relocation form this linker has no
         // patcher for is an unsupported input, not a broken invariant.
         _ => Err(site.unsupported()),
@@ -2893,6 +2908,36 @@ mod tests {
                 reloc_desc(NativeMachine::Aarch64, rtype),
             );
         }
+    }
+
+    /// `R_AARCH64_ADR_PREL_LO21` splits its displacement across immlo
+    /// and immhi; the patcher must agree with the shared `adr` encoder
+    /// for a byte-granular target, and reject one past +-1 MiB.
+    #[test]
+    fn aarch64_adr_patcher_matches_the_shared_encoder() {
+        use crate::c5::codegen::aarch64::encode::{Reg, enc_adr};
+        for disp in [0x10i32, -0x24, (1 << 20) - 1, -(1 << 20)] {
+            let mut text = alloc::vec![0u8; 4];
+            text[..4].copy_from_slice(&enc_adr(Reg(7), 0).to_le_bytes());
+            apply_reloc(
+                &mut text,
+                0,
+                disp as i64,
+                &site(NativeMachine::Aarch64, R_AARCH64_ADR_PREL_LO21, 0),
+            )
+            .expect("an in-range displacement patches");
+            let got = u32::from_le_bytes(text[..4].try_into().unwrap());
+            assert_eq!(got, enc_adr(Reg(7), disp), "disp {disp:#x}");
+        }
+        let mut text = alloc::vec![0u8; 4];
+        text[..4].copy_from_slice(&enc_adr(Reg(7), 0).to_le_bytes());
+        apply_reloc(
+            &mut text,
+            0,
+            1 << 20,
+            &site(NativeMachine::Aarch64, R_AARCH64_ADR_PREL_LO21, 0),
+        )
+        .expect_err("a displacement past +-1 MiB is a link error");
     }
 
     /// GNU ld reports `relocation truncated to fit` at 0x40000 for

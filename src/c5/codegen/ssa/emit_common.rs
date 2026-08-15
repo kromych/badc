@@ -32,6 +32,8 @@ pub(crate) struct EmitCtx<'a> {
     /// this unit does not define. The callee's address is a link-time
     /// decision, so each site becomes a call relocation against the name.
     pub(crate) asm_extern_call_sites: &'a mut alloc::vec::Vec<super::UserExternCallSite>,
+    /// Function-body inline-asm symbol-operand sites (aarch64 only).
+    pub(crate) asm_sym_fixups: &'a mut alloc::vec::Vec<super::AsmSymFixup>,
     /// Alignment the text stream requires in the image, raised by an
     /// inline-asm alignment directive above the section default.
     pub(crate) text_align: &'a mut usize,

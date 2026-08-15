@@ -1765,13 +1765,20 @@ pub(super) fn write_relocatable(
             .map(|s| (s.link_name(), s.val))
             .collect()
     };
-    // Inline-asm section reloc names with neither a definition in this
-    // unit nor an existing UNDEF entry get their own undefined symbols.
+    // Inline-asm section reloc and function-body symbol-operand names with
+    // neither a definition in this unit nor an existing UNDEF entry get
+    // their own undefined symbols.
     let mut asm_extern_names: Vec<&str> = Vec::new();
-    for s in &build.asm_sections {
-        for r in &s.relocs {
-            use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
-            let AsmSectionTarget::Symbol(name) = &r.target else {
+    {
+        use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
+        let section_syms = build
+            .asm_sections
+            .iter()
+            .flat_map(|s| &s.relocs)
+            .map(|r| &r.target);
+        let operand_syms = build.asm_sym_fixups.iter().map(|r| &r.target);
+        for target in section_syms.chain(operand_syms) {
+            let AsmSectionTarget::Symbol(name) = target else {
                 continue;
             };
             let n = name.as_str();
@@ -2901,6 +2908,79 @@ pub(super) fn write_relocatable(
         );
     }
 
+    // Undefined-symbol index by name. The three name lists are
+    // disjoint by construction (each is filtered against the ones
+    // before it), so one map answers all three.
+    let mut extern_symidx_by_name: alloc::collections::BTreeMap<&str, usize> =
+        alloc::collections::BTreeMap::new();
+    for (list, idx) in [
+        (&user_extern_names, &user_extern_sym_idx),
+        (&user_extern_data_names, &user_extern_data_sym_idx),
+        (&asm_extern_names, &asm_extern_sym_idx),
+    ] {
+        for (k, n) in list.iter().enumerate() {
+            extern_symidx_by_name.insert(n, idx[k]);
+        }
+    }
+
+    // Function-body inline-asm symbol-operand sites: one row per record at
+    // the instruction word, typed by the field kind. The target resolves
+    // like an inline-asm section reloc's: a resolved data offset, an asm
+    // label, a defined function or data object, or an undefined symbol.
+    for r in &build.asm_sym_fixups {
+        use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
+        let (sym_idx, addend) = match &r.target {
+            AsmSectionTarget::Data(off) => {
+                home_sym(plan.map_ref(off.wrapping_add_signed(r.addend), *off))
+            }
+            AsmSectionTarget::Symbol(name) => {
+                let (sym, base) = if let Some(pair) = asm_label_ref(name.as_str()) {
+                    pair
+                } else if let Some(&idx) = func_symidx_by_name.get(name.as_str()) {
+                    (idx as u64, 0)
+                } else if let Some(&idx) = defined_data_symidx.get(name.as_str()) {
+                    (idx, 0)
+                } else if let Some(&val) = defined_data_by_name.get(name.as_str()) {
+                    data_section_ref(val)
+                } else if let Some(&idx) = extern_symidx_by_name.get(name.as_str()) {
+                    (idx as u64, 0)
+                } else {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &alloc::format!(
+                            "elf_reloc: asm operand relocation names `{name}`, which \
+                             reached no defined or undefined symbol"
+                        ),
+                    )));
+                };
+                (sym, base + r.addend)
+            }
+            other => {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &alloc::format!(
+                        "elf_reloc: asm operand relocation target {other:?} is not a \
+                         data offset or symbol"
+                    ),
+                )));
+            }
+        };
+        let Some(rtype) = a64_insn_reloc_type(r.kind) else {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &alloc::format!(
+                    "elf_reloc: asm operand relocation kind {:?} names no field type",
+                    r.kind
+                ),
+            )));
+        };
+        write_struct(
+            &mut rela_bytes,
+            &Elf64Rela {
+                r_offset: r.instr_offset as u64,
+                r_info: (sym_idx << 32) | rtype as u64,
+                r_addend: addend,
+            },
+        );
+    }
+
     // Route `.rela.text` rows applying within a carved range into the
     // owning named section, and retarget rows whose text-section
     // addend the carve moved.
@@ -2913,20 +2993,6 @@ pub(super) fn write_relocatable(
     // undefined symbol.
     {
         use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
-        // Undefined-symbol index by name. The three name lists are
-        // disjoint by construction (each is filtered against the ones
-        // before it), so one map answers all three.
-        let mut extern_symidx_by_name: alloc::collections::BTreeMap<&str, usize> =
-            alloc::collections::BTreeMap::new();
-        for (list, idx) in [
-            (&user_extern_names, &user_extern_sym_idx),
-            (&user_extern_data_names, &user_extern_data_sym_idx),
-            (&asm_extern_names, &asm_extern_sym_idx),
-        ] {
-            for (k, n) in list.iter().enumerate() {
-                extern_symidx_by_name.insert(n, idx[k]);
-            }
-        }
         for (&(e, base), s) in asm_placements.iter().zip(build.asm_sections.iter()) {
             for r in &s.relocs {
                 let (sym_idx, addend) = match &r.target {
@@ -3056,38 +3122,8 @@ pub(super) fn write_relocatable(
                         (RelocAbi::Aarch64, true, 8) => R_AARCH64_PREL64,
                         (RelocAbi::Aarch64, true, _) => R_AARCH64_PREL32,
                     },
-                    RK::A64Branch26 { link: true } => R_AARCH64_CALL26,
-                    RK::A64Branch26 { link: false } => R_AARCH64_JUMP26,
-                    RK::A64Condbr19 => R_AARCH64_CONDBR19,
-                    RK::A64Tstbr14 => R_AARCH64_TSTBR14,
-                    RK::A64Adr21 => R_AARCH64_ADR_PREL_LO21,
-                    RK::A64AdrpPage21 => R_AARCH64_ADR_PREL_PG_HI21,
-                    RK::A64AddLo12 => R_AARCH64_ADD_ABS_LO12_NC,
-                    RK::A64LdrLit19 => R_AARCH64_LD_PREL_LO19,
-                    RK::Explicit(t) => t,
-                    RK::A64LdstLo12(sz) => match sz {
-                        1 => R_AARCH64_LDST8_ABS_LO12_NC,
-                        2 => R_AARCH64_LDST16_ABS_LO12_NC,
-                        4 => R_AARCH64_LDST32_ABS_LO12_NC,
-                        8 => R_AARCH64_LDST64_ABS_LO12_NC,
-                        _ => R_AARCH64_LDST128_ABS_LO12_NC,
-                    },
-                    RK::A64MovwAbs {
-                        group,
-                        signed,
-                        check,
-                    } => match (group, signed, check.is_some()) {
-                        (0, false, true) => R_AARCH64_MOVW_UABS_G0,
-                        (1, false, true) => R_AARCH64_MOVW_UABS_G1,
-                        (2, false, true) => R_AARCH64_MOVW_UABS_G2,
-                        (0, false, false) => R_AARCH64_MOVW_UABS_G0_NC,
-                        (1, false, false) => R_AARCH64_MOVW_UABS_G1_NC,
-                        (2, false, false) => R_AARCH64_MOVW_UABS_G2_NC,
-                        (0, true, _) => R_AARCH64_MOVW_SABS_G0,
-                        (1, true, _) => R_AARCH64_MOVW_SABS_G1,
-                        (2, true, _) => R_AARCH64_MOVW_SABS_G2,
-                        _ => R_AARCH64_MOVW_UABS_G3,
-                    },
+                    kind => a64_insn_reloc_type(kind)
+                        .expect("every instruction-field kind maps to a type"),
                 };
                 carve.table.entries[e]
                     .relas
@@ -4374,6 +4410,48 @@ fn dwarf_reloc_to_elf_rela(
 /// first instruction of the pair (or the lea's opcode byte on
 /// x86_64). The codegen's existing `DataFixup` / `FuncFixup`
 /// already record this position.
+/// ELF relocation type of an AArch64 instruction-field kind. `None` for the
+/// data-field kinds (`Data` / `JumpRel`), whose type depends on the field's
+/// width and flags.
+fn a64_insn_reloc_type(kind: crate::c5::codegen::ssa::emit_common::AsmRelocKind) -> Option<u32> {
+    use crate::c5::codegen::ssa::emit_common::AsmRelocKind as RK;
+    Some(match kind {
+        RK::Data | RK::JumpRel => return None,
+        RK::A64Branch26 { link: true } => R_AARCH64_CALL26,
+        RK::A64Branch26 { link: false } => R_AARCH64_JUMP26,
+        RK::A64Condbr19 => R_AARCH64_CONDBR19,
+        RK::A64Tstbr14 => R_AARCH64_TSTBR14,
+        RK::A64Adr21 => R_AARCH64_ADR_PREL_LO21,
+        RK::A64AdrpPage21 => R_AARCH64_ADR_PREL_PG_HI21,
+        RK::A64AddLo12 => R_AARCH64_ADD_ABS_LO12_NC,
+        RK::A64LdrLit19 => R_AARCH64_LD_PREL_LO19,
+        RK::Explicit(t) => t,
+        RK::A64LdstLo12(sz) => match sz {
+            1 => R_AARCH64_LDST8_ABS_LO12_NC,
+            2 => R_AARCH64_LDST16_ABS_LO12_NC,
+            4 => R_AARCH64_LDST32_ABS_LO12_NC,
+            8 => R_AARCH64_LDST64_ABS_LO12_NC,
+            _ => R_AARCH64_LDST128_ABS_LO12_NC,
+        },
+        RK::A64MovwAbs {
+            group,
+            signed,
+            check,
+        } => match (group, signed, check.is_some()) {
+            (0, false, true) => R_AARCH64_MOVW_UABS_G0,
+            (1, false, true) => R_AARCH64_MOVW_UABS_G1,
+            (2, false, true) => R_AARCH64_MOVW_UABS_G2,
+            (0, false, false) => R_AARCH64_MOVW_UABS_G0_NC,
+            (1, false, false) => R_AARCH64_MOVW_UABS_G1_NC,
+            (2, false, false) => R_AARCH64_MOVW_UABS_G2_NC,
+            (0, true, _) => R_AARCH64_MOVW_SABS_G0,
+            (1, true, _) => R_AARCH64_MOVW_SABS_G1,
+            (2, true, _) => R_AARCH64_MOVW_SABS_G2,
+            _ => R_AARCH64_MOVW_UABS_G3,
+        },
+    })
+}
+
 fn emit_addr_fixup_relocs(
     machine: Machine,
     out: &mut Vec<u8>,
@@ -4822,6 +4900,7 @@ mod tests {
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),
+            asm_sym_fixups: Vec::new(),
             asm_text_labels: Vec::new(),
             asm_sym_decls: Vec::new(),
             copy_relocs: Default::default(),

@@ -437,6 +437,158 @@ fn fold_asm_sections(
     Ok(label_at)
 }
 
+/// Resolve function-body inline-asm symbol-operand sites (aarch64) on a
+/// single-TU final image. A page / low-12 field against a resolved target
+/// becomes the writers' per-site address fixup; a PC-relative field whose
+/// target landed in the text stream is patched in place. A `movw` group
+/// needs the image base, and a PC-relative field cannot reach the data
+/// segment before layout; both are refused toward the `-c` + link path,
+/// as is a name the image does not define.
+#[cfg(feature = "native-emit")]
+fn resolve_single_image_asm_sym_fixups(
+    program: &Program,
+    build: &mut Build,
+    asm_labels: &alloc::collections::BTreeMap<String, AsmLabelPlacement>,
+) -> Result<(), C5Error> {
+    use crate::c5::codegen::AddrPart;
+    use crate::c5::codegen::ssa::emit_common::{
+        AsmRelocKind, AsmSectionTarget, patch_asm_insn_field,
+    };
+    if build.output_kind == OutputKind::Relocatable || build.asm_sym_fixups.is_empty() {
+        return Ok(());
+    }
+    use crate::c5::token::Token;
+    let weak_names: alloc::collections::BTreeSet<&str> = program
+        .symbols
+        .iter()
+        .filter(|s| s.is_weak && (s.is_fun_entity() || s.class == Token::Glo as i64))
+        .map(|s| s.link_name())
+        .collect();
+    let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = {
+        use crate::c5::symbol::Linkage;
+        program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.is_alias
+                    && !s.is_thread_local
+                    && !s.name.is_empty()
+                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
+            })
+            .map(|s| (s.link_name(), s.val))
+            .collect()
+    };
+    let err = |m: alloc::string::String| C5Error::Compile(crate::c5::error::fmt_link_err(&m));
+    // Where a record's target landed; the addend is already applied.
+    enum Loc {
+        Text(usize),
+        Data(u64),
+        WeakUndef,
+    }
+    let records = core::mem::take(&mut build.asm_sym_fixups);
+    let mut resolved: Vec<(crate::c5::codegen::AsmSymFixup, Loc)> = Vec::new();
+    {
+        let func_off = |name: &str| -> Option<usize> {
+            let i = build.func_names.iter().position(|n| n == name)?;
+            build.pc_to_native.get(*build.func_ent_pcs.get(i)?).copied()
+        };
+        for r in records {
+            let loc = match &r.target {
+                AsmSectionTarget::Data(off) => Loc::Data(off.wrapping_add_signed(r.addend)),
+                AsmSectionTarget::Symbol(name) => match asm_labels.get(name.as_str()) {
+                    Some(AsmLabelPlacement::Text(off)) => {
+                        Loc::Text(off.wrapping_add_signed(r.addend as isize))
+                    }
+                    Some(AsmLabelPlacement::Data(off)) => {
+                        Loc::Data((*off as u64).wrapping_add_signed(r.addend))
+                    }
+                    None => {
+                        if let Some(off) = func_off(name.as_str()) {
+                            Loc::Text(off.wrapping_add_signed(r.addend as isize))
+                        } else if let Some(&val) = defined_data_by_name.get(name.as_str()) {
+                            Loc::Data((val.max(0) as u64).wrapping_add_signed(r.addend))
+                        } else if weak_names.contains(name.as_str()) {
+                            Loc::WeakUndef
+                        } else {
+                            return Err(err(alloc::format!("undefined reference to `{name}`")));
+                        }
+                    }
+                },
+                other => {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &alloc::format!(
+                            "asm operand relocation target {other:?} is not a data offset or symbol"
+                        ),
+                    )));
+                }
+            };
+            resolved.push((r, loc));
+        }
+    }
+    let refuse = |what: &str| {
+        err(alloc::format!(
+            "inline asm: {what} needs a load-time relocation and cannot be resolved in a \
+             single-file image; compile with `-c` and link"
+        ))
+    };
+    for (r, loc) in resolved {
+        let part = match r.kind {
+            AsmRelocKind::A64AdrpPage21 => Some(AddrPart::Page),
+            AsmRelocKind::A64AddLo12 | AsmRelocKind::A64LdstLo12(_) => Some(AddrPart::InPage),
+            _ => None,
+        };
+        match (part, loc) {
+            (Some(part), Loc::Data(off)) => build.data_fixups.push(crate::c5::codegen::DataFixup {
+                instr_offset: r.instr_offset,
+                data_offset: off,
+                part,
+            }),
+            (Some(part), Loc::Text(off)) => build.func_fixups.push(crate::c5::codegen::FuncFixup {
+                instr_offset: r.instr_offset,
+                target_native_offset: off,
+                part,
+            }),
+            // An undefined weak name resolves to address 0, as the linkers
+            // resolve it: the `adrp` becomes `movz rd, #0`, the `add` keeps
+            // the zero base, and a load/store keeps its zero immediate over
+            // the zero base.
+            (Some(AddrPart::Page), Loc::WeakUndef) => {
+                if !weak_undef::aarch64_adrp_to_zero(&mut build.text, r.instr_offset) {
+                    return Err(refuse("a weak symbol operand"));
+                }
+            }
+            (Some(AddrPart::InPage), Loc::WeakUndef) => {
+                if matches!(r.kind, AsmRelocKind::A64AddLo12)
+                    && !weak_undef::aarch64_add_lo12_to_zero(&mut build.text, r.instr_offset)
+                {
+                    return Err(refuse("a weak symbol operand"));
+                }
+            }
+            (None, Loc::Text(off)) => {
+                if matches!(r.kind, AsmRelocKind::A64MovwAbs { .. }) {
+                    return Err(refuse("a `movz`/`movk` symbol operand"));
+                }
+                let disp = off as i64 - r.instr_offset as i64;
+                let patched =
+                    patch_asm_insn_field(&mut build.text, r.instr_offset, r.kind, true, 4, disp)
+                        .map_err(|m| err(m))?;
+                if !patched {
+                    return Err(refuse("a symbol operand"));
+                }
+            }
+            (None, Loc::WeakUndef)
+                if matches!(r.kind, AsmRelocKind::A64Branch26 { .. })
+                    && weak_undef::aarch64_branch_to_nop(&mut build.text, r.instr_offset) => {}
+            (None, _) | (Some(AddrPart::Whole), _) => {
+                return Err(refuse("a symbol operand"));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Resolve or diagnose the external references still recorded on a
 /// single-TU final image. Such an image has no link step to bind them,
 /// so leaving them as the codegen's zero-displacement placeholders
@@ -637,6 +789,7 @@ pub fn emit_native_with_options_named(
     build.bss_size = bss_size;
     route_single_tu_data_imports(&mut build, target);
     let asm_labels = fold_asm_sections(&mut build, target)?;
+    resolve_single_image_asm_sym_fixups(program, &mut build, &asm_labels)?;
     resolve_single_tu_extern_refs(program, &mut build, target, &asm_labels)?;
     if options.output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);

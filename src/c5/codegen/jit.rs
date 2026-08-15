@@ -308,6 +308,7 @@ mod jit_impl {
             return Err(undefined_reference(&site.symbol_name));
         }
         route_jit_data_imports(&mut build)?;
+        resolve_jit_asm_sym_targets(program, &mut build);
 
         // Allocate a writable data region, copy `build.data` in. The
         // page is RW (no exec permission); an attempt to execute
@@ -1687,6 +1688,124 @@ mod jit_impl {
                 fx.part,
                 "func fixup",
             )?;
+        }
+        apply_jit_asm_sym_fixups(code, code_vmaddr, data_vmaddr, build)?;
+        Ok(())
+    }
+
+    /// Rewrite each inline-asm symbol-operand record naming a data object
+    /// this unit defines to its resolved data offset. The emitter leaves an
+    /// external-linkage name symbolic so the object keeps the symbol's
+    /// binding; the JIT has no link step to interpose it, so the local
+    /// definition is the resolution.
+    fn resolve_jit_asm_sym_targets(program: &Program, build: &mut Build) {
+        use super::super::ssa::emit_common::AsmSectionTarget;
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        if build.asm_sym_fixups.is_empty() {
+            return;
+        }
+        let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.is_alias
+                    && !s.is_thread_local
+                    && !s.name.is_empty()
+                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
+            })
+            .map(|s| (s.link_name(), s.val))
+            .collect();
+        for r in &mut build.asm_sym_fixups {
+            if let AsmSectionTarget::Symbol(name) = &r.target
+                && let Some(&val) = defined_data_by_name.get(name.as_str())
+            {
+                r.target = AsmSectionTarget::Data(val.max(0) as u64);
+            }
+        }
+    }
+
+    /// Patch function-body inline-asm symbol-operand sites (aarch64): the
+    /// target resolves to a runtime address (this unit's data or one of its
+    /// functions) and the field kind selects the patch. An extern name has
+    /// no link step to bind it, so it is refused like an extern call site.
+    fn apply_jit_asm_sym_fixups(
+        code: &mut [u8],
+        code_vmaddr: u64,
+        data_vmaddr: u64,
+        build: &Build,
+    ) -> Result<(), C5Error> {
+        use super::super::aarch64::patch as a64patch;
+        use super::super::ssa::emit_common::{
+            AsmRelocKind, AsmSectionTarget, patch_asm_insn_field,
+        };
+        let internal = |m: String| C5Error::Compile(crate::c5::error::fmt_internal_err(&m));
+        for r in &build.asm_sym_fixups {
+            let target_vmaddr = match &r.target {
+                AsmSectionTarget::Data(off) => {
+                    data_vmaddr.wrapping_add(off.wrapping_add_signed(r.addend))
+                }
+                AsmSectionTarget::Symbol(name) => {
+                    let off = build
+                        .func_names
+                        .iter()
+                        .position(|n| n == name)
+                        .and_then(|i| build.pc_to_native.get(*build.func_ent_pcs.get(i)?).copied())
+                        .ok_or_else(|| undefined_reference(name))?;
+                    code_vmaddr
+                        .wrapping_add(off as u64)
+                        .wrapping_add_signed(r.addend)
+                }
+                other => {
+                    return Err(internal(format!(
+                        "JIT: asm operand relocation target {other:?} is not a data offset \
+                         or symbol"
+                    )));
+                }
+            };
+            let at = r.instr_offset;
+            let site_vmaddr = (code_vmaddr + at as u64) as i64;
+            match r.kind {
+                AsmRelocKind::A64AdrpPage21 => {
+                    a64patch::patch_adrp(code, at, site_vmaddr, target_vmaddr as i64)
+                }
+                AsmRelocKind::A64AddLo12 | AsmRelocKind::A64LdstLo12(_) => {
+                    a64patch::patch_lo12(code, at, target_vmaddr as i64)
+                }
+                kind => {
+                    if let AsmRelocKind::A64MovwAbs {
+                        group,
+                        signed,
+                        check,
+                    } = kind
+                    {
+                        let word = u32::from_le_bytes(code[at..at + 4].try_into().unwrap());
+                        let patched = a64patch::movw_const_word(
+                            word,
+                            group,
+                            signed,
+                            check,
+                            target_vmaddr as i64,
+                        )
+                        .map_err(|m| internal(format!("JIT: {m}")))?;
+                        code[at..at + 4].copy_from_slice(&patched.to_le_bytes());
+                        continue;
+                    }
+                    let disp = target_vmaddr as i64 - site_vmaddr;
+                    match patch_asm_insn_field(code, at, kind, true, 4, disp) {
+                        Ok(true) => continue,
+                        Ok(false) => {
+                            return Err(internal(format!(
+                                "JIT: asm operand relocation kind {kind:?} has no patch"
+                            )));
+                        }
+                        Err(m) => return Err(internal(format!("JIT: {m}"))),
+                    }
+                }
+            }
+            .map_err(|e| internal(e.describe("JIT: asm operand fixup")))?;
         }
         Ok(())
     }

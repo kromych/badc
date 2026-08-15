@@ -452,6 +452,7 @@ fn synth_program_and_build(
         asm_section_text_refs: Vec::new(),
         asm_text_abs_refs: Vec::new(),
         asm_text_labels: Vec::new(),
+        asm_sym_fixups: Vec::new(),
         asm_sym_decls: Vec::new(),
         copy_relocs,
         dynamic_exports,

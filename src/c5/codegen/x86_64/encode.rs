@@ -2177,6 +2177,9 @@ pub(crate) fn lower(
     // Function name -> entry PC, so an inline-asm `call`/`jmp` to a bare symbol
     // resolves to a relocation the fixup pass patches like any other call.
     let mut asm_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
+    // aarch64-only channel; empty on x86_64, whose function-body symbol
+    // operands ride `UserExternDataRef` / `DataFixup`.
+    let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
     let mut text_align: usize = 16;
     let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
@@ -2239,6 +2242,7 @@ pub(crate) fn lower(
                 prologue_native: &mut func_prologue_native,
                 asm_sections: &mut asm_sections,
                 asm_extern_call_sites: &mut asm_extern_call_sites,
+                asm_sym_fixups: &mut asm_sym_fixups,
                 text_align: &mut text_align,
                 label_relocs: &mut label_relocs,
             };
@@ -2485,6 +2489,7 @@ pub(crate) fn lower(
         asm_section_text_refs,
         asm_text_abs_refs,
         asm_text_labels,
+        asm_sym_fixups,
         label_relocs,
         copy_relocs: Vec::new(),
         text: code,

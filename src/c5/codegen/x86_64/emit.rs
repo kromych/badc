@@ -1658,6 +1658,7 @@ pub(crate) fn emit_function(
     let prologue_native = &mut *cx.prologue_native;
     let asm_sections = &mut *cx.asm_sections;
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
+    let asm_sym_fixups = &mut *cx.asm_sym_fixups;
     let text_align = &mut *cx.text_align;
     let label_relocs = &mut *cx.label_relocs;
     let snapshot = code.len();
@@ -2028,6 +2029,7 @@ pub(crate) fn emit_function(
                         prologue_native: &mut *prologue_native,
                         asm_sections: &mut *asm_sections,
                         asm_extern_call_sites: &mut *asm_extern_call_sites,
+                        asm_sym_fixups: &mut *asm_sym_fixups,
                         text_align: &mut *text_align,
                         label_relocs: &mut *label_relocs,
                     };

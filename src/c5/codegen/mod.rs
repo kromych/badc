@@ -1780,6 +1780,10 @@ pub(crate) struct Build {
     /// Each is a definition the unit owns, so the writers emit a local
     /// `.text` symbol and bind a C reference to the same name against it.
     pub asm_text_labels: Vec<AsmTextLabel>,
+    /// Function-body inline-asm symbol-operand sites (aarch64). The
+    /// relocatable writer emits one `R_AARCH64_*` row per entry; the
+    /// single-image and JIT paths patch each site in place.
+    pub asm_sym_fixups: Vec<AsmSymFixup>,
     /// Symbol directives inline-asm templates carried outside any section
     /// (`.globl` / `.local` / `.weak` / `.type` / `.size`). GNU as scopes
     /// them to the unit; the writers apply each to the definition the unit
@@ -1938,6 +1942,25 @@ pub(crate) struct AsmSectionTextRef {
     /// The field holds the label's absolute address (a `$LABEL` immediate)
     /// rather than a PC-relative displacement. x86_64 only.
     pub absolute: bool,
+}
+
+/// Relocation for a function-body inline-asm instruction whose operand
+/// names a symbol (`adrp x0, sym`, `ldr w0, [x0, :lo12:sym]`). One record
+/// covers one instruction word in `Build::text`; `kind` is the section
+/// encoder's field flavor, so the relocatable writer emits the same
+/// `R_AARCH64_*` row for either path. The emitter resolves an
+/// internal-linkage data name to its offset (`AsmSectionTarget::Data`) and
+/// leaves every other name symbolic. aarch64-only; the x86_64 function-body
+/// path records its RIP-relative symbol operands as [`UserExternDataRef`] /
+/// [`DataFixup`].
+#[derive(Debug, Clone)]
+pub(crate) struct AsmSymFixup {
+    /// Byte offset within `Build::text` of the instruction word.
+    pub instr_offset: usize,
+    pub kind: ssa::emit_common::AsmRelocKind,
+    /// Only the `Data` and `Symbol` arms are produced.
+    pub target: ssa::emit_common::AsmSectionTarget,
+    pub addend: i64,
 }
 
 /// Relocation for an inline-asm instruction taking a template-local label's

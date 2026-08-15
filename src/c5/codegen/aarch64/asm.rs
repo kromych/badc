@@ -125,12 +125,14 @@ pub(crate) enum AsmOpndA64 {
     GotoLabel(u8),
     /// A symbol expression operand (`sym`, `sym + 24`, `sym + (2f - 1f)`):
     /// a branch / `adr` / `adrp` target, or the part of the value `spec`
-    /// names. Only file-scope section code encodes these (to a relocation);
-    /// the in-function emitters reject them.
+    /// names. Section code and function bodies both encode these to a
+    /// relocation; a function body admits only the `sym + constant` form,
+    /// having no layout to fold a label difference against.
     Sym { expr: String, spec: SymSpec },
     /// `[base, :lo12:sym]`: a load/store whose scaled immediate is the low
-    /// 12 bits of a symbol expression.
-    MemSymLo12 { base: u8, expr: String },
+    /// 12 bits of a symbol expression. The base is an operand reference or
+    /// an explicit register, as for [`AsmOpndA64::Mem`].
+    MemSymLo12 { base: MemBase, expr: String },
     /// An immediate written as an expression over labels (`#(1b - vs + 4)`):
     /// absolute, but only the section layout knows the value, and on A64 the
     /// value selects the encoding, so the section path folds it before
@@ -680,16 +682,13 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
             .unwrap_or(parts[1])
             .strip_prefix(":lo12:")
     {
-        let MemBase::Reg(rn) = base else {
-            return Err(format!("inline asm: bad `:lo12:` base `[{inner}]`"));
-        };
         if pre {
             return Err(format!("inline asm: `:lo12:` has no writeback `[{inner}]`"));
         }
         let expr = split_sym_addend(spec)
             .ok_or_else(|| format!("inline asm: bad `:lo12:` symbol `[{inner}]`"))?;
         return Ok(AsmOpndA64::MemSymLo12 {
-            base: rn,
+            base,
             expr: String::from(expr),
         });
     }

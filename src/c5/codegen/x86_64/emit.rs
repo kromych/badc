@@ -11766,6 +11766,38 @@ mod code_mode_tests {
         assert!(assemble_err(".code16\nfnstsw (%bx,%si,2)\n").contains("no scale"));
     }
 
+    /// `mov` between a segment register and a GPR moves 16 bits: 8C writes
+    /// and zero-extends, 8E reads. REX.W is unused in both directions, and
+    /// 8E's operand size is the opcode's rather than the register's, so only
+    /// an 8C with a 16-bit destination takes the `66` prefix. The GDT reload
+    /// in `arch/x86/kernel/relocate_kernel_64.S` writes the 64-bit pair.
+    /// Bytes measured with GNU as 2.46.1 for the same source.
+    #[test]
+    fn segment_register_moves_take_no_rex_w() {
+        #[rustfmt::skip]
+        let cases: &[(&str, &[u8])] = &[
+            ("mov %ds, %rax\n",      &[0x8c, 0xd8]),
+            ("mov %rax, %ds\n",      &[0x8e, 0xd8]),
+            ("mov %ds, %eax\n",      &[0x8c, 0xd8]),
+            ("mov %eax, %ds\n",      &[0x8e, 0xd8]),
+            ("mov %ds, %ax\n",       &[0x66, 0x8c, 0xd8]),
+            ("mov %ax, %ds\n",       &[0x8e, 0xd8]),
+            ("mov %fs, %r8\n",       &[0x41, 0x8c, 0xe0]),
+            ("mov %fs, %r8d\n",      &[0x41, 0x8c, 0xe0]),
+            ("mov %fs, %r8w\n",      &[0x66, 0x41, 0x8c, 0xe0]),
+            ("mov %r8, %fs\n",       &[0x41, 0x8e, 0xe0]),
+            ("mov %r8w, %fs\n",      &[0x41, 0x8e, 0xe0]),
+            ("mov %gs, %rbx\n",      &[0x8c, 0xeb]),
+            ("mov %rbx, %gs\n",      &[0x8e, 0xeb]),
+            ("mov %ds, (%rax)\n",    &[0x8c, 0x18]),
+            ("mov (%rax), %ds\n",    &[0x8e, 0x18]),
+            ("mov %ds, (%r9)\n",     &[0x41, 0x8c, 0x19]),
+        ];
+        for (src, want) in cases {
+            assert_eq!(assemble(src), *want, "{src}");
+        }
+    }
+
     /// An explicit size suffix on `push` / `pop` selects the stack operand
     /// size in every mode: the `66` prefix when it is not the mode default,
     /// the immediate field width, and the shortest immediate form. Long mode

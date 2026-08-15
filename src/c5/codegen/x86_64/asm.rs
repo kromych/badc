@@ -4561,8 +4561,18 @@ fn encode_bespoke(
                         ));
                     }
                     if kind == b's' {
-                        // 8C stores a segment selector to r/m, 8E loads one.
-                        prefix_rex(code, mode, gp_size, spec_idx, gp);
+                        // 8C stores a selector to r/m, 8E loads one. Both move
+                        // 16 bits, so REX.W adds nothing; 8E's source width is
+                        // the opcode's, so only 8C takes an operand-size prefix.
+                        if spec_is_src
+                            && !matches!(gp_size, AsmRegSize::Byte | AsmRegSize::Quad)
+                            && gp_size.bytes() != mode.opsize()
+                        {
+                            code.push(0x66);
+                        }
+                        if gp >= 8 {
+                            code.push(rex(false, false, false, true));
+                        }
                         code.push(if spec_is_src { 0x8C } else { 0x8E });
                     } else {
                         // Control / debug moves are inherently 64-bit; REX.W is
@@ -6639,8 +6649,9 @@ mod tests {
 
     /// `mov %seg, r/m16` (8C) and `mov r/m16, %seg` (8E). A memory operand is
     /// 16-bit by opcode, so it takes no operand-size prefix; a 32-bit base
-    /// adds the address-size prefix, and a register destination keeps the
-    /// width its name spells. Bytes measured with GNU as 2.46.1.
+    /// adds the address-size prefix, and an 8C register destination keeps the
+    /// width its name spells. Neither direction takes REX.W, and 8E takes no
+    /// operand-size prefix. Bytes measured with GNU as 2.46.1.
     #[test]
     fn segment_register_moves() {
         let sreg = |n: u8| Concrete::Reg {
@@ -6681,10 +6692,26 @@ mod tests {
         );
         // movw 4(%rax), %ds loads the selector.
         assert_eq!(e(8, &[mem(0, None, 1, 4), sreg(3)]), [0x8E, 0x58, 0x04]);
-        // The register forms: the destination width alone selects 0x66.
+        // The register forms: the 8C destination width alone selects 0x66.
         let mov = |ops: &[Concrete]| enc(Mnemonic::Mov, None, ops);
         assert_eq!(mov(&[sreg(3), gp(0, AsmRegSize::Word)]), [0x66, 0x8C, 0xD8]);
         assert_eq!(mov(&[sreg(1), gp(0, AsmRegSize::Long)]), [0x8C, 0xC8]);
+        // mov %ds, %rax / mov %rax, %ds: a 64-bit GPR encodes as the 32-bit
+        // one, the opcode moving 16 bits and zero-extending.
+        assert_eq!(mov(&[sreg(3), gp(0, AsmRegSize::Quad)]), [0x8C, 0xD8]);
+        assert_eq!(mov(&[gp(0, AsmRegSize::Quad), sreg(3)]), [0x8E, 0xD8]);
+        // mov %ax, %ds / mov %eax, %ds: 8E reads 16 bits whatever the name.
+        assert_eq!(mov(&[gp(0, AsmRegSize::Word), sreg(3)]), [0x8E, 0xD8]);
+        assert_eq!(mov(&[gp(0, AsmRegSize::Long), sreg(3)]), [0x8E, 0xD8]);
+        // A high GPR takes REX.B in both directions; %r8w keeps 8C's 0x66.
+        assert_eq!(mov(&[sreg(4), gp(8, AsmRegSize::Quad)]), [0x41, 0x8C, 0xE0]);
+        assert_eq!(mov(&[sreg(4), gp(8, AsmRegSize::Long)]), [0x41, 0x8C, 0xE0]);
+        assert_eq!(
+            mov(&[sreg(4), gp(8, AsmRegSize::Word)]),
+            [0x66, 0x41, 0x8C, 0xE0]
+        );
+        assert_eq!(mov(&[gp(8, AsmRegSize::Quad), sreg(4)]), [0x41, 0x8E, 0xE0]);
+        assert_eq!(mov(&[gp(8, AsmRegSize::Word), sreg(4)]), [0x41, 0x8E, 0xE0]);
     }
 }
 

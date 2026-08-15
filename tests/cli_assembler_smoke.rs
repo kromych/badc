@@ -1445,6 +1445,23 @@ fn a_branch_takes_an_expression_target() {
     assert_eq!(text_relocs("branch-expr-alias-rel", src), []);
 }
 
+/// GNU as writes a 64-bit far branch with its `rex[.WRXB]` prefix and has no
+/// `q` suffix for one; LLVM spells the same encoding `ljmpq` and prints it
+/// that way, so both are accepted. On one statement the prefix merges into
+/// the instruction's own REX byte, which is where the extended base register
+/// puts its bit. The bytes are GNU as 2.46.1's for the same source.
+#[test]
+fn a_rex_prefix_writes_a_far_branch() {
+    let t = text_of(
+        "rex-far",
+        "\t.text\n\trex.W ljmp *(%rax)\n\trex.W ljmp *(%r13)\n\tljmpq *(%rax)\n",
+    );
+    assert_eq!(
+        t,
+        [0x48, 0xff, 0x28, 0x49, 0xff, 0x6d, 0x00, 0x48, 0xff, 0x28]
+    );
+}
+
 /// `call` has no `rel8` form, so it keeps `e8 rel32` at any distance.
 #[test]
 fn a_near_call_is_not_shortened() {

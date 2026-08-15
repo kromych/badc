@@ -6717,12 +6717,24 @@ fn encode_one_x86_section_insn(
         Mnemonic::Table(n) => n,
         _ => "",
     };
+    // REX is a 64-bit-mode prefix; the other modes read the byte as an
+    // instruction, so GNU as rejects it there.
+    if mode != super::table::Mode::Bits64
+        && (insn.rex.is_some()
+            || matches!(insn.mnemonic, Mnemonic::Prefix(b) if (0x40..=0x4F).contains(&b)))
+    {
+        return Err(alloc::format!(
+            "inline asm: replacement `{text}` takes a `rex` prefix outside 64-bit mode"
+        ));
+    }
     // A prefixed branch or symbol push has no meaning; the prefix applies
-    // on the general operand path below.
-    if prefix.is_some()
+    // on the general operand path below. The direct-branch forms are built
+    // by hand and carry neither prefix byte, so one on them would be
+    // dropped rather than encoded.
+    if (prefix.is_some() || insn.rex.is_some())
         && (matches!(
             insn.operands.first(),
-            Some(AsmOpnd::GotoLabel(_) | AsmOpnd::ImmSym { .. })
+            Some(AsmOpnd::GotoLabel(_) | AsmOpnd::ImmSym { .. } | AsmOpnd::Label { .. })
         ) || (!insn.sym_exprs.is_empty() && insn.operands.is_empty()))
     {
         return Err(alloc::format!(
@@ -7305,7 +7317,11 @@ fn encode_one_x86_section_insn(
     let addr = section_addr_size(insn, mode);
     let encode = |ops: &[Concrete]| {
         let mut out = alloc::vec::Vec::new();
-        super::asm::encode_in(&mut out, mode, addr, insn.mnemonic, insn.suffix, ops).map(|()| out)
+        super::asm::encode_in(&mut out, mode, addr, insn.mnemonic, insn.suffix, ops)?;
+        if let Some(rex) = insn.rex {
+            super::asm::splice_rex(&mut out, 0, rex)?;
+        }
+        Ok(out)
     };
     // A `$symbol` immediate: settle the field's width and signedness before
     // the body is encoded, since both follow from the form the probe value
@@ -7385,16 +7401,8 @@ fn encode_one_x86_section_insn(
             },
             other => other,
         };
-        let mut probe_bytes = alloc::vec::Vec::new();
-        super::asm::encode_in(
-            &mut probe_bytes,
-            mode,
-            addr,
-            insn.mnemonic,
-            insn.suffix,
-            &probe,
-        )
-        .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+        let probe_bytes =
+            encode(&probe).map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
         let (field, width) = differing_run(&body, &probe_bytes)
             .filter(|&(_, n)| matches!(n, 2 | 4))
             .ok_or_else(|| {
@@ -8051,6 +8059,16 @@ fn emit_inline_asm(
             after_insn = true;
             continue;
         }
+        // The direct-branch forms below carry no REX byte, so a prefix on one
+        // would be dropped rather than encoded.
+        if insn.rex.is_some()
+            && (matches!(
+                insn.operands.first(),
+                Some(AsmOpnd::Label { .. } | AsmOpnd::GotoLabel(_))
+            ) || (!insn.sym_exprs.is_empty() && insn.operands.is_empty()))
+        {
+            return fail("inline asm: a `rex` prefix on a direct branch");
+        }
         // A jmp / jcc to a local label: emit the rel32 form now and record the
         // site; the displacement is patched below against the label offset.
         if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
@@ -8594,10 +8612,17 @@ fn emit_inline_asm(
         // A segment override is a legacy prefix preceding the opcode. It comes
         // from a template `%gs:` / `%fs:` or from a `__seg_gs` / `__seg_fs`
         // memory operand; the two never conflict on one instruction.
+        let insn_at = code.len();
         if let Some(seg) = insn.seg.or(operand_seg) {
             code.push(seg);
         }
         if let Err(m) = super::asm::encode(code, insn.mnemonic, insn.suffix, &concrete) {
+            bail_msg(&m);
+            return false;
+        }
+        if let Some(rex) = insn.rex
+            && let Err(m) = super::asm::splice_rex(code, insn_at, rex)
+        {
             bail_msg(&m);
             return false;
         }

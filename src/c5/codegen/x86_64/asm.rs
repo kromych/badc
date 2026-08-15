@@ -482,6 +482,9 @@ pub(crate) struct AsmInsn {
     /// Segment-override prefix byte (0x64 `%%fs:`, 0x65 `%%gs:`) written on
     /// the instruction's memory operand; emitted before the opcode.
     pub seg: Option<u8>,
+    /// REX byte of a `rex[.WRXB]` prefix leading the instruction on its own
+    /// statement; merged into the instruction's own REX byte.
+    pub rex: Option<u8>,
     pub operands: Vec<AsmOpnd>,
     /// Literal bytes for a [`Mnemonic::RawBytes`] piece; empty otherwise.
     pub bytes: Vec<u8>,
@@ -1069,7 +1072,9 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "inc" => Mnemonic::Inc,
         "dec" => Mnemonic::Dec,
         _ => {
-            return string_op(name)
+            return rex_prefix_byte(name)
+                .map(Mnemonic::Prefix)
+                .or_else(|| string_op(name))
                 .or_else(|| sse2_op(name))
                 .or_else(|| sse_mov(name))
                 .or_else(|| sse_imm(name))
@@ -1077,6 +1082,53 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
                 .or_else(|| super::evex::op(name).map(Mnemonic::Evex));
         }
     })
+}
+
+/// The REX byte of the `rex[.WRXB]` prefix spelling. The letters name the
+/// bits of `0100WRXB` and appear in that order, each at most once, as GNU as
+/// spells them.
+fn rex_prefix_byte(name: &str) -> Option<u8> {
+    let rest = name.strip_prefix("rex")?;
+    if rest.is_empty() {
+        return Some(0x40);
+    }
+    let letters = rest.strip_prefix('.').filter(|l| !l.is_empty())?;
+    let (mut bits, mut next) = (0x40u8, 0usize);
+    for c in letters.bytes() {
+        let i = b"WRXB"
+            .iter()
+            .position(|&w| w == c.to_ascii_uppercase())
+            .filter(|&i| i >= next)?;
+        bits |= 1 << (3 - i);
+        next = i + 1;
+    }
+    Some(bits)
+}
+
+/// Merge an explicit REX prefix into the instruction encoded from `at`: the
+/// bits join the instruction's own REX byte, which follows the legacy
+/// prefixes and precedes the opcode, as GNU as merges them. A VEX / EVEX
+/// encoding carries the same bits in its own prefix and admits no REX byte.
+pub(crate) fn splice_rex(code: &mut Vec<u8>, at: usize, rex: u8) -> Result<(), String> {
+    let mut i = at;
+    while i < code.len()
+        && matches!(
+            code[i],
+            0x66 | 0x67 | 0xF0 | 0xF2 | 0xF3 | 0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65
+        )
+    {
+        i += 1;
+    }
+    match code.get(i) {
+        Some(&b) if (0x40..=0x4F).contains(&b) => code[i] = b | (rex & 0x0F),
+        Some(0xC4 | 0xC5 | 0x62) => {
+            return Err(String::from(
+                "inline asm: a `rex` prefix is invalid with a VEX / EVEX instruction",
+            ));
+        }
+        _ => code.insert(i, rex),
+    }
+    Ok(())
 }
 
 /// SSE2 two-xmm register ops as `(name, mandatory-prefix, 0F-opcode)`; a zero
@@ -1760,8 +1812,9 @@ fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
     if let Some(m) = mnemonic_by_name(base) {
         // A string primitive carries its size in its own name, so a further
         // suffix does not apply: `movsbl` is a sign-extending move, not
-        // `movsb` widened to long.
-        if matches!(m, Mnemonic::StringOp { .. }) {
+        // `movsb` widened to long. A prefix has no operand to size, so a
+        // suffixed spelling of one (`rex.BW`, `lockw`) is no mnemonic.
+        if matches!(m, Mnemonic::StringOp { .. } | Mnemonic::Prefix(_)) {
             return None;
         }
         return Some((m, suffix));
@@ -2394,6 +2447,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
                 seg: None,
+                rex: None,
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 sym_exprs: Vec::new(),
@@ -2430,6 +2484,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 mnemonic: Mnemonic::Data(w as u8),
                 suffix: None,
                 seg: None,
+                rex: None,
                 operands,
                 bytes: Vec::new(),
                 sym_exprs: Vec::new(),
@@ -2444,6 +2499,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 mnemonic: Mnemonic::RawBytes,
                 suffix: None,
                 seg: None,
+                rex: None,
                 operands: Vec::new(),
                 bytes: bytes?,
                 sym_exprs: Vec::new(),
@@ -2466,6 +2522,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 mnemonic: Mnemonic::Skip,
                 suffix: None,
                 seg: None,
+                rex: None,
                 operands: Vec::new(),
                 bytes: (value as u64).to_le_bytes()[..unit as usize].to_vec(),
                 sym_exprs: alloc::vec![String::from(count_expr)],
@@ -2487,6 +2544,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 mnemonic: Mnemonic::Align { n, fill, max },
                 suffix: None,
                 seg: None,
+                rex: None,
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 sym_exprs: Vec::new(),
@@ -2503,19 +2561,28 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         // A prefix may lead the instruction it applies to on the same
         // statement (`rep stosw`, `lock xaddl ...`) as well as stand alone
         // (`repe; cmpsb`). Emit each leading prefix as its own entry and
-        // carry on with the rest of the statement.
+        // carry on with the rest of the statement. A REX prefix is the
+        // exception: leading an instruction it merges into that
+        // instruction's own REX byte, as GNU as merges it, and only a
+        // statement of its own deposits a byte.
+        let mut rex = None;
         while !rest.is_empty()
             && let Some((Mnemonic::Prefix(b), None)) = split_mnemonic(mnem_tok)
         {
-            insns.push(AsmInsn {
-                mnemonic: Mnemonic::Prefix(b),
-                suffix: None,
-                seg: None,
-                operands: Vec::new(),
-                bytes: Vec::new(),
-                sym_exprs: Vec::new(),
-                label_def: None,
-            });
+            if (0x40..=0x4F).contains(&b) {
+                rex = Some(rex.unwrap_or(0x40u8) | b);
+            } else {
+                insns.push(AsmInsn {
+                    mnemonic: Mnemonic::Prefix(b),
+                    suffix: None,
+                    seg: None,
+                    rex: None,
+                    operands: Vec::new(),
+                    bytes: Vec::new(),
+                    sym_exprs: Vec::new(),
+                    label_def: None,
+                });
+            }
             (mnem_tok, rest) = match rest.find(char::is_whitespace) {
                 Some(p) => (&rest[..p], rest[p..].trim()),
                 None => (rest, ""),
@@ -2550,6 +2617,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 mnemonic,
                 suffix,
                 seg: None,
+                rex,
                 operands: Vec::new(),
                 bytes: Vec::new(),
                 sym_exprs: alloc::vec![alloc::string::String::from(rest)],
@@ -2647,6 +2715,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             mnemonic,
             suffix,
             seg,
+            rex,
             operands,
             bytes: Vec::new(),
             sym_exprs,
@@ -4759,10 +4828,14 @@ mod tests {
                     other => panic!("unexpected operand {other:?}"),
                 })
                 .collect();
+            let at = out.len();
             if let Some(seg) = insn.seg {
                 out.push(seg);
             }
             encode(&mut out, insn.mnemonic, insn.suffix, &ops).unwrap();
+            if let Some(rex) = insn.rex {
+                splice_rex(&mut out, at, rex).unwrap();
+            }
         }
         out
     }
@@ -6808,7 +6881,11 @@ mod string_and_prefix_tests {
         assert_eq!(asm_bytes(b"lcallw *8(%rbx)"), [0x66, 0xFF, 0x5B, 0x08]);
         assert_eq!(asm_bytes(b"lcall *(%rax)"), [0xFF, 0x18]);
         assert_eq!(asm_bytes(b"lcalll *(%rax)"), [0xFF, 0x18]);
+        // The `q` spelling is LLVM's, which its disassembler also prints;
+        // GNU as has no far-branch `q` suffix and writes the same encoding
+        // `rex.W lcall`. Both are accepted.
         assert_eq!(asm_bytes(b"lcallq *(%rax)"), [0x48, 0xFF, 0x18]);
+        assert_eq!(asm_bytes(b"rex.W lcall *(%rax)"), [0x48, 0xFF, 0x18]);
         // x87 load / store-and-pop of a 64-bit float (DD /0, DD /3).
         assert_eq!(asm_bytes(b"fldl (%rax)"), [0xDD, 0x00]);
         assert_eq!(asm_bytes(b"fldl 8(%rbx)"), [0xDD, 0x43, 0x08]);
@@ -6817,10 +6894,46 @@ mod string_and_prefix_tests {
         assert_eq!(asm_bytes(b"fstpl 8(%rbx)"), [0xDD, 0x5B, 0x08]);
         assert_eq!(asm_bytes(b"fstpl (%r14)"), [0x41, 0xDD, 0x1E]);
         // Far indirect jump (FF /5); the AT&T suffix sets the operand size.
+        // `ljmpq` is LLVM's spelling of the 64-bit offset form, kept beside
+        // GNU as's `rex.W ljmp`.
         assert_eq!(asm_bytes(b"ljmpl *(%rax)"), [0xFF, 0x28]);
         assert_eq!(asm_bytes(b"ljmpq *(%rax)"), [0x48, 0xFF, 0x28]);
+        assert_eq!(asm_bytes(b"rex.W ljmp *(%rax)"), [0x48, 0xFF, 0x28]);
         assert_eq!(asm_bytes(b"ljmpl *(%r13)"), [0x41, 0xFF, 0x6D, 0x00]);
         assert_eq!(asm_bytes(b"ljmpw *(%rax)"), [0x66, 0xFF, 0x28]);
+    }
+
+    /// The `rex[.WRXB]` prefix. Leading an instruction on one statement its
+    /// bits merge into that instruction's own REX byte; a statement of its
+    /// own deposits the byte and the next instruction encodes independently.
+    /// The letters name the bits in W, R, X, B order. Bytes measured with
+    /// GNU as 2.46.1.
+    #[test]
+    fn rex_prefix_forms_match_gnu_as() {
+        assert_eq!(asm_bytes(b"rex.W ljmp *(%rax)"), [0x48, 0xFF, 0x28]);
+        // The prefix's B joins the instruction's own REX, so one byte
+        // carries both and the operand register is extended.
+        assert_eq!(asm_bytes(b"rex.WB ljmp *(%rax)"), [0x49, 0xFF, 0x28]);
+        assert_eq!(asm_bytes(b"rex.W ljmp *(%r13)"), [0x49, 0xFF, 0x6D, 0x00]);
+        assert_eq!(asm_bytes(b"rex ljmp *(%rax)"), [0x40, 0xFF, 0x28]);
+        assert_eq!(asm_bytes(b"rex.R ljmp *(%rax)"), [0x44, 0xFF, 0x28]);
+        assert_eq!(asm_bytes(b"rex.W nop"), [0x48, 0x90]);
+        assert_eq!(asm_bytes(b"rex.wb nop"), [0x49, 0x90]);
+        // Standalone, and so unmerged: the `ljmp` keeps its own REX.B.
+        assert_eq!(
+            asm_bytes(b"rex.W; ljmp *(%r13)"),
+            [0x48, 0x41, 0xFF, 0x6D, 0x00]
+        );
+        // The prefix rides behind the mandatory and size prefixes, where the
+        // instruction's own REX sits.
+        assert_eq!(
+            asm_bytes(b"rex.B movsd (%rax), %xmm0"),
+            [0xF2, 0x41, 0x0F, 0x10, 0x00]
+        );
+        // Letters out of order name no prefix.
+        assert!(split_mnemonic("rex.BW").is_none());
+        assert!(split_mnemonic("rex.WW").is_none());
+        assert!(split_mnemonic("rex.").is_none());
     }
 
     /// System / SSE-control / invalidation memory forms on the 0F and 0F38

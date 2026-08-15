@@ -824,8 +824,22 @@ impl<'a> Walker<'a> {
     }
     /// True when the expression's type tag carries the volatile
     /// qualifier (C99 6.7.3); `false` for node shapes without a type.
+    /// A member access inherits the qualifiers of the object it is
+    /// reached through (C99 6.5.2.3p3-4), and qualifying an array type
+    /// qualifies its elements (C99 6.7.3p8), so descend through the
+    /// member / subscript chain to the base whose tag carries the
+    /// qualifier.
     fn expr_is_volatile(&self, id: ExprId) -> bool {
-        expr_ty(self.ast.expr(id)).is_some_and(is_volatile_ty)
+        let e = self.ast.expr(id);
+        if expr_ty(e).is_some_and(is_volatile_ty) {
+            return true;
+        }
+        match e {
+            Expr::Member { obj: base, .. } | Expr::Index { array: base, .. } => {
+                self.expr_is_volatile(*base)
+            }
+            _ => false,
+        }
     }
 
     /// Segment override for an access to an lvalue of type `ty`.
@@ -4879,7 +4893,7 @@ impl<'a> Walker<'a> {
                     // included `field_off`).
                     let bf = *bf;
                     let ty = *ty;
-                    let vol = is_volatile_ty(ty) || self.expr_is_volatile(*obj);
+                    let vol = self.expr_is_volatile(id);
                     let seg = self.bitfield_access_seg(id, ty, bf)?;
                     let base = self.walk_expr_rvalue(b, *obj)?;
                     let addr = if *field_off != 0 {
@@ -4904,7 +4918,7 @@ impl<'a> Walker<'a> {
                     return Ok(addr);
                 }
                 let kind = load_kind_for(*ty, self.target);
-                let vol = is_volatile_ty(*ty) || self.expr_is_volatile(*obj);
+                let vol = self.expr_is_volatile(id);
                 let seg = self.access_seg(id, *ty)?;
                 Ok(load_place(b, addr, kind, seg, vol))
             }
@@ -4935,7 +4949,7 @@ impl<'a> Walker<'a> {
                 }
                 let kind = load_kind_for(*ty, self.target);
                 let seg = self.access_seg(id, *ty)?;
-                Ok(load_place(b, addr, kind, seg, is_volatile_ty(*ty)))
+                Ok(load_place(b, addr, kind, seg, self.expr_is_volatile(id)))
             }
             Expr::Cast { child, to_ty } => {
                 let v = self.walk_expr_rvalue(b, *child)?;

@@ -260,6 +260,10 @@ const ABBREV_SUBPROGRAM_LEAF_INTERNAL: u64 = 30;
 const ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL: u64 = 31;
 const ABBREV_TLS_VARIABLE: u64 = 32;
 const ABBREV_TLS_VARIABLE_INTERNAL: u64 = 33;
+const ABBREV_SUBPROGRAM_LEAF_VOID: u64 = 34;
+const ABBREV_SUBPROGRAM_WITH_CHILDREN_VOID: u64 = 35;
+const ABBREV_SUBPROGRAM_LEAF_INTERNAL_VOID: u64 = 36;
+const ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL_VOID: u64 = 37;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -376,6 +380,9 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
     // K&R identifier-list declarators per C99 6.7.6.3p14.
     // DW_AT_calling_convention pins DW_CC_normal -- SysV / Win64 /
     // AAPCS64 are the C standard convention per DWARF 4 3.3.1.1.
+    // DW_AT_type is the return type; DWARF 4 3.3.2 gives a
+    // void-returning function no such attribute, which is the
+    // `_VOID` form below.
     AbbrevDecl {
         code: ABBREV_SUBPROGRAM_LEAF,
         tag: DW_TAG_SUBPROGRAM,
@@ -387,6 +394,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
             (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+            (DW_AT_TYPE, DW_FORM_REF4),
         ],
     },
     // subprogram with variable / parameter children. DW_AT_frame_base
@@ -402,6 +410,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
             (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+            (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
     },
@@ -415,6 +424,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+            (DW_AT_TYPE, DW_FORM_REF4),
         ],
     },
     AbbrevDecl {
@@ -427,6 +437,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
             (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+            (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
         ],
     },
@@ -732,6 +743,60 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DECL_LINE, DW_FORM_UDATA),
         ],
     },
+    // The four subprogram shapes above for a function returning void,
+    // which DWARF 4 3.3.2 describes by the absence of DW_AT_type.
+    AbbrevDecl {
+        code: ABBREV_SUBPROGRAM_LEAF_VOID,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+        ],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBPROGRAM_WITH_CHILDREN_VOID,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+            (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
+        ],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBPROGRAM_LEAF_INTERNAL_VOID,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+        ],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL_VOID,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+            (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
+        ],
+    },
 ];
 
 fn build_debug_abbrev() -> Vec<u8> {
@@ -762,6 +827,26 @@ fn push_attr(out: &mut Vec<u8>, name: u8, form: u8) {
 }
 
 // ---- .debug_info ----
+
+/// What a subprogram DIE needs from the function's `Token::Fun`
+/// symbol, resolved before the type catalog is laid out.
+#[derive(Clone, Copy)]
+struct FnFacts {
+    is_variadic: bool,
+    external: bool,
+    /// `None` for a void-returning function (DWARF 4 3.3.2).
+    ret: Option<TypeId>,
+}
+
+/// The `i`th defined function's link name.
+fn subprogram_name(build: &Build, i: usize) -> &str {
+    build
+        .func_names
+        .get(i)
+        .map(|s| s.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("<unknown>")
+}
 
 fn build_debug_info(
     source_path: &str,
@@ -835,6 +920,29 @@ fn build_debug_info(
     let static_types: Vec<TypeId> = statics
         .iter()
         .map(|&i| catalog.of_symbol(&program.symbols[i]))
+        .collect();
+    // Prototype facts per defined function, resolved here so a return
+    // type reaches the catalog before the layout pass fixes every
+    // DIE's offset.
+    let fn_facts: Vec<FnFacts> = (0..build.func_ent_pcs.len())
+        .map(|i| {
+            let sym = program.symbols.iter().find(|s| {
+                s.class == super::super::token::Token::Fun as i64
+                    && s.link_name() == subprogram_name(build, i)
+            });
+            FnFacts {
+                // A missing entry means non-variadic and external: a
+                // function this unit defines always has one, and only a
+                // `static` definition denies the name to other units
+                // (C99 6.2.2p3).
+                is_variadic: sym.is_some_and(|s| s.is_variadic),
+                external: sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal),
+                ret: match sym {
+                    Some(s) => catalog.of_return(s.type_),
+                    None => Some(catalog.unspecified()),
+                },
+            }
+        })
         .collect();
     catalog.drain();
     let mut dies: Vec<DieBuf> = Vec::new();
@@ -972,23 +1080,12 @@ fn build_debug_info(
         if size == 0 {
             continue;
         }
-        let name = build
-            .func_names
-            .get(i)
-            .map(|s| s.as_str())
-            .filter(|s| !s.is_empty())
-            .unwrap_or("<unknown>");
-        // Prototype and linkage come from the matching `Token::Fun`
-        // entry. A missing entry means non-variadic and external: a
-        // function this unit defines always has one, and only a
-        // `static` definition denies the name to other units
-        // (C99 6.2.2p3).
-        let fn_sym = program
-            .symbols
-            .iter()
-            .find(|s| s.class == super::super::token::Token::Fun as i64 && s.link_name() == name);
-        let is_variadic = fn_sym.is_some_and(|s| s.is_variadic);
-        let external = fn_sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal);
+        let name = subprogram_name(build, i);
+        let FnFacts {
+            is_variadic,
+            external,
+            ret,
+        } = fn_facts[i];
         // Group this function's parameters and locals out of the
         // flat program.variables list. `function_bc_pc` keys by
         // the function's ent_pc, matching what the amalg path's
@@ -1005,11 +1102,15 @@ fn build_debug_info(
         let has_children = !vars.is_empty() || is_variadic;
         write_uleb128(
             &mut body,
-            match (has_children, external) {
-                (true, true) => ABBREV_SUBPROGRAM_WITH_CHILDREN,
-                (true, false) => ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL,
-                (false, true) => ABBREV_SUBPROGRAM_LEAF,
-                (false, false) => ABBREV_SUBPROGRAM_LEAF_INTERNAL,
+            match (has_children, external, ret.is_some()) {
+                (true, true, true) => ABBREV_SUBPROGRAM_WITH_CHILDREN,
+                (true, false, true) => ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL,
+                (false, true, true) => ABBREV_SUBPROGRAM_LEAF,
+                (false, false, true) => ABBREV_SUBPROGRAM_LEAF_INTERNAL,
+                (true, true, false) => ABBREV_SUBPROGRAM_WITH_CHILDREN_VOID,
+                (true, false, false) => ABBREV_SUBPROGRAM_WITH_CHILDREN_INTERNAL_VOID,
+                (false, true, false) => ABBREV_SUBPROGRAM_LEAF_VOID,
+                (false, false, false) => ABBREV_SUBPROGRAM_LEAF_INTERNAL_VOID,
             },
         );
         push_string(&mut body, name);
@@ -1027,6 +1128,11 @@ fn build_debug_info(
         // all use the host C ABI; debuggers treat that as
         // DW_CC_normal.
         body.push(DW_CC_NORMAL);
+        // DW_AT_type -- the return type (DWARF 4 3.3.2), left out
+        // entirely by the abbrev when the function returns void.
+        if let Some(r) = ret {
+            body.extend_from_slice(&type_offsets[r].to_le_bytes());
+        }
         if has_children {
             // DW_AT_frame_base: exprloc with a single
             // DW_OP_reg<fp> byte. ULEB128 length(1) + opcode.
@@ -1643,6 +1749,17 @@ impl<'a> TypeCatalog<'a> {
         }
     }
 
+    /// The return type of a function definition, from the `Token::Fun`
+    /// symbol's `type_`. `None` is a void-returning function, which
+    /// DWARF 4 3.3.2 describes by the absence of `DW_AT_type`.
+    fn of_return(&mut self, tag: i64) -> Option<TypeId> {
+        match decompose_pointer_chain(tag) {
+            Some(k) if k.is_void_value() => None,
+            Some(k) => Some(self.of_key(k)),
+            None => Some(self.unspecified()),
+        }
+    }
+
     /// The type of a local or parameter. C99 6.7.5.3p7 decays a
     /// parameter array to a pointer, so only a true local contributes
     /// an array type.
@@ -2179,16 +2296,18 @@ mod abbrev_golden {
         assert_eq!(
             hex,
             "0111012508130b03081b081101120710170000022e000308110112073f192719360b\
-             0000032e010308110112073f192719360b401800001e2e000308110112072719360b\
-             00001f2e010308110112072719360b401800000405000308021849133a0f3b0f0000\
-             0534000308021849133a0f3b0f000006240003080b0b3e0b0000070f000b0b491300\
-             0008130103080b0f000009170103080b0f00000a0d0003084913380f00001d0d0049\
-             13380f00000b0d00030849136b0f0d0f00000c180000000d0101491300000e21002f\
-             0f00000f040103080b0b000010280003081c0d00001113010b0f00001217010b0f00\
-             0013130003083c19000014170003083c190000151501271949130000161501271900\
-             00170500491300001821000000190f000b0b00001a3b0000001b3400030849133f19\
-             02183a0f3b0f00001c34000308491302183a0f3b0f0000203400030849133f193a0f\
-             3b0f0000213400030849133a0f3b0f000000"
+             49130000032e010308110112073f192719360b4913401800001e2e00030811011207\
+             2719360b491300001f2e010308110112072719360b49134018000004050003080218\
+             49133a0f3b0f00000534000308021849133a0f3b0f000006240003080b0b3e0b0000\
+             070f000b0b4913000008130103080b0f000009170103080b0f00000a0d0003084913\
+             380f00001d0d004913380f00000b0d00030849136b0f0d0f00000c180000000d0101\
+             491300000e21002f0f00000f040103080b0b000010280003081c0d00001113010b0f\
+             00001217010b0f000013130003083c19000014170003083c19000015150127194913\
+             000016150127190000170500491300001821000000190f000b0b00001a3b0000001b\
+             3400030849133f1902183a0f3b0f00001c34000308491302183a0f3b0f0000203400\
+             030849133f193a0f3b0f0000213400030849133a0f3b0f0000222e00030811011207\
+             3f192719360b0000232e010308110112073f192719360b40180000242e0003081101\
+             12072719360b0000252e010308110112072719360b4018000000"
         );
     }
 }

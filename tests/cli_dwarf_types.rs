@@ -1059,3 +1059,78 @@ fn thread_local_objects_get_a_variable_die() {
     );
     assert_eq!(u.type_of(s).name(), Some("long"));
 }
+
+/// DWARF 4 3.3.2: a subprogram that returns a value carries
+/// `DW_AT_type` naming the return type, and one that returns none
+/// omits it. Without the attribute every function reads as void.
+#[test]
+fn subprograms_name_their_return_type() {
+    let u = compile_unit(
+        "subprogram-return",
+        "struct pt { int x, y; };\n\
+         int apply(int (*fn)(int), int x) { return fn(x); }\n\
+         void nothing(void) { }\n\
+         static void sv(int a) { (void)a; }\n\
+         static int si(void) { return 1; }\n\
+         struct pt mk(void) { struct pt p; p.x = 1; p.y = 2; return p; }\n\
+         char *sp(char *s) { return s; }\n\
+         void **ppv(void) { return 0; }\n\
+         unsigned long ul(void) { return 0; }\n\
+         double dd(void) { return 0.0; }\n\
+         int va(const char *f, ...) { (void)f; return 0; }\n\
+         int use(void) { sv(1); return si() + apply(0, 0) + (int)ul() + (int)dd()\n\
+             + va(\"x\") + mk().x + (sp(0) != 0) + (ppv() != 0); }\n",
+    );
+
+    for (f, ty) in [
+        ("apply", "int"),
+        ("si", "int"),
+        ("va", "int"),
+        ("ul", "unsigned long"),
+        ("dd", "double"),
+        ("mk", "pt"),
+    ] {
+        let die = u.named(DW_TAG_SUBPROGRAM, f);
+        assert_eq!(u.type_of(die).name(), Some(ty), "return type of `{f}`");
+    }
+
+    // A pointer return keeps every level; `void **` bottoms out in an
+    // untyped pointer.
+    let sp = u.type_of(u.named(DW_TAG_SUBPROGRAM, "sp"));
+    assert_eq!(sp.tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(u.type_of(sp).name(), Some("char"));
+    let ppv = u.type_of(u.named(DW_TAG_SUBPROGRAM, "ppv"));
+    assert_eq!(ppv.tag, DW_TAG_POINTER_TYPE);
+    let inner = u.type_of(ppv);
+    assert_eq!(inner.tag, DW_TAG_POINTER_TYPE);
+    assert!(
+        inner.at(DW_AT_TYPE).is_none(),
+        "the inner level of `void **` is `void *`"
+    );
+
+    for f in ["nothing", "sv"] {
+        assert!(
+            u.named(DW_TAG_SUBPROGRAM, f).at(DW_AT_TYPE).is_none(),
+            "a void-returning subprogram carries no DW_AT_type"
+        );
+    }
+    // The return type rides alongside the linkage and child-list
+    // distinctions rather than replacing them.
+    for (f, external) in [("si", false), ("sv", false), ("apply", true), ("ul", true)] {
+        let die = u.named(DW_TAG_SUBPROGRAM, f);
+        assert_eq!(
+            die.at(DW_AT_EXTERNAL).is_some(),
+            external,
+            "linkage of `{f}`"
+        );
+    }
+    let va_kids: Vec<u64> = u
+        .children(u.named(DW_TAG_SUBPROGRAM, "va"))
+        .iter()
+        .map(|d| d.tag)
+        .collect();
+    assert_eq!(
+        va_kids,
+        [DW_TAG_FORMAL_PARAMETER, DW_TAG_UNSPECIFIED_PARAMETERS]
+    );
+}

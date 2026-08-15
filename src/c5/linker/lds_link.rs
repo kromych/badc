@@ -739,6 +739,17 @@ impl Val {
     fn abs(v: u64) -> Val {
         Val { v, att: Att::Abs }
     }
+
+    /// Value an expression naming the symbol that holds it sees. Only
+    /// the definition taken from the location counter picks up a
+    /// section for its own symtab entry, so what it hands on is a
+    /// number (bfd's rel_from_abs).
+    fn as_reference(self) -> Val {
+        match self.att {
+            Att::DotAbs => Val::abs(self.v),
+            _ => self,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -2474,7 +2485,7 @@ impl<'a> LdsLinker<'a> {
             return Some(Val { v: self.dot, att });
         }
         if let Some(s) = self.script_now.get(name) {
-            return Some(s.val);
+            return Some(s.val.as_reference());
         }
         if let Some(&(oi, si)) = self.globals.get(name)
             && let Some(v) = self.object_sym_val(oi, si)
@@ -2482,7 +2493,7 @@ impl<'a> LdsLinker<'a> {
             return Some(v);
         }
         if let Some(s) = self.script_prev.get(name) {
-            return Some(s.val);
+            return Some(s.val.as_reference());
         }
         None
     }
@@ -4928,18 +4939,20 @@ impl<'a> LdsLinker<'a> {
                 size: 0,
             });
         }
-        // Referenced-but-undefined weak symbols surface as UNDEF.
+        // An undefined weak symbol reaches the table only where the
+        // output still names it: bfd keeps the ones its relocations
+        // reference and drops the rest, so a final link that emits no
+        // relocations carries none of them.
         let mut weak_undefs: BTreeSet<&String> = BTreeSet::new();
-        for o in &self.objects {
-            for sym in &o.symbols {
-                if sym.shndx as u16 == SHN_UNDEF
-                    && sym.binding() == STB_WEAK
-                    && !sym.name.is_empty()
-                    && !self.globals.contains_key(&sym.name)
-                    && !self.script_now.contains_key(&sym.name)
-                {
-                    weak_undefs.insert(&sym.name);
-                }
+        for r in &self.emitted {
+            let sym = &self.objects[r.obj].symbols[r.sym as usize];
+            if sym.shndx as u16 == SHN_UNDEF
+                && sym.binding() == STB_WEAK
+                && !sym.name.is_empty()
+                && !self.globals.contains_key(&sym.name)
+                && !self.script_now.contains_key(&sym.name)
+            {
+                weak_undefs.insert(&sym.name);
             }
         }
         for name in weak_undefs {
@@ -7822,6 +7835,102 @@ SECTIONS {
             "merged-section temporary dropped"
         );
         assert!(rows.iter().any(|(n, _, _)| n == "b_local"));
+    }
+
+    /// A definition taken from the location counter outside an output
+    /// section carries a section in its own entry but hands a number
+    /// to whatever names it, so the aliases a script builds from one
+    /// are absolute, as they are in ld.
+    #[test]
+    fn a_symbol_defined_from_dot_hands_on_a_number() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x1000;
+  .text : { *(.text) in_text = .; }
+  . = ALIGN(0x1000);
+  etext = .;
+  .data : { *(.data) }
+}
+alias_etext = etext;
+alias_in_text = in_text;
+alias_sum = etext + 4;
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let syms = image_symbols(&res.image);
+        let at = |n: &str| {
+            let s = syms
+                .iter()
+                .find(|(name, _, _)| name == n)
+                .unwrap_or_else(|| panic!("{n}"));
+            (s.1, s.2)
+        };
+        let text_shndx = 1u16;
+        assert_ne!(at("etext").1, SHN_ABS, "the definition keeps a section");
+        assert_eq!(at("alias_etext"), (at("etext").0, SHN_ABS));
+        assert_eq!(at("alias_sum"), (at("etext").0 + 4, SHN_ABS));
+        assert_eq!(
+            at("alias_in_text"),
+            (at("in_text").0, text_shndx),
+            "an in-section definition stays section relative"
+        );
+    }
+
+    /// An undefined weak symbol reaches `.symtab` only where a
+    /// relocation the output keeps names it, as in bfd.
+    #[test]
+    fn undefined_weak_symbols_need_a_relocation_naming_them() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x1000;
+  .text : { *(.text) }
+  .data : { *(.data) }
+  /DISCARD/ : { *(.gone) }
+}
+"#,
+        )
+        .expect("script parses");
+        let obj = || {
+            let a = TestObj::new()
+                .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+                .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+                .sec(".gone", SHT_PROGBITS, SHF_ALLOC, 8, &[0u8; 8])
+                .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+                .sym("wu_kept", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+                .sym("wu_gone", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+                // Symtab: null(0), sections(1..=3), _start(4),
+                // wu_kept(5), wu_gone(6).
+                .reloc(1, 0, 5, rt::R_X86_64_64, 0)
+                .reloc(2, 0, 6, rt::R_X86_64_64, 0)
+                .build(EM_X86_64);
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")]
+        };
+        let res = link_with_script(&script, obj(), &LdsOptions::default()).expect("links");
+        let names: Vec<String> = image_symbols(&res.image)
+            .into_iter()
+            .map(|(n, _, _)| n)
+            .collect();
+        assert!(!names.iter().any(|n| n.starts_with("wu_")), "none kept");
+        let opts = LdsOptions {
+            emit_relocs: true,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, obj(), &opts).expect("links");
+        let weak: Vec<(String, u16)> = image_sym_rows(&res.image)
+            .into_iter()
+            .filter(|(_, info, _)| info >> 4 == STB_WEAK)
+            .map(|(n, _, shndx)| (n, shndx))
+            .collect();
+        assert_eq!(weak, alloc::vec![("wu_kept".to_string(), SHN_UNDEF)]);
     }
 
     /// Without a PHDRS command a PT_LOAD ends where bfd ends one: at a

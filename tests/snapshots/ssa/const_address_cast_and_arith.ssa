@@ -238,28 +238,29 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     terminator Return(v145)   (exit_acc=v145)
   block 44  start_pc=0
     v146 ImmData(120)                                     -> x0
-    v147 Load { addr=v146, disp=0, kind=I64 }             -> x0
-    v148 ImmData(216)                                     -> x1
-    v149 Imm(16)                                          -> x2
-    v150 BinopI { op=add, lhs=v148, rhs_imm=16 }          -> x1
-    v151 Binop { op=ne, lhs=v147, rhs=v150 }              -> x0
-    terminator Bz { cond=v151, target=b46, fall=b45 }   (exit_acc=v151)
+    v147 Load { addr=v146, disp=0, kind=I64 }             -> x1
+    v148 ImmData(216)                                     -> x0
+    v149 Imm(32)                                          -> x2
+    v150 BinopI { op=add, lhs=v148, rhs_imm=32 }          -> x2
+    v151 BinopI { op=add, lhs=v148, rhs_imm=24 }          -> x0
+    v152 Binop { op=ne, lhs=v147, rhs=v151 }              -> x0
+    terminator Bz { cond=v152, target=b46, fall=b45 }   (exit_acc=v152)
   block 45  start_pc=0
-    v152 Imm(22)                                          -> x0
-    terminator Return(v152)   (exit_acc=v152)
+    v153 Imm(22)                                          -> x0
+    terminator Return(v153)   (exit_acc=v153)
   block 46  start_pc=0
-    v153 ImmData(128)                                     -> x0
-    v154 Load { addr=v153, disp=0, kind=I64 }             -> x0
-    v155 ImmData(296)                                     -> x1
-    v156 Imm(0)                                           -> x2
-    v157 Binop { op=ne, lhs=v154, rhs=v155 }              -> x0
-    terminator Bz { cond=v157, target=b48, fall=b47 }   (exit_acc=v157)
+    v154 ImmData(128)                                     -> x0
+    v155 Load { addr=v154, disp=0, kind=I64 }             -> x0
+    v156 ImmData(296)                                     -> x1
+    v157 Imm(0)                                           -> x2
+    v158 Binop { op=ne, lhs=v155, rhs=v156 }              -> x0
+    terminator Bz { cond=v158, target=b48, fall=b47 }   (exit_acc=v158)
   block 47  start_pc=0
-    v158 Imm(23)                                          -> x0
-    terminator Return(v158)   (exit_acc=v158)
-  block 48  start_pc=0
-    v159 Imm(0)                                           -> x0
+    v159 Imm(23)                                          -> x0
     terminator Return(v159)   (exit_acc=v159)
+  block 48  start_pc=0
+    v160 Imm(0)                                           -> x0
+    terminator Return(v160)   (exit_acc=v160)
   block 49  start_pc=0
     terminator Jmp(b22)
 ; --- SSA dump (ok=true) ent_pc=0 ---

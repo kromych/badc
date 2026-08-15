@@ -176,10 +176,10 @@ Disassembly of section .text:
                	movl	$0x15, %eax
                	retq
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	leaq	<rip>, %rcx
-               	addq	$0x10, %rcx
-               	cmpq	%rcx, %rax
+               	movq	(%rax), %rcx
+               	leaq	<rip>, %rax
+               	addq	$0x18, %rax
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x16, %eax
                	retq

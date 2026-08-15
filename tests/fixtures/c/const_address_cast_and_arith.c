@@ -36,7 +36,7 @@ static unsigned long before_words1  = (unsigned long)&words - 1;
 static unsigned long before_words16 = (unsigned long)&words - 16;
 static unsigned long before_ints4   = (unsigned long)&ints - 4;
 static unsigned long before_g8      = (unsigned long)&g - 8;
-static unsigned long mid_back       = (unsigned long)&words[4] - 16;
+static unsigned long mid_back       = (unsigned long)&words[4] - 8;
 static T *two_back = (T *)&structs[2] - 2;
 
 // Integer-typed casts: the sum is a byte count past the address.
@@ -74,7 +74,9 @@ int main(void) {
     if ((unsigned long)&words - before_words16 != 16) return 19;
     if ((unsigned long)&ints - before_ints4 != 4) return 20;
     if ((unsigned long)&g - before_g8 != 8) return 21;
-    if (mid_back != (unsigned long)&words[2]) return 22;
+    // Byte-computed expectation: `long` is four bytes on the Windows
+    // targets, so an element-computed one would bake in LP64.
+    if (mid_back != (unsigned long)((char *)&words[4] - 8)) return 22;
     if (two_back != &structs[0]) return 23;
     return 0;
 }

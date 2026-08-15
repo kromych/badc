@@ -922,19 +922,21 @@ pub(crate) enum AsmSectionItem {
         fill: Option<u8>,
         max: Option<u32>,
     },
-    /// `.org n`: pad with zero bytes to section offset `n`.
-    Org(u32),
-    /// `.org label + expr`: pad to a section-local label's offset plus a
-    /// constant expression (`.org 2b + %c3`, the `__bug_table` entry size).
+    /// `.org n[, fill]`: pad to section offset `n` with `fill`, zero by
+    /// default.
+    Org(u32, u8),
+    /// `.org label + expr[, fill]`: pad to a section-local label's offset plus
+    /// a constant expression (`.org 2b + %c3`, the `__bug_table` entry size).
     /// The label and expression resolve at materialize time.
     OrgLabel {
         label: alloc::string::String,
         addend: alloc::string::String,
+        fill: u8,
     },
-    /// `.org expr` over locations (`.org . - (664b-663b) + (662b-661b)`,
-    /// the alternatives length equalizer): the target offset is the
-    /// expression's value, an absolute or a location of this section.
-    OrgExpr(alloc::string::String),
+    /// `.org expr[, fill]` over locations (`.org . - (664b-663b) +
+    /// (662b-661b)`, the alternatives length equalizer): the target offset is
+    /// the expression's value, an absolute or a location of this section.
+    OrgExpr(alloc::string::String, u8),
     /// `.rept count` whose count reads section labels, deferred past macro
     /// expansion; the body repeats `count` times at layout.
     Rept {
@@ -1920,9 +1922,9 @@ impl AsmSectionSink {
                 // `.set .,` moves the location counter of the section it sits
                 // in; the code stream's is the enclosing function's, which the
                 // arch backend lays out.
-                AsmSectionItem::Org(_)
+                AsmSectionItem::Org(..)
                 | AsmSectionItem::OrgLabel { .. }
-                | AsmSectionItem::OrgExpr(_) => {
+                | AsmSectionItem::OrgExpr(..) => {
                     return Err(alloc::string::String::from(
                         "inline asm: `.set .` outside a section",
                     ));
@@ -4267,20 +4269,37 @@ fn parse_section_item(
             })
         }
         ".org" => {
+            // `.org new-lc[, fill]`. The fill byte is the last top-level
+            // comma-separated argument; the origin keeps the rest, which is
+            // itself an expression and may contain commas in no other form.
+            let parts = split_top_commas(rest);
+            let (rest, fill) = match parts.as_slice() {
+                [_] => (rest, 0u8),
+                [org, f] => {
+                    let v = eval_const_expr(f)
+                        .ok_or_else(|| alloc::format!("inline asm: bad `.org` fill `{f}`"))?;
+                    (*org, v as u8)
+                }
+                _ => return Err(alloc::format!("inline asm: bad `.org` operands `{rest}`")),
+            };
+            let rest = rest.trim();
             if let Some(n) = parse_raw_int(rest).filter(|&n| n >= 0) {
-                return Ok(AsmSectionItem::Org(n as u32));
+                return Ok(AsmSectionItem::Org(n as u32, fill));
             }
             // `.org label + expr`: the target is a section-local label's offset
             // plus a constant. Split on the first `+`; the label must be a
-            // backward numeric reference or a symbol name.
+            // backward numeric reference or a symbol name. `.` is the location
+            // counter, not a symbol, so it takes the expression form below.
             let (label, addend) = rest
                 .split_once('+')
                 .map(|(l, r)| (l.trim(), r.trim()))
-                .unwrap_or((rest.trim(), "0"));
-            if numeric_label_digits(label).is_some() || is_asm_symbol_name(label) {
+                .unwrap_or((rest, "0"));
+            if label != "." && (numeric_label_digits(label).is_some() || is_asm_symbol_name(label))
+            {
                 return Ok(AsmSectionItem::OrgLabel {
                     label: alloc::string::String::from(label),
                     addend: alloc::string::String::from(addend),
+                    fill,
                 });
             }
             // A general location expression, deferred to layout.
@@ -4290,7 +4309,10 @@ fn parse_section_item(
                 lax_div: true,
             };
             if eval_asm_value(rest, &probe).is_ok() {
-                return Ok(AsmSectionItem::OrgExpr(alloc::string::String::from(rest)));
+                return Ok(AsmSectionItem::OrgExpr(
+                    alloc::string::String::from(rest),
+                    fill,
+                ));
             }
             Err(alloc::format!("inline asm: bad `.org` offset `{rest}`"))
         }
@@ -6213,8 +6235,8 @@ fn measure_round_inner(
                     };
                     at += align_gap(at, bytes, *max);
                 }
-                AsmSectionItem::Org(n) => at = at.max(*n as i64),
-                AsmSectionItem::OrgLabel { label, addend } => {
+                AsmSectionItem::Org(n, _) => at = at.max(*n as i64),
+                AsmSectionItem::OrgLabel { label, addend, .. } => {
                     let digits = numeric_label_digits(label).unwrap_or(label);
                     let base = map
                         .get(digits)
@@ -6230,7 +6252,7 @@ fn measure_round_inner(
                     })?;
                     at = (base + add).max(at);
                 }
-                AsmSectionItem::OrgExpr(expr) => {
+                AsmSectionItem::OrgExpr(expr, _) => {
                     // A target referencing labels of a later subsection (the
                     // alternatives length equalizer) resolves in round two,
                     // like a fill count.
@@ -6477,7 +6499,11 @@ pub(crate) fn materialize_asm_sections(
                         }
                     }
                 }
-                AsmSectionItem::OrgLabel { label, addend } => {
+                AsmSectionItem::OrgLabel {
+                    label,
+                    addend,
+                    fill,
+                } => {
                     // Resolve the label's offset within this section (defined
                     // above), then pad to that plus the constant addend.
                     let lname = numeric_label_digits(label)
@@ -6503,17 +6529,17 @@ pub(crate) fn materialize_asm_sections(
                             "inline asm: `.org` moves backwards",
                         ));
                     }
-                    sec.bytes.resize(target as usize, 0);
+                    sec.bytes.resize(target as usize, *fill);
                 }
-                AsmSectionItem::Org(n) => {
+                AsmSectionItem::Org(n, fill) => {
                     if (*n as usize) < sec.bytes.len() {
                         return Err(alloc::string::String::from(
                             "inline asm: `.org` moves backwards",
                         ));
                     }
-                    sec.bytes.resize(*n as usize, 0);
+                    sec.bytes.resize(*n as usize, *fill);
                 }
-                AsmSectionItem::OrgExpr(expr) => {
+                AsmSectionItem::OrgExpr(expr, fill) => {
                     let key = section_key(b);
                     let here = sec.bytes.len() as i64;
                     let resolve = |t: &str| {
@@ -6533,7 +6559,7 @@ pub(crate) fn materialize_asm_sections(
                             "inline asm: `.org` moves backwards",
                         ));
                     }
-                    sec.bytes.resize(target as usize, 0);
+                    sec.bytes.resize(target as usize, *fill);
                 }
                 AsmSectionItem::Rept { count, items } => {
                     let n = eval_fill_count_with(count, sec.bytes.len() as i64, const_of, &|t| {
@@ -7297,7 +7323,7 @@ pub(crate) fn materialize_asm_sections(
                 AsmSectionItem::Data { .. }
                 | AsmSectionItem::Fill { .. }
                 | AsmSectionItem::Bytes(_)
-                | AsmSectionItem::Org(_)
+                | AsmSectionItem::Org(..)
                 | AsmSectionItem::OrgLabel { .. } => sec.after_insn = false,
                 _ => {}
             }
@@ -7312,9 +7338,9 @@ pub(crate) fn materialize_asm_sections(
                 AsmSectionItem::Align { .. }
                 | AsmSectionItem::AlignArch { .. }
                 | AsmSectionItem::Rept { .. }
-                | AsmSectionItem::Org(_)
+                | AsmSectionItem::Org(..)
                 | AsmSectionItem::OrgLabel { .. }
-                | AsmSectionItem::OrgExpr(_) => {}
+                | AsmSectionItem::OrgExpr(..) => {}
                 _ => sec.map.content(map_at, laid, MapClass::Data),
             }
         }

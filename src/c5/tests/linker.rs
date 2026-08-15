@@ -8556,6 +8556,104 @@ fn asm_section_org_pads_to_label_plus_operand() {
 }
 
 #[test]
+fn asm_hidden_and_reloc_directives_reach_the_object() {
+    // `.hidden` sets STV_HIDDEN in `st_other`; `.reloc offset, TYPE, sym +
+    // addend` places a relocation of the named type at a section-relative
+    // offset with no field to derive it from. The nVHE hyp relocation table
+    // is built entirely out of the latter.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const STV_HIDDEN: u8 = 2;
+    for (target, rtype, spelling) in [
+        (Target::LinuxX64, 2u32, "R_X86_64_PC32"),
+        (Target::LinuxAarch64, 261u32, "R_AARCH64_PREL32"),
+    ] {
+        let src = alloc::format!(
+            "__asm__(\
+             \".globl vis_sym\\n\"\
+             \".hidden vis_sym\\n\"\
+             \".pushsection .hyprel,\\\"a\\\"\\n\"\
+             \"vis_sym:\\n\"\
+             \"\\t.word 0\\n\"\
+             \"\\t.word 0\\n\"\
+             \"\\t.reloc 0, {spelling}, vis_sym + 0xde0\\n\"\
+             \".popsection\\n\");\n\
+             int main(void) {{ return 0; }}\n"
+        );
+        let program = Compiler::with_target(src, target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        assert_eq!(
+            elf_symbol_st_other(&bytes, "vis_sym"),
+            STV_HIDDEN,
+            "{target:?}: `.hidden` visibility"
+        );
+        let sections = elf_sections(&bytes);
+        let rela = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".rela.hyprel")
+            .unwrap_or_else(|| panic!("{target:?}: .rela.hyprel missing"))
+            .3;
+        assert_eq!(rela.len(), 24, "{target:?}: one relocation");
+        let r_offset = u64::from_le_bytes(rela[0..8].try_into().unwrap());
+        let r_info = u64::from_le_bytes(rela[8..16].try_into().unwrap());
+        let r_addend = i64::from_le_bytes(rela[16..24].try_into().unwrap());
+        assert_eq!(r_offset, 0, "{target:?}: `.reloc` offset");
+        assert_eq!(r_info as u32, rtype, "{target:?}: named relocation type");
+        assert_eq!(r_addend, 0xde0, "{target:?}: `.reloc` addend");
+        assert_eq!(
+            elf_symbols(&bytes)[(r_info >> 32) as usize].0,
+            "vis_sym",
+            "{target:?}: `.reloc` target symbol"
+        );
+    }
+}
+
+#[test]
+fn asm_section_org_fills_with_the_named_byte() {
+    // `.org new-lc, fill` pads with `fill` rather than zero, and the origin
+    // may be a label, a constant or the location counter. The kernel's FRED
+    // and PVH entry pages pad with 0xcc and 0 this way.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "void a(void) { __asm__ volatile(\
+        \".pushsection .otab,\\\"aw\\\"\\n\"\
+        \"2:\\t.byte 1\\n\"\
+        \"\\t.org 2b + 4, 0xcc\\n\"\
+        \"\\t.byte 2\\n\"\
+        \"\\t.org 12, 0x90\\n\"\
+        \"\\t.byte 3\\n\"\
+        \"\\t.org . + 3, 0xaa\\n\"\
+        \".popsection\\n\"); }\n\
+        int main(void) { a(); return 0; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let sec = sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".otab")
+            .unwrap_or_else(|| panic!("{target:?}: .otab missing"));
+        assert_eq!(
+            sec.3,
+            vec![
+                1, 0xcc, 0xcc, 0xcc, // .byte 1 then `.org 2b + 4, 0xcc`
+                2, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, // then `.org 12, 0x90`
+                3, 0xaa, 0xaa, 0xaa, // then `.org . + 3, 0xaa`
+            ],
+            "{target:?}"
+        );
+    }
+}
+
+#[test]
 fn inline_asm_label_glued_section_directive_balances() {
     // A section directive may follow a label on the same line in the code
     // stream (`1:\t.pushsection ...`): GNU as treats the label and the

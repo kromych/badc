@@ -18,14 +18,19 @@ Each lane:
   4. On Linux lanes, rerun the lib suite under the register-pressure caps
      (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--lib --features "codegen_test full"`),
      the same scope as CI's pressure matrix.
-  5. Run the gating demos (`GATING_DEMOS` below).
-  6. On Linux lanes, compile and link the pinned `defconfig` kernel with
+  5. Run the gating demos (`GATING_DEMOS` below) through
+     `scripts/run_demos.py`, which runs them concurrently; every demo the
+     lane's kind selects runs, `--demo-jobs` bounds only how many at once.
+  6. On the lane `--snapshot-box` names, regenerate `tests/snapshots/` and
+     fail on drift, as CI's `snapshots clean` job does. Skip with
+     `--no-snapshots`.
+  7. On Linux lanes, compile and link the pinned `defconfig` kernel with
      badc -- CI's kernel corpus, not the vendored minimal configs. Skip
      with `--no-kernel`.
 
 Usage (one `--box` flag per remote lane):
 
-    python3 scripts/validate_local_boxes.py \\
+    python3 scripts/validate_local_boxes.py --snapshot-box krom2 \\
         --box xps=xps-8930.local:~/src/compilers/badc/:linux \\
         --box krom2=krom2.local:~/src/compilers/badc/:linux \\
         --box win=kromyrzen.local:R:/src/compilers/badc/:windows
@@ -50,31 +55,102 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# Lane kinds a demo runs on. Not every off-platform demo skips with a
+# zero status -- demos/chibicc exits 2 on Windows -- so the kinds are
+# named rather than left to the demo.
+ALL = frozenset({"linux", "windows", "macos"})
+POSIX = frozenset({"linux", "macos"})
+LINUX = frozenset({"linux"})
+
+# Demos to run at a time per lane. Several drive their own thread pool
+# (demos/qemu takes cpu_count), so the width trades lane wall clock
+# against oversubscription rather than scaling with core count.
+DEMO_JOBS = 4
+
+# Longest first: the phase ends when the last long demo does, so one
+# that starts late after the pool drains extends the phase by its whole
+# duration. The four leading entries are the measured long poles.
 GATING_DEMOS = (
-    "demos/sqlite3/smoke.py",
-    "demos/lua/smoke.py",
-    "demos/miniz/smoke.py",
-    "demos/monocypher/smoke.py",
-    "demos/stb/smoke.py",
-    "demos/tweetnacl/smoke.py",
-    "demos/quickjs/smoke.py",
-    "demos/raylib/smoke.py",
-    "demos/curl/smoke.py",
+    # The only demo that drives ./configure + make and replays the
+    # Makefile's own compile lines through badc, and the only one
+    # running an upstream suite (tests/all.tcl) against a zero-failure
+    # baseline. The longest demo in the roster, so it sets the floor.
+    ("demos/tcl/smoke.py", POSIX),
+    # PE32+ EFI applications for both Windows targets, --freestanding,
+    # badc's own linker, no GenFw: the EFIAPI ABI surface and the
+    # subsystem-10 header, which no hosted demo reaches. Boots the
+    # images where QEMU and firmware are installed.
+    ("demos/edk2/smoke.py", ALL),
+    # The widest corpus in the tree (1683 units on aarch64, 1466 on
+    # x86_64) and the only pure self-link -- badc's own linker over
+    # 100%-badc objects, no system linker. run_demos.py gates its build
+    # and its run, not its boot: the boot consumes the firmware CI's
+    # ovmf lane publishes as an artifact. Needs pkg-config,
+    # libglib2.0-dev, zlib1g-dev, libfdt-dev.
+    ("demos/qemu/smoke.py", LINUX),
+    # The whole upstream src/ tree five ways, deliberately not
+    # amalgamated: BearSSL reuses `static` names across files, so this
+    # is the internal-linkage and cross-TU exercise. Runs 17 KAT suites.
+    ("demos/bearssl/smoke.py", ALL),
+    ("demos/sqlite3/smoke.py", ALL),
+    ("demos/lua/smoke.py", ALL),
+    ("demos/miniz/smoke.py", ALL),
+    ("demos/monocypher/smoke.py", ALL),
+    ("demos/stb/smoke.py", ALL),
+    ("demos/tweetnacl/smoke.py", ALL),
+    ("demos/quickjs/smoke.py", ALL),
+    ("demos/raylib/smoke.py", ALL),
+    ("demos/curl/smoke.py", ALL),
     # Cooperative-concurrency demos gate the inline-asm context switch
     # (sp move + setjmp/longjmp); POSIX-gated, they skip cleanly on
     # Windows and off x86-64.
-    "demos/libmill/smoke.py",
-    "demos/libdill/smoke.py",
-    "demos/coroutines/smoke.py",
+    ("demos/libmill/smoke.py", ALL),
+    ("demos/libdill/smoke.py", ALL),
+    ("demos/coroutines/smoke.py", ALL),
     # A badc-built assembler runs its own golden suite, so a wrong value
     # in compiled code surfaces as a runtime failure rather than a bad
     # object. Every other demo here compiled clean while this caught a
-    # stale-value miscompile, so it gates too. (demos/python is the same
-    # kind of check and is gated in CI, but it cannot join this list
-    # until a BSS global can be dynamically exported -- see the TODO in
-    # src/c5/linker/synth_build.rs.)
-    "demos/nasm/smoke.py",
+    # stale-value miscompile, so it gates too.
+    ("demos/nasm/smoke.py", ALL),
+    # The only demo feeding badc an amalgamation on stdin (`badc -`)
+    # with #line markers driving DWARF file attribution.
+    ("demos/bzip2/smoke.py", ALL),
+    # libm calls and their FP return register, compound-assign int->FP
+    # conversion, and a JIT dlopen of libm.
+    ("demos/kissfft/smoke.py", ALL),
+    # Links system GUI libraries -- user32/gdi32, libX11.so.6, libobjc +
+    # AppKit -- for all five targets from any host, plus #pragma
+    # subsystem and #pragma entrypoint. The only cover for linking a
+    # non-libc system library on a target that is not the host.
+    ("demos/gui_hello/smoke.py", ALL),
+    # PE subsystem bytes (CUI and NATIVE) and the ntdll HANDLE-returning
+    # bindings, where a 64-bit return truncation would show.
+    ("demos/nt_loader/smoke.py", ALL),
+    # A self-hosting compiler's TU set across x86_64/aarch64 and
+    # ELF/Mach-O/PE; locks in bitfield storage units (6.7.2.1p11),
+    # <inttypes.h> PRI/SCN, and the Win64 16-byte-aligned jmp_buf.
+    ("demos/tinycc/smoke.py", ALL),
+    # POSIX libc surface no other demo here spells (fork/execvp/waitpid,
+    # glob, dirname, open_memstream, strtold) and file-scope compound
+    # literals. Exits 2 on Windows.
+    ("demos/chibicc/smoke.py", POSIX),
 )
+
+# Out of the roster, measured on the boxes rather than assumed:
+#   demos/kernel   481 s per Linux lane on both arches, nearly all of it
+#                  eight UEFI boots, half cross-architecture under TCG.
+#   demos/yasm     Red on both Linux boxes before badc is at fault: its
+#                  host-cc reference build hits the boxes' gcc defaulting
+#                  to -std=c23, where yasm's own
+#                  `enum boolean { false = FALSE, ... }` is a syntax
+#                  error. badc's yasm builds and runs on both.
+#   demos/python   POSIX-only, and red on the aarch64 box in its host
+#                  reference build: CPython's own checksharedmods step
+#                  faults in sysconfig before badc compiles anything.
+#                  The dynamic export of a BSS global, which this entry
+#                  used to name as the blocker, is implemented in
+#                  synth_build.rs; whether anything else blocks the demo
+#                  cannot be told until the host build runs.
 
 
 # The kernel step's corpus is the pinned `defconfig` release setup.py fetches,
@@ -208,7 +284,19 @@ def kernel_steps() -> list[str]:
     ]
 
 
-def remote_run_linux(box: Box, github_token: str, kernel: bool, demos: bool) -> int:
+def demo_command(box: Box, jobs: int, runner: str) -> str:
+    """The whole demo phase as one command.
+
+    The demos are independent processes with per-demo cache directories, so
+    `run_demos.py` runs them in a pool instead of a serial `&&` chain. It
+    prints its roster and pool width; `jobs` bounds concurrency only."""
+    demos = " ".join(d for d, kinds in GATING_DEMOS if box.kind in kinds)
+    return f"{runner} scripts/run_demos.py --jobs {jobs} {demos}"
+
+
+def remote_run_linux(
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+) -> int:
     steps = [
         "step cargo build --release --locked --features full",
         "step cargo test --release --features full",
@@ -223,7 +311,9 @@ def remote_run_linux(box: Box, github_token: str, kernel: bool, demos: bool) -> 
         'cargo test --release --lib --features "codegen_test full"',
     ]
     if demos:
-        steps += [f"step python3 {d}" for d in GATING_DEMOS]
+        steps.append("step " + demo_command(box, jobs, "python3"))
+    if snapshots:
+        steps.append("step python3 scripts/snapshot_drift.py")
     # Last: the most expensive step, so the cheaper ones report first.
     if kernel:
         steps += kernel_steps()
@@ -306,9 +396,12 @@ def sync_windows(box: Box, github_token: str) -> int:
     )
 
 
-# `_kernel` is unused: the kernel step is a Linux-lane dimension, and the
-# parameter is present only so both lane kinds dispatch through one signature.
-def remote_run_windows(box: Box, github_token: str, _kernel: bool, demos: bool) -> int:
+# `_kernel` and `_snapshots` are unused: both steps are Linux-lane
+# dimensions, and the parameters are present only so both lane kinds
+# dispatch through one signature.
+def remote_run_windows(
+    box: Box, github_token: str, _kernel: bool, demos: bool, _snapshots: bool, jobs: int
+) -> int:
     # cmd's path separator is the backslash; forward slashes from a
     # caller-supplied --box arg work for some commands but not for
     # `cd /d`, which silently returns success without changing the cwd.
@@ -320,7 +413,7 @@ def remote_run_windows(box: Box, github_token: str, _kernel: bool, demos: bool) 
         "cargo test --release --features full",
     ]
     if demos:
-        parts += [f"python {d}" for d in GATING_DEMOS]
+        parts.append(demo_command(box, jobs, "python"))
     inner = " && ".join(parts)
     # Quote the entire command so the outer ssh-side cmd /c treats the
     # whole `cd && ... && cargo ...` chain as one cmd context. Without
@@ -330,14 +423,16 @@ def remote_run_windows(box: Box, github_token: str, _kernel: bool, demos: bool) 
     return stream(box.short, ["ssh", box.host, f'cmd /c "{inner}"'])
 
 
-def run_box(box: Box, github_token: str, kernel: bool, demos: bool) -> int:
+def run_box(
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+) -> int:
     sync = sync_linux if box.kind == "linux" else sync_windows
     test = remote_run_linux if box.kind == "linux" else remote_run_windows
     rc = sync(box, github_token)
     if rc != 0:
         sys.stdout.write(f"[{box.short}] SYNC FAILED ({rc})\n")
         return rc
-    rc = test(box, github_token, kernel, demos)
+    rc = test(box, github_token, kernel, demos, snapshots, jobs)
     sys.stdout.write(f"[{box.short}] {'OK' if rc == 0 else f'FAIL ({rc})'}\n")
     return rc
 
@@ -358,6 +453,25 @@ def main() -> int:
         "--no-kernel",
         action="store_true",
         help="skip the defconfig kernel step on Linux lanes",
+    )
+    p.add_argument(
+        "--no-snapshots",
+        action="store_true",
+        help="skip the snapshot-drift check on the snapshot lane",
+    )
+    p.add_argument(
+        "--snapshot-box",
+        metavar="NAME",
+        help="Linux lane that runs the snapshot-drift check; the check needs "
+        "one lane's release build, not four. No lane runs it unless named: "
+        "regeneration is not host-independent yet (see the note in main)",
+    )
+    p.add_argument(
+        "--demo-jobs",
+        type=int,
+        default=DEMO_JOBS,
+        help=f"demos to run at a time per lane (default {DEMO_JOBS}); bounds "
+        "concurrency only, never which demos run",
     )
     p.add_argument(
         "--no-demos",
@@ -385,6 +499,31 @@ def main() -> int:
                   "run on a box also downloads the release (~150 MB). "
                   "Skip with --no-kernel.")
 
+    # The lane is named rather than picked: `scripts/snapshots.py` is not
+    # host-independent yet. On a linux-x64 host the x64 fixtures link
+    # natively, and on Fedora 44 that map does not yield a `.text` stop
+    # address, so the regeneration appends the runtime tail to the x64
+    # snapshots and every one of them reads as drifted. The aarch64 lane
+    # cross-links both targets and matches the committed corpus.
+    linux_lanes = [b for b in selected if b.kind == "linux"]
+    snapshot_lane = ""
+    if args.no_snapshots:
+        print("snapshot-drift check: SKIPPED (--no-snapshots)")
+    elif not args.snapshot_box:
+        if linux_lanes:
+            print("snapshot-drift check: NO LANE; name one with "
+                  "--snapshot-box (a Linux lane) to gate tests/snapshots/ "
+                  "against drift, as CI's `snapshots clean` job does")
+    elif args.snapshot_box not in {b.short for b in linux_lanes}:
+        print(f"--snapshot-box {args.snapshot_box!r} is not a selected Linux lane",
+              file=sys.stderr)
+        return 2
+    else:
+        snapshot_lane = args.snapshot_box
+        print(f"snapshot-drift check: lane {snapshot_lane}; regenerates "
+              "tests/snapshots/ and fails on drift, as CI's `snapshots clean` "
+              "job does. Needs llvm-objdump. Skip with --no-snapshots.")
+
     github_token = ""
     try:
         github_token = subprocess.run(
@@ -399,7 +538,12 @@ def main() -> int:
 
     def worker(box: Box) -> None:
         results[box.short] = run_box(
-            box, github_token, not args.no_kernel, not args.no_demos
+            box,
+            github_token,
+            not args.no_kernel,
+            not args.no_demos,
+            box.short == snapshot_lane,
+            args.demo_jobs,
         )
 
     threads = [threading.Thread(target=worker, args=(b,)) for b in selected]

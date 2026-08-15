@@ -35,9 +35,27 @@ boxes using `./scripts/validate_local_boxes.py`:
     BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's pressure matrix does
   * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
-    coroutines, nasm
+    coroutines, nasm, qemu, edk2, bearssl, bzip2, kissfft, gui_hello, nt_loader,
+    tinycc, chibicc, tcl. Each entry names the lane kinds it runs on, and
+    `scripts/run_demos.py` runs the lane's set concurrently. `--demo-jobs`
+    bounds how many run at a time, never which ones run; the runner prints
+    its roster and its width.
+  * the snapshot-drift check on the Linux lane `--snapshot-box` names --
+    `--snapshot-box krom2` today: regenerate `tests/snapshots/` and fail on
+    drift, as CI's `snapshots clean` job does. It needs `llvm-objdump` -- the
+    committed snapshots were disassembled with it and GNU objdump's text does
+    not match -- and fails the step when it is absent rather than downgrading
+    the check. No lane runs it unless named, because regeneration is not
+    host-independent: on a linux-x64 host the x64 fixtures link natively, and
+    that map yields no `.text` stop address on Fedora 44, so every x64
+    snapshot reads as drifted. Skip with `--no-snapshots`.
   * the kernel step: `demos/linux/verify.py --linker badc --no-boot` over the
     pinned `defconfig` release, on each Linux lane
+
+Out of `GATING_DEMOS` by measurement, and covered by CI instead: `demos/kernel`,
+`demos/yasm` and `demos/python`; the script records the measurement behind each.
+`demos/qemu` gates its build, self-link and run, not its boot: the boot consumes
+the firmware CI's `ovmf` lane publishes as an artifact.
 
 The script is the contract; this list describes it and has to be updated with it.
 

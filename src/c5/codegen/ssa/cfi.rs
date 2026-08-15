@@ -10,7 +10,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::emit_common::{AsmRelocKind, AsmSection, AsmSectionReloc, AsmSectionTarget};
-use crate::c5::codegen::map_syms::MapMarks;
+use crate::c5::codegen::map_syms::{MapClass, MapMarks};
 
 // Call-frame instruction opcodes. The low-opcode forms pack an operand into
 // the top two bits; `DW_CFA_ADVANCE_LOC_HI`, `DW_CFA_OFFSET_HI` and
@@ -717,6 +717,7 @@ fn encode_table(fdes: &[Fde], t: CfiTarget, eh: bool) -> Result<AsmSection, Stri
         labels: Vec::new(),
         align: t.addr_bytes as u32,
         after_insn: false,
+        map_state: Some(MapClass::Data),
         map: MapMarks::default(),
     })
 }

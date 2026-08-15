@@ -1705,6 +1705,10 @@ pub(crate) struct AsmSection {
     /// that merge into one section. A fresh section starts at the
     /// assembler's section-start boundary.
     pub after_insn: bool,
+    /// The mapping state GNU as tracks per section: none before any
+    /// content, then data or instructions. On AArch64 an instruction
+    /// emitted while it is data is aligned to 4 first.
+    pub map_state: Option<MapClass>,
     /// Code / data run starts, for the AArch64 mapping symbols the object
     /// writer emits.
     pub map: MapMarks,
@@ -1790,7 +1794,9 @@ pub(crate) struct AsmSectionsSnapshot {
     /// Recorded `.cfi_*` directives at the snapshot, so a re-laid-out
     /// function does not describe its frame twice.
     cfi: usize,
-    per_section: alloc::vec::Vec<(usize, usize, usize, u32, bool)>,
+    /// Per section: bytes, relocs, labels, alignment, instruction-boundary
+    /// state, mapping state.
+    per_section: alloc::vec::Vec<(usize, usize, usize, u32, bool, Option<MapClass>)>,
 }
 
 /// The accumulated inline-asm sections and the indexes that make a lookup
@@ -2009,6 +2015,7 @@ impl AsmSectionSink {
             labels: alloc::vec::Vec::new(),
             align: 1,
             after_insn: true,
+            map_state: None,
             map: MapMarks::default(),
         });
         let i = self.sections.len() - 1;
@@ -2044,6 +2051,7 @@ impl AsmSectionSink {
                         s.labels.len(),
                         s.align,
                         s.after_insn,
+                        s.map_state,
                     )
                 })
                 .collect(),
@@ -2066,7 +2074,7 @@ impl AsmSectionSink {
                 self.labels.remove(&l.name);
             }
         }
-        for (s, &(bytes, relocs, labels, align, after_insn)) in
+        for (s, &(bytes, relocs, labels, align, after_insn, map_state)) in
             self.sections.iter_mut().zip(&snap.per_section)
         {
             s.bytes.truncate(bytes);
@@ -2077,6 +2085,7 @@ impl AsmSectionSink {
             }
             s.align = align;
             s.after_insn = after_insn;
+            s.map_state = map_state;
         }
     }
 }
@@ -2094,7 +2103,7 @@ pub(crate) fn resolve_asm_goto_relocs(
         let start = snap
             .per_section
             .get(i)
-            .map_or(0, |&(_, relocs, _, _, _)| relocs);
+            .map_or(0, |&(_, relocs, _, _, _, _)| relocs);
         for r in s.relocs.iter_mut().skip(start) {
             if let AsmSectionTarget::TextBlock(bid) = r.target {
                 r.target = AsmSectionTarget::Text(block_off(bid));
@@ -2117,7 +2126,7 @@ pub(crate) fn resolve_asm_deferred_relocs(
         let start = snap
             .per_section
             .get(i)
-            .map_or(0, |&(_, relocs, _, _, _)| relocs);
+            .map_or(0, |&(_, relocs, _, _, _, _)| relocs);
         for r in s.relocs.iter_mut().skip(start) {
             if let AsmSectionTarget::DeferredText { region, off } = r.target {
                 r.target = AsmSectionTarget::Text(region_base(region) + off as usize);
@@ -5871,7 +5880,69 @@ pub(crate) fn align_fill_pattern(fill: Option<u8>, exec: bool, aarch64: bool) ->
         (Some(b), _, _) => ([b, 0, 0, 0], 1),
         (None, false, _) => ([0, 0, 0, 0], 1),
         (None, true, false) => ([0x90, 0, 0, 0], 1),
-        (None, true, true) => ([0x1f, 0x20, 0x03, 0xd5], 4),
+        (None, true, true) => (A64_NOP, A64_NOP.len()),
+    }
+}
+
+/// The AArch64 NOP, `d503201f`. Its length is the instruction size, the
+/// boundary code and alignment padding split on.
+pub(crate) const A64_NOP: [u8; 4] = [0x1f, 0x20, 0x03, 0xd5];
+
+/// Fill an AArch64 executable alignment gap as GNU as does: the gap's
+/// sub-word remainder as zeros, then whole NOPs. Returns the zero run's
+/// length, which is data where the NOPs are code.
+pub(crate) fn push_a64_exec_align_fill(out: &mut alloc::vec::Vec<u8>, gap: usize) -> usize {
+    let zeros = gap % A64_NOP.len();
+    out.resize(out.len() + zeros, 0);
+    for _ in 0..(gap - zeros) / A64_NOP.len() {
+        out.extend_from_slice(&A64_NOP);
+    }
+    zeros
+}
+
+/// Bytes before an instruction: GNU as brings an AArch64 executable
+/// section's counter to the instruction size only out of the data mapping
+/// state, so an instruction after an alignment directive or an odd `.org`
+/// stays where the counter is. The padding belongs to the data run, and
+/// the labels already placed keep their unaligned values. x86-64 never
+/// pads.
+pub(crate) fn insn_align_gap(
+    at: i64,
+    state: Option<MapClass>,
+    exec: bool,
+    align_is_p2: bool,
+) -> i64 {
+    if align_is_p2 && exec && state == Some(MapClass::Data) {
+        align_gap(at, A64_NOP.len() as i64, None)
+    } else {
+        0
+    }
+}
+
+/// The mapping state an item leaves behind. Attribute-only items, `.org`
+/// and an alignment of one leave it unchanged; a wider alignment directive
+/// in an executable section leaves instructions even where it padded
+/// nothing, so a following instruction is not realigned.
+pub(crate) fn step_map_state(
+    item: &AsmSectionItem,
+    cur: Option<MapClass>,
+    exec: bool,
+    align_is_p2: bool,
+) -> Option<MapClass> {
+    let aligned = |n: u32| (n > 1).then_some(if exec { MapClass::Code } else { MapClass::Data });
+    match item {
+        AsmSectionItem::CodeBytes { .. } => Some(MapClass::Code),
+        AsmSectionItem::Align { n, .. } => aligned(*n).or(cur),
+        AsmSectionItem::AlignArch { n, .. } => {
+            aligned(if align_is_p2 { 1u32 << n.min(&12) } else { *n }).or(cur)
+        }
+        AsmSectionItem::Data { .. } | AsmSectionItem::Fill { .. } | AsmSectionItem::Bytes(_) => {
+            Some(MapClass::Data)
+        }
+        AsmSectionItem::Rept { items, .. } => items
+            .iter()
+            .fold(cur, |st, it| step_map_state(it, st, exec, align_is_p2)),
+        _ => cur,
     }
 }
 
@@ -6178,16 +6249,27 @@ fn measure_round_inner(
         alloc::collections::BTreeMap::new();
     let mut places: alloc::collections::BTreeMap<(usize, usize), i64> =
         alloc::collections::BTreeMap::new();
+    // The mapping state each section was left in, so the instruction padding
+    // measured here matches what the materializer lays down.
+    let mut states: alloc::collections::BTreeMap<alloc::string::String, Option<MapClass>> =
+        alloc::collections::BTreeMap::new();
     for &bi in &subsection_order(blocks) {
         let b = &blocks[bi];
         let key = section_key(b);
+        let exec = b.flags.contains('x');
         // A section already holding bytes in the sink continues at its
         // current length, so measured offsets, alignment gaps, and the
         // location counter agree with the materialized layout.
         let mut at = *lens
             .entry(key.clone())
             .or_insert_with(|| sink.index_of(b).map_or(0, |i| sink[i].bytes.len() as i64));
+        let mut state = *states
+            .entry(key.clone())
+            .or_insert_with(|| sink.index_of(b).and_then(|i| sink[i].map_state));
         for (ii, item) in b.items.iter().enumerate() {
+            if matches!(item, AsmSectionItem::CodeBytes { .. }) {
+                at += insn_align_gap(at, state, exec, align_is_p2);
+            }
             places.insert((bi, ii), at);
             match item {
                 AsmSectionItem::Label(name) => {
@@ -6354,15 +6436,42 @@ fn measure_round_inner(
                             0
                         }
                     };
-                    let mut unit_len = 0i64;
-                    for it in items {
-                        unit_len += rept_item_len(it, const_of)?;
+                    // Padding before an instruction depends on the offset the
+                    // iteration starts at, so the body is measured per
+                    // repetition where it can pad at all.
+                    if items
+                        .iter()
+                        .any(|it| matches!(it, AsmSectionItem::CodeBytes { .. }))
+                        && align_is_p2
+                        && exec
+                    {
+                        for _ in 0..n.max(0) {
+                            for it in items {
+                                if matches!(it, AsmSectionItem::CodeBytes { .. }) {
+                                    at += insn_align_gap(at, state, exec, align_is_p2);
+                                }
+                                at += rept_item_len(it, const_of)?;
+                                state = step_map_state(it, state, exec, align_is_p2);
+                            }
+                        }
+                    } else {
+                        let mut unit_len = 0i64;
+                        for it in items {
+                            unit_len += rept_item_len(it, const_of)?;
+                        }
+                        at += n.max(0) * unit_len;
+                        if n > 0 {
+                            state = step_map_state(item, state, exec, align_is_p2);
+                        }
                     }
-                    at += n.max(0) * unit_len;
                 }
             }
+            if !matches!(item, AsmSectionItem::Rept { .. }) {
+                state = step_map_state(item, state, exec, align_is_p2);
+            }
         }
-        lens.insert(key, at);
+        lens.insert(key.clone(), at);
+        states.insert(key, state);
     }
     let sections = section_name_keys(blocks, sink);
     let mut syms: alloc::collections::BTreeMap<alloc::string::String, i64> =
@@ -6510,40 +6619,58 @@ pub(crate) fn materialize_asm_sections(
                 }
                 other => other,
             };
+            if matches!(item, AsmSectionItem::CodeBytes { .. }) {
+                let pad = insn_align_gap(
+                    sec.bytes.len() as i64,
+                    sec.map_state,
+                    b.flags.contains('x'),
+                    align_is_p2,
+                ) as usize;
+                if pad > 0 {
+                    sec.map.content(sec.bytes.len(), pad, MapClass::Data);
+                    sec.bytes.resize(sec.bytes.len() + pad, 0);
+                }
+            }
             let map_at = sec.bytes.len();
             match item {
                 AsmSectionItem::AlignArch { .. } => unreachable!("resolved above"),
+                // An alignment of one moves nothing, and GNU as builds no
+                // frag for it: no padding, no section alignment, no run.
+                AsmSectionItem::Align { n, .. } if *n <= 1 => {}
                 AsmSectionItem::Align { n, fill, max } => {
                     let gap = align_gap(sec.bytes.len() as i64, *n as i64, None) as usize;
-                    // A max skip drops the alignment; it then constrains
-                    // neither the bytes nor the section's own alignment.
+                    // GNU as records the requested alignment on the section
+                    // even where a max skip drops the padding.
+                    sec.align = sec.align.max(*n);
+                    let exec = b.flags.contains('x');
                     if max.is_none_or(|m| gap <= m as usize) {
-                        sec.align = sec.align.max(*n);
                         let nop_fill = matches!(fill, None | Some(X86_NOP_OPCODE));
-                        // The padding holds instructions only where the
-                        // fill is the target NOP; an explicit fill byte is
-                        // data, and AArch64 has no one-byte NOP to spell it.
-                        sec.map.align(
-                            map_at,
-                            if b.flags.contains('x')
-                                && if align_is_p2 {
-                                    fill.is_none()
-                                } else {
-                                    nop_fill
-                                }
-                            {
-                                MapClass::Code
-                            } else {
-                                MapClass::Data
-                            },
-                        );
-                        if nop_fill && b.flags.contains('x') && !align_is_p2 {
-                            push_x86_exec_align_fill(&mut sec.bytes, gap, sec.after_insn);
+                        if exec && align_is_p2 && fill.is_none() {
+                            let zeros = push_a64_exec_align_fill(&mut sec.bytes, gap);
+                            if zeros > 0 {
+                                sec.map.align(map_at, MapClass::Data);
+                            }
+                            sec.map.align(map_at + zeros, MapClass::Code);
                         } else {
-                            let (pat, plen) =
-                                align_fill_pattern(*fill, b.flags.contains('x'), align_is_p2);
-                            for _ in 0..gap {
-                                sec.bytes.push(pat[sec.bytes.len() % plen]);
+                            // The padding holds instructions where the fill is
+                            // the target NOP, and on AArch64 also where it is
+                            // an explicit byte, which GNU as leaves in the
+                            // instruction state.
+                            sec.map.align(
+                                map_at,
+                                if exec && (align_is_p2 || nop_fill) {
+                                    MapClass::Code
+                                } else {
+                                    MapClass::Data
+                                },
+                            );
+                            if nop_fill && exec && !align_is_p2 {
+                                push_x86_exec_align_fill(&mut sec.bytes, gap, sec.after_insn);
+                            } else {
+                                let (pat, plen) = align_fill_pattern(*fill, exec, align_is_p2);
+                                for _ in 0..gap {
+                                    sec.bytes.push(pat[sec.bytes.len() % plen]);
+                                }
                             }
                         }
                     }
@@ -6622,6 +6749,18 @@ pub(crate) fn materialize_asm_sections(
                     })?;
                     for _ in 0..n.max(0) {
                         for it in items {
+                            if matches!(it, AsmSectionItem::CodeBytes { .. }) {
+                                let pad = insn_align_gap(
+                                    sec.bytes.len() as i64,
+                                    sec.map_state,
+                                    b.flags.contains('x'),
+                                    align_is_p2,
+                                ) as usize;
+                                if pad > 0 {
+                                    sec.map.content(sec.bytes.len(), pad, MapClass::Data);
+                                    sec.bytes.resize(sec.bytes.len() + pad, 0);
+                                }
+                            }
                             let rept_at = sec.bytes.len();
                             match it {
                                 AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
@@ -6658,6 +6797,12 @@ pub(crate) fn materialize_asm_sections(
                                     AsmSectionItem::CodeBytes { .. } => MapClass::Code,
                                     _ => MapClass::Data,
                                 },
+                            );
+                            sec.map_state = step_map_state(
+                                it,
+                                sec.map_state,
+                                b.flags.contains('x'),
+                                align_is_p2,
                             );
                         }
                     }
@@ -7382,6 +7527,10 @@ pub(crate) fn materialize_asm_sections(
                 | AsmSectionItem::Org(..)
                 | AsmSectionItem::OrgLabel { .. } => sec.after_insn = false,
                 _ => {}
+            }
+            if !matches!(item, AsmSectionItem::Rept { .. }) {
+                sec.map_state =
+                    step_map_state(item, sec.map_state, b.flags.contains('x'), align_is_p2);
             }
             // Everything an item lays down other than an instruction is
             // data. `.align` recorded its own class above and `.rept` each
@@ -8981,6 +9130,86 @@ mod asm_section_tests {
             false,
         );
         assert_eq!(skip.len(), 2);
+    }
+
+    #[test]
+    fn a64_exec_align_fill_matches_gnu_as() {
+        // GNU as splits an AArch64 code-section alignment gap: the gap's
+        // sub-word remainder as zeros, then whole NOPs. The split is by the
+        // gap, not by the offset, so a `.balign 2` over one byte writes one
+        // zero. Each row is `(gap, zeros, nops)` read off `as` 2.46.
+        for &(gap, zeros, nops) in &[
+            (0usize, 0usize, 0usize),
+            (1, 1, 0),
+            (2, 2, 0),
+            (3, 3, 0),
+            (4, 0, 1),
+            (7, 3, 1),
+            (8, 0, 2),
+            (12, 0, 3),
+            (15, 3, 3),
+            (30, 2, 7),
+        ] {
+            let mut out = alloc::vec::Vec::new();
+            assert_eq!(push_a64_exec_align_fill(&mut out, gap), zeros, "gap {gap}");
+            assert_eq!(out.len(), gap, "gap {gap} length");
+            assert!(out[..zeros].iter().all(|&b| b == 0), "gap {gap} zeros");
+            assert!(
+                out[zeros..]
+                    .chunks_exact(A64_NOP.len())
+                    .all(|c| c == A64_NOP),
+                "gap {gap} nops"
+            );
+            assert_eq!((out.len() - zeros) / A64_NOP.len(), nops, "gap {gap} count");
+        }
+    }
+
+    #[test]
+    fn insn_align_gap_follows_the_mapping_state() {
+        // The padding before an instruction is a data-to-instruction
+        // transition in an AArch64 code section. No other state pads, and
+        // neither does a non-executable section or x86-64.
+        for at in 0..8i64 {
+            let want = (4 - at % 4) % 4;
+            assert_eq!(insn_align_gap(at, Some(MapClass::Data), true, true), want);
+            assert_eq!(insn_align_gap(at, Some(MapClass::Code), true, true), 0);
+            assert_eq!(insn_align_gap(at, None, true, true), 0);
+            assert_eq!(insn_align_gap(at, Some(MapClass::Data), false, true), 0);
+            assert_eq!(insn_align_gap(at, Some(MapClass::Data), true, false), 0);
+        }
+    }
+
+    #[test]
+    fn an_alignment_of_one_leaves_the_mapping_state_alone() {
+        // GNU as builds no frag for an alignment of one, so it neither
+        // opens a run nor suppresses the padding before a later
+        // instruction. A wider one leaves the section in the instruction
+        // state where the section is executable.
+        let one = AsmSectionItem::Align {
+            n: 1,
+            fill: None,
+            max: None,
+        };
+        let two = AsmSectionItem::Align {
+            n: 2,
+            fill: None,
+            max: None,
+        };
+        for exec in [false, true] {
+            assert_eq!(
+                step_map_state(&one, Some(MapClass::Data), exec, true),
+                Some(MapClass::Data)
+            );
+            assert_eq!(step_map_state(&one, None, exec, true), None);
+        }
+        assert_eq!(
+            step_map_state(&two, Some(MapClass::Data), true, true),
+            Some(MapClass::Code)
+        );
+        assert_eq!(
+            step_map_state(&two, Some(MapClass::Code), false, true),
+            Some(MapClass::Data)
+        );
     }
 
     /// GNU as 2.46 output for an x86-64 executable-section alignment gap

@@ -104,7 +104,8 @@ pub(crate) fn code_stream_marks(len: usize, ranges: &[(usize, usize)]) -> alloc:
 ///
 /// A run opens where the class changes; a section holding only data
 /// carries no mapping symbols, so a data run that opens before the section
-/// has one is held until instructions appear. A start on the offset of the
+/// has one is held until instructions or an opening mark appear, and then
+/// starts at the offset the data did. A start on the offset of the
 /// previous start replaces it, and a start on the section's end marks no
 /// bytes and is dropped.
 pub(crate) fn fold(marks: &mut [MapMark], len: usize) -> alloc::vec::Vec<(u32, MapClass)> {
@@ -131,8 +132,10 @@ pub(crate) fn fold(marks: &mut [MapMark], len: usize) -> alloc::vec::Vec<(u32, M
                 held_data.get_or_insert(m.at);
             }
             MapClass::Data => {
-                if m.opens {
-                    held_data = None;
+                // A held run is already open here, so the mark that forces
+                // it out keeps the offset the data started at.
+                if let Some(held) = held_data.take() {
+                    open(&mut starts, &mut state, held, MapClass::Data);
                 }
                 open(&mut starts, &mut state, m.at, m.class);
             }
@@ -211,6 +214,16 @@ mod tests {
         m.align(0, MapClass::Data);
         m.content(0, 4, MapClass::Data);
         assert_eq!(run(&mut m.0, 4), [(0, "$d")]);
+    }
+
+    #[test]
+    fn padding_after_leading_data_keeps_the_run_start() {
+        let mut m = marks();
+        m.content(0, 1, MapClass::Data);
+        m.align(1, MapClass::Data);
+        m.align(4, MapClass::Code);
+        m.content(4, 4, MapClass::Code);
+        assert_eq!(run(&mut m.0, 8), [(0, "$d"), (4, "$x")]);
     }
 
     #[test]

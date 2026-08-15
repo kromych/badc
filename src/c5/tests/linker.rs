@@ -14085,6 +14085,199 @@ fn aarch64_assembled_shapes_carry_the_mapping_symbols_gnu_as_emits() {
 }
 
 #[test]
+fn aarch64_code_section_alignment_matches_gnu_as() {
+    // GNU as pads a code section's alignment gap with the sub-word
+    // remainder as zeros and the rest as whole NOPs, and brings the
+    // location counter to the instruction boundary before an instruction
+    // whose section is in the data mapping state. Labels keep the offsets
+    // they were written at; an alignment directive, `.org` and a dropped
+    // max skip leave the counter where they put it, so an instruction
+    // after one of those is not realigned. An alignment of one moves
+    // nothing. A section that is not executable pads with zeros only and
+    // never realigns. Every expectation was read off `as` (binutils 2.46)
+    // for the same input.
+    use crate::c5::Target;
+    const NOP: &str = "1f2003d5";
+    /// A shape: what it is, its source, the section it lays out, that
+    /// section's bytes and alignment, the value of `after`, and the
+    /// mapping symbols.
+    type Shape = (
+        &'static str,
+        &'static str,
+        &'static str,
+        String,
+        u64,
+        u64,
+        &'static [(u64, &'static str)],
+    );
+    let shapes: alloc::vec::Vec<Shape> = alloc::vec![
+        (
+            "an odd `.skip` before an instruction",
+            ".text\nstart:\n\t.skip 3\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("00000000{NOP}"),
+            4,
+            3,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a sub-word `.byte` run before an instruction",
+            ".text\nstart:\n\t.byte 0x11,0x22,0x33\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11223300{NOP}"),
+            4,
+            3,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "a sub-word string before an instruction",
+            ".text\nstart:\n\t.ascii \"abc\"\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("61626300{NOP}"),
+            4,
+            3,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "`.balign` over a sub-word remainder",
+            ".text\nstart:\n\t.byte 0x11\n\t.balign 16\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11000000{NOP}{NOP}{NOP}{NOP}"),
+            16,
+            16,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "`.balign` whose gap is whole instructions",
+            ".text\nstart:\n\tnop\n\t.balign 8\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("{NOP}{NOP}{NOP}"),
+            8,
+            8,
+            &[(0, "$x")][..],
+        ),
+        (
+            "`.balign` past a five-byte remainder",
+            ".text\nstart:\n\tnop\n\t.byte 0x11\n\t.balign 8\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("{NOP}11000000{NOP}"),
+            8,
+            8,
+            &[(0, "$x"), (4, "$d"), (8, "$x")][..],
+        ),
+        (
+            "an explicit fill, repeated over the whole gap",
+            ".text\nstart:\n\t.byte 0x11\n\t.balign 4, 0xcc\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11cccccc{NOP}"),
+            4,
+            4,
+            &[(0, "$d"), (1, "$x")][..],
+        ),
+        (
+            "`.align`, a power-of-two exponent on AArch64",
+            ".text\nstart:\n\t.byte 0x11\n\t.align 4\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11000000{NOP}{NOP}{NOP}{NOP}"),
+            16,
+            16,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "`.p2align` over a sub-word remainder",
+            ".text\nstart:\n\t.byte 0x11,0x22,0x33\n\t.p2align 2\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11223300{NOP}"),
+            4,
+            4,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "`.balign 2`, which leaves the instruction unaligned",
+            ".text\nstart:\n\t.byte 0x11\n\t.balign 2\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("1100{NOP}"),
+            4,
+            2,
+            &[(0, "$d"), (2, "$x")][..],
+        ),
+        (
+            "`.balign 1`, which moves nothing",
+            ".text\nstart:\n\t.byte 0x11\n\t.balign 1\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11000000{NOP}"),
+            4,
+            1,
+            &[(0, "$d"), (4, "$x")][..],
+        ),
+        (
+            "`.org`, which leaves the counter where it put it",
+            ".text\nstart:\n\tnop\n\t.org 7\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("{NOP}000000{NOP}"),
+            4,
+            7,
+            &[(0, "$x")][..],
+        ),
+        (
+            "a max skip that drops the padding but keeps the alignment",
+            ".text\nstart:\n\t.byte 0x11\n\t.balign 16, , 2\nafter:\n\tnop\n",
+            ".text",
+            alloc::format!("11{NOP}"),
+            16,
+            1,
+            &[(0, "$d"), (1, "$x")][..],
+        ),
+        (
+            "an instruction in a section that is not executable",
+            ".section .nx,\"aw\",@progbits\nstart:\n\t.byte 0x11\nafter:\n\tnop\n",
+            ".nx",
+            alloc::format!("11{NOP}"),
+            4,
+            1,
+            &[(0, "$d"), (1, "$x")][..],
+        ),
+        (
+            "alignment padding in a section that is not executable",
+            ".section .nx,\"aw\",@progbits\nstart:\n\t.skip 1\n\t.balign 8\nafter:\n\tnop\n",
+            ".nx",
+            alloc::format!("0000000000000000{NOP}"),
+            8,
+            8,
+            &[(0, "$d"), (8, "$x")][..],
+        ),
+    ];
+    // A unit keeps the compiled `.text` and the assembled one in separate
+    // headers of the same name; the assembled bytes are in the later.
+    let laid_out = |obj: &[u8], name: &str| -> alloc::vec::Vec<u8> {
+        elf_sections(obj)
+            .into_iter()
+            .rfind(|(n, ..)| n == name)
+            .map(|(.., b)| b)
+            .unwrap_or_default()
+    };
+    for (what, src, sec, hex, align, after, maps) in shapes {
+        let obj = asm_reloc_tu(src, Target::LinuxAarch64);
+        let want: alloc::vec::Vec<u8> = (0..hex.len() / 2)
+            .map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).unwrap())
+            .collect();
+        assert_eq!(laid_out(&obj, sec), want, "{sec} bytes for {what}");
+        let (sections, syms) = elf_layout(&obj);
+        assert_eq!(sections[sec].1, align, "{sec} sh_addralign for {what}");
+        assert_eq!(syms["after"].1, after, "`after` for {what}");
+        assert_eq!(syms["start"].1, 0, "`start` for {what}");
+        let got: alloc::vec::Vec<(u64, String)> = mapping_symbols(&obj)
+            .into_iter()
+            .filter(|(s, ..)| s == sec)
+            .map(|(_, o, n)| (o, n))
+            .collect();
+        let want_maps: alloc::vec::Vec<(u64, String)> =
+            maps.iter().map(|&(o, n)| (o, String::from(n))).collect();
+        assert_eq!(got, want_maps, "{sec} mapping symbols for {what}");
+    }
+}
+
+#[test]
 fn aarch64_compiled_objects_mark_their_code_and_data() {
     // A compiled unit: `.text` opens with `$x`, an embedded jump table is a
     // `$d` run with `$x` past it, and each non-empty allocatable data

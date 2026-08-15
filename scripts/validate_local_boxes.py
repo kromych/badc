@@ -298,6 +298,12 @@ def remote_run_linux(
     box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
 ) -> int:
     steps = [
+        # Lint here, not only in the pre-push hook. Code behind
+        # `cfg(target_os = "linux")` is not compiled on the macOS host the
+        # hook runs on, so clippy cannot see it there at all -- a lint in a
+        # Linux-gated path passes every local check and fails in CI. Debug
+        # profile, matching the `fmt + clippy` job.
+        "step cargo clippy --all-targets --features full -- -D warnings",
         "step cargo build --release --locked --features full",
         "step cargo test --release --features full",
         # CI additionally runs the suite under register-pressure caps

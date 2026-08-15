@@ -4893,7 +4893,7 @@ mod comdat {
         for s in secs {
             off.push(out.len());
             out.extend_from_slice(s.body);
-            while out.len() % 8 != 0 {
+            while !out.len().is_multiple_of(8) {
                 out.push(0);
             }
         }
@@ -4919,7 +4919,7 @@ mod comdat {
         }
         let shstr_at = out.len();
         out.extend_from_slice(&shstr);
-        while out.len() % 8 != 0 {
+        while !out.len().is_multiple_of(8) {
             out.push(0);
         }
         let shoff = out.len();

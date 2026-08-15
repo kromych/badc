@@ -54,9 +54,9 @@ const MAX_MEM_MOVE_ACCESSES: i64 = 8;
 const MAX_MEM_TRANSFER_ALIGN: u32 = 8;
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits, format_type, fp_result_ty, integer_promote,
-    is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_struct_value_ty,
-    is_unsigned_ty, is_vector_ty, is_void_ptr_ty, object_segment_bits, segment_of_ty, struct_id_of,
-    struct_ptr_depth,
+    is_bool_ty, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty, object_segment_bits,
+    segment_of_ty, struct_id_of, struct_ptr_depth,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -1549,6 +1549,35 @@ impl Compiler {
                         self.emit_lea(temp_off);
                         self.ast_psh();
                         self.expr(Token::Assign as i64)?;
+
+                        // A `long double` that reaches a platform-libc callee
+                        // as a `long double` is decoded there in the target
+                        // ABI's wider format, not the binary64 c5 supplies.
+                        // The declared parameter decides: an argument
+                        // converted to a `double` parameter is exact, which is
+                        // how <math.h> binds the `l` entry points. Past the
+                        // fixed parameters -- a variadic tail, or a callee
+                        // with no prototype -- 6.5.2.2p6 leaves the type
+                        // alone, so the argument's own type governs.
+                        let reaches_callee_as_long_double =
+                            match expected_params.get(nargs as usize) {
+                                Some(want) => is_long_double_ty(*want),
+                                None => is_long_double_ty(self.ty),
+                            };
+                        if is_sys_call
+                            && reaches_callee_as_long_double
+                            && let Some(platform_fmt) = self.target.wider_platform_long_double()
+                        {
+                            self.warn_at(
+                                arg_line,
+                                format!(
+                                    "`long double` argument {} of `{}` is passed as 8-byte \
+                                     binary64; this target's ABI passes {platform_fmt}",
+                                    nargs + 1,
+                                    fn_name_for_warn,
+                                ),
+                            );
+                        }
 
                         // Type-check before the Si overwrites self.ty.
                         if (nargs as usize) < expected_params.len() {

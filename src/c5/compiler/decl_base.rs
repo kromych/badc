@@ -1473,14 +1473,17 @@ impl Compiler {
             Ty::Float as i64
         } else if self.lex.tk == Token::Double {
             self.next()?;
-            // `long double` collapses to the f64 `double` encoding; the
-            // marker carries the spelling so the prototype path can stamp
-            // a libc binding's return convention (SysV x86_64 returns
-            // long double in x87 st(0), not XMM0).
+            // `long double` collapses to the f64 `double` encoding.
+            // `base_was_long_double` lets the prototype path stamp a libc
+            // binding's return convention (SysV x86_64 returns long double
+            // in x87 st(0), not XMM0); `LONG_DOUBLE_BIT` keeps the spelling
+            // on the tag itself, which the libc-argument ABI diagnostic reads.
             if m.saw_long() {
                 self.pending.base_was_long_double = true;
+                Ty::Double as i64 | super::types::LONG_DOUBLE_BIT
+            } else {
+                Ty::Double as i64
             }
-            Ty::Double as i64
         } else {
             return Ok(None);
         };

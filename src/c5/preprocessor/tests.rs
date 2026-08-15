@@ -409,8 +409,8 @@ fn the_code_model_predefine_names_the_selected_model() {
 }
 
 /// Sizes and underlying types the layout engine fixes across targets:
-/// `long double` is laid out as `double` (8, not gcc's x87 12 / 16, and
-/// no `__float80` / `__float128` exists to describe), `wint_t` is the
+/// `long double` is laid out as `double` (8, not the 16 both Linux ABIs
+/// use, and no `__float80` / `__float128` exists to describe), `wint_t` is the
 /// bundled <wchar.h>'s `int`, a bare `__attribute__((aligned))`
 /// resolves to 16, and `__WCHAR_TYPE__` agrees with
 /// `__SIZEOF_WCHAR_T__` on every target.
@@ -437,6 +437,44 @@ fn type_size_predefines_match_the_layout_engine() {
         assert!(out.contains("winttype int ."), "{t:?}: {out}");
         assert!(out.contains(&format!("wchar {wchar} .")), "{t:?}: {out}");
         assert!(!out.contains("phantom-float"), "{t:?}: {out}");
+    }
+}
+
+/// C99 5.2.4.2.2 characteristics, in the `__FLT_*` / `__DBL_*` /
+/// `__LDBL_*` spellings third-party headers test directly. badc's
+/// `float` is binary32 and both `double` and `long double` are binary64
+/// on every target, so the LDBL row must equal the DBL row -- a header
+/// deriving "long double is wider" from these would size or print the
+/// type wrong. The values are target-independent.
+#[test]
+fn float_characteristic_predefines_describe_the_implemented_formats() {
+    let probe = concat!(
+        "flt __FLT_MANT_DIG__ __FLT_DIG__ __FLT_DECIMAL_DIG__ .\n",
+        "dbl __DBL_MANT_DIG__ __DBL_DIG__ __DBL_MAX_EXP__ .\n",
+        "ldbl __LDBL_MANT_DIG__ __LDBL_DIG__ __LDBL_MAX_EXP__ .\n",
+        "radix __FLT_RADIX__ decimal __DECIMAL_DIG__ .\n",
+        "#if __LDBL_MANT_DIG__ == __DBL_MANT_DIG__\n",
+        "ldbl-is-dbl\n#endif\n",
+        "#if __LDBL_MAX_EXP__ > __DBL_MAX_EXP__ || __LDBL_DIG__ > __DBL_DIG__\n",
+        "ldbl-claims-wider\n#endif\n",
+        "traits __FLT_HAS_DENORM__ __DBL_HAS_INFINITY__ __LDBL_HAS_QUIET_NAN__ .\n",
+    );
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+        let out = pp.process(probe).expect("preprocessor failed");
+        assert!(out.contains("flt 24 6 9 ."), "{t:?}: {out}");
+        assert!(out.contains("dbl 53 15 1024 ."), "{t:?}: {out}");
+        assert!(out.contains("ldbl 53 15 1024 ."), "{t:?}: {out}");
+        assert!(out.contains("radix 2 decimal 17 ."), "{t:?}: {out}");
+        assert!(out.contains("ldbl-is-dbl"), "{t:?}: {out}");
+        assert!(!out.contains("ldbl-claims-wider"), "{t:?}: {out}");
+        assert!(out.contains("traits 1 1 1 ."), "{t:?}: {out}");
     }
 }
 

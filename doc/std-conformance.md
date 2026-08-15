@@ -33,13 +33,50 @@ drives the extension when an 8-bit `char` l-value widens to a
 larger integer.
 
 **`long double` is 8-byte IEEE binary64** (the same representation as
-`double`) regardless of host. C99 6.2.5p10 permits any FP type at least as
-wide as `double`. This matches macOS and Windows directly. On Linux x86_64
-(host 80-bit x87) and Linux aarch64 (host IEEE binary128) the libc-boundary
-readers narrow the wider host return into the FP64 slot (x87
-`fstp QWORD PTR [rsp]` and a `__trunctfdf2` libgcc call respectively), so
-`strtold` and friends round-trip to FP64 precision; a `long double` literal
-and any value held in c5 cannot represent the wider host dynamic range.
+`double`) on every target. C99 6.2.5p10 permits any FP type at least as
+wide as `double`, and `sizeof`, `_Alignof`, struct offsets, array stride,
+`<float.h>`, and the `__LDBL_*` / `__SIZEOF_LONG_DOUBLE__` predefines all
+report that layout consistently. Two of the five targets' platform ABIs
+define the type differently:
+
+| target          | platform `long double` | size / align | significand |
+|-----------------|------------------------|--------------|-------------|
+| linux-x64       | x87 80-bit             | 16 / 16      | 64          |
+| linux-aarch64   | IEEE binary128         | 16 / 16      | 113         |
+| macos-aarch64   | IEEE binary64          | 8 / 8        | 53          |
+| windows-x64     | IEEE binary64          | 8 / 8        | 53          |
+| windows-aarch64 | IEEE binary64          | 8 / 8        | 53          |
+
+c5 matches macOS and Windows exactly. Against the two Linux ABIs the
+consequences are:
+
+* **Precision.** A value needing more than 53 significand bits is not
+  representable, so it does not round-trip -- `(unsigned long long)(long
+  double)((1ULL<<53)+1)` loses the low bit where the platform types keep
+  it. This needs no 128-bit type to observe.
+* **Layout.** An object shared with code built by the platform toolchain
+  disagrees in size, alignment, and element stride.
+* **Argument passing.** Where a `long double` reaches a platform-libc
+  callee still typed `long double`, the callee decodes it in the platform
+  format -- from a 16-byte stack slot on System V x86-64, from a vector
+  register on AAPCS64 -- while c5 supplies its 8-byte binary64. That is
+  the variadic tail: `printf("%Lf", 1.0L)` prints `nan` on linux-x64 and
+  `0.000000` on linux-aarch64. Each such argument draws a compile-time
+  warning naming the platform format, so the mismatch is not silent. The
+  fixed parameters are unaffected -- `<math.h>` binds the `l` entry
+  points (`ldexpl`, `fabsl`, ...) to their `double` counterparts, so the
+  argument converts to a `double` parameter exactly and the ABI matches.
+* **Returns** are handled: the libc-boundary readers narrow the wider
+  platform return into the FP64 slot (x87 `fstp QWORD PTR [rsp]` and a
+  `__trunctfdf2` libgcc call respectively), so `strtold` and friends
+  round-trip to FP64 precision.
+
+Widening the type to the platform formats is not a layout change alone:
+it needs a 16-byte value class in an IR whose every SSA value is one
+8-byte slot, an X87 argument class the ABI classifier does not have,
+16-byte frame and stack-argument alignment, variadic slots wider than 8
+bytes on both arches, and a general lowering to soft-float runtime calls
+for binary128. TODO: extended-precision `long double`.
 
 Byte order is little-endian on every target: `__BYTE_ORDER__` expands to
 `__ORDER_LITTLE_ENDIAN__` and `__LITTLE_ENDIAN__` is defined.

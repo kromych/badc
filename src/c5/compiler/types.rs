@@ -180,6 +180,24 @@ const SEG_LVL_MASK: i64 = 0x1FF << SEG_LVL_SHIFT;
 /// rule, `_Generic` matching) test the bit.
 pub(crate) const VOID_BIT: i64 = 1 << 28;
 
+/// High-bit flag marking a type tag whose base type was spelled `long
+/// double`. c5 gives `long double` the `double` band's binary64
+/// representation on every target (see doc/std-conformance.md), so the
+/// bit carries only the spelling. Stripped by [`strip_unsigned`] like
+/// the other orthogonal markers, which keeps every band classifier,
+/// layout query, and codegen path reading a plain `double`;
+/// identity-sensitive sites ([`is_long_double_ty`], the libc-argument
+/// ABI diagnostic) test the bit.
+///
+/// Sits above [`SEG_LVL_MASK`]'s 9-bit field (bits 34..43).
+pub(crate) const LONG_DOUBLE_BIT: i64 = 1 << 43;
+
+/// True when `ty`'s base type was spelled `long double`, at any
+/// qualification or pointer depth.
+pub(crate) fn is_long_double_ty(ty: i64) -> bool {
+    (ty & LONG_DOUBLE_BIT) != 0
+}
+
 /// The x86 named address space a type tag carries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Segment {
@@ -276,7 +294,13 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
 /// when storing a type tag where a non-bit-flagged tag is expected
 /// (e.g., switch-table comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
-    ty & !(UNSIGNED_BIT | VOLATILE_BIT | VOLATILE_INNER_BIT | SEG_MASK | SEG_LVL_MASK | VOID_BIT)
+    ty & !(UNSIGNED_BIT
+        | VOLATILE_BIT
+        | VOLATILE_INNER_BIT
+        | SEG_MASK
+        | SEG_LVL_MASK
+        | VOID_BIT
+        | LONG_DOUBLE_BIT)
 }
 
 /// The scalar `void` type tag.

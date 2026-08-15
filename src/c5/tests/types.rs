@@ -599,3 +599,123 @@ fn union_target_does_not_raise_the_object_mismatch_constraint() {
         p.warnings
     );
 }
+
+/// All five targets: `long double` is laid out exactly as `double`
+/// (C99 6.2.5p10 permits any FP type at least as wide as `double`), so
+/// `sizeof` / `_Alignof` / struct offsets match `double`'s on every one.
+/// Both Linux ABIs give the platform type 16 bytes at 16-byte alignment;
+/// doc/std-conformance.md records that divergence.
+#[test]
+fn long_double_is_laid_out_as_double_on_every_target() {
+    use super::Vm;
+    use crate::Compiler;
+    use crate::Target;
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(Compiler::with_target(src.to_string(), t).compile().unwrap())
+            .run()
+            .unwrap()
+    };
+    let probe = "struct S { char c; long double l; };\n\
+                 int main(void){ return (sizeof(long double)==8 && _Alignof(long double)==8\n\
+                 && sizeof(long double)==sizeof(double)\n\
+                 && sizeof(struct S)==16 && __builtin_offsetof(struct S, l)==8\n\
+                 && sizeof(long double[3])==24) ? 7 : 0; }";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert_eq!(
+            run(probe, t),
+            7,
+            "{t:?}: long double must be laid out as double"
+        );
+    }
+}
+
+/// `long double` keeps `double`'s 53-bit significand, so a value needing
+/// more than 53 bits does not round-trip. The platform types on both
+/// Linux targets do (x87 80-bit has 64, binary128 has 113), which is why
+/// the layout divergence is observable and documented rather than silent.
+#[test]
+fn long_double_carries_only_the_binary64_significand() {
+    let probe = "int main(void){ unsigned long long u = (1ULL<<53)+1ULL;\n\
+                 long double l = (long double)u;\n\
+                 return ((unsigned long long)l == u) ? 1 : 7; }";
+    assert_eq!(super::run_str(probe), 7, "2^53+1 must not round-trip");
+    let fits = "int main(void){ unsigned long long u = (1ULL<<53);\n\
+                long double l = (long double)u;\n\
+                return ((unsigned long long)l == u) ? 7 : 0; }";
+    assert_eq!(
+        super::run_str(fits),
+        7,
+        "2^53 is representable and must round-trip"
+    );
+}
+
+/// A `long double` handed to a platform-libc import is read by the
+/// callee in the target ABI's format. badc passes the binary64 it
+/// stores, so on the two Linux targets the callee decodes a different
+/// object; the mismatch is announced at compile time instead of
+/// surfacing as a wrong value at run time. macOS/arm64 and Windows x64
+/// define `long double` as binary64, so nothing is lost there.
+#[test]
+fn long_double_libc_argument_warns_where_the_platform_abi_is_wider() {
+    use crate::Compiler;
+    use crate::Target;
+    let warns = |src: &str, t: Target| -> alloc::vec::Vec<alloc::string::String> {
+        Compiler::with_target(super::with_prelude(src), t)
+            .compile()
+            .unwrap()
+            .warnings
+    };
+    let src = "int main(void){ long double x = 1.0L; double d = 2.0;\n\
+               printf(\"%Lf\\n\", x); printf(\"%f\\n\", d); return 0; }";
+    let hit = |ws: &[alloc::string::String], needle: &str| {
+        ws.iter()
+            .any(|w| w.contains("`long double` argument") && w.contains(needle))
+    };
+    let x64 = warns(src, Target::LinuxX64);
+    assert!(
+        hit(&x64, "x87 80-bit"),
+        "LinuxX64 must name the x87 format, got: {x64:?}"
+    );
+    let a64 = warns(src, Target::LinuxAarch64);
+    assert!(
+        hit(&a64, "IEEE binary128"),
+        "LinuxAarch64 must name the binary128 format, got: {a64:?}"
+    );
+    for t in [
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let ws = warns(src, t);
+        assert!(
+            !ws.iter().any(|w| w.contains("`long double` argument")),
+            "{t:?} defines long double as binary64 and must not warn, got: {ws:?}"
+        );
+    }
+    // Exactly one argument is at issue: the `double` call must stay quiet.
+    assert_eq!(
+        x64.iter()
+            .filter(|w| w.contains("`long double` argument"))
+            .count(),
+        1,
+        "only the `%Lf` argument may warn, got: {x64:?}"
+    );
+    // <math.h> binds the `l` entry points to their `double` counterparts, so
+    // the argument is converted to a `double` parameter and reaches the callee
+    // exactly. A declared parameter that is not `long double` must stay quiet.
+    let prototyped = "#include <math.h>\n\
+                      int main(void){ return (int)ldexpl((long double)1.0, 53); }";
+    for t in [Target::LinuxX64, Target::LinuxAarch64] {
+        let ws = warns(prototyped, t);
+        assert!(
+            !ws.iter().any(|w| w.contains("`long double` argument")),
+            "{t:?}: a `double` parameter takes the value exactly and must not warn, got: {ws:?}"
+        );
+    }
+}

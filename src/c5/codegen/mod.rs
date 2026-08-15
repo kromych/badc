@@ -214,6 +214,20 @@ impl Target {
         !matches!(self, Target::LinuxAarch64)
     }
 
+    /// The `long double` format the target's platform ABI defines, when
+    /// it is wider than the binary64 badc gives the type; `None` when
+    /// the platform agrees with badc. System V x86-64 passes the x87
+    /// 80-bit type in a 16-byte stack slot and returns it in `st(0)`;
+    /// AArch64 Linux passes and returns IEEE binary128 in a vector
+    /// register. macOS/arm64 and Windows x64 define it as binary64.
+    pub fn wider_platform_long_double(self) -> Option<&'static str> {
+        match self {
+            Target::LinuxX64 => Some("x87 80-bit"),
+            Target::LinuxAarch64 => Some("IEEE binary128"),
+            Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => None,
+        }
+    }
+
     /// Default target -- used when callers (mostly tests) construct a
     /// [`Compiler`] without an explicit `--target` choice. Picks the
     /// target matching the host badc is running on; someone running

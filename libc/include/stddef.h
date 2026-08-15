@@ -32,8 +32,9 @@ typedef int wchar_t;
 #endif
 
 // C11 6.2.8: a type whose alignment is the greatest fundamental
-// alignment. A long long / long double pair carries the platform's
-// widest scalar alignment (16 on aarch64 / x86-64, 8 under LLP64).
+// alignment. Both members are 8-byte aligned -- c5 lays `long double`
+// out as `double` (doc/std-conformance.md), so this is 8 on every
+// target, where the two Linux ABIs give the platform type 16.
 #ifndef __max_align_t_defined
 typedef struct {
     long long __max_align_ll;

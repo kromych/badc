@@ -8996,6 +8996,220 @@ fn asm_section_operand_symbol_in_exec_section_self_links() {
     }
 }
 
+/// Sections of a final PE image as `(name, rva, virtual size, body)`,
+/// plus the image base and the `.reloc` entries as
+/// `(page_rva + in-page offset, type)`.
+struct PeImage {
+    image_base: u64,
+    sections: alloc::vec::Vec<(alloc::string::String, u32, u32, alloc::vec::Vec<u8>)>,
+    base_relocs: alloc::vec::Vec<(u32, u16)>,
+}
+
+impl PeImage {
+    fn parse(bytes: &[u8]) -> Self {
+        let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap());
+        let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+        let pe = u32le(0x3c) as usize;
+        assert_eq!(&bytes[pe..pe + 4], b"PE\0\0");
+        let nsec = u16le(pe + 6) as usize;
+        let opt = pe + 24;
+        let image_base = u64::from_le_bytes(bytes[opt + 24..opt + 32].try_into().unwrap());
+        let sect = opt + u16le(pe + 20) as usize;
+        let mut sections = alloc::vec::Vec::new();
+        for i in 0..nsec {
+            let o = sect + i * 40;
+            let end = bytes[o..o + 8].iter().position(|&b| b == 0).unwrap_or(8);
+            let name = core::str::from_utf8(&bytes[o..o + end]).unwrap().into();
+            let (vsize, rva) = (u32le(o + 8), u32le(o + 12));
+            let (rawsz, rawptr) = (u32le(o + 16) as usize, u32le(o + 20) as usize);
+            sections.push((name, rva, vsize, bytes[rawptr..rawptr + rawsz].to_vec()));
+        }
+        // Data directory entry 5 is the base-relocation table.
+        let (reloc_rva, reloc_size) = (u32le(opt + 112 + 5 * 8), u32le(opt + 112 + 5 * 8 + 4));
+        let mut base_relocs = alloc::vec::Vec::new();
+        if reloc_size != 0 {
+            let blob = sections
+                .iter()
+                .find(|(_, rva, _, _)| *rva == reloc_rva)
+                .map(|(_, _, _, body)| body.clone())
+                .expect(".reloc section");
+            let mut off = 0usize;
+            while off + 8 <= reloc_size as usize {
+                let page = u32::from_le_bytes(blob[off..off + 4].try_into().unwrap());
+                let size = u32::from_le_bytes(blob[off + 4..off + 8].try_into().unwrap()) as usize;
+                assert!(size >= 8, "malformed .reloc block");
+                for j in 0..(size - 8) / 2 {
+                    let e = u16::from_le_bytes(
+                        blob[off + 8 + j * 2..off + 10 + j * 2].try_into().unwrap(),
+                    );
+                    base_relocs.push((page + (e & 0xfff) as u32, e >> 12));
+                }
+                off += size;
+            }
+        }
+        PeImage {
+            image_base,
+            sections,
+            base_relocs,
+        }
+    }
+
+    fn section(&self, name: &str) -> (u32, &[u8]) {
+        self.sections
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .map(|(_, rva, _, body)| (*rva, body.as_slice()))
+            .unwrap_or_else(|| panic!("no `{name}` section"))
+    }
+}
+
+/// Self-link a source carrying absolute words in an executable
+/// inline-asm section and return the image bytes. The PE entry stub
+/// calls into a runtime a single self-linked object does not carry, so
+/// the Windows targets take the library output kind, whose image the
+/// same writer produces without a stub.
+fn self_link_text_absolute_shape(
+    target: crate::c5::Target,
+    words: &str,
+) -> Result<(alloc::vec::Vec<u8>, crate::c5::linker::MergedNative), crate::c5::error::C5Error> {
+    use crate::c5::linker::{
+        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
+    let src = alloc::format!(
+        "struct sk {{ int x; }};\n\
+         struct sk key = {{ 42 }};\n\
+         int probe(void) {{\n\
+             __asm__ volatile(\n\
+                 \"1:\\tnop\\n\"\n\
+                 \".pushsection .optab,\\\"ax\\\"\\n\"\n\
+                 \".balign 8\\n\"\n\
+                 \".ascii \\\"OpTaB9mk\\\"\\n\"\n\
+                 \"{words}\"\n\
+                 \".popsection\\n\" : : \"i\"(&key));\n\
+             return 0;\n\
+         }}\n\
+         int main(void) {{ return probe(); }}\n"
+    );
+    let program = Compiler::with_target(src, target)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(core::slice::from_ref(&obj)).expect("link");
+    let plt = match target {
+        crate::c5::Target::LinuxAarch64 | crate::c5::Target::WindowsAarch64 => {
+            emit_aarch64_plt(&mut merged).expect("plt")
+        }
+        _ => emit_x86_64_plt(&mut merged).expect("plt"),
+    };
+    let output_kind = if target.is_windows() {
+        OutputKind::SharedLibrary
+    } else {
+        OutputKind::Executable
+    };
+    let shared_name = target.is_windows().then_some("optab.dll");
+    let image = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        output_kind,
+        target,
+        shared_name,
+    )?;
+    Ok((image, merged))
+}
+
+#[test]
+fn text_absolute_field_self_links_into_a_pe_image() {
+    // A `.quad sym` word inside an executable section holds `S + A` as
+    // a runtime address. The merge parks it -- only the writer knows
+    // where the image loads -- and the synthesizer had no carrier for
+    // a plain field, so it was declined as an unsupported relocation
+    // where GNU ld resolves the same object. PE rebases every section
+    // through `.reloc`, so each field takes its preferred VA plus one
+    // `IMAGE_REL_BASED_DIR64` entry.
+    use crate::c5::Target;
+    const IMAGE_REL_BASED_DIR64: u16 = 10;
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let (image, merged) = self_link_text_absolute_shape(target, ".quad %c0\\n\\t.quad 1b\\n")
+            .expect("write PE image");
+        let pe = PeImage::parse(&image);
+        let (text_rva, text) = pe.section(".text");
+        let (data_rva, _) = pe.section(".data");
+        let marker = text
+            .windows(8)
+            .position(|w| w == b"OpTaB9mk")
+            .expect("section payload in image .text");
+        let quad = |i: usize| u64::from_le_bytes(text[i..i + 8].try_into().unwrap());
+        // `key` is writable, so its merged data offset sits past the
+        // read-only prefix the writer places in `.rdata`.
+        let key = merged.defined.get("key").expect("key in merged");
+        let key_rva = data_rva as u64 + (key.value - merged.data_ro_len as u64);
+        assert_eq!(
+            quad(marker + 8),
+            pe.image_base + key_rva,
+            "{target:?}: `.quad %c0` must hold the preferred VA of `key`"
+        );
+        // `1b` labels the `nop` the template emits ahead of the pushed
+        // section, so the second word points back into `.text`.
+        let label = quad(marker + 16);
+        assert!(
+            label >= pe.image_base + text_rva as u64
+                && label < pe.image_base + text_rva as u64 + text.len() as u64,
+            "{target:?}: `.quad 1b` must hold a `.text` VA, got {label:#x}"
+        );
+        for i in [8usize, 16] {
+            let site = text_rva + (marker + i) as u32;
+            assert!(
+                pe.base_relocs.contains(&(site, IMAGE_REL_BASED_DIR64)),
+                "{target:?}: no DIR64 base relocation for the field at .text+{:#x}; \
+                 entries: {:?}",
+                marker + i,
+                pe.base_relocs
+            );
+        }
+    }
+}
+
+#[test]
+fn narrow_text_absolute_field_reports_truncation() {
+    // The same field at four bytes: the image base puts every address
+    // past 2^32, so `R_X86_64_32` cannot hold one. The writer reports
+    // it rather than storing the low half, as `write_abs_field` does on
+    // the ET_EXEC path.
+    let err = self_link_text_absolute_shape(crate::c5::Target::WindowsX64, ".long %c0\\n")
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(err.contains("relocation truncated to fit"), "{err}");
+}
+
+#[test]
+fn text_absolute_field_stays_refused_in_a_position_independent_image() {
+    // The ELF writer sets ET_DYN: the loader picks the base and ELF
+    // admits no relocation against an executable section, so `S + A`
+    // has no value to write. The reference is declined at the
+    // synthesizer, naming the output kind as GNU ld does.
+    use crate::c5::Target;
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let err = self_link_text_absolute_shape(target, ".quad %c0\\n")
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(
+            err.contains("can not be used when making a position-independent executable"),
+            "{target:?}: {err}"
+        );
+    }
+}
+
 #[test]
 fn asm_section_pcrel_extern_with_addend_relocates_like_gas() {
     // A static-call trampoline emits `jmp.d32 func` as section data:

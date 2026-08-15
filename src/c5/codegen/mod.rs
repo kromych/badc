@@ -1501,6 +1501,10 @@ pub(crate) struct Build {
     /// data-byte space. Populated only by the multi-object
     /// synthesizer; see [`TextPcRelReloc`].
     pub text_pcrel_relocs: Vec<TextPcRelReloc>,
+    /// Object-link absolute fields in `Build::text`. Populated only by
+    /// the multi-object synthesizer, and only for an output format
+    /// that rebases an executable section; see [`TextAbsReloc`].
+    pub text_abs_relocs: Vec<TextAbsReloc>,
     /// Each entry records an `adrp + add` placeholder pair the codegen
     /// left for a function-pointer literal. The writer patches it with
     /// the page-relative address of `__text + target_native_offset`.
@@ -2098,6 +2102,33 @@ pub(crate) struct TextPcRelReloc {
     pub target_data_offset: u64,
     /// Field width in bytes: 4 or 8.
     pub width: u8,
+}
+
+/// A plain N-byte field inside `Build::text` holding `S + A` as a
+/// runtime address (`movq $sym, %rax` from an object assembler, a
+/// `.quad sym` word in an executable section). The merge parks these
+/// because only the writer knows where the image loads; the writer
+/// stores the address and records whatever base relocation its format
+/// needs so a slide keeps the field correct.
+///
+/// Produced by the multi-object synthesizer, and only for a format
+/// that rebases an executable section -- an image the loader places at
+/// an address of its own with no relocation against executable
+/// sections has no value to write, and the synthesizer declines the
+/// reference instead.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TextAbsReloc {
+    /// Byte offset of the field within `Build::text`.
+    pub site_text_offset: u64,
+    /// Target byte offset: within `Build::text` when `target_in_text`
+    /// is set, else within the data-byte space (zero-fill tail
+    /// included). `S + A` of the source relocation.
+    pub target_offset: u64,
+    pub target_in_text: bool,
+    /// ELF relocation type of the source site. badc's relocatable
+    /// format is ELF ET_REL on every target, so this names the field's
+    /// width and overflow rule through the one relocation table.
+    pub rtype: u32,
 }
 
 // TLS relocations don't need a writer-time fixup type for Linux:

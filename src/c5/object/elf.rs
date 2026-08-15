@@ -3728,6 +3728,16 @@ pub(super) fn write(
         out[file_off..file_off + 4].copy_from_slice(&v.to_le_bytes());
     }
 
+    // This writer sets ET_DYN, where an absolute field in an
+    // executable section has no value: the loader picks the base and
+    // ELF admits no relocation against such a section. The synthesizer
+    // declines the reference before it reaches here.
+    if !build.text_abs_relocs.is_empty() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "ELF: an absolute text field cannot be written into a position-independent image",
+        )));
+    }
+
     // Switch-table base materializations (the lea feeding the
     // dispatch); the blob sits in the PF_R load at `jt_vmaddr`.
     for fx in &build.rodata.addr_fixups {
@@ -3933,6 +3943,7 @@ mod tests {
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
             text_pcrel_relocs: Vec::new(),
+            text_abs_relocs: Vec::new(),
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),

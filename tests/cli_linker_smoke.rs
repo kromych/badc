@@ -3698,6 +3698,119 @@ fn absolute_text_reloc_is_rejected_for_a_pie() {
     );
 }
 
+/// The same relocation where the output format admits it: PE rebases
+/// every section through `.reloc`, so an assembler `movabsq $sym, %reg`
+/// links. The field takes the symbol's preferred VA and the image
+/// carries an `IMAGE_REL_BASED_DIR64` entry for it, which is what the
+/// Windows loader applies after sliding the image.
+#[test]
+fn absolute_text_reloc_links_and_rebases_in_a_pe() {
+    let dir = tempdir("abs-text-reloc-pe");
+    let asm = write_source(
+        &dir,
+        "gd.s",
+        "\t.text\n\
+         \t.globl get_gdata\n\
+         get_gdata:\n\
+         \tmovabsq $gdata, %rax\n\
+         \tmovl (%rax), %eax\n\
+         \tret\n\
+         \t.data\n\
+         \t.globl gdata\n\
+         gdata:\n\
+         \t.long 42\n",
+    );
+    let main = write_source(
+        &dir,
+        "m.c",
+        "int get_gdata(void);\nint main(void) { return get_gdata(); }\n",
+    );
+    for src in [&asm, &main] {
+        run(
+            Command::new(badc())
+                .args(["-c", "--target=windows-x64", "-o"])
+                .arg(dir.join(src.with_extension("o").file_name().unwrap()))
+                .arg(src)
+                .current_dir(&dir),
+            "compile to an object",
+        );
+    }
+    let exe = dir.join("prog.exe");
+    run(
+        Command::new(badc())
+            .args(["--target=windows-x64", "-o"])
+            .arg(&exe)
+            .arg(dir.join("m.o"))
+            .arg(dir.join("gd.o"))
+            .current_dir(&dir),
+        "link the PE",
+    );
+    let image = std::fs::read(&exe).expect("read the PE");
+    let u16le = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let pe = u32le(0x3c) as usize;
+    let opt = pe + 24;
+    let image_base = u64::from_le_bytes(image[opt + 24..opt + 32].try_into().unwrap());
+    let sect = opt + u16le(pe + 20);
+    // (name, rva, raw offset, raw size) per section header.
+    let secs: Vec<(String, u32, usize, usize)> = (0..u16le(pe + 6))
+        .map(|i| {
+            let o = sect + i * 40;
+            let end = image[o..o + 8].iter().position(|&b| b == 0).unwrap_or(8);
+            let name = String::from_utf8_lossy(&image[o..o + end]).into_owned();
+            (
+                name,
+                u32le(o + 12),
+                u32le(o + 20) as usize,
+                u32le(o + 16) as usize,
+            )
+        })
+        .collect();
+    let find = |n: &str| secs.iter().find(|s| s.0 == n).expect("section");
+    let (_, text_rva, text_off, text_size) = *find(".text");
+    let (_, data_rva, data_off, data_size) = *find(".data");
+    // The `movabsq` immediate is the eight bytes after its two-byte
+    // REX + opcode prefix; the object defines nothing else absolute.
+    let body = &image[text_off..text_off + text_size];
+    let site = body
+        .windows(2)
+        .position(|w| w == [0x48, 0xb8])
+        .expect("movabsq in .text")
+        + 2;
+    let value = u64::from_le_bytes(body[site..site + 8].try_into().unwrap());
+    // The field must name `gdata` itself: its preferred VA lands
+    // inside `.data` and the word there is the initializer.
+    let target = (value - image_base) as usize;
+    assert!(
+        target >= data_rva as usize && target + 4 <= data_rva as usize + data_size,
+        "the field must hold a `.data` VA, got {value:#x}"
+    );
+    let at = data_off + target - data_rva as usize;
+    assert_eq!(u32le(at), 42, "the field must reach `gdata`");
+    let (_, reloc_rva, reloc_off, _) = *find(".reloc");
+    let reloc_size = u32le(opt + 112 + 5 * 8 + 4) as usize;
+    assert_ne!(
+        reloc_size, 0,
+        "the image must carry a base-relocation table"
+    );
+    assert_eq!(u32le(opt + 112 + 5 * 8), reloc_rva, "reloc directory rva");
+    let want = text_rva + site as u32;
+    let mut found = false;
+    let mut off = 0usize;
+    while off + 8 <= reloc_size {
+        let page = u32le(reloc_off + off);
+        let size = u32le(reloc_off + off + 4) as usize;
+        assert!(size >= 8, "malformed .reloc block");
+        for j in 0..(size - 8) / 2 {
+            let e = u16le(reloc_off + off + 8 + j * 2) as u16;
+            // Type 10 is IMAGE_REL_BASED_DIR64.
+            found |= e >> 12 == 10 && page + (e & 0xfff) as u32 == want;
+        }
+        off += size;
+    }
+    assert!(found, "no DIR64 base relocation covering rva {want:#x}");
+}
+
 // Gated on Linux: the read-only data page only exists on the native ELF
 // link path, and the test exec's the produced binary.
 //

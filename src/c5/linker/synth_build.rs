@@ -140,6 +140,7 @@ fn synth_program_and_build(
         data: data_fixups,
         func: func_fixups,
         text_pcrel: text_pcrel_relocs,
+        text_abs: text_abs_relocs,
     } = synth_fixups(merged, plt, TextAbsolute::for_output(target, output_kind))?;
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt)?;
@@ -494,6 +495,7 @@ fn synth_program_and_build(
             })
             .collect(),
         text_pcrel_relocs,
+        text_abs_relocs,
         func_fixups,
         pc_to_native,
         func_ent_pcs,
@@ -758,6 +760,7 @@ struct SynthFixups {
     data: Vec<DataFixup>,
     func: Vec<FuncFixup>,
     text_pcrel: Vec<crate::c5::codegen::TextPcRelReloc>,
+    text_abs: Vec<crate::c5::codegen::TextAbsReloc>,
 }
 
 fn synth_fixups(
@@ -769,6 +772,7 @@ fn synth_fixups(
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
     let mut text_pcrel: Vec<crate::c5::codegen::TextPcRelReloc> = Vec::new();
+    let mut text_abs_relocs: Vec<crate::c5::codegen::TextAbsReloc> = Vec::new();
 
     for tramp in plt {
         got_fixups.push(GotFixup {
@@ -796,6 +800,29 @@ fn synth_fixups(
                 site_text_offset: reloc.text_offset,
                 target_data_offset: reloc.addend as u64,
                 width: width as u8,
+            });
+            continue;
+        }
+        // A parked absolute field in an executable section: also a
+        // plain field, and its value is an address, so it goes to the
+        // writer only where the format rebases such a section.
+        if reloc.import_index == usize::MAX
+            && matches!(text_abs, TextAbsolute::Representable)
+            && super::image::abs_field(merged.machine, reloc.rtype).is_some()
+            && let Some(target_in_text) = match reloc.target_section {
+                NativeSymSection::Text => Some(true),
+                NativeSymSection::RoData
+                | NativeSymSection::RelRo
+                | NativeSymSection::Data
+                | NativeSymSection::Bss => Some(false),
+                _ => None,
+            }
+        {
+            text_abs_relocs.push(crate::c5::codegen::TextAbsReloc {
+                site_text_offset: reloc.text_offset,
+                target_offset: reloc.addend as u64,
+                target_in_text,
+                rtype: reloc.rtype,
             });
             continue;
         }
@@ -828,6 +855,7 @@ fn synth_fixups(
         data: data_fixups,
         func: func_fixups,
         text_pcrel,
+        text_abs: text_abs_relocs,
     })
 }
 
@@ -906,7 +934,8 @@ fn project_aarch64_pending(
 #[derive(Clone, Copy)]
 enum TextAbsolute {
     /// PE: `.reloc` base relocations cover every section, so the
-    /// reference is representable and only a carrier is missing.
+    /// reference is representable and rides a
+    /// [`crate::c5::codegen::TextAbsReloc`] to the writer.
     Representable,
     /// ELF `ET_DYN` and Mach-O `MH_PIE`: the loader picks the base and
     /// neither format admits a relocation against an executable
@@ -950,8 +979,6 @@ fn declined_reloc(
     let absolute = super::image::abs_field(merged.machine, rtype).is_some();
     match text_abs {
         TextAbsolute::RejectedInPie { shared } if absolute => site.absolute_in_pie(shared),
-        // TODO: carry a plain N-byte absolute field through a
-        // writer-side fixup, for the formats that admit one.
         _ => site.unsupported(),
     }
 }

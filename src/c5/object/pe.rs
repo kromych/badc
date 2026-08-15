@@ -72,6 +72,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::aarch64;
 use super::dwarf;
+use super::elf_reloc_types::AbsCheck;
 use super::x86_64;
 use super::{AddrPart, Build, Machine};
 use crate::c5::layout::{round_up, write_struct};
@@ -166,6 +167,11 @@ const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
 /// `AddressOfIndex`) so DYNAMIC_BASE / HIGH_ENTROPY_VA can stay
 /// on for TLS-using images.
 const IMAGE_REL_BASED_DIR64: u16 = 10 << 12;
+/// `IMAGE_REL_BASED_HIGHLOW` (type = 3). The 32-bit counterpart of
+/// `IMAGE_REL_BASED_DIR64`: the loader applies the whole delta to a
+/// 32-bit field, which holds only while the image's addresses fit 32
+/// bits. A field the value overflows is reported instead.
+const IMAGE_REL_BASED_HIGHLOW: u16 = 3 << 12;
 /// `IMAGE_REL_BASED_ABSOLUTE` (type = 0). A no-op entry whose
 /// only purpose is to pad each `.reloc` block to a 4-byte
 /// boundary, since `SizeOfBlock` must be a multiple of 4.
@@ -404,7 +410,8 @@ pub(super) fn write(
     let reloc_section_present = !build.tls_data.is_empty()
         || !build.data_relocs.is_empty()
         || !build.code_relocs.is_empty()
-        || !build.label_relocs.is_empty();
+        || !build.label_relocs.is_empty()
+        || !build.text_abs_relocs.is_empty();
     // `.edata` is present whenever the image exports anything: a
     // `#pragma export` set (shared library or executable, matching the
     // ELF `.dynsym` behaviour) or an executable's `--export-all` /
@@ -615,6 +622,36 @@ pub(super) fn write(
         0
     };
 
+    // Absolute fields inside the code section, resolved once so the
+    // `.reloc` block below and the field writes further down agree on
+    // every site's width and target.
+    let text_abs_fields: Vec<AbsTextField> = build
+        .text_abs_relocs
+        .iter()
+        .map(|r| {
+            let site_off = r.site_text_offset as usize + text_prologue_len as usize;
+            let (width, check) = abs_field(machine, r.rtype).ok_or_else(|| {
+                C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                    "PE: text absolute field {site_off:#x} carries relocation type {} with no \
+                     field width",
+                    r.rtype
+                )))
+            })?;
+            let target_rva = if r.target_in_text {
+                text_rva + text_prologue_len + r.target_offset as u32
+            } else {
+                data_off_to_rva(r.target_offset as u32)
+            };
+            Ok(AbsTextField {
+                site_off,
+                site_rva: text_rva + site_off as u32,
+                width,
+                check,
+                target_rva,
+            })
+        })
+        .collect::<Result<_, C5Error>>()?;
+
     // `.reloc` carries one IMAGE_BASE_RELOCATION block with
     // three IMAGE_REL_BASED_DIR64 entries -- one per absolute
     // VA in the TLS directory. The block is fixed-size (16
@@ -642,6 +679,7 @@ pub(super) fn write(
             &build.data_relocs,
             &build.code_relocs,
             &build.label_relocs,
+            &text_abs_fields,
         )
     } else {
         Vec::new()
@@ -1076,6 +1114,33 @@ pub(super) fn write(
             };
             text_bytes[site..site + 4].copy_from_slice(&v.to_le_bytes());
         }
+    }
+
+    // Absolute fields in executable sections (`movq $sym, %rax` from
+    // an object assembler, a `.quad sym` word): the field holds
+    // `S + A` as a preferred VA and the `.reloc` entry recorded above
+    // carries it across a slide. A field too narrow for the value is
+    // reported, not truncated.
+    for f in &text_abs_fields {
+        let width = f.width as usize;
+        if f.site_off + width > text_bytes.len() {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "PE: text absolute field {:#x} past end of .text ({})",
+                    f.site_off,
+                    text_bytes.len()
+                ),
+            )));
+        }
+        let value = IMAGE_BASE as i64 + f.target_rva as i64;
+        if !f.check.admits(value, f.width) {
+            return Err(C5Error::Compile(crate::c5::error::fmt_link_err(&format!(
+                "relocation truncated to fit: .text+{:#x} needs the absolute address {value:#x}, \
+                 which does not fit a {width}-byte field",
+                f.site_off,
+            ))));
+        }
+        text_bytes[f.site_off..f.site_off + width].copy_from_slice(&value.to_le_bytes()[..width]);
     }
 
     // Read-only blob references (switch dispatch): the site
@@ -1677,6 +1742,29 @@ fn build_export_directory(
 /// slot offsets are `.data`-relative past it. A slot below `ro_len`
 /// is rejected by the writer's data patch pass before this stream is
 /// consumed.
+/// One [`crate::c5::codegen::TextAbsReloc`] with its width, overflow
+/// rule and target resolved against this image's layout.
+struct AbsTextField {
+    /// Byte offset of the field within the emitted `.text` bytes.
+    site_off: usize,
+    site_rva: u32,
+    width: u32,
+    check: AbsCheck,
+    target_rva: u32,
+}
+
+/// Width and overflow rule of the field a relocation type writes
+/// `S + A` into. badc's relocatable format is ELF ET_REL on every
+/// target, so a PE image's inputs carry ELF relocation numbers.
+fn abs_field(machine: Machine, rtype: u32) -> Option<(u32, AbsCheck)> {
+    use super::elf_reloc_types::{aarch64_abs_field, x86_64_abs_field};
+    match machine {
+        Machine::X86_64 => x86_64_abs_field(rtype),
+        Machine::Aarch64 => aarch64_abs_field(rtype),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn build_reloc_section(
     data_rva: u32,
     ro_len: u32,
@@ -1685,59 +1773,79 @@ fn build_reloc_section(
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
     label_relocs: &[crate::c5::codegen::LabelReloc],
+    text_abs_fields: &[AbsTextField],
 ) -> Vec<u8> {
     // Bucket every relocation target by the 4 KiB page it
     // lives in. Per-page entries within a bucket get one
-    // shared `IMAGE_BASE_RELOCATION` header.
+    // shared `IMAGE_BASE_RELOCATION` header. Each entry pairs the
+    // in-page offset with the type the field's width takes.
     use alloc::collections::BTreeMap;
-    let mut by_page: BTreeMap<u32, Vec<u32>> = BTreeMap::new(); // page_rva -> [in-page offsets]
+    let mut by_page: BTreeMap<u32, Vec<(u32, u16)>> = BTreeMap::new();
+    let mut add = |rva: u32, kind: u16| {
+        by_page
+            .entry(rva & !0xFFF)
+            .or_default()
+            .push((rva & 0xFFF, kind));
+    };
     if tls_present {
         let dir_rva = data_rva + tls_layout.directory_offset_in_data;
         // Sanity: the directory's three pointer fields must
         // share a page. The directory is 40 bytes, far smaller
         // than 4 KiB, so this holds on any reasonable layout.
         debug_assert_eq!(dir_rva & !0xFFF, (dir_rva + 16) & !0xFFF);
-        let page = dir_rva & !0xFFF;
-        let bucket = by_page.entry(page).or_default();
-        bucket.push(dir_rva & 0xFFF); // StartAddressOfRawData
-        bucket.push((dir_rva + 8) & 0xFFF); // EndAddressOfRawData
-        bucket.push((dir_rva + 16) & 0xFFF); // AddressOfIndex
+        add(dir_rva, IMAGE_REL_BASED_DIR64); // StartAddressOfRawData
+        add(dir_rva + 8, IMAGE_REL_BASED_DIR64); // EndAddressOfRawData
+        add(dir_rva + 16, IMAGE_REL_BASED_DIR64); // AddressOfIndex
     }
     for r in data_relocs {
-        let target_rva = data_rva + (r.data_offset as u32).saturating_sub(ro_len);
-        let page = target_rva & !0xFFF;
-        by_page.entry(page).or_default().push(target_rva & 0xFFF);
+        add(
+            data_rva + (r.data_offset as u32).saturating_sub(ro_len),
+            IMAGE_REL_BASED_DIR64,
+        );
     }
     // Code relocations live in the data segment too -- the slot
     // sits at `data_rva + r.data_offset`, the loader just adds
     // the slide. The kind of pointer (data vs code) doesn't
     // matter to PE's `.reloc`, so we use the same DIR64 entry.
     for r in code_relocs {
-        let target_rva = data_rva + (r.data_offset as u32).saturating_sub(ro_len);
-        let page = target_rva & !0xFFF;
-        by_page.entry(page).or_default().push(target_rva & 0xFFF);
+        add(
+            data_rva + (r.data_offset as u32).saturating_sub(ro_len),
+            IMAGE_REL_BASED_DIR64,
+        );
     }
     // `&&label` initializers hold a code pointer in the data segment,
     // so they take the same DIR64 entry.
     for r in label_relocs {
-        let target_rva = data_rva + (r.data_offset as u32).saturating_sub(ro_len);
-        let page = target_rva & !0xFFF;
-        by_page.entry(page).or_default().push(target_rva & 0xFFF);
+        add(
+            data_rva + (r.data_offset as u32).saturating_sub(ro_len),
+            IMAGE_REL_BASED_DIR64,
+        );
+    }
+    // Absolute fields in the code section. `.reloc` covers every
+    // section, so the loader rebases these like a data pointer; the
+    // entry type follows the field's width.
+    for f in text_abs_fields {
+        let kind = if f.width == 8 {
+            IMAGE_REL_BASED_DIR64
+        } else {
+            IMAGE_REL_BASED_HIGHLOW
+        };
+        add(f.site_rva, kind);
     }
 
     let mut out = Vec::new();
-    for (page_rva, mut offsets) in by_page {
-        offsets.sort_unstable();
+    for (page_rva, mut entries) in by_page {
+        entries.sort_unstable();
         // Each entry is u16; SizeOfBlock must be 4-byte
         // aligned. Pad with a no-op ABSOLUTE entry when the
         // entry count is odd.
-        let needs_pad = !offsets.len().is_multiple_of(2);
-        let total_entries = offsets.len() + if needs_pad { 1 } else { 0 };
+        let needs_pad = !entries.len().is_multiple_of(2);
+        let total_entries = entries.len() + if needs_pad { 1 } else { 0 };
         let size_of_block = 8 + total_entries as u32 * 2;
         out.extend_from_slice(&page_rva.to_le_bytes());
         out.extend_from_slice(&size_of_block.to_le_bytes());
-        for off in offsets {
-            let entry = IMAGE_REL_BASED_DIR64 | off as u16;
+        for (off, kind) in entries {
+            let entry = kind | off as u16;
             out.extend_from_slice(&entry.to_le_bytes());
         }
         if needs_pad {

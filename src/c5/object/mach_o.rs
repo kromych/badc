@@ -1821,6 +1821,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     if !build.rodata.bytes.is_empty()
         || !build.data_pcrel_relocs.is_empty()
         || !build.text_pcrel_relocs.is_empty()
+        || !build.text_abs_relocs.is_empty()
     {
         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
             "Mach-O writer: read-only blob / pc-relative data-word slots not implemented",
@@ -2904,6 +2905,7 @@ mod tests {
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
             text_pcrel_relocs: Vec::new(),
+            text_abs_relocs: Vec::new(),
             func_fixups: Vec::new(),
             pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),

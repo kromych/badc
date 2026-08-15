@@ -4915,6 +4915,7 @@ mod tests {
             rodata: Default::default(),
             data_pcrel_relocs: Vec::new(),
             text_pcrel_relocs: Vec::new(),
+            text_abs_relocs: Vec::new(),
             data_align: 8,
             bss_size: 0,
             init_fini_arrays: Default::default(),

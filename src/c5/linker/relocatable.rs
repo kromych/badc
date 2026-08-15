@@ -16,6 +16,7 @@
 #![cfg(feature = "std")]
 
 use alloc::borrow::ToOwned;
+use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -23,6 +24,7 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::c5::error::C5Error;
 
+use super::attributes;
 use super::gnu_property;
 use super::lds::{
     BinOp, DataWidth, Expr, LinkerScript, SectionContent, SectionsItem, SortKind, UnOp,
@@ -831,17 +833,11 @@ impl OutSec {
     }
 }
 
-/// ELF object-attribute sections carry one attribute set, not a
-/// concatenation of the inputs': BFD reads the first subsection length
-/// and rejects anything past it. Only the first copy is kept, and the
-/// rest must agree.
-/// TODO: merge per tag -- the AArch64 `aeabi_feature_and_bits` set is
-/// an AND across inputs, so disagreeing objects have a defined result.
-fn is_attributes_section(sh_type: u32) -> bool {
-    const SHT_GNU_ATTRIBUTES: u32 = 0x6fff_fff5;
-    /// `SHT_ARM_ATTRIBUTES` / `SHT_AARCH64_ATTRIBUTES`, the same value.
-    const SHT_ARCH_ATTRIBUTES: u32 = 0x7000_0003;
-    matches!(sh_type, SHT_GNU_ATTRIBUTES | SHT_ARCH_ATTRIBUTES)
+/// Every object's body for one attribute section name.
+struct AttrInputs<'a> {
+    sh_type: u32,
+    addralign: u64,
+    bodies: Vec<Option<&'a [u8]>>,
 }
 
 fn merge_property_notes(inputs: &[Vec<&[u8]>], align: u64) -> Option<EtSection> {
@@ -918,6 +914,9 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
     let script = opts.script.as_ref().unwrap_or(&empty);
     let mut prop_notes: Vec<Vec<&[u8]>> = alloc::vec![Vec::new(); objs.len()];
     let mut prop_align = 4u64;
+    // Attribute sections hold one attribute set each, so they leave the
+    // generic name-merge too: `attrs[name][obj]` is the input's body.
+    let mut attrs: BTreeMap<&str, AttrInputs> = BTreeMap::new();
     for (oi, o) in objs.iter().enumerate() {
         for (si, s) in o.sections.iter().enumerate() {
             if s.name == ".note.gnu.property" && s.sh_type == SHT_NOTE {
@@ -927,6 +926,15 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
             } else if (opts.strip_debug && s.name.starts_with(".debug"))
                 || script.discard.iter().any(|p| glob_match(p, &s.name))
             {
+                dropped.insert((oi, si));
+            } else if attributes::is_attributes_section(s.sh_type) {
+                let e = attrs.entry(&s.name).or_insert_with(|| AttrInputs {
+                    sh_type: s.sh_type,
+                    addralign: s.addralign,
+                    bodies: alloc::vec![None; objs.len()],
+                });
+                e.addralign = e.addralign.max(s.addralign);
+                e.bodies[oi] = Some(s.bytes.as_slice());
                 dropped.insert((oi, si));
             }
         }
@@ -1018,17 +1026,6 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 outsecs.push(OutSec::new(&s.name, exec_fill));
                 outsecs.len() - 1
             });
-            if is_attributes_section(s.sh_type) {
-                if outsecs[idx].bytes.is_empty() {
-                    outsecs[idx].append(objs, oi, si);
-                } else if outsecs[idx].bytes != s.bytes {
-                    return Err(err(&format!(
-                        "{}: `{}` disagrees with an earlier object's;                          object attributes are not merged per tag",
-                        o.source, s.name
-                    )));
-                }
-                continue;
-            }
             outsecs[idx].append(objs, oi, si);
         }
     }
@@ -1044,6 +1041,22 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
                 outsecs.push(out);
             }
         }
+    }
+    for (name, a) in &attrs {
+        let inputs: Vec<attributes::Input> = objs
+            .iter()
+            .zip(&a.bodies)
+            .map(|(o, b)| (o.source.as_str(), *b))
+            .collect();
+        let fmt = attributes::format_for(machine, a.sh_type);
+        let Some(bytes) = attributes::merge(name, fmt, &inputs).map_err(|e| err(&e))? else {
+            continue;
+        };
+        let mut out = OutSec::new(name, exec_fill);
+        out.sh_type = a.sh_type;
+        out.addralign = a.addralign;
+        out.bytes = bytes;
+        outsecs.push(out);
     }
     if let Some(p) = merge_property_notes(&prop_notes, prop_align) {
         let mut out = OutSec::new(&p.name, exec_fill);

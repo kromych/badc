@@ -4,8 +4,8 @@
 //! relocation rewriting, script handling).
 
 use crate::c5::linker::relocatable::{
-    EtRel, EtSection, EtSymRef, RelinkOptions, glob_match, link_relocatable, parse_et_rel,
-    parse_module_script,
+    EM_AARCH64, EtRel, EtSection, EtSymRef, RelinkOptions, glob_match, link_relocatable,
+    parse_et_rel, parse_module_script,
 };
 use crate::c5::{
     CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
@@ -24,6 +24,22 @@ fn compile_obj(src: &str, name: &str) -> EtRel {
         ..Default::default()
     };
     let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    parse_et_rel(&bytes, name).expect("parse")
+}
+
+fn compile_obj_aarch64(src: &str, name: &str) -> EtRel {
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(src.to_string(), Target::LinuxAarch64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
     parse_et_rel(&bytes, name).expect("parse")
 }
 
@@ -461,6 +477,69 @@ fn object_attributes_are_kept_once_not_concatenated() {
         .find(|s| s.name == ".ARM.attributes")
         .expect("attributes kept");
     assert_eq!(sec.bytes, attrs, "one attribute set, not two");
+}
+
+/// AArch64 build attributes merge per tag: `aeabi_feature_and_bits`
+/// AND-s its tags across the inputs, and an input carrying no
+/// attribute section withholds every bit. The expected bytes are what
+/// `ld -r` (binutils 2.46) writes for the same inputs.
+#[test]
+fn aarch64_feature_bits_merge_per_tag_across_a_relocatable_link() {
+    // 'A', subsection length, "aeabi_feature_and_bits\0", optional,
+    // ULEB128, then Tag_Feature_BTI/PAC/GCS values.
+    let attrs = |bti: u8, pac: u8, gcs: u8| -> Vec<u8> {
+        let mut v = alloc::vec![b'A', 0x23, 0, 0, 0];
+        v.extend_from_slice(b"aeabi_feature_and_bits\0\x01\x00");
+        v.extend_from_slice(&[0, bti, 1, pac, 2, gcs]);
+        v
+    };
+    let obj = |fname: &str, src: &str, body: Option<Vec<u8>>| -> EtRel {
+        let mut o =
+            compile_obj_aarch64(&alloc::format!("int {fname}(void) {{ return 1; }}\n"), src);
+        if let Some(bytes) = body {
+            o.sections.push(EtSection {
+                name: ".ARM.attributes".to_string(),
+                sh_type: 0x7000_0003,
+                flags: 0,
+                addralign: 1,
+                entsize: 0,
+                bytes,
+                nobits_size: 0,
+                link_target: None,
+                relocs: Vec::new(),
+                group: None,
+            });
+        }
+        o
+    };
+    let opts = RelinkOptions {
+        expect_machine: Some(EM_AARCH64),
+        ..Default::default()
+    };
+    let merged_attrs = |objs: &[EtRel]| -> Vec<u8> {
+        let bytes = link_relocatable(objs, &opts).expect("link");
+        let merged = parse_et_rel(&bytes, "merged").expect("parse merged");
+        merged
+            .sections
+            .iter()
+            .find(|s| s.name == ".ARM.attributes")
+            .expect("attributes kept")
+            .bytes
+            .clone()
+    };
+    assert_eq!(
+        merged_attrs(&[
+            obj("f", "a.o", Some(attrs(1, 1, 0))),
+            obj("g", "b.o", Some(attrs(1, 0, 1))),
+        ]),
+        attrs(1, 0, 0),
+        "each tag is AND-ed, not the first input's set kept"
+    );
+    assert_eq!(
+        merged_attrs(&[obj("f", "a.o", Some(attrs(1, 1, 1))), obj("g", "b.o", None),]),
+        attrs(0, 0, 0),
+        "an input with no attribute section claims nothing"
+    );
 }
 
 /// `ld -r` merges the inputs' property notes into one, the same way a

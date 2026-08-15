@@ -1484,7 +1484,7 @@ pub(super) fn write_relocatable(
             .iter()
             .filter(|s| {
                 s.is_weak
-                    && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64)
+                    && (s.is_fun_entity() || s.class == Token::Glo as i64)
                     && !s.name.is_empty()
             })
             .map(|s| s.link_name())
@@ -1516,7 +1516,7 @@ pub(super) fn write_relocatable(
             .iter()
             .filter(|s| {
                 s.is_hidden
-                    && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64)
+                    && (s.is_fun_entity() || s.class == Token::Glo as i64)
                     && !s.name.is_empty()
             })
             .map(|s| s.link_name())

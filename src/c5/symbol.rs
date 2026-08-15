@@ -438,20 +438,21 @@ pub(crate) struct Symbol {
     /// independent of the slot's restored class at walk time.
     pub block_extern_active: bool,
 
-    /// True for a block-scope `static` local that shadowed an outer
-    /// binding (a file-scope object of the same name). The local is
-    /// promoted to `Glo` class for its data-segment storage but keeps
-    /// block scope (C99 6.2.1, 6.2.4p3), so the function-exit cleanup
-    /// must restore the shadowed outer binding even though the
-    /// symbol's class is no longer `Loc`. Cleared on restore.
-    pub is_scope_static: bool,
+    /// True for a binding made at the function-body top level whose
+    /// class no longer reads as `Loc`, so the function-exit cleanup
+    /// cannot infer it: a block-scope `static` (promoted to `Glo`), a
+    /// typedef, an enumerator, or a block-scope / C89-implicit function
+    /// declaration (C99 6.2.1p4: all have block scope). The cleanup
+    /// restores the shadowed outer binding. Cleared on restore.
+    pub is_scope_bound: bool,
 
-    /// True for a `typedef` declared at the function-body top level
-    /// (C99 6.7.7, 6.2.1: block scope). The name binds to `Typedef`
-    /// class for the function body but must not leak to file scope,
-    /// so the function-exit cleanup restores the shadowed outer
-    /// binding even though the class is not `Loc`. Cleared on restore.
-    pub is_scope_typedef: bool,
+    /// True once a block-scope or C89-implicit function declaration
+    /// bound this symbol. Scope exit unbinds the name (`class` returns
+    /// to 0), but the entity -- prototype, linkage, asm rename -- stays
+    /// on the slot for call lowering and the extern-import scan (C99
+    /// 6.2.2p4: every declaration with external linkage denotes the
+    /// same function). Never cleared.
+    pub scoped_fn_decl: bool,
 
     /// ent_pc of the enclosing function for a block-scope static's
     /// emission record (the persistent `name.N` symbol; the scoped
@@ -647,6 +648,17 @@ impl Symbol {
     pub fn link_name(&self) -> &str {
         self.asm_name.as_deref().unwrap_or(&self.name)
     }
+
+    /// Whether the slot denotes a function entity: a live `Token::Fun`
+    /// binding, or a scoped function declaration whose name binding was
+    /// unwound at scope exit (`class` back to 0) while `val`, the
+    /// prototype and the linkage stayed on the slot. Consumers reading
+    /// the entity (call lowering, import scans) use this; name lookup
+    /// keys on `class` alone.
+    pub fn is_fun_entity(&self) -> bool {
+        self.class == crate::c5::token::Token::Fun as i64
+            || (self.class == 0 && self.scoped_fn_decl)
+    }
 }
 
 impl crate::c5::layout::DataOffsets for Symbol {
@@ -730,8 +742,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_inline_definition: _,   // linkage model result
             saw_static_decl: _,
             block_extern_active: _,
-            is_scope_static: _,
-            is_scope_typedef: _,
+            is_scope_bound: _,
+            scoped_fn_decl: _,
             owner_ent_pc: _, // code address space
             is_compound_literal: _,
             was_referenced: _,

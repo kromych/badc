@@ -1598,13 +1598,10 @@ impl Compiler {
                             // keyword, so dispatch it here (the nested
                             // blocks reach the same handler through
                             // parse_block_stmt).
-                            self.parse_block_typedef(None)?;
+                            self.parse_block_typedef()?;
                         } else if self.lex_is_type_start() {
                             let item_before = self.ast_stmts_snapshot();
-                            self.parse_local_decl(
-                                leading_maybe_unused,
-                                &mut super::locals::DeclScope::FunctionBody,
-                            )?;
+                            self.parse_local_decl(leading_maybe_unused)?;
                             let item_after = self.ast.stmts.len();
                             // Skip any statement-expression sub-statements
                             // interleaved by an initializer; they are

@@ -785,6 +785,16 @@ impl Compiler {
     /// and already holds a `&mut Symbol`; passing the symbol
     /// reference avoids re-borrowing the symbol table.
     pub(super) fn restore_shadowed_symbol(sym: &mut Symbol) {
+        // A scoped function declaration over a previously unbound name:
+        // the name unbinds, but the entity -- prototype, linkage, asm
+        // rename -- stays on the slot for call lowering and the
+        // extern-import scan (C99 6.2.2p4: one function, TU-wide).
+        if sym.scoped_fn_decl && sym.class == Token::Fun as i64 && sym.h_class == 0 {
+            sym.class = 0;
+            sym.is_scope_bound = false;
+            sym.block_extern_active = false;
+            return;
+        }
         sym.class = sym.h_class;
         sym.type_ = sym.h_type;
         sym.val = sym.h_val;
@@ -804,8 +814,7 @@ impl Compiler {
         sym.is_global_register = sym.h_is_global_register;
         sym.asm_name = sym.h_asm_name.take();
         sym.const_object_value = sym.h_const_object_value;
-        sym.is_scope_static = false;
-        sym.is_scope_typedef = false;
+        sym.is_scope_bound = false;
         sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
         // being unbound, never to the restored outer symbol.
@@ -837,8 +846,7 @@ impl Compiler {
             && sym.is_global_register == sym.h_is_global_register
             && sym.asm_name == sym.h_asm_name
             && sym.const_object_value == sym.h_const_object_value
-            && !sym.is_scope_static
-            && !sym.is_scope_typedef
+            && !sym.is_scope_bound
             && !sym.block_extern_active
     }
 
@@ -868,14 +876,12 @@ impl Compiler {
     }
 
     /// Whether `sym` currently holds a binding an enclosing scope must
-    /// get back at scope exit: a local or parameter, a block-scope
-    /// `static` or `typedef` (which no longer read as `Loc`), or a
+    /// get back at scope exit: a local or parameter, a function-body
+    /// binding that no longer reads as `Loc` (a block-scope `static`,
+    /// typedef, enumerator, or scoped function declaration), or a
     /// block-scope `extern` that converted a bound file-scope name.
     pub(super) fn scope_binding_active(sym: &Symbol) -> bool {
-        sym.class == Token::Loc as i64
-            || sym.is_scope_static
-            || sym.is_scope_typedef
-            || sym.block_extern_active
+        sym.class == Token::Loc as i64 || sym.is_scope_bound || sym.block_extern_active
     }
 
     /// Restore the outer binding of every symbol in `bound` that still
@@ -894,6 +900,58 @@ impl Compiler {
         bound.retain(|&i| Self::scope_binding_active(&symbols[i as usize]));
         bound.append(&mut self.scope_bound);
         self.scope_bound = bound;
+    }
+
+    /// Whether the innermost open scope already declared `idx`: the
+    /// enclosing block's shadow list inside a block, the live binding at
+    /// function-body scope (which C99 6.2.1p4 shares with the
+    /// parameters). Drives the C99 6.7p3 one-declaration-per-scope
+    /// diagnostic; the per-scope single shadow slot also depends on it
+    /// -- a second same-scope save would overwrite the outer binding.
+    pub(super) fn binds_in_current_scope(&self, idx: usize) -> bool {
+        match self.block_scopes.last() {
+            Some(level) => level.iter().any(|b| b.idx == idx),
+            None => {
+                let s = &self.symbols[idx];
+                (s.class == Token::Loc as i64 && !s.is_global_register)
+                    || s.is_scope_bound
+                    || s.block_extern_active
+            }
+        }
+    }
+
+    /// Save the current binding of `idx` for restore when the innermost
+    /// open scope exits: onto the enclosing block's shadow list inside a
+    /// block, into the per-symbol `h_*` slot at function-body scope.
+    pub(super) fn save_scope_binding(&mut self, idx: usize) {
+        if self.block_scopes.is_empty() {
+            self.shadow_symbol(idx);
+        } else {
+            let snap = self.capture_block_shadow(idx);
+            self.block_scopes.last_mut().unwrap().push(snap);
+        }
+    }
+
+    /// Rebind `idx` as a non-`Loc` scoped declaration (an enumerator, a
+    /// block-scope or C89-implicit function declaration): diagnose a
+    /// same-scope redeclaration, save the outer binding for the scope's
+    /// exit, and mark a function-body binding for the function-exit
+    /// restore. No-op at file scope, where the binding is permanent.
+    pub(super) fn rebind_scoped(&mut self, idx: usize) -> Result<(), C5Error> {
+        if !self.in_function_body() {
+            return Ok(());
+        }
+        if self.binds_in_current_scope(idx) {
+            return Err(self.compile_err(alloc::format!(
+                "redeclaration of `{}` in the same scope",
+                self.symbols[idx].name
+            )));
+        }
+        self.save_scope_binding(idx);
+        if self.block_scopes.is_empty() {
+            self.symbols[idx].is_scope_bound = true;
+        }
+        Ok(())
     }
 
     // ---- AST helpers ----

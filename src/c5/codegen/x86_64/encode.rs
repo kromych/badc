@@ -2149,14 +2149,13 @@ pub(crate) fn lower(
     // comment on the aarch64 lowering's `variadic_targets`.
     {
         use crate::c5::symbol::Linkage;
-        use crate::c5::token::Token;
         let extern_pcs: alloc::collections::BTreeSet<usize> = program
             .extern_function_imports
             .iter()
             .map(|(pc, _)| *pc)
             .collect();
         for sym in &program.symbols {
-            if sym.class == Token::Fun as i64
+            if sym.is_fun_entity()
                 && !sym.defined_here
                 && sym.linkage == Linkage::External
                 && sym.is_variadic
@@ -2188,15 +2187,12 @@ pub(crate) fn lower(
     // function referenced by address gets an ent_pc placeholder too). A `%c`
     // function operand a replacement `call` in a section relocates against
     // resolves its `ImmCode` ent_pc through this.
-    let fn_name_by_pc: alloc::collections::BTreeMap<usize, &str> = {
-        use crate::c5::token::Token;
-        program
-            .symbols
-            .iter()
-            .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
-            .map(|s| (s.val as usize, s.link_name()))
-            .collect()
-    };
+    let fn_name_by_pc: alloc::collections::BTreeMap<usize, &str> = program
+        .symbols
+        .iter()
+        .filter(|s| s.is_fun_entity() && !s.name.is_empty())
+        .map(|s| (s.val as usize, s.link_name()))
+        .collect();
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         pc_to_native[ent_pc] = code.len();

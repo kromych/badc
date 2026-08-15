@@ -74,8 +74,13 @@ impl Compiler {
                 || c == Token::Glo as i64
                 || c == Token::Loc as i64;
             if !known {
+                // The name has block scope (C99 6.2.1p4): save it for
+                // the scope-exit restore. The declared entity survives
+                // on the slot past the unbind for call resolution.
+                self.rebind_scoped(id_idx)?;
                 let sym = &mut self.symbols[id_idx];
                 sym.class = Token::Fun as i64;
+                sym.scoped_fn_decl = true;
                 sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
                 sym.params = params.types;
                 sym.is_variadic = params.is_variadic;

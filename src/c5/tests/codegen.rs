@@ -6187,3 +6187,45 @@ fn x64_cf_protection_skips_a_naked_body() {
     // The body is the one-byte `ret` the asm supplied and nothing else.
     assert_eq!(elf_text(&obj), [0xC3], "no pad ahead of a naked body");
 }
+
+#[test]
+fn scoped_fn_declaration_keeps_its_entity_for_the_link() {
+    // A function declared only inside a block unbinds at scope exit
+    // (C99 6.2.1p4), but the declared entity stays on the symbol slot
+    // (6.2.2p4): the import scan and the encoders' variadic-callee
+    // classification read it after every scope is unwound.
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "int f(void) { int scoped_vfn(const char *, ...); return scoped_vfn(\"x\", 1.5); }\n\
+               int main(void) { return f(); }";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let sym = program
+        .symbols
+        .iter()
+        .find(|s| s.name == "scoped_vfn")
+        .expect("symbol");
+    assert_eq!(sym.class, 0, "the name must unbind at scope exit");
+    assert!(
+        sym.is_fun_entity() && sym.is_variadic,
+        "the entity and its prototype must survive the unbind"
+    );
+    assert!(
+        program
+            .extern_function_imports
+            .iter()
+            .any(|(_, n)| n == "scoped_vfn"),
+        "the unbound declaration still needs an import placeholder"
+    );
+    // System V x86_64 variadic calls set `al` to the FP-register
+    // argument count; the classification reads the surviving entity.
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(2).any(|w| w == [0xB0, 0x01]),
+        "the call to the scoped variadic declaration must set al = 1"
+    );
+}

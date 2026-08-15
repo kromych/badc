@@ -55,36 +55,6 @@ pub(super) struct DeclAlign {
     pub realign_auto: bool,
 }
 
-/// Which scope a declaration parsed by [`Compiler::parse_local_decl`]
-/// belongs to. It decides where the outer binding of a redeclared name is
-/// saved and what "already declared in this scope" (C99 6.7p3) means.
-pub(super) enum DeclScope<'a> {
-    /// The function body's outermost scope, which C99 6.2.1p4 shares with
-    /// the parameters. Every binding in it lives in the per-symbol `h_*`
-    /// shadow slot the function-close pass restores, so an existing `Loc`
-    /// binding of the name is a redeclaration in the same scope.
-    FunctionBody,
-    /// A nested block or a `for` init clause. Its bindings are saved on a
-    /// per-entry stack the scope's exit unwinds; that stack also lists
-    /// exactly the names this scope has bound so far.
-    Block(&'a mut alloc::vec::Vec<super::stmt::BlockShadow>),
-}
-
-impl DeclScope<'_> {
-    /// Whether `idx` already has a binding made by this scope.
-    fn binds_in_this_scope(&self, symbols: &[crate::c5::symbol::Symbol], idx: usize) -> bool {
-        match self {
-            // A parameter or an earlier top-level declarator holds `Loc`;
-            // a file-scope register-asm variable self-shadows and is not a
-            // redeclaration.
-            DeclScope::FunctionBody => {
-                symbols[idx].class == Token::Loc as i64 && !symbols[idx].is_global_register
-            }
-            DeclScope::Block(saved) => saved.iter().any(|b| b.idx == idx),
-        }
-    }
-}
-
 impl Compiler {
     /// Drain the three pending local-initializer carriers into a single
     /// `LocalInit`: a scalar AST expression, a runtime per-element store
@@ -303,14 +273,12 @@ impl Compiler {
 
     /// Parse one declaration inside a function body: the declaration
     /// specifiers, then a comma-separated declarator list each with an
-    /// optional initializer. `scope` selects only how an outer binding is
-    /// saved and what a redeclaration is checked against; every other rule
-    /// is shared by the function-body top level and the blocks in it.
-    pub(super) fn parse_local_decl(
-        &mut self,
-        maybe_unused: bool,
-        scope: &mut DeclScope<'_>,
-    ) -> Result<(), C5Error> {
+    /// optional initializer. The innermost open scope -- `block_scopes`
+    /// when a nested block or `for`-init level is open, the
+    /// function-body scope (shared with the parameters, C99 6.2.1p4)
+    /// otherwise -- receives the bindings and the saved outer state its
+    /// exit restores.
+    pub(super) fn parse_local_decl(&mut self, maybe_unused: bool) -> Result<(), C5Error> {
         let mut is_static = false;
         let mut is_extern = false;
         let mut is_thread_local = false;
@@ -415,8 +383,12 @@ impl Compiler {
                     || c == Token::Glo as i64
                     || c == Token::Loc as i64;
                 if !known {
+                    // The name has block scope (C99 6.2.1p4); the
+                    // declared entity survives the unbind on the slot.
+                    self.rebind_scoped(loc_idx)?;
                     let sym = &mut self.symbols[loc_idx];
                     sym.class = Token::Fun as i64;
+                    sym.scoped_fn_decl = true;
                     // Undo the typedef's pre-decay to pointer-to-function.
                     sym.type_ = ty - Ty::Ptr as i64;
                     sym.params = params;
@@ -481,9 +453,8 @@ impl Compiler {
             let rebinds_slot = !is_extern || convert_extern;
 
             // C99 6.7p3: an identifier with no linkage is declared once per
-            // scope; `DeclScope` supplies what that scope is. An `extern`
-            // redeclaration has linkage and is exempt.
-            if !is_extern && scope.binds_in_this_scope(&self.symbols, loc_idx) {
+            // scope. An `extern` redeclaration has linkage and is exempt.
+            if !is_extern && self.binds_in_current_scope(loc_idx) {
                 return Err(self.compile_err("duplicate local definition"));
             }
             // Save the outer binding of any name this declarator rebinds.
@@ -491,13 +462,7 @@ impl Compiler {
             // naming an existing entity writes nothing, and one naming a
             // never-declared name is deliberately left bound past the scope.
             if !is_extern || extern_shadows_binding {
-                match scope {
-                    DeclScope::FunctionBody => self.shadow_symbol(loc_idx),
-                    DeclScope::Block(saved) => {
-                        let snap = self.capture_block_shadow(loc_idx);
-                        saved.push(snap);
-                    }
-                }
+                self.save_scope_binding(loc_idx);
             }
 
             // A block-scope `extern` allocates no storage (C11 6.7.5).
@@ -543,7 +508,7 @@ impl Compiler {
                 // scope's restore pass is gated on class `Loc`, which a
                 // static local no longer carries, so mark it; a nested block
                 // unbinds it from its own shadow stack instead.
-                self.symbols[loc_idx].is_scope_static = matches!(scope, DeclScope::FunctionBody);
+                self.symbols[loc_idx].is_scope_bound |= self.block_scopes.is_empty();
                 // A `static const` integer folds its `.data` value into a
                 // later constant expression, so `char buf[N * 2 + 1]` is a
                 // fixed array rather than a VLA. Static storage plus a const

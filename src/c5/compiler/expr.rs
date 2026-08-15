@@ -989,7 +989,13 @@ impl Compiler {
                         .iter()
                         .any(|n| n == &self.symbols[id_idx].name)
                 {
+                    // The implicit declaration lands in the innermost
+                    // block containing the call (C89 6.3.2.2) and
+                    // unbinds at its exit; the entity survives on the
+                    // slot for link resolution.
+                    self.rebind_scoped(id_idx)?;
                     self.symbols[id_idx].class = Token::Fun as i64;
+                    self.symbols[id_idx].scoped_fn_decl = true;
                     self.symbols[id_idx].type_ = Ty::Int as i64;
                     self.symbols[id_idx].implicit_return_int = true;
                     self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;

@@ -464,7 +464,7 @@ fn resolve_single_tu_extern_refs(
     let weak_names: alloc::collections::BTreeSet<&str> = program
         .symbols
         .iter()
-        .filter(|s| s.is_weak && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64))
+        .filter(|s| s.is_weak && (s.is_fun_entity() || s.class == Token::Glo as i64))
         .map(|s| s.link_name())
         .collect();
     // Data objects this unit defines, by name and unified data offset --

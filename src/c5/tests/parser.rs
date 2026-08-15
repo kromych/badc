@@ -2091,3 +2091,135 @@ fn nested_block_declaration_diagnostics_match_the_function_body() {
         "an inner-scope redeclaration must stay accepted"
     );
 }
+
+#[test]
+fn enum_redeclaration_in_same_scope_is_diagnosed() {
+    // C99 6.2.1p4: parameters share the function body's outermost scope,
+    // and 6.7p3 allows one no-linkage declaration per scope, so an
+    // enumerator there redeclares the parameter.
+    expect_compile_error(
+        "int f(int x) { enum { x = 3 }; return 0; } int main(void) { return f(1); }",
+        "redeclaration of `x` in the same scope",
+    );
+    // Same constraint between two function-body declarations, in either
+    // order, and inside one nested block.
+    expect_compile_error(
+        "int main(void) { int y = 1; enum { y }; return y; }",
+        "redeclaration of `y` in the same scope",
+    );
+    expect_compile_error(
+        "int main(void) { enum { y }; int y = 1; return y; }",
+        "duplicate local definition",
+    );
+    expect_compile_error(
+        "int main(void) { { int z = 1; enum { z }; return z; } }",
+        "redeclaration of `z` in the same scope",
+    );
+}
+
+#[test]
+fn enum_constant_unbinds_at_scope_exit() {
+    // C99 6.2.1p4: the enumerator shadows the file-scope object inside
+    // its block and the object returns at block exit.
+    let block = "int x = 7;\n\
+                 int f(void) { { enum { x = 3 }; if (x != 3) return 1; } return x == 7 ? 0 : 2; }\n\
+                 int main(void) { return f(); }";
+    let prog = Compiler::new(block.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    // Function-body scope: restored at function exit, so the next
+    // function reads the file-scope object again.
+    let body = "int x = 7;\n\
+                int f(void) { enum { x = 3 }; return x; }\n\
+                int g(void) { return x; }\n\
+                int main(void) { return f() == 3 && g() == 7 ? 0 : 1; }";
+    let prog = Compiler::new(body.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn block_fn_declaration_unbinds_at_scope_exit() {
+    // In scope, the declaration resolves the call against the later
+    // definition (C99 6.2.2p4: one entity with external linkage).
+    let ok = "int f(void) { int one8(void); return one8(); }\n\
+              int one8(void) { return 8; }\n\
+              int main(void) { return f() == 8 ? 0 : 1; }";
+    let prog = Compiler::new(ok.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    // Out of scope the name is undeclared again (C99 6.2.1p4).
+    expect_compile_error(
+        "void f(void) { { int q8(void); } } int main(void) { return q8 != 0; }",
+        "undefined variable q8",
+    );
+    // A later declarator of the same name in the same scope is a
+    // no-linkage redeclaration (C99 6.7p3).
+    expect_compile_error(
+        "int main(void) { int q9(void); int q9 = 1; return q9; }",
+        "duplicate local definition",
+    );
+    // A bare-function-type declarator (`F g;`) binds the same way and
+    // unbinds with its block.
+    let td = "typedef int F(void);\n\
+              int f(void) { F one9; return one9(); }\n\
+              int one9(void) { return 9; }\n\
+              int main(void) { return f() == 9 ? 0 : 1; }";
+    let prog = Compiler::new(td.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    expect_compile_error(
+        "typedef int F(void); void f(void) { { F q10; } } int main(void) { return q10 != 0; }",
+        "undefined variable q10",
+    );
+}
+
+#[test]
+fn block_typedef_redeclaration_rules() {
+    // C11 6.7p3 admits a same-scope typedef redeclared as a typedef;
+    // only the first save is kept, so the scope exit still restores
+    // the outer binding once.
+    let ok = "typedef char T;\n\
+              int f(void) { typedef int T; typedef int T; T v = 3; return v; }\n\
+              int main(void) { T w = 4; return f() == 3 && sizeof(w) == 1 ? 0 : 1; }";
+    let prog = Compiler::new(ok.to_string()).compile().unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    // Any other same-scope binding is a redeclaration.
+    expect_compile_error(
+        "int main(void) { int T = 1; typedef int T; return T; }",
+        "redeclaration of `T` in the same scope",
+    );
+}
+
+#[test]
+fn implicit_extern_fn_binding_unbinds_at_scope_exit() {
+    let opts = || {
+        crate::c5::compiler::CompileOptions::default()
+            .with_implicit_extern_fns(alloc::vec!["impfn".to_string()])
+    };
+    let target = super::super::codegen::Target::default_target();
+    // C89 6.3.2.2 puts the implicit declaration in the innermost block
+    // containing the call. Each caller re-binds; the calls resolve to
+    // the definition later in the unit.
+    let ok = "int f(void) { return impfn(4); }\n\
+              int h(void) { { return impfn(10); } }\n\
+              int impfn(int x) { return x + 1; }\n\
+              int main(void) { return f() + h() == 16 ? 0 : 1; }";
+    let prog = Compiler::with_options(ok.to_string(), target, opts())
+        .compile()
+        .unwrap();
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+    // After the declaring function exits, the name is out of scope; a
+    // non-call use in the next function does not see it.
+    match Compiler::with_options(
+        "int f(void) { return impfn(4); } int g(void) { return impfn; } \
+         int impfn(int x) { return x + 1; } int main(void) { return 0; }"
+            .to_string(),
+        target,
+        opts(),
+    )
+    .compile()
+    {
+        Err(e) => assert!(
+            e.to_string().contains("undefined variable impfn"),
+            "unexpected error: {e}"
+        ),
+        Ok(_) => panic!("an out-of-scope implicit binding must not resolve"),
+    }
+}

@@ -1989,14 +1989,13 @@ pub(crate) fn lower(
         .collect();
     {
         use crate::c5::symbol::Linkage;
-        use crate::c5::token::Token;
         let extern_pcs: alloc::collections::BTreeSet<usize> = program
             .extern_function_imports
             .iter()
             .map(|(pc, _)| *pc)
             .collect();
         for sym in &program.symbols {
-            if sym.class == Token::Fun as i64
+            if sym.is_fun_entity()
                 && !sym.defined_here
                 && sym.linkage == Linkage::External
                 && sym.is_variadic

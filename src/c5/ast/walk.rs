@@ -595,33 +595,33 @@ struct Walker<'a> {
 }
 
 impl<'a> Walker<'a> {
-    /// Live `ent_pc` for a `Token::Fun` symbol. Reading the
+    /// The symbol's live function entity, if it holds one: a
+    /// `Token::Fun` binding, or a scoped function declaration whose
+    /// name binding was unwound at scope exit (class back to 0) while
+    /// the entity -- `val`, prototype, linkage -- stayed on the slot.
+    fn live_fun_sym(&self, sym: u32) -> Option<&crate::c5::symbol::Symbol> {
+        self.symbols.get(sym as usize).filter(|s| s.is_fun_entity())
+    }
+
+    /// Live `ent_pc` for a function symbol. Reading the
     /// symbol's current `val` lets every `Expr::Call` resolve to
     /// the matching `pc_to_native` slot the codegen will
     /// populate. Sys trampolines have their `val` patched late
     /// by `emit_sys_trampolines`; the same live-read fits both
     /// cases.
     fn live_fun_val(&self, sym: u32, fallback_val: i64) -> i64 {
-        let idx = sym as usize;
-        if idx < self.symbols.len() && self.symbols[idx].class == Token::Fun as i64 {
-            self.symbols[idx].val
-        } else {
-            fallback_val
-        }
+        self.live_fun_sym(sym).map_or(fallback_val, |s| s.val)
     }
 
-    /// True when the `Token::Fun` symbol is a variadic function. A
+    /// True when the function symbol is a variadic function. A
     /// variadic c5 callee keeps the c5 cdecl stack-push argument
     /// shape, so its floating-point arguments ride the integer
     /// register class as widened doubles rather than the FP bank.
     fn fun_is_variadic(&self, sym: u32) -> bool {
-        let idx = sym as usize;
-        idx < self.symbols.len()
-            && self.symbols[idx].class == Token::Fun as i64
-            && self.symbols[idx].is_variadic
+        self.live_fun_sym(sym).is_some_and(|s| s.is_variadic)
     }
 
-    /// Count of named (pre-ellipsis) parameters the `Token::Fun`
+    /// Count of named (pre-ellipsis) parameters the function
     /// symbol declares. The parser records the prototype's fixed
     /// parameter types in `Symbol::params`; a variadic callee's
     /// arguments past this count are the variadic tail. Used to
@@ -629,12 +629,7 @@ impl<'a> Walker<'a> {
     /// prefix and the variadic (host-stack) tail for the macOS
     /// arm64 variadic ABI.
     fn fun_fixed_args(&self, sym: u32) -> usize {
-        let idx = sym as usize;
-        if idx < self.symbols.len() && self.symbols[idx].class == Token::Fun as i64 {
-            self.symbols[idx].params.len()
-        } else {
-            0
-        }
+        self.live_fun_sym(sym).map_or(0, |s| s.params.len())
     }
 
     /// Resolve an indirect call's callee expression to the pointed-to
@@ -6395,18 +6390,12 @@ impl<'a> Walker<'a> {
             // Sys-trampoline symbols are added late and have
             // their `val` filled in by `emit_sys_trampolines`
             // -- AFTER `ast_emit_ident` snapshotted 0. Read
-            // the live value off the symbol table (Token::Fun
-            // is not shadowable so this is safe). The walker
-            // sym is the same index the parser stored, so the
-            // lookup hits the same entry the trampoline emit
-            // updated.
-            let live_val = if (*sym as usize) < self.symbols.len()
-                && self.symbols[*sym as usize].class == Token::Fun as i64
-            {
-                self.symbols[*sym as usize].val
-            } else {
-                *val
-            };
+            // the live value off the symbol table; a scoped
+            // function declaration's entity also keeps its
+            // post-parse `val` there. The walker sym is the
+            // same index the parser stored, so the lookup hits
+            // the same entry the trampoline emit updated.
+            let live_val = self.live_fun_val(*sym, *val);
             if live_val == 0 {
                 Ok(b.imm_code_extern(*sym))
             } else {

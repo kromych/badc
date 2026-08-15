@@ -1244,6 +1244,14 @@ pub struct Compiler {
     /// which keeps the entries whose binding outlives the scope (a
     /// file-scope register variable is permanently `Loc`).
     scope_bound: Vec<u32>,
+    /// Open nested-block scopes' saved bindings, innermost last. A
+    /// level is pushed at block / `for`-init entry and drained at its
+    /// exit through `restore_block_shadow`; any rebinding site reached
+    /// while a level is open (declaration, enum body, block-scope or
+    /// implicit function declaration) saves the outer binding into the
+    /// innermost level. Empty at the function-body top level, whose
+    /// bindings use the per-symbol `h_*` slots instead.
+    block_scopes: Vec<Vec<stmt::BlockShadow>>,
 
     // --- Codegen state ---
     /// Next available `ent_pc` identifier for a user function or
@@ -2153,6 +2161,7 @@ impl Compiler {
             symbols,
             symbol_index,
             scope_bound: Vec::new(),
+            block_scopes: Vec::new(),
             deferred_error,
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),
@@ -2559,10 +2568,10 @@ impl Compiler {
             let mut imports: alloc::vec::Vec<(usize, String)> = alloc::vec::Vec::new();
             let mut next_pc = self.next_ent_pc + 1;
             for sym in self.symbols.iter_mut() {
-                if sym.class != Token::Fun as i64
-                    || sym.defined_here
-                    || sym.linkage != Linkage::External
-                {
+                // `is_fun_entity`: a scoped function declaration keeps
+                // its entity on the slot after the name unbinds; it
+                // still needs an import placeholder for its calls.
+                if !sym.is_fun_entity() || sym.defined_here || sym.linkage != Linkage::External {
                     continue;
                 }
                 imports.push((next_pc, sym.link_name().into()));
@@ -2663,10 +2672,7 @@ impl Compiler {
                     continue;
                 }
                 let sym = &self.symbols[sym_idx];
-                if sym.class == Token::Fun as i64
-                    && !sym.defined_here
-                    && sym.linkage == Linkage::External
-                {
+                if sym.is_fun_entity() && !sym.defined_here && sym.linkage == Linkage::External {
                     reloc.target_ent_pc = sym.val as u64;
                 }
             }

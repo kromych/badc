@@ -27,7 +27,6 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
-use super::locals::DeclScope;
 use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_depth};
 
 /// The outer binding a nested block saved before rebinding a name, restored
@@ -108,6 +107,14 @@ impl Compiler {
     /// clearing the block-`extern` mark.
     pub(super) fn restore_block_shadow(&mut self, b: BlockShadow) {
         let s = &mut self.symbols[b.idx];
+        // Same entity-preserving unbind as `restore_shadowed_symbol`:
+        // a scoped function declaration keeps its prototype / linkage
+        // on the slot; only the name binding ends.
+        if s.scoped_fn_decl && s.class == Token::Fun as i64 && b.class == 0 {
+            s.class = 0;
+            s.block_extern_active = false;
+            return;
+        }
         s.class = b.class;
         s.type_ = b.type_;
         s.val = b.val;
@@ -211,12 +218,12 @@ impl Compiler {
 
         // C99 6.8.5.3 for-init is either an expression or a
         // declaration. The declared identifier's scope is the
-        // entire for statement, so a fresh `block_symbols`
-        // vector lets us shadow and restore in the same shape
-        // as `parse_block_stmt`. `parse_local_decl`
+        // entire for statement, so a fresh `block_scopes` level
+        // lets us shadow and restore in the same shape as
+        // `parse_block_stmt`. `parse_local_decl`
         // consumes its own trailing `;`; the expression branch
         // does it explicitly.
-        let mut for_init_symbols: Vec<BlockShadow> = Vec::new();
+        self.block_scopes.push(Vec::new());
         let mut init_ast: Option<super::super::ast::BlockItem> = None;
         if self.lex.tk == ';' {
             self.next()?;
@@ -230,7 +237,7 @@ impl Compiler {
             // and the declared counter never reaches the
             // SSA prologue.
             let init_before = self.ast_stmts_snapshot();
-            self.parse_local_decl(false, &mut DeclScope::Block(&mut for_init_symbols))?;
+            self.parse_local_decl(false)?;
             let init_after = self.ast.stmts.len();
             // C99 6.7p1: a declaration's init-declarator-list may name
             // several declarators (`for (int i = 0, l = n; ...)`).
@@ -352,6 +359,7 @@ impl Compiler {
         // the binding's scope ends with the for statement
         // (C99 6.8.5.3 / 6.8p3). Restore in reverse order to
         // unwind multiple shadows in declaration order.
+        let for_init_symbols = self.block_scopes.pop().unwrap();
         self.capture_block_locals(&for_init_symbols);
         for b in for_init_symbols.into_iter().rev() {
             self.restore_block_shadow(b);
@@ -400,15 +408,11 @@ impl Compiler {
     /// 6.7.7, 6.2.1), routed here so block-local typedefs (e.g.
     /// `typedef void(*LOGFUNC_t)(...)` inside a switch case) bind
     /// without bouncing through the file-scope declaration parser.
-    /// `block_symbols == Some` records the prior binding for an
-    /// enclosing `parse_block_stmt` to restore on block exit;
-    /// `block_symbols == None` (function-body top level) shadows the
-    /// prior binding and marks `is_scope_typedef` so the function-exit
-    /// cleanup restores it.
-    pub(super) fn parse_block_typedef(
-        &mut self,
-        mut block_symbols: Option<&mut Vec<BlockShadow>>,
-    ) -> Result<(), C5Error> {
+    /// Inside a block the prior binding is recorded for the enclosing
+    /// scope's exit restore; at the function-body top level the shadow
+    /// slot plus `is_scope_bound` route it to the function-exit
+    /// cleanup.
+    pub(super) fn parse_block_typedef(&mut self) -> Result<(), C5Error> {
         self.next()?; // consume `typedef`
         // Scope the object-alignment carrier to this typedef so a prior
         // statement's `_Alignas` does not leak onto the alias.
@@ -455,12 +459,22 @@ impl Compiler {
                     // An alias of a function-type typedef stays a function type.
                     (ty, fn_ptr_indirection, None, bare_fn_type)
                 };
-            if block_symbols.is_some() {
-                let snap = self.capture_block_shadow(id_idx);
-                block_symbols.as_deref_mut().unwrap().push(snap);
+            // A name this scope already bound keeps its first save: a
+            // second one would overwrite the outer binding with the
+            // scope's own. C11 6.7p3 admits only a typedef redeclared
+            // as a typedef; any other prior binding is a redeclaration.
+            if self.binds_in_current_scope(id_idx) {
+                if self.symbols[id_idx].class != Token::Typedef as i64 {
+                    return Err(self.compile_err(format!(
+                        "redeclaration of `{}` in the same scope",
+                        self.symbols[id_idx].name
+                    )));
+                }
             } else {
-                self.shadow_symbol(id_idx);
-                self.symbols[id_idx].is_scope_typedef = true;
+                self.save_scope_binding(id_idx);
+                if self.block_scopes.is_empty() {
+                    self.symbols[id_idx].is_scope_bound = true;
+                }
             }
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
@@ -748,7 +762,7 @@ impl Compiler {
         // GCC local labels declared by this block; see
         // `Compiler::resolve_label_name`.
         self.local_label_scopes.push(alloc::vec::Vec::new());
-        let mut block_symbols = Vec::new();
+        self.block_scopes.push(Vec::new());
 
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
         // C99 6.2.4p2: a VLA declared directly in this block has its
@@ -784,7 +798,7 @@ impl Compiler {
                 }
             }
             if self.lex.tk == Token::Typedef {
-                self.parse_block_typedef(Some(&mut block_symbols))?;
+                self.parse_block_typedef()?;
             } else if self.lex.tk == Token::StaticAssert {
                 // C11 6.7.10 allows `static_assert` anywhere a
                 // declaration may appear -- including block scope.
@@ -792,10 +806,7 @@ impl Compiler {
             } else if self.lex_is_type_start() {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
-                self.parse_local_decl(
-                    leading_maybe_unused,
-                    &mut DeclScope::Block(&mut block_symbols),
-                )?;
+                self.parse_local_decl(leading_maybe_unused)?;
                 if self.func_vla_decls > vla_before {
                     block_has_vla = true;
                 }
@@ -893,6 +904,7 @@ impl Compiler {
         // `{ ... }` block; their diagnostic is emitted at function
         // exit. Names starting with `_` are suppressed (gcc /
         // clang `-Wunused` convention).
+        let block_symbols = self.block_scopes.pop().unwrap();
         for b in &block_symbols {
             let sym = &self.symbols[b.idx];
             if sym.class != Token::Loc as i64

@@ -2483,6 +2483,18 @@ pub(crate) fn lower(
         off
     };
 
+    // `-m32` narrows the object to i386, whose frame register numbering and
+    // alignment factors differ from x86-64's.
+    let cfi_target = super::ssa::cfi::CfiTarget {
+        arch: match native.elf_class {
+            crate::c5::object::elf_class::ElfClass::Elf32 => super::ssa::cfi::CfiArch::X86,
+            crate::c5::object::elf_class::ElfClass::Elf64 => super::ssa::cfi::CfiArch::X86_64,
+        },
+        addr_bytes: native.elf_class.addr_size() as u8,
+    };
+    asm_sections
+        .emit_cfi_sections(cfi_target)
+        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = asm_sections.into_parts();
     Ok(Build {
         emitted_relocs: Vec::new(),

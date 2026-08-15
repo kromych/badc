@@ -1541,3 +1541,187 @@ fn a_near_call_is_not_shortened() {
     let t = text_of("relax-call", "\t.text\nf:\n\tcall 1f\n1:\n\tnop\n");
     assert_eq!(&t[..5], [0xe8, 0, 0, 0, 0], "call keeps rel32");
 }
+
+const X64: &str = "linux-x64";
+const A64: &str = "linux-aarch64";
+
+/// A prologue described by `.cfi_*` and nothing else. Every byte below is
+/// GNU as 2.46.1's for the same source: a `zR` CIE carrying the x86-64
+/// entry rules, then one FDE whose address field is a PC-relative
+/// displacement the link resolves against `.text`.
+#[test]
+fn cfi_directives_build_the_eh_frame_gnu_as_does() {
+    let b = object_for(
+        "cfi-eh",
+        "\t.text\n\t.globl f\n\t.type f,@function\nf:\n\
+         \t.cfi_startproc\n\tpushq\t%rbp\n\t.cfi_adjust_cfa_offset 8\n\
+         \t.cfi_rel_offset %rbp, 0\n\tnop\n\tpopq\t%rbp\n\
+         \t.cfi_restore %rbp\n\t.cfi_def_cfa %rsp, 8\n\tret\n\
+         \t.cfi_endproc\n\t.size f,.-f\n",
+        X64,
+    );
+    assert_eq!(
+        section_data(&b, ".eh_frame"),
+        [
+            0x14, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x7a, 0x52, 0x00, 0x01, 0x78, 0x10, 0x01, 0x1b, 0x0c,
+            0x07, 0x08, 0x90, 0x01, 0x00, 0x00, 0x1c, 0, 0, 0, 0x1c, 0, 0, 0, 0, 0, 0, 0, 0x04, 0,
+            0, 0, 0x00, 0x41, 0x0e, 0x10, 0x86, 0x02, 0x42, 0xc6, 0x0c, 0x07, 0x08, 0x00, 0, 0, 0,
+            0
+        ]
+    );
+    // R_X86_64_PC32 over the FDE's address field, so the table needs no
+    // load-time relocation in a shared object.
+    assert_eq!(relocs(&b, ".rela.eh_frame"), [(0x20, 2, 0)]);
+    assert!(!section_names(&b).iter().any(|n| n == ".debug_frame"));
+}
+
+/// `.cfi_sections .debug_frame` moves the same description to the offline
+/// table: an all-ones `cie_id`, an absolute address field, and a CIE
+/// pointer the link rebases. GNU as 2.46.1's bytes for the same source.
+#[test]
+fn cfi_sections_moves_the_table_to_debug_frame() {
+    let b = object_for(
+        "cfi-dbg",
+        "\t.text\n\t.globl f\n\t.type f,@function\nf:\n\
+         \t.cfi_sections .debug_frame\n\t.cfi_startproc\n\tpushq\t%rbp\n\
+         \t.cfi_adjust_cfa_offset 8\n\t.cfi_rel_offset %rbp, 0\n\tnop\n\
+         \tpopq\t%rbp\n\t.cfi_restore %rbp\n\t.cfi_def_cfa %rsp, 8\n\tret\n\
+         \t.cfi_endproc\n\t.size f,.-f\n",
+        X64,
+    );
+    assert_eq!(
+        section_data(&b, ".debug_frame"),
+        [
+            0x14, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0x01, 0x00, 0x01, 0x78, 0x10, 0x0c, 0x07, 0x08,
+            0x90, 0x01, 0x00, 0x00, 0, 0, 0, 0, 0x24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0x04, 0, 0, 0, 0, 0, 0, 0, 0x41, 0x0e, 0x10, 0x86, 0x02, 0x42, 0xc6, 0x0c, 0x07, 0x08,
+            0, 0, 0, 0, 0, 0
+        ]
+    );
+    // The CIE pointer is a 32-bit offset into this section; the address
+    // field is a full absolute address.
+    assert_eq!(
+        relocs(&b, ".rela.debug_frame"),
+        [(0x1c, 10, 0), (0x20, 1, 0)]
+    );
+    assert!(!section_names(&b).iter().any(|n| n == ".eh_frame"));
+}
+
+/// `.cfi_signal_frame` marks the CIE in both tables: `zRS` where the
+/// augmentation block exists, a bare `S` in `.debug_frame`. An unwinder
+/// reads it to take the return address unmodified, which is what lets a
+/// walk step out of a signal handler. GNU as 2.46.1's augmentation bytes.
+#[test]
+fn a_signal_frame_is_marked_in_both_tables() {
+    let b = object_for(
+        "cfi-sig",
+        "\t.text\n\t.globl f\n\t.type f,@function\nf:\n\
+         \t.cfi_sections .eh_frame, .debug_frame\n\t.cfi_startproc\n\
+         \t.cfi_signal_frame\n\tnop\n\t.cfi_endproc\n\t.size f,.-f\n",
+        X64,
+    );
+    assert_eq!(&section_data(&b, ".eh_frame")[9..13], b"zRS\0");
+    assert_eq!(&section_data(&b, ".debug_frame")[9..11], b"S\0");
+}
+
+/// The AArch64 PCS puts the entry CFA at `sp` with the return address in
+/// x30, and factors code offsets by four. GNU as 2.46.1's bytes.
+#[test]
+fn an_aarch64_frame_takes_the_pcs_alignment_factors() {
+    let b = object_for(
+        "cfi-a64",
+        "\t.text\n\t.globl f\n\t.type f,%function\nf:\n\t.cfi_startproc\n\
+         \tstp\tx29, x30, [sp, #-16]!\n\t.cfi_def_cfa_offset 16\n\
+         \t.cfi_offset x29, -16\n\t.cfi_offset x30, -8\n\tnop\n\
+         \tldp\tx29, x30, [sp], #16\n\t.cfi_restore x30\n\t.cfi_restore x29\n\
+         \t.cfi_def_cfa_offset 0\n\tret\n\t.cfi_endproc\n\t.size f,.-f\n",
+        A64,
+    );
+    assert_eq!(
+        section_data(&b, ".eh_frame"),
+        [
+            0x10, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x7a, 0x52, 0x00, 0x04, 0x78, 0x1e, 0x01, 0x1b, 0x0c,
+            0x1f, 0x00, 0x20, 0, 0, 0, 0x18, 0, 0, 0, 0, 0, 0, 0, 0x10, 0, 0, 0, 0x00, 0x41, 0x0e,
+            0x10, 0x9d, 0x02, 0x9e, 0x01, 0x42, 0xde, 0xdd, 0x0e, 0x00, 0, 0, 0, 0, 0, 0, 0
+        ]
+    );
+    // R_AARCH64_PREL32 over the FDE's address field.
+    assert_eq!(relocs(&b, ".rela.eh_frame"), [(0x1c, 261, 0)]);
+}
+
+/// `-m32` narrows the object to i386, whose frame registers are numbered
+/// from a different table (`ecx` is 1, the return column 8) and whose data
+/// alignment factor is -4. This is the shape the 32-bit vDSO ships, so it
+/// is checked against GNU as 2.46.1's bytes for the same source.
+#[test]
+fn an_i386_frame_takes_the_i386_register_numbering() {
+    let d = dir("cfi-i386");
+    write(
+        &d,
+        "u.s",
+        "\t.text\n\t.globl f\n\t.type f,@function\nf:\n\t.cfi_startproc\n\
+         \tpushl\t%ecx\n\t.cfi_adjust_cfa_offset 4\n\t.cfi_rel_offset ecx, 0\n\
+         \tnop\n\tpopl\t%ecx\n\t.cfi_restore ecx\n\t.cfi_adjust_cfa_offset -4\n\
+         \tret\n\t.cfi_endproc\n\t.size f,.-f\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "-m32", "u.s", "-o", "u.o"],
+    );
+    let b = std::fs::read(d.join("u.o")).unwrap();
+    let secs = elf32_sections(&b);
+    let eh = secs.iter().find(|s| s.0 == ".eh_frame").expect(".eh_frame");
+    assert_eq!(
+        &b[eh.2..eh.2 + eh.3],
+        [
+            0x14, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x7a, 0x52, 0x00, 0x01, 0x7c, 0x08, 0x01, 0x1b, 0x0c,
+            0x04, 0x04, 0x88, 0x01, 0x00, 0x00, 0x18, 0, 0, 0, 0x1c, 0, 0, 0, 0, 0, 0, 0, 0x04, 0,
+            0, 0, 0x00, 0x41, 0x0e, 0x08, 0x81, 0x02, 0x42, 0xc1, 0x0e, 0x04, 0x00, 0x00
+        ]
+    );
+    // i386 has no RELA: the FDE address is a `SHT_REL` R_386_PC32.
+    assert!(secs.iter().any(|s| s.0 == ".rel.eh_frame"));
+}
+
+/// A frame operand is an absolute expression, not a literal: the kernel's
+/// signal trampolines spell every saved-register slot as offset arithmetic
+/// over a macro argument. Both frames below describe the same state, so
+/// the two must encode identically.
+#[test]
+fn a_frame_operand_may_be_a_constant_expression() {
+    let lit = object_for(
+        "cfi-lit",
+        "\t.text\nf:\n\t.cfi_startproc simple\n\t.cfi_def_cfa %rsp, 12\n\
+         \t.cfi_offset %rbx, -24\n\tnop\n\t.cfi_endproc\n",
+        X64,
+    );
+    let expr = object_for(
+        "cfi-expr",
+        "\t.text\nf:\n\t.cfi_startproc simple\n\t.cfi_def_cfa %rsp, 16 - 4\n\
+         \t.cfi_offset %rbx, (0 - 3) * 8\n\tnop\n\t.cfi_endproc\n",
+        X64,
+    );
+    assert_eq!(
+        section_data(&lit, ".eh_frame"),
+        section_data(&expr, ".eh_frame")
+    );
+    assert!(!section_data(&lit, ".eh_frame").is_empty());
+}
+
+/// A unit with no `.cfi_startproc` gains no frame table, and an unclosed
+/// description is an error rather than a truncated one: a consumer trusts
+/// the table, so a partial one is worse than none.
+#[test]
+fn frames_appear_only_for_a_closed_description() {
+    let plain = object_for("cfi-none", "\t.text\nf:\n\tnop\n\tret\n", X64);
+    assert!(!section_names(&plain).iter().any(|n| n == ".eh_frame"));
+
+    let d = dir("cfi-open");
+    write(&d, "u.s", "\t.text\nf:\n\t.cfi_startproc\n\tnop\n");
+    let (ok, out) = run(
+        &d,
+        &["-q", "-c", &format!("--target={X64}"), "u.s", "-o", "u.o"],
+    );
+    assert!(!ok, "an unclosed frame description must fail: {out}");
+    assert!(out.contains("cfi_endproc"), "{out}");
+}

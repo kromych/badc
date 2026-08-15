@@ -181,20 +181,15 @@ const OPCODE_BASE: u8 = 13;
 /// `DW_CFA_advance_loc` is encoded as an opcode-with-operand: the
 /// top two bits are `0b01` (= 0x40) and the low six bits carry
 /// the factored delta. Used inline; broken out as a helper.
-const DW_CFA_ADVANCE_LOC_HI: u8 = 0x40;
-const DW_CFA_OFFSET_HI: u8 = 0x80;
+/// The opcodes themselves come from the assembler's frame emitter, which
+/// needs the whole set; `DW_CFA_undefined` marks a register as having no
+/// recoverable value in the previous frame, which is how the `_start` FDE
+/// tells an unwinder it has reached the bottom of the stack.
+use crate::c5::codegen::ssa::cfi::{
+    DW_CFA_ADVANCE_LOC_HI, DW_CFA_ADVANCE_LOC1, DW_CFA_ADVANCE_LOC2, DW_CFA_ADVANCE_LOC4,
+    DW_CFA_DEF_CFA, DW_CFA_OFFSET_HI, DW_CFA_UNDEFINED,
+};
 
-const DW_CFA_ADVANCE_LOC1: u8 = 0x02;
-const DW_CFA_ADVANCE_LOC2: u8 = 0x03;
-const DW_CFA_ADVANCE_LOC4: u8 = 0x04;
-const DW_CFA_DEF_CFA: u8 = 0x0c;
-/// `DW_CFA_undefined <register>` -- mark a register as having
-/// no recoverable value in the previous frame. The unwinder
-/// uses this to recognise the bottom of the stack: when the
-/// return-address column is undefined, there's nothing to walk
-/// to. Used in the `_start` FDE so gdb stops gracefully
-/// instead of reading past the bottom-most frame.
-const DW_CFA_UNDEFINED: u8 = 0x07;
 /// `DW_CFA_AARCH64_negate_ra_state` -- toggles the row's RA_SIGN_STATE
 /// (AArch64 ELF ABI). Set, the unwinder strips the authentication code
 /// from the saved return address before using it.

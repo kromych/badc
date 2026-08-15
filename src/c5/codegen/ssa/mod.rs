@@ -3,6 +3,7 @@
 //! the sibling x86_64/ and aarch64/ modules.
 
 pub(crate) mod build;
+pub(crate) mod cfi;
 #[cfg(feature = "std")]
 pub(crate) mod dump;
 pub(crate) mod emit_common;

@@ -1038,6 +1038,11 @@ pub(crate) enum AsmSectionItem {
     /// outcome. Evaluated after layout; the first arm whose condition holds
     /// raises its `.error`.
     CondDiag(alloc::vec::Vec<AsmCondArm>),
+    /// A `.cfi_*` directive. It deposits no bytes; the section offset it
+    /// reaches is the point its unwind rule takes effect from, so the
+    /// materializer records the pair and the frame tables are built from the
+    /// unit's whole stream.
+    Cfi(super::cfi::CfiOp),
     /// `.reloc offset, TYPE, sym + addend`: a relocation of a named ELF type
     /// at a section-relative offset, deposited without a field of its own.
     Reloc {
@@ -1782,6 +1787,9 @@ pub(crate) struct AsmSectionsSnapshot {
     /// The declarations verbatim: a merge onto an entry that predates the
     /// snapshot is not undone by a length truncation.
     decls: alloc::vec::Vec<AsmSymDecl>,
+    /// Recorded `.cfi_*` directives at the snapshot, so a re-laid-out
+    /// function does not describe its frame twice.
+    cfi: usize,
     per_section: alloc::vec::Vec<(usize, usize, usize, u32, bool)>,
 }
 
@@ -1807,6 +1815,10 @@ pub(crate) struct AsmSectionSink {
     /// section, merged by name. Applied by the object writer, which is where
     /// every definition the unit holds is known.
     sym_decls: alloc::vec::Vec<AsmSymDecl>,
+    /// `.cfi_*` directives in the order the unit wrote them, each carrying
+    /// the section and offset it reached. Turned into frame tables by
+    /// [`Self::emit_cfi_sections`] once every section is laid out.
+    cfi: alloc::vec::Vec<super::cfi::CfiRecord>,
 }
 
 /// Label name -> (owning section's identity key, offset within it).
@@ -1834,6 +1846,25 @@ impl AsmSectionSink {
     /// dropped with the sink.
     pub(crate) fn into_parts(self) -> (alloc::vec::Vec<AsmSection>, alloc::vec::Vec<AsmSymDecl>) {
         (self.sections, self.sym_decls)
+    }
+
+    /// Append the frame tables the unit's `.cfi_*` directives describe. Runs
+    /// once every section is laid out, since an FDE spans a code range whose
+    /// end the closing directive fixes.
+    pub(crate) fn emit_cfi_sections(
+        &mut self,
+        target: super::cfi::CfiTarget,
+    ) -> Result<(), alloc::string::String> {
+        if self.cfi.is_empty() {
+            return Ok(());
+        }
+        let built = super::cfi::build_cfi_sections(&self.cfi, target)?;
+        for s in built {
+            let key = section_key_of(&s);
+            self.by_key.insert(key, self.sections.len());
+            self.sections.push(s);
+        }
+        Ok(())
     }
 
     /// Merge the symbol directives a template carried outside any section
@@ -2002,6 +2033,7 @@ impl AsmSectionSink {
         AsmSectionsSnapshot {
             len: self.sections.len(),
             decls: self.sym_decls.clone(),
+            cfi: self.cfi.len(),
             per_section: self
                 .sections
                 .iter()
@@ -2027,6 +2059,7 @@ impl AsmSectionSink {
         if self.sym_decls.len() >= snap.decls.len() {
             self.sym_decls.clone_from(&snap.decls);
         }
+        self.cfi.truncate(snap.cfi.min(self.cfi.len()));
         for s in self.sections.drain(snap.len.min(self.sections.len())..) {
             self.by_key.remove(&section_key_of(&s));
             for l in &s.labels {
@@ -4341,9 +4374,23 @@ fn parse_section_item(
             Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new()))
         }
         // `.cfi_*` describes unwind state to a DWARF consumer and deposits no
-        // bytes in this section. badc emits no unwind info for asm bodies, the
-        // same as the template path.
-        _ if tok.starts_with(".cfi_") => Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new())),
+        // bytes in this section; it is carried to the frame-table builder,
+        // which pairs it with the offset the materializer reaches it at.
+        _ if tok.starts_with(".cfi_") => {
+            // A frame operand is absolute: no leaf resolves, so an
+            // expression naming a label folds to nothing and is rejected.
+            let ctx = AsmExprCtx {
+                resolve: &|_| None,
+                const_of: &|_| None,
+                lax_div: false,
+            };
+            let eval = |s: &str| eval_asm_value(s, &ctx).ok().and_then(|v| v.to_abs());
+            match super::cfi::parse_cfi_directive(tok, rest, &eval) {
+                Ok(Some(op)) => Ok(AsmSectionItem::Cfi(op)),
+                Ok(None) => Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new())),
+                Err(m) => Err(alloc::format!("inline asm: {m}")),
+            }
+        }
         // `.code16` / `.code32` / `.code64` select the x86 encoding mode for
         // the instructions that follow. The directive deposits no bytes; it
         // reaches the arch backend as a code item, which reads it as the
@@ -6155,6 +6202,7 @@ fn measure_round_inner(
                 | AsmSectionItem::Local(_)
                 | AsmSectionItem::Hidden(_)
                 | AsmSectionItem::CondDiag(_)
+                | AsmSectionItem::Cfi(_)
                 | AsmSectionItem::Reloc { .. } => {}
                 AsmSectionItem::SymSet { name, target } => {
                     aliases.insert(name.clone(), target.clone());
@@ -6434,6 +6482,7 @@ pub(crate) fn materialize_asm_sections(
         let AsmSectionSink {
             sections,
             labels: sink_labels,
+            cfi: sink_cfi,
             ..
         } = &mut *sink;
         if !touched.iter().any(|&(i, _)| i == sec_idx) {
@@ -6750,6 +6799,13 @@ pub(crate) fn materialize_asm_sections(
                 // Visibility is carried by name to the object writer, which
                 // sets `st_other` wherever the symbol is emitted.
                 AsmSectionItem::Hidden(_) => {}
+                // The rule takes effect at the location counter the directive
+                // was written at, which is this section's current length.
+                AsmSectionItem::Cfi(op) => sink_cfi.push(super::cfi::CfiRecord {
+                    key: section_key(b),
+                    offset: sec.bytes.len() as u32,
+                    op: op.clone(),
+                }),
                 // `.reloc`: the offset is section-relative and independent of
                 // the location counter, and no field is deposited.
                 AsmSectionItem::Reloc {

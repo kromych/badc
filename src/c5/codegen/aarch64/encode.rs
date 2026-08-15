@@ -2345,6 +2345,12 @@ pub(crate) fn lower(
         off
     };
 
+    asm_sections
+        .emit_cfi_sections(super::ssa::cfi::CfiTarget {
+            arch: super::ssa::cfi::CfiArch::Aarch64,
+            addr_bytes: 8,
+        })
+        .map_err(|m| C5Error::Compile(alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = asm_sections.into_parts();
     Ok(Build {
         emitted_relocs: Vec::new(),

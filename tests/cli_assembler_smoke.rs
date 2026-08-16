@@ -88,9 +88,10 @@ fn dot_s_assembles_to_an_object() {
     let bytes = std::fs::read(d.join("leaf.o")).expect("object written next to the source");
     assert_eq!(&bytes[..4], b"\x7fELF");
     let names = section_names(&bytes);
-    assert!(
-        names.iter().filter(|n| *n == ".text").count() >= 1,
-        "assembled `.text` missing: {names:?}"
+    assert_eq!(
+        names.iter().filter(|n| *n == ".text").count(),
+        1,
+        "assembled `.text` is not named exactly once: {names:?}"
     );
 }
 
@@ -909,13 +910,12 @@ fn code16_same_section_branches_resolve_in_place() {
     );
 }
 
-/// Contents of the first non-empty `.text`, from an object of either
-/// ELF class.
+/// Contents of `.text`, from an object of either ELF class.
 fn text_bytes(b: &[u8]) -> Vec<u8> {
     if b[4] == 1 {
         let t = elf32_sections(b)
             .into_iter()
-            .find(|s| s.0 == ".text" && s.3 != 0)
+            .find(|s| s.0 == ".text")
             .expect(".text");
         return b[t.2..t.2 + t.3].to_vec();
     }
@@ -924,13 +924,11 @@ fn text_bytes(b: &[u8]) -> Vec<u8> {
     let (shoff, shentsize) = (u64at(0x28), u16at(0x3a));
     let (off, size) = section_names(b)
         .iter()
-        .enumerate()
-        .filter(|(_, n)| *n == ".text")
-        .map(|(i, _)| {
+        .position(|n| n == ".text")
+        .map(|i| {
             let sh = shoff + i * shentsize;
             (u64at(sh + 0x18), u64at(sh + 0x20))
         })
-        .find(|(_, size)| *size != 0)
         .expect(".text");
     b[off..off + size].to_vec()
 }
@@ -1422,7 +1420,7 @@ fn section64(bytes: &[u8], want: &str) -> Vec<u8> {
         let n = strtab + u32at(sh);
         let end = bytes[n..].iter().position(|&c| c == 0).unwrap();
         let size = u64at(sh + 0x20);
-        if &bytes[n..n + end] == want.as_bytes() && size != 0 {
+        if &bytes[n..n + end] == want.as_bytes() {
             let off = u64at(sh + 0x18);
             return bytes[off..off + size].to_vec();
         }

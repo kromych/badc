@@ -29,6 +29,7 @@
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::ops::Range;
 
 use super::super::codegen::map_syms::{self, MapClass, MapMark};
 use super::super::error::C5Error;
@@ -1401,6 +1402,18 @@ pub(super) fn write_relocatable(
     }
     let named_section_count = carve.table.entries.len();
 
+    // A default section the unit leaves empty while an assembled or
+    // attribute-placed section claims its name -- how a `.s` unit's
+    // own `.text` / `.data` / `.bss` arrive -- is dropped below. Two
+    // sections of one name in an object make selection by name
+    // ambiguous: `objcopy --dump-section=.text` reads the empty one.
+    let shadowed = |name: &str, empty: bool| -> bool {
+        empty && carve.table.entries.iter().any(|e| e.name == name)
+    };
+    let text_shadowed = shadowed(".text", build.text.is_empty());
+    let data_shadowed = shadowed(".data", build.data.is_empty() && plan.data_len == 0);
+    let bss_shadowed = shadowed(".bss", plan.bss_len == 0);
+
     // Strtab + symtab construction. The file symbol leads
     // (binding LOCAL, type FILE); per-function symbols follow
     // (binding GLOBAL, type FUNC). ELF requires every LOCAL
@@ -1425,22 +1438,29 @@ pub(super) fn write_relocatable(
         ..Default::default()
     });
 
-    // Section symbols (.text, .data, .bss, .debug_line,
-    // .debug_abbrev). Each has empty name and SHN of the matching
-    // section. The DWARF section symbols let `.rela.debug_info` /
-    // `.rela.debug_line` relocations target them: a placeholder
-    // slot in `.debug_info` that refers to the unit's
-    // `.debug_line` start surfaces as
+    // Section symbols (.text, .data, .bss, and under `-g`
+    // .debug_line, .debug_abbrev). Each has empty name and SHN of the
+    // matching section; data and function-pointer fixups land against
+    // one with the offset in `r_addend`. The DWARF section symbols let
+    // `.rela.debug_info` / `.rela.debug_line` relocations target
+    // them: a placeholder slot in `.debug_info` that refers to the
+    // unit's `.debug_line` start surfaces as
     // `R_*_32 against .debug_line section sym, addend = 0`, which
     // the linker rebases to the unit's final `.debug_line` offset
-    // after concatenation.
-    for shndx in [
-        SHIDX_TEXT,
-        SHIDX_DATA,
-        SHIDX_BSS,
-        SHIDX_DEBUG_LINE,
-        SHIDX_DEBUG_ABBREV,
-    ] {
+    // after concatenation. Without `-g` the `.debug_*` sections are
+    // not written, so their symbols are not either.
+    let text_sym_idx = symbols.len() as u64;
+    let data_sym_idx = text_sym_idx + 1;
+    let bss_sym_idx = text_sym_idx + 2;
+    let (debug_line_sym_idx, debug_abbrev_sym_idx) = (text_sym_idx + 3, text_sym_idx + 4);
+    let mut fixed_section_shndx = alloc::vec![SHIDX_TEXT, SHIDX_DATA, SHIDX_BSS];
+    if build.debug_info {
+        fixed_section_shndx.push(SHIDX_DEBUG_LINE);
+        fixed_section_shndx.push(SHIDX_DEBUG_ABBREV);
+    }
+    let fixed_section_syms: Range<u64> =
+        text_sym_idx..text_sym_idx + fixed_section_shndx.len() as u64;
+    for shndx in fixed_section_shndx {
         symbols.push(Elf64Sym {
             st_info: pack_sym_info(STB_LOCAL, STT_SECTION),
             st_shndx: shndx,
@@ -1470,8 +1490,23 @@ pub(super) fn write_relocatable(
         (0, 0)
     };
     // One STT_SECTION symbol per named section so relocations into a
-    // carved range can reference the section + offset.
+    // carved range can reference the section + offset. An entry that
+    // takes a dropped default's name takes its symbol with it, so the
+    // section still carries exactly one.
     for k in 0..named_section_count {
+        let inherited = [
+            (".text", text_shadowed, text_sym_idx),
+            (".data", data_shadowed, data_sym_idx),
+            (".bss", bss_shadowed, bss_sym_idx),
+        ]
+        .into_iter()
+        .find(|&(name, dropped, _)| dropped && carve.table.entries[k].name == name)
+        .map(|(_, _, sym)| sym);
+        if let Some(sym) = inherited {
+            carve.sym_idx[k] = sym;
+            symbols[sym as usize].st_shndx = carve.shndx[k];
+            continue;
+        }
         carve.sym_idx[k] = symbols.len() as u64;
         symbols.push(Elf64Sym {
             st_info: pack_sym_info(STB_LOCAL, STT_SECTION),
@@ -2674,17 +2709,6 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // Section symbol indices follow the order they are pushed:
-    // null(0), file(1), text(2), data(3), bss(4), .debug_line(5),
-    // .debug_abbrev(6). Data + function-pointer fixups land against the
-    // matching section symbol; the `r_addend` carries the offset within
-    // the section.
-    let text_sym_idx: u64 = 2;
-    let data_sym_idx: u64 = 3;
-    let bss_sym_idx: u64 = 4;
-    let debug_line_sym_idx: u64 = 5;
-    let debug_abbrev_sym_idx: u64 = 6;
-
     // Every unified data offset resolves through the plan: `.data` /
     // `.bss` (a `.bss` offset names a byte in the zero-fill region past
     // the file-backed bytes) or a named section. `home_sym` yields the
@@ -3311,16 +3335,10 @@ pub(super) fn write_relocatable(
         use crate::c5::codegen::ssa::emit_common::AsmSectionTarget;
         // The STT_SECTION symbols a reduction can land on. A branch against
         // one names no function, so no PLT slot can carry it.
-        let section_syms: alloc::collections::BTreeSet<u64> = [
-            text_sym_idx,
-            data_sym_idx,
-            bss_sym_idx,
-            debug_line_sym_idx,
-            debug_abbrev_sym_idx,
-        ]
-        .into_iter()
-        .chain(carve.sym_idx.iter().copied())
-        .collect();
+        let section_syms: alloc::collections::BTreeSet<u64> = fixed_section_syms
+            .clone()
+            .chain(carve.sym_idx.iter().copied())
+            .collect();
         for (&(e, base), s) in asm_placements.iter().zip(build.asm_sections.iter()) {
             for r in &s.relocs {
                 let (sym_idx, addend) = match &r.target {
@@ -3702,12 +3720,10 @@ pub(super) fn write_relocatable(
     // Generate the DWARF triple for this TU. Address slots end
     // up as placeholders paired with `DwarfReloc` records that
     // the loop below translates into ELF `.rela.debug_*`
-    // entries. Without `-g` the DWARF build is skipped entirely:
-    // the `.debug_*` sections stay zero-length, so `link_native_-
-    // objects` sees no debug info and the final image carries
-    // none, and the type-catalog walk is avoided on a default
-    // build. TODO: drop the empty `.debug_*` section headers from
-    // the relocatable object as well.
+    // entries. Without `-g` the DWARF build is skipped entirely and
+    // the `.debug_*` sections are not written at all, so `link_-
+    // native_objects` sees no debug info and the final image carries
+    // none, and the type-catalog walk is avoided on a default build.
     let dwarf = if build.debug_info {
         dwarf_reloc::emit(program, build, source_path, machine, target)
     } else {
@@ -3773,21 +3789,35 @@ pub(super) fn write_relocatable(
     // Every relocation table of the fixed set is final here. A
     // relocation section with no entries is dropped: it describes
     // nothing, and a consumer reaching one through its target's
-    // `sh_info` link has no entry to read. `shndx_map` renumbers the
-    // nominal layout over the sections that survive; the named and
-    // `.init_array` groups that follow the fixed set shift by the
-    // total. Applied to every recorded index before it is written.
-    let fixed_rela_empty = [
+    // `sh_info` link has no entry to read. The `.debug_*` triple goes
+    // the same way without `-g`, where it would carry no bytes:
+    // `readelf --debug-dump` and `objdump --dwarf` both report an
+    // error on a zero-length debug section, and gcc emits none.
+    //
+    // A shadowed default section goes with them, per the rule above.
+    //
+    // `shndx_map` renumbers the nominal layout over the sections that
+    // survive; the named and `.init_array` groups that follow the
+    // fixed set shift by the total. Applied to every recorded index
+    // before it is written.
+    let no_dwarf = !build.debug_info;
+    let fixed_dropped = [
+        (SHIDX_TEXT, text_shadowed),
         (SHIDX_RELA_TEXT, rela_bytes.is_empty()),
+        (SHIDX_DATA, data_shadowed),
+        (SHIDX_BSS, bss_shadowed),
         (SHIDX_RELA_DATA, rela_data_bytes.is_empty()),
+        (SHIDX_DEBUG_INFO, no_dwarf),
         (SHIDX_RELA_DEBUG_INFO, rela_debug_info_bytes.is_empty()),
+        (SHIDX_DEBUG_ABBREV, no_dwarf),
+        (SHIDX_DEBUG_LINE, no_dwarf),
         (SHIDX_RELA_DEBUG_LINE, rela_debug_line_bytes.is_empty()),
         (SHIDX_RELA_TDATA, rela_tdata_bytes.is_empty()),
     ];
     let dropped_below = |n: u16| -> u16 {
-        fixed_rela_empty
+        fixed_dropped
             .iter()
-            .filter(|&&(idx, empty)| empty && idx < n)
+            .filter(|&&(idx, dropped)| dropped && idx < n)
             .count() as u16
     };
     let dropped_sections = dropped_below(base_sections as u16);
@@ -3845,9 +3875,9 @@ pub(super) fn write_relocatable(
     let mut shstrtab_names: Vec<String> = Vec::with_capacity(num_sections);
     for (i, name) in fixed_names.iter().enumerate() {
         let nominal = i as u16 + 1;
-        if !fixed_rela_empty
+        if !fixed_dropped
             .iter()
-            .any(|&(idx, empty)| empty && idx == nominal)
+            .any(|&(idx, dropped)| dropped && idx == nominal)
         {
             shstrtab_names.push(name.clone());
         }
@@ -3956,19 +3986,21 @@ pub(super) fn write_relocatable(
         text_body.drain(carve.text_keep_len..carve_hi);
     }
     fold_rel_addends(class, &rela_bytes, &mut text_body)?;
-    let text_align = build.text_align.max(16) as u64;
-    let text_off = round_up(out.len() as u64, text_align);
-    out.resize(text_off as usize, 0);
-    out.extend_from_slice(&text_body);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_TEXT),
-        sh_type: SHT_PROGBITS,
-        sh_flags: SHF_ALLOC | SHF_EXECINSTR,
-        sh_offset: text_off,
-        sh_size: text_body.len() as u64,
-        sh_addralign: text_align,
-        ..Default::default()
-    });
+    if !text_shadowed {
+        let text_align = build.text_align.max(16) as u64;
+        let text_off = round_up(out.len() as u64, text_align);
+        out.resize(text_off as usize, 0);
+        out.extend_from_slice(&text_body);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_TEXT),
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC | SHF_EXECINSTR,
+            sh_offset: text_off,
+            sh_size: text_body.len() as u64,
+            sh_addralign: text_align,
+            ..Default::default()
+        });
+    }
 
     // .rela.text -- one entry per `RelocCallSite`. `sh_link`
     // points at the symbol table; `sh_info` at the section the
@@ -4080,33 +4112,37 @@ pub(super) fn write_relocatable(
         }
         ent.bytes.extend_from_slice(&build.rodata.bytes);
     }
-    let data_align = plan.data_align;
-    let data_off = round_up(out.len() as u64, data_align);
-    out.resize(data_off as usize, 0);
-    out.extend_from_slice(&data_body);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_DATA),
-        sh_type: SHT_PROGBITS,
-        sh_flags: SHF_ALLOC | SHF_WRITE,
-        sh_offset: data_off,
-        sh_size: data_body.len() as u64,
-        sh_addralign: data_align,
-        ..Default::default()
-    });
+    if !data_shadowed {
+        let data_align = plan.data_align;
+        let data_off = round_up(out.len() as u64, data_align);
+        out.resize(data_off as usize, 0);
+        out.extend_from_slice(&data_body);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_DATA),
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_offset: data_off,
+            sh_size: data_body.len() as u64,
+            sh_addralign: data_align,
+            ..Default::default()
+        });
+    }
 
     // .bss (no file bytes) -- zero-init data segregated past the file
     // image; the linker zero-fills it. Its alignment covers the
     // zero-init objects the plan keeps in it; a fixed 16 would
     // silently under-align an over-aligned one.
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_BSS),
-        sh_type: SHT_NOBITS,
-        sh_flags: SHF_ALLOC | SHF_WRITE,
-        sh_offset: out.len() as u64,
-        sh_size: plan.bss_len,
-        sh_addralign: plan.bss_align,
-        ..Default::default()
-    });
+    if !bss_shadowed {
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_BSS),
+            sh_type: SHT_NOBITS,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_offset: out.len() as u64,
+            sh_size: plan.bss_len,
+            sh_addralign: plan.bss_align,
+            ..Default::default()
+        });
+    }
 
     // .symtab
     let symtab_off = round_up(out.len() as u64, 8);
@@ -4207,17 +4243,19 @@ pub(super) fn write_relocatable(
 
     // .debug_info -- one CU DIE per `.o`. SHT_PROGBITS without
     // SHF_ALLOC: not loaded at runtime, just consumed by the
-    // debugger via its `.shdr` walk.
-    let debug_info_off = out.len() as u64;
-    out.extend_from_slice(&dwarf.debug_info);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_DEBUG_INFO),
-        sh_type: SHT_PROGBITS,
-        sh_offset: debug_info_off,
-        sh_size: dwarf.debug_info.len() as u64,
-        sh_addralign: 1,
-        ..Default::default()
-    });
+    // debugger via its `.shdr` walk. Written under `-g` only.
+    if !no_dwarf {
+        let debug_info_off = out.len() as u64;
+        out.extend_from_slice(&dwarf.debug_info);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_DEBUG_INFO),
+            sh_type: SHT_PROGBITS,
+            sh_offset: debug_info_off,
+            sh_size: dwarf.debug_info.len() as u64,
+            sh_addralign: 1,
+            ..Default::default()
+        });
+    }
 
     // .rela.debug_info -- placeholder slots described above.
     if !rela_debug_info_bytes.is_empty() {
@@ -4242,29 +4280,33 @@ pub(super) fn write_relocatable(
     // .debug_abbrev -- abbreviation table. No relocs; the slot
     // it's referenced from in `.debug_info` already carries the
     // reloc that rebases to its merged-section offset.
-    let debug_abbrev_off = out.len() as u64;
-    out.extend_from_slice(&dwarf.debug_abbrev);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_DEBUG_ABBREV),
-        sh_type: SHT_PROGBITS,
-        sh_offset: debug_abbrev_off,
-        sh_size: dwarf.debug_abbrev.len() as u64,
-        sh_addralign: 1,
-        ..Default::default()
-    });
+    if !no_dwarf {
+        let debug_abbrev_off = out.len() as u64;
+        out.extend_from_slice(&dwarf.debug_abbrev);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_DEBUG_ABBREV),
+            sh_type: SHT_PROGBITS,
+            sh_offset: debug_abbrev_off,
+            sh_size: dwarf.debug_abbrev.len() as u64,
+            sh_addralign: 1,
+            ..Default::default()
+        });
+    }
 
     // .debug_line -- per-statement line program. Reloc against
     // `.text` rebases each `DW_LNE_set_address` opcode.
-    let debug_line_off = out.len() as u64;
-    out.extend_from_slice(&dwarf.debug_line);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_DEBUG_LINE),
-        sh_type: SHT_PROGBITS,
-        sh_offset: debug_line_off,
-        sh_size: dwarf.debug_line.len() as u64,
-        sh_addralign: 1,
-        ..Default::default()
-    });
+    if !no_dwarf {
+        let debug_line_off = out.len() as u64;
+        out.extend_from_slice(&dwarf.debug_line);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_DEBUG_LINE),
+            sh_type: SHT_PROGBITS,
+            sh_offset: debug_line_off,
+            sh_size: dwarf.debug_line.len() as u64,
+            sh_addralign: 1,
+            ..Default::default()
+        });
+    }
 
     // .rela.debug_line -- the placeholder slots above.
     if !rela_debug_line_bytes.is_empty() {
@@ -5241,6 +5283,93 @@ mod tests {
         assert_eq!(bytes[secs[".debug_info"].0 + 10], 4, "CU address_size");
         assert!(secs.contains_key(".rel.debug_info"));
         assert!(secs.contains_key(".rel.debug_line"));
+    }
+
+    /// Section names of an ELF64 object, in header order.
+    fn elf64_section_names(bytes: &[u8]) -> Vec<String> {
+        let u16a = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+        let u32a = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+        let u64a = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+        let (shoff, shentsize, shnum) = (u64a(0x28), u16a(0x3a), u16a(0x3c));
+        let strtab = u64a(shoff + u16a(0x3e) * shentsize + 0x18);
+        (0..shnum)
+            .map(|i| {
+                let at = strtab + u32a(shoff + i * shentsize);
+                let end = at + bytes[at..].iter().position(|&b| b == 0).expect("name ends");
+                String::from_utf8_lossy(&bytes[at..end]).into_owned()
+            })
+            .collect()
+    }
+
+    /// An object names each section once, and carries `.debug_*` only
+    /// under `-g`. Two sections of one name make selection by name
+    /// ambiguous: `objcopy --dump-section=.text` reads the first, which
+    /// for an assembled unit was the empty default rather than the
+    /// assembly. A zero-length `.debug_info` makes
+    /// `readelf --debug-dump` and `objdump --dwarf` report an error over
+    /// a unit that has no debug info to read. GNU as and gcc emit
+    /// neither for the same source.
+    #[test]
+    fn an_object_names_each_section_once_and_carries_dwarf_only_under_g() {
+        use crate::c5::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+        // Every default section name is claimed by the assembly, so each
+        // one has an empty default to shadow.
+        const ASM: &str = "\t.text\n\t.globl f\nf:\n\t.byte 0\n\
+                           \t.data\n\t.globl d\nd:\n\t.long 1\n\
+                           \t.section .rodata\nr:\n\t.long 2\n\
+                           \t.bss\nb:\n\t.zero 4\n";
+        const C: &str = "int g = 3; int f(void) { return g; }";
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            for debug in [false, true] {
+                for (label, program) in [
+                    (
+                        "asm",
+                        Compiler::assemble(
+                            ASM,
+                            target,
+                            CompileOptions {
+                                no_entry_point: true,
+                                ..Default::default()
+                            },
+                        ),
+                    ),
+                    (
+                        "c",
+                        Compiler::with_options(
+                            String::from(C),
+                            target,
+                            CompileOptions::default().with_no_entry_point(true),
+                        )
+                        .compile(),
+                    ),
+                ] {
+                    let ctx = alloc::format!("{label} [{target:?}, debug={debug}]");
+                    let program = program.unwrap_or_else(|e| panic!("{ctx}: {e}"));
+                    let bytes = crate::c5::emit_native_with_options(
+                        &program,
+                        target,
+                        NativeOptions {
+                            output_kind: OutputKind::Relocatable,
+                            ..NativeOptions::new().with_debug_info(debug)
+                        },
+                    )
+                    .unwrap_or_else(|e| panic!("{ctx}: {e}"));
+                    let names = elf64_section_names(&bytes);
+                    for want in [".text", ".data", ".bss"] {
+                        assert_eq!(
+                            names.iter().filter(|n| n.as_str() == want).count(),
+                            1,
+                            "{ctx}: `{want}` is not named exactly once in {names:?}"
+                        );
+                    }
+                    assert_eq!(
+                        names.iter().any(|n| n.starts_with(".debug")),
+                        debug,
+                        "{ctx}: debug sections in {names:?}"
+                    );
+                }
+            }
+        }
     }
 
     /// `(offset, size)` of each named section of an ELFCLASS32 object.

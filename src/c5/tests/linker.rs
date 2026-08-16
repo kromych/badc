@@ -14220,6 +14220,73 @@ fn aarch64_assembled_shapes_carry_the_mapping_symbols_gnu_as_emits() {
 }
 
 #[test]
+fn aarch64_mapping_symbols_open_on_the_class_not_the_frag() {
+    // GNU as opens a run at a frag boundary, so it emits a start where the
+    // class is unchanged and it classifies padding by the frag that follows
+    // rather than by the bytes. badc opens a run only where the class
+    // changes, and classifies the bytes. The bytes and relocations are
+    // identical; what the difference is worth was measured with GNU objdump
+    // 2.46.1 and llvm-objdump against `as` (binutils 2.46.1). A redundant
+    // start gives every byte the same class either way. For the `.ltorg`
+    // padding both disassemblers decode gas's as `udf` and badc's as data.
+    // In a section that is not executable only `llvm-objdump -D` reads the
+    // symbol at all, and there gas's placement decodes the first data byte
+    // as an instruction.
+    use crate::c5::Target;
+    /// A shape, its source, badc's mapping symbols, and gas's.
+    type Shape = (
+        &'static str,
+        &'static str,
+        &'static [(&'static str, u64, &'static str)],
+        &'static [(&'static str, u64, &'static str)],
+    );
+    let shapes: &[Shape] = &[
+        (
+            "alignment padding after data, which gas opens a second data run for",
+            ".text\n\t.byte 9\n\tnop\n",
+            &[(".text", 0, "$d"), (".text", 4, "$x")],
+            &[(".text", 0, "$d"), (".text", 1, "$d"), (".text", 4, "$x")],
+        ),
+        (
+            "a `.skip 0`, which gas reopens the instruction run after",
+            ".text\n\tnop\n\t.skip 0\n\tnop\n",
+            &[(".text", 0, "$x")],
+            &[(".text", 0, "$x"), (".text", 4, "$x")],
+        ),
+        (
+            "leading data in a section that is not executable, which gas \
+             opens at the alignment frag rather than at the data",
+            ".section .ro,\"a\",@progbits\n\t.byte 9\n\t.balign 4\n\t.word 7\n",
+            &[(".ro", 0, "$d")],
+            &[(".ro", 1, "$d")],
+        ),
+        (
+            "a `.ltorg` pool's alignment padding, which gas leaves in the \
+             instruction run it pads out of",
+            ".text\n\tldr x0, =0x123456789abcdef\n\t.ltorg\n",
+            &[(".text", 0, "$x"), (".text", 4, "$d")],
+            &[(".text", 0, "$x"), (".text", 8, "$d")],
+        ),
+    ];
+    for (what, src, want, gas) in shapes {
+        let want: alloc::vec::Vec<(String, u64, String)> = want
+            .iter()
+            .map(|&(s, o, n)| (String::from(s), o, String::from(n)))
+            .collect();
+        let gas: alloc::vec::Vec<(String, u64, String)> = gas
+            .iter()
+            .map(|&(s, o, n)| (String::from(s), o, String::from(n)))
+            .collect();
+        let got = mapping_symbols(&asm_reloc_tu(src, Target::LinuxAarch64));
+        assert_eq!(got, want, "aarch64 mapping symbols for {what}");
+        assert_ne!(
+            got, gas,
+            "the divergence from GNU as for {what} is deliberate"
+        );
+    }
+}
+
+#[test]
 fn aarch64_code_section_alignment_matches_gnu_as() {
     // GNU as pads a code section's alignment gap with the sub-word
     // remainder as zeros and the rest as whole NOPs, and brings the

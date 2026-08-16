@@ -303,10 +303,13 @@ impl SectionMap {
     /// name the object a site came from, at the offset `readelf -r`
     /// prints, without carrying the origin per relocation.
     pub(crate) fn locate_text(&self, offset: u64) -> Option<(&str, &str, u64)> {
+        // A contribution that covers the offset names it; an empty one
+        // sharing that offset is the answer only when no other does.
         let c = self
             .text
             .iter()
-            .find(|c| offset >= c.offset && offset < c.offset + c.size.max(1))?;
+            .find(|c| offset >= c.offset && offset < c.offset + c.size)
+            .or_else(|| self.text.iter().find(|c| offset == c.offset))?;
         let src = c
             .input
             .and_then(|i| self.sources.get(i))
@@ -999,6 +1002,11 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // satisfies a reference. Collected separately, then folded into
     // `defined` for every name no strong definition claims.
     let mut weak_defined: HashMap<&str, MergedSymbol> = HashMap::new();
+    // `SHN_ABS` definitions. Their value is a link-time constant, not a
+    // position in any merged section, so they carry no `MergedSymbol`
+    // and every reference to one resolves without an image base.
+    let mut absolute_defined: HashMap<&str, i64> = HashMap::new();
+    let mut weak_absolute: HashMap<&str, i64> = HashMap::new();
     for (i, obj) in objs.iter().enumerate() {
         for sym in &obj.symbols {
             // STB_LOCAL (0) routes through the static-func pass; only
@@ -1006,7 +1014,26 @@ pub fn link_native_objects_with_shared_libs<'a>(
             if sym.binding != 1 && sym.binding != 2 {
                 continue;
             }
-            if matches!(sym.section, NativeSymSection::Undef | NativeSymSection::Abs) {
+            if sym.section == NativeSymSection::Abs {
+                if sym.name.is_empty() {
+                    continue;
+                }
+                if sym.binding == 2 {
+                    weak_absolute
+                        .entry(sym.name.as_str())
+                        .or_insert(sym.value as i64);
+                } else if let Some(prev) =
+                    absolute_defined.insert(sym.name.as_str(), sym.value as i64)
+                    && prev != sym.value as i64
+                {
+                    return Err(link_err(&format!(
+                        "multiple definition of `{}` (first {prev:#x}, also {:#x})",
+                        sym.name, sym.value,
+                    )));
+                }
+                continue;
+            }
+            if sym.section == NativeSymSection::Undef {
                 continue;
             }
             if sym.name.is_empty() {
@@ -1064,6 +1091,9 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // every other weak name becomes its own defined entry.
     for (name, merged) in weak_defined {
         defined.entry(name).or_insert(merged);
+    }
+    for (name, value) in weak_absolute {
+        absolute_defined.entry(name).or_insert(value);
     }
 
     // Pass 2.1 -- collect the prologue-end anchors. Each unit's
@@ -1402,6 +1432,13 @@ pub fn link_native_objects_with_shared_libs<'a>(
                             target,
                             &origin.at(machine, reloc.rtype, &sym.name, reloc.offset),
                         )?;
+                    } else if let Some(&value) = absolute_defined.get(sym.name.as_str()) {
+                        apply_absolute_reloc(
+                            &mut text,
+                            patch_offset,
+                            value + reloc.addend,
+                            &origin.at(machine, reloc.rtype, &sym.name, reloc.offset),
+                        )?;
                     } else if !sym.name.is_empty() {
                         // STB_GLOBAL UNDEF that doesn't resolve
                         // against any defining unit is a
@@ -1502,15 +1539,15 @@ pub fn link_native_objects_with_shared_libs<'a>(
                     }
                 }
                 NativeSymSection::Abs => {
-                    // Absolute symbol -- the value goes in
-                    // directly. None of our writer's symbols
-                    // are ABS (only the file symbol is, and
-                    // nothing relocs against it), so this is
-                    // an unexpected shape.
-                    return Err(err(&format!(
-                        "link_native_objects: reloc against ABS symbol `{}` is not supported",
-                        sym.name,
-                    )));
+                    // `S + A` is a link-time constant, so the field
+                    // takes it here: no image base is involved and the
+                    // value survives a load-time slide unchanged.
+                    apply_absolute_reloc(
+                        &mut text,
+                        patch_offset,
+                        sym.value as i64 + reloc.addend,
+                        &origin.at(machine, reloc.rtype, &sym.name, reloc.offset),
+                    )?;
                 }
                 NativeSymSection::Common => {
                     // C99 6.9.2 tentative definition: Pass 2.5
@@ -1770,6 +1807,28 @@ pub fn link_native_objects_with_shared_libs<'a>(
                     .at(machine, reloc.rtype, &sym.name, reloc.offset)
                     .unsupported());
             }
+            // A slot naming an `SHN_ABS` symbol takes `S + A` directly:
+            // the value is a link-time constant, so no load-time
+            // relocation carries it.
+            let abs_value = match sym.section {
+                NativeSymSection::Abs => Some(sym.value as i64),
+                NativeSymSection::Undef if !defined.contains_key(sym.name.as_str()) => {
+                    absolute_defined.get(sym.name.as_str()).copied()
+                }
+                _ => None,
+            };
+            if let Some(value) = abs_value {
+                let slot = slot_offset as usize;
+                let seg = if in_tls { &mut tls_data } else { &mut data };
+                if slot + 8 > seg.len() {
+                    return Err(err(&format!(
+                        "absolute data reloc slot 0x{slot:x} past end of segment (len {})",
+                        seg.len(),
+                    )));
+                }
+                seg[slot..slot + 8].copy_from_slice(&(value + reloc.addend).to_le_bytes());
+                continue;
+            }
             let resolved_section = match sym.section {
                 NativeSymSection::Undef | NativeSymSection::Common => {
                     // Common targets are coalesced into `.bss` by
@@ -1861,7 +1920,8 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 }
                 NativeSymSection::Abs => {
                     return Err(err(&format!(
-                        "link_native_objects: .rela.data points at ABS symbol `{}`",
+                        "link_native_objects: .rela.data ABS symbol `{}` reached the \
+                         section-relative path",
                         sym.name,
                     )));
                 }
@@ -2917,6 +2977,44 @@ fn apply_reloc(
         // patcher for is an unsupported input, not a broken invariant.
         _ => Err(site.unsupported()),
     }
+}
+
+/// Write `S + A` where the value is a link-time constant -- a
+/// reference to an `SHN_ABS` symbol. Only the forms whose field holds
+/// an absolute value apply: a PC-relative or page-relative form over a
+/// constant needs the site's runtime address, which an image the loader
+/// places has only at load time.
+fn apply_absolute_reloc(
+    text: &mut [u8],
+    patch_offset: usize,
+    value: i64,
+    site: &RelocSite<'_>,
+) -> Result<(), C5Error> {
+    if site.machine == NativeMachine::Aarch64
+        && let Some((group, signed, check)) = aarch64_movw_field(site.rtype)
+    {
+        use crate::c5::codegen::aarch64::patch;
+        check_patch_bounds(text, patch_offset, 4)?;
+        if let Some(bits) = check
+            && !patch::movw_fits(value, bits, signed)
+        {
+            return Err(site.truncated(value));
+        }
+        let word = u32::from_le_bytes(text[patch_offset..patch_offset + 4].try_into().unwrap());
+        let word = patch::movw_word(word, group, signed, value);
+        text[patch_offset..patch_offset + 4].copy_from_slice(&word.to_le_bytes());
+        return Ok(());
+    }
+    if let Some((width, check)) = super::image::abs_field(site.machine, site.rtype) {
+        check_patch_bounds(text, patch_offset, width as usize)?;
+        if !check.admits(value, width) {
+            return Err(site.truncated(value));
+        }
+        let n = width as usize;
+        text[patch_offset..patch_offset + n].copy_from_slice(&value.to_le_bytes()[..n]);
+        return Ok(());
+    }
+    Err(site.unsupported())
 }
 
 /// Width and overflow rule of the plain data field a PC-relative

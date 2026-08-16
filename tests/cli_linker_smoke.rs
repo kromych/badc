@@ -4872,6 +4872,21 @@ mod aarch64_link {
         )
     }
 
+    /// Attempt the same link and return the driver's stderr on failure.
+    fn link_a64_err(dir: &Path, srcs: &[(&str, &str)]) -> String {
+        let objs = assemble_a64(dir, srcs);
+        let out = Command::new(badc())
+            .args(["-q", "--target=linux-aarch64", "--freestanding"])
+            .args(&objs)
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .current_dir(dir)
+            .output()
+            .expect("run the link");
+        assert!(!out.status.success(), "the link was expected to fail");
+        String::from_utf8_lossy(&out.stderr).into_owned()
+    }
+
     /// Runtime address a link map gives a global symbol.
     fn map_symbol(map: &str, name: &str) -> u64 {
         for line in map.lines() {
@@ -4992,6 +5007,96 @@ mod aarch64_link {
         );
     }
 
+    /// Every MOVW group relocation over a link-time constant, against
+    /// the words GNU ld writes for the same input.
+    #[test]
+    fn movw_group_relocations_match_gnu_ld() {
+        // (specifier, symbol value, the word `ld` produced)
+        let cases: &[(&str, &str, u32)] = &[
+            ("movz	x5, :abs_g3:K", "0xfedc89ab1234f0f0", 0xd2ff_db85),
+            ("movz	x5, :abs_g2_nc:K", "0xfedc89ab1234f0f0", 0xd2d1_3565),
+            ("movz	x5, :abs_g1_nc:K", "0xfedc89ab1234f0f0", 0xd2a2_4685),
+            ("movz	x5, :abs_g0_nc:K", "0xfedc89ab1234f0f0", 0xd29e_1e05),
+            ("movk	x5, :abs_g2_nc:K", "0xfedc89ab1234f0f0", 0xf2d1_3565),
+            ("movk	x5, :abs_g1_nc:K", "0xfedc89ab1234f0f0", 0xf2a2_4685),
+            ("movk	x5, :abs_g0_nc:K", "0xfedc89ab1234f0f0", 0xf29e_1e05),
+            ("movz	x5, :abs_g0:K", "0xbeef", 0xd297_dde5),
+            ("movz	x5, :abs_g1:K", "0xcafe0000", 0xd2b9_5fc5),
+            ("movz	x5, :abs_g2:K", "0xdead00000000", 0xd2db_d5a5),
+            ("movz	x5, :abs_g0_s:K", "0x7fff", 0xd28f_ffe5),
+            ("movz	x5, :abs_g0_s:K", "-0x8000", 0x928f_ffe5),
+            ("movz	x5, :abs_g1_s:K", "0x7fffffff", 0xd2af_ffe5),
+            ("movz	x5, :abs_g1_s:K", "-0x80000000", 0x92af_ffe5),
+            ("movz	x5, :abs_g2_s:K", "0x123456789abc", 0xd2c2_4685),
+            ("movz	x5, :abs_g2_s:K", "-0x800", 0x92c0_0005),
+            ("movz	w5, :abs_g0_nc:K", "0xbeef", 0x5297_dde5),
+            ("movk	w5, :abs_g1_nc:K", "0xcafe0000", 0x72b9_5fc5),
+        ];
+        for (i, (insn, value, want)) in cases.iter().enumerate() {
+            let dir = tempdir(&format!("a64-movw-{i}"));
+            let main = format!("	.text\n	.globl __c5_entry\n__c5_entry:\n	{insn}\n	ret\n");
+            let defs = format!("	.globl K\n	.set K, {value}\n");
+            let (image, map) = link_a64(&dir, &[("m.s", &main), ("d.s", &defs)]);
+            let got = word_at(&image, map_symbol(&map, "__c5_entry"));
+            assert_eq!(
+                got, *want,
+                "`{insn}` over {value}: got {got:#010x}, ld writes {want:#010x}"
+            );
+        }
+    }
+
+    /// The checked groups refuse a value they cannot hold, as ld does
+    /// rather than narrowing it. The `_NC` groups take the same values.
+    #[test]
+    fn movw_checked_groups_refuse_an_out_of_range_value() {
+        for (i, (insn, value)) in [
+            ("movz	x5, :abs_g0:K", "0x10000"),
+            ("movz	x5, :abs_g1:K", "0x100000000"),
+            ("movz	x5, :abs_g2:K", "0x1000000000000"),
+            ("movz	x5, :abs_g0_s:K", "0x10000"),
+            ("movz	x5, :abs_g1_s:K", "0x100000000"),
+            ("movz	x5, :abs_g2_s:K", "0x1000000000000"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let dir = tempdir(&format!("a64-movw-range-{i}"));
+            let main = format!("	.text\n	.globl __c5_entry\n__c5_entry:\n	{insn}\n	ret\n");
+            let defs = format!("	.globl K\n	.set K, {value}\n");
+            let err = link_a64_err(&dir, &[("m.s", &main), ("d.s", &defs)]);
+            assert!(
+                err.contains("relocation truncated to fit"),
+                "`{insn}` over {value} should be refused: {err}"
+            );
+        }
+    }
+
+    /// A MOVW group over a section-relative symbol holds part of a
+    /// runtime address, and no dynamic form carries an instruction
+    /// field, so an image the loader places refuses it -- the refusal
+    /// GNU ld gives for the same input in a `-pie` / `-shared` link.
+    #[test]
+    fn movw_against_a_placed_symbol_is_refused_in_a_pie() {
+        let dir = tempdir("a64-movw-pie");
+        let main = "	.text\n\
+                    	.globl __c5_entry\n\
+                    __c5_entry:\n\
+                    	movz	x5, :abs_g2_s:tgt\n\
+                    	movk	x5, :abs_g1_nc:tgt\n\
+                    	movk	x5, :abs_g0_nc:tgt\n\
+                    	ret\n\
+                    	.globl tgt\n\
+                    tgt:\n\
+                    	nop\n";
+        let err = link_a64_err(&dir, &[("m.s", main)]);
+        assert!(
+            err.contains("R_AARCH64_MOVW_SABS_G2")
+                && err.contains("can not be used when making a position-independent executable"),
+            "{err}"
+        );
+        assert!(err.contains("m.o(.text+0x0)"), "the site is named: {err}");
+    }
+
     /// Build a host-native image from one asm source plus a `main` that
     /// exits nonzero on the first check it fails, run it, and require 0.
     #[cfg(target_arch = "aarch64")]
@@ -5051,6 +5156,69 @@ mod aarch64_link {
                     	return 0;\n\
                     }\n";
         run_host_image("a64-align-run", asm, main);
+    }
+
+    /// The MOVW groups on the host: a value assembled from four
+    /// unsigned groups, one from the signed top group, and a negative
+    /// one that turns the leading `movz` into a `movn`.
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn movw_constants_run_on_the_host() {
+        let asm = "	.globl KBIG\n\
+                   	.globl KMID\n\
+                   	.globl KNEG\n\
+                   	.set KBIG, 0xfedc89ab1234f0f0\n\
+                   	.set KMID, 0x123456789abc\n\
+                   	.set KNEG, -0x800\n\
+                   	.text\n\
+                   	.globl get_kbig\n\
+                   get_kbig:\n\
+                   	movz	x0, :abs_g3:KBIG\n\
+                   	movk	x0, :abs_g2_nc:KBIG\n\
+                   	movk	x0, :abs_g1_nc:KBIG\n\
+                   	movk	x0, :abs_g0_nc:KBIG\n\
+                   	ret\n\
+                   	.globl get_kmid\n\
+                   get_kmid:\n\
+                   	movz	x0, :abs_g2_s:KMID\n\
+                   	movk	x0, :abs_g1_nc:KMID\n\
+                   	movk	x0, :abs_g0_nc:KMID\n\
+                   	ret\n\
+                   	.globl get_kneg\n\
+                   get_kneg:\n\
+                   	movz	x0, :abs_g2_s:KNEG\n\
+                   	movk	x0, :abs_g1_nc:KNEG\n\
+                   	movk	x0, :abs_g0_nc:KNEG\n\
+                   	ret\n";
+        let main = "extern unsigned long get_kbig(void), get_kmid(void), get_kneg(void);\n\
+                    int main(void) {\n\
+                    	if (get_kbig() != 0xfedc89ab1234f0f0UL) return 1;\n\
+                    	if (get_kmid() != 0x123456789abcUL) return 2;\n\
+                    	if (get_kneg() != (unsigned long)-0x800L) return 3;\n\
+                    	return 0;\n\
+                    }\n";
+        run_host_image("a64-movw-run", asm, main);
+    }
+
+    /// An `R_AARCH64_ABS64` data slot naming an absolute symbol takes
+    /// the constant, with no load-time relocation behind it.
+    #[test]
+    fn abs64_data_slot_over_an_absolute_symbol_takes_the_constant() {
+        let dir = tempdir("a64-abs64-const");
+        let main = "	.text\n\
+                    	.globl __c5_entry\n\
+                    __c5_entry:\n\
+                    	ret\n\
+                    	.data\n\
+                    	.globl slot\n\
+                    slot:\n\
+                    	.quad K\n";
+        let defs = "	.globl K\n	.set K, 0x123456789abc\n";
+        let (image, map) = link_a64(&dir, &[("m.s", main), ("d.s", defs)]);
+        let at = map_symbol(&map, "slot");
+        let lo = u64::from(word_at(&image, at));
+        let hi = u64::from(word_at(&image, at + 4));
+        assert_eq!(lo | (hi << 32), 0x1234_5678_9abc);
     }
 }
 

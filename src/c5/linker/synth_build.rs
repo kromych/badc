@@ -44,7 +44,7 @@ use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
     R_AARCH64_CALL26, R_AARCH64_LD64_GOT_LO12_NC, R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PLT32,
-    R_X86_64_REX_GOTPCRELX, aarch64_ldst_lo12_scale,
+    R_X86_64_REX_GOTPCRELX, aarch64_ldst_lo12_scale, aarch64_movw_field,
 };
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
@@ -992,7 +992,10 @@ fn declined_reloc(
         .unwrap_or(("", ".text", reloc.text_offset));
     let site =
         RelocOrigin::in_named_section(source, section).at(merged.machine, rtype, name, offset);
-    let absolute = super::image::abs_field(merged.machine, rtype).is_some();
+    // A MOVW group holds one 16-bit slice of an absolute value, so it
+    // is an absolute form even though no plain data field describes it.
+    let absolute = super::image::abs_field(merged.machine, rtype).is_some()
+        || (merged.machine == NativeMachine::Aarch64 && aarch64_movw_field(rtype).is_some());
     match text_abs {
         TextAbsolute::RejectedInPie { shared } if absolute => site.absolute_in_pie(shared),
         _ => site.unsupported(),

@@ -703,6 +703,104 @@ fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
     }
 }
 
+/// An object compiled for a link that resolves its relocations
+/// statically, then handed to this toolchain's own linker instead:
+/// every image it writes is `ET_DYN`, so the relocation needs a
+/// load-time fixup and a section is the atom of placement, which costs
+/// the whole `.rodata` the read-only prefix. `ld` refuses such an
+/// object for a `-pie` link outright, so there is no reference
+/// placement to match; what has to hold is that the demotion lands the
+/// storage in the relro region rather than in writable data, and that
+/// the region's end anchors on the maximum page size so the loader's
+/// re-protection covers it under every runtime page size.
+#[test]
+fn statically_relocated_object_keeps_const_storage_read_only_when_linked() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{
+        Compiler, NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
+        emit_x86_64_plt,
+    };
+    const PT_GNU_RELRO: u32 = 0x6474_E552;
+    let src = "\
+        const char pure_tab[16] = \"PURETABPURETAB\";\n\
+        static int probe(void) { return 1; }\n\
+        struct ops { int (*p)(void); char tag[8]; };\n\
+        const struct ops mixer = { probe, \"MIXTAG\" };\n\
+        int wglob = 5;\n\
+        void __c5_entry(void *sp, long off) {\n\
+            (void)sp; (void)off; wglob += mixer.p() + pure_tab[0] + mixer.tag[0];\n\
+        }\n";
+    for target in [Target::LinuxAarch64, Target::LinuxX64] {
+        let copts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(alloc::string::String::from(src), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            pic_link: false,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        // The premise: both objects share one `.rodata`, which is what
+        // makes the section the unit of the demotion below.
+        let objs = super::linker::elf_data_objects(&bytes);
+        assert_eq!(objs["pure_tab"].0, ".rodata", "{target:?}: pure const");
+        assert_eq!(objs["mixer"].0, ".rodata", "{target:?}: relocated const");
+
+        let mut merged =
+            link_native_objects(&[parse_native_elf(&bytes).expect("parse")]).expect("link");
+        assert_eq!(
+            merged.data_ro_len, 0,
+            "{target:?}: a relocated `.rodata` leaves no read-only prefix"
+        );
+        assert!(
+            merged.data_relro_len > 0,
+            "{target:?}: the demoted section must reach the relro region"
+        );
+        let plt = match merged.machine {
+            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        }
+        .expect("plt");
+        let image = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "__c5_entry",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let (_, roff, rlen) = elf_phdr_file_range(&image, PT_GNU_RELRO).expect("PT_GNU_RELRO");
+        // Both objects rode the demotion, and both stay inside the
+        // span the loader re-protects: the placement is lost, the
+        // read-only storage is not.
+        for needle in [b"PURETAB".as_slice(), b"MIXTAG".as_slice()] {
+            assert!(
+                contains(&image[roff..roff + rlen], needle),
+                "{target:?}: const storage outside PT_GNU_RELRO"
+            );
+        }
+        // The loader aligns the span's end down to the runtime page
+        // size, so a 4K-anchored end protects nothing on a 16K or 64K
+        // kernel. aarch64 allows all three; x86_64 is always 4K.
+        let max_page = if target == Target::LinuxAarch64 {
+            0x1_0000
+        } else {
+            0x1000
+        };
+        assert_eq!(
+            (roff + rlen) % max_page,
+            0,
+            "{target:?}: PT_GNU_RELRO must end on the maximum page size"
+        );
+    }
+}
+
 /// The direct single-TU image segregates `.data` into the same three
 /// regions the multi-object link produces: `const` storage with no
 /// relocated slot forms the read-only prefix, `const` storage whose

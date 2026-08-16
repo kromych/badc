@@ -197,6 +197,18 @@ Compile knobs:
                            tree, never a jump table, so no switch takes
                            an indirect branch. -fjump-tables restores
                            the default.
+  -fPIC, -fpic             Emit a position-independent `-c` object: a
+  -fPIE, -fpie             switch table takes the label-difference form,
+                           so no absolute relocation reaches the object.
+                           Final images are position-independent either
+                           way.
+  -fno-pic, -fno-pie       Compile the `-c` object for a link that
+                           resolves its relocations statically, keeping
+                           a relocation-carrying `const` in .rodata.
+                           Without it such storage goes to .data.rel.ro,
+                           so the unit's remaining `const` objects keep
+                           the image's read-only prefix. Implied by
+                           -mcmodel=kernel.
   -fshort-wchar            Give wchar_t an unsigned 16-bit type instead
                            of the target's default, narrowing the
                            elements of L-prefixed string and character
@@ -582,6 +594,10 @@ fn run() {
     let mut mno_fp_regs = false;
     let mut mstrict_align = false;
     let mut fpic = false;
+    // `-fno-pic` / `-fno-pie`, tracked apart from `fpic` because the
+    // absence of any PIC flag and an explicit opt-out choose different
+    // `const` placements in a `-c` object; see `NativeOptions::pic_link`.
+    let mut fno_pic = false;
     let mut jump_tables = true;
     let mut code_model = badc::CodeModel::Small;
     let mut code_model_tiny = false;
@@ -1060,8 +1076,14 @@ fn run() {
             // `NativeOptions::pic`. badc's final images are always
             // position-independent, so the flag only chooses the
             // `-c` object's relocation shapes.
-            "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => fpic = true,
-            "-fno-pic" | "-fno-PIC" | "-fno-pie" | "-fno-PIE" => fpic = false,
+            "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => {
+                fpic = true;
+                fno_pic = false;
+            }
+            "-fno-pic" | "-fno-PIC" | "-fno-pie" | "-fno-PIE" => {
+                fpic = false;
+                fno_pic = true;
+            }
             // gcc / clang `-fno-jump-tables`: a switch never dispatches
             // through a table, only through the compare tree. Kernels
             // built with retpoline or indirect-branch tracking pass it
@@ -2814,6 +2836,7 @@ fn run() {
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
         reloc_opts.pic = fpic;
+        reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         reloc_opts.elf_class = object_elf_class;
@@ -2946,6 +2969,7 @@ fn run() {
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
         reloc_opts.pic = fpic;
+        reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
         reloc_opts.elf_class = object_elf_class;
@@ -3053,6 +3077,23 @@ fn run() {
     // the native-link path (executable / shared library), `-c`, and
     // `--ar`. Reaching here means a mode was added without a handler.
     unreachable!("every CLI mode is handled and returns above");
+}
+
+/// Whether a `-c` / `--ar` object is laid out for a link that applies
+/// its relocations after mapping; see [`badc::NativeOptions::pic_link`].
+///
+/// The default is that it is: this toolchain's own linker is the usual
+/// consumer and every image it writes is `ET_DYN`, so a `const` object
+/// carrying a relocation cannot ride the read-only prefix and would
+/// otherwise cost its whole `.rodata` that placement. gcc reaches the
+/// same layout wherever it is configured default-PIE.
+///
+/// Two inputs state the opposite -- a link that resolves the relocation
+/// statically -- and keep such storage in `.rodata`: an explicit
+/// `-fno-pic` / `-fno-pie`, and the kernel code model, which by
+/// definition names a static link at fixed addresses.
+fn pic_link_default(fno_pic: bool, code_model: badc::CodeModel) -> bool {
+    !fno_pic && code_model != badc::CodeModel::Kernel
 }
 
 /// The host's default system header directories, probed after the

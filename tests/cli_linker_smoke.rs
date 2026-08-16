@@ -3480,6 +3480,140 @@ fn elf_segments(bytes: &[u8]) -> Vec<(u32, u32)> {
         .collect()
 }
 
+/// Program headers of an ELF64 image as
+/// `(p_type, p_flags, p_offset, p_filesz)`.
+fn elf_segment_ranges(bytes: &[u8]) -> Vec<(u32, u32, usize, usize)> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let e_phoff = rd64(0x20) as usize;
+    let (e_phentsize, e_phnum) = (rd16(0x36), rd16(0x38));
+    (0..e_phnum)
+        .map(|i| {
+            let ph = e_phoff + i * e_phentsize;
+            (
+                rd32(ph),
+                rd32(ph + 4),
+                rd64(ph + 0x08) as usize,
+                rd64(ph + 0x20) as usize,
+            )
+        })
+        .collect()
+}
+
+/// A `-c` object is laid out for a link that applies its relocations
+/// after mapping, because this toolchain's own linker is the usual
+/// consumer and every image it writes is `ET_DYN`. Only the `const`
+/// object carrying the relocation reaches the relro region; the unit's
+/// relocation-free `const` objects keep the read-only prefix.
+///
+/// Without that, a section being the atom of placement costs the whole
+/// `.rodata` the prefix, and the demoted storage is only re-protected
+/// once the loader has applied the fixups. `-fno-pic` states the
+/// opposite -- a link that resolves the relocation statically -- and is
+/// checked here too, since the kernel corpus builds under it.
+#[test]
+fn compile_only_object_keeps_the_read_only_prefix_when_linked() {
+    const PT_GNU_RELRO: u32 = 0x6474_E552;
+    const PF_R: u32 = 4;
+    let dir = tempdir("c-object-read-only-prefix");
+    let src = write_source(
+        &dir,
+        "ro.c",
+        "const char pure_tab[16] = \"PURETABPURETAB\";\n\
+         static int probe(void) { return 1; }\n\
+         struct ops { int (*p)(void); char tag[8]; };\n\
+         const struct ops mixer = { probe, \"MIXTAG\" };\n\
+         int main(void) { return mixer.p() + pure_tab[0] + mixer.tag[0]; }\n",
+    );
+    let holds = |img: &[u8], off: usize, len: usize, needle: &[u8]| {
+        img[off..off + len]
+            .windows(needle.len())
+            .any(|w| w == needle)
+    };
+    for target in ["linux-x64", "linux-aarch64"] {
+        // `-c` with no PIC flag, then linked: the shape every
+        // make-driven build produces.
+        let obj = dir.join(format!("ro-{target}.o"));
+        let img = dir.join(format!("ro-{target}.bin"));
+        run(
+            Command::new(badc())
+                .args(["-c", &format!("--target={target}")])
+                .arg(&src)
+                .arg("-o")
+                .arg(&obj),
+            "compile -c",
+        );
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(&obj)
+                .arg("-o")
+                .arg(&img),
+            "link the object",
+        );
+        let bytes = std::fs::read(&img).expect("read image");
+        let segs = elf_segment_ranges(&bytes);
+        assert!(
+            segs.iter()
+                .any(|&(_, f, o, l)| f == PF_R && holds(&bytes, o, l, b"PURETAB")),
+            "{target}: relocation-free const outside every read-only load"
+        );
+        let (_, _, roff, rlen) = *segs
+            .iter()
+            .find(|&&(t, ..)| t == PT_GNU_RELRO)
+            .expect("PT_GNU_RELRO");
+        assert!(
+            holds(&bytes, roff, rlen, b"MIXTAG"),
+            "{target}: relocated const outside PT_GNU_RELRO"
+        );
+        assert!(
+            !holds(&bytes, roff, rlen, b"PURETAB"),
+            "{target}: relocation-free const demoted into PT_GNU_RELRO"
+        );
+
+        // `-fno-pic` keeps gcc's static-link assignment: both objects
+        // in `.rodata`, so the link has the whole section to demote.
+        let nobj = dir.join(format!("ro-nopic-{target}.o"));
+        run(
+            Command::new(badc())
+                .args(["-c", "-fno-pic", &format!("--target={target}")])
+                .arg(&src)
+                .arg("-o")
+                .arg(&nobj),
+            "compile -c -fno-pic",
+        );
+        let nbytes = std::fs::read(&nobj).expect("read object");
+        let names: Vec<String> = elf_sections(&nbytes).into_iter().map(|(n, ..)| n).collect();
+        assert!(
+            !names.iter().any(|n| n == ".data.rel.ro"),
+            "{target}: -fno-pic must keep relocated const in .rodata"
+        );
+    }
+
+    // The kernel code model names a static link at fixed addresses, so
+    // it keeps the same assignment with no flag of its own.
+    let kobj = dir.join("ro-kernel.o");
+    run(
+        Command::new(badc())
+            .args(["-c", "-mcmodel=kernel", "--target=linux-x64"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&kobj),
+        "compile -c -mcmodel=kernel",
+    );
+    let kbytes = std::fs::read(&kobj).expect("read object");
+    let knames: Vec<String> = elf_sections(&kbytes).into_iter().map(|(n, ..)| n).collect();
+    assert!(
+        !knames.iter().any(|n| n == ".data.rel.ro"),
+        "the kernel code model must keep relocated const in .rodata"
+    );
+    assert!(
+        knames.iter().any(|n| n == ".rodata"),
+        "kernel object .rodata"
+    );
+}
+
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 

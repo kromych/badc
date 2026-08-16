@@ -2130,10 +2130,10 @@ impl Compiler {
             return Ok(v);
         }
         if self.lex.tk == Token::Num {
-            // Type the literal per C99 6.4.4.1p5 (suffix + magnitude)
-            // before `next()` resets the lexer's suffix fields.
+            // Type the literal before `next()` resets the lexer's
+            // suffix and character-constant fields.
             let v = self.lex.ival;
-            let ty = self.literal_auto_promoted_type(v);
+            let ty = self.num_token_type(v);
             self.next()?;
             return Ok(ConstVal::Int { val: v as i128, ty });
         }

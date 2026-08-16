@@ -44,11 +44,12 @@ fn if_signed_right_shift_is_arithmetic() {
 fn if_char_literal_takes_a_universal_character_name() {
     // C11 6.4.3: a universal character name in a `#if` character
     // constant means what it means outside one -- the UTF-8 bytes of its
-    // code point, packed per C99 6.4.4.4p10. Matches GCC.
+    // code point, packed per C99 6.4.4.4p10 and read at the constant's
+    // `int` type, so four of them give a negative value. Matches GCC.
     for e in [
         r"'\u0024' == 0x24",
         r"'\u00E9' == 0xC3A9",
-        r"'\U0001F600' == 0xF09F9880",
+        r"'\U0001F600' == -257976192",
         r"'a\u00E9' == 0x61C3A9",
     ] {
         let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
@@ -1385,6 +1386,54 @@ fn wide_char_constant_in_if() {
     let out = process(src);
     assert!(out.contains("int yes;"), "{out:?}");
     assert!(!out.contains("int no;"), "{out:?}");
+}
+
+/// C99 6.10.1p4 evaluates `#if` in `intmax_t`, but a character constant
+/// enters that evaluation at the type 6.4.4.4p10 gives it -- `int` -- so
+/// bytes that fill the width read as a negative value. gcc-16 agrees on
+/// every row.
+#[test]
+fn if_character_constant_narrows_to_int() {
+    for (e, want) in [
+        (r"'a' == 97", true),
+        (r"'ab' == 24930", true),
+        (r"'abc' == 6382179", true),
+        (r"'abcd' == 1633837924", true),
+        (r"'\xF0\x9F\x98\x80' < 0", true),
+        (r"'\xF0\x9F\x98\x80' == -257976192", true),
+        (r"'\xF0\x9F\x98\x80' == 4036991104", false),
+        (r"'\x7F\xFF\xFF\xFF' == 2147483647", true),
+        (r"'\x80\x00\x00\x00' == -2147483648", true),
+        // Fewer than four bytes cannot reach the sign bit.
+        (r"'\xF0\x9F' == 61599", true),
+        (r"'\xF0\x9F\x98' == 15769496", true),
+    ] {
+        let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
+        assert_eq!(out.contains("TAKEN"), want, "{e}: {out}");
+    }
+}
+
+/// A prefixed character constant holds one code point at the `wchar_t` /
+/// `char16_t` / `char32_t` width (C99 6.4.4.4p11), not the UTF-8 bytes an
+/// unprefixed one packs. `#if` must read it the way the lexer does
+/// outside one, so the same constant cannot mean two things.
+#[test]
+fn if_prefixed_character_constant_holds_a_code_point() {
+    for e in [
+        // A hex escape is not truncated to a byte at these widths.
+        r"L'\xFFFF' == 65535",
+        r"U'\U0001F600' == 128512",
+        // Written as a universal character name and as the source's own
+        // UTF-8, which both name U+00E9.
+        r"L'\U000000E9' == 233",
+        r"u'\U000000E9' == 233",
+        "L'\u{e9}' == 233",
+        // Unprefixed, the same code point packs its UTF-8 bytes.
+        "'\u{e9}' == 0xC3A9",
+    ] {
+        let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
+        assert!(out.contains("TAKEN"), "{e}: {out}");
+    }
 }
 
 #[test]

@@ -58,7 +58,7 @@ enum VisibilityDirective {
 /// `(code_point, byte_length)`. A malformed lead or truncated sequence
 /// falls back to the single byte interpreted as Latin-1, so the lexer
 /// always advances.
-fn decode_utf8(bytes: &[u8]) -> (u32, usize) {
+pub(crate) fn decode_utf8(bytes: &[u8]) -> (u32, usize) {
     let b0 = bytes[0];
     let (mut cp, len) = if b0 & 0x80 == 0 {
         return (b0 as u32, 1);
@@ -344,6 +344,7 @@ pub(crate) struct LexerSnapshot {
     int_suffix_unsigned: bool,
     int_is_decimal: bool,
     float_suffix_f32: bool,
+    num_is_char: bool,
     char_is_wide: bool,
     str_is_wide: bool,
     str_elem_bytes: usize,
@@ -419,6 +420,14 @@ pub(crate) struct Lexer {
     /// on Windows (UTF-16) and 4 on the Unix targets. Reset per token in
     /// `next`; set only in the wide-character branch of the literal lexer.
     pub char_is_wide: bool,
+
+    /// `true` when the most recent `Token::Num` came from a character
+    /// constant rather than an integer constant. C99 6.4.4.4p10 gives
+    /// every character constant a fixed type, so the expression parser
+    /// must not apply the value-driven rank selection of 6.4.4.1p5.
+    /// Reset per token in `next`; set in both literal-lexer character
+    /// branches.
+    pub num_is_char: bool,
 
     /// Byte width of a `wchar_t` element. 4 on the Unix targets (where
     /// `wchar_t` is `int`) and 2 on Windows (UTF-16). The compiler sets
@@ -570,6 +579,7 @@ impl Lexer {
             str_is_wide: false,
             str_elem_bytes: 4,
             char_is_wide: false,
+            num_is_char: false,
             wchar_bytes: 4,
             char_signed: true,
             // Bottom of the stack is the default pack -- c5 already
@@ -832,7 +842,7 @@ impl Lexer {
         // interpreted as int. Sign-extend on signed-char targets so
         // `'\x80'` is -128, matching a `char` lvalue read; a hex /
         // octal escape that overran a byte keeps its wider value.
-        self.ival = if *count == 1 {
+        let v = if *count == 1 {
             if self.char_signed && (0..=0xFF).contains(&val) {
                 val as i8 as i64
             } else {
@@ -841,6 +851,9 @@ impl Lexer {
         } else {
             *acc
         };
+        // C99 6.4.4.4p10: the constant has type `int`, so the packed
+        // bytes wrap into that width -- `'\xF0\x9F\x98\x80'` is negative.
+        self.ival = v as i32 as i64;
     }
 
     fn lex_wide_literal(
@@ -971,6 +984,7 @@ impl Lexer {
             if quote != b'"' {
                 self.ival = char_value;
                 self.tk = Tok(Token::Num as i64);
+                self.num_is_char = true;
                 self.char_is_wide = true;
                 return Ok(());
             }
@@ -1131,6 +1145,7 @@ impl Lexer {
             self.str_is_wide = false;
         } else {
             self.tk = Tok(Token::Num as i64);
+            self.num_is_char = true;
         }
         Ok(())
     }
@@ -1253,6 +1268,7 @@ impl Lexer {
             int_suffix_unsigned: self.int_suffix_unsigned,
             int_is_decimal: self.int_is_decimal,
             float_suffix_f32: self.float_suffix_f32,
+            num_is_char: self.num_is_char,
             char_is_wide: self.char_is_wide,
             str_is_wide: self.str_is_wide,
             str_elem_bytes: self.str_elem_bytes,
@@ -1274,6 +1290,7 @@ impl Lexer {
         self.int_suffix_unsigned = s.int_suffix_unsigned;
         self.int_is_decimal = s.int_is_decimal;
         self.float_suffix_f32 = s.float_suffix_f32;
+        self.num_is_char = s.num_is_char;
         self.char_is_wide = s.char_is_wide;
         self.str_is_wide = s.str_is_wide;
         self.str_elem_bytes = s.str_elem_bytes;
@@ -1569,6 +1586,7 @@ impl Lexer {
         self.int_suffix_unsigned = false;
         self.int_is_decimal = true;
         self.float_suffix_f32 = false;
+        self.num_is_char = false;
         self.char_is_wide = false;
         loop {
             if self.pos >= self.src.len() {
@@ -2700,6 +2718,40 @@ mod tests {
         let mut data: Vec<u8> = Vec::new();
         lex.next(&mut symbols, &mut index, &mut data).unwrap();
         assert_eq!(lex.ival, 128);
+    }
+
+    #[test]
+    fn multi_character_constant_narrows_to_int() {
+        // C99 6.4.4.4p10 gives every character constant type `int`, so
+        // the packed bytes wrap into that width rather than widening the
+        // constant. Each byte is masked on the way in, so the values do
+        // not depend on the target's plain-char signedness. gcc-16 and
+        // clang produce the same numbers.
+        assert_eq!(lex_char_literal(r#"'ab'"#), 24930);
+        assert_eq!(lex_char_literal(r#"'abc'"#), 6382179);
+        assert_eq!(lex_char_literal(r#"'abcd'"#), 1633837924);
+        assert_eq!(lex_char_literal(r#"'\xF0\x9F\x98\x80'"#), -257976192);
+        assert_eq!(lex_char_literal(r#"'\x7F\xFF\xFF\xFF'"#), 2147483647);
+        assert_eq!(lex_char_literal(r#"'\x80\x00\x00\x00'"#), -2147483648);
+        // Fewer than four bytes cannot reach the sign bit.
+        assert_eq!(lex_char_literal(r#"'\xF0\x9F'"#), 61599);
+        assert_eq!(lex_char_literal(r#"'\xF0\x9F\x98'"#), 15769496);
+    }
+
+    #[test]
+    fn a_character_constant_is_marked_as_one() {
+        // The type of 6.4.4.4p10 is fixed, not value-driven, so the
+        // expression parser needs the token's origin: an integer constant
+        // spelled with the same value takes the ranks of 6.4.4.1p5.
+        let mut lex = Lexer::new(r#"'a' 97"#.to_string());
+        let mut symbols: Vec<Symbol> = Vec::new();
+        let mut index = SymbolIndex::new();
+        let mut data: Vec<u8> = Vec::new();
+        lex.next(&mut symbols, &mut index, &mut data).unwrap();
+        assert!(lex.num_is_char);
+        assert!(!lex.char_is_wide);
+        lex.next(&mut symbols, &mut index, &mut data).unwrap();
+        assert!(!lex.num_is_char);
     }
 
     #[test]

@@ -196,6 +196,22 @@ impl Compiler {
         ty
     }
 
+    /// Type of the `Token::Num` the lexer just produced. A character
+    /// constant has a fixed type: `wchar_t` when prefixed (C99
+    /// 6.4.4.4p11) -- `unsigned short` at the 2-byte width Windows and
+    /// `-fshort-wchar` select, `int` at 4 -- and `int` otherwise
+    /// (6.4.4.4p10). Only an integer constant takes the value-driven
+    /// rank selection of 6.4.4.1p5.
+    pub(super) fn num_token_type(&self, val: i64) -> i64 {
+        if !self.lex.num_is_char {
+            self.literal_auto_promoted_type(val)
+        } else if self.lex.char_is_wide && self.lex.wchar_bytes == 2 {
+            Ty::Short as i64 | UNSIGNED_BIT
+        } else {
+            Ty::Int as i64
+        }
+    }
+
     /// Parse a C11 7.17 atomic builtin call. The opening `(` has
     /// already been consumed. The first operand is the atomic-object
     /// pointer; its pointee type sets the operand width. The result
@@ -849,20 +865,7 @@ impl Compiler {
         } else if self.lex.tk == Token::Num {
             let val = self.lex.ival;
             self.emit_imm(val);
-            // C99 6.4.4.4p11: a wide character constant (`L'x'`) has type
-            // `wchar_t` -- `unsigned short` at the 2-byte width Windows
-            // and `-fshort-wchar` select, `int` at 4 -- matching the
-            // `<stddef.h>` typedef. A plain integer or narrow character
-            // constant takes the usual value-driven promotion.
-            self.ty = if self.lex.char_is_wide {
-                if self.lex.wchar_bytes == 2 {
-                    Ty::Short as i64 | super::types::UNSIGNED_BIT
-                } else {
-                    Ty::Int as i64
-                }
-            } else {
-                self.literal_auto_promoted_type(val)
-            };
+            self.ty = self.num_token_type(val);
             self.ast_emit_int_lit(val, self.ty);
             self.next()?;
         } else if self.lex.tk == Token::FloatNum {
@@ -2958,7 +2961,7 @@ impl Compiler {
                 // the post-Add/Sub mask in `convert.rs` truncates
                 // a downstream `-MAX - 1` back to 32 bits and
                 // yields 0 instead of `INT64_MIN`.
-                self.ty = self.literal_auto_promoted_type(val);
+                self.ty = self.num_token_type(val);
                 // Dual-emit: the constant-folded `-N` collapses
                 // the unary-minus on the AST side too. Seed
                 // `ast_acc` with the matching IntLit so a

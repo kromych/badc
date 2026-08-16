@@ -1086,6 +1086,12 @@ pub(crate) const PACIASP: u32 = 0xD503_233F;
 /// be back at its function-entry value.
 pub(crate) const AUTIASP: u32 = 0xD503_23BF;
 
+/// `XPACLRI` -- strip the authentication code from x30. `HINT #7`, so it
+/// decodes as a NOP where FEAT_PAuth is absent and leaves an unsigned
+/// pointer unchanged. x30 is the only register the hint form reaches;
+/// stripping any other needs `XPACI <Xd>`, which requires FEAT_PAuth.
+pub(crate) const XPACLRI: u32 = 0xD503_20FF;
+
 /// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
 /// the `Terminator::TailExt` lowering to forward control to the
 /// IAT/GOT-resolved libc address without saving a return point:

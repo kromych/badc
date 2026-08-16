@@ -6353,7 +6353,16 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            emit(code, enc_ldr_imm(rd, Reg(29), 8));
+            // Under pac-ret the slot holds a signed pointer, which matches
+            // no symbol range. `XPACLRI` strips x30 and no other register,
+            // so the value is staged there; the epilogue reloads x30 from
+            // the same slot. Holding the intrinsic keeps the function off
+            // the full-leaf path, so that frame record always exists.
+            // Unconditional, as gcc and clang emit it: the hint is a NOP
+            // without FEAT_PAuth and an unsigned pointer survives it.
+            emit(code, enc_ldr_imm(Reg(30), Reg(29), 8));
+            emit(code, super::encode::XPACLRI);
+            emit_mov_reg(code, rd, Reg(30));
             spill_local_addr_to_dst(code, dst, rd, frame);
             true
         }

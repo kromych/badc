@@ -161,6 +161,57 @@ fn pac_ret_signed_frames_return_natively() {
     );
 }
 
+/// `__builtin_return_address(0)` stages the slot through x30 so
+/// `xpaclri` can strip it. x30 holds the live link register, so this
+/// pins that the epilogue's reload puts it back: a caller that keeps
+/// running after the read would otherwise return through the loaded
+/// value. Also checks the result carries no authentication bits.
+#[test]
+fn return_address_reads_a_bare_pointer_and_keeps_the_return_path() {
+    const SRC: &str = "
+        void *ra(void) { return __builtin_return_address(0); }
+        int add1(int x) { return x + 1; }
+        /* Reads the slot, then calls and returns: x30 must survive. */
+        int mixed(int x) {
+            void *p = __builtin_return_address(0);
+            int y = add1(x);
+            return p == 0 ? -1 : y;
+        }
+        int canonical(void *p) {
+            /* A signed pointer sets bits above the 48-bit address range. */
+            return ((unsigned long)p >> 48) == 0;
+        }
+        int main(void) {
+            int bad = 0;
+            void *a = ra();
+            if (a == 0) bad++;
+            if (!canonical(a)) bad++;
+            if (!canonical(__builtin_return_address(0))) bad++;
+            if (mixed(10) != 11) bad++;
+            if (add1(41) != 42) bad++;
+            return bad == 0 ? 42 : bad;
+        }
+    ";
+    for hardening in [
+        crate::Hardening::NONE,
+        crate::Hardening {
+            pac_ret: true,
+            ..crate::Hardening::NONE
+        },
+    ] {
+        let opts = NativeOptions {
+            hardening,
+            ..NativeOptions::default()
+        };
+        let outcome = build_and_run_outcome_with_options(SRC, "ra_strip_native", opts);
+        assert!(
+            outcome.matches(42),
+            "pac_ret={}: got {outcome:?}",
+            hardening.pac_ret
+        );
+    }
+}
+
 /// Link + run a source through the startup runtime (`__c5_entry`),
 /// signing before exec. Mirrors `build_and_run` but takes the full
 /// link path so `__attribute__((constructor))` functions run: dyld

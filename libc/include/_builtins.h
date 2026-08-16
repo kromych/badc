@@ -29,8 +29,10 @@
 #define __builtin_huge_vall() ((long double)(1.0e+308 * 10.0))
 #define __builtin_nan(s) (0.0 / 0.0)
 #define __builtin_nanf(s) ((float)(0.0 / 0.0))
-// Convert between the raw and "real" return address. The supported
-// targets carry no flag bits in the return address, so both are identity.
+// Convert between the raw and "real" return address. Both are identity:
+// `__builtin_return_address` already strips the aarch64 authentication
+// code, and no supported target carries other flag bits there. gcc and
+// clang define the pair the same way on aarch64.
 #define __builtin_extract_return_addr(a) (a)
 #define __builtin_frob_return_addr(a) (a)
 // `__builtin_choose_expr` and `__builtin_constant_p` are first-class

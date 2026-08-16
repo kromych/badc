@@ -109,6 +109,14 @@ Compile knobs:
   -iquote path             Add a search path for #include \"...\" only,
                            probed after the including file's directory
                            and before the -I paths. Repeatable.
+  -fno-builtin[-<name>]    Treat a call spelled with a library
+  -ffreestanding           function's own name as an ordinary call the
+                           compiler may not fold, and drop the C99
+                           7.1.4p2 recovery that declares an undeclared
+                           library function by auto-including its
+                           header. The `__builtin_` spellings keep
+                           folding. -fbuiltin / -fhosted restore the
+                           default.
   -nostdinc                Drop the bundled standard headers and the
                            system directories from the #include search,
                            leaving only -I, -iquote and the including
@@ -652,6 +660,8 @@ fn run() {
     // own plain-`char` signedness.
     let mut char_signed: Option<bool> = None;
     let mut nostdinc = false;
+    let mut no_builtin = false;
+    let mut no_builtin_fns: Vec<String> = Vec::new();
     // Multi-translation-unit linker plumbing. Bytecode `.o`
     // inputs accumulate alongside C sources; `.a` archives
     // arrive either positionally or through `-l<name>` after a
@@ -1185,6 +1195,17 @@ fn run() {
             // it reaches the front end rather than being dropped.
             "-fsigned-char" | "-fno-unsigned-char" => char_signed = Some(true),
             "-funsigned-char" | "-fno-signed-char" => char_signed = Some(false),
+            // gcc / clang `-fno-builtin` and `-ffreestanding`: a call
+            // spelled with a library function's own name is an ordinary
+            // call the compiler may not fold. `-ffreestanding` also drops
+            // the hosted assumption that such a name is declarable, which
+            // is the auto-include retry. The `__builtin_` spellings are
+            // unaffected, as under gcc.
+            "-fno-builtin" | "-ffreestanding" => no_builtin = true,
+            "-fbuiltin" | "-fhosted" => no_builtin = false,
+            s if s.starts_with("-fno-builtin-") => {
+                no_builtin_fns.push(s["-fno-builtin-".len()..].to_string());
+            }
             // gcc / clang `-nostdinc`: the standard headers leave the
             // `#include` search, so a name no `-I` / `-iquote` path carries
             // is an error rather than a bind to badc's bundled libc. A
@@ -1983,6 +2004,8 @@ fn run() {
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
                 .with_nostdinc(nostdinc)
+                .with_no_builtin(no_builtin)
+                .with_no_builtin_fns(no_builtin_fns.clone())
                 .with_gnu_dialect(gnu_dialect)
                 .with_asm_source(SourceKind::of(src).is_asm())
                 .with_defines(tu_defines(src, &defines))
@@ -2061,6 +2084,8 @@ fn run() {
             .with_short_wchar(short_wchar)
             .with_char_signed(char_signed)
             .with_nostdinc(nostdinc)
+            .with_no_builtin(no_builtin)
+            .with_no_builtin_fns(no_builtin_fns.clone())
             .with_gnu_dialect(gnu_dialect)
             .with_optimize(optimize_flag)
             .with_defines(defines.clone())
@@ -2160,6 +2185,8 @@ fn run() {
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
                 .with_nostdinc(nostdinc)
+                .with_no_builtin(no_builtin)
+                .with_no_builtin_fns(no_builtin_fns.clone())
                 .with_gnu_dialect(gnu_dialect)
                 .with_optimize(optimize_flag)
                 .with_asm_source(SourceKind::of(src_path).is_asm())
@@ -2273,6 +2300,8 @@ fn run() {
             short_wchar,
             char_signed,
             nostdinc,
+            no_builtin,
+            no_builtin_fns: &no_builtin_fns,
             optimize_flag,
             export_all,
             show_includes,
@@ -2310,6 +2339,8 @@ fn run() {
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
                 .with_nostdinc(nostdinc)
+                .with_no_builtin(no_builtin)
+                .with_no_builtin_fns(no_builtin_fns.clone())
                 .with_gnu_dialect(gnu_dialect)
                 .with_optimize(optimize_flag)
                 .with_defines(copts_defines)
@@ -2906,6 +2937,8 @@ fn run() {
             short_wchar,
             char_signed,
             nostdinc,
+            no_builtin,
+            no_builtin_fns: &no_builtin_fns,
             optimize_flag,
             export_all: false,
             show_includes,
@@ -3042,6 +3075,8 @@ fn run() {
             short_wchar,
             char_signed,
             nostdinc,
+            no_builtin,
+            no_builtin_fns: &no_builtin_fns,
             optimize_flag,
             export_all: false,
             show_includes,
@@ -3458,6 +3493,8 @@ struct CompileCfg<'a> {
     short_wchar: bool,
     char_signed: Option<bool>,
     nostdinc: bool,
+    no_builtin: bool,
+    no_builtin_fns: &'a [String],
     optimize_flag: bool,
     export_all: bool,
     show_includes: bool,
@@ -3622,6 +3659,8 @@ fn tu_compile_options(
         .with_short_wchar(cfg.short_wchar)
         .with_char_signed(cfg.char_signed)
         .with_nostdinc(cfg.nostdinc)
+        .with_no_builtin(cfg.no_builtin)
+        .with_no_builtin_fns(cfg.no_builtin_fns.to_vec())
         .with_gnu_dialect(cfg.gnu_dialect)
         .with_asm_source(SourceKind::of(src_path).is_asm())
         .with_defines(tu_defines(src_path, cfg.defines))

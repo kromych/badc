@@ -258,6 +258,10 @@ pub(crate) struct Preprocessor {
     /// headers ([`crate::c5::headers::COMPILER_OWNED_HEADERS`]) stay, as
     /// gcc's builtins do.
     nostdinc: bool,
+    /// `-fno-builtin`: `#pragma intrinsic(name)` registers nothing, so a
+    /// call spelled with the library name lowers as a call rather than as
+    /// the instruction badc has for it.
+    no_builtin: bool,
     /// Headers to splice in front of the user's translation unit,
     /// before any source line is preprocessed. Mirrors gcc /
     /// clang's `-include FILE` flag: each name resolves through
@@ -841,6 +845,7 @@ impl Preprocessor {
             quote_search_paths: Vec::new(),
             system_fallback_paths: Vec::new(),
             nostdinc: false,
+            no_builtin: false,
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
             warnings: Vec::new(),
@@ -1034,6 +1039,12 @@ impl Preprocessor {
     /// `#include` search. See [`Preprocessor::nostdinc`].
     pub fn set_nostdinc(&mut self, on: bool) {
         self.nostdinc = on;
+    }
+
+    /// gcc / clang `-fno-builtin` / `-ffreestanding`, the preprocessor's
+    /// half. See [`Preprocessor::no_builtin`].
+    pub fn set_no_builtin(&mut self, on: bool) {
+        self.no_builtin = on;
     }
 
     /// Add a header to splice in front of the user's translation

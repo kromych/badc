@@ -152,6 +152,11 @@ FORWARD_EXACT = {
     # compiler must supply none. Withheld, a `#include <...>` its own tree
     # does not carry resolves from badc's bundled libc instead of failing.
     "-nostdinc",
+    # A unit that names a library function means its own definition, not a
+    # value the compiler may substitute. Withheld, badc folds `strlen` of a
+    # literal to its length and recovers an undeclared library call by
+    # auto-including its bundled header.
+    "-fno-builtin", "-ffreestanding", "-fbuiltin", "-fhosted",
 }
 
 FORWARD_PREFIX = (
@@ -175,6 +180,8 @@ FORWARD_PREFIX = (
     # three-function object placed the third at offset 0x61. badc validates
     # the operand.
     "-fmin-function-alignment=",
+    # `-fno-builtin`, per library function.
+    "-fno-builtin-",
     *HARDENING_PREFIX,
 )
 
@@ -187,9 +194,6 @@ UNSUPPORTED_EXACT = {
     # badc emits no stack-protector prologue, guard load or __stack_chk_fail
     # call, so a CONFIG_STACKPROTECTOR_STRONG kernel has no canary.
     "-fstack-protector", "-fstack-protector-all", "-fstack-protector-strong",
-    # badc recognizes calls by libc name and folds them (strlen of a literal
-    # becomes its length), which these switch off.
-    "-fno-builtin", "-ffreestanding",
     # badc emits no .eh_frame, so the 64-bit vDSO units that ask for unwind
     # tables get none. The negative spelling is already what badc does.
     "-fasynchronous-unwind-tables", "-funwind-tables",
@@ -209,8 +213,6 @@ UNSUPPORTED_PREFIX = (
     # Which trailing arrays __builtin_object_size treats as bounded, hence
     # what the FORTIFY_SOURCE checks are computed against.
     "-fstrict-flex-arrays=",
-    # As -fno-builtin, per function.
-    "-fno-builtin-",
 )
 
 # Flags measured to leave badc's object unchanged, with the measurement.
@@ -570,10 +572,12 @@ def _self_test() -> int:
     assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]
     assert rewrite(["-fmin-function-alignment=16"]).argv == \
         ["-fmin-function-alignment=16"]
+    for flag in ("-fno-builtin", "-ffreestanding", "-fno-builtin-wcslen"):
+        assert rewrite([flag]).argv == [flag], flag
     for flag in ("-fstack-protector-strong",
                  "-ftrivial-auto-var-init=zero",
-                 "-fpatchable-function-entry=16,16", "-fno-builtin-wcslen",
-                 "-mstack-protector-guard=sysreg", "-ffreestanding",
+                 "-fpatchable-function-entry=16,16",
+                 "-mstack-protector-guard=sysreg",
                  "-fstrict-flex-arrays=3", "-fasynchronous-unwind-tables"):
         r = rewrite([flag])
         assert r.dropped == [flag] and r.unknown == [], (flag, r)

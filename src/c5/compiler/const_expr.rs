@@ -1426,6 +1426,14 @@ impl Compiler {
         self.parse_const_expr_primary_val()
     }
 
+    /// Whether `-fno-builtin` / `-ffreestanding` bars this spelling from
+    /// folding. The flag applies to the library name only; gcc keeps the
+    /// `__builtin_` prefixed form folding under it.
+    pub(super) fn library_name_is_opaque(&self, name: &str) -> bool {
+        !name.starts_with("__builtin_")
+            && (self.no_builtin || self.no_builtin_fns.iter().any(|n| n == name))
+    }
+
     /// Fold `strlen` / `__builtin_strlen` of a string literal, which gcc
     /// and clang admit in an integer constant expression. The count stops
     /// at the first NUL, as the library function does, so a literal with an
@@ -1437,12 +1445,11 @@ impl Compiler {
     /// whatever it already was in this context -- a VLA bound, or the
     /// error the context raises for a non-constant operand.
     pub(super) fn try_fold_strlen_builtin(&mut self) -> Result<Option<ConstVal>, C5Error> {
-        if self.lex.tk != Token::Id
-            || !matches!(
-                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                "strlen" | "__builtin_strlen"
-            )
-        {
+        if self.lex.tk != Token::Id {
+            return Ok(None);
+        }
+        let name = self.symbols[self.lex.curr_id_idx].name.as_str();
+        if !matches!(name, "strlen" | "__builtin_strlen") || self.library_name_is_opaque(name) {
             return Ok(None);
         }
         // A local, a global object, or an enum constant of this name is
@@ -1501,6 +1508,9 @@ impl Compiler {
             "strncmp" | "memcmp" | "__builtin_strncmp" | "__builtin_memcmp" => true,
             _ => return Ok(None),
         };
+        if self.library_name_is_opaque(name) {
+            return Ok(None);
+        }
         let stop_at_nul = !name.ends_with("memcmp");
         // A local, a global object, or an enum constant of this name is
         // not the library function.

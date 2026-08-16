@@ -336,6 +336,14 @@ pub struct CompileOptions {
     /// retry is off with it: a unit that asked for no library headers must
     /// not be given one. See [`Preprocessor::set_nostdinc`].
     pub nostdinc: bool,
+    /// `-fno-builtin` / `-ffreestanding` -- a call spelled with a library
+    /// function's own name is an ordinary call, not a builtin the compiler
+    /// may fold. The `__builtin_` spellings keep folding, as they do under
+    /// gcc's flag, and the auto-include retry is off with it: a
+    /// freestanding unit has no library to declare the name from.
+    pub no_builtin: bool,
+    /// `-fno-builtin-<name>` -- the same, for one library name each.
+    pub no_builtin_fns: Vec<String>,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
     /// Filename string used in compiler diagnostics
@@ -448,6 +456,17 @@ impl CompileOptions {
     /// (`-nostdinc`).
     pub fn with_nostdinc(mut self, on: bool) -> Self {
         self.nostdinc = on;
+        self
+    }
+    /// Stop treating a library function's own name as a builtin
+    /// (`-fno-builtin` / `-ffreestanding`).
+    pub fn with_no_builtin(mut self, on: bool) -> Self {
+        self.no_builtin = on;
+        self
+    }
+    /// The same for the named library functions (`-fno-builtin-<name>`).
+    pub fn with_no_builtin_fns(mut self, names: Vec<String>) -> Self {
+        self.no_builtin_fns = names;
         self
     }
 
@@ -1868,6 +1887,11 @@ pub struct Compiler {
     /// `resolve_exports` adds every non-static defined function to the
     /// export list so a `--shared` consumer can `dlsym` it.
     export_all_functions: bool,
+    /// Mirror of [`CompileOptions::no_builtin`] and
+    /// [`CompileOptions::no_builtin_fns`]. Read by the library-name
+    /// folds, which decline under them.
+    no_builtin: bool,
+    no_builtin_fns: Vec<String>,
     /// Mirror of [`CompileOptions::elf_class`]: the assembler's
     /// starting code mode.
     elf_class: crate::c5::ElfClass,
@@ -2173,6 +2197,7 @@ impl Compiler {
             pp.add_own_header_root(path);
         }
         pp.set_nostdinc(opts.nostdinc);
+        pp.set_no_builtin(opts.no_builtin);
         // The GCC `__builtin_*` library thunks, which gcc and clang give
         // every unit with no `#include`. The header is only `#define`s of
         // names C99 7.1.3 reserves to the implementation, so it declares
@@ -2399,6 +2424,8 @@ impl Compiler {
             data_align: 8,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
+            no_builtin: opts.no_builtin,
+            no_builtin_fns: opts.no_builtin_fns.clone(),
             elf_class: opts.elf_class,
             inline_model: if opts.gnu89_inline {
                 crate::c5::symbol::InlineModel::Gnu89
@@ -2601,7 +2628,7 @@ impl Compiler {
         // declaration is a hosted-implementation one, and the header it
         // would splice in is off the search under `-nostdinc`. The
         // undeclared-function error stands instead.
-        if opts.nostdinc {
+        if opts.nostdinc || opts.no_builtin {
             return result;
         }
         // Auto-include retry. Each pass that fails on an undeclared

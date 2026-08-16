@@ -6546,6 +6546,102 @@ fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
 }
 
 #[test]
+#[cfg(feature = "full")]
+fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
+    // gcc's `-fno-builtin` bars the library spelling from folding and
+    // leaves the `__builtin_` one alone. `-fno-builtin-<name>` does the
+    // same for one name. A declined fold leaves a call, so the object
+    // names the function.
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    const SRC: &str = "unsigned long strlen(const char *s);\n\
+                       int strcmp(const char *a, const char *b);\n\
+                       unsigned long n(void) { return strlen(\"hello\"); }\n\
+                       int c(void) { return strcmp(\"a\", \"b\"); }\n\
+                       unsigned long b(void) { return __builtin_strlen(\"hello\"); }\n\
+                       _Static_assert(__builtin_strlen(\"hello\") == 5,\n\
+                                      \"the __builtin_ spelling keeps folding\");\n";
+    let target = Target::LinuxX64;
+    let base = || CompileOptions::default().with_no_entry_point(true);
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
+    let undefined = |co: CompileOptions| -> alloc::vec::Vec<String> {
+        let prog = Compiler::with_options(SRC.to_string(), target, co)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"));
+        let bytes = crate::emit_native_with_options(&prog, target, opts).expect("emit");
+        elf_undefined_names(&bytes)
+    };
+
+    let folded = undefined(base());
+    assert!(
+        !folded.iter().any(|n| n == "strlen" || n == "strcmp"),
+        "both names fold by default, so neither reaches the object: {folded:?}"
+    );
+
+    let opaque = undefined(base().with_no_builtin(true));
+    assert!(
+        opaque.iter().any(|n| n == "strlen") && opaque.iter().any(|n| n == "strcmp"),
+        "-fno-builtin must leave both as calls: {opaque:?}"
+    );
+
+    let one = undefined(base().with_no_builtin_fns(alloc::vec!["strcmp".to_string()]));
+    assert!(
+        one.iter().any(|n| n == "strcmp") && !one.iter().any(|n| n == "strlen"),
+        "-fno-builtin-strcmp must bar only that name: {one:?}"
+    );
+
+    // The same for a `#pragma intrinsic` name: the instruction badc has
+    // for it is a substitution the flag withdraws.
+    const SQRT: &str = "#pragma intrinsic(sqrt)\n\
+                        double sqrt(double x);\n\
+                        double f(double x) { return sqrt(x); }\n";
+    let intrinsic = |co: CompileOptions| -> alloc::vec::Vec<String> {
+        let prog = Compiler::with_options(SQRT.to_string(), target, co)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile sqrt: {e}"));
+        elf_undefined_names(&crate::emit_native_with_options(&prog, target, opts).expect("emit"))
+    };
+    assert!(
+        !intrinsic(base()).iter().any(|n| n == "sqrt"),
+        "sqrt lowers to the instruction by default"
+    );
+    assert!(
+        intrinsic(base().with_no_builtin(true))
+            .iter()
+            .any(|n| n == "sqrt"),
+        "-fno-builtin must leave sqrt as a call"
+    );
+}
+
+/// Names of the `SHT_SYMTAB` entries with `st_shndx == SHN_UNDEF`.
+#[cfg(feature = "full")]
+fn elf_undefined_names(bytes: &[u8]) -> alloc::vec::Vec<String> {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let (shoff, shentsize, shnum) = (u64le(0x28), u16le(0x3A), u16le(0x3C));
+    let sh = |i: usize| shoff + i * shentsize;
+    let mut out = alloc::vec::Vec::new();
+    for i in 0..shnum {
+        if u32le(sh(i) + 4) != 2 {
+            continue;
+        }
+        let (off, size) = (u64le(sh(i) + 0x18), u64le(sh(i) + 0x20));
+        let strs = u64le(sh(u32le(sh(i) + 0x28)) + 0x18);
+        for e in (off..off + size).step_by(24) {
+            if u16le(e + 6) == 0 && u32le(e) != 0 {
+                let s = strs + u32le(e);
+                let n = bytes[s..].iter().position(|&c| c == 0).unwrap();
+                out.push(String::from_utf8_lossy(&bytes[s..s + n]).into_owned());
+            }
+        }
+    }
+    out
+}
+
+#[test]
 fn nostdinc_declines_the_auto_include_retry() {
     // A unit built with `-nostdinc` asked for no library headers, so the
     // C99 7.1.4p2 recovery must not splice one in: the undeclared-function

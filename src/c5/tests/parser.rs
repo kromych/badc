@@ -2602,7 +2602,7 @@ fn wide_string_array_initializer_requires_matching_element_width() {
         "int main(void) { static long long a[] = L\"abc\"; return (int)a[0]; }",
         "int main(void) { static char a[] = L\"abc\"; return a[0]; }",
         "int main(void) { static char a[] = { L\"abc\" }; return a[0]; }",
-        "int main(void) { static int a[4] = u\"ab\" L\"cd\"; return a[0]; }",
+        "int main(void) { static int a[4] = u\"abc\"; return a[0]; }",
     ] {
         expect_compile_error(
             src,
@@ -2619,5 +2619,34 @@ fn wide_string_array_initializer_requires_matching_element_width() {
     )
     .compile()
     .expect("a wchar_t-width array takes a wide string literal");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn mixed_prefix_string_concatenation_is_rejected() {
+    // C99 6.4.5p5 leaves a run carrying two encoding prefixes undefined.
+    // The initializer sees one staged literal by then, so the width the
+    // first part happens to match cannot hide the mismatch: the lexer
+    // rejects the run while both prefixes are visible.
+    expect_compile_error(
+        "#include <stddef.h>\n\
+         int main(void) { static wchar_t a[] = L\"ab\" u\"cd\"; return (int)a[0]; }",
+        "different encoding prefixes",
+    );
+    expect_compile_error(
+        "int main(void) { return sizeof(u\"a\" U\"b\"); }",
+        "different encoding prefixes",
+    );
+    // An unprefixed part is defined and folds at the run's width.
+    let prog = Compiler::new(
+        "#include <stddef.h>\n\
+         int main(void) { static wchar_t a[] = L\"ab\" \"cd\";\n\
+         static wchar_t b[] = \"ab\" L\"cd\";\n\
+         return (int)(a[2] - 'c') + (int)(b[3] - 'd')\n\
+         + (int)(sizeof a - sizeof b); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("an unprefixed part joins the run");
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }

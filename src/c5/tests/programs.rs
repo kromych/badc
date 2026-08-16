@@ -3005,6 +3005,14 @@ fn utf16_utf32_string_literals() {
 }
 
 #[test]
+fn string_concat_encoding_prefix() {
+    // C99 6.4.5p4: an unprefixed part of an adjacent-literal run joins at
+    // the run's element width, whichever end carries the prefix. Matched
+    // against GCC and clang.
+    assert_eq!(run_fixture("string_concat_encoding_prefix.c"), 0);
+}
+
+#[test]
 fn const_object_array_bound() {
     // A static `const` integer object folds its value in a later constant
     // expression, so it works as an array bound (a fixed array, not a VLA)

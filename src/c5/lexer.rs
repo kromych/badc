@@ -509,14 +509,15 @@ impl Lexer {
     /// like other pragmas, because pack is source-position-
     /// dependent in a way the per-translation-unit `dylibs` /
     /// `bindings` accumulator can't capture).
-    /// Tokenise a C99 wide-string (`L"..."`) or wide-character
-    /// (`L'...'`) literal. Caller has consumed the `L`; `self.pos`
-    /// points at the opening quote. Characters are emitted into
-    /// `data` as 16-bit little-endian values (one slot per `char`)
-    /// per the UTF-16 representation. Adjacent `L"..."` literals
-    /// are absorbed into the current token so the parser's narrow
-    /// concatenation loop does not interleave a 1-byte gap, and a
-    /// 16-bit `0` terminator is appended at the end.
+    /// Tokenise a wide string (`L"..."`, `u"..."`, `U"..."`) or wide
+    /// character (`L'...'`) literal. Caller has consumed the prefix;
+    /// `self.pos` points at the opening quote. Characters are emitted
+    /// into `data` as little-endian values `elem_bytes` wide, one per
+    /// code point. The rest of the adjacent run -- further parts with
+    /// this prefix and unprefixed parts -- is absorbed into the current
+    /// token so the parser's narrow concatenation loop does not
+    /// interleave a 1-byte gap, and an `elem_bytes`-wide `0` terminator
+    /// is appended at the end.
     /// Parse the rest of a C99 6.4.4.2 hexadecimal floating
     /// constant. The integer hex digits occupy `[mant_start,
     /// self.pos)`; `self.pos` points at the `.` or the binary-
@@ -604,6 +605,75 @@ impl Lexer {
             mant = mant as f32 as f64;
         }
         Ok(mant)
+    }
+
+    /// Element width in bytes of a string or character literal carrying
+    /// `prefix` (C11 6.4.5): the target's `wchar_t` for `L`, `char16_t`
+    /// for `u`, `char32_t` for `U`. `0` for an unprefixed literal.
+    fn string_prefix_width(&self, prefix: u8) -> usize {
+        match prefix {
+            b'L' => self.wchar_bytes,
+            b'u' => 2,
+            b'U' => 4,
+            _ => 0,
+        }
+    }
+
+    /// Encoding prefix shared by the run of adjacent string literals
+    /// starting at `at`, with its element width. C99 6.4.5p4 makes a run
+    /// mixing unprefixed and prefixed parts one literal carrying that
+    /// prefix; two different prefixes in one run have no defined result,
+    /// and GCC and clang both reject it. `None` when no part is prefixed.
+    /// Scans without consuming: the parts are lexed afterwards at the
+    /// width this returns.
+    fn survey_string_run(&self, at: usize) -> Result<Option<(u8, usize)>, C5Error> {
+        let mut pos = at;
+        let mut line = self.line;
+        let mut found: Option<u8> = None;
+        while pos < self.src.len() {
+            let prefix = match self.src[pos] {
+                b'"' => 0,
+                p @ (b'L' | b'u' | b'U') if self.src.get(pos + 1) == Some(&b'"') => {
+                    pos += 1;
+                    p
+                }
+                _ => break,
+            };
+            if prefix != 0 {
+                if found.is_some_and(|seen| seen != prefix) {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_compile_err(
+                        &self.file,
+                        line,
+                        "concatenated string literals have different encoding prefixes",
+                    )));
+                }
+                found = Some(prefix);
+            }
+            pos += 1; // opening quote
+            loop {
+                match self.src.get(pos) {
+                    // Unterminated: the part lexer reports it.
+                    None => return Ok(found.map(|p| (p, self.string_prefix_width(p)))),
+                    Some(&b'\\') => pos += 2,
+                    Some(&b'"') => {
+                        pos += 1;
+                        break;
+                    }
+                    Some(&b'\n') => {
+                        line += 1;
+                        pos += 1;
+                    }
+                    Some(_) => pos += 1,
+                }
+            }
+            while matches!(self.src.get(pos), Some(b' ' | b'\t' | b'\r' | b'\n')) {
+                if self.src[pos] == b'\n' {
+                    line += 1;
+                }
+                pos += 1;
+            }
+        }
+        Ok(found.map(|p| (p, self.string_prefix_width(p))))
     }
 
     fn lex_wide_literal(
@@ -765,9 +835,11 @@ impl Lexer {
                 self.char_is_wide = true;
                 return Ok(());
             }
-            // Absorb adjacent `L"..."` literals so the 16-bit
-            // terminator below isn't split by the parser's narrow
-            // concatenation loop.
+            // Absorb the rest of the run so the wide terminator below
+            // isn't split by the parser's narrow concatenation loop. An
+            // unprefixed part joins at this run's element width (C99
+            // 6.4.5p4); the survey at the run's start has already
+            // rejected a differently-prefixed part.
             let saved_pos = self.pos;
             let saved_line = self.line;
             while self.pos < self.src.len() {
@@ -780,6 +852,10 @@ impl Lexer {
                 } else {
                     break;
                 }
+            }
+            if self.pos < self.src.len() && self.src[self.pos] == b'"' {
+                self.pos += 1;
+                continue;
             }
             if self.pos + 1 < self.src.len()
                 && self.src[self.pos] == prefix_byte
@@ -1307,13 +1383,11 @@ impl Lexer {
                     && (self.src[self.pos] == b'"' || self.src[self.pos] == b'\'')
                 {
                     let prefix = self.src[start];
-                    let elem_bytes = match prefix {
-                        b'L' => self.wchar_bytes,
-                        b'u' => 2,
-                        b'U' => 4,
-                        _ => 0,
-                    };
+                    let elem_bytes = self.string_prefix_width(prefix);
                     if elem_bytes != 0 {
+                        if self.src[self.pos] == b'"' {
+                            self.survey_string_run(start)?;
+                        }
                         return self.lex_wide_literal(data, elem_bytes, prefix);
                     }
                 }
@@ -1587,6 +1661,14 @@ impl Lexer {
                     return Ok(());
                 }
             } else if c == '\'' || c == '"' {
+                // C99 6.4.5p4: a run whose first part is unprefixed is
+                // still one wide literal when a later part is prefixed.
+                if c == '"'
+                    && let Some((prefix, elem_bytes)) = self.survey_string_run(self.pos - 1)?
+                {
+                    self.pos -= 1;
+                    return self.lex_wide_literal(data, elem_bytes, prefix);
+                }
                 let start_data = data.len() as i64;
                 // C99 6.4.4.4p10: a character constant containing more
                 // than one character has an implementation-defined value;
@@ -2546,6 +2628,69 @@ mod tests {
             lex_string_literal(r#"L"A" L"B""#),
             vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn string_run_absorbs_unprefixed_parts_at_the_run_width() {
+        // C99 6.4.5p4: an unprefixed part of a run joins at the run's
+        // element width, at either end and in the middle.
+        assert_eq!(
+            lex_string_literal(r#"L"A" "B""#),
+            vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            lex_string_literal(r#""A" L"B""#),
+            vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            lex_string_literal(r#""A" u"B" "C""#),
+            vec![0x41, 0, 0x42, 0, 0x43, 0, 0, 0]
+        );
+        // An all-unprefixed run stays narrow: the lexer leaves the parts
+        // for the parser's concatenation loop and adds no terminator.
+        assert_eq!(lex_string_literal(r#""A" "B""#), vec![0x41]);
+    }
+
+    #[test]
+    fn string_run_rejects_two_encoding_prefixes() {
+        // C99 6.4.5p5 leaves the mixed case undefined; GCC and clang both
+        // reject it. Every ordered pair of two different prefixes, plus a
+        // run of three where the unprefixed part sits between them.
+        for src in [
+            r#"char *s = L"a" u"b";"#,
+            r#"char *s = L"a" U"b";"#,
+            r#"char *s = u"a" L"b";"#,
+            r#"char *s = u"a" U"b";"#,
+            r#"char *s = U"a" L"b";"#,
+            r#"char *s = U"a" u"b";"#,
+            r#"char *s = L"a" "b" u"c";"#,
+            r#"char *s = "a" u"b" U"c";"#,
+            r#"char *s = L"a" L"b" U"c";"#,
+        ] {
+            let err = lex_all(src).expect_err("expected a lex error for {src:?}");
+            assert!(
+                alloc::format!("{err}").contains("different encoding prefixes"),
+                "{src:?} reported {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn string_run_accepts_one_encoding_prefix() {
+        for src in [
+            r#"char *s = "a" "b";"#,
+            r#"char *s = L"a" L"b";"#,
+            r#"char *s = u"a" u"b";"#,
+            r#"char *s = U"a" U"b";"#,
+            r#"char *s = L"a" "b";"#,
+            r#"char *s = "a" L"b";"#,
+            r#"char *s = "a" "b" U"c";"#,
+            r#"char *s = u"a" "b" u"c";"#,
+            // A character constant is not part of a string run.
+            r#"char c = 'a'; char *s = u"b";"#,
+        ] {
+            lex_all(src).unwrap_or_else(|e| panic!("{src:?} rejected: {e}"));
+        }
     }
 
     #[test]

@@ -399,6 +399,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("variadic_libc_fnptr_static_init.c", 0),
     ("forward_fn_ptr_in_static_init.c", 0),
     ("attributed_aggregate_align_floor.c", 0),
+    ("string_concat_encoding_prefix.c", 0),
     ("overaligned_data_placement.c", 0),
     ("overaligned_type_placement.c", 0),
     ("page_multiple_alignment.c", 0),

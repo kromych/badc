@@ -6978,6 +6978,76 @@ fn address_taken_aggregate_state_fold_drops_unreachable_call() {
     }
 }
 
+/// The same state machine, with the aggregate padded by members that are
+/// written and never read. `passes::sroa` declines an object whose fields
+/// outnumber the target's usable GPR file, and counting the write-only
+/// members put this one over it on both targets -- 32 fields against 12
+/// (x86-64) and 25 (aarch64) -- so the state member stayed in memory and
+/// the unreachable call survived. A member no load reads occupies no
+/// register: the split gives it a value that the store elimination
+/// removes. Two members are read here, so the split's register demand is
+/// two whatever the padding is.
+#[test]
+fn write_only_aggregate_members_do_not_decline_the_split() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const PAD: usize = 30;
+    let mut pads = String::new();
+    for i in 0..PAD {
+        pads.push_str(&alloc::format!("w.pad[{i}] = (unsigned long)n + {i}; "));
+    }
+    let src = alloc::format!(
+        "enum st {{ st_done = 0, st_run, st_wait }}; \
+         struct walk {{ enum st state; unsigned long data; unsigned long pad[{PAD}]; }}; \
+         extern void assert_canary(void); \
+         extern void runtime_canary(void); \
+         extern long gate; \
+         static __attribute__((always_inline)) void step(struct walk *w, long n) {{ \
+             switch (w->state) {{ \
+             case st_done: assert_canary(); return; \
+             case st_run: w->data += (unsigned long)n; w->state = st_wait; return; \
+             case st_wait: w->state = st_done; return; \
+             }} \
+         }} \
+         long walk_all(long n) {{ \
+             long acc = 0; \
+             for (struct walk w = {{ .state = st_run, .data = 5 }}; \
+                  w.state != st_done; step(&w, n)) {{ \
+                 acc += (long)w.data; {pads} \
+             }} \
+             if (gate == 77) runtime_canary(); \
+             return acc; \
+         }}"
+    );
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            src.clone(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        let named = |n: &str| syms.iter().any(|(s, _)| s == n);
+        assert!(
+            !named("assert_canary"),
+            "{target:?}: {PAD} write-only members declined the split, so the \
+             unreachable state's call survives (symbols: {syms:?})"
+        );
+        assert!(
+            named("runtime_canary"),
+            "{target:?}: the runtime-guarded call was dropped, so the check is vacuous \
+             (symbols: {syms:?})"
+        );
+    }
+}
+
 /// `(rela section, r_offset, symbol name, addend)` for every relocation
 /// the object carries.
 fn elf_relocations(

@@ -134,13 +134,21 @@ struct CopyField {
     imm: Option<i64>,
 }
 
+/// How a candidate object's field is accessed: `fp` when it moves
+/// through an FP register, `load` when some load reads it.
+#[derive(Default)]
+struct FieldUse {
+    fp: bool,
+    load: bool,
+}
+
 /// Rewrite every splittable object's accesses to per-field slots,
 /// decompose its block initializer, and neutralise the dead
 /// base-address instructions. Returns `(base_slot, field_slots)` for
-/// each object actually split. Splits nothing when the total field
-/// count would exceed `budget` (the target's usable GPR file), since the
-/// mem2reg re-run would then spill the loop-carried phis back to the
-/// frame at a net loss.
+/// each object actually split. Splits nothing when the fields the split
+/// would put in registers outnumber `budget` (the target's usable GPR
+/// file), since the mem2reg re-run would then spill the loop-carried
+/// phis back to the frame at a net loss.
 fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> {
     let Some(cells_of) = candidate_objects(func) else {
         return Vec::new();
@@ -353,24 +361,25 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
         }
     }
 
-    // Group the surviving accesses into fields (the flag records whether
-    // the field is carried in an FP register) and check that the byte
+    // Group the surviving accesses into fields and check that the byte
     // ranges partition: two accesses are the same field or disjoint.
-    let mut fields_of: BTreeMap<i64, BTreeMap<(i64, i64), bool>> = BTreeMap::new();
+    let mut fields_of: BTreeMap<i64, BTreeMap<(i64, i64), FieldUse>> = BTreeMap::new();
     for a in &accesses {
         if declined.contains(&a.base) || demoted.contains(&a.id) {
             continue;
         }
-        let fp = match &func.insts[a.id as usize] {
-            Inst::Load { kind, .. } => matches!(kind, LoadKind::F32 | LoadKind::F64),
-            Inst::Store { kind, .. } => matches!(kind, StoreKind::F32 | StoreKind::F64),
-            _ => false,
+        let (fp, load) = match &func.insts[a.id as usize] {
+            Inst::Load { kind, .. } => (matches!(kind, LoadKind::F32 | LoadKind::F64), true),
+            Inst::Store { kind, .. } => (matches!(kind, StoreKind::F32 | StoreKind::F64), false),
+            _ => (false, false),
         };
-        *fields_of
+        let use_ = fields_of
             .entry(a.base)
             .or_default()
             .entry((a.off, a.width))
-            .or_default() |= fp;
+            .or_default();
+        use_.fp |= fp;
+        use_.load |= load;
     }
     for (base, fields) in &fields_of {
         let mut end = 0i64;
@@ -392,13 +401,13 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
             continue;
         };
         let end = init.off + init.size;
-        let ok = fields.iter().all(|(&(off, width), &fp)| {
+        let ok = fields.iter().all(|(&(off, width), use_)| {
             if off + width <= init.off || off >= end {
                 return true;
             }
             off >= init.off
                 && off + width <= end
-                && !fp
+                && !use_.fp
                 && width <= init.align
                 && (off - init.off) % width == 0
                 && off <= i32::MAX as i64
@@ -414,7 +423,14 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
         .copied()
         .filter(|b| !declined.contains(b))
         .collect();
-    let total: usize = order.iter().map(|b| fields_of[b].len()).sum();
+    // Only a field some load reads occupies a register: one that is
+    // written and never read becomes a dead def the store elimination
+    // removes, so counting it declines the split for a demand the split
+    // does not create.
+    let total: usize = order
+        .iter()
+        .map(|b| fields_of[b].values().filter(|u| u.load).count())
+        .sum();
     if order.is_empty() || total > budget {
         return Vec::new();
     }

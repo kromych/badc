@@ -12,12 +12,13 @@ with a warm release build (measured on an idle linux-x64 box).
 Each lane:
   1. Rsync (Linux) or tar+scp (Windows) the working tree, excluding
      `target/` and the vendored demo caches so the remote side
-     builds + fetches its own caches.
+     builds + fetches its own caches. The macOS lane is the host itself
+     and runs in the working tree, so it has no sync.
   2. Build release with `cargo build --release --locked`.
   3. Run `cargo test --release` (all test targets).
   4. On Linux lanes, rerun the lib suite under the register-pressure caps
      (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--lib --features "codegen_test full"`),
-     the same scope as CI's pressure matrix.
+     the same scope as CI's pressure matrix, which runs on Linux only.
   5. Run the gating demos (`GATING_DEMOS` below) through
      `scripts/run_demos.py`, which runs them concurrently; every demo the
      lane's kind selects runs, `--demo-jobs` bounds only how many at once.
@@ -27,16 +28,20 @@ Each lane:
      badc -- CI's kernel corpus, not the vendored minimal configs. Skip
      with `--no-kernel`.
 
-Usage (one `--box` flag per remote lane):
+Usage (one `--box` flag per lane):
 
-    python3 scripts/validate_local_boxes.py --snapshot-box krom2 \\
+    python3 scripts/validate_local_boxes.py \\
         --box xps=xps-8930.local:~/src/compilers/badc/:linux \\
         --box krom2=krom2.local:~/src/compilers/badc/:linux \\
-        --box win=kromyrzen.local:R:/src/compilers/badc/:windows
+        --box win=kromyrzen.local:R:/src/compilers/badc/:windows \\
+        --box mac=macos
 
 The `name` segment is the prefix that gets printed on every output
-line so parallel lane output stays attributable. `kind` is
-`linux` or `windows`; the sync + test commands switch accordingly.
+line so parallel lane output stays attributable. A remote lane is
+`name=host:path:kind` with `kind` `linux` or `windows`; the sync + test
+commands switch accordingly. `name=macos` is the host lane: macOS is the
+only Mach-O and SDK-libc target in the matrix and needs no transport to
+reach.
 
 A non-zero exit means at least one lane failed.
 """
@@ -49,6 +54,7 @@ import shlex
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -170,7 +176,7 @@ class Box:
     name: str
     host: str
     remote_path: str
-    kind: str  # "linux" | "windows"
+    kind: str  # "linux" | "windows" | "macos"
 
     @property
     def short(self) -> str:
@@ -178,19 +184,27 @@ class Box:
 
 
 def parse_box(spec: str) -> Box:
-    """Parse a `--box name=host:path:kind` spec. The `path` may
-    contain colons (e.g. Windows `R:/src/compilers/badc/`); split
-    on `:` from the left for `name` and `host`, then from the
-    right for `kind`."""
+    """Parse a `--box name=host:path:kind` spec, or `--box name=macos`
+    for the host lane, which has no transport. The `path` may contain
+    colons (e.g. Windows `R:/src/compilers/badc/`); split on `:` from
+    the left for `name` and `host`, then from the right for `kind`."""
     if "=" not in spec:
         raise argparse.ArgumentTypeError(
-            f"`--box` expects `name=host:path:kind`, got {spec!r}"
+            f"`--box` expects `name=host:path:kind` or `name=macos`, got {spec!r}"
         )
     name, rest = spec.split("=", 1)
     if ":" not in rest:
-        raise argparse.ArgumentTypeError(
-            f"`--box {name}=...` body must be `host:path:kind`, got {rest!r}"
-        )
+        if rest.strip().lower() != "macos":
+            raise argparse.ArgumentTypeError(
+                f"`--box {name}=...` body must be `host:path:kind`, or `macos` "
+                f"for the host lane, got {rest!r}"
+            )
+        if sys.platform != "darwin":
+            raise argparse.ArgumentTypeError(
+                f"`--box {name}=macos` runs on the host, which is "
+                f"{sys.platform!r}, not macOS"
+            )
+        return Box(name=name, host="", remote_path=str(REPO_ROOT), kind="macos")
     host, rest = rest.split(":", 1)
     if ":" not in rest:
         raise argparse.ArgumentTypeError(
@@ -198,6 +212,11 @@ def parse_box(spec: str) -> Box:
         )
     path, kind = rest.rsplit(":", 1)
     kind = kind.strip().lower()
+    if kind == "macos":
+        raise argparse.ArgumentTypeError(
+            f"`--box {name}=...` macos is the host lane and takes no host or "
+            f"path; write `--box {name}=macos`"
+        )
     if kind not in ("linux", "windows"):
         raise argparse.ArgumentTypeError(
             f"`--box {name}=...` kind must be `linux` or `windows`, got {kind!r}"
@@ -293,41 +312,71 @@ def demo_command(box: Box, jobs: int, runner: str) -> str:
     return f"{runner} scripts/run_demos.py --jobs {jobs} {demos}"
 
 
-def remote_run_linux(
-    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
-) -> int:
-    steps = [
+def posix_steps(
+    box: Box, kernel: bool, demos: bool, snapshots: bool, jobs: int
+) -> list[str]:
+    """The step list both POSIX lane kinds run. The Linux-only steps are
+    the ones CI runs on Linux only, plus the kernel corpus."""
+    steps = []
+    if box.kind == "linux":
         # Lint here, not only in the pre-push hook. Code behind
         # `cfg(target_os = "linux")` is not compiled on the macOS host the
         # hook runs on, so clippy cannot see it there at all -- a lint in a
         # Linux-gated path passes every local check and fails in CI. Debug
         # profile, matching the `fmt + clippy` job.
-        "step cargo clippy --all-targets --features full -- -D warnings",
+        steps.append("step cargo clippy --all-targets --features full -- -D warnings")
+    steps += [
         "step cargo build --release --locked --features full",
         "step cargo test --release --features full",
+    ]
+    if box.kind == "linux":
         # CI additionally runs the suite under register-pressure caps
         # (BADC_MAX_GPR / BADC_MAX_FPR over several N); N=2 is the value
         # that has caught spill-interaction bugs the default banks hide.
         # The capped rerun keeps CI's --lib scope: the caps reach every
         # badc the tests spawn, and an integration fixture asserting an
         # optimization-strength property does not hold under a 2-register
-        # bank.
-        "step env BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
-        'cargo test --release --lib --features "codegen_test full"',
-    ]
+        # bank. CI's pressure matrix is Linux-only, so this lane is too.
+        steps.append(
+            "step env BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
+            'cargo test --release --lib --features "codegen_test full"'
+        )
     if demos:
         steps.append("step " + demo_command(box, jobs, "python3"))
-    if snapshots:
+    # The macOS host regenerates snapshots after every commit through the
+    # post-commit hook, so the drift check adds cover on the Linux lanes
+    # only. The kernel corpus is Linux-only.
+    if snapshots and box.kind == "linux":
         steps.append("step python3 scripts/snapshot_drift.py")
     # Last: the most expensive step, so the cheaper ones report first.
-    if kernel:
+    if kernel and box.kind == "linux":
         steps += kernel_steps()
+    return steps
+
+
+def remote_run_linux(
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+) -> int:
+    steps = posix_steps(box, kernel, demos, snapshots, jobs)
     inner = (
         f"cd {box.remote_path} && "
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
         f"{STEP_FN}; " + " && ".join(steps)
     )
     return stream(box.short, ["ssh", box.host, inner])
+
+
+def local_run(
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+) -> int:
+    """The host lane: the same step list, run in the working tree by a
+    shell rather than over ssh."""
+    inner = (
+        f"cd {shlex.quote(box.remote_path)} && "
+        f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
+        f"{STEP_FN}; " + " && ".join(posix_steps(box, kernel, demos, snapshots, jobs))
+    )
+    return stream(box.short, ["bash", "-c", inner])
 
 
 def sync_windows(box: Box, github_token: str) -> int:
@@ -436,16 +485,27 @@ def remote_run_windows(
     return stream(box.short, ["ssh", box.host, f'cmd /c "{inner}"'])
 
 
+def sync_none(box: Box, github_token: str) -> int:
+    """The host lane runs in the working tree; nothing to ship."""
+    return 0
+
+
 def run_box(
     box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
 ) -> int:
-    sync = sync_linux if box.kind == "linux" else sync_windows
-    test = remote_run_linux if box.kind == "linux" else remote_run_windows
+    sync = {"linux": sync_linux, "windows": sync_windows, "macos": sync_none}[box.kind]
+    test = {
+        "linux": remote_run_linux,
+        "windows": remote_run_windows,
+        "macos": local_run,
+    }[box.kind]
     rc = sync(box, github_token)
     if rc != 0:
         sys.stdout.write(f"[{box.short}] SYNC FAILED ({rc})\n")
         return rc
+    start = time.time()
     rc = test(box, github_token, kernel, demos, snapshots, jobs)
+    sys.stdout.write(f"[{box.short}] lane wall clock {time.time() - start:.0f}s\n")
     sys.stdout.write(f"[{box.short}] {'OK' if rc == 0 else f'FAIL ({rc})'}\n")
     return rc
 
@@ -460,7 +520,8 @@ def main() -> int:
         type=parse_box,
         required=True,
         metavar="NAME=HOST:PATH:KIND",
-        help="add one remote lane; repeat for additional lanes",
+        help="add one lane; repeat for additional lanes. `NAME=macos` is "
+        "the host lane and takes no host or path",
     )
     p.add_argument(
         "--no-kernel",

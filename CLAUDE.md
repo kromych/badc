@@ -23,8 +23,10 @@ system-provided temporary directory for one-off tests, binaries and archives you
 
 Configure Git hooks using `./scripts/install_hooks.py`.
 
-There are local boxes available via ssh. CI may hang due to miscompiles and SIGSEGV's,
-and costs money. Be frugal. Before any `git push`, the following must pass on the local
+There are local boxes available via ssh, plus the macOS host itself, which is a lane
+(`--box NAME=macos`) rather than a driver only: macOS is the matrix's only Mach-O and
+only SDK-libc target. CI may hang due to miscompiles and SIGSEGV's, and costs money.
+Be frugal. Before any `git push`, the following must pass on the local
 boxes using `./scripts/validate_local_boxes.py`:
 
   * `cargo test`
@@ -32,7 +34,8 @@ boxes using `./scripts/validate_local_boxes.py`:
     fixture-parity paths that debug builds skip; the integration suites under
     `tests/` are part of the gate)
   * the same run again under the register-pressure caps (`BADC_MAX_GPR=2
-    BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's pressure matrix does
+    BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's pressure matrix
+    does -- on the Linux lanes, the only ones CI's matrix covers
   * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
     coroutines, nasm, qemu, edk2, bearssl, bzip2, kissfft, gui_hello, nt_loader,
@@ -49,6 +52,11 @@ boxes using `./scripts/validate_local_boxes.py`:
     Skip with `--no-snapshots`.
   * the kernel step: `demos/linux/verify.py --linker badc --no-boot` over the
     pinned `defconfig` release, on each Linux lane
+
+The macOS lane runs in the working tree with no transport, and runs the build,
+the release test suite and the POSIX demo set. It skips the kernel step (that
+corpus is Linux-only), the pressure rerun and the clippy step (CI runs both on
+Linux only, and the pre-push hook lints on this host already).
 
 Out of `GATING_DEMOS` by measurement, and covered by CI instead: `demos/kernel`,
 `demos/yasm` and `demos/python`; the script records the measurement behind each.

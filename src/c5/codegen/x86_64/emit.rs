@@ -6720,27 +6720,6 @@ fn short_branch_form(
     }
 }
 
-/// Address size of an instruction's memory operand in bytes: the width of the
-/// base or index register it names, or the mode default when the operand names
-/// no register or the register comes from a template operand (always 64-bit).
-fn section_addr_size(insn: &super::asm::AsmInsn, mode: super::table::Mode) -> u8 {
-    use super::asm::{AsmMemBase, AsmOpnd};
-    let of = |b: AsmMemBase| match b {
-        AsmMemBase::Reg { size, .. } => Some(size.bytes()),
-        AsmMemBase::Ref(_) => None,
-    };
-    insn.operands
-        .iter()
-        .find_map(|o| match *o {
-            AsmOpnd::Mem { base, index, .. } | AsmOpnd::SymMem { base, index, .. } => {
-                of(base).or_else(|| index.and_then(of))
-            }
-            AsmOpnd::IndexMem { index, .. } => of(index),
-            _ => None,
-        })
-        .unwrap_or_else(|| mode.addrsize())
-}
-
 /// Byte width of a near-branch displacement and whether the operand-size
 /// prefix selects it. The displacement follows the operand size, which is 32
 /// in long and 32-bit modes and 16 in 16-bit mode; an AT&T size suffix
@@ -7254,7 +7233,7 @@ fn encode_one_x86_section_insn(
                 }
                 sym_disp = Some((expr_target(expr)?, 0, concrete.len(), false));
                 concrete.push(Concrete::AbsMem {
-                    disp: abs_probe(section_addr_size(insn, mode)).0,
+                    disp: abs_probe(super::asm::addr_size(insn, mode)).0,
                     size,
                 });
             }
@@ -7422,7 +7401,7 @@ fn encode_one_x86_section_insn(
                     false,
                 ));
                 concrete.push(Concrete::AbsMem {
-                    disp: abs_probe(section_addr_size(insn, mode)).0,
+                    disp: abs_probe(super::asm::addr_size(insn, mode)).0,
                     size: mem_size(insn),
                 });
             }
@@ -7435,7 +7414,7 @@ fn encode_one_x86_section_insn(
         }
     }
     // Encode the instruction body; a segment override rides in front of it.
-    let addr = section_addr_size(insn, mode);
+    let addr = super::asm::addr_size(insn, mode);
     let encode = |ops: &[Concrete]| {
         let mut out = alloc::vec::Vec::new();
         super::asm::encode_in(&mut out, mode, addr, insn.mnemonic, insn.suffix, ops)?;
@@ -9010,7 +8989,8 @@ fn emit_inline_asm(
         if let Some(seg) = insn.seg.or(operand_seg) {
             code.push(seg);
         }
-        if let Err(m) = super::asm::encode(code, insn.mnemonic, insn.suffix, &concrete) {
+        let addr = super::asm::addr_size(insn, super::table::Mode::Bits64);
+        if let Err(m) = super::asm::encode(code, addr, insn.mnemonic, insn.suffix, &concrete) {
             bail_msg(&m);
             return false;
         }
@@ -11407,7 +11387,6 @@ mod code_mode_tests {
             "a folded difference relocates: {relocs:?}"
         );
     }
-
     /// `.org` reads its target against the final layout, so operator order
     /// does not decide whether the target reduces. GNU as 2.46.1 accepts
     /// every spelling with the same padding.

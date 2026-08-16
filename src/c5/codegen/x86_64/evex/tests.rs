@@ -43,7 +43,8 @@ fn enc(text: &str) -> Result<Vec<u8>, String> {
                 ref other => panic!("unexpected operand {other:?}"),
             })
             .collect();
-        encode(&mut out, insn.mnemonic, insn.suffix, &ops)?;
+        let addr = super::super::asm::addr_size(&insn, super::super::table::Mode::Bits64);
+        encode(&mut out, addr, insn.mnemonic, insn.suffix, &ops)?;
     }
     Ok(out)
 }

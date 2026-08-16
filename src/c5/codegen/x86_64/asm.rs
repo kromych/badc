@@ -2212,8 +2212,8 @@ fn parse_mem_operand(prefix: &str, inner: &str, labels: &[&str]) -> Option<AsmOp
     } else {
         i32::try_from(parse_int(prefix)?).ok()?
     };
-    // An operand-reference base `%N` or an explicit 64-bit base register
-    // (32-bit bases need the 0x67 prefix, not modelled).
+    // An operand-reference base `%N` or an explicit base register at the
+    // width it was written; the width selects the instruction's address size.
     Some(AsmOpnd::Mem {
         base: parse_mem_base(inner)?,
         index: None,
@@ -3300,16 +3300,46 @@ pub(crate) fn imm_field_tail(mnemonic: Mnemonic) -> usize {
     }
 }
 
-/// Encode one resolved instruction into `code`. Operands are in AT&T
-/// order. Returns an error for an unsupported mnemonic / operand form.
+/// Address size of an instruction's memory operand in bytes: the width of the
+/// base or index register it names, or the mode default when the operand names
+/// no register or the register comes from a template operand (always 64-bit).
+/// `encode_in` emits the `67` prefix when this differs from the mode default.
+pub(crate) fn addr_size(insn: &AsmInsn, mode: super::table::Mode) -> u8 {
+    let of = |b: AsmMemBase| match b {
+        AsmMemBase::Reg { size, .. } => Some(size.bytes()),
+        AsmMemBase::Ref(_) => None,
+    };
+    insn.operands
+        .iter()
+        .find_map(|o| match *o {
+            AsmOpnd::Mem { base, index, .. } | AsmOpnd::SymMem { base, index, .. } => {
+                of(base).or_else(|| index.and_then(of))
+            }
+            AsmOpnd::IndexMem { index, .. } => of(index),
+            _ => None,
+        })
+        .unwrap_or_else(|| mode.addrsize())
+}
+
+/// Encode one resolved instruction into `code` in 64-bit mode. Operands are in
+/// AT&T order; `addr` is the address size in bytes the memory operand was
+/// written at, from [`addr_size`]. Returns an error for an unsupported
+/// mnemonic / operand form.
 pub(crate) fn encode(
     code: &mut Vec<u8>,
+    addr: u8,
     mnemonic: Mnemonic,
     suffix: Option<AsmRegSize>,
     ops: &[Concrete],
 ) -> Result<(), String> {
-    let mode = super::table::Mode::Bits64;
-    encode_in(code, mode, mode.addrsize(), mnemonic, suffix, ops)
+    encode_in(
+        code,
+        super::table::Mode::Bits64,
+        addr,
+        mnemonic,
+        suffix,
+        ops,
+    )
 }
 
 /// `mov` between the accumulator and an absolute address: the `A0`..`A3`
@@ -4844,7 +4874,7 @@ mod tests {
 
     fn enc(m: Mnemonic, suffix: Option<AsmRegSize>, ops: &[Concrete]) -> Vec<u8> {
         let mut c = Vec::new();
-        encode(&mut c, m, suffix, ops).unwrap();
+        encode(&mut c, 8, m, suffix, ops).unwrap();
         c
     }
 
@@ -4906,7 +4936,14 @@ mod tests {
             if let Some(seg) = insn.seg {
                 out.push(seg);
             }
-            encode(&mut out, insn.mnemonic, insn.suffix, &ops).unwrap();
+            encode(
+                &mut out,
+                addr_size(&insn, crate::c5::codegen::x86_64::table::Mode::Bits64),
+                insn.mnemonic,
+                insn.suffix,
+                &ops,
+            )
+            .unwrap();
             if let Some(rex) = insn.rex {
                 splice_rex(&mut out, at, rex).unwrap();
             }
@@ -5506,7 +5543,7 @@ mod tests {
             [0x66, 0x41, 0x0F, 0x6E, 0xD9]
         ); // movd %r9d,%xmm3 -> REX.B
         // A non-xmm operand pair is rejected.
-        assert!(encode(&mut Vec::new(), sse(0x66, 0xEF), None, &[gp(0), gp(1)]).is_err());
+        assert!(encode(&mut Vec::new(), 8, sse(0x66, 0xEF), None, &[gp(0), gp(1)]).is_err());
         // The prefix byte selects the variant: 0xF2/0xF3 scalar, 0x66 packed
         // double, and a zero prefix the no-prefix packed single (no leading
         // byte).
@@ -5696,8 +5733,8 @@ mod tests {
         ); // movntpd %xmm1,(%rax)
         // A direction the instruction does not have is rejected, not encoded
         // as the other one.
-        assert!(encode(&mut Vec::new(), nt("movntdqa"), None, &[xmm(1), mem(0)]).is_err());
-        assert!(encode(&mut Vec::new(), nt("movntdq"), None, &[mem(0), xmm(1)]).is_err());
+        assert!(encode(&mut Vec::new(), 8, nt("movntdqa"), None, &[xmm(1), mem(0)]).is_err());
+        assert!(encode(&mut Vec::new(), 8, nt("movntdq"), None, &[mem(0), xmm(1)]).is_err());
     }
 
     #[test]
@@ -6613,6 +6650,7 @@ mod tests {
         assert!(
             encode(
                 &mut c,
+                8,
                 vex_op("vpblendvb").unwrap(),
                 None,
                 &[Concrete::Imm(0x30), xmm(2), xmm(1), xmm(0)]
@@ -6622,6 +6660,7 @@ mod tests {
         assert!(
             encode(
                 &mut c,
+                8,
                 vex_op("vpblendvb").unwrap(),
                 None,
                 &[xmm(2), xmm(1), xmm(0)]
@@ -6672,6 +6711,7 @@ mod tests {
         assert!(
             encode(
                 &mut c,
+                8,
                 vex_op("vbroadcasti128").unwrap(),
                 None,
                 &[xmm(1), ymm(0)]
@@ -6876,6 +6916,44 @@ mod tests {
         );
         assert_eq!(mov(&[gp(8, AsmRegSize::Quad), sreg(4)]), [0x41, 0x8E, 0xE0]);
         assert_eq!(mov(&[gp(8, AsmRegSize::Word), sreg(4)]), [0x41, 0x8E, 0xE0]);
+    }
+
+    /// A 32-bit base or index takes the `67` address-size prefix in 64-bit
+    /// mode, ahead of the operand-size prefix and REX. Bytes measured with
+    /// GNU as 2.46.1.
+    #[test]
+    fn address_size_prefix_follows_the_base_register_width() {
+        let gas: &[(&[u8], &[u8])] = &[
+            (b"movl 2(%eax), %ebx", &[0x67, 0x8B, 0x58, 0x02]),
+            (b"movl (%eax), %ebx", &[0x67, 0x8B, 0x18]),
+            (b"movl (%eax,%ecx,4), %ebx", &[0x67, 0x8B, 0x1C, 0x88]),
+            (
+                b"movl 8(%eax,%ecx,8), %ebx",
+                &[0x67, 0x8B, 0x5C, 0xC8, 0x08],
+            ),
+            (b"movl 2(%r8d), %ebx", &[0x67, 0x41, 0x8B, 0x58, 0x02]),
+            (b"movl (%r8d,%r9d,2), %ebx", &[0x67, 0x43, 0x8B, 0x1C, 0x48]),
+            (b"movl 2(%esp), %ebx", &[0x67, 0x8B, 0x5C, 0x24, 0x02]),
+            (b"movl 2(%ebp), %ebx", &[0x67, 0x8B, 0x5D, 0x02]),
+            (b"movq 2(%eax), %rbx", &[0x67, 0x48, 0x8B, 0x58, 0x02]),
+            (b"movw 2(%eax), %bx", &[0x67, 0x66, 0x8B, 0x58, 0x02]),
+            (b"movb 2(%eax), %bl", &[0x67, 0x8A, 0x58, 0x02]),
+            (b"leal 4(%eax), %ebx", &[0x67, 0x8D, 0x58, 0x04]),
+            (b"addl $1, 2(%eax)", &[0x67, 0x83, 0x40, 0x02, 0x01]),
+            (b"movl %ebx, 2(%eax)", &[0x67, 0x89, 0x58, 0x02]),
+            (b"movl %gs:2(%eax), %ebx", &[0x65, 0x67, 0x8B, 0x58, 0x02]),
+            // A 64-bit base is the mode default and takes no prefix.
+            (b"movl 2(%rax), %ebx", &[0x8B, 0x58, 0x02]),
+            (b"movl (%rax,%rcx,4), %ebx", &[0x8B, 0x1C, 0x88]),
+        ];
+        for (text, want) in gas {
+            assert_eq!(
+                asm_bytes(text),
+                *want,
+                "{}",
+                core::str::from_utf8(text).unwrap()
+            );
+        }
     }
 }
 
@@ -7098,6 +7176,7 @@ mod string_and_prefix_tests {
             let mut c = Vec::new();
             encode(
                 &mut c,
+                8,
                 m,
                 sfx,
                 &[Concrete::Reg {

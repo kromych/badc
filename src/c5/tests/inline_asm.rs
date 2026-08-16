@@ -344,6 +344,53 @@ fn x86_seg_qualified_memory_operand_rides_a_segment_prefix() {
 // Emits a native image, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
+fn x86_function_body_asm_takes_the_address_size_prefix() {
+    use crate::{NativeOptions, Target};
+    // A 32-bit base or index in a function-body template addresses 32 bits and
+    // takes the `67` prefix, as it does in file-scope and `.s` asm. The
+    // expected run is what GNU as 2.46.1 emits for the same statements.
+    let src = "void f(void){ __asm__ volatile(\
+               \"movl 2(%%eax), %%ebx\\n\\t\"\
+               \"movl (%%eax,%%ecx,4), %%ebx\\n\\t\"\
+               \"movl (,%%ecx,4), %%ebx\\n\\t\"\
+               \"movl 2(%%r8d), %%ebx\\n\\t\"\
+               \"movw 2(%%eax), %%bx\\n\\t\"\
+               \"movq 2(%%eax), %%rbx\\n\\t\"\
+               \"movl 2(%%rax), %%ebx\" \
+               ::: \"memory\", \"rbx\", \"rcx\"); } \
+               int main(void){ return 0; }";
+    let image = crate::Compiler::with_options(
+        alloc::string::String::from(src),
+        Target::LinuxX64,
+        crate::CompileOptions::default(),
+    )
+    .compile()
+    .and_then(|p| {
+        crate::c5::object::emit_native_single_tu_for_test(
+            &p,
+            Target::LinuxX64,
+            NativeOptions::default(),
+        )
+    })
+    .expect("emit");
+    let want: &[u8] = &[
+        0x67, 0x8B, 0x58, 0x02, // movl 2(%eax), %ebx
+        0x67, 0x8B, 0x1C, 0x88, // movl (%eax,%ecx,4), %ebx
+        0x67, 0x8B, 0x1C, 0x8D, 0x00, 0x00, 0x00, 0x00, // movl (,%ecx,4), %ebx
+        0x67, 0x41, 0x8B, 0x58, 0x02, // movl 2(%r8d), %ebx
+        0x67, 0x66, 0x8B, 0x58, 0x02, // movw 2(%eax), %bx
+        0x67, 0x48, 0x8B, 0x58, 0x02, // movq 2(%eax), %rbx
+        0x8B, 0x58, 0x02, // movl 2(%rax), %ebx -- mode default, no prefix
+    ];
+    assert!(
+        image.windows(want.len()).any(|w| w == want),
+        "function-body asm must encode a 32-bit base the way GNU as does"
+    );
+}
+
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
 fn x86_c_operand_memory_reference_is_never_an_immediate() {
     use crate::{NativeOptions, Target};
     // A bare `%c` / `%P` operand is a memory reference in AT&T syntax. Taking

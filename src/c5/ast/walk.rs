@@ -898,21 +898,87 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Reject an aggregate rvalue whose bytes would be copied through
-    /// the generic space while its type names an address space. The
-    /// aggregate's address-as-value production is segment-neutral; the
-    /// copy consumers (assignment, initialization, argument and return
-    /// passing, 128-bit half loads) are not.
-    fn reject_seg_aggregate_copy(&self, id: ExprId) -> Result<(), WalkError> {
-        let seg_aggregate = expr_ty(self.ast.expr(id))
-            .is_some_and(|t| is_struct_value_ty(t) && segment_of_object_ty(t).is_some());
-        if seg_aggregate {
-            return Err(WalkError::UnsupportedExpr {
-                id,
-                kind: "aggregate copy in a named address space",
-            });
+    /// The type of `id` when it is an aggregate rvalue whose bytes sit
+    /// in a named address space. The address-as-value production is
+    /// segment-neutral; the copy consumers (assignment, initialization,
+    /// argument and return passing, 128-bit half loads) read the bytes
+    /// and are not.
+    fn seg_aggregate_ty(&self, id: ExprId) -> Option<i64> {
+        expr_ty(self.ast.expr(id))
+            .filter(|t| is_struct_value_ty(*t) && segment_of_object_ty(*t).is_some())
+    }
+
+    /// Copy `size` bytes from `src` to `dst` in the widest chunks the
+    /// endpoint alignment allows, each endpoint riding its own segment
+    /// override. `Inst::Mcpy` carries no segment, so a copy with a
+    /// qualified endpoint takes this cover instead; both may be
+    /// qualified, and independently.
+    /// TODO: the cover is one chunk per unit at any size; gcc switches
+    /// to an indexed loop for a large aggregate.
+    #[allow(clippy::too_many_arguments)]
+    fn seg_copy_bytes(
+        &self,
+        b: &mut SsaBuilder,
+        dst: ValueId,
+        dst_seg: AsmSeg,
+        src: ValueId,
+        src_seg: AsmSeg,
+        size: i64,
+        align: u32,
+        vol: bool,
+    ) {
+        for (off, width) in super::mem_transfer_chunks(size, align) {
+            let at = |b: &mut SsaBuilder, base: ValueId| {
+                if off == 0 {
+                    base
+                } else {
+                    b.binop_imm(BinOp::Add, base, off)
+                }
+            };
+            let chunk_align = offset_align(align, off).min(u32::from(u8::MAX)) as u8;
+            let sp = at(b, src);
+            let v = load_place(b, sp, load_kind_for_width(width), src_seg, vol, chunk_align);
+            let dp = at(b, dst);
+            store_place(
+                b,
+                dp,
+                v,
+                store_kind_for_width(width),
+                dst_seg,
+                vol,
+                chunk_align,
+            );
         }
-        Ok(())
+    }
+
+    /// Walk `id` as an rvalue a copy consumer will read the bytes of.
+    /// An aggregate in a named address space is copied into a frame slot
+    /// through that segment first and the slot's address stands in;
+    /// every other expression walks unchanged.
+    fn walk_copy_operand(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
+        let v = self.walk_expr_rvalue(b, id)?;
+        self.flatten_copy_operand(b, id, v)
+    }
+
+    /// [`Self::walk_copy_operand`] for a site that has already walked
+    /// the operand and holds its address.
+    fn flatten_copy_operand(
+        &mut self,
+        b: &mut SsaBuilder,
+        id: ExprId,
+        v: ValueId,
+    ) -> Result<ValueId, WalkError> {
+        let Some(ty) = self.seg_aggregate_ty(id) else {
+            return Ok(v);
+        };
+        let seg = self.access_seg(id, ty)?;
+        let size = self.struct_size(ty);
+        let align = self.struct_align(ty);
+        let slot = b.alloc_synthetic_struct(size);
+        let dst = b.local_addr(slot);
+        let vol = is_volatile_ty(ty) || self.expr_is_volatile(id);
+        self.seg_copy_bytes(b, dst, AsmSeg::None, v, seg, size, align, vol);
+        Ok(dst)
     }
 
     /// [`Self::access_seg`] for a bitfield's storage unit. A 16-byte
@@ -1017,8 +1083,6 @@ impl<'a> Walker<'a> {
         rhs: ExprId,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
-        self.reject_seg_aggregate_copy(lhs)?;
-        self.reject_seg_aggregate_copy(rhs)?;
         let lhs_vec = self.expr_is_vector(lhs);
         let rhs_vec = self.expr_is_vector(rhs);
         if lhs_vec && rhs_vec && matches!(op, BinOp::And | BinOp::Or | BinOp::Xor) {
@@ -1031,12 +1095,12 @@ impl<'a> Walker<'a> {
         let lk = load_kind_for(elem_ty, self.target);
         let sk = store_kind_for(elem_ty, self.target);
         let lv = if lhs_vec {
-            self.walk_expr_rvalue(b, lhs)?
+            self.walk_copy_operand(b, lhs)?
         } else {
             self.vector_broadcast_operand(b, lhs, elem_ty)?
         };
         let rv = if rhs_vec {
-            self.walk_expr_rvalue(b, rhs)?
+            self.walk_copy_operand(b, rhs)?
         } else {
             self.vector_broadcast_operand(b, rhs, elem_ty)?
         };
@@ -1075,13 +1139,12 @@ impl<'a> Walker<'a> {
         child: ExprId,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
-        self.reject_seg_aggregate_copy(child)?;
         let (elem_ty, lanes) = self.vector_lanes(ty);
         let size = self.struct_size(ty);
         let elem_size = size / lanes;
         let lk = load_kind_for(elem_ty, self.target);
         let sk = store_kind_for(elem_ty, self.target);
-        let src = self.walk_expr_rvalue(b, child)?;
+        let src = self.walk_copy_operand(b, child)?;
         let slot = b.alloc_synthetic_struct(size);
         let dst = b.local_addr(slot);
         for i in 0..lanes {
@@ -1119,8 +1182,8 @@ impl<'a> Walker<'a> {
         rhs: ExprId,
         ty: i64,
     ) -> Result<super::super::ir::ValueId, WalkError> {
-        let lhs_addr = self.walk_expr_rvalue(b, lhs)?;
-        let rhs_addr = self.walk_expr_rvalue(b, rhs)?;
+        let lhs_addr = self.walk_copy_operand(b, lhs)?;
+        let rhs_addr = self.walk_copy_operand(b, rhs)?;
         let size = self.struct_size(ty);
         let slot = b.alloc_synthetic_struct(size);
         let dst = b.local_addr(slot);
@@ -1205,10 +1268,9 @@ impl<'a> Walker<'a> {
     /// converts per C99 6.3.1.3 (widen to 64 bits, then sign- or
     /// zero-fill the high half, mirroring `store_scalar_as_int128`).
     fn int128_operand(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<Halves, WalkError> {
-        self.reject_seg_aggregate_copy(id)?;
         let ty = expr_ty(self.ast.expr(id)).unwrap_or(Ty::Int as i64);
         let is128 = self.expr_is_int128_value(id);
-        let v = self.walk_expr_rvalue(b, id)?;
+        let v = self.walk_copy_operand(b, id)?;
         if is128 {
             return Ok(self.int128_load(b, v));
         }
@@ -1965,9 +2027,8 @@ impl<'a> Walker<'a> {
     /// Shift count for a 128-bit shift: a scalar rvalue, or the low
     /// half of an int128-typed count.
     fn int128_shift_count(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
-        self.reject_seg_aggregate_copy(id)?;
         let is128 = self.expr_is_int128_value(id);
-        let v = self.walk_expr_rvalue(b, id)?;
+        let v = self.walk_copy_operand(b, id)?;
         if is128 {
             return Ok(b.load(v, LoadKind::I64));
         }
@@ -1991,7 +2052,6 @@ impl<'a> Walker<'a> {
                 // scalar returned through the 128-bit integer carrier is a
                 // value, not an address, so widen it into a 16-byte object
                 // first -- the aggregate paths below read an address.
-                self.reject_seg_aggregate_copy(*e)?;
                 let widened = if self.is_int128_value_ty(self.scalar_return_ty)
                     && !self.expr_is_int128_value(*e)
                 {
@@ -2009,7 +2069,7 @@ impl<'a> Walker<'a> {
                     // caller's result temp.
                     let v = match widened {
                         Some(addr) => addr,
-                        None => self.walk_expr_rvalue(b, *e)?,
+                        None => self.walk_copy_operand(b, *e)?,
                     };
                     b.return_(v);
                     return Ok(true);
@@ -2025,7 +2085,7 @@ impl<'a> Walker<'a> {
                     let out_ptr = b.load_local(2, super::super::ir::LoadKind::I64);
                     let src = match widened {
                         Some(addr) => addr,
-                        None => self.walk_expr_rvalue(b, *e)?,
+                        None => self.walk_copy_operand(b, *e)?,
                     };
                     if self.return_struct_size > 0 {
                         // The out-pointer is the caller's result temp, so
@@ -2041,7 +2101,7 @@ impl<'a> Walker<'a> {
                     b.return_(out_ptr);
                     return Ok(true);
                 }
-                let mut v = self.walk_expr_rvalue(b, *e)?;
+                let mut v = self.walk_copy_operand(b, *e)?;
                 // C99 6.8.6.4 / 6.3.1.1: the return value is converted to the
                 // function's return type. A body evaluated in 64-bit registers
                 // can leave bits above the type width set -- a signed constant
@@ -2717,8 +2777,7 @@ impl<'a> Walker<'a> {
         match init {
             super::super::ast::LocalInit::None => Ok(()),
             super::super::ast::LocalInit::Scalar(init_id) => {
-                self.reject_seg_aggregate_copy(*init_id)?;
-                let v = self.walk_expr_rvalue(b, *init_id)?;
+                let v = self.walk_copy_operand(b, *init_id)?;
                 // C99 6.7.8p13 struct-value initializer: copy the source's
                 // bytes into the slot via Mcpy. `v` is the source address
                 // (the walker's address-as-value routing for struct
@@ -2818,10 +2877,9 @@ impl<'a> Walker<'a> {
                         }
                         super::super::ast::RuntimeInitValue::Expr(value) => value,
                     };
-                    self.reject_seg_aggregate_copy(value)?;
                     let v = match elem.bitfield {
                         Some(bf) => self.bitfield_store_value(b, bf, value)?,
-                        None => self.walk_expr_rvalue(b, value)?,
+                        None => self.walk_copy_operand(b, value)?,
                     };
                     let base = b.local_addr(slot);
                     let addr = if elem.offset == 0 {
@@ -2960,13 +3018,12 @@ impl<'a> Walker<'a> {
         bf: super::super::ast::BitfieldDesc,
         rhs: ExprId,
     ) -> Result<ValueId, WalkError> {
-        self.reject_seg_aggregate_copy(rhs)?;
         if bf.is_wide_value() {
             let pair = self.int128_operand(b, rhs)?;
             return Ok(self.int128_materialize(b, pair));
         }
         let is128 = self.expr_is_int128_value(rhs);
-        let v = self.walk_expr_rvalue(b, rhs)?;
+        let v = self.walk_copy_operand(b, rhs)?;
         // C99 6.3.1.3: a 128-bit source narrows to the field's type,
         // which is its low half -- not the address the value is carried as.
         Ok(if is128 { b.load(v, LoadKind::I64) } else { v })
@@ -4030,21 +4087,23 @@ impl<'a> Walker<'a> {
                 // dst address as the expression's value
                 // (mirroring libc `memcpy`).
                 if is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0 {
-                    // The copy runs through the generic space; a
-                    // segment-qualified aggregate on either side is
-                    // rejected rather than silently copied at the wrong
-                    // addresses.
-                    if segment_of_object_ty(*ty).is_some() {
-                        return Err(WalkError::UnsupportedExpr {
-                            id: *lhs,
-                            kind: "aggregate copy in a named address space",
-                        });
-                    }
-                    self.reject_seg_aggregate_copy(*rhs)?;
+                    let dst_seg = self.access_seg(*lhs, *ty)?;
+                    let src_seg = match self.seg_aggregate_ty(*rhs) {
+                        Some(t) => self.access_seg(*rhs, t)?,
+                        None => AsmSeg::None,
+                    };
                     let dst = self.walk_expr_lvalue(b, *lhs)?;
                     let src = self.walk_expr_rvalue(b, *rhs)?;
                     let size = self.struct_size(*ty);
-                    b.mcpy(dst, src, size, self.struct_align(*ty));
+                    let align = self.struct_align(*ty);
+                    if dst_seg == AsmSeg::None && src_seg == AsmSeg::None {
+                        b.mcpy(dst, src, size, align);
+                    } else {
+                        let vol = is_volatile_ty(*ty)
+                            || self.expr_is_volatile(*lhs)
+                            || self.expr_is_volatile(*rhs);
+                        self.seg_copy_bytes(b, dst, dst_seg, src, src_seg, size, align, vol);
+                    }
                     return Ok(dst);
                 }
                 // Local-target shortcut: a Token::Loc-class Ident
@@ -4338,8 +4397,7 @@ impl<'a> Walker<'a> {
                 for (i, a) in args.iter().enumerate() {
                     // A by-value aggregate argument is copied by the
                     // callee through the generic space.
-                    self.reject_seg_aggregate_copy(*a)?;
-                    arg_vals.push(self.walk_expr_rvalue(b, *a)?);
+                    arg_vals.push(self.walk_copy_operand(b, *a)?);
                     if expr_ty(self.ast.expr(*a))
                         .map(is_floating_scalar)
                         .unwrap_or(false)
@@ -5213,7 +5271,7 @@ impl<'a> Walker<'a> {
                 // floating target instead converts the whole 128-bit
                 // value (C99 6.3.1.4) through `int128_to_fp`.
                 if self.is_int128_value_ty(src_ty) && !is_struct_ty(*to_ty) {
-                    self.reject_seg_aggregate_copy(*child)?;
+                    let v = self.flatten_copy_operand(b, *child, v)?;
                     if is_floating_scalar(*to_ty) {
                         let pair = self.int128_load(b, v);
                         let signed = (src_ty & UNSIGNED_BIT) == 0;

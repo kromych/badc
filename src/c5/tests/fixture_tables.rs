@@ -1881,6 +1881,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_sym_riprel.c", 42),
     ("inline_seg_percpu_accessor.c", 42),
     ("seg_gs_lvalue_spellings.c", 42),
+    ("seg_gs_aggregate_copy.c", 42),
     ("inline_asm_x64_align.c", 42),
     ("inline_asm_x64_align_above_section.c", 42),
     ("file_scope_asm_local_label_branch.c", 42),

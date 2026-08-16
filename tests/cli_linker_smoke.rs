@@ -5156,6 +5156,8 @@ mod aarch64_link {
 
     /// Build a host-native image from one asm source plus a `main` that
     /// exits nonzero on the first check it fails, run it, and require 0.
+    /// The `main` compiles for the host data model, which is LLP64 on
+    /// Windows, so a 64-bit value the asm returns needs `long long`.
     #[cfg(target_arch = "aarch64")]
     fn run_host_image(tag: &str, asm: &str, main: &str) {
         let dir = tempdir(tag);
@@ -5181,8 +5183,8 @@ mod aarch64_link {
     }
 
     /// The alignment fix on the host: a 16-aligned island read through
-    /// a scaled 16-byte load, in a Mach-O image on macOS and an ELF one
-    /// on Linux.
+    /// a scaled 16-byte load, in a Mach-O image on macOS, an ELF one on
+    /// Linux and a PE one on Windows.
     #[cfg(target_arch = "aarch64")]
     #[test]
     fn aligned_text_island_runs_on_the_host() {
@@ -5206,10 +5208,10 @@ mod aarch64_link {
                    	adrp	x0, isle16\n\
                    	add	x0, x0, #:lo12:isle16\n\
                    	ret\n";
-        let main = "extern unsigned long load_isle(void), isle_addr(void);\n\
+        let main = "extern unsigned long long load_isle(void), isle_addr(void);\n\
                     int main(void) {\n\
                     	if (isle_addr() % 16) return 1;\n\
-                    	if (load_isle() != 0x1122334455667788UL) return 2;\n\
+                    	if (load_isle() != 0x1122334455667788ULL) return 2;\n\
                     	return 0;\n\
                     }\n";
         run_host_image("a64-align-run", asm, main);
@@ -5247,11 +5249,11 @@ mod aarch64_link {
                    	movk	x0, :abs_g1_nc:KNEG\n\
                    	movk	x0, :abs_g0_nc:KNEG\n\
                    	ret\n";
-        let main = "extern unsigned long get_kbig(void), get_kmid(void), get_kneg(void);\n\
+        let main = "extern unsigned long long get_kbig(void), get_kmid(void), get_kneg(void);\n\
                     int main(void) {\n\
-                    	if (get_kbig() != 0xfedc89ab1234f0f0UL) return 1;\n\
-                    	if (get_kmid() != 0x123456789abcUL) return 2;\n\
-                    	if (get_kneg() != (unsigned long)-0x800L) return 3;\n\
+                    	if (get_kbig() != 0xfedc89ab1234f0f0ULL) return 1;\n\
+                    	if (get_kmid() != 0x123456789abcULL) return 2;\n\
+                    	if (get_kneg() != (unsigned long long)-0x800LL) return 3;\n\
                     	return 0;\n\
                     }\n";
         run_host_image("a64-movw-run", asm, main);

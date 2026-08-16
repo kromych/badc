@@ -544,12 +544,12 @@ fn encode_op(
         CfiOp::DefCfa { reg, off } => {
             cfa.offset = *off;
             out.push(DW_CFA_DEF_CFA);
-            write_uleb(out, reg.resolve(t)?);
-            write_uleb(out, *off as u64);
+            write_uleb128(out, reg.resolve(t)?);
+            write_uleb128(out, *off as u64);
         }
         CfiOp::DefCfaRegister(reg) => {
             out.push(DW_CFA_DEF_CFA_REGISTER);
-            write_uleb(out, reg.resolve(t)?);
+            write_uleb128(out, reg.resolve(t)?);
         }
         CfiOp::DefCfaOffset(off) => {
             cfa.offset = *off;
@@ -571,19 +571,19 @@ fn encode_op(
             let factored = factor(*off, daf)?;
             if factored >= 0 {
                 out.push(DW_CFA_VAL_OFFSET);
-                write_uleb(out, r);
-                write_uleb(out, factored as u64);
+                write_uleb128(out, r);
+                write_uleb128(out, factored as u64);
             } else {
                 out.push(DW_CFA_VAL_OFFSET_SF);
-                write_uleb(out, r);
-                write_sleb(out, factored);
+                write_uleb128(out, r);
+                write_sleb128(out, factored);
             }
         }
         CfiOp::NegateRaState => out.push(DW_CFA_NEGATE_RA_STATE),
         CfiOp::Register { reg, from } => {
             out.push(DW_CFA_REGISTER);
-            write_uleb(out, reg.resolve(t)?);
-            write_uleb(out, from.resolve(t)?);
+            write_uleb128(out, reg.resolve(t)?);
+            write_uleb128(out, from.resolve(t)?);
         }
         CfiOp::Restore(reg) => {
             let r = reg.resolve(t)?;
@@ -591,16 +591,16 @@ fn encode_op(
                 out.push(DW_CFA_RESTORE_HI | r as u8);
             } else {
                 out.push(DW_CFA_RESTORE_EXTENDED);
-                write_uleb(out, r);
+                write_uleb128(out, r);
             }
         }
         CfiOp::Undefined(reg) => {
             out.push(DW_CFA_UNDEFINED);
-            write_uleb(out, reg.resolve(t)?);
+            write_uleb128(out, reg.resolve(t)?);
         }
         CfiOp::SameValue(reg) => {
             out.push(DW_CFA_SAME_VALUE);
-            write_uleb(out, reg.resolve(t)?);
+            write_uleb128(out, reg.resolve(t)?);
         }
         CfiOp::RememberState => out.push(DW_CFA_REMEMBER_STATE),
         CfiOp::RestoreState => out.push(DW_CFA_RESTORE_STATE),
@@ -617,10 +617,10 @@ fn encode_op(
 fn write_def_cfa_offset(out: &mut Vec<u8>, off: i64, daf: i64) {
     if off >= 0 {
         out.push(DW_CFA_DEF_CFA_OFFSET);
-        write_uleb(out, off as u64);
+        write_uleb128(out, off as u64);
     } else {
         out.push(DW_CFA_DEF_CFA_OFFSET_SF);
-        write_sleb(out, off / daf);
+        write_sleb128(out, off / daf);
     }
 }
 
@@ -638,15 +638,15 @@ fn write_offset(out: &mut Vec<u8>, reg: u64, off: i64, daf: i64) -> Result<(), S
     let factored = factor(off, daf)?;
     if factored >= 0 && reg < 0x40 {
         out.push(DW_CFA_OFFSET_HI | reg as u8);
-        write_uleb(out, factored as u64);
+        write_uleb128(out, factored as u64);
     } else if factored >= 0 {
         out.push(DW_CFA_OFFSET_EXTENDED);
-        write_uleb(out, reg);
-        write_uleb(out, factored as u64);
+        write_uleb128(out, reg);
+        write_uleb128(out, factored as u64);
     } else {
         out.push(DW_CFA_OFFSET_EXTENDED_SF);
-        write_uleb(out, reg);
-        write_sleb(out, factored);
+        write_uleb128(out, reg);
+        write_sleb128(out, factored);
     }
     Ok(())
 }
@@ -760,12 +760,12 @@ fn write_cie(out: &mut Vec<u8>, key: &CieKey, t: CfiTarget, eh: bool) {
         out.push(b'S');
     }
     out.push(0);
-    write_uleb(out, t.code_align());
-    write_sleb(out, t.data_align());
+    write_uleb128(out, t.code_align());
+    write_sleb128(out, t.data_align());
     // Version 1 carries the return column in a single byte.
     out.push(key.return_column as u8);
     if eh {
-        write_uleb(out, 1);
+        write_uleb128(out, 1);
         out.push(DW_EH_PE_PCREL_SDATA4);
     }
     out.extend_from_slice(&key.initial);
@@ -818,7 +818,7 @@ fn write_fde(
     let range = (fde.end - fde.start) as u64;
     out.extend_from_slice(&range.to_le_bytes()[..width as usize]);
     if eh {
-        write_uleb(out, 0);
+        write_uleb128(out, 0);
     }
     out.extend_from_slice(body);
     finish_record(out, start, record_align(t, eh));
@@ -840,7 +840,10 @@ fn record_align(t: CfiTarget, eh: bool) -> usize {
     if eh { 4 } else { t.addr_bytes as usize }
 }
 
-fn write_uleb(out: &mut Vec<u8>, mut value: u64) {
+/// DWARF 4 7.6 unsigned LEB128. The single encoder for every consumer in
+/// the tree: the CFI tables here and the `.debug_*` writers under
+/// `object`, which depends on `codegen` rather than the reverse.
+pub(crate) fn write_uleb128(out: &mut Vec<u8>, mut value: u64) {
     loop {
         let mut b = (value & 0x7f) as u8;
         value >>= 7;
@@ -854,7 +857,10 @@ fn write_uleb(out: &mut Vec<u8>, mut value: u64) {
     }
 }
 
-fn write_sleb(out: &mut Vec<u8>, mut value: i64) {
+/// DWARF 4 7.6 signed LEB128. The continuation test reads the shifted
+/// value against the sign bit of the group just emitted, so the result is
+/// the canonical shortest encoding.
+pub(crate) fn write_sleb128(out: &mut Vec<u8>, mut value: i64) {
     loop {
         let mut b = (value & 0x7f) as u8;
         value >>= 7;
@@ -865,6 +871,116 @@ fn write_sleb(out: &mut Vec<u8>, mut value: i64) {
         out.push(b);
         if done {
             break;
+        }
+    }
+}
+
+#[cfg(test)]
+mod leb128_tests {
+    use super::*;
+
+    /// Canonical byte count for a signed LEB128 value: the significant
+    /// bits plus one sign bit, rounded up to whole 7-bit groups. Derived
+    /// from DWARF 4 7.6 rather than from the encoder, so a shared bug
+    /// cannot hide.
+    fn sleb128_len(v: i64) -> usize {
+        let magnitude = if v < 0 { !v } else { v };
+        let significant = 64 - magnitude.leading_zeros() as usize;
+        (significant + 1).div_ceil(7).max(1)
+    }
+
+    fn uleb128_len(v: u64) -> usize {
+        (64 - v.leading_zeros() as usize).div_ceil(7).max(1)
+    }
+
+    fn decode_sleb128(bytes: &[u8]) -> (i64, usize) {
+        let mut result: i64 = 0;
+        let mut shift = 0u32;
+        for (i, b) in bytes.iter().enumerate() {
+            result |= ((b & 0x7f) as i64) << shift;
+            shift += 7;
+            if b & 0x80 == 0 {
+                if shift < 64 && b & 0x40 != 0 {
+                    result |= -1i64 << shift;
+                }
+                return (result, i + 1);
+            }
+        }
+        panic!("unterminated sleb128");
+    }
+
+    fn decode_uleb128(bytes: &[u8]) -> (u64, usize) {
+        let mut result: u64 = 0;
+        let mut shift = 0u32;
+        for (i, b) in bytes.iter().enumerate() {
+            result |= ((b & 0x7f) as u64) << shift;
+            shift += 7;
+            if b & 0x80 == 0 {
+                return (result, i + 1);
+            }
+        }
+        panic!("unterminated uleb128");
+    }
+
+    fn sleb(v: i64) -> Vec<u8> {
+        let mut out = Vec::new();
+        write_sleb128(&mut out, v);
+        out
+    }
+
+    #[test]
+    fn sleb128_matches_dwarf_encoding() {
+        let cases: &[(i64, &[u8])] = &[
+            (0, &[0x00]),
+            (1, &[0x01]),
+            (5, &[0x05]),
+            (-1, &[0x7f]),
+            (63, &[0x3f]),
+            (64, &[0xc0, 0x00]),
+            (-63, &[0x41]),
+            (-64, &[0x40]),
+            (-65, &[0xbf, 0x7f]),
+            (128, &[0x80, 0x01]),
+            (1000, &[0xe8, 0x07]),
+            (-1000, &[0x98, 0x78]),
+            (8191, &[0xff, 0x3f]),
+            (8192, &[0x80, 0xc0, 0x00]),
+            (-8192, &[0x80, 0x40]),
+            (-8193, &[0xff, 0xbf, 0x7f]),
+            (2147483647, &[0xff, 0xff, 0xff, 0xff, 0x07]),
+        ];
+        for (v, want) in cases {
+            assert_eq!(&sleb(*v)[..], *want, "sleb128({v})");
+        }
+    }
+
+    #[test]
+    fn sleb128_round_trips_at_canonical_length() {
+        let mut values: Vec<i64> = (-5000..=5000).collect();
+        values.extend([
+            i32::MIN as i64,
+            i32::MAX as i64,
+            i64::MIN,
+            i64::MAX,
+            -(1 << 40),
+            1 << 40,
+        ]);
+        for v in values {
+            let bytes = sleb(v);
+            assert_eq!(bytes.len(), sleb128_len(v), "sleb128({v}) length");
+            assert_eq!(decode_sleb128(&bytes), (v, bytes.len()), "sleb128({v})");
+        }
+    }
+
+    #[test]
+    fn uleb128_round_trips_at_canonical_length() {
+        let mut values: Vec<u64> = (0..=10000).collect();
+        values.extend([u32::MAX as u64, u64::MAX, 1 << 40]);
+        for v in values {
+            let mut bytes = Vec::new();
+            write_uleb128(&mut bytes, v);
+            assert_eq!(bytes.len(), uleb128_len(v), "uleb128({v}) length");
+            assert_eq!(decode_uleb128(&bytes), (v, bytes.len()), "uleb128({v})");
         }
     }
 }

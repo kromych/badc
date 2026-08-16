@@ -187,7 +187,8 @@ const OPCODE_BASE: u8 = 13;
 /// tells an unwinder it has reached the bottom of the stack.
 use crate::c5::codegen::ssa::cfi::{
     DW_CFA_ADVANCE_LOC_HI, DW_CFA_ADVANCE_LOC1, DW_CFA_ADVANCE_LOC2, DW_CFA_ADVANCE_LOC4,
-    DW_CFA_DEF_CFA, DW_CFA_NEGATE_RA_STATE, DW_CFA_OFFSET_HI, DW_CFA_UNDEFINED,
+    DW_CFA_DEF_CFA, DW_CFA_NEGATE_RA_STATE, DW_CFA_OFFSET_HI, DW_CFA_UNDEFINED, write_sleb128,
+    write_uleb128,
 };
 
 // Architecture-specific register codes used in CFI rules.
@@ -2791,34 +2792,6 @@ impl StrTable {
     }
     fn into_bytes(self) -> Vec<u8> {
         self.bytes
-    }
-}
-
-fn write_uleb128(buf: &mut Vec<u8>, mut value: u64) {
-    loop {
-        let mut byte = (value & 0x7f) as u8;
-        value >>= 7;
-        if value != 0 {
-            byte |= 0x80;
-            buf.push(byte);
-        } else {
-            buf.push(byte);
-            return;
-        }
-    }
-}
-
-fn write_sleb128(buf: &mut Vec<u8>, mut value: i64) {
-    loop {
-        let byte = (value & 0x7f) as u8;
-        let cont = !((value == 0 && (byte & 0x40) == 0) || (value == -1 && (byte & 0x40) != 0));
-        value >>= 7;
-        if cont {
-            buf.push(byte | 0x80);
-        } else {
-            buf.push(byte);
-            return;
-        }
     }
 }
 

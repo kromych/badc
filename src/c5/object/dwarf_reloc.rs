@@ -51,6 +51,7 @@ use super::super::program::Program;
 use super::super::token::Ty;
 use super::Build;
 use super::elf_class::ElfClass;
+use crate::c5::codegen::ssa::cfi::{write_sleb128, write_uleb128};
 use crate::c5::compiler::{StructDef, StructField};
 use crate::c5::layout::write_struct;
 use crate::c5::symbol::DeclSpelling;
@@ -1581,18 +1582,6 @@ fn push_string(out: &mut Vec<u8>, s: &str) {
     out.push(0);
 }
 
-fn write_uleb128(out: &mut Vec<u8>, mut value: u64) {
-    loop {
-        let byte = (value & 0x7f) as u8;
-        value >>= 7;
-        if value == 0 {
-            out.push(byte);
-            return;
-        }
-        out.push(byte | 0x80);
-    }
-}
-
 /// Index of a type DIE within the per-unit catalog.
 type TypeId = usize;
 
@@ -2516,20 +2505,6 @@ fn base_type_for_leaf(leaf: i64, target: super::Target, addr_bytes: u8) -> Optio
         return None;
     };
     Some(desc)
-}
-
-fn write_sleb128(out: &mut Vec<u8>, mut value: i64) {
-    loop {
-        let byte = (value & 0x7f) as u8;
-        let sign_bit = byte & 0x40;
-        value >>= 7;
-        let done = (value == 0 && sign_bit == 0) || (value == -1 && sign_bit != 0);
-        if done {
-            out.push(byte);
-            return;
-        }
-        out.push(byte | 0x80);
-    }
 }
 
 /// Wide-format string for callers needing a writable view of

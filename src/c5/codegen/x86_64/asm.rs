@@ -2238,13 +2238,13 @@ fn parse_int(s: &str) -> Option<i64> {
     crate::c5::codegen::ssa::emit_common::eval_const_expr(s.trim())
 }
 
-/// The symbolic displacement expression of an operand, or `None` when the
-/// text holds no symbol: an integer constant, a register name, a template
-/// label reference (which has its own operand forms), or an operand
-/// reference. Anything else the assembler's expression grammar accepts and
-/// that names at least one symbol is returned as written; the section engine
-/// evaluates it once the layout is known, folding a same-section difference
-/// and relocating what is left.
+/// The location expression of an operand, or `None` when the text holds no
+/// location: an integer constant, a register name, a lone template label
+/// reference (which has its own operand forms), or an operand reference.
+/// Anything else the assembler's expression grammar accepts and that names
+/// at least one symbol or template label is returned as written; the
+/// evaluator resolves it once the layout is known, folding a same-section
+/// difference and relocating what is left.
 fn sym_disp_expr<'a>(prefix: &'a str, labels: &[&str]) -> Option<&'a str> {
     let prefix = prefix.trim();
     // `%` in a displacement is a register or an operand reference, never a
@@ -2252,13 +2252,19 @@ fn sym_disp_expr<'a>(prefix: &'a str, labels: &[&str]) -> Option<&'a str> {
     if prefix.is_empty()
         || prefix.contains('%')
         || parse_int(prefix).is_some()
-        || parse_label_ref(prefix, labels).is_some()
+        // A lone label reference has its own operand forms, parenthesized
+        // (`lea (2f)(%rip)`) as much as bare.
+        || parse_label_ref(strip_outer_parens(prefix), labels).is_some()
     {
         return None;
     }
     let named = core::cell::Cell::new(false);
     let resolve = |t: &str| {
-        named.set(named.get() || super::super::ssa::emit_common::is_asm_symbol_template(t));
+        named.set(
+            named.get()
+                || super::super::ssa::emit_common::is_asm_symbol_template(t)
+                || parse_label_ref(t, labels).is_some(),
+        );
         Some(super::super::ssa::emit_common::AsmExprLeaf::Abs(0))
     };
     let ctx = super::super::ssa::emit_common::AsmExprCtx {
@@ -2348,21 +2354,18 @@ fn parse_align_directive(name: &str, rest: &str) -> Option<(u32, Option<u8>, Opt
 ///
 /// The bare form reads its tokens as hexadecimal (so `90` is `0x90`); the
 /// directive form reads C-style integer constants (`0x`-prefixed or decimal).
-fn parse_raw_bytes(piece: &str) -> Option<Result<Vec<u8>, String>> {
+/// A directive with an argument that is not constant is not a raw-byte piece;
+/// its values resolve at emit time.
+fn parse_raw_bytes(piece: &str) -> Option<Vec<u8>> {
     let width = data_directive_width(piece.split_whitespace().next()?);
     if let Some(w) = width {
-        let args = piece[piece.find(char::is_whitespace).unwrap()..].trim();
+        let args = piece[piece.find(char::is_whitespace)?..].trim();
         let mut out = Vec::new();
         for a in args.split(',') {
-            let a = a.trim();
-            let Some(v) = parse_int(a) else {
-                return Some(Err(format!(
-                    "inline asm: bad `.byte`-directive value `{a}`"
-                )));
-            };
+            let v = parse_int(a.trim())?;
             out.extend_from_slice(&(v as u64).to_le_bytes()[..w]);
         }
-        return Some(Ok(out));
+        return Some(out);
     }
     // Bare hex-byte run: every whitespace-delimited token must be exactly two
     // hex digits, so a normal mnemonic (letters) is never mistaken for one.
@@ -2376,7 +2379,7 @@ fn parse_raw_bytes(piece: &str) -> Option<Result<Vec<u8>, String>> {
             .iter()
             .map(|t| u8::from_str_radix(t, 16).unwrap())
             .collect();
-        return Some(Ok(bytes));
+        return Some(bytes);
     }
     None
 }
@@ -2454,20 +2457,30 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
         if piece.starts_with(".cfi_") {
             continue;
         }
-        // A `.byte`-family directive whose arguments reference operands
-        // (`.long %c0`) resolves its values at emit time.
-        if let Some((tok, rest)) = piece
-            .split_once(char::is_whitespace)
-            .filter(|(_, r)| r.contains('%'))
+        // A `.byte`-family directive whose arguments are not all constant:
+        // an operand reference (`.long %c0`) or an expression over template
+        // labels (`.byte 662b-661b`) resolves its value at emit time.
+        if let Some((tok, rest)) = piece.split_once(char::is_whitespace)
             && let Some(w) = data_directive_width(tok)
+            && parse_raw_bytes(piece).is_none()
         {
             let mut operands = Vec::new();
+            let mut sym_exprs = Vec::new();
             for a in rest.split(',') {
                 // Directive arguments are bare integers, not `$`-prefixed.
                 let a = a.trim();
                 operands.push(match parse_int(a) {
                     Some(v) => AsmOpnd::Imm(v),
-                    None => parse_operand(a, &names)?,
+                    None if a.contains('%') => parse_operand(a, &names)?,
+                    None => {
+                        let expr = sym_disp_expr(a, &names).ok_or_else(|| {
+                            format!("inline asm: bad `{tok}`-directive value `{a}`")
+                        })?;
+                        let idx = u8::try_from(sym_exprs.len())
+                            .map_err(|_| String::from("inline asm: too many symbol operands"))?;
+                        sym_exprs.push(String::from(expr));
+                        AsmOpnd::ImmSym { expr: idx }
+                    }
                 });
             }
             insns.push(AsmInsn {
@@ -2477,7 +2490,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 rex: None,
                 operands,
                 bytes: Vec::new(),
-                sym_exprs: Vec::new(),
+                sym_exprs,
                 label_def: None,
             });
             continue;
@@ -2491,7 +2504,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 seg: None,
                 rex: None,
                 operands: Vec::new(),
-                bytes: bytes?,
+                bytes,
                 sym_exprs: Vec::new(),
                 label_def: None,
             });

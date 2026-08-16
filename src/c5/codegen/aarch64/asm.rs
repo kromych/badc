@@ -1089,12 +1089,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
 /// section layout knows. Leaves stand in as zero, so this checks the syntax
 /// alone; the constant folder has already run.
 fn is_layout_expr(tok: &str) -> bool {
-    let ctx = emit_common::AsmExprCtx {
-        resolve: &|_| Some(emit_common::AsmExprLeaf::Abs(0)),
-        const_of: &|_| None,
-        lax_div: true,
-    };
-    !tok.is_empty() && emit_common::eval_asm_value(tok, &ctx).is_ok()
+    emit_common::is_asm_layout_expr(tok)
 }
 
 /// The group part of an `:abs_gN[_s|_nc]:` specifier. GNU as defines the
@@ -1243,13 +1238,13 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         {
             continue;
         }
-        // A `.byte`-family directive whose arguments reference operands
-        // (`.long %c0`) resolves its values at emit time; the directive
-        // keyword rides the mnemonic field.
-        if let Some((tok, rest)) = piece
-            .split_once(char::is_whitespace)
-            .filter(|(_, r)| r.contains('%'))
+        // A `.byte`-family directive whose arguments are not all constant: an
+        // operand reference (`.long %c0`) or an expression over template
+        // labels (`.byte 662b-661b`) resolves its value at emit time; the
+        // directive keyword rides the mnemonic field.
+        if let Some((tok, rest)) = piece.split_once(char::is_whitespace)
             && emit_common::data_directive_width(tok).is_some()
+            && emit_common::parse_raw_template(piece.as_bytes()).is_none()
         {
             let mut operands = Vec::new();
             for a in split_operands(rest) {

@@ -932,6 +932,44 @@ fn text_bytes(b: &[u8]) -> Vec<u8> {
     b[off..off + size].to_vec()
 }
 
+/// A difference of two local numeric labels is an absolute value in every
+/// operand position, in plain `.text` as much as inside a `.pushsection`:
+/// the ALTERNATIVE idiom stores it as a length byte and reads it as an
+/// instruction field. GNU as 2.46.1 emits these bytes for the same unit --
+/// a backward difference takes the narrow field, a forward one keeps the
+/// wide field the encoding chose.
+#[test]
+fn label_difference_operands_in_plain_text() {
+    const SRC: &str = concat!(
+        "\t.text\n\t.globl f\nf:\n",
+        "661:\n\tnop\n\tnop\n662:\n",
+        "\t.byte 662b-661b\n\t.short 662b-661b\n",
+        "\t.long 662b-661b\n\t.quad 662b-661b\n",
+        "\t.byte 664f-663f\n",
+        "663:\n",
+        "\tsubl $(662b - 661b), %ebp\n",
+        "\tsubl $(664f - 663b), %ebp\n",
+        "\tmovl (662b - 661b)(%rax), %ebx\n",
+        "\tmovl (664f - 663b)(%rax), %ecx\n",
+        "\tnop\n664:\n\tnop\n",
+    );
+    let d = dir("label-difference-text");
+    write(&d, "ld.s", SRC);
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "ld.s", "-o", "ld.o"],
+    );
+    let b = std::fs::read(d.join("ld.o")).expect("object");
+    assert_eq!(
+        text_bytes(&b),
+        vec![
+            0x90, 0x90, 0x02, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x13, 0x83, 0xed, 0x02, 0x81, 0xed, 0x13, 0x00, 0x00, 0x00, 0x8b,
+            0x58, 0x02, 0x8b, 0x88, 0x13, 0x00, 0x00, 0x00, 0x90, 0x90,
+        ]
+    );
+}
+
 /// gcc selects the preprocessor's predefines from the code model:
 /// `-m16` and `-m32` are i386 units, so `__i386__` is defined and
 /// `__x86_64__` is not. `-m16` is `-m32` code generation with a 16-bit

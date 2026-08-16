@@ -8292,6 +8292,72 @@ pub(crate) fn eval_asm_expr_with_labels(
     eval_asm_value(expr, &ctx).ok().and_then(|v| v.to_abs())
 }
 
+/// Whether `tok` is a well-formed GNU as expression whose value only the
+/// layout knows. Every leaf stands in as zero, so this checks grammar alone.
+pub(crate) fn is_asm_layout_expr(tok: &str) -> bool {
+    let ctx = AsmExprCtx {
+        resolve: &|_| Some(AsmExprLeaf::Abs(0)),
+        const_of: &|_| None,
+        lax_div: true,
+    };
+    !tok.is_empty() && eval_asm_value(tok, &ctx).is_ok()
+}
+
+/// Whether `name` spells a template label reference: a numeric `Nb` / `Nf`
+/// or a name in the template's intern table.
+pub(crate) fn is_template_label(name: &str, names: &[&str]) -> bool {
+    names.contains(&name) || numeric_label_digits(name).is_some_and(|d| d.len() < name.len())
+}
+
+/// Whether every leaf of `expr` is a template label or a literal, so the
+/// emitted stream settles its value with no relocation.
+pub(crate) fn is_template_label_expr(expr: &str, names: &[&str]) -> bool {
+    let all = core::cell::Cell::new(true);
+    let resolve = |t: &str| {
+        all.set(all.get() && is_template_label(t, names));
+        Some(AsmExprLeaf::Abs(0))
+    };
+    let ctx = AsmExprCtx {
+        resolve: &resolve,
+        const_of: &|_| None,
+        lax_div: true,
+    };
+    eval_asm_value(expr, &ctx).is_ok() && all.get()
+}
+
+/// The stream offset a template label reference stands for, under the GNU as
+/// local-label rule: `Nb` binds to the nearest definition at or before `at`,
+/// `Nf` to the nearest after it, a name to its single definition. `names` is
+/// the template's intern table.
+pub(crate) fn template_label_offset(
+    name: &str,
+    at: usize,
+    label_defs: &[(u32, usize)],
+    names: &[&str],
+) -> Option<i64> {
+    let nearest = |num: u32, forward: bool| -> Option<i64> {
+        let defs = label_defs.iter().filter(|&&(n, _)| n == num);
+        if forward {
+            defs.filter(|&&(_, off)| off > at).map(|&(_, o)| o).min()
+        } else {
+            defs.filter(|&&(_, off)| off <= at).map(|&(_, o)| o).max()
+        }
+        .map(|o| o as i64)
+    };
+    if let Some(idx) = names.iter().position(|&n| n == name) {
+        let num = NAMED_LABEL_BASE + idx as u32;
+        return label_defs
+            .iter()
+            .find(|&&(n, _)| n == num)
+            .map(|&(_, o)| o as i64);
+    }
+    let digits = numeric_label_digits(name)?;
+    if digits.len() == name.len() {
+        return None;
+    }
+    nearest(digits.parse().ok()?, name.ends_with('f'))
+}
+
 /// Substitute each identifier `resolve` knows with its value, leaving other
 /// tokens -- numeric literals, unknown symbols, the location counter `.` --
 /// as written. Identifier characters are the assembler's: alphanumeric plus

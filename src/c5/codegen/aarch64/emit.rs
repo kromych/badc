@@ -3172,6 +3172,19 @@ fn encode_deferred_asm_region(
     ))
 }
 
+/// The value of a template field's expression at stream offset `at`, over
+/// the template's own label definitions. `None` when a leaf is unresolved.
+fn template_expr_value(
+    expr: &str,
+    at: usize,
+    label_defs: &[(u32, usize)],
+    names: &[&str],
+) -> Option<i64> {
+    super::super::ssa::emit_common::eval_asm_expr_with_labels(expr, &|name| {
+        super::super::ssa::emit_common::template_label_offset(name, at, label_defs, names)
+    })
+}
+
 /// Bring an inline-asm stream to the instruction boundary out of the data
 /// mapping state, as GNU as does in an executable section. The gap is under
 /// one instruction, so the shared fill lays it down as zeros; the padding
@@ -3719,6 +3732,14 @@ fn emit_inline_asm_aarch64(
     // or before the branch, `Nf` to the next one after it).
     let mut label_defs: Vec<(u32, usize)> = Vec::new();
     let mut label_fixups: Vec<(usize, LabelBranch, u32, bool)> = Vec::new();
+    // The template's intern table, telling an expression leaf apart from a
+    // symbol the stream cannot relocate.
+    let label_names = super::super::ssa::emit_common::scan_label_names(code_text);
+    // Forward-referencing fields over template labels, settled below: a data
+    // field as `(reference_site, field, width, expression)`, an instruction
+    // operand by re-encoding its word.
+    let mut expr_fixups: Vec<(usize, usize, usize, String)> = Vec::new();
+    let mut insn_expr_fixups: Vec<(usize, String, Vec<Opnd>, usize, String)> = Vec::new();
     // `asm goto` label branches: `(site, kind, label_index)` per `%lK`
     // reference, patched to the label's restore trampoline (or to the
     // shared fall-through restore when the target is the fall-through
@@ -3766,6 +3787,25 @@ fn emit_inline_asm_aarch64(
                             Some(v) => v,
                             None => {
                                 bail_msg("aarch64 inline asm: non-constant data-directive value");
+                                return false;
+                            }
+                        }
+                    }
+                    // A value over template labels: the field width is the
+                    // directive's, so only the value waits on the layout.
+                    AsmOpndA64::ImmExpr(ref e) => {
+                        match template_expr_value(e, code.len(), &label_defs, &label_names) {
+                            Some(v) => v,
+                            None if super::super::ssa::emit_common::is_template_label_expr(
+                                e,
+                                &label_names,
+                            ) =>
+                            {
+                                expr_fixups.push((code.len(), code.len(), w, e.clone()));
+                                0
+                            }
+                            None => {
+                                bail_msg("aarch64 inline asm: unsupported data-directive value");
                                 return false;
                             }
                         }
@@ -3968,7 +4008,21 @@ fn emit_inline_asm_aarch64(
             continue;
         }
         let mut ops: Vec<Opnd> = Vec::new();
+        // An operand expression over template labels resolves here when every
+        // leaf is placed; a forward reference encodes zero and the word is
+        // built again below, the field width being the encoding's either way.
+        let mut pending: Option<(usize, String)> = None;
         for o in &insn.operands {
+            if let AsmOpndA64::ImmExpr(e) = o
+                && super::super::ssa::emit_common::is_template_label_expr(e, &label_names)
+            {
+                let v = template_expr_value(e, code.len(), &label_defs, &label_names);
+                if v.is_none() {
+                    pending = Some((ops.len(), e.clone()));
+                }
+                ops.push(Opnd::Imm(v.unwrap_or(0)));
+                continue;
+            }
             match conv(o) {
                 Ok(opnd) => ops.push(opnd),
                 Err(m) => {
@@ -3977,6 +4031,7 @@ fn emit_inline_asm_aarch64(
                 }
             }
         }
+        let site = code.len();
         match table::encode(&insn.mnemonic, &ops) {
             Ok(word) => emit(code, word),
             Err(m) => {
@@ -3984,10 +4039,41 @@ fn emit_inline_asm_aarch64(
                 return false;
             }
         }
+        if let Some((idx, expr)) = pending {
+            insn_expr_fixups.push((site, insn.mnemonic.clone(), ops, idx, expr));
+        }
     }
     // The block's exit work is instructions, so a template ending in data
     // realigns here.
     a64_align_asm_stream(code, text_data_ranges, map_state);
+    // Settle the deferred expression fields and words: the layout is final,
+    // so a forward reference now has its definition.
+    for (site, at, width, expr) in &expr_fixups {
+        let Some(v) = template_expr_value(expr, *site, &label_defs, &label_names) else {
+            bail_msg(&alloc::format!(
+                "aarch64 inline asm: expression `{expr}` is not a constant"
+            ));
+            return false;
+        };
+        code[*at..*at + *width].copy_from_slice(&(v as u64).to_le_bytes()[..*width]);
+    }
+    for (site, mnemonic, ops, idx, expr) in &insn_expr_fixups {
+        let Some(v) = template_expr_value(expr, *site, &label_defs, &label_names) else {
+            bail_msg(&alloc::format!(
+                "aarch64 inline asm: expression `{expr}` is not a constant"
+            ));
+            return false;
+        };
+        let mut ops = ops.clone();
+        ops[*idx] = Opnd::Imm(v);
+        match table::encode(mnemonic, &ops) {
+            Ok(word) => code[*site..*site + 4].copy_from_slice(&word.to_le_bytes()),
+            Err(m) => {
+                bail_msg(&m);
+                return false;
+            }
+        }
+    }
     // Patch the label branches now that every definition's offset is known.
     // A named label has exactly one definition, so direction does not apply.
     for &(site, ref kind, num, forward) in &label_fixups {

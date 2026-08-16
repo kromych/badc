@@ -7482,6 +7482,21 @@ fn encode_one_x86_section_insn(
                 prefix,
             )
         }
+        // The same rule for a based memory operand's displacement: `disp8`
+        // when the expression is already a value, the wide field when a
+        // relocation has to fill it.
+        (None, _) => match &sym_disp {
+            Some((target, off, idx, false)) => narrow_disp_form(
+                &concrete,
+                *idx,
+                &encode,
+                target,
+                *off,
+                insn.seg.or(operand_seg),
+                prefix,
+            ),
+            _ => None,
+        },
         _ => None,
     };
     // GNU as orders the prefixes segment, address size, operand size, then
@@ -7656,6 +7671,79 @@ fn narrow_imm_form(
     })
 }
 
+/// The `disp8` encoding of an instruction whose symbolic displacement sits
+/// at `idx`, when the based form has one. Located as the wide field is: two
+/// probe values that differ in the byte, taking the run that differs.
+fn narrow_disp_form(
+    concrete: &[super::asm::Concrete],
+    idx: usize,
+    encode: &EncodeFn<'_>,
+    target: &super::ssa::emit_common::AsmSectionTarget,
+    off: i64,
+    seg: Option<u8>,
+    prefix: Option<u8>,
+) -> Option<super::ssa::emit_common::AsmShortBranch> {
+    use super::asm::Concrete;
+    use super::ssa::emit_common::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
+    let with = |v: i32| {
+        let mut ops = concrete.to_vec();
+        ops[idx] = match ops[idx] {
+            Concrete::Mem {
+                base,
+                index,
+                scale,
+                size,
+                ..
+            } => Concrete::Mem {
+                base,
+                index,
+                scale,
+                disp: v,
+                size,
+            },
+            _ => return None,
+        };
+        encode(&ops).ok()
+    };
+    let (a, b) = (with(0x5B)?, with(0x24)?);
+    let wide = with(RIPREL_PROBE_DISP)?;
+    if a.len() >= wide.len() || a.len() != b.len() {
+        return None;
+    }
+    let (start, len) = differing_run(&a, &b)?;
+    if len != 1 {
+        return None;
+    }
+    let sizes = a.iter().take_while(|b| matches!(b, 0x66 | 0x67)).count();
+    if start < sizes {
+        return None;
+    }
+    let mut bytes = alloc::vec::Vec::new();
+    if let Some(s) = seg {
+        bytes.push(s);
+    }
+    bytes.extend_from_slice(&a[..sizes]);
+    if let Some(p) = prefix {
+        bytes.push(p);
+    }
+    let offset = (bytes.len() + start - sizes) as u32;
+    bytes.extend_from_slice(&a[sizes..]);
+    bytes[offset as usize] = 0;
+    Some(AsmShortBranch {
+        bytes,
+        reloc: AsmSectionReloc {
+            offset,
+            width: 1,
+            kind: AsmRelocKind::Data,
+            pcrel: false,
+            branch: false,
+            signed: true,
+            target: target.clone(),
+            addend: off,
+        },
+    })
+}
+
 /// Where a `$symbol` immediate lands in an instruction's encoding.
 struct SymImmField {
     /// Probe value that selects this field; the body encodes with it and the
@@ -7731,6 +7819,29 @@ fn locate_sym_imm_field(
         });
     }
     None
+}
+
+/// The value of a template field's expression at stream offset `at`: a
+/// template label takes the offset its definition stands at, a section label
+/// the offset the measured layout gives it. `None` when a leaf is unresolved.
+fn template_expr_value(
+    expr: &str,
+    at: usize,
+    label_defs: &[(u32, usize)],
+    names: &[&str],
+    measure: &super::ssa::emit_common::SectionLabelOffsets,
+) -> Option<i64> {
+    let resolve = |name: &str| -> Option<i64> {
+        // A bare decimal is an integer literal; a GNU as numeric label is
+        // referenced only as `Nb` / `Nf`. Leave literals for the evaluator.
+        if name.bytes().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        measure
+            .offset(name)
+            .or_else(|| super::ssa::emit_common::template_label_offset(name, at, label_defs, names))
+    };
+    super::ssa::emit_common::eval_asm_expr_with_labels(expr, &resolve)
 }
 
 /// A local label's name as the section materializer resolves it: the number
@@ -8071,6 +8182,12 @@ fn emit_inline_asm(
     // resolved to an absolute `.text` relocation once every definition's
     // offset is known.
     let mut abs_label_fixups: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
+    // Fields over template labels (`.byte 662f-661b`, `subl $(2f - 1b)`):
+    // `(reference_site, field, width, expression)`. Only a forward reference
+    // reaches here; a backward one is a value where the field is laid down,
+    // so the encoding sees it and takes the narrow form where one fits.
+    let mut expr_fixups: alloc::vec::Vec<(usize, usize, u8, alloc::string::String)> =
+        alloc::vec::Vec::new();
     // `asm goto` label branches: `(rel32_site, branch_kind, label_index)`
     // per `%lK` reference, patched to the label's block directly when
     // `goto_direct`, else to the label's teardown trampoline (or to the
@@ -8131,33 +8248,13 @@ fn emit_inline_asm(
         // the two so a boot-time patch fits).
         if insn.mnemonic == super::asm::Mnemonic::Skip {
             let expr = insn.sym_exprs.first().map_or("0", |e| e.as_str());
-            let resolve = |name: &str| -> Option<i64> {
-                // A bare decimal is an integer literal; a GNU as numeric label is
-                // referenced only as `Nb` / `Nf`. Leave literals for the evaluator.
-                if name.bytes().all(|c| c.is_ascii_digit()) {
-                    return None;
-                }
-                if let Some(off) = section_measure.offset(name) {
-                    return Some(off);
-                }
-                // A named code label (a multiply-defined numeric label renamed
-                // above): its text offset, already emitted at a `.skip` site.
-                if let Some(idx) = code_label_names.iter().position(|&n| n == name) {
-                    let num = super::asm::NAMED_LABEL_BASE + idx as u32;
-                    return label_defs
-                        .iter()
-                        .rfind(|&&(n, _)| n == num)
-                        .map(|&(_, off)| off as i64);
-                }
-                let digits = name.strip_suffix(['b', 'f'])?;
-                let num: u32 = digits.parse().ok()?;
-                label_defs
-                    .iter()
-                    .rfind(|&&(n, _)| n == num)
-                    .map(|&(_, off)| off as i64)
-            };
-            let Some(count) = super::ssa::emit_common::eval_asm_expr_with_labels(expr, &resolve)
-            else {
+            let Some(count) = template_expr_value(
+                expr,
+                code.len(),
+                &label_defs,
+                &code_label_names,
+                &section_measure,
+            ) else {
                 return fail("inline asm: `.skip` count is not a constant");
             };
             if count < 0 {
@@ -8203,6 +8300,26 @@ fn emit_inline_asm(
                         match const_of(idx) {
                             Some(v) => v,
                             None => return fail("inline asm: non-constant data-directive value"),
+                        }
+                    }
+                    // A value over template labels: the field width is the
+                    // directive's, so only the value waits on the layout.
+                    AsmOpnd::ImmSym { expr } => {
+                        let Some(text) = insn.sym_exprs.get(expr as usize) else {
+                            return fail("inline asm: data-directive expression is missing");
+                        };
+                        match template_expr_value(
+                            text,
+                            code.len(),
+                            &label_defs,
+                            &code_label_names,
+                            &section_measure,
+                        ) {
+                            Some(v) => v,
+                            None => {
+                                expr_fixups.push((code.len(), code.len(), w, text.clone()));
+                                0
+                            }
                         }
                     }
                     _ => return fail("inline asm: unsupported data-directive value"),
@@ -8446,6 +8563,11 @@ fn emit_inline_asm(
         // the target and the operand's template displacement (folded into the
         // reloc addend). At most one memory operand per instruction.
         let mut riprel_reloc: Option<(AsmRipSym, i64)> = None;
+        // A `$expr` immediate, and a memory displacement, whose value the
+        // stream has not reached: the placeholder fixes the wide field and
+        // the expression settles into it below.
+        let mut imm_expr: Option<alloc::string::String> = None;
+        let mut disp_expr: Option<alloc::string::String> = None;
         // An immediate encodes after the memory operand's disp32, so a
         // RIP-relative form would put the relocation on the wrong bytes.
         // Instructions carrying one keep the register-indirect addressing.
@@ -8747,10 +8869,61 @@ fn emit_inline_asm(
                 }
                 // `disp+sym(%base)`: a symbol displacement, as for the
                 // no-base form above.
-                AsmOpnd::SymMem { .. } => {
-                    return fail(
-                        "inline asm: a symbol-displacement memory operand is only supported in file-scope asm",
-                    );
+                // A displacement expression over template labels is a value
+                // the stream settles; one naming a symbol needs a relocation
+                // only file-scope section code carries.
+                AsmOpnd::SymMem {
+                    base,
+                    index,
+                    scale,
+                    expr,
+                } => {
+                    let sym_only = "inline asm: a symbol-displacement memory operand is only \
+                                    supported in file-scope asm";
+                    let Some(text) = insn.sym_exprs.get(expr as usize) else {
+                        return fail(sym_only);
+                    };
+                    if !super::ssa::emit_common::is_template_label_expr(text, &code_label_names) {
+                        return fail(sym_only);
+                    }
+                    let disp = match template_expr_value(
+                        text,
+                        code.len(),
+                        &label_defs,
+                        &code_label_names,
+                        &section_measure,
+                    ) {
+                        Some(v) => match i32::try_from(v) {
+                            Ok(d) => d,
+                            Err(_) => return fail("inline asm: displacement out of range"),
+                        },
+                        None => {
+                            disp_expr = Some(text.clone());
+                            RIPREL_PROBE_DISP
+                        }
+                    };
+                    let reg_of = |b: super::asm::AsmMemBase| -> Option<u8> {
+                        match b {
+                            super::asm::AsmMemBase::Reg { num, .. } => Some(num),
+                            super::asm::AsmMemBase::Ref(i) => {
+                                op_reg.get(i as usize).copied().flatten()
+                            }
+                        }
+                    };
+                    let (Some(base), index) = (reg_of(base), index.map(reg_of)) else {
+                        return fail("inline asm: memory base is not a register");
+                    };
+                    if index == Some(None) {
+                        return fail("inline asm: memory index is not a register");
+                    }
+                    Concrete::Mem {
+                        base,
+                        index: index.flatten(),
+                        scale,
+                        disp,
+                        size: asm_mem_size(None, insn, &asm.operands, &op_reg)
+                            .unwrap_or(AsmRegSize::Quad),
+                    }
                 }
                 // `sym(%%rip)`: a PC-relative reference to a named symbol,
                 // resolved by name through the same relocation channel as a
@@ -8774,13 +8947,34 @@ fn emit_inline_asm(
                     riprel_reloc = Some((AsmRipSym::Extern { name, offset: 0 }, addend));
                     Concrete::RipRel { disp: 0, size }
                 }
-                // A `$symbol` absolute-address immediate needs a symbol
-                // relocation the function-body stream does not carry; it is
-                // assembled only in file-scope section code.
-                AsmOpnd::ImmSym { .. } => {
-                    return fail(
-                        "inline asm: `$symbol` address immediate is only supported in file-scope asm",
-                    );
+                // A `$expr` immediate, under the same rule as a displacement.
+                AsmOpnd::ImmSym { expr } => {
+                    let Some(text) = insn.sym_exprs.get(expr as usize) else {
+                        return fail("inline asm: symbol immediate expression is missing");
+                    };
+                    match template_expr_value(
+                        text,
+                        code.len(),
+                        &label_defs,
+                        &code_label_names,
+                        &section_measure,
+                    ) {
+                        Some(v) => Concrete::Imm(v),
+                        None if super::ssa::emit_common::is_template_label_expr(
+                            text,
+                            &code_label_names,
+                        ) =>
+                        {
+                            imm_expr = Some(text.clone());
+                            Concrete::Imm(ABS_LABEL_PLACEHOLDER)
+                        }
+                        None => {
+                            return fail(
+                                "inline asm: `$symbol` address immediate is only supported in \
+                                 file-scope asm",
+                            );
+                        }
+                    }
                 }
                 // A label address immediate encodes as a placeholder wide
                 // enough to force the imm32 field; the relocation replaces it.
@@ -8836,6 +9030,28 @@ fn emit_inline_asm(
             code[at..].fill(0);
             abs_label_fixups.push((at, num, forward));
         }
+        // The displacement is the last four bytes; an immediate would follow
+        // it, so a form carrying one is refused rather than patched wrong.
+        if let Some(text) = disp_expr.take() {
+            if concrete.iter().any(|c| matches!(c, Concrete::Imm(_))) {
+                return fail("inline asm: an expression displacement with an immediate");
+            }
+            if code.len() < 4 || code[code.len() - 4..] != RIPREL_PROBE_DISP.to_le_bytes() {
+                return fail("inline asm: an expression displacement requires a wider form");
+            }
+            let at = code.len() - 4;
+            code[at..].fill(0);
+            expr_fixups.push((insn_at, at, 4, text));
+        }
+        // The same placement rule for a `$expr` immediate.
+        if let Some(text) = imm_expr.take() {
+            if code.len() < 4 || code[code.len() - 4..] != ABS_LABEL_PLACEHOLDER_BYTES {
+                return fail("inline asm: an expression immediate requires a wider form");
+            }
+            let at = code.len() - 4;
+            code[at..].fill(0);
+            expr_fixups.push((insn_at, at, 4, text));
+        }
         // Record the RIP-relative relocation against the operand's symbol.
         // The disp32 occupies the last four bytes of the instruction just
         // encoded; both channels place the reloc at `instr_offset + 3`, so
@@ -8869,6 +9085,24 @@ fn emit_inline_asm(
             }
         }
         after_insn = true;
+    }
+    // Settle each deferred expression field: the layout is final, so a
+    // forward reference now has its definition.
+    for (site, at, width, text) in &expr_fixups {
+        let Some(v) = template_expr_value(
+            text,
+            *site,
+            &label_defs,
+            &code_label_names,
+            &section_measure,
+        ) else {
+            bail_msg(&alloc::format!(
+                "inline asm: expression `{text}` is not a constant"
+            ));
+            return false;
+        };
+        let w = *width as usize;
+        code[*at..*at + w].copy_from_slice(&(v as u64).to_le_bytes()[..w]);
     }
     // Patch each label reference now that every definition's offset is
     // known. A forward `Nf` takes the nearest matching definition after the
@@ -11134,6 +11368,44 @@ mod code_mode_tests {
             &mut sink,
         )
         .expect_err("rejected")
+    }
+
+    /// A label difference is an absolute value in an immediate and in a
+    /// memory displacement. GNU as fixes the field when the instruction is
+    /// assembled, so a backward difference takes the narrow field and a
+    /// forward one keeps the wide one. Bytes from GNU as 2.46.1.
+    #[test]
+    fn file_scope_x86_label_difference_operand_matches_gnu_as() {
+        let (bytes, relocs) = assemble_relocs(
+            ".pushsection .t,\"ax\"\n\
+             1:\n\
+             nop\n\
+             2:\n\
+             subl $(2b - 1b), %ebp\n\
+             subl $(4f - 3f), %ebp\n\
+             movl (2b - 1b)(%rax), %ebx\n\
+             movl (4f - 3f)(%rax), %ecx\n\
+             3:\n\
+             nop\n\
+             4:\n\
+             nop\n\
+             .popsection\n",
+        );
+        assert_eq!(
+            bytes,
+            alloc::vec![
+                0x90, // nop
+                0x83, 0xed, 0x01, // subl $1, %ebp        imm8, backward
+                0x81, 0xed, 0x01, 0x00, 0x00, 0x00, // subl $1, %ebp  imm32, forward
+                0x8b, 0x58, 0x01, // movl 1(%rax), %ebx   disp8, backward
+                0x8b, 0x88, 0x01, 0x00, 0x00, 0x00, // movl 1(%rax), %ecx  disp32, forward
+                0x90, 0x90,
+            ]
+        );
+        assert!(
+            relocs.is_empty(),
+            "a folded difference relocates: {relocs:?}"
+        );
     }
 
     /// `crc32` encodes `r32, r/m8|r/m16|r/m32` and `r64, r/m8|r/m64`: REX.W is

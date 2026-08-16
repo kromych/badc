@@ -2380,6 +2380,109 @@ fn asm_main_stream_reference_binds_label_in_pushed_section() {
 }
 
 #[test]
+fn asm_label_difference_in_a_function_body_stream() {
+    // A difference of two template labels is an absolute value wherever the
+    // operand grammar takes one, including the main instruction stream of a
+    // function-body asm -- the position a `.pushsection` does not cover. The
+    // field width follows GNU as: a backward difference is a value when the
+    // instruction is assembled and takes the narrow field, a forward one
+    // keeps the wide field the encoding chose. Bytes from GNU as 2.46.1 for
+    // the same template.
+    use crate::c5::Target;
+    use crate::c5::linker::parse_native_elf;
+    let src = r#"
+        void f(void) {
+            __asm__ volatile(
+                "661:\n\t"
+                "nop\n\t"
+                "nop\n"
+                "662:\n\t"
+                ".byte 662b-661b\n\t"
+                ".short 662b-661b\n\t"
+                ".long 662b-661b\n\t"
+                ".quad 662b-661b\n\t"
+                ".byte 664f-663f\n"
+                "663:\n\t"
+                "subl $(662b - 661b), %%ebp\n\t"
+                "subl $(664f - 663b), %%ebp\n\t"
+                "movl (662b - 661b)(%%rax), %%ebx\n\t"
+                "movl (664f - 663b)(%%rax), %%ecx\n\t"
+                "nop\n"
+                "664:\n\t"
+                "nop\n"
+                ::: "memory");
+        }
+    "#;
+    let obj = parse_native_elf(&reloc_tu(src, Target::LinuxX64, false)).expect("parse ET_REL");
+    let want: &[u8] = &[
+        0x90, 0x90, // the two nops the labels bracket
+        0x02, // .byte  662b-661b
+        0x02, 0x00, // .short
+        0x02, 0x00, 0x00, 0x00, // .long
+        0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // .quad
+        0x13, // .byte 664f-663f: 19 bytes of instructions follow
+        0x83, 0xed, 0x02, // subl $2, %ebp             imm8, backward
+        0x81, 0xed, 0x13, 0x00, 0x00, 0x00, // subl $19, %ebp   imm32, forward
+        0x8b, 0x58, 0x02, // movl 2(%rax), %ebx        disp8, backward
+        0x8b, 0x88, 0x13, 0x00, 0x00, 0x00, // movl 19(%rax), %ecx  disp32, forward
+        0x90, 0x90,
+    ];
+    assert!(
+        obj.text.windows(want.len()).any(|w| w == want),
+        "template bytes not found in .text: {:02x?}",
+        obj.text
+    );
+}
+
+#[test]
+fn asm_label_difference_in_an_aarch64_function_body_stream() {
+    // The AArch64 form of the same rule: a data directive's value and an
+    // instruction's immediate both take the difference, forward or backward.
+    // The immediate field is the encoding's either way, so only the value
+    // waits on the layout. Bytes from GNU as 2.46.1 for the same template.
+    use crate::c5::Target;
+    use crate::c5::linker::parse_native_elf;
+    let src = r#"
+        void f(void) {
+            __asm__ volatile(
+                "661:\n\t"
+                "nop\n\t"
+                "nop\n"
+                "662:\n\t"
+                ".byte 662b-661b\n\t"
+                ".short 662b-661b\n\t"
+                ".long 662b-661b\n\t"
+                ".quad 662b-661b\n\t"
+                ".byte 664f-663f\n"
+                "663:\n\t"
+                "add x0, x0, #(662b - 661b)\n\t"
+                "mov w1, #(664f - 663b)\n\t"
+                "nop\n"
+                "664:\n\t"
+                "nop\n"
+                ::: "memory");
+        }
+    "#;
+    let obj = parse_native_elf(&reloc_tu(src, Target::LinuxAarch64, false)).expect("parse ET_REL");
+    let want: &[u8] = &[
+        0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5, // the two bracketed nops
+        0x08, // .byte  662b-661b
+        0x08, 0x00, // .short
+        0x08, 0x00, 0x00, 0x00, // .long
+        0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // .quad
+        0x0c, // .byte 664f-663f: three instructions follow
+        0x00, 0x20, 0x00, 0x91, // add x0, x0, #8    backward
+        0x81, 0x01, 0x80, 0x52, // mov w1, #12       forward
+        0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5,
+    ];
+    assert!(
+        obj.text.windows(want.len()).any(|w| w == want),
+        "template bytes not found in .text: {:02x?}",
+        obj.text
+    );
+}
+
+#[test]
 fn asm_label_address_immediate_relocates_absolute() {
     // `pushq $1f` pushes the address of a template-local label as an absolute
     // immediate: gas encodes it as `68 <imm32>` (push imm32, never the imm8

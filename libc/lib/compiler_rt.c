@@ -27,7 +27,9 @@
 typedef unsigned char __bcrt_u8;
 typedef unsigned short __bcrt_u16;
 typedef unsigned int __bcrt_u32;
-typedef unsigned long __bcrt_u64;
+// `long` is 4 bytes on Windows LLP64, which would give every `*8_*`
+// helper a 4-byte operand; `long long` is 8 on every target.
+typedef unsigned long long __bcrt_u64;
 
 #define BCRT_LDADD(sz, T, ord, mo) \
     T __aarch64_ldadd##sz##_##ord(T v, T *p) { return __atomic_fetch_add(p, v, mo); }

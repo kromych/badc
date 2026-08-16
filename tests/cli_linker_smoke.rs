@@ -3200,8 +3200,9 @@ fn link_defined_symbol_wins_over_auto_included_binding() {
 // targets that compile neither (e.g. windows-x64) do not see it as dead code.
 #[cfg(any(target_os = "linux", target_arch = "aarch64"))]
 const OUTLINE_ATOMICS_SRC: &str = "\
-typedef unsigned char u8; typedef unsigned int u32; typedef unsigned long u64;\n\
+typedef unsigned char u8; typedef unsigned int u32; typedef unsigned long long u64;\n\
 extern u64 __aarch64_ldadd8_acq_rel(u64, u64*);\n\
+extern u64 __aarch64_swp8_acq_rel(u64, u64*);\n\
 extern u32 __aarch64_ldclr4_acq_rel(u32, u32*);\n\
 extern u32 __aarch64_ldset4_acq_rel(u32, u32*);\n\
 extern u32 __aarch64_ldeor4_acq_rel(u32, u32*);\n\
@@ -3209,7 +3210,7 @@ extern u32 __aarch64_swp4_acq_rel(u32, u32*);\n\
 extern u32 __aarch64_cas4_acq_rel(u32, u32, u32*);\n\
 extern u8  __aarch64_cas1_acq_rel(u8, u8, u8*);\n\
 int main(void){\n\
-    u64 a=100; if(__aarch64_ldadd8_acq_rel(7,&a)!=100||a!=107) return 1;\n\
+    u64 a=0x1000000064ULL; if(__aarch64_ldadd8_acq_rel(7,&a)!=0x1000000064ULL||a!=0x100000006bULL) return 1;\n\
     u32 c=0xF0; if(__aarch64_ldclr4_acq_rel(0x30,&c)!=0xF0||c!=0xC0) return 2;\n\
     u32 s=0x01; if(__aarch64_ldset4_acq_rel(0x30,&s)!=0x01||s!=0x31) return 3;\n\
     u32 e=0xFF; if(__aarch64_ldeor4_acq_rel(0x0F,&e)!=0xFF||e!=0xF0) return 4;\n\
@@ -3217,6 +3218,8 @@ int main(void){\n\
     u32 k=5;    if(__aarch64_cas4_acq_rel(5,42,&k)!=5||k!=42) return 6;\n\
     u32 j=5;    if(__aarch64_cas4_acq_rel(9,42,&j)!=5||j!=5) return 7;\n\
     u8 b=3;     if(__aarch64_cas1_acq_rel(3,7,&b)!=3||b!=7) return 8;\n\
+    u64 x=0x2000000000ULL;\n\
+    if(__aarch64_swp8_acq_rel(0x3000000000ULL,&x)!=0x2000000000ULL||x!=0x3000000000ULL) return 9;\n\
     return 0;\n\
 }\n";
 
@@ -3263,7 +3266,8 @@ fn outline_atomics_resolve_on_demand() {
 }
 
 // On an aarch64 host the produced binary runs directly, checking the atomic
-// semantics of every op family the helpers cover.
+// semantics of every op family the helpers cover. The 8-byte cases carry a
+// value in the upper half, so a helper built over a 4-byte operand fails.
 #[cfg(target_arch = "aarch64")]
 #[test]
 fn outline_atomics_run_correct() {

@@ -5,6 +5,7 @@ use super::text::{
     is_ident_byte, literal_prefix_len, pp_number_len, skip_literal, strip_c_comments,
 };
 use crate::c5::error::C5Error;
+use crate::c5::lexer::{Ucn, encode_utf8, scan_ucn};
 use alloc::format;
 use alloc::string::{String, ToString};
 
@@ -702,6 +703,24 @@ impl<'a> IfExprParser<'a> {
                 if b == b'\\' && self.pos + 1 < bytes.len() {
                     self.pos += 2;
                     let esc = bytes[self.pos - 1];
+                    // A universal character name folds in as the UTF-8
+                    // encoding of its code point, the same bytes the
+                    // lexer stages for one outside `#if`.
+                    if matches!(esc, b'u' | b'U') {
+                        let Ucn::Ok(cp) = scan_ucn(bytes, &mut self.pos, esc) else {
+                            return Err(C5Error::Compile(format!(
+                                "preprocessor: invalid universal character name \\{} in `#if`",
+                                esc as char
+                            )));
+                        };
+                        let mut enc = [0u8; 4];
+                        let n = encode_utf8(cp, &mut enc);
+                        count += n - 1; // the escape itself is already counted
+                        for &byte in &enc[..n] {
+                            acc = (acc << 8) | byte as i64;
+                        }
+                        continue;
+                    }
                     // C99 6.4.4.4: simple, octal (`\N` up to three
                     // digits), and hexadecimal (`\xN...`) escapes.
                     let ch: i64 = match esc {

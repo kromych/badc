@@ -41,6 +41,34 @@ fn if_signed_right_shift_is_arithmetic() {
 }
 
 #[test]
+fn if_char_literal_takes_a_universal_character_name() {
+    // C11 6.4.3: a universal character name in a `#if` character
+    // constant means what it means outside one -- the UTF-8 bytes of its
+    // code point, packed per C99 6.4.4.4p10. Matches GCC.
+    for e in [
+        r"'\u0024' == 0x24",
+        r"'\u00E9' == 0xC3A9",
+        r"'\U0001F600' == 0xF09F9880",
+        r"'a\u00E9' == 0x61C3A9",
+    ] {
+        let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
+        assert!(out.contains("TAKEN"), "{e}: {out}");
+    }
+    // 6.4.3p2 bars the surrogates, a value below 00A0 outside {0024,
+    // 0040, 0060}, and anything past the code space; p1 fixes the digit
+    // count. The evaluator rejects rather than folding a wrong value.
+    for e in [
+        r"'\uD800' == 0",
+        r"'\u0041' == 0x41",
+        r"'\U00110000' == 0",
+        r"'\u12' == 0",
+    ] {
+        let err = process_err(&format!("#if {e}\nX\n#endif\n"));
+        assert!(err.contains("universal character name"), "{e}: {err}");
+    }
+}
+
+#[test]
 fn if_division_by_zero_is_error() {
     for src in [
         "#if 1/0\nX\n#endif\n",

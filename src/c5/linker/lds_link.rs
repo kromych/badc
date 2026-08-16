@@ -392,7 +392,11 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
             | SHT_LLVM_ADDRSIG => continue,
             _ => {}
         }
-        if sh.sh_flags & SHF_EXCLUDE != 0 && sh.sh_flags & SHF_ALLOC == 0 {
+        // SHF_EXCLUDE keeps a section out of a final link whatever its
+        // other flags say, and a script naming the section does not
+        // bring it back. Relocatable output reads inputs through
+        // `parse_et_rel`, which keeps them.
+        if sh.sh_flags & SHF_EXCLUDE != 0 {
             continue;
         }
         let data_off = if sh.sh_type == SHT_NOBITS {
@@ -9882,6 +9886,93 @@ SECTIONS {
         assert_eq!(flags(".kept") & SHF_GROUP, 0, "group is input-side");
         let tgt = (secs.iter().position(|s| s.0 == ".tgt").expect("tgt") + 1) as u32;
         assert_eq!(section_link(&res.image, ".ordered"), tgt);
+    }
+
+    /// SHF_EXCLUDE keeps an input section out of a final link whatever
+    /// its other flags say, and a script naming the section does not
+    /// bring it back. Measured against GNU ld 2.46.1 on linux-x86_64
+    /// and linux-aarch64: every `.exc.*` below is dropped there, in a
+    /// default link and under this script alike.
+    #[test]
+    fn shf_exclude_sections_never_reach_a_final_image() {
+        let script = parse_linker_script(
+            r#"
+SECTIONS {
+  . = 0x1000;
+  .text : { *(.text) }
+  .exc.alloc : { *(.exc.alloc) }
+  .exc.noalloc : { *(.exc.noalloc) }
+  .exc.aw : { *(.exc.aw) }
+  .exc.ax : { *(.exc.ax) }
+  .keep : { *(.keep) }
+}
+"#,
+        )
+        .expect("script parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(
+                ".exc.alloc",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXCLUDE,
+                1,
+                &[0xa1, 0xa2, 0xa3, 0xa4],
+            )
+            .sec(
+                ".exc.noalloc",
+                SHT_PROGBITS,
+                SHF_EXCLUDE,
+                1,
+                &[0xb1, 0xb2, 0xb3, 0xb4],
+            )
+            .sec(
+                ".exc.aw",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_WRITE | SHF_EXCLUDE,
+                1,
+                &[0xc1, 0xc2, 0xc3, 0xc4],
+            )
+            .sec(
+                ".exc.ax",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR | SHF_EXCLUDE,
+                1,
+                &[0xd1, 0xd2, 0xd3, 0xd4],
+            )
+            .sec(
+                ".keep",
+                SHT_PROGBITS,
+                SHF_ALLOC,
+                1,
+                &[0xe1, 0xe2, 0xe3, 0xe4],
+            )
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .build(EM_X86_64);
+        let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let secs = readelf_sections(&res.image);
+        for name in [".exc.alloc", ".exc.noalloc", ".exc.aw", ".exc.ax"] {
+            assert!(
+                !secs.iter().any(|s| s.0 == name),
+                "{name} reached the image"
+            );
+        }
+        assert!(secs.iter().any(|s| s.0 == ".keep"), "control section kept");
+        for marker in [
+            [0xa1u8, 0xa2, 0xa3, 0xa4],
+            [0xb1, 0xb2, 0xb3, 0xb4],
+            [0xc1, 0xc2, 0xc3, 0xc4],
+            [0xd1, 0xd2, 0xd3, 0xd4],
+        ] {
+            assert!(
+                !res.image.windows(4).any(|w| w == marker),
+                "excluded content {marker:x?} reached the image"
+            );
+        }
+        assert!(
+            res.image.windows(4).any(|w| w == [0xe1, 0xe2, 0xe3, 0xe4]),
+            "control content missing"
+        );
     }
 
     /// `--emit-relocs` gives the entries relocations name: one section

@@ -466,9 +466,17 @@ impl Intrinsic {
     /// intrinsic is a leaf reproduced by operand remap. `VaStart` reads
     /// the enclosing variadic save area; a body holding it is variadic
     /// and already ineligible, but it is listed for completeness.
-    /// `ReturnAddress` is absent: gcc specifies the inlined result as the
-    /// return address of the function inlined into, which is what the
-    /// spliced read of the caller's frame yields.
+    ///
+    /// `ReturnAddress` and `FrameAddress` are absent. gcc specifies the
+    /// inlined result of both as the caller's -- the return address, and
+    /// the frame, of the function inlined into -- which is what the
+    /// spliced read yields. A level above 0 rides the same splice: the
+    /// parser decomposes it into the level-0 intrinsic plus N loads
+    /// through the saved frame pointer, so the walk starts one frame
+    /// higher and still names the frame N calls above the read.
+    /// `function_makes_no_calls` counts `Inst::Intrinsic`, so the frame
+    /// record the read needs is established in whichever function ends
+    /// up holding it.
     pub fn is_frame_bound(self) -> bool {
         matches!(
             self,
@@ -476,7 +484,6 @@ impl Intrinsic {
                 | Intrinsic::SetjmpAArch64
                 | Intrinsic::LongjmpAArch64
                 | Intrinsic::VaStart
-                | Intrinsic::FrameAddress
                 | Intrinsic::AllocaSave
                 | Intrinsic::AllocaRestore
                 | Intrinsic::StackPointer

@@ -32,25 +32,16 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<read_fp>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	%rbp, %rax
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
                	callq	<addr>
                	movq	%rax, %rbx
                	callq	<addr>
-               	movq	%rax, %r12
-               	callq	<addr>
-               	movq	%rax, %rcx
+               	movq	%rax, %rdx
+               	movq	%rbp, %rcx
                	testq	%rbx, %rbx
                	sete	%al
                	movzbq	%al, %rax
@@ -63,15 +54,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	cmpq	%r12, %rbx
+               	cmpq	%rdx, %rbx
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -79,13 +68,11 @@ Disassembly of section .text:
                	jae	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

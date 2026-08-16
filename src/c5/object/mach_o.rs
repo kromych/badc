@@ -1286,7 +1286,7 @@ fn dylib_command(cmd: u32, path: &str) -> Vec<u8> {
 /// byte-identical compilations share a UUID (useful for cache
 /// keying, dSYM matching). Doesn't have to be cryptographic;
 /// lldb only uses it to deduplicate modules.
-fn uuid_command(text: &[u8], data: &[u8]) -> Vec<u8> {
+fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBuild) -> Vec<u8> {
     fn fnv1a128(bytes: &[u8]) -> [u8; 16] {
         // Two interleaved 64-bit FNV-1a hashes give a 128-bit
         // result without needing a real cryptographic primitive.
@@ -1315,6 +1315,14 @@ fn uuid_command(text: &[u8], data: &[u8]) -> Vec<u8> {
     let mut hash_input: Vec<u8> = Vec::with_capacity(text.len() + data.len());
     hash_input.extend_from_slice(text);
     hash_input.extend_from_slice(data);
+    // Switch-table entries are patched after this runs, so the blob's
+    // bytes are still zero; the routing they will carry lives in the
+    // entry list. Two images whose code is byte-identical can still
+    // route their cases differently.
+    for r in &rodata.rel32 {
+        hash_input.extend_from_slice(&r.slot_offset.to_le_bytes());
+        hash_input.extend_from_slice(&r.text_offset.to_le_bytes());
+    }
     let uuid = fnv1a128(&hash_input);
     let mut out = Vec::with_capacity(UUID_COMMAND_SIZE);
     out.extend_from_slice(&LC_UUID.to_le_bytes());
@@ -1929,16 +1937,21 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let code = &build.text;
     let tls_present = !build.macho_tlv_descriptors.is_empty();
     let n_tlv = build.macho_tlv_descriptors.len();
-    // The aarch64 lowering keeps switch tables in `.text`, so these
-    // carriers are empty on every build that reaches this writer.
-    // Fail loud rather than drop them if that changes. TODO
-    if !build.rodata.bytes.is_empty()
-        || !build.data_pcrel_relocs.is_empty()
+    // The pc-relative data-word carriers have no Mach-O placement yet.
+    // Fail loud rather than drop them. TODO
+    if !build.data_pcrel_relocs.is_empty()
         || !build.text_pcrel_relocs.is_empty()
         || !build.text_abs_relocs.is_empty()
     {
         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            "Mach-O writer: read-only blob / pc-relative data-word slots not implemented",
+            "Mach-O writer: pc-relative data-word slots not implemented",
+        )));
+    }
+    // The absolute-slot table form is relocatable-output only; this
+    // writer produces images, whose tables hold label differences.
+    if !build.rodata.abs64.is_empty() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "Mach-O writer: absolute table slots reached an image build",
         )));
     }
 
@@ -1986,7 +1999,16 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let data_const_present = relro_size > 0;
     let provenance = super::provenance_comment();
     let const_marker_off = round_up(ro_len, 8);
-    let const_size = const_marker_off + provenance.len() as u64;
+    // The switch-table blob rides the same read-only section, 8-aligned
+    // past the fingerprint, so no table byte lands in `__text`.
+    let jt_len = build.rodata.bytes.len() as u64;
+    let const_tail = const_marker_off + provenance.len() as u64;
+    let jt_off = round_up(const_tail, 8);
+    let const_size = if jt_len > 0 {
+        jt_off + jt_len
+    } else {
+        const_tail
+    };
     let text_seg_size = (SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE) as u64;
     let data_const_seg_size: u64 = if data_const_present {
         (SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE) as u64
@@ -2033,7 +2055,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         .map(|d| load_dylib(&d.path))
         .collect();
     let bv = build_version();
-    let uuid_lc = uuid_command(&build.text, &build.data);
+    let uuid_lc = uuid_command(&build.text, &build.data, &build.rodata);
     // Shared libraries replace `LC_MAIN` (24 bytes) with
     // `LC_ID_DYLIB` (carries this image's install name). It is
     // `@rpath/<name>` so a consumer that links against the image by
@@ -2814,6 +2836,19 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         code_vmaddr_base,
         &build.func_fixups,
     )?;
+    // Switch-table base materializations: the adrp+add pair reaches
+    // the table inside `__TEXT,__const`.
+    for fx in &build.rodata.addr_fixups {
+        patch_adrp_add(
+            &mut out,
+            code_file_offset,
+            code_vmaddr_base,
+            fx.code_offset,
+            const_vmaddr + jt_off + fx.rodata_offset,
+            AddrPart::Whole,
+            "table fixup",
+        )?;
+    }
     // Patch TLV adrp+add fixups now that we know the
     // __thread_vars vmaddr layout. Each fixup's
     // `descriptor_index` selects a 24-byte descriptor inside
@@ -2834,6 +2869,27 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     out.extend_from_slice(&build.data[..ro_len as usize]);
     out.resize((const_fileoff + const_marker_off) as usize, 0);
     out.extend_from_slice(&provenance);
+    // The switch-table blob, then each entry as the `target -
+    // table_base` difference both ends of which are now placed.
+    if jt_len > 0 {
+        out.resize((const_fileoff + jt_off) as usize, 0);
+        out.extend_from_slice(&build.rodata.bytes);
+        let jt_vmaddr = const_vmaddr + jt_off;
+        for r in &build.rodata.rel32 {
+            let value =
+                (code_vmaddr_base + r.text_offset) as i64 - (jt_vmaddr + r.base_offset) as i64;
+            let Ok(v) = i32::try_from(value) else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &alloc::format!(
+                        "Mach-O: table slot {:#x}: displacement {value:#x} exceeds 32 bits",
+                        r.slot_offset,
+                    ),
+                )));
+            };
+            let at = (const_fileoff + jt_off + r.slot_offset) as usize;
+            out[at..at + 4].copy_from_slice(&v.to_le_bytes());
+        }
+    }
     while (out.len() as u64) < text_filesize {
         out.push(0);
     }

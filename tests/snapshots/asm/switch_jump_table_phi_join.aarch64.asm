@@ -17,22 +17,10 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0xc
                	b.hs	<addr>
-               	adr	x17, <addr>
-               	ldrsw	x16, [x17, x0, lsl #2]
-               	add	x17, x17, x16
+               	adrp	x17, <page>
+               	add	x17, x17, <lo12>
+               	ldr	x17, [x17, x0, lsl #3]
                	br	x17
-               	udf	#0x30
-               	udf	#0x6c
-               	udf	#0x70
-               	udf	#0x74
-               	udf	#0x78
-               	udf	#0x7c
-               	udf	#0x80
-               	udf	#0x84
-               	udf	#0x88
-               	udf	#0x8c
-               	udf	#0x90
-               	udf	#0xa8
                	add	x1, x1, #0x1
                	add	x2, x1, #0x2
                	add	x1, x1, x2

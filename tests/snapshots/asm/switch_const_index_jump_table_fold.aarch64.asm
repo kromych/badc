@@ -21,18 +21,10 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x0, #0x8
                	b.hs	<addr>
-               	adr	x17, <addr>
-               	ldrsw	x16, [x17, x0, lsl #2]
-               	add	x17, x17, x16
+               	adrp	x17, <page>
+               	add	x17, x17, <lo12>
+               	ldr	x17, [x17, x0, lsl #3]
                	br	x17
-               	udf	#0x20
-               	udf	#0x28
-               	udf	#0x30
-               	udf	#0x38
-               	udf	#0x40
-               	udf	#0x48
-               	udf	#0x50
-               	udf	#0x58
                	mov	x0, #0x14               // =20
                	ret
                	mov	x0, #0x15               // =21

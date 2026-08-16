@@ -1726,6 +1726,7 @@ pub(crate) fn lower(
     // walk and the -O passes that produced them are skipped, the rest of
     // the pipeline runs unchanged.
     let walked = prebuilt.is_none();
+    let mut rodata = super::RodataBuild::default();
     let (mut ssa_funcs, prebuilt_promoted) = match prebuilt {
         Some(p) => (p.funcs, p.promoted_local_slots),
         None => (
@@ -2147,6 +2148,8 @@ pub(crate) fn lower(
                 &mut text_map_state,
                 native.no_fp_regs,
                 native.strict_align,
+                &mut rodata,
+                native.output_kind == super::OutputKind::Relocatable && !native.pic,
                 native.hardening,
             )
         };
@@ -2385,7 +2388,7 @@ pub(crate) fn lower(
         entry_offset,
         got_fixups,
         data_fixups,
-        rodata: super::RodataBuild::default(),
+        rodata,
         data_pcrel_relocs: Vec::new(),
         text_pcrel_relocs: Vec::new(),
         text_abs_relocs: Vec::new(),

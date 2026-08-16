@@ -55,13 +55,13 @@ use super::encode::{
     enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzs_x_s,
     enc_fcvtzu_x_d, enc_fcvtzu_x_s, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d,
     enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldaxr, enc_ldp_d_off, enc_ldp_d_post, enc_ldp_off,
-    enc_ldp_post, enc_ldr_d_imm, enc_ldr_d_post, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
-    enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
-    enc_ldrsw_reg_lsl2, enc_lslv, enc_lsrv, enc_movz, enc_msub, enc_mul, enc_orr_reg, enc_ret,
-    enc_scvtf_d_x, enc_scvtf_s_x, enc_sdiv, enc_stlxr, enc_stp_d_off, enc_stp_d_pre, enc_stp_off,
-    enc_stp_pre, enc_str_d_imm, enc_str_d_pre, enc_str_imm, enc_str_pre, enc_str_s_imm,
-    enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm,
-    enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv, load_imm64,
+    enc_ldp_post, enc_ldr_d_imm, enc_ldr_d_post, enc_ldr_imm, enc_ldr_post, enc_ldr_reg_lsl3,
+    enc_ldr_s_imm, enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm,
+    enc_ldrsw_imm, enc_ldrsw_reg_lsl2, enc_lslv, enc_lsrv, enc_movz, enc_msub, enc_mul,
+    enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_scvtf_s_x, enc_sdiv, enc_stlxr, enc_stp_d_off,
+    enc_stp_d_pre, enc_stp_off, enc_stp_pre, enc_str_d_imm, enc_str_d_pre, enc_str_imm,
+    enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_sub_imm,
+    enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_ucvtf_s_x, enc_udiv, load_imm64,
 };
 use super::ssa::emit_common::{
     MAX_UNPROBED_STACK_STEP, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX, build_arg_aggs,
@@ -882,6 +882,8 @@ pub(crate) fn emit_function(
     text_map_state: &mut Option<super::super::map_syms::MapClass>,
     no_fp_regs: bool,
     strict_align: bool,
+    rodata: &mut super::RodataBuild,
+    abs_jump_tables: bool,
     hardening: super::Hardening,
 ) -> bool {
     // The bundled emit output arrives in `cx`; recreate the per-field names as
@@ -1612,11 +1614,14 @@ pub(crate) fn emit_function(
                 emit(code, enc_br(rt));
             }
             Terminator::JumpTable { idx, table } => {
-                // Table dispatch: `adr` the table base (embedded right
-                // after the `br`, so the +/-1 MiB reach is trivially
-                // met), load the 32-bit table-relative entry, add, and
-                // branch. The bounds check preceding this terminator
-                // proves the index in range.
+                // Table dispatch through the read-only blob (kept out
+                // of the code section so it never decodes as
+                // instructions). The bounds check preceding this
+                // terminator proves the index in range. Image output
+                // reads a 32-bit table-relative entry and adds the
+                // base back (no load-time relocation); relocatable
+                // output loads an 8-byte absolute entry, the form
+                // whose relocations name the targets directly.
                 let iplace = alloc
                     .places
                     .get(idx as usize)
@@ -1644,15 +1649,20 @@ pub(crate) fn emit_function(
                 };
                 // rt is an allocated register or scratch.primary, never
                 // scratch.secondary, so the table base cannot alias it.
+                // The adrp+add pair reaches into the read-only blob, so
+                // the writer patches it (RodataAddrFixup).
                 let tbl = scratch.secondary;
-                emit(code, enc_adr(tbl, 16));
-                emit(code, enc_ldrsw_reg_lsl2(scratch.primary, tbl, rt));
-                emit(code, enc_add_reg(tbl, tbl, scratch.primary));
+                let addr_site = code.len();
+                emit(code, enc_adrp(tbl, 0));
+                emit(code, enc_add_imm(tbl, tbl, 0));
+                if abs_jump_tables {
+                    emit(code, enc_ldr_reg_lsl3(tbl, tbl, rt));
+                } else {
+                    emit(code, enc_ldrsw_reg_lsl2(scratch.primary, tbl, rt));
+                    emit(code, enc_add_reg(tbl, tbl, scratch.primary));
+                }
                 emit(code, enc_br(tbl));
-                jump_table_fixups.push((code.len(), table));
-                let entries = func.jump_tables[table as usize].len();
-                text_data_ranges.push((code.len(), entries * 4));
-                code.resize(code.len() + entries * 4, 0);
+                jump_table_fixups.push((addr_site, table));
             }
             Terminator::AsmGoto { table } => {
                 // The label branches were lowered inside the
@@ -1849,19 +1859,6 @@ pub(crate) fn emit_function(
             }
         }
     }
-    // Patch each jump table's entries with the target block's offset
-    // relative to the table base.
-    for (table_start, table) in &jump_table_fixups {
-        for (i, &t) in func.jump_tables[*table as usize].iter().enumerate() {
-            let rel = block_offsets[t as usize] as i64 - *table_start as i64;
-            debug_assert!(
-                i32::try_from(rel).is_ok(),
-                "JumpTable: entry offset out of i32 range"
-            );
-            let site = table_start + i * 4;
-            code[site..site + 4].copy_from_slice(&(rel as i32).to_le_bytes());
-        }
-    }
     // Patch the recorded branches.
     for fx in &branch_fixups {
         let target_off = block_offsets[fx.target as usize];
@@ -1967,6 +1964,41 @@ pub(crate) fn emit_function(
         };
         let bytes = word.to_le_bytes();
         code[fx.site..fx.site + 4].copy_from_slice(&bytes);
+    }
+
+    // Materialize each jump table into the read-only blob: one
+    // address fixup for the adrp+add site, one slot per entry (a
+    // 4-byte `target - table_base` difference, or the relocatable
+    // form's 8-byte absolute address left for the object's
+    // relocations). Runs past the last bail site so a bailed function
+    // leaves the blob untouched.
+    for (addr_site, table) in &jump_table_fixups {
+        let width: usize = if abs_jump_tables { 8 } else { 4 };
+        while !rodata.bytes.len().is_multiple_of(width) {
+            rodata.bytes.push(0);
+        }
+        let base = rodata.bytes.len() as u64;
+        rodata.addr_fixups.push(super::RodataAddrFixup {
+            code_offset: *addr_site,
+            rodata_offset: base,
+        });
+        for (i, &t) in func.jump_tables[*table as usize].iter().enumerate() {
+            let slot_offset = base + (i * width) as u64;
+            let text_offset = block_offsets[t as usize] as u64;
+            if abs_jump_tables {
+                rodata.abs64.push(super::RodataAbs64 {
+                    slot_offset,
+                    text_offset,
+                });
+            } else {
+                rodata.rel32.push(super::RodataRel32 {
+                    slot_offset,
+                    base_offset: base,
+                    text_offset,
+                });
+            }
+            rodata.bytes.resize(rodata.bytes.len() + width, 0);
+        }
     }
     true
 }
@@ -12260,6 +12292,8 @@ mod tests {
                 &mut None,
                 false,
                 false,
+                &mut super::super::RodataBuild::default(),
+                false,
                 super::super::Hardening::NONE,
             )
         };
@@ -12446,6 +12480,8 @@ mod tests {
                 &mut None,
                 false,
                 false,
+                &mut super::super::RodataBuild::default(),
+                false,
                 super::super::Hardening::NONE,
             )
         };
@@ -12530,6 +12566,8 @@ mod tests {
                 &mut Vec::new(),
                 &mut None,
                 false,
+                false,
+                &mut super::super::RodataBuild::default(),
                 false,
                 super::super::Hardening::NONE,
             )

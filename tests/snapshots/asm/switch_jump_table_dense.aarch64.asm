@@ -18,27 +18,10 @@ Disassembly of section .text:
                	sub	x0, x0, #0x3
                	cmp	x0, #0x11
                	b.hs	<addr>
-               	adr	x17, <addr>
-               	ldrsw	x16, [x17, x0, lsl #2]
-               	add	x17, x17, x16
+               	adrp	x17, <page>
+               	add	x17, x17, <lo12>
+               	ldr	x17, [x17, x0, lsl #3]
                	br	x17
-               	udf	#0x44
-               	udf	#0x4c
-               	udf	#0x54
-               	udf	#0x5c
-               	udf	#0x64
-               	udf	#0x6c
-               	udf	#0x74
-               	udf	#0x7c
-               	udf	#0x84
-               	udf	#0x8c
-               	udf	#0x94
-               	udf	#0x9c
-               	udf	#0xa4
-               	udf	#0xb8
-               	udf	#0xc0
-               	udf	#0xc8
-               	udf	#0xd0
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x2                // =2
@@ -81,19 +64,10 @@ Disassembly of section .text:
                	add	x0, x0, #0x6
                	cmp	x0, #0x9
                	b.hs	<addr>
-               	adr	x17, <addr>
-               	ldrsw	x16, [x17, x0, lsl #2]
-               	add	x17, x17, x16
+               	adrp	x17, <page>
+               	add	x17, x17, <lo12>
+               	ldr	x17, [x17, x0, lsl #3]
                	br	x17
-               	udf	#0x24
-               	udf	#0x2c
-               	udf	#0x34
-               	udf	#0x3c
-               	udf	#0x44
-               	udf	#0x4c
-               	udf	#0x54
-               	udf	#0x5c
-               	udf	#0x64
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x2                // =2
@@ -125,20 +99,10 @@ Disassembly of section .text:
                	sub	x0, x0, x17
                	cmp	x0, #0xa
                	b.hs	<addr>
-               	adr	x17, <addr>
-               	ldrsw	x16, [x17, x0, lsl #2]
-               	add	x17, x17, x16
+               	adrp	x17, <page>
+               	add	x17, x17, <lo12>
+               	ldr	x17, [x17, x0, lsl #3]
                	br	x17
-               	udf	#0x28
-               	udf	#0x30
-               	udf	#0x38
-               	udf	#0x40
-               	udf	#0x48
-               	udf	#0x50
-               	udf	#0x58
-               	udf	#0x60
-               	udf	#0x68
-               	udf	#0x70
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x2                // =2

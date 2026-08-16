@@ -6577,6 +6577,257 @@ fn switch_table_pic_object_uses_pcrel_entries() {
     }
 }
 
+/// Minimal ELF64 section / relocation reader for the object tests.
+struct ElfView<'a> {
+    bytes: &'a [u8],
+    shoff: usize,
+    shnum: usize,
+    shstr: usize,
+    symtab: Option<(usize, usize)>,
+}
+
+/// One `Elf64_Rela` row.
+struct RelaRow {
+    offset: u64,
+    rtype: u32,
+    sym: usize,
+    addend: u64,
+}
+
+impl<'a> ElfView<'a> {
+    const SHDR: usize = 64;
+    const SYM: usize = 24;
+    const RELA: usize = 24;
+
+    fn new(bytes: &'a [u8]) -> Self {
+        let mut v = Self {
+            bytes,
+            shoff: 0,
+            shnum: 0,
+            shstr: 0,
+            symtab: None,
+        };
+        v.shoff = v.u64(0x28) as usize;
+        v.shnum = v.u16(0x3C) as usize;
+        v.shstr = v.u16(0x3E) as usize;
+        v.symtab = v
+            .find(".symtab")
+            .map(|i| (v.sh_offset(i), v.sh_size(i) / Self::SYM));
+        v
+    }
+
+    fn u16(&self, o: usize) -> u16 {
+        u16::from_le_bytes(self.bytes[o..o + 2].try_into().unwrap())
+    }
+    fn u32(&self, o: usize) -> u32 {
+        u32::from_le_bytes(self.bytes[o..o + 4].try_into().unwrap())
+    }
+    fn u64(&self, o: usize) -> u64 {
+        u64::from_le_bytes(self.bytes[o..o + 8].try_into().unwrap())
+    }
+
+    fn shdr(&self, i: usize) -> usize {
+        self.shoff + i * Self::SHDR
+    }
+    fn sh_type(&self, i: usize) -> u32 {
+        self.u32(self.shdr(i) + 4)
+    }
+    fn sh_flags(&self, i: usize) -> u64 {
+        self.u64(self.shdr(i) + 8)
+    }
+    fn sh_offset(&self, i: usize) -> usize {
+        self.u64(self.shdr(i) + 24) as usize
+    }
+    fn sh_size(&self, i: usize) -> usize {
+        self.u64(self.shdr(i) + 32) as usize
+    }
+
+    fn name_of(&self, i: usize) -> &'a str {
+        let start = self.sh_offset(self.shstr) + self.u32(self.shdr(i)) as usize;
+        let len = self.bytes[start..].iter().position(|&b| b == 0).unwrap();
+        core::str::from_utf8(&self.bytes[start..start + len]).unwrap()
+    }
+
+    fn find(&self, name: &str) -> Option<usize> {
+        (0..self.shnum).find(|&i| self.name_of(i) == name)
+    }
+
+    fn sym_count(&self) -> usize {
+        self.symtab.map(|(_, n)| n).unwrap_or(0)
+    }
+    fn sym_shndx(&self, s: usize) -> usize {
+        let (off, _) = self.symtab.expect("object lacks .symtab");
+        self.u16(off + s * Self::SYM + 6) as usize
+    }
+    /// `st_info & 0xf` -- `3` is `STT_SECTION`.
+    fn sym_type(&self, s: usize) -> u8 {
+        let (off, _) = self.symtab.expect("object lacks .symtab");
+        self.bytes[off + s * Self::SYM + 4] & 0xf
+    }
+    fn sym_name(&self, s: usize) -> &'a str {
+        let (off, _) = self.symtab.expect("object lacks .symtab");
+        let strtab = self.find(".strtab").expect("object lacks .strtab");
+        let start = self.sh_offset(strtab) + self.u32(off + s * Self::SYM) as usize;
+        let len = self.bytes[start..].iter().position(|&b| b == 0).unwrap();
+        core::str::from_utf8(&self.bytes[start..start + len]).unwrap()
+    }
+
+    fn rela_rows(&self, sec: usize) -> alloc::vec::Vec<RelaRow> {
+        let (off, size) = (self.sh_offset(sec), self.sh_size(sec));
+        (0..size / Self::RELA)
+            .map(|k| {
+                let p = off + k * Self::RELA;
+                let info = self.u64(p + 8);
+                RelaRow {
+                    offset: self.u64(p),
+                    rtype: (info & 0xffff_ffff) as u32,
+                    sym: (info >> 32) as usize,
+                    addend: self.u64(p + 16),
+                }
+            })
+            .collect()
+    }
+}
+
+/// Source shared by the switch-dispatch object tests: ten consecutive
+/// cases, dense enough to reach `emit_switch_table`.
+const DENSE_SWITCH_SRC: &str = "int pick(int x) {\n\
+     \tswitch (x) {\n\
+     \tcase 0: return 10;\n\
+     \tcase 1: return 11;\n\
+     \tcase 2: return 12;\n\
+     \tcase 3: return 13;\n\
+     \tcase 4: return 14;\n\
+     \tcase 5: return 15;\n\
+     \tcase 6: return 16;\n\
+     \tcase 7: return 17;\n\
+     \tcase 8: return 18;\n\
+     \tcase 9: return 19;\n\
+     \tdefault: return -1;\n\
+     \t}\n\
+     }\n";
+
+/// Compile [`DENSE_SWITCH_SRC`] to a relocatable object for `target`.
+fn dense_switch_object(target: crate::Target, pic: bool) -> alloc::vec::Vec<u8> {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    let prog = Compiler::with_options(
+        DENSE_SWITCH_SRC.to_string(),
+        target,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile dense switch: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        pic,
+        ..NativeOptions::default()
+    };
+    emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit object: {e}"))
+}
+
+/// aarch64 twin of `switch_table_lands_in_rodata_section_of_object`:
+/// the table belongs in the read-only section, not in `.text`, where a
+/// disassembler decodes it as instructions. The dispatch materializes
+/// the base with an `adrp` + `add` pair, so the object carries the two
+/// relocations that pair takes against the table section's own symbol,
+/// and one absolute entry relocation per case naming a `.text` byte.
+#[test]
+fn aarch64_switch_table_lands_in_rodata_section_of_object() {
+    use crate::Target;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21,
+    };
+
+    let bytes = dense_switch_object(Target::LinuxAarch64, false);
+    let elf = ElfView::new(&bytes);
+    let tbl = elf.find(".rodata.jump_tables").expect("no table section");
+    const SHF_ALLOC: u64 = 0x2;
+    assert_eq!(elf.sh_type(tbl), 1, "table section must be SHT_PROGBITS");
+    assert_eq!(
+        elf.sh_flags(tbl),
+        SHF_ALLOC,
+        "table must be alloc, read-only, non-executable"
+    );
+    let tbl_size = elf.sh_size(tbl);
+    assert!(
+        tbl_size >= 10 * 8 && tbl_size.is_multiple_of(8),
+        "table size {tbl_size} does not cover 10 dense cases in 8-byte entries"
+    );
+
+    // One absolute entry per case, each naming a `.text` byte.
+    let rela = elf
+        .find(".rela.rodata.jump_tables")
+        .expect("no table relocations");
+    let text = elf.find(".text").expect("no .text");
+    let text_size = elf.sh_size(text) as u64;
+    let rows = elf.rela_rows(rela);
+    assert_eq!(rows.len(), tbl_size / 8, "one relocation per table entry");
+    for (k, r) in rows.iter().enumerate() {
+        assert_eq!(r.offset, (k * 8) as u64, "entry {k} offset stride");
+        assert_eq!(r.rtype, R_AARCH64_ABS64, "entry {k} relocation kind");
+        assert_eq!(elf.sym_shndx(r.sym), text, "entry {k} must target `.text`");
+        assert!(
+            r.addend < text_size,
+            "entry {k} addend {:#x} must name a `.text` byte",
+            r.addend
+        );
+    }
+
+    // The base materialization: the adrp + add pair, both against the
+    // table section's own STT_SECTION symbol.
+    let rela_text = elf.find(".rela.text").expect("no .rela.text");
+    let text_rows = elf.rela_rows(rela_text);
+    let pair: alloc::vec::Vec<u32> = text_rows
+        .iter()
+        .filter(|r| elf.sym_shndx(r.sym) == tbl && elf.sym_type(r.sym) == 3)
+        .map(|r| r.rtype)
+        .collect();
+    assert_eq!(
+        pair,
+        alloc::vec![R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_ADD_ABS_LO12_NC],
+        "one adrp + add pair addresses the table"
+    );
+
+    // No named symbol covers the table: consumers that discover
+    // compiler jump tables require the region symbol-free. The
+    // section symbol and the `$d` mapping symbol are not names in
+    // that sense; gas emits the same `$d` over a gcc table.
+    for s in 0..elf.sym_count() {
+        assert!(
+            elf.sym_shndx(s) != tbl || elf.sym_type(s) == 3 || elf.sym_name(s).starts_with('$'),
+            "symbol {s} (`{}`) covers the table section",
+            elf.sym_name(s)
+        );
+    }
+}
+
+/// `-fPIC` on aarch64 takes the same label-difference form the x86-64
+/// side does: 4-byte pc-relative slots, so no absolute relocation
+/// reaches the object.
+#[test]
+fn aarch64_switch_table_pic_object_uses_pcrel_entries() {
+    use crate::Target;
+    use crate::c5::object::elf_reloc_types::R_AARCH64_PREL32;
+
+    let bytes = dense_switch_object(Target::LinuxAarch64, true);
+    let elf = ElfView::new(&bytes);
+    let tbl = elf.find(".rodata.jump_tables").expect("no table section");
+    let tbl_size = elf.sh_size(tbl);
+    assert!(
+        tbl_size >= 10 * 4 && tbl_size.is_multiple_of(4),
+        "table size {tbl_size} does not cover 10 dense cases in 4-byte entries"
+    );
+    let rela = elf
+        .find(".rela.rodata.jump_tables")
+        .expect("no table relocations");
+    let rows = elf.rela_rows(rela);
+    assert_eq!(rows.len(), tbl_size / 4, "one relocation per table entry");
+    for (k, r) in rows.iter().enumerate() {
+        assert_eq!(r.offset, (k * 4) as u64, "entry {k} offset stride");
+        assert_eq!(r.rtype, R_AARCH64_PREL32, "entry {k} relocation kind");
+    }
+}
+
 /// A declaration in a `for` initializer has the whole for statement as
 /// its scope (C99 6.8.5.3), so it is a function local like any other:
 /// it belongs in the DWARF variable list, and an aggregate among them

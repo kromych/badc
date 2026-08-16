@@ -77,18 +77,10 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	strb	w1, [x0]
                	b	<addr>
-               	adr	x17, <addr>
-               	ldrsw	x16, [x17, x3, lsl #2]
-               	add	x17, x17, x16
+               	adrp	x17, <page>
+               	add	x17, x17, <lo12>
+               	ldr	x17, [x17, x3, lsl #3]
                	br	x17
-               	<unknown>
-               	udf	#0x48
-               	udf	#0x4c
-               	udf	#0x50
-               	udf	#0x54
-               	udf	#0x58
-               	udf	#0x5c
-               	udf	#0x60
                	add	x0, x3, #0x1
                	add	x1, x4, #0x1
                	ldrb	w4, [x4]

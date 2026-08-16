@@ -1,6 +1,6 @@
 // A dense case set (>= 8 cases, >= 50% dense over the span) lowers to
 // a jump table: a bias subtract, an unsigned bounds check to default,
-// and an indexed branch through a text-embedded table. Every case must
+// and an indexed branch through a table in read-only data. Every case must
 // route to its block, a hole in the span and any out-of-range value
 // (below the bias, above the span, negative) must reach default, and
 // an unsigned discriminant biased near UINT_MAX must index correctly.

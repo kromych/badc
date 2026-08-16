@@ -495,11 +495,38 @@ def main() -> int:
         "rerun on Linux), the quick check for intermediate merges -- the "
         "full gate stays required before a push",
     )
+    p.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="gate the working tree even with uncommitted changes; off by "
+        "default because the sync ships the working tree, so a stray edit "
+        "is gated instead of the commit that will be pushed",
+    )
     args = p.parse_args()
     selected: list[Box] = args.box
     if not selected:
         print("no boxes selected", file=sys.stderr)
         return 2
+
+    # The sync ships the working tree, not HEAD. An uncommitted edit -- a
+    # half-finished change, or an agent writing to the shared checkout --
+    # is therefore what gets gated, and the result does not describe the
+    # commit being pushed. Seen once: an in-progress change reached all
+    # four lanes and failed every one on a test that HEAD passes.
+    if not args.allow_dirty:
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if dirty:
+            print(
+                "working tree is dirty; the sync would gate these instead of "
+                "HEAD:\n" + dirty + "\ncommit, stash, or pass --allow-dirty",
+                file=sys.stderr,
+            )
+            return 2
 
     if any(b.kind == "linux" for b in selected):
         if args.no_kernel:

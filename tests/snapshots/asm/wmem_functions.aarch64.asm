@@ -81,29 +81,41 @@ Disassembly of section .text:
                	mov	x2, #0x3                // =3
                	bl	<addr>
                	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0]
-               	cmp	x0, #0x7
+               	ldr	w0, [x0]
+               	mov	x17, #0x7               // =7
+               	eor	x0, x0, x17
+               	mov	w0, w0
+               	cmp	x0, #0x0
                	cset	x0, ne
                	mov	x1, #0x1                // =1
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	x0, #0x7
+               	ldr	w0, [x0, #0x4]
+               	mov	x17, #0x7               // =7
+               	eor	x0, x0, x17
+               	mov	w0, w0
+               	cmp	x0, #0x0
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x1, ne
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0, #0x8]
-               	cmp	x0, #0x7
+               	ldr	w0, [x0, #0x8]
+               	mov	x17, #0x7               // =7
+               	eor	x0, x0, x17
+               	mov	w0, w0
+               	cmp	x0, #0x0
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0, #0xc]
-               	cmp	x0, #0x28
+               	ldr	w0, [x0, #0xc]
+               	mov	x17, #0x28              // =40
+               	eor	x0, x0, x17
+               	mov	w0, w0
+               	cmp	x0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
@@ -117,21 +129,30 @@ Disassembly of section .text:
                	mov	x2, #0x3                // =3
                	bl	<addr>
                	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	x0, #0x7
+               	ldr	w0, [x0, #0x4]
+               	mov	x17, #0x7               // =7
+               	eor	x0, x0, x17
+               	mov	w0, w0
+               	cmp	x0, #0x0
                	cset	x1, ne
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0, #0x8]
-               	cmp	x0, #0x7
+               	ldr	w0, [x0, #0x8]
+               	mov	x17, #0x7               // =7
+               	eor	x0, x0, x17
+               	mov	w0, w0
+               	cmp	x0, #0x0
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x30
-               	ldrsw	x0, [x0, #0xc]
-               	cmp	x0, #0x7
+               	ldr	w0, [x0, #0xc]
+               	mov	x17, #0x7               // =7
+               	eor	x0, x0, x17
+               	mov	w0, w0
+               	cmp	x0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x5                // =5

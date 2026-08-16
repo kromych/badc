@@ -142,6 +142,71 @@ impl BinaryFormat {
     }
 }
 
+/// The integer type `wchar_t` denotes. C99 7.17 leaves both the width
+/// and the signedness to the implementation and each platform ABI fixes
+/// them independently, so the width does not imply the sign: AAPCS64
+/// and the Linux/x86-64 psABI both give the type 4 bytes and disagree
+/// on whether it is signed. Carrying the pair keeps the `<stddef.h>`
+/// typedef, the `__WCHAR_*__` predefines and the type of `L'...'` from
+/// deriving it separately.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WcharType {
+    pub bytes: usize,
+    pub signed: bool,
+}
+
+impl WcharType {
+    /// Spelling of the underlying type, as `__WCHAR_TYPE__` reports it
+    /// and the bundled `<stddef.h>` typedefs it. `ilp32` selects gcc's
+    /// i386 `long int` over `int` at the 4-byte width.
+    pub fn spelling(self, ilp32: bool) -> &'static str {
+        match (self.bytes, self.signed, ilp32) {
+            (2, true, _) => "short",
+            (2, false, _) => "unsigned short",
+            (_, true, true) => "long int",
+            (_, true, false) => "int",
+            (_, false, _) => "unsigned int",
+        }
+    }
+
+    /// Greatest value the type holds.
+    pub fn max(self) -> i64 {
+        let bits = self.bytes * 8;
+        if self.signed {
+            (1i64 << (bits - 1)) - 1
+        } else {
+            (1i64 << bits) - 1
+        }
+    }
+
+    /// Least value the type holds.
+    pub fn min(self) -> i64 {
+        if self.signed { -(self.max() + 1) } else { 0 }
+    }
+
+    /// `__WCHAR_MAX__` / `__WCHAR_MIN__` replacement lists. Each bound
+    /// carries the type the value has after the integer promotions
+    /// (C99 6.3.1.1p2), so a `U` suffix appears only where the promoted
+    /// type is unsigned -- a 2-byte `wchar_t` promotes to `int` and its
+    /// bounds are plain. The signed lower bound is spelled against
+    /// `__WCHAR_MAX__` because `-2147483648` is not a constant of the
+    /// type; gcc spells both the same way.
+    pub fn bound_macros(self) -> (String, String) {
+        let suffix = if self.max() > i32::MAX as i64 {
+            "U"
+        } else {
+            ""
+        };
+        let max = format!("{}{suffix}", self.max());
+        let min = if self.signed {
+            "(-__WCHAR_MAX__ - 1)".to_string()
+        } else {
+            format!("{}{suffix}", self.min())
+        };
+        (max, min)
+    }
+}
+
 impl Target {
     /// Canonical short name for this target. Round-trips through
     /// [`Target::parse`]; used as the value of the preprocessor's
@@ -215,16 +280,26 @@ impl Target {
         !matches!(self, Target::LinuxAarch64)
     }
 
-    /// `wchar_t` width in bytes: 2 on Windows, whose wide-string APIs
-    /// take UTF-16 code units, and 2 on any target under `-fshort-wchar`
-    /// (`short_wchar`). Sole source of the width for the lexer's wide
-    /// literals and for the `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__`
-    /// predefines the bundled `<stddef.h>` keys its typedef on.
-    pub fn wchar_bytes(self, short_wchar: bool) -> usize {
+    /// The `wchar_t` the target's platform ABI defines. 2 bytes and
+    /// unsigned on Windows, whose wide-string APIs take UTF-16 code
+    /// units, and likewise on any target under `-fshort-wchar`
+    /// (`short_wchar`). At 4 bytes AAPCS64 makes the type unsigned
+    /// while the Linux/x86-64 psABI and Apple's arm64 ABI make it
+    /// signed. Sole source of the type for the lexer's wide literals,
+    /// the `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__` / `__WCHAR_MAX__` /
+    /// `__WCHAR_MIN__` predefines, and the `<stddef.h>` typedef that
+    /// keys on them.
+    pub fn wchar_type(self, short_wchar: bool) -> WcharType {
         if short_wchar || self.is_windows() {
-            2
+            WcharType {
+                bytes: 2,
+                signed: false,
+            }
         } else {
-            4
+            WcharType {
+                bytes: 4,
+                signed: !matches!(self, Target::LinuxAarch64),
+            }
         }
     }
 

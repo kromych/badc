@@ -208,12 +208,23 @@ impl Compiler {
         match self.lex.char_prefix {
             // `char16_t` is `uint_least16_t` and `char32_t` is
             // `uint_least32_t`: unsigned, and the same width on every
-            // target. `wchar_t` is `unsigned short` at the 2-byte width
-            // Windows and `-fshort-wchar` select, `int` at 4.
+            // target. `wchar_t` takes both its width and its signedness
+            // from the target ABI, so neither is derived from the other.
             StrPrefix::Char16 => Ty::Short as i64 | UNSIGNED_BIT,
             StrPrefix::Char32 => Ty::Int as i64 | UNSIGNED_BIT,
-            StrPrefix::Wide if self.lex.wchar_bytes == 2 => Ty::Short as i64 | UNSIGNED_BIT,
-            // Unprefixed is `int` (6.4.4.4p10), as is a 4-byte `wchar_t`.
+            StrPrefix::Wide => {
+                let base = if self.lex.wchar_bytes == 2 {
+                    Ty::Short as i64
+                } else {
+                    Ty::Int as i64
+                };
+                if self.lex.wchar_signed {
+                    base
+                } else {
+                    base | UNSIGNED_BIT
+                }
+            }
+            // Unprefixed is `int` (6.4.4.4p10).
             _ => Ty::Int as i64,
         }
     }

@@ -429,11 +429,17 @@ pub(crate) struct Lexer {
     /// branches.
     pub num_is_char: bool,
 
-    /// Byte width of a `wchar_t` element. 4 on the Unix targets (where
-    /// `wchar_t` is `int`) and 2 on Windows (UTF-16). The compiler sets
-    /// it from the target after construction; wide string and character
-    /// literals store this many bytes per element.
+    /// Byte width of a `wchar_t` element. 4 on the Unix targets and 2 on
+    /// Windows (UTF-16). The compiler sets it from the target after
+    /// construction; wide string and character literals store this many
+    /// bytes per element.
     pub wchar_bytes: usize,
+
+    /// Whether `wchar_t` is signed for the target. Set from the target
+    /// alongside `wchar_bytes`; the two together are the type, and the
+    /// expression parser reads them to give `L'...'` its type
+    /// (C11 6.4.4.4p2).
+    pub wchar_signed: bool,
 
     /// Whether plain `char` is signed for the target (C99 6.2.5p15
     /// leaves it implementation-defined). Set from the target after
@@ -581,6 +587,7 @@ impl Lexer {
             char_prefix: StrPrefix::None,
             num_is_char: false,
             wchar_bytes: 4,
+            wchar_signed: true,
             char_signed: true,
             // Bottom of the stack is the default pack -- c5 already
             // caps struct alignment at 8, and that's the implicit

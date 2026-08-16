@@ -458,7 +458,7 @@ fn type_size_predefines_match_the_layout_engine() {
     );
     for (t, wchar) in [
         (Target::LinuxX64, "int = 4"),
-        (Target::LinuxAarch64, "int = 4"),
+        (Target::LinuxAarch64, "unsigned int = 4"),
         (Target::MacOSAarch64, "int = 4"),
         (Target::WindowsX64, "unsigned short = 2"),
         (Target::WindowsAarch64, "unsigned short = 2"),
@@ -488,7 +488,7 @@ fn short_wchar_moves_the_wchar_predefines() {
     let probe = "wchar __WCHAR_TYPE__ = __SIZEOF_WCHAR_T__ .\n";
     for (t, wide) in [
         (Target::LinuxX64, "int = 4"),
-        (Target::LinuxAarch64, "int = 4"),
+        (Target::LinuxAarch64, "unsigned int = 4"),
         (Target::MacOSAarch64, "int = 4"),
         (Target::WindowsX64, "unsigned short = 2"),
         (Target::WindowsAarch64, "unsigned short = 2"),

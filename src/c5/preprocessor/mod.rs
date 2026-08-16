@@ -181,6 +181,10 @@ pub(crate) struct Preprocessor {
     /// Compilation target; Windows include resolution is
     /// case-insensitive, matching its filesystems.
     target: Target,
+    /// The `wchar_t` in force for this unit, tracking `-fshort-wchar`
+    /// through [`Self::set_unit_model`]. `#if` types an `L'...'`
+    /// constant by it, and the `__WCHAR_*__` predefines report it.
+    pub(super) wchar: crate::c5::codegen::WcharType,
     fn_macros: HashMap<String, FnMacro>,
     /// One entry per `#pragma dylib(name, "path")`, in the order
     /// declared. Each entry collects the bindings whose
@@ -459,7 +463,7 @@ fn install_float_characteristics(macros: &mut HashMap<String, String>) {
 /// refuses the flag there and the target's own model stands.
 ///
 /// `short_wchar` is `-fshort-wchar`, which narrows `wchar_t` to an
-/// unsigned 16-bit type on any target; see [`Target::wchar_bytes`].
+/// unsigned 16-bit type on any target; see [`Target::wchar_type`].
 fn install_data_model(
     macros: &mut HashMap<String, String>,
     target: Target,
@@ -527,18 +531,18 @@ fn install_data_model(
     if !ilp32 {
         macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());
     }
-    // `wchar_t`'s width and underlying type. Unsigned 16-bit on Windows
-    // and under `-fshort-wchar`, gcc's `long int` on i386, the bundled
-    // <stddef.h>'s `int` elsewhere; the spelling always agrees with
-    // `__SIZEOF_WCHAR_T__`, which the typedef keys on.
-    let wchar_bytes = target.wchar_bytes(short_wchar);
-    let wchar_ty = match (wchar_bytes, ilp32) {
-        (2, _) => "unsigned short",
-        (_, true) => "long int",
-        (_, false) => "int",
-    };
-    macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar_bytes.to_string());
-    macros.insert("__WCHAR_TYPE__".to_string(), wchar_ty.to_string());
+    // `wchar_t`'s width, underlying type and range, all from the one
+    // `WcharType` the target defines, so the four predefines and the
+    // `<stddef.h>` typedef that keys on `__WCHAR_TYPE__` cannot disagree.
+    let wchar = target.wchar_type(short_wchar);
+    macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar.bytes.to_string());
+    macros.insert(
+        "__WCHAR_TYPE__".to_string(),
+        wchar.spelling(ilp32).to_string(),
+    );
+    let (wchar_max, wchar_min) = wchar.bound_macros();
+    macros.insert("__WCHAR_MAX__".to_string(), wchar_max);
+    macros.insert("__WCHAR_MIN__".to_string(), wchar_min);
     // gcc's x86 back end names the selected code model; the aarch64 one
     // defines no such macro. An ELFCLASS32 object is the 32-bit model
     // whatever `-mcmodel` says.
@@ -812,6 +816,7 @@ impl Preprocessor {
         Self {
             macros,
             target,
+            wchar: target.wchar_type(false),
             fn_macros,
             dylibs: Vec::new(),
             exports: Vec::new(),
@@ -847,6 +852,7 @@ impl Preprocessor {
     /// x86-64 model, and `-fshort-wchar` narrows `wchar_t`; see
     /// [`install_data_model`].
     pub fn set_unit_model(&mut self, class: ElfClass, model: CodeModel, short_wchar: bool) {
+        self.wchar = self.target.wchar_type(short_wchar);
         install_data_model(&mut self.macros, self.target, class, model, short_wchar);
     }
 

@@ -2261,8 +2261,11 @@ impl Compiler {
 
         let lex = {
             let mut l = Lexer::new(preprocessed);
-            // Wide literals take their element width from `wchar_t`.
-            l.wchar_bytes = target.wchar_bytes(opts.short_wchar);
+            // Wide literals take their element width, and `L'...'` its
+            // type, from the target's `wchar_t`.
+            let wchar = target.wchar_type(opts.short_wchar);
+            l.wchar_bytes = wchar.bytes;
+            l.wchar_signed = wchar.signed;
             l.char_signed = target.plain_char_signed();
             l
         };

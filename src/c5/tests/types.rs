@@ -138,6 +138,74 @@ fn short_wchar_narrows_wchar_t_on_every_target() {
     );
 }
 
+/// `wchar_t`'s signedness comes from the target ABI, not from its width:
+/// AAPCS64 makes the 4-byte type unsigned while the Linux/x86-64 psABI
+/// and Apple's arm64 ABI make the same width signed, which is what
+/// gcc 16.1.1 and clang 22.1.8 report on each. The `<stddef.h>` typedef,
+/// the `__WCHAR_MAX__` / `__WCHAR_MIN__` bounds and the type C11
+/// 6.4.4.4p2 gives `L'...'` all follow the one definition.
+#[test]
+fn wchar_t_signedness_follows_the_target_abi() {
+    use super::Vm;
+    use crate::{CompileOptions, Compiler, Target};
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(
+            Compiler::with_options(src.to_string(), t, CompileOptions::default())
+                .compile()
+                .unwrap(),
+        )
+        .run()
+        .unwrap()
+    };
+    // Width, whether the typedef is unsigned, and whether both bounds
+    // agree with it: an unsigned type has `(wchar_t)-1` as its maximum
+    // and zero as its minimum.
+    let probe = "#include <stddef.h>\n\
+                 int main(void){ return (int)(sizeof(wchar_t) * 1000 \
+                 + ((wchar_t)-1 > 0) * 100 \
+                 + (__WCHAR_MAX__ == (wchar_t)-1) * 10 \
+                 + (__WCHAR_MIN__ == 0)); }";
+    for (t, want) in [
+        (Target::LinuxX64, 4000),
+        (Target::LinuxAarch64, 4111),
+        (Target::MacOSAarch64, 4000),
+        (Target::WindowsX64, 2111),
+        (Target::WindowsAarch64, 2111),
+    ] {
+        assert_eq!(run(probe, t), want, "{t:?} wchar_t definition");
+    }
+    // C11 6.4.4.4p2 types `L'...'` as `wchar_t`, so the comparison is
+    // unsigned exactly where the type is and the 2-byte type promotes to
+    // `int` first (C99 6.3.1.1p2), making the comparison signed there.
+    let promo = "int main(void){ return L'a' > -1 ? 1 : 0; }";
+    for (t, want) in [
+        (Target::LinuxX64, 1),
+        (Target::LinuxAarch64, 0),
+        (Target::MacOSAarch64, 1),
+        (Target::WindowsX64, 1),
+        (Target::WindowsAarch64, 1),
+    ] {
+        assert_eq!(run(promo, t), want, "{t:?} L'a' > -1");
+    }
+    // The `#if` evaluator takes its signedness from the same definition,
+    // but C99 6.10.1p4 gives every unsigned operand `uintmax_t` with no
+    // integer promotion first, so an unsigned `wchar_t` compares unsigned
+    // at every width -- including the 2-byte one whose expression form
+    // promotes to `int` above. gcc 16.1.1 and clang 22.1.8 both report
+    // this split on x86_64 and on AArch64.
+    let cond = "#if L'a' > -1\nint main(void){ return 1; }\n\
+                #else\nint main(void){ return 0; }\n#endif\n";
+    for (t, want) in [
+        (Target::LinuxX64, 1),
+        (Target::LinuxAarch64, 0),
+        (Target::MacOSAarch64, 1),
+        (Target::WindowsX64, 0),
+        (Target::WindowsAarch64, 0),
+    ] {
+        assert_eq!(run(cond, t), want, "{t:?} #if L'a' > -1");
+    }
+}
+
 #[test]
 fn warn_int_to_pointer_assignment() {
     // `int *p; p = 5;` -- assigning a non-zero integer to a pointer.

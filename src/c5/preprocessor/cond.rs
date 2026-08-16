@@ -696,7 +696,9 @@ impl<'a> IfExprParser<'a> {
                 if b == b'\'' {
                     self.pos += 1;
                     if wide {
-                        return Ok(IfValue::signed(last));
+                        // `L'...'` has type `wchar_t` (C11 6.4.4.4p2),
+                        // whose signedness the target ABI fixes.
+                        return Ok(IfValue::with_sign(last, !self.pp.wchar.signed));
                     }
                     // A single-character constant keeps its char's own
                     // value, sign-extended on signed-plain-char targets.

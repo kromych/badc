@@ -33,28 +33,34 @@ Disassembly of section .text:
                	cset	x2, eq
                	mov	x1, #0x0                // =0
                	cbz	x2, <addr>
-               	ldrsw	x1, [x0, #0x4]
-               	cmp	x1, #0x68
+               	ldr	w1, [x0, #0x4]
+               	mov	x17, #0x68              // =104
+               	eor	x1, x1, x17
+               	mov	w1, w1
+               	cmp	x1, #0x0
                	cset	x1, eq
                	cmp	x1, #0x0
                	cset	x1, ne
                	mov	x2, #0x0                // =0
                	cbz	x1, <addr>
-               	ldrsw	x1, [x0, #0x8]
-               	cmp	x1, #0x69
+               	ldr	w1, [x0, #0x8]
+               	mov	x17, #0x69              // =105
+               	eor	x1, x1, x17
+               	mov	w1, w1
+               	cmp	x1, #0x0
                	cset	x1, eq
                	cmp	x1, #0x0
                	cset	x2, ne
                	mov	x1, #0x0                // =0
                	cbz	x2, <addr>
-               	ldrsw	x1, [x0, #0xc]
+               	ldr	w1, [x0, #0xc]
                	cmp	x1, #0x0
                	cset	x1, eq
                	cmp	x1, #0x0
                	cset	x1, ne
                	mov	x2, #0x0                // =0
                	cbz	x1, <addr>
-               	ldrsw	x0, [x0, #0x10]
+               	ldr	w0, [x0, #0x10]
                	cmp	x0, #0x0
                	cset	x0, eq
                	cmp	x0, #0x0

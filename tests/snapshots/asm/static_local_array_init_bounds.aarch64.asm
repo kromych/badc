@@ -149,14 +149,14 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldr	w0, [x0]
                	cmp	x0, #0x78
                	cset	x1, ne
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x4]
+               	ldr	w0, [x0, #0x4]
                	cmp	x0, #0x79
                	cset	x0, ne
                	cmp	x0, #0x0
@@ -164,7 +164,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x8]
+               	ldr	w0, [x0, #0x8]
                	cmp	x0, #0x7a
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -172,13 +172,13 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldr	w0, [x0]
                	cmp	x0, #0x78
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x4]
+               	ldr	w0, [x0, #0x4]
                	cmp	x0, #0x79
                	cset	x0, ne
                	cbz	x0, <addr>
@@ -186,14 +186,14 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x8]
+               	ldr	w0, [x0, #0x8]
                	cmp	x0, #0x0
                	cset	x1, ne
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0xc]
+               	ldr	w0, [x0, #0xc]
                	cmp	x0, #0x0
                	cset	x0, ne
                	cmp	x0, #0x0
@@ -201,7 +201,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0, #0x10]
+               	ldr	w0, [x0, #0x10]
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>

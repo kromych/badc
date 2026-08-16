@@ -26,15 +26,13 @@ typedef unsigned long size_t;
 typedef long ptrdiff_t;
 #endif
 
-// 2 bytes on Windows, whose wide-string APIs take UTF-16 code units,
-// and on any target under `-fshort-wchar`, where the type is also
-// unsigned; 4 bytes otherwise. Wide literals take the same width, so
-// the typedef and `L"..."` agree by construction.
-#if __SIZEOF_WCHAR_T__ == 2
-typedef unsigned short wchar_t;
-#else
-typedef int wchar_t;
-#endif
+// Width and signedness both come from the target ABI: 2 bytes and
+// unsigned on Windows, whose wide-string APIs take UTF-16 code units,
+// and under `-fshort-wchar`; 4 bytes elsewhere, unsigned under AAPCS64
+// and signed under the Linux/x86-64 and Apple arm64 ABIs. Taking the
+// predefine verbatim keeps the typedef, `__SIZEOF_WCHAR_T__` and the
+// type of `L"..."` in agreement by construction.
+typedef __WCHAR_TYPE__ wchar_t;
 
 // C11 6.2.8: a type whose alignment is the greatest fundamental
 // alignment. Both members are 8-byte aligned -- c5 lays `long double`

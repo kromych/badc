@@ -741,6 +741,12 @@ impl Preprocessor {
         // `wint_t` is the bundled <wchar.h>'s `int` on every target.
         macros.insert("__WINT_TYPE__".to_string(), "int".to_string());
         macros.insert("__SIZEOF_WINT_T__".to_string(), "4".to_string());
+        // C11 6.4.4.4p2-p4 / 7.28: `char16_t` is `uint_least16_t` and
+        // `char32_t` is `uint_least32_t`. Neither tracks `wchar_t`, so
+        // both hold on every target, and they name the types `u'c'` and
+        // `U'c'` take.
+        macros.insert("__CHAR16_TYPE__".to_string(), "unsigned short".to_string());
+        macros.insert("__CHAR32_TYPE__".to_string(), "unsigned int".to_string());
         // The largest fundamental alignment: what a bare
         // `__attribute__((aligned))` resolves to and what `__int128` /
         // 16-aligned automatics are placed at.

@@ -159,7 +159,7 @@ pub(crate) fn scan_ucn(bytes: &[u8], pos: &mut usize, esc: u8) -> Ucn {
 /// (C11 6.4.5p2, 6.4.4.4p2). `string_prefix_width` maps each to its
 /// element width.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum StrPrefix {
+pub enum StrPrefix {
     None,
     Utf8,
     Wide,
@@ -345,7 +345,7 @@ pub(crate) struct LexerSnapshot {
     int_is_decimal: bool,
     float_suffix_f32: bool,
     num_is_char: bool,
-    char_is_wide: bool,
+    char_prefix: StrPrefix,
     str_is_wide: bool,
     str_elem_bytes: usize,
 }
@@ -413,13 +413,13 @@ pub(crate) struct Lexer {
     /// `U"..."` (char32_t). Only meaningful when `str_is_wide` is set.
     pub str_elem_bytes: usize,
 
-    /// `true` when the most recent `Token::Num` came from a wide
-    /// character constant (`L'x'`). C99 6.4.4.4p11 gives such a constant
-    /// type `wchar_t`; the expression parser reads this to type it at the
-    /// target's `wchar_t` width instead of `int`, so `sizeof (L'x')` is 2
-    /// on Windows (UTF-16) and 4 on the Unix targets. Reset per token in
-    /// `next`; set only in the wide-character branch of the literal lexer.
-    pub char_is_wide: bool,
+    /// Encoding prefix of the most recent `Token::Num` character
+    /// constant. C11 6.4.4.4p2-p4 types each prefix separately -- `L'x'`
+    /// is `wchar_t`, `u'x'` is `char16_t`, `U'x'` is `char32_t` -- so the
+    /// width alone does not identify the type. Only meaningful when
+    /// `num_is_char` is set. Reset per token in `next`; set in both
+    /// character branches of the literal lexer.
+    pub char_prefix: StrPrefix,
 
     /// `true` when the most recent `Token::Num` came from a character
     /// constant rather than an integer constant. C99 6.4.4.4p10 gives
@@ -578,7 +578,7 @@ impl Lexer {
             float_suffix_f32: false,
             str_is_wide: false,
             str_elem_bytes: 4,
-            char_is_wide: false,
+            char_prefix: StrPrefix::None,
             num_is_char: false,
             wchar_bytes: 4,
             char_signed: true,
@@ -985,7 +985,7 @@ impl Lexer {
                 self.ival = char_value;
                 self.tk = Tok(Token::Num as i64);
                 self.num_is_char = true;
-                self.char_is_wide = true;
+                self.char_prefix = prefix;
                 return Ok(());
             }
             // Absorb the rest of the run so the wide terminator below
@@ -1269,7 +1269,7 @@ impl Lexer {
             int_is_decimal: self.int_is_decimal,
             float_suffix_f32: self.float_suffix_f32,
             num_is_char: self.num_is_char,
-            char_is_wide: self.char_is_wide,
+            char_prefix: self.char_prefix,
             str_is_wide: self.str_is_wide,
             str_elem_bytes: self.str_elem_bytes,
         }
@@ -1291,7 +1291,7 @@ impl Lexer {
         self.int_is_decimal = s.int_is_decimal;
         self.float_suffix_f32 = s.float_suffix_f32;
         self.num_is_char = s.num_is_char;
-        self.char_is_wide = s.char_is_wide;
+        self.char_prefix = s.char_prefix;
         self.str_is_wide = s.str_is_wide;
         self.str_elem_bytes = s.str_elem_bytes;
     }
@@ -1587,7 +1587,7 @@ impl Lexer {
         self.int_is_decimal = true;
         self.float_suffix_f32 = false;
         self.num_is_char = false;
-        self.char_is_wide = false;
+        self.char_prefix = StrPrefix::None;
         loop {
             if self.pos >= self.src.len() {
                 self.tk = Tok::EOF;
@@ -2749,9 +2749,30 @@ mod tests {
         let mut data: Vec<u8> = Vec::new();
         lex.next(&mut symbols, &mut index, &mut data).unwrap();
         assert!(lex.num_is_char);
-        assert!(!lex.char_is_wide);
+        assert!(lex.char_prefix == StrPrefix::None);
         lex.next(&mut symbols, &mut index, &mut data).unwrap();
         assert!(!lex.num_is_char);
+    }
+
+    #[test]
+    fn a_character_constant_records_its_encoding_prefix() {
+        // C11 6.4.4.4p2-p4 type each prefix separately, so the width
+        // alone cannot stand in for which one was written.
+        let mut lex = Lexer::new(r#"'a' L'a' u'a' U'a'"#.to_string());
+        let mut symbols: Vec<Symbol> = Vec::new();
+        let mut index = SymbolIndex::new();
+        let mut data: Vec<u8> = Vec::new();
+        for want in [
+            StrPrefix::None,
+            StrPrefix::Wide,
+            StrPrefix::Char16,
+            StrPrefix::Char32,
+        ] {
+            lex.next(&mut symbols, &mut index, &mut data).unwrap();
+            assert!(lex.num_is_char);
+            assert!(lex.char_prefix == want, "prefix mismatch");
+            assert_eq!(lex.ival, 'a' as i64);
+        }
     }
 
     #[test]

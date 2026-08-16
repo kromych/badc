@@ -196,19 +196,25 @@ impl Compiler {
         ty
     }
 
-    /// Type of the `Token::Num` the lexer just produced. A character
-    /// constant has a fixed type: `wchar_t` when prefixed (C99
-    /// 6.4.4.4p11) -- `unsigned short` at the 2-byte width Windows and
-    /// `-fshort-wchar` select, `int` at 4 -- and `int` otherwise
-    /// (6.4.4.4p10). Only an integer constant takes the value-driven
-    /// rank selection of 6.4.4.1p5.
+    /// Type of the `Token::Num` the lexer just produced. C11 6.4.4.4p2-p4
+    /// fix a character constant's type by its encoding prefix, so the
+    /// value never selects it; only an integer constant takes the
+    /// value-driven rank selection of 6.4.4.1p5.
     pub(super) fn num_token_type(&self, val: i64) -> i64 {
+        use crate::c5::lexer::StrPrefix;
         if !self.lex.num_is_char {
-            self.literal_auto_promoted_type(val)
-        } else if self.lex.char_is_wide && self.lex.wchar_bytes == 2 {
-            Ty::Short as i64 | UNSIGNED_BIT
-        } else {
-            Ty::Int as i64
+            return self.literal_auto_promoted_type(val);
+        }
+        match self.lex.char_prefix {
+            // `char16_t` is `uint_least16_t` and `char32_t` is
+            // `uint_least32_t`: unsigned, and the same width on every
+            // target. `wchar_t` is `unsigned short` at the 2-byte width
+            // Windows and `-fshort-wchar` select, `int` at 4.
+            StrPrefix::Char16 => Ty::Short as i64 | UNSIGNED_BIT,
+            StrPrefix::Char32 => Ty::Int as i64 | UNSIGNED_BIT,
+            StrPrefix::Wide if self.lex.wchar_bytes == 2 => Ty::Short as i64 | UNSIGNED_BIT,
+            // Unprefixed is `int` (6.4.4.4p10), as is a 4-byte `wchar_t`.
+            _ => Ty::Int as i64,
         }
     }
 

@@ -442,7 +442,9 @@ fn the_code_model_predefine_names_the_selected_model() {
 /// use, and no `__float80` / `__float128` exists to describe), `wint_t` is the
 /// bundled <wchar.h>'s `int`, a bare `__attribute__((aligned))`
 /// resolves to 16, and `__WCHAR_TYPE__` agrees with
-/// `__SIZEOF_WCHAR_T__` on every target.
+/// `__SIZEOF_WCHAR_T__` on every target. `__CHAR16_TYPE__` /
+/// `__CHAR32_TYPE__` name the types C11 6.4.4.4p3-p4 give `u'c'` and
+/// `U'c'`; neither tracks `wchar_t`, so both hold on every target.
 #[test]
 fn type_size_predefines_match_the_layout_engine() {
     let probe = concat!(
@@ -450,6 +452,7 @@ fn type_size_predefines_match_the_layout_engine() {
         "align __BIGGEST_ALIGNMENT__ .\n",
         "winttype __WINT_TYPE__ .\n",
         "wchar __WCHAR_TYPE__ = __SIZEOF_WCHAR_T__ .\n",
+        "c16 __CHAR16_TYPE__ c32 __CHAR32_TYPE__ .\n",
         "#if defined(__SIZEOF_FLOAT80__) || defined(__SIZEOF_FLOAT128__)\n",
         "phantom-float\n#endif\n",
     );
@@ -465,6 +468,10 @@ fn type_size_predefines_match_the_layout_engine() {
         assert!(out.contains("ld 8 wint 4 align 16 ."), "{t:?}: {out}");
         assert!(out.contains("winttype int ."), "{t:?}: {out}");
         assert!(out.contains(&format!("wchar {wchar} .")), "{t:?}: {out}");
+        assert!(
+            out.contains("c16 unsigned short c32 unsigned int ."),
+            "{t:?}: {out}"
+        );
         assert!(!out.contains("phantom-float"), "{t:?}: {out}");
     }
 }

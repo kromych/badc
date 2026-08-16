@@ -34,6 +34,47 @@ fn wide_char_constant_has_target_wchar_width() {
     assert_eq!(run(val, Target::WindowsX64), 7, "L'A' keeps its value");
 }
 
+/// C11 6.4.4.4p2-p4: `u'c'` has type `char16_t` (`uint_least16_t`) and
+/// `U'c'` has type `char32_t` (`uint_least32_t`). Both are unsigned and
+/// keep their width on every target, so neither follows `wchar_t` --
+/// which would make `u'c'` 4 bytes on the ELF and Mach-O targets and
+/// `U'c'` 2 on Windows.
+#[test]
+fn prefixed_char_constant_takes_its_own_type() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(Compiler::with_target(src.to_string(), t).compile().unwrap())
+            .run()
+            .unwrap()
+    };
+    // Width, then signedness: an unsigned type leaves `(T)-1` positive.
+    let probe = "int main(void){ return (int)(sizeof(u'A') * 1000 + sizeof(U'A') * 100 \
+                 + ((__typeof__(u'A'))-1 > 0) * 10 + ((__typeof__(U'A'))-1 > 0)); }";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        assert_eq!(
+            run(probe, t),
+            2411,
+            "{t:?}: u'A' is 2-byte, U'A' 4, unsigned"
+        );
+    }
+    // The prefix picks the type, so `L` stays on `wchar_t` and the two
+    // do not coincide where `wchar_t` is 2 bytes.
+    let wide = "int main(void){ return (int)(sizeof(L'A') * 10 + sizeof(u'A')); }";
+    assert_eq!(run(wide, Target::WindowsX64), 22, "Windows wchar_t is 2");
+    assert_eq!(run(wide, Target::LinuxX64), 42, "ELF wchar_t is 4");
+    // Values are unaffected by the retyping.
+    let val = "int main(void){ return u'A' == 65 && U'A' == 65 \
+               && u'\\uFFFD' == 65533 && U'\\U0001F600' == 128512 ? 7 : 0; }";
+    assert_eq!(run(val, Target::LinuxX64), 7, "code points preserved");
+}
+
 /// `-fshort-wchar` gives `wchar_t` an unsigned 16-bit type on every
 /// target, as gcc 16.1.1 does: `sizeof(wchar_t)` and the element width
 /// of `L"..."` / `L'...'` follow it, and a `wchar_t`-width array is then

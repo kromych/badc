@@ -33,6 +33,24 @@ static int sign(void) {
     return 0;
 }
 
+// C11 6.4.4.4p2-p4: the encoding prefix fixes the type. `u'c'` is
+// `char16_t` (`uint_least16_t`) and `U'c'` is `char32_t`
+// (`uint_least32_t`) -- unsigned, and the same width on every target,
+// so neither tracks `wchar_t`. `L'c'` is `wchar_t`, whose width the
+// target picks, so only its relation to the others is asserted here.
+static int prefixed(void) {
+    if (sizeof(u'a') != 2) return 19;
+    if (sizeof(U'a') != 4) return 20;
+    if ((__typeof__(u'a')) - 1 < 0) return 21;
+    if ((__typeof__(U'a')) - 1 < 0) return 22;
+    if (sizeof(L'a') != 2 && sizeof(L'a') != 4) return 23;
+    // The retyping leaves the code point alone.
+    if (u'a' != 97 || U'a' != 97 || L'a' != 97) return 24;
+    if (u'\uFFFD' != 65533) return 25;
+    if (U'\U0001F600' != 128512) return 26;
+    return 0;
+}
+
 // A `case` label and an array bound run the constant through the
 // constant-expression evaluator rather than the expression parser; both
 // must read the same type.
@@ -40,19 +58,26 @@ static int labelled(int x) {
     switch (x) {
         case '\xF0\x9F\x98\x80': return 1;
         case 'ab': return 2;
+        case u'\uFFFD': return 3;
         default: return 0;
     }
 }
 
 static char packed[sizeof('abcd')];
+static char packed_u16[sizeof(u'a')];
+static char packed_u32[sizeof(U'a')];
 
 int main(void) {
     int r;
     if ((r = width()) != 0) return r;
     if ((r = value()) != 0) return r;
     if ((r = sign()) != 0) return r;
+    if ((r = prefixed()) != 0) return r;
     if (labelled(-257976192) != 1) return 16;
     if (labelled(24930) != 2) return 17;
     if (sizeof(packed) != sizeof(int)) return 18;
+    if (labelled(65533) != 3) return 27;
+    if (sizeof(packed_u16) != 2) return 28;
+    if (sizeof(packed_u32) != 4) return 29;
     return 0;
 }

@@ -270,15 +270,25 @@ pub(super) enum Directive<'a> {
 /// `\n` consumed by the outer loop bumps `self.line` to `N` --
 /// which means the next source line in the buffer is attributed
 /// to `(file, N)`.
-pub(super) fn format_line_marker(line: usize, file: &str) -> String {
-    let mut escaped = String::with_capacity(file.len());
-    for ch in file.chars() {
+/// Append `s` as the body of a string literal, escaping `\` and `"`.
+/// Three positions need it: the `#` operator (C99 6.10.3.2), a line
+/// marker's filename, and `__FILE__` / `__BASE_FILE__`, whose expansion
+/// is itself a string literal. gcc and clang escape both characters in
+/// all three. A path is the case that reaches it in practice: an
+/// unescaped `\U` in a Windows path opens a universal character name.
+pub(super) fn push_string_body(s: &str, out: &mut String) {
+    for ch in s.chars() {
         match ch {
-            '\\' => escaped.push_str("\\\\"),
-            '"' => escaped.push_str("\\\""),
-            other => escaped.push(other),
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            other => out.push(other),
         }
     }
+}
+
+pub(super) fn format_line_marker(line: usize, file: &str) -> String {
+    let mut escaped = String::with_capacity(file.len());
+    push_string_body(file, &mut escaped);
     format!("# {line} \"{escaped}\"\n")
 }
 

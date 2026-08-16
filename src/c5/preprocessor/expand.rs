@@ -62,6 +62,17 @@ impl Hideset {
     }
 }
 
+/// A file name spelled as a string literal, for `__FILE__` and
+/// `__BASE_FILE__`. A name is arbitrary text, so it takes the escaping a
+/// line marker's filename takes.
+fn quoted_path(path: &str) -> String {
+    let mut s = String::with_capacity(path.len() + 2);
+    s.push('"');
+    super::directive::push_string_body(path, &mut s);
+    s.push('"');
+    s
+}
+
 fn hs_union(a: &Hideset, b: &Hideset) -> Hideset {
     let mut names = Vec::with_capacity(a.names.len() + b.names.len());
     let (mut i, mut j) = (0, 0);
@@ -478,13 +489,7 @@ impl<'a> Exp<'a> {
             }
             let text = self.text(t);
             if matches!(t.kind, TokKind::Str | TokKind::Char) {
-                for c in text.chars() {
-                    match c {
-                        '"' => s.push_str("\\\""),
-                        '\\' => s.push_str("\\\\"),
-                        _ => s.push(c),
-                    }
-                }
+                super::directive::push_string_body(text, &mut s);
             } else {
                 s.push_str(text);
             }
@@ -698,14 +703,14 @@ impl<'a> Exp<'a> {
                 out.push(t);
             }
             "__FILE__" => {
-                let t = self.synth(format!("\"{filename}\""), TokKind::Str, tok.space);
+                let t = self.synth(quoted_path(filename), TokKind::Str, tok.space);
                 out.push(t);
             }
             // The main input file, so it keeps its value inside an
             // include where `__FILE__` names the header.
             "__BASE_FILE__" => {
                 let base = self.pp.source_label.clone();
-                let t = self.synth(format!("\"{base}\""), TokKind::Str, tok.space);
+                let t = self.synth(quoted_path(&base), TokKind::Str, tok.space);
                 out.push(t);
             }
             // Extension: each use expands to the next integer.

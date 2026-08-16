@@ -855,6 +855,30 @@ fn stringify_escapes_quote_and_backslash() {
 }
 
 #[test]
+fn a_file_name_is_escaped_wherever_it_becomes_a_string_literal() {
+    // A Windows path is what reaches this: `\U` opens a universal
+    // character name, so `__FILE__` naming `...\UefiApp\...` failed to
+    // lex once the lexer diagnosed an incomplete one. gcc and clang
+    // escape `\` and `"` in both positions.
+    let name = "R:\\src\\UefiApp\\a\"b.c";
+    let want = "\"R:\\\\src\\\\UefiApp\\\\a\\\"b.c\"";
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_source_label(name);
+    let out = pp.process("__FILE__\n").expect("preprocessor failed");
+    assert!(
+        out.contains(want),
+        "__FILE__ must expand to a valid string literal:\n{out}"
+    );
+    // The line marker names the same file, and the two escaped
+    // independently -- only the marker did. Assert they agree so a
+    // third copy cannot drift from either.
+    assert_eq!(
+        super::directive::format_line_marker(1, name),
+        alloc::format!("# 1 {want}\n")
+    );
+}
+
+#[test]
 fn token_paste_joins_tokens() {
     let out = process("#define PASTE(a, b) a ## b\nint PASTE(x, y) = 0;\n");
     assert!(

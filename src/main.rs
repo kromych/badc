@@ -40,8 +40,9 @@ Output mode -- pick at most one (defaults to a native binary):
                            runtime, so editing an installed file changes
                            the build without rebuilding badc.
   --dump-pp, -E            Run the preprocessor on the input and
-                           print the expanded source to stdout.
-                           Mirrors gcc / clang `-E`.
+                           write the expanded source to `-o`'s path,
+                           or to stdout when `-o` is absent or names
+                           `-`. Mirrors gcc / clang `-E`.
 
 Multi-TU knobs:
   -c, --compile-only       Emit a c5 `.o` per source instead of
@@ -2155,12 +2156,25 @@ fn run() {
         }
     }
 
-    // `--dump-pp` / `-E` preprocesses each source to stdout and
-    // exits: no link, no codegen, no output file. A multi-source
-    // dump prefixes each unit with a `--- <label> ---` marker on
-    // stderr so the preprocessed bytes on stdout stay parseable.
+    // `--dump-pp` / `-E` preprocesses each source and exits: no link,
+    // no codegen. `-o <path>` names the file the expansion goes to and
+    // `-o -` names stdout, as in gcc and clang; without `-o` it goes to
+    // stdout. A multi-source dump prefixes each unit with a
+    // `--- <label> ---` marker on stderr so the preprocessed bytes on
+    // stdout stay parseable, and takes no `-o`: one output stream
+    // cannot hold several expansions, which is why gcc and clang refuse
+    // the combination too.
     if mode == Mode::DumpPp {
         let multi_tu = sources.len() > 1;
+        if output_path.is_some() && multi_tu {
+            eprintln!(
+                "badc: `-o <path>` together with `-E` requires exactly one \
+                 source input ({} given)",
+                sources.len()
+            );
+            std::process::exit(1);
+        }
+        let pp_output = output_path.as_deref().filter(|p| p.as_os_str() != "-");
         // `-MD` / `-MMD` alongside `-E`: gcc preprocesses and writes the
         // rule, naming the file from `-MF` / `-Wp,-M[M]D,<path>` / `-o` as
         // it does for a compile.
@@ -2206,7 +2220,18 @@ fn run() {
                     if multi_tu {
                         eprintln!("--- {label} ---");
                     }
-                    print!("{s}");
+                    match pp_output {
+                        Some(p) => {
+                            if let Err(e) = std::fs::write(p, &s) {
+                                eprint_diagnostic(format!(
+                                    "badc: error: failed to write {}: {e}",
+                                    p.display()
+                                ));
+                                std::process::exit(1);
+                            }
+                        }
+                        None => print!("{s}"),
+                    }
                     if let Some(d) = dump_deps {
                         let mut log = TuLog::default();
                         let res = emit_deps(

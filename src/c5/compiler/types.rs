@@ -230,6 +230,22 @@ pub(crate) fn segment_of_object_ty(ty: i64) -> Option<Segment> {
     }
 }
 
+/// Drop the qualifiers an assignment does not carry. C99 6.3.2.1p2
+/// gives the value of an lvalue the unqualified version of the
+/// lvalue's type, and 6.5.16.1p1 constrains only the pointed-to
+/// types, so a qualifier on the object itself never takes part in
+/// compatibility. `volatile` goes at every level because the single
+/// bit does not record one; a named address space records its level
+/// and is dropped only when it qualifies the object.
+pub(crate) fn unqualified_object_ty(ty: i64) -> i64 {
+    let ty = ty & !VOLATILE_MASK;
+    if segment_of_object_ty(ty).is_some() {
+        ty & !(SEG_MASK | SEG_LVL_MASK)
+    } else {
+        ty
+    }
+}
+
 /// The segment-qualifier bit pattern of `ty` when the qualifier
 /// applies to the object itself, else 0. For re-application onto a
 /// derived tag through [`apply_qual_bits`].
@@ -319,6 +335,28 @@ pub(crate) fn is_void_ptr_ty(ty: i64) -> bool {
     (ty & VOID_BIT) != 0 && strip_unsigned(ty) == Ty::Char as i64 + Ty::Ptr as i64
 }
 
+/// Render the derivation suffix of a tag with `depth` pointer levels:
+/// one `*` per level, with any named-address-space keyword written at
+/// the derivation [`SEG_LVL_MASK`] records. Two tags that differ only
+/// in that qualifier must not render alike.
+fn ptr_suffix(ty: i64, depth: usize) -> alloc::string::String {
+    let stars = "*".repeat(depth);
+    let Some(seg) = segment_of_ty(ty) else {
+        return stars;
+    };
+    let kw = match seg {
+        Segment::Gs => " __seg_gs",
+        Segment::Fs => " __seg_fs",
+    };
+    let lvl = (((ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT) as usize).min(depth);
+    let (below, above) = stars.split_at(lvl);
+    if above.is_empty() {
+        alloc::format!("{below}{kw}")
+    } else {
+        alloc::format!("{below}{kw} {above}")
+    }
+}
+
 /// Render a c5 type tag back into a C-like spelling: `int`, `char *`,
 /// `unsigned long **`, `struct ShellText *`, etc. Used by the
 /// redeclaration-mismatch warning so the user can see the prior and
@@ -333,7 +371,7 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     let bare = strip_unsigned(ty);
     let prefix = if unsigned { "unsigned " } else { "" };
     if (ty & VOID_BIT) != 0 && (0..100).contains(&bare) {
-        return format!("void{}", "*".repeat((bare / 2) as usize));
+        return format!("void{}", ptr_suffix(ty, (bare / 2) as usize));
     }
     if bare >= STRUCT_BASE {
         let id = struct_id_of(bare);
@@ -344,7 +382,7 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             .filter(|n| !n.is_empty())
             .map(alloc::string::ToString::to_string)
             .unwrap_or_else(|| format!("@{id}"));
-        return format!("{prefix}struct {name}{}", "*".repeat(depth));
+        return format!("{prefix}struct {name}{}", ptr_suffix(ty, depth));
     }
     let (base, leaf) = if in_band(bare, Ty::Float as i64) {
         (Ty::Float as i64, "float")
@@ -363,12 +401,12 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
         let depth = (bare / 2) as usize;
         let leaf_char = bare % 2 == 0;
         let name = if leaf_char { "char" } else { "int" };
-        return format!("{prefix}{name}{}", "*".repeat(depth));
+        return format!("{prefix}{name}{}", ptr_suffix(ty, depth));
     } else {
         return format!("{prefix}ty@{bare}");
     };
     let depth = ((bare - base) / 2) as usize;
-    format!("{prefix}{leaf}{}", "*".repeat(depth))
+    format!("{prefix}{leaf}{}", ptr_suffix(ty, depth))
 }
 
 /// Render a function signature: `<return> (<params>[, ...])`. Used by

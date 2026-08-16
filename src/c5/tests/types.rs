@@ -716,6 +716,51 @@ fn pointer_converted_to_bool_yields_zero_or_one() {
     assert_eq!(got, 1010);
 }
 
+#[test]
+fn a_named_address_space_on_the_object_does_not_change_compatibility() {
+    use crate::{Compiler, Target};
+    // C99 6.3.2.1p2 gives an lvalue's value the unqualified type, so a
+    // named address space qualifying the object itself takes no part in
+    // assignment compatibility -- the same rule `volatile` already gets.
+    // Both spellings the x86 per-cpu accessors produce are covered: a
+    // qualified pointer object, and a dereference of a pointer to one.
+    let src = "struct mm_struct;\n\
+               extern struct mm_struct *__seg_gs cur_mm;\n\
+               extern struct mm_struct *pcpu_mm;\n\
+               struct mm_struct *direct(void) { return cur_mm; }\n\
+               struct mm_struct *through_cast(void) {\n\
+                 return *(struct mm_struct *__seg_gs *)(__UINTPTR_TYPE__)&pcpu_mm; }\n\
+               void assign(void) { struct mm_struct *m; m = cur_mm; (void)m; }\n\
+               int main(void) { return 0; }";
+    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .expect("a qualified object is compatible with its unqualified type");
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+}
+
+#[test]
+fn a_named_address_space_on_the_pointee_is_named_in_the_diagnostic() {
+    use crate::{Compiler, Target};
+    // The qualifier below the outermost derivation is a real difference,
+    // and no diagnostic may print two type texts that read alike.
+    let src = "struct task_struct;\n\
+               extern __seg_gs struct task_struct *cur;\n\
+               struct task_struct *f(void) { return cur; }\n\
+               int main(void) { return 0; }";
+    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap();
+    assert!(
+        p.warnings.iter().any(|w| {
+            w.contains("incompatible struct types in return")
+                && w.contains("declared=struct task_struct*")
+                && w.contains("returned=struct task_struct __seg_gs *")
+        }),
+        "got: {:?}",
+        p.warnings
+    );
+}
+
 /// All five targets: `long double` is laid out exactly as `double`
 /// (C99 6.2.5p10 permits any FP type at least as wide as `double`), so
 /// `sizeof` / `_Alignof` / struct offsets match `double`'s on every one.

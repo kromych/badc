@@ -4816,6 +4816,244 @@ fn gc_sections_drops_unreachable_named_sections() {
     assert!(swept.iter().any(|s| s.0 == "livetab"), "{swept:?}");
 }
 
+// AArch64 input-section alignment and the MOVW group relocations.
+// Every golden here was measured against GNU as 2.46.1 + GNU ld
+// 2.46.1 on linux-aarch64; the cross-target links run on any host.
+mod aarch64_link {
+    use super::{badc, run, tempdir};
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    fn write(dir: &Path, name: &str, body: &str) -> PathBuf {
+        let p = dir.join(name);
+        std::fs::write(&p, body).expect("write source");
+        p
+    }
+
+    /// Write each source and assemble it for linux-aarch64.
+    fn assemble_a64(dir: &Path, srcs: &[(&str, &str)]) -> Vec<PathBuf> {
+        let mut objs: Vec<PathBuf> = Vec::new();
+        for (name, body) in srcs {
+            let src = write(dir, name, body);
+            let obj = dir.join(format!("{}.o", name.trim_end_matches(".s")));
+            run(
+                Command::new(badc())
+                    .args(["-q", "-c", "--target=linux-aarch64"])
+                    .arg(&src)
+                    .arg("-o")
+                    .arg(&obj)
+                    .current_dir(dir),
+                "assemble for linux-aarch64",
+            );
+            objs.push(obj);
+        }
+        objs
+    }
+
+    /// Link the sources into a freestanding linux-aarch64 image and
+    /// return `(image bytes, link map)`.
+    fn link_a64(dir: &Path, srcs: &[(&str, &str)]) -> (Vec<u8>, String) {
+        let objs = assemble_a64(dir, srcs);
+        let exe = dir.join("prog");
+        let map = dir.join("prog.map");
+        let mut c = Command::new(badc());
+        c.args(["-q", "--target=linux-aarch64", "--freestanding"]);
+        run(
+            c.args(&objs)
+                .arg("-o")
+                .arg(&exe)
+                .arg(format!("-Map={}", map.display()))
+                .current_dir(dir),
+            "link for linux-aarch64",
+        );
+        (
+            std::fs::read(&exe).expect("read image"),
+            std::fs::read_to_string(&map).expect("read map"),
+        )
+    }
+
+    /// Runtime address a link map gives a global symbol.
+    fn map_symbol(map: &str, name: &str) -> u64 {
+        for line in map.lines() {
+            let mut f = line.split_whitespace();
+            let (Some(addr), Some(sym)) = (f.next(), f.next()) else {
+                continue;
+            };
+            if sym == name
+                && f.next().is_none()
+                && let Some(hex) = addr.strip_prefix("0x")
+            {
+                return u64::from_str_radix(hex, 16).expect("map address");
+            }
+        }
+        panic!("`{name}` not in the link map:\n{map}");
+    }
+
+    /// Little-endian word an ELF64 image holds at `vaddr`.
+    fn word_at(bytes: &[u8], vaddr: u64) -> u32 {
+        let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+        let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+        let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+        let e_phoff = rd64(0x20) as usize;
+        let e_phentsize = rd16(0x36);
+        for i in 0..rd16(0x38) {
+            let ph = e_phoff + i * e_phentsize;
+            let (p_vaddr, p_offset, p_filesz) = (rd64(ph + 16), rd64(ph + 8), rd64(ph + 32));
+            if rd32(ph) == 1 && (p_vaddr..p_vaddr + p_filesz).contains(&vaddr) {
+                return rd32((p_offset + (vaddr - p_vaddr)) as usize);
+            }
+        }
+        panic!("vaddr {vaddr:#x} is in no PT_LOAD");
+    }
+
+    const ISLANDS: &str = "	.text\n\
+                           	nop\n\
+                           	nop\n\
+                           	nop\n\
+                           	.balign 16\n\
+                           	.globl isle16\n\
+                           isle16:\n\
+                           	.quad 0x1122334455667788\n\
+                           	.quad 0x99aabbccddeeff00\n\
+                           	nop\n\
+                           	.section .text.k32,\"ax\",@progbits\n\
+                           	.balign 32\n\
+                           	.globl isle32\n\
+                           isle32:\n\
+                           	.quad 1\n\
+                           	.quad 2\n\
+                           	nop\n\
+                           	.section .text.k64,\"ax\",@progbits\n\
+                           	.balign 64\n\
+                           	.globl isle64\n\
+                           isle64:\n\
+                           	.quad 5\n";
+
+    /// Each input text section keeps the alignment it claims once the
+    /// image is laid out, which is the guarantee GNU ld gives: with
+    /// the same three islands `ld` places them at 16-, 32- and
+    /// 64-aligned addresses, and `.text` reports the widest of them.
+    #[test]
+    fn merged_text_keeps_each_input_section_alignment() {
+        let dir = tempdir("a64-text-align");
+        let main = "	.text\n\
+                    	.globl __c5_entry\n\
+                    __c5_entry:\n\
+                    	adrp	x0, isle16\n\
+                    	ldr	q0, [x0, #:lo12:isle16]\n\
+                    	ret\n";
+        let (image, map) = link_a64(&dir, &[("m.s", main), ("i.s", ISLANDS)]);
+        for (name, align) in [("isle16", 16u64), ("isle32", 32), ("isle64", 64)] {
+            let at = map_symbol(&map, name);
+            assert_eq!(at % align, 0, "{name} at {at:#x} is not {align}-aligned");
+        }
+        // `.text`'s own header has to agree with where it starts.
+        let rd16 = |o: usize| u16::from_le_bytes([image[o], image[o + 1]]) as usize;
+        let rd64 = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+        let e_shoff = rd64(0x28) as usize;
+        let (esz, num, strndx) = (rd16(0x3a), rd16(0x3c), rd16(0x3e));
+        let str_off = rd64(e_shoff + strndx * esz + 0x18) as usize;
+        let mut seen = false;
+        for i in 0..num {
+            let sh = e_shoff + i * esz;
+            let n = str_off + u32::from_le_bytes(image[sh..sh + 4].try_into().unwrap()) as usize;
+            if image[n..n + 6] != *b".text\0" {
+                continue;
+            }
+            let (addr, align) = (rd64(sh + 16), rd64(sh + 48));
+            assert_eq!(align, 64, ".text should report the widest input alignment");
+            assert_eq!(addr % align, 0, ".text at {addr:#x} is not {align}-aligned");
+            seen = true;
+        }
+        assert!(seen, "no .text section header");
+    }
+
+    /// A 16-byte load reaching a 16-aligned island: the scaled imm12
+    /// can only carry a multiple of the access size, so a dropped
+    /// alignment stops the link.
+    #[test]
+    fn scaled_16_byte_load_reaches_an_aligned_text_island() {
+        let dir = tempdir("a64-scaled-ldr");
+        let main = "	.text\n\
+                    	.globl __c5_entry\n\
+                    __c5_entry:\n\
+                    	adrp	x0, isle16\n\
+                    	ldr	q0, [x0, #:lo12:isle16]\n\
+                    	ret\n";
+        let (image, map) = link_a64(&dir, &[("m.s", main), ("i.s", ISLANDS)]);
+        let entry = map_symbol(&map, "__c5_entry");
+        let isle = map_symbol(&map, "isle16");
+        // `ldr q0, [x0, #imm12]`: imm12 at bits 21:10, scaled by 16.
+        let ldr = word_at(&image, entry + 4);
+        assert_eq!(
+            u64::from((ldr >> 10) & 0xfff) * 16,
+            isle & 0xfff,
+            "the scaled offset must reach the island's in-page address"
+        );
+    }
+
+    /// Build a host-native image from one asm source plus a `main` that
+    /// exits nonzero on the first check it fails, run it, and require 0.
+    #[cfg(target_arch = "aarch64")]
+    fn run_host_image(tag: &str, asm: &str, main: &str) {
+        let dir = tempdir(tag);
+        let exe = dir.join("prog");
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .arg(write(&dir, "unit.s", asm))
+                .arg(write(&dir, "main.c", main))
+                .arg("-o")
+                .arg(&exe)
+                .current_dir(&dir),
+            "build the host-native image",
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "stdout={:?} stderr={:?}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    /// The alignment fix on the host: a 16-aligned island read through
+    /// a scaled 16-byte load, in a Mach-O image on macOS and an ELF one
+    /// on Linux.
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn aligned_text_island_runs_on_the_host() {
+        let asm = "	.text\n\
+                   	nop\n\
+                   	nop\n\
+                   	nop\n\
+                   	.balign 16\n\
+                   	.globl isle16\n\
+                   isle16:\n\
+                   	.quad 0x1122334455667788\n\
+                   	.quad 0x99aabbccddeeff00\n\
+                   	.globl load_isle\n\
+                   load_isle:\n\
+                   	adrp	x1, isle16\n\
+                   	ldr	q0, [x1, #:lo12:isle16]\n\
+                   	mov	x0, v0.d[0]\n\
+                   	ret\n\
+                   	.globl isle_addr\n\
+                   isle_addr:\n\
+                   	adrp	x0, isle16\n\
+                   	add	x0, x0, #:lo12:isle16\n\
+                   	ret\n";
+        let main = "extern unsigned long load_isle(void), isle_addr(void);\n\
+                    int main(void) {\n\
+                    	if (isle_addr() % 16) return 1;\n\
+                    	if (load_isle() != 0x1122334455667788UL) return 2;\n\
+                    	return 0;\n\
+                    }\n";
+        run_host_image("a64-align-run", asm, main);
+    }
+}
+
 // COMDAT groups reach the linker from C++ inline functions and from
 // gcc's PIC thunks, and no compiler here emits one, so the inputs are
 // written out directly. x86-64 only: the bodies are machine code.

@@ -704,6 +704,23 @@ fn symbol_text_offset(build: &Build, name: &str) -> Option<u64> {
     Some(build.pc_to_native[ent_pc] as u64)
 }
 
+/// Extend `code` to `len` with `int3` / `brk #1`. The pad follows a
+/// stub that transfers control away, so it is never executed.
+fn pad_with_traps(machine: Machine, code: &mut Vec<u8>, len: usize) {
+    if code.len() >= len {
+        return;
+    }
+    match machine {
+        Machine::X86_64 => code.resize(len, 0xCC),
+        Machine::Aarch64 => {
+            while code.len() + 4 <= len {
+                aarch64::emit(code, 0xd420_0020);
+            }
+            code.resize(len, 0);
+        }
+    }
+}
+
 /// Byte length of the entry adapter -- the minimal shim that loads the
 /// initial stack pointer and the image-base offset into the first two
 /// argument registers and calls `__c5_entry`.
@@ -1604,13 +1621,20 @@ pub(super) fn write(
     // Shared libraries don't have a `_start` stub -- dyld
     // never jumps into them, callers reach exports via
     // `dlsym`.
-    let stub_len = if is_shared {
+    let stub_body_len = if is_shared {
         0
     } else if c5_entry_offset.is_some() {
         entry_adapter_len(machine)
     } else {
         start_stub_len(machine, use_libc_exit)
     };
+    // The stub is the first input section of `.text` and `build.text`
+    // the second, so the stub spans a whole multiple of the alignment
+    // `build.text`'s own input sections claim: a shorter span shifts
+    // every symbol in `build.text` off that alignment.
+    let text_align = build.text_align.max(16) as u64;
+    let stub_len = round_up(stub_body_len, text_align);
+    let text_gap = stub_len - stub_body_len;
     // Defined `.dynsym` export entries. A shared library always exports;
     // an executable exports under `--export-all` (functions, via
     // `Build::exports`) and `--export-data` (every global, function and
@@ -1900,24 +1924,18 @@ pub(super) fn write(
         0
     };
     let rela_size = (n_imports as u64 + n_relative as u64 + n_copy as u64) * ELF64_RELA_SIZE;
-    // An asm alignment request above the section default places
-    // `build.text[0]` (which follows the entry stub) at that alignment,
-    // so the section-relative padding holds absolutely; p_offset ==
-    // p_vaddr modulo the page size. Without such a request the code
-    // blob keeps its established 16-aligned placement.
-    let text_align = build.text_align.max(16) as u64;
-    let code_off = if text_align > 16 {
-        round_up(rela_off + rela_size + stub_len, text_align) - stub_len
-    } else {
-        round_up(rela_off + rela_size, 16)
-    };
+    // `.text` starts at the alignment its input sections claim;
+    // p_offset == p_vaddr modulo the page size, so it holds absolutely.
+    let code_off = round_up(rela_off + rela_size, text_align);
 
-    // Build the code blob: _start stub + build.text (with shifted
-    // fixup offsets at write time). For shared-library output
-    // we skip the stub entirely; dyld won't run it (no entry
-    // point), and emitting one would force a libc-exit
-    // import that isn't otherwise needed.
+    // Build the code blob: _start stub + alignment pad + build.text
+    // (with shifted fixup offsets at write time). For shared-library
+    // output we skip the stub entirely; dyld won't run it (no entry
+    // point), and emitting one would force a libc-exit import that
+    // isn't otherwise needed.
     let mut code: Vec<u8> = Vec::with_capacity(stub_len as usize + build.text.len());
+    // Both stub emitters measure their branch to `build.text` from
+    // their own first byte, so `text_gap` rides on the target offset.
     // `Some(byte_offset)` for the libc-exit GOT placeholder, or
     // `None` when the stub direct-syscalls / for shared
     // libraries that emit no stub at all. `None` short-circuits
@@ -1928,17 +1946,24 @@ pub(super) fn write(
         // The adapter reaches `__c5_entry` (in `build.text`, past the
         // adapter) with a relative call and exits through it, so there
         // is no libc-exit GOT slot to patch here.
-        emit_entry_adapter(machine, build.abi, &mut code, entry_off, code_off);
+        emit_entry_adapter(
+            machine,
+            build.abi,
+            &mut code,
+            entry_off + text_gap,
+            code_off,
+        );
         None
     } else {
         emit_start_stub(
             machine,
             build.abi,
             &mut code,
-            build.entry_offset as u64,
+            build.entry_offset as u64 + text_gap,
             use_libc_exit,
         )
     };
+    pad_with_traps(machine, &mut code, stub_len as usize);
     code.extend_from_slice(&build.text);
     let code_size = code.len() as u64;
 
@@ -3287,7 +3312,7 @@ pub(super) fn write(
             sh_size: code_size,
             sh_link: 0,
             sh_info: 0,
-            sh_addralign: 16,
+            sh_addralign: text_align,
             sh_entsize: 0,
         },
     );

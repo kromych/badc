@@ -362,17 +362,13 @@ pub(super) fn write(
     //    build.text`; the program's `mprotect` calls go through
     //    the regular IAT lookup just like every other libc call.
     let stub_len = stub.bytes.len() as u32;
-    // An asm alignment request above the section default pads past the
-    // stub so `build.text[0]` lands at that alignment within the
-    // SECTION_ALIGNMENT-aligned section and the section-relative
-    // padding holds absolutely; otherwise the established stub-relative
-    // placement stays.
+    // The stub is the first input section of `.text` and `build.text`
+    // the second, so the stub occupies a span rounded up to the
+    // alignment `build.text`'s own input sections claim. The section
+    // starts at SECTION_ALIGNMENT, so the span places `build.text[0]`
+    // on that alignment absolutely.
     let text_align = build.text_align.max(16) as u32;
-    let text_prologue_len = if text_align > 16 {
-        round_up(stub_len, text_align)
-    } else {
-        stub_len
-    };
+    let text_prologue_len = round_up(stub_len, text_align);
 
     // `.rdata` carries `build.data[..data_relro_len]`: the read-only
     // prefix (no relocated slot) followed by the relro region, whose

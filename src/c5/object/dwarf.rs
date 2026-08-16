@@ -94,14 +94,12 @@ const DW_AT_FRAME_BASE: u32 = 0x40;
 /// `DW_AT_data_member_location` (0x38) carries the byte offset of
 /// a member from the start of its containing struct / union.
 const DW_AT_DATA_MEMBER_LOCATION: u32 = 0x38;
-/// `DW_AT_bit_offset` (0x0c) is DWARF 3-style; deprecated in v4
-/// but every consumer we target still handles it. Encodes the
-/// distance from the MSB of the storage unit to the MSB of the
-/// bitfield (so on little-endian targets we transform c5's
-/// LSB-relative `bit_offset` into `storage_bits - lsb - width`
-/// at emit time).
-const DW_AT_BIT_OFFSET: u32 = 0x0c;
 const DW_AT_BIT_SIZE: u32 = 0x0d;
+/// `DW_AT_data_bit_offset` (0x6b) is the DWARF 4 5.6.6 bitfield
+/// position: bits from the start of the containing aggregate,
+/// independent of byte order. It replaces `DW_AT_bit_offset`, which
+/// DWARF 4 deprecates and defines against the storage unit's MSB.
+const DW_AT_DATA_BIT_OFFSET: u32 = 0x6b;
 const DW_AT_DECL_LINE: u32 = 0x3b;
 const DW_AT_DECL_FILE: u32 = 0x3a;
 const DW_AT_PROTOTYPED: u32 = 0x27;
@@ -319,6 +317,12 @@ pub(crate) struct DwarfSections {
 }
 
 /// Produce DWARF for `program` / `build`.
+///
+/// The whole result is consumed on the single-TU path that writes a
+/// final image with no link step (`emit_native_with_options` with a
+/// non-relocatable `OutputKind`). A merged link takes `.debug_info` /
+/// `.debug_abbrev` / `.debug_line` / `.debug_str` from
+/// `Build::merged_dwarf` and only `.debug_frame` from here.
 ///
 /// `target` selects the data model used to size c5's `long`
 /// (LP64 = 8 bytes vs LLP64 = 4 bytes) so the emitted base-type
@@ -891,12 +895,15 @@ impl CatalogEntry {
                 let mut size: u32 = 1 + 4 + 4;
                 if let Some(s) = structs.get(*id as usize) {
                     for f in &s.fields {
-                        // member abbrev(1) + name(4) + type(4) + location(4)
-                        size += 13;
-                        if f.bit_width > 0 {
-                            // + byte_size(1) + bit_offset(1) + bit_size(1)
-                            size += 3;
-                        }
+                        size += if f.bit_width > 0 {
+                            // abbrev(1) + name(4) + type(4)
+                            // + data_bit_offset(uleb) + bit_size(uleb)
+                            9 + uleb128_byte_len((f.offset as u64) * 8 + f.bit_offset as u64)
+                                + uleb128_byte_len(f.bit_width as u64)
+                        } else {
+                            // abbrev(1) + name(4) + type(4) + location(4)
+                            13
+                        };
                     }
                 }
                 // children-list terminator
@@ -1413,9 +1420,9 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4),
         ],
     },
-    // bitfield member -- DWARF 3-style byte_size + bit_offset +
-    // bit_size on top of the regular member triple; lldb / gdb both
-    // accept this shape on DWARF 4 input.
+    // bitfield member -- name + type ref4 + DWARF 4
+    // DW_AT_data_bit_offset (absolute bit offset from the aggregate
+    // start) + DW_AT_bit_size (bit width).
     AbbrevDecl {
         code: ABBREV_BITFIELD_MEMBER,
         tag: DW_TAG_MEMBER,
@@ -1423,10 +1430,8 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         attrs: &[
             (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_TYPE, DW_FORM_REF4),
-            (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4),
-            (DW_AT_BYTE_SIZE, DW_FORM_DATA1),
-            (DW_AT_BIT_OFFSET, DW_FORM_DATA1),
-            (DW_AT_BIT_SIZE, DW_FORM_DATA1),
+            (DW_AT_DATA_BIT_OFFSET, DW_FORM_UDATA),
+            (DW_AT_BIT_SIZE, DW_FORM_UDATA),
         ],
     },
     // PLT-trampoline subprogram -- abbrev 2's shape plus DW_AT_type
@@ -2059,22 +2064,17 @@ fn emit_type_die(
                     body.extend_from_slice(&member_type_off.to_le_bytes());
                     body.extend_from_slice(&(f.offset as u32).to_le_bytes());
                 } else {
-                    // Bitfield: abbrev 10. c5 packs bitfields
-                    // into 8-byte storage units; convert c5's
-                    // LSB-relative `bit_offset` to DWARF v4's
-                    // MSB-relative `DW_AT_bit_offset` on
-                    // little-endian targets:
-                    //   dwarf_bit_offset = 64 - lsb_offset - width
+                    // DWARF 4 5.6.6: DW_AT_data_bit_offset is the
+                    // absolute bit offset from the start of the
+                    // aggregate. c5 stores `offset` as the byte offset
+                    // of the storage unit and `bit_offset` as the bit
+                    // offset within it.
+                    let data_bit_offset = (f.offset as u64) * 8 + f.bit_offset as u64;
                     write_uleb128(body, ABBREV_BITFIELD_MEMBER);
                     body.extend_from_slice(&member_name_off.to_le_bytes());
                     body.extend_from_slice(&member_type_off.to_le_bytes());
-                    body.extend_from_slice(&(f.offset as u32).to_le_bytes());
-                    body.push(8); // DW_AT_byte_size: storage unit is 8 bytes.
-                    let dwarf_bit_offset = 64u32
-                        .saturating_sub(f.bit_offset)
-                        .saturating_sub(f.bit_width);
-                    body.push(dwarf_bit_offset as u8);
-                    body.push(f.bit_width as u8);
+                    write_uleb128(body, data_bit_offset);
+                    write_uleb128(body, f.bit_width as u64);
                 }
             }
             // Children-list terminator for this struct.
@@ -2819,10 +2819,59 @@ mod tests {
              40180000132e01030e110112072719360b40180000032400030e0b0b3e0b00000434\
              00030e491302183a0f3b0f0000050500030e491302183a0f3b0f0000060f000b0b49\
              130000071301030e0b060000081701030e0b060000090d00030e4913380600000a0d\
-             00030e491338060b0b0c0b0d0b00000b2e01030e110112073f19491300000c050003\
-             0e491300000d180000000e0500030e4913021800000f0101491300001021002f0f00\
-             0011040103080b0b000012280003081c0d000000"
+             00030e49136b0f0d0f00000b2e01030e110112073f19491300000c0500030e491300\
+             000d180000000e0500030e4913021800000f0101491300001021002f0f0000110401\
+             03080b0b000012280003081c0d000000"
         );
+    }
+
+    /// This module emits DWARF for a single translation unit written
+    /// straight to a final image (`emit_native_with_options` with a
+    /// non-relocatable `OutputKind`); `dwarf_reloc` emits it for
+    /// ET_REL, which the linker merges. Both describe the same C
+    /// types, so an attribute carries the same form in both unless it
+    /// is listed below with the reason it cannot.
+    #[test]
+    fn abbrev_attribute_forms_match_the_et_rel_producer() {
+        // DW_FORM_string. The ET_REL producer inlines strings because
+        // a .debug_str offset would need a relocation to survive the
+        // merge; this one has the final .debug_str and uses strp.
+        const DW_FORM_STRING: u32 = 0x08;
+        // `die_size` lays out CU-relative DIE offsets before emission,
+        // so these carry a fixed-width form here where the ET_REL
+        // producer, which patches refs after the fact, uses udata.
+        const FIXED_WIDTH_HERE: &[u32] = &[DW_AT_BYTE_SIZE, DW_AT_DATA_MEMBER_LOCATION];
+
+        let norm = |form: u32| {
+            if form == DW_FORM_STRING {
+                DW_FORM_STRP
+            } else {
+                form
+            }
+        };
+        let mut here: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+        for d in ABBREV_DECLS {
+            for &(at, form) in d.attrs {
+                here.entry(at).or_default().insert(norm(form));
+            }
+        }
+        let mut there: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+        for (at, form) in super::super::dwarf_reloc::abbrev_attr_forms() {
+            there
+                .entry(at as u32)
+                .or_default()
+                .insert(norm(form as u32));
+        }
+        for (at, forms) in &here {
+            if FIXED_WIDTH_HERE.contains(at) {
+                continue;
+            }
+            let Some(other) = there.get(at) else { continue };
+            assert_eq!(
+                forms, other,
+                "attribute {at:#04x} is encoded differently by the two DWARF producers",
+            );
+        }
     }
 
     #[test]

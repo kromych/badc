@@ -408,13 +408,21 @@ fn lldb_resolves_bitfield_widths() {
         let _ = std::fs::remove_file(&path);
         return;
     };
-    // lldb prints bitfield widths as `<name> : <bits>`. The
-    // emitter converts c5's LSB-relative `bit_offset` to DWARF
-    // v3-style MSB-relative `DW_AT_bit_offset` so a wrong sign on
-    // that math would yield negative widths or swap field
-    // positions.
+    // lldb prints bitfield widths as `<name> : <bits>`.
     for needle in ["width : 5", "height : 6", "rest : 21"] {
         assert!(out.contains(needle), "expected `{needle}` in:\n{out}");
+    }
+    // Widths alone leave the field positions unchecked. DWARF 4
+    // 5.6.6 puts each field at DW_AT_data_bit_offset bits from the
+    // start of the aggregate, so the three run 0 / 5 / 11.
+    if let Some(info) = dwarfdump_debug_info(&path) {
+        for needle in [
+            "DW_AT_data_bit_offset\t(0)",
+            "DW_AT_data_bit_offset\t(5)",
+            "DW_AT_data_bit_offset\t(11)",
+        ] {
+            assert!(info.contains(needle), "expected `{needle}` in:\n{info}");
+        }
     }
     let _ = std::fs::remove_file(&path);
 }

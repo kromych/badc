@@ -868,6 +868,16 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
     },
 ];
 
+/// Every declaration's `(attribute, form)` pairs, for the
+/// cross-producer form check in `dwarf`.
+#[cfg(test)]
+pub(super) fn abbrev_attr_forms() -> Vec<(u8, u8)> {
+    ABBREV_DECLS
+        .iter()
+        .flat_map(|d| d.attrs.iter().copied())
+        .collect()
+}
+
 fn build_debug_abbrev() -> Vec<u8> {
     let mut out = Vec::new();
     for d in ABBREV_DECLS {

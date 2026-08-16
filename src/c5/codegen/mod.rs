@@ -1751,12 +1751,11 @@ pub(crate) struct Build {
     /// `IMAGE_OPTIONAL_HEADER64::AddressOfEntryPoint` at the
     /// user's body via `pc_to_native[pc]`.
     pub dllmain_pc: Option<usize>,
-    /// Mirror of [`NativeOptions::debug_info`]. The per-format
-    /// writers gate DWARF section emission on this -- when
-    /// `false`, no `.debug_*` sections appear in the output
-    /// image. Defaults to `true` for `Build::default()`
-    /// so existing tests that build a `Build` by hand keep
-    /// debug info enabled.
+    /// Mirror of [`NativeOptions::debug_info`], assigned in
+    /// `lower_for`. The per-format writers gate DWARF section
+    /// emission on this -- when `false`, no `.debug_*` sections
+    /// appear in the output image. `Build::default()` derives
+    /// `false`.
     pub debug_info: bool,
     /// Pre-baked merged DWARF byte streams. Set by the
     /// multi-TU link synthesizer (`synth_build.rs`) so the

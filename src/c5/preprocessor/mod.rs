@@ -1164,7 +1164,7 @@ impl Preprocessor {
             // for assembler input.
             let parsed_hash = trimmed
                 .strip_prefix('#')
-                .map(|rest| (rest, parse_directive(rest.trim_start())));
+                .map(|rest| (rest, parse_directive(rest.trim_start(), self.asm_source)));
             let asm_text = self.asm_source
                 && matches!(&parsed_hash, Some((r, Directive::Other)) if !r.trim_start().is_empty());
             if let Some((rest, parsed)) = parsed_hash
@@ -1451,7 +1451,7 @@ impl Preprocessor {
                     let dline = source_line + consumed - 1;
                     let cont_trimmed = cont.trim_start();
                     if let Some(rest) = cont_trimmed.strip_prefix('#') {
-                        let parsed = parse_directive(rest.trim_start());
+                        let parsed = parse_directive(rest.trim_start(), self.asm_source);
                         // TODO: `#include`, `#line` and `#pragma` inside an
                         // argument list are consumed without effect; their
                         // output would have to interleave with the joined

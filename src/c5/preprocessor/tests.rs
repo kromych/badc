@@ -1175,6 +1175,39 @@ fn asm_hash_line_tail_is_macro_expanded() {
     );
 }
 
+/// A keyword-less line marker is text in assembler input and a directive
+/// in C. `#` opens a comment for several assemblers, so GNU cpp and clang
+/// pass every `# <n> ...` line through unchanged there -- flag digits and
+/// the file-less form included -- and honor only `#line`; consuming one
+/// re-homes the unit's diagnostics onto a file it never read and drops the
+/// line's own text.
+#[test]
+fn asm_keeps_line_markers_as_text() {
+    let src = "nop1\n# 42 \"injected.h\"\nnop2\n# 7 \"flagged.h\" 1\n\
+               nop3\n# 99\nnop4\n#line 55 \"real.h\"\nnop5\n";
+    let out = process_asm(src);
+    for text in ["# 42 \"injected.h\"", "# 7 \"flagged.h\" 1", "# 99"] {
+        assert!(out.contains(text), "{text} not passed through: {out}");
+    }
+    // `#line` is a directive in both languages, and renders as a marker.
+    assert!(out.contains("# 55 \"real.h\""), "{out}");
+    assert!(!out.contains("#line"), "{out}");
+
+    // C input keeps the GNU spelling, which generated sources rely on: the
+    // marker is consumed and re-rendered from the tracked position, so the
+    // flag digit goes and a file-less form acquires the current file.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process("# 7 \"flagged.h\" 1\nint x;\n# 99\nint y;\n")
+        .expect("preprocess");
+    assert!(
+        out.contains("# 7 \"flagged.h\"") && !out.contains(" 1\n"),
+        "{out}"
+    );
+    assert!(out.contains("# 99 \"flagged.h\""), "{out}");
+    assert!(pp.warnings.is_empty(), "{:?}", pp.warnings);
+}
+
 /// C99 6.10p9: `#` with nothing after it is the null directive,
 /// consumed without effect and without diagnostic in either language.
 #[test]

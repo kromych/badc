@@ -1809,7 +1809,10 @@ fn run() {
         file: dep_file,
         targets: dep_targets,
         phony: dep_phony,
-        target_from_output: dep_target_from_output,
+        // Under `-E` the `-o` operand names the preprocessed text, not an
+        // object, so the rule keeps gcc's default target -- the source stem
+        // with `.o` -- rather than naming a file no rule builds.
+        target_from_output: dep_target_from_output && mode != Mode::DumpPp,
     });
     // One dependency file cannot describe several translation units.
     // gcc truncates it per unit, leaving only the last; badc compiles
@@ -1825,13 +1828,16 @@ fn run() {
         ));
         std::process::exit(1);
     }
-    // `-MD` / `-MMD` describe a compiled translation unit, which only
-    // `-c` and the executable / shared-library link produce. Refuse the
+    // `-MD` / `-MMD` describe a translation unit the run processes, which
+    // `-c`, the executable / shared-library link and `-E` all do. Refuse the
     // other modes rather than accept the flag and write nothing.
     if let Some(d) = &deps
         && d.kind == DepKind::WithOutput
         && !compile_only
-        && !matches!(mode, Mode::NativeExecutable | Mode::SharedLibrary)
+        && !matches!(
+            mode,
+            Mode::NativeExecutable | Mode::SharedLibrary | Mode::DumpPp
+        )
     {
         eprint_diagnostic(format!(
             "badc: error: {} produces no translation-unit output to describe, \
@@ -2038,6 +2044,12 @@ fn run() {
     // stderr so the preprocessed bytes on stdout stay parseable.
     if mode == Mode::DumpPp {
         let multi_tu = sources.len() > 1;
+        // `-MD` / `-MMD` alongside `-E`: gcc preprocesses and writes the
+        // rule, naming the file from `-MF` / `-Wp,-M[M]D,<path>` / `-o` as
+        // it does for a compile.
+        let dump_deps = deps.as_ref().filter(|d| d.kind == DepKind::WithOutput);
+        let stderr_is_tty = std::io::stderr().is_terminal();
+        let mut dep_failed = false;
         for src_path in &sources {
             let (label, contents) = if src_path == "-" {
                 ("-".to_string(), read_stdin_source())
@@ -2065,20 +2077,37 @@ fn run() {
                 .with_own_header_roots(own_header_roots.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(label.clone())
+                .with_track_includes(dump_deps.is_some())
                 .with_elf_class(object_elf_class)
                 .with_code_model(code_model);
-            match Compiler::preprocess(contents, target, opts) {
-                Ok(s) => {
+            match Compiler::preprocess_tracked(contents, target, opts) {
+                Ok((s, records)) => {
                     if multi_tu {
                         eprintln!("--- {label} ---");
                     }
                     print!("{s}");
+                    if let Some(d) = dump_deps {
+                        let mut log = TuLog::default();
+                        let res = emit_deps(
+                            src_path,
+                            &records,
+                            d,
+                            output_path.as_deref(),
+                            &mut log,
+                            stderr_is_tty,
+                        );
+                        log.flush();
+                        dep_failed |= res.is_err();
+                    }
                 }
                 Err(e) => {
                     eprint_diagnostic(e);
                     std::process::exit(1);
                 }
             }
+        }
+        if dep_failed {
+            std::process::exit(1);
         }
         return;
     }

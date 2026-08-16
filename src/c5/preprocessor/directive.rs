@@ -294,7 +294,9 @@ fn strip_keyword<'a>(rest: &'a str, kw: &str) -> Option<&'a str> {
         .then_some(after)
 }
 
-pub(super) fn parse_directive(rest: &str) -> Directive<'_> {
+/// Classify the text after a `#`. `asm` selects assembler-with-cpp rules,
+/// which differ in one place: the keyword-less line marker below.
+pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
     if let Some(after) = strip_keyword(rest, "define") {
         let after = after.trim_start();
         let (name, rest_after_name) = split_ident(after);
@@ -453,8 +455,13 @@ pub(super) fn parse_directive(rest: &str) -> Directive<'_> {
     // the unknown-directive warning. Trailing flag digits (1 2 3
     // 4) are GNU's enter / leave / system / extern markers; we
     // ignore them since c5 only tracks (file, line).
+    //
+    // Assembler input keeps it as text: `#` opens a comment for several
+    // assemblers, so GNU cpp passes every `# <n> ...` line through there
+    // and honors only `#line`. A hand-written `.S` carrying one gets the
+    // line assembled rather than its diagnostics re-homed.
     let trimmed = rest.trim();
-    if trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+    if !asm && trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         let mut split = trimmed.splitn(2, char::is_whitespace);
         if let Some(num) = split.next()
             && let Ok(line) = num.parse::<usize>()

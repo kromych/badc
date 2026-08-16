@@ -5,7 +5,8 @@
 //! host: the source is always the first prerequisite, the rule's
 //! default target is the source's base name with its suffix replaced
 //! by `.o` (directory components dropped), `-MD` / `-MMD` take the
-//! rule name from `-o` while the `-Wp,` spellings keep the default,
+//! rule name from `-o` -- except under `-E`, where `-o` names the
+//! preprocessed text -- while the `-Wp,` spellings keep the default,
 //! lists wrap past column 72 onto ` \`-continued lines, and `-MP`
 //! appends one empty rule per prerequisite after the source with no
 //! blank lines between them.
@@ -181,6 +182,29 @@ fn dash_mmd_compiles_and_names_the_file_and_rule_after_the_object() {
         read(&dir, "custom.d"),
         "obj/main.o: main.c a.h sub/deep.h b.h\n"
     );
+}
+
+/// `-E` produces a translation unit's expansion, which is enough for
+/// `-MD` / `-MMD` to describe: gcc and clang preprocess and write the rule.
+/// The dependency file is named as it is for a compile -- `-MF` and the
+/// `-Wp,` payload first, else `-o` with a `.d` suffix, else the source base
+/// name -- but `-o` names the preprocessed text here, not an object, so the
+/// rule keeps gcc's default target rather than naming it.
+#[test]
+fn dash_e_writes_the_rule_and_preprocesses() {
+    let dir = fixture("dumppp");
+    let text = run(&dir, &["-q", "-E", "-Wp,-MMD,pp.d", "main.c", "-o", "pp.i"]);
+    assert!(text.contains("int main(void)"), "-E must expand: {text}");
+    assert_eq!(read(&dir, "pp.d"), "main.o: main.c a.h sub/deep.h b.h\n");
+    // `-o` with no `-MF` names the file, never the rule.
+    run(&dir, &["-q", "-E", "-MMD", "main.c", "-o", "obj/pp.i"]);
+    assert_eq!(
+        read(&dir, "obj/pp.d"),
+        "main.o: main.c a.h sub/deep.h b.h\n"
+    );
+    // Without `-o` the source base name does.
+    run(&dir, &["-q", "-E", "-MMD", "main.c"]);
+    assert_eq!(read(&dir, "main.d"), "main.o: main.c a.h sub/deep.h b.h\n");
 }
 
 #[test]

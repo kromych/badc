@@ -10017,7 +10017,7 @@ fn emit_intrinsic(
         }
         I::FrameAddress => {
             // __builtin_frame_address(0): the current frame pointer (rbp).
-            // The parser admits level 0 only, so there is no operand.
+            // A level above 0 reaches here as this plus a load chain.
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("FrameAddress: dst not int reg / spill");
             };

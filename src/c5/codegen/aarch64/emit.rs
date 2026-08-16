@@ -6172,7 +6172,7 @@ fn emit_intrinsic(
         }
         I::FrameAddress => {
             // __builtin_frame_address(0): the current frame pointer (x29).
-            // The parser admits level 0 only, so there is no operand.
+            // A level above 0 reaches here as this plus a load chain.
             // Materialise through scratch when the dst spilled.
             let rd = match dst {
                 Place::IntReg(r) => Reg(r),

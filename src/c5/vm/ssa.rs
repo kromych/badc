@@ -241,6 +241,9 @@ impl Memory {
         base
     }
 
+    /// Size of the per-frame record: one link to the caller's record.
+    const FRAME_RECORD_BYTES: usize = 8;
+
     fn alloc_frame(&mut self, frame_bytes: usize) -> Result<usize, C5Error> {
         let base = self.stack_top;
         let next = base.checked_add(frame_bytes).ok_or_else(|| {
@@ -427,6 +430,12 @@ struct Frame<'a> {
     /// `stack_base + (N - 1) * 8`; param `i + 2` lives at
     /// `stack_base + (locals + i) * 8`.
     stack_base: usize,
+    /// Byte offset of this frame's record, just above its slots. Holds
+    /// the caller's record offset (0 for the entry frame) in its first
+    /// eight bytes. `Intrinsic::FrameAddress` answers with it, so a
+    /// chained load walks callers the way it does on a native frame
+    /// pointer.
+    record: usize,
     /// Total bytes the frame allocated; saved here so
     /// `release_frame` lines up with the alloc_frame returned by
     /// `Memory::alloc_frame`.
@@ -560,7 +569,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         let ctor = prog
             .lookup(pc)
             .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no constructor at ent_pc {pc}")))?;
-        if let Err(e) = run_func(&prog, &mut mem, host, ctor, &[], &[]) {
+        if let Err(e) = run_func(&prog, &mut mem, host, ctor, &[], &[], 0) {
             return match exit_status_of(&e) {
                 Some(status) => Ok(status),
                 None => Err(e),
@@ -578,7 +587,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     } else {
         &entry_args
     };
-    let status = match run_func(&prog, &mut mem, host, entry, slice, &[]) {
+    let status = match run_func(&prog, &mut mem, host, entry, slice, &[], 0) {
         Err(e) => match exit_status_of(&e) {
             Some(status) => status,
             None => return Err(e),
@@ -592,7 +601,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         let dtor = prog
             .lookup(pc)
             .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: no destructor at ent_pc {pc}")))?;
-        if let Err(e) = run_func(&prog, &mut mem, host, dtor, &[], &[]) {
+        if let Err(e) = run_func(&prog, &mut mem, host, dtor, &[], &[], 0) {
             match exit_status_of(&e) {
                 Some(s) => return Ok(s),
                 None => return Err(e),
@@ -702,11 +711,17 @@ fn run_func<H: Host>(
     func: &FunctionSsa,
     args: &[i64],
     arg_aggs: &[Option<u32>],
+    caller_record: usize,
 ) -> Result<i64, C5Error> {
     let locals = func.locals.max(0) as usize;
     let n_params = func.n_params.max(args.len());
     let frame_bytes = (locals + n_params) * 8;
-    let stack_base = mem.alloc_frame(frame_bytes)?;
+    // The record sits above the slots: the arena grows up, so that keeps
+    // the frame-address proxy above the stack-pointer one, as on a native
+    // stack.
+    let stack_base = mem.alloc_frame(frame_bytes + Memory::FRAME_RECORD_BYTES)?;
+    let record = stack_base + frame_bytes;
+    mem.write_bytes(record, &(caller_record as u64).to_le_bytes())?;
     // C11 6.7.5: reserve the aligned region for over-aligned automatic objects
     // above this frame; `release_frame(stack_base)` reclaims it on return.
     let realign_base = if func.over_aligned.is_empty() {
@@ -746,6 +761,7 @@ fn run_func<H: Host>(
         func,
         regs: alloc::vec![i64::MIN; func.insts.len()],
         stack_base,
+        record,
         frame_bytes,
         locals,
         realign_base,
@@ -1188,7 +1204,7 @@ fn run_inst<H: Host>(
                 C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
             })?;
             let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
-            let ret = run_func(prog, mem, host, callee, &arg_vals, arg_aggs)?;
+            let ret = run_func(prog, mem, host, callee, &arg_vals, arg_aggs, frame.record)?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
@@ -1238,7 +1254,7 @@ fn run_inst<H: Host>(
                 ))
             })?;
             let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
-            let ret = run_func(prog, mem, host, callee, &arg_vals, arg_aggs)?;
+            let ret = run_func(prog, mem, host, callee, &arg_vals, arg_aggs, frame.record)?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
@@ -2890,11 +2906,14 @@ fn run_intrinsic(
         }
         Intrinsic::FrameAddress => {
             // The interpreter has no native frame pointer; return this
-            // frame's base in the byte arena. It is non-zero, stable
-            // within a frame, and distinct across nested calls -- enough
-            // for a stack-depth comparison. (The arena grows up, so a
-            // deeper frame has a larger address than on a native stack.)
-            frame.regs[v as usize] = frame.stack_base as i64;
+            // frame's record in the byte arena. It is non-zero, stable
+            // within a frame, distinct across nested calls, and links to
+            // the caller's record at offset 0, so the load chain the
+            // parser emits for a level above 0 walks callers as it does
+            // natively and reads 0 past the entry frame. (The arena grows
+            // up, so a deeper frame has a larger address than on a native
+            // stack.)
+            frame.regs[v as usize] = frame.record as i64;
             Ok(())
         }
         Intrinsic::StackPointer => {

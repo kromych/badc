@@ -122,9 +122,11 @@ pub enum Intrinsic {
     Bswap64 = 29,
     /// `__builtin_frame_address(0)` -- the current frame pointer (x29 /
     /// rbp), returned as a `void *`. Used for stack-depth /
-    /// stack-overflow checks. Takes no operand: the parser requires the
-    /// level to be the constant 0 and rejects a caller's frame, so
-    /// nothing is left to carry.
+    /// stack-overflow checks and as the base of a stack walk. Takes no
+    /// operand: the parser requires the level to be an integer constant
+    /// and emits a level above 0 as that many loads through the saved
+    /// frame pointer at offset 0 of each frame record, so only level 0
+    /// reaches here.
     FrameAddress = 30,
     /// CPU spin-loop relax hint, the lowering of an operand-free
     /// inline-asm spin hint (`asm volatile("pause")` on x86-64,
@@ -237,8 +239,9 @@ pub enum Intrinsic {
     /// `__builtin_return_address(0)` -- the current function's return
     /// address, read from the saved slot just above the frame pointer
     /// (`[fp + 8]` under both the AAPCS64 and SysV prologues). Takes no
-    /// operand, on the same terms as `FrameAddress`. The interpreter
-    /// returns a stable per-frame proxy.
+    /// operand: the parser rejects a level above 0, which gcc's own
+    /// targets answer differently. The interpreter returns a stable
+    /// per-frame proxy.
     ReturnAddress = 66,
     /// 128-bit masked store-insert: `*mem = (*mem & ~msk) | val`, built from
     /// an `LDXP` / `BIC` / `ORR` / `STXP` exclusive retry loop. Takes the

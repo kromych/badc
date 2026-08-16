@@ -511,12 +511,13 @@ fn builtin_return_address() {
 }
 
 #[test]
-fn builtin_frame_and_return_address_reject_a_non_zero_level() {
+fn builtin_return_address_rejects_a_non_zero_level() {
     // GCC types the operand as the number of frames to walk up and
-    // rejects a non-constant one. Only level 0 is answerable here: gcc's
-    // aarch64 backend returns a constant 0 for a higher return-address
-    // level, and on x86-64 the walk yields a stack address once a caller
-    // drops its frame pointer. A diagnostic replaces both wrong answers.
+    // rejects a non-constant one. Only level 0 is answerable for a
+    // return address: gcc's aarch64 backend returns a constant 0 for a
+    // higher level, and its x86-64 backend yields a stack address once a
+    // caller drops its frame pointer. A diagnostic replaces both wrong
+    // answers.
     use crate::c5::Compiler;
     for (src, want) in [
         (
@@ -524,7 +525,7 @@ fn builtin_frame_and_return_address_reject_a_non_zero_level() {
             "supports level 0 only",
         ),
         (
-            "void *f(void){ return __builtin_frame_address(2); }",
+            "void *f(void){ return __builtin_return_address(2 + 3); }",
             "supports level 0 only",
         ),
         (
@@ -535,26 +536,46 @@ fn builtin_frame_and_return_address_reject_a_non_zero_level() {
             "void *f(int n){ return __builtin_frame_address(n); }",
             "must be an integer constant",
         ),
+        (
+            "void *f(void){ return __builtin_frame_address(-1); }",
+            "must not be negative",
+        ),
+        (
+            "void *f(void){ return __builtin_return_address(-1); }",
+            "must not be negative",
+        ),
     ] {
         let err = Compiler::new(src.to_string())
             .compile()
-            .expect_err("a non-zero level must be rejected");
+            .expect_err("the level must be rejected");
         let msg = format!("{err:?}");
         assert!(
             msg.contains(want),
             "expected {want:?} for {src:?}, got {msg:?}"
         );
     }
-    // Level 0 compiles, spelled directly or as a constant expression.
+    // Level 0 compiles, spelled directly or as a constant expression;
+    // a frame-address level above 0 compiles to the chain walk.
     for ok in [
         "void *f(void){ return __builtin_return_address(0); } int main(void){return 0;}",
         "void *f(void){ return __builtin_frame_address(0); } int main(void){return 0;}",
         "void *f(void){ return __builtin_return_address(1 - 1); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_frame_address(1); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_frame_address(1 + 2); } int main(void){return 0;}",
     ] {
         Compiler::new(ok.to_string())
             .compile()
-            .unwrap_or_else(|e| panic!("level 0 must compile: {ok:?}: {e:?}"));
+            .unwrap_or_else(|e| panic!("{ok:?} must compile: {e:?}"));
     }
+}
+
+#[test]
+fn builtin_frame_address_walks_to_a_callers_frame() {
+    // __builtin_frame_address(N > 0) reports the frame address level 0
+    // reports N calls up. The fixture checks three levels against the
+    // frames that published them; gcc answers identically at -O0 and -O2
+    // on linux-x86_64 and linux-aarch64.
+    assert_eq!(run_fixture("builtin_frame_address_levels.c"), 0);
 }
 
 #[test]

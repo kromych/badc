@@ -1148,6 +1148,9 @@ impl Compiler {
                     // the intrinsic node is built the result is wrapped
                     // in a load of this type (GCC value semantics).
                     let mut va_arg_result_ty: Option<i64> = None;
+                    // `__builtin_frame_address` level above 0: how many
+                    // saved-frame-pointer loads wrap the intrinsic node.
+                    let mut frame_walk_levels: i64 = 0;
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
                     if intrinsic_id == trap_id {
@@ -1375,20 +1378,33 @@ impl Compiler {
                     {
                         // GCC defines the operand as the number of frames to
                         // walk up and requires it to be a constant. Level 0
-                        // reads this function's own frame; a higher level
-                        // needs a frame-pointer chain through every caller,
-                        // which no ABI here guarantees, so it is rejected
-                        // rather than answered with level 0. The level is
+                        // reads this function's own frame. Above 0,
+                        // `__builtin_frame_address` walks the saved
+                        // frame-pointer chain; `__builtin_return_address` has
+                        // no single behaviour to reproduce -- gcc's aarch64
+                        // backend folds it to a constant 0 and its x86-64
+                        // backend yields a stack address once a caller drops
+                        // its frame pointer -- so it is rejected. The level is
                         // consumed at parse time and reaches no operand.
                         self.expr(Token::Assign as i64)?;
                         let level = self.ast_acc.and_then(|a| self.expr_const_int(a));
                         match level {
                             Some(0) => {}
+                            Some(n) if n > 0 && intrinsic_id == frame_address_id => {
+                                frame_walk_levels = n;
+                            }
+                            Some(n) if n < 0 => {
+                                return Err(self.compile_err(format!(
+                                    "invalid argument to `{fn_name}`: \
+                                     the level must not be negative, got {n}"
+                                )));
+                            }
                             Some(n) => {
                                 return Err(self.compile_err(format!(
                                     "`{fn_name}` supports level 0 only, not {n}: \
-                                     reaching a caller's frame needs a frame-pointer \
-                                     chain the ABI does not guarantee"
+                                     the targets gcc supports disagree on what a \
+                                     caller's return address is, so there is no \
+                                     one behaviour to reproduce"
                                 )));
                             }
                             None => {
@@ -1512,6 +1528,19 @@ impl Compiler {
                             self.mark_emit_scalar_load();
                         }
                         self.ty = res_ty;
+                        self.ast_apply_unary(super::super::ast::UnOp::Deref);
+                    }
+                    // `__builtin_frame_address(N)`, N > 0. A frame record
+                    // holds the caller's frame pointer at offset 0, so each
+                    // level is one load through the level below it. This is
+                    // the sequence gcc emits on both supported targets.
+                    let void_ptr_ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+                    for _ in 0..frame_walk_levels {
+                        if let Some(child) = self.ast_acc {
+                            self.ast_emit_cast(child, void_ptr_ty + Ty::Ptr as i64);
+                        }
+                        self.mark_emit_scalar_load();
+                        self.ty = void_ptr_ty;
                         self.ast_apply_unary(super::super::ast::UnOp::Deref);
                     }
                 } else {

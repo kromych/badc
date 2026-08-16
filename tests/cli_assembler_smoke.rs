@@ -242,6 +242,49 @@ fn visibility(bytes: &[u8], want: &str) -> Option<u8> {
     None
 }
 
+/// An immediate whose expression folds to a value already fixed where the
+/// instruction sits takes the operand's `imm8` form, as GNU as 2.46.1 does;
+/// the kernel's boot decompressor writes `subl $rva(1b), %ebp` this way. A
+/// form with no `imm8` keeps the wide field, and so does a reference to a
+/// label the instruction's own width would move -- there GNU as settles the
+/// field before the layout, and the two widths give different values.
+#[test]
+fn a_folded_expression_immediate_takes_the_narrow_form() {
+    let back = "\t.text\nstart:\n\tcall 1f\n1:\tpopq %rbp\n";
+    let t = text_of(
+        "imm-narrow",
+        &format!(
+            "{back}\tsubl $(1b - start), %ebp\n\tsubq $(1b - start), %rbp\n\
+             \tsubw $(1b - start), %bp\n\timull $(1b - start), %ebp, %ebp\n\
+             \tpushq $(1b - start)\n\taddl $(1b - start), (%rsp)\n"
+        ),
+    );
+    assert_eq!(
+        &t[6..],
+        [
+            0x83, 0xed, 0x05, // subl
+            0x48, 0x83, 0xed, 0x05, // subq
+            0x66, 0x83, 0xed, 0x05, // subw
+            0x6b, 0xed, 0x05, // imull
+            0x6a, 0x05, // pushq
+            0x83, 0x04, 0x24, 0x05, // addl to memory
+        ],
+    );
+    // `test` and `mov` have no imm8 form, so the wide field stands.
+    let t = text_of(
+        "imm-wide-form",
+        &format!("{back}\ttestl $(1b - start), %ebp\n\tmovl $(1b - start), %ebp\n"),
+    );
+    assert_eq!(&t[6..], [0xf7, 0xc5, 0x05, 0, 0, 0, 0xbd, 0x05, 0, 0, 0]);
+    // A forward reference keeps the wide field and its value, matching the
+    // layout GNU as settles on.
+    let t = text_of(
+        "imm-forward",
+        "\t.text\nlo:\n\tsubl $(hi - lo), %ebp\n\tnop\n\tnop\nhi:\n\tnop\n",
+    );
+    assert_eq!(&t[..6], [0x81, 0xed, 0x08, 0, 0, 0]);
+}
+
 #[test]
 fn hidden_visibility_reaches_the_symbol_table() {
     // GNU as 2.46.1 on the same source: `_bss` and `_ebss` are
@@ -1313,17 +1356,27 @@ fn a_branch_against_a_section_symbol_takes_pc32() {
         ),
         [(1, PC32, String::from(".other"), -4)],
     );
-    // A named symbol keeps PLT32, defined or not.
+    // An undefined named symbol keeps PLT32.
     assert_eq!(
         text_relocs("reloc-undef", "\t.text\nf:\n\tjmp undef\n"),
         [(1, PLT32, String::from("undef"), -4)],
+    );
+    // A `call` to a same-section global keeps PLT32; the relaxable `jmp`
+    // to the same target resolves in place, which is GNU as 2.46.1's
+    // encoding of each source.
+    assert_eq!(
+        text_relocs(
+            "reloc-glob-call",
+            "\t.text\n\t.globl g\nf:\n\tcall g\n\tnop\ng:\n\tnop\n",
+        ),
+        [(1, PLT32, String::from("g"), -4)],
     );
     assert_eq!(
         text_relocs(
             "reloc-glob",
             "\t.text\n\t.globl g\nf:\n\tjmp g\n\tnop\ng:\n\tnop\n",
         ),
-        [(1, PLT32, String::from("g"), -4)],
+        [],
     );
 }
 
@@ -1387,7 +1440,9 @@ fn a_branch_an_org_pushes_out_of_range_keeps_the_long_form() {
 
 /// Only a reference the assembler resolves in place may take the short
 /// form: a weak name, a name in another section, and an undefined name all
-/// keep a relocation, which the link fills at the long form's width.
+/// keep a relocation, which the link fills at the long form's width. A
+/// same-section global is not among them -- the link cannot rebind it away
+/// from the definition here, so the branch relaxes.
 #[test]
 fn a_relocated_branch_keeps_the_long_form() {
     let t = text_of(
@@ -1402,14 +1457,42 @@ fn a_relocated_branch_keeps_the_long_form() {
         "\t.text\nf:\n\tjmp o\n\t.section .other,\"ax\"\no:\n\tnop\n",
     );
     assert_eq!(&t[..5], [0xe9, 0, 0, 0, 0], "target in another section");
-    // A global definition in the same section keeps its relocation too:
-    // GNU as resolves in place only for names local to the unit, so the
-    // link binds the definition that wins.
+    // A global definition in the same section relaxes: GNU as 2.46.1 emits
+    // `eb 01` here, while the non-relaxable `call` to the same target keeps
+    // rel32 and its relocation.
     let t = text_of(
         "relax-glob",
         "\t.text\n\t.globl g\nf:\n\tjmp g\n\tnop\ng:\n\tnop\n",
     );
-    assert_eq!(&t[..5], [0xe9, 0, 0, 0, 0], "global target in this section");
+    assert_eq!(&t[..2], [0xeb, 0x01], "global target in this section");
+    let t = text_of(
+        "relax-glob-call",
+        "\t.text\n\t.globl g\nf:\n\tcall g\n\tnop\ng:\n\tnop\n",
+    );
+    assert_eq!(&t[..5], [0xe8, 0, 0, 0, 0], "call to a same-section global");
+}
+
+/// A branch relaxes across `.align` and a label-valued `.skip`, whose
+/// padding absorbs the branch's own width. The kernel's `clear_bhb_loop` is
+/// this shape; the bytes are GNU as 2.46.1's for the same source, which
+/// needs the function's base to keep the 64-byte modulus the padding is
+/// measured against.
+#[test]
+fn a_branch_over_alignment_padding_matches_gnu_as() {
+    let src = "\t.text\n\t.skip 32, 0x90\n\t.globl f\nf:\n\tpush %rbp\n\tmov %rsp, %rbp\n\
+               \tmovl $5, %ecx\n\tcall 1f\n\tjmp 5f\n\t.align 64, 0xcc\n\
+               \t.skip 32 - (.Lret1 - 1f), 0xcc\n1:\tcall 2f\n.Lret1:\tjmp thunk\n\
+               \t.align 64, 0xcc\n\t.skip 32 - 18, 0xcc\n2:\tmovl $5, %eax\n\
+               3:\tjmp 4f\n\tnop\n4:\tsub $1, %eax\n\tjnz 3b\n\tsub $1, %ecx\n\tjnz 1b\n\
+               .Lret2:\tjmp thunk\n5:\tlfence\n\tpop %rbp\n\tjmp thunk\n";
+    let t = text_of("relax-bhb", src);
+    // The `jmp 5f` at 0x2e reaches 0xa5 in the short form; the following
+    // `.align 64` absorbs the three bytes, so every later offset stands.
+    assert_eq!(&t[0x2e..0x30], [0xeb, 0x75], "jmp 5f");
+    assert_eq!(&t[0x29..0x2e], [0xe8, 0x2d, 0, 0, 0], "call 1f");
+    assert_eq!(&t[0x5b..0x60], [0xe8, 0x2e, 0, 0, 0], "1: call 2f");
+    assert_eq!(&t[0x8e..0x93], [0xb8, 0x05, 0, 0, 0], "2: movl $5, %eax");
+    assert_eq!(&t[0xa5..0xa8], [0x0f, 0xae, 0xe8], "5: lfence");
 }
 
 /// A branch to a `.set name, symbol` alias takes the location and the
@@ -1417,8 +1500,7 @@ fn a_relocated_branch_keeps_the_long_form() {
 /// branch's own section resolves at assembly time and takes the short form,
 /// and one of a label of another section reduces to that section's symbol;
 /// both are GNU as 2.46.1's encoding of the same source. An alias of a name
-/// the unit binds global keeps its relocation, against the name the chain
-/// ends at, as a direct reference to that name does.
+/// the unit binds global relaxes, as a direct reference to that name does.
 #[test]
 fn a_branch_to_a_set_alias_follows_the_chain() {
     let src = "\t.text\nf:\n\tjmp a\n\tnop\nt:\n\tnop\n\t.set a, t\n";
@@ -1435,13 +1517,11 @@ fn a_branch_to_a_set_alias_follows_the_chain() {
         text_relocs("alias-xsec-rel", src),
         [(1, 2, String::from(".other"), -4)],
     );
-    // An alias of a global keeps the relocation the target's binding needs.
+    // An alias of a same-section global relaxes, as a direct reference to
+    // that name does; GNU as 2.46.1 emits `eb 01` with no relocation.
     let src = "\t.text\n\t.globl g\nf:\n\tjmp ga\n\tnop\ng:\n\tnop\n\t.set ga, g\n";
-    assert_eq!(&text_of("alias-glob", src)[..5], [0xe9, 0, 0, 0, 0]);
-    assert_eq!(
-        text_relocs("alias-glob-rel", src),
-        [(1, 4, String::from("g"), -4)],
-    );
+    assert_eq!(&text_of("alias-glob", src)[..2], [0xeb, 0x01]);
+    assert_eq!(text_relocs("alias-glob-rel", src), []);
 }
 
 /// A data field naming a `.set name, symbol` alias relocates against the

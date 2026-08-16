@@ -1158,9 +1158,10 @@ pub(crate) enum AsmRelocKind {
         check: Option<u32>,
     },
     /// A relaxable x86 jump displacement (`jmp` / `jcc`). GNU as computes it
-    /// while relaxing the branch, which resolves only a local label of the
-    /// same section; a global or weak target keeps the long form and its
-    /// relocation, like every other field.
+    /// while relaxing the branch, which resolves any same-section target
+    /// whatever its binding; only a weak one, which the link may rebind,
+    /// keeps the long form and its relocation. `call` is not relaxable and
+    /// takes `Data`, where a global target does keep its relocation.
     JumpRel,
     /// `.reloc`: the ELF relocation type is named in the source, and the
     /// section deposits no field for it.
@@ -1210,11 +1211,12 @@ pub(crate) struct AsmSectionReloc {
     pub addend: i64,
 }
 
-/// A branch's short encoding, supplied by the arch encoder next to the long
-/// one. The two differ only in the displacement field's width, so one
+/// An instruction's short encoding, supplied by the arch encoder next to the
+/// long one. The two differ only in one field's width, so a single
 /// relocation describes the short form; the layout selects it when the
-/// target is a label of the branch's own section that the narrow field
-/// reaches. GNU as makes the same choice by the same rule.
+/// narrow field holds what the field resolves to -- a branch whose target is
+/// a label of its own section, or an immediate whose expression folds. GNU
+/// as makes the same choice by the same rule.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmShortBranch {
     pub bytes: alloc::vec::Vec<u8>,
@@ -6088,13 +6090,15 @@ pub(crate) fn measure_asm_section_offsets(
     if sites.is_empty() {
         return Ok(m);
     }
-    let non_local = asm_non_local_names(blocks, sink);
+    // A relaxable branch resolves in place against any same-section name the
+    // link cannot rebind, so only weakness holds the long form here.
+    let weak_only = asm_weak_only_names(blocks, sink);
     loop {
         let grown: AsmRelaxSet = sites
             .iter()
             .filter(|s| {
                 !long.contains(&s.site)
-                    && !short_branch_reaches(blocks, &m, &non_local, s, const_of, sink)
+                    && !short_form_fits(blocks, &m, &weak_only, s, const_of, sink)
             })
             .map(|s| s.site)
             .collect();
@@ -6108,14 +6112,15 @@ pub(crate) fn measure_asm_section_offsets(
     }
 }
 
-/// Whether the short form of the branch at `site` reaches its target under
-/// `m`. Only a target the materializer resolves in place can be reached:
+/// Whether the short form of the site fits under `m`: a branch whose target
+/// is in reach, or a narrow immediate whose expression folds to a value the
+/// field holds. Only a target the materializer resolves in place qualifies;
 /// any other keeps a relocation, which the link fills at the long form's
-/// width.
-fn short_branch_reaches(
+/// width, and an absolute field cannot carry one at all.
+fn short_form_fits(
     blocks: &[AsmSectionBlock],
     m: &SectionLabelOffsets,
-    non_local: &alloc::collections::BTreeSet<alloc::string::String>,
+    rebindable: &alloc::collections::BTreeSet<alloc::string::String>,
     s: &AsmRelaxSite,
     const_of: &dyn Fn(u8) -> Option<i64>,
     sink: &AsmSectionSink,
@@ -6128,15 +6133,18 @@ fn short_branch_reaches(
     };
     let key = section_key(&blocks[s.site.0]);
     let place = s.at + short.reloc.offset as i64;
-    let disp = match &short.reloc.target {
+    let value = match &short.reloc.target {
+        // An absolute field holds a value, not a link-time address, so a
+        // name that survives as a symbol rules the narrow form out.
+        AsmSectionTarget::Symbol(_) if !short.reloc.pcrel => return false,
         AsmSectionTarget::Symbol(name) => {
             // The reference takes the location and the binding of the name
             // its `.set` chain ends at. A `.set` expression name is an
-            // absolute value, not a location in this section, and a global or
-            // weak name may bind to another definition at link time, so
-            // either keeps a relocation at the long form's width.
+            // absolute value, not a location in this section, and a weak name
+            // may bind to another definition at link time, so either keeps a
+            // relocation at the long form's width.
             let name = m.alias_target(name.as_str());
-            if m.symbol(name).is_some() || non_local.contains(name) {
+            if m.symbol(name).is_some() || rebindable.contains(name) {
                 return false;
             }
             let (Some(sec), Some(off)) = (m.section(name), m.offset(name)) else {
@@ -6153,23 +6161,43 @@ fn short_branch_reaches(
         // takes the long form.
         AsmSectionTarget::Expr(text) => {
             let num_unique = alloc::collections::BTreeMap::new();
-            let resolve =
-                |t: &str| section_expr_leaf(t, &key, s.at, m, &sink.labels, &num_unique, &|_| None);
+            // A label at or after this site moves with the site's own width,
+            // so an absolute field naming one has two self-consistent
+            // layouts with different values. GNU as picks the wide one by
+            // settling the field before the layout; take the same value by
+            // narrowing only what cannot move.
+            let ahead = core::cell::Cell::new(false);
+            let resolve = |t: &str| {
+                let leaf =
+                    section_expr_leaf(t, &key, s.at, m, &sink.labels, &num_unique, &|_| None);
+                if let Some(AsmExprLeaf::Loc(term)) = &leaf
+                    && let Some((AsmSpace::Section(k), off)) = &term.space
+                    && *k == key
+                    && *off > s.at
+                {
+                    ahead.set(true);
+                }
+                leaf
+            };
             let ctx = AsmExprCtx {
                 resolve: &resolve,
                 const_of,
                 lax_div: false,
             };
             let space = AsmSpace::Section(key.clone());
-            match resolve_asm_field_expr(
+            let folded = resolve_asm_field_expr(
                 text,
                 &ctx,
                 &space,
                 place,
                 short.reloc.addend,
-                true,
-                non_local,
-            ) {
+                short.reloc.pcrel || short.reloc.kind.self_relative(),
+                rebindable,
+            );
+            if ahead.get() && !short.reloc.pcrel {
+                return false;
+            }
+            match folded {
                 Ok(AsmFieldTarget::Abs(c)) => c,
                 _ => return false,
             }
@@ -6177,7 +6205,38 @@ fn short_branch_reaches(
         _ => return false,
     };
     let lim = 1i64 << (8 * short.reloc.width as u32 - 1);
-    (-lim..lim).contains(&disp)
+    (-lim..lim).contains(&value)
+}
+
+/// Names the unit binds weak, from the blocks and from what earlier
+/// statements recorded. A weak definition never resolves in place: the link
+/// may bind a different one, so every reference keeps its relocation,
+/// relaxable branch included.
+fn asm_weak_only_names(
+    blocks: &[AsmSectionBlock],
+    sink: &AsmSectionSink,
+) -> alloc::collections::BTreeSet<alloc::string::String> {
+    blocks
+        .iter()
+        .flat_map(|b| &b.items)
+        .filter_map(|it| match it {
+            AsmSectionItem::Weak(n) => Some(n.clone()),
+            _ => None,
+        })
+        .chain(
+            sink.sym_decls
+                .iter()
+                .filter(|d| d.bind == AsmSymBind::Weak)
+                .map(|d| d.name.clone()),
+        )
+        .chain(
+            sink.sections
+                .iter()
+                .flat_map(|s| &s.labels)
+                .filter(|l| l.weak)
+                .map(|l| l.name.clone()),
+        )
+        .collect()
 }
 
 /// Names the unit binds global or weak, from the blocks and from what
@@ -6631,9 +6690,11 @@ pub(crate) fn materialize_asm_sections(
     let measured = measure_asm_section_offsets(blocks, const_of, align_is_p2, sink)?;
     let mut defined: alloc::vec::Vec<MaterializedLabel> = alloc::vec::Vec::new();
     // A same-section reference to a global or weak name keeps its
-    // relocation; the same set drives the branch relaxation above, so a
-    // long form is in place wherever a relocation survives.
+    // relocation, except on a relaxable branch, which resolves against any
+    // name the link cannot rebind. The relaxation above uses the same two
+    // sets, so a long form is in place wherever a relocation survives.
     let non_local = asm_non_local_names(blocks, sink);
+    let weak_only = asm_weak_only_names(blocks, sink);
     let mut weak_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
     // `.globl` is a unit-level declaration in GNU as: the name it binds
     // external may be defined in any section of the unit, before or after.
@@ -7437,6 +7498,13 @@ pub(crate) fn materialize_asm_sections(
                         // An operand expression resolves against the layout
                         // here: what folds lands in the field, what keeps a
                         // symbol relocates against it.
+                        // A relaxable branch binds any same-section name the
+                        // link cannot rebind; every other field binds only a
+                        // local one.
+                        let rebindable = match r.kind {
+                            AsmRelocKind::JumpRel => &weak_only,
+                            _ => &non_local,
+                        };
                         if let AsmSectionTarget::Expr(text) = &r.target {
                             let place = base as i64 + r.offset as i64;
                             // `.` in an operand is the instruction's own
@@ -7465,7 +7533,7 @@ pub(crate) fn materialize_asm_sections(
                                 place,
                                 r.addend,
                                 r.pcrel || r.kind.self_relative(),
-                                &non_local,
+                                rebindable,
                             )? {
                                 AsmFieldTarget::Abs(c) => {
                                     store_asm_insn_const(&mut buf, r.offset as usize, &r, c)
@@ -7509,7 +7577,7 @@ pub(crate) fn materialize_asm_sections(
                                         &num_unique,
                                         label_off,
                                     ),
-                                    !non_local.contains(n),
+                                    !rebindable.contains(n),
                                 )
                             }
                             _ => (None, true),

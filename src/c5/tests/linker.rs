@@ -3149,12 +3149,13 @@ fn elf_section_bytes(bytes: &[u8], want: &[u8]) -> alloc::vec::Vec<u8> {
 
 #[test]
 fn file_scope_asm_reference_to_global_or_weak_keeps_its_relocation() {
-    // GNU as resolves a same-section PC-relative reference in place only
-    // for a name local to the unit; a `.globl` or `.weak` name may bind to
-    // another definition at link time, so the reference keeps its
-    // relocation: PC32 for a data-class reference (`lea`), PLT32 for a
-    // branch at the rel32 width, PC8 for a rel8-only branch (`loop`). A
-    // numeric label stays local and resolves at the rel8 width.
+    // GNU as resolves a same-section PC-relative reference in place for a
+    // name local to the unit, and for any non-weak name on a relaxable
+    // branch, which it settles while relaxing. Every other reference keeps
+    // its relocation so the link binds the definition that wins: PC32 for a
+    // data-class reference (`lea`), PLT32 for `call`, PC8 for a rel8-only
+    // branch (`loop`), which has no relaxable form. Measured against GNU as
+    // 2.46.1 on the same source.
     use crate::c5::linker::parse_native_elf;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"
@@ -3196,17 +3197,15 @@ int main(void) { return 0; }
         [
             ("wsym", R_X86_64_PC32, -4),
             ("wsym", R_X86_64_PLT32, -4),
-            ("gsym", R_X86_64_PLT32, -4),
-            ("gsym", R_X86_64_PLT32, -4),
             ("gsym", R_X86_64_PC8, -1),
         ],
     );
-    // The relocated branches take the long form with a zeroed field; the
-    // numeric-label jump resolves in place as `eb fe` with no relocation.
+    // The `call` keeps the long form with a zeroed field; the relaxable
+    // branches to `gsym` and the numeric-label jump resolve in place.
     let t = &obj.text;
-    assert!(t.windows(5).any(|w| w == [0xe9, 0, 0, 0, 0]), "{t:02x?}");
+    assert!(t.windows(5).any(|w| w == [0xe8, 0, 0, 0, 0]), "{t:02x?}");
     assert!(
-        t.windows(6).any(|w| w == [0x0f, 0x85, 0, 0, 0, 0]),
+        !t.windows(6).any(|w| w == [0x0f, 0x85, 0, 0, 0, 0]),
         "{t:02x?}"
     );
     let fold = t.windows(2).position(|w| w == [0xeb, 0xfe]).expect("eb fe");
@@ -3269,9 +3268,10 @@ int main(void) { return 0; }
 #[test]
 fn i386_asm_branch_to_global_keeps_a_pc32_relocation() {
     // The i386 boot shape, through the standalone assembler driver: the
-    // unit defines `.globl memcpy` and branches to it. GNU as emits
-    // `R_386_PC32 memcpy` for the `call` and the `jmp` (REL, the -4
-    // addend lives in the field); the numeric label resolves in place.
+    // unit defines `.globl memcpy` and branches to it. GNU as 2.46.1 emits
+    // `R_386_PC32 memcpy` for the `call` (REL, the -4 addend lives in the
+    // field) and relaxes the `jmp` in place, the same split as in long
+    // mode; the numeric label resolves in place too.
     use crate::c5::linker::parse_lds_object;
     use crate::c5::{
         CompileOptions, ElfClass, NativeOptions, OutputKind, Target, emit_native_with_options,
@@ -3311,13 +3311,10 @@ fn i386_asm_branch_to_global_keeps_a_pc32_relocation() {
         .iter()
         .map(|r| (obj.symbols[r.sym as usize].name.as_str(), r.rtype, r.addend))
         .collect();
-    assert_eq!(
-        got,
-        [("memcpy", R_386_PC32, -4), ("memcpy", R_386_PC32, -4)],
-    );
+    assert_eq!(got, [("memcpy", R_386_PC32, -4)]);
     let t = &obj.bytes[text.data_off..text.data_off + text.size as usize];
     assert!(t.windows(5).any(|w| w == [0xe8, 0xfc, 0xff, 0xff, 0xff]));
-    assert!(t.windows(5).any(|w| w == [0xe9, 0xfc, 0xff, 0xff, 0xff]));
+    assert!(t.windows(2).any(|w| w == [0xeb, 0xf8]), "{t:02x?}");
     assert!(t.windows(2).any(|w| w == [0xeb, 0xfe]), "{t:02x?}");
 }
 

@@ -6922,7 +6922,10 @@ fn encode_one_x86_section_insn(
                 relocs: alloc::vec![AsmSectionReloc {
                     offset: 1,
                     width: 1,
-                    kind: AsmRelocKind::JumpRel,
+                    // Not `JumpRel`: these have no wider form, so GNU as
+                    // fixes them up rather than relaxing them, and a global
+                    // target keeps its relocation as it does for `call`.
+                    kind: AsmRelocKind::Data,
                     pcrel: true,
                     branch: false,
                     signed: false,
@@ -7462,6 +7465,25 @@ fn encode_one_x86_section_insn(
     }
     let mut body =
         encode(&concrete).map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+    // A narrower alternative for a symbol immediate whose expression folds
+    // to a constant: GNU as picks the operand's `imm8` form when the value
+    // is known at assembly time, and the wide field only when a relocation
+    // has to fill it. The section relaxation settles which applies, so the
+    // narrow encoding rides alongside the wide one.
+    let short = match (&sym_imm, &imm_field) {
+        (Some((target, off, idx)), Some(f)) if f.width > 1 && sym_disp.is_none() => {
+            narrow_imm_form(
+                &concrete,
+                *idx,
+                &encode,
+                target,
+                *off,
+                insn.seg.or(operand_seg),
+                prefix,
+            )
+        }
+        _ => None,
+    };
     // GNU as orders the prefixes segment, address size, operand size, then
     // repeat / lock; the encoded body carries the size prefixes at its front,
     // so the repeat / lock byte goes after them.
@@ -7570,7 +7592,67 @@ fn encode_one_x86_section_insn(
     Ok(AsmSectionItem::CodeBytes {
         bytes,
         relocs,
-        short: None,
+        short,
+    })
+}
+
+/// The `imm8` encoding of an instruction whose symbol immediate sits at
+/// `idx`, when the form has one and it is shorter than the wide field's.
+/// The field is located the same way the wide one is: encode with two probe
+/// values that differ in every byte and take the run that differs.
+fn narrow_imm_form(
+    concrete: &[super::asm::Concrete],
+    idx: usize,
+    encode: &EncodeFn<'_>,
+    target: &super::ssa::emit_common::AsmSectionTarget,
+    off: i64,
+    seg: Option<u8>,
+    prefix: Option<u8>,
+) -> Option<super::ssa::emit_common::AsmShortBranch> {
+    use super::asm::Concrete;
+    use super::ssa::emit_common::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
+    let (_, p1, p2) = IMM_PROBE[2];
+    let with = |v: i64| {
+        let mut ops = concrete.to_vec();
+        ops[idx] = Concrete::Imm(v);
+        encode(&ops).ok()
+    };
+    let (a, b) = (with(p1)?, with(p2)?);
+    let wide = with(IMM_PROBE[0].1)?;
+    if a.len() >= wide.len() || a.len() != b.len() {
+        return None;
+    }
+    let (start, len) = differing_run(&a, &b)?;
+    if len != 1 {
+        return None;
+    }
+    let sizes = a.iter().take_while(|b| matches!(b, 0x66 | 0x67)).count();
+    if start < sizes {
+        return None;
+    }
+    let mut bytes = alloc::vec::Vec::new();
+    if let Some(s) = seg {
+        bytes.push(s);
+    }
+    bytes.extend_from_slice(&a[..sizes]);
+    if let Some(p) = prefix {
+        bytes.push(p);
+    }
+    let offset = (bytes.len() + start - sizes) as u32;
+    bytes.extend_from_slice(&a[sizes..]);
+    bytes[offset as usize] = 0;
+    Some(AsmShortBranch {
+        bytes,
+        reloc: AsmSectionReloc {
+            offset,
+            width: 1,
+            kind: AsmRelocKind::Data,
+            pcrel: false,
+            branch: false,
+            signed: false,
+            target: target.clone(),
+            addend: off,
+        },
     })
 }
 
@@ -11646,11 +11728,13 @@ mod code_mode_tests {
         assert_eq!(names("call glob\n"), ["glob"]);
         assert_eq!(names("call wk\n"), ["wk"]);
         assert_eq!(names("lea glob(%rip), %rax\n"), ["glob"]);
-        // A relaxed jump to a global or weak target keeps the long form and
-        // its relocation, like every other reference.
-        assert_eq!(names("jmp glob\n"), ["glob"]);
-        assert_eq!(names("je glob\n"), ["glob"]);
+        // A relaxed jump binds a same-section global in place: the branch
+        // relaxes and no relocation survives. A weak target keeps both the
+        // long form and its relocation.
+        assert!(names("jmp glob\n").is_empty());
+        assert!(names("je glob\n").is_empty());
         assert_eq!(names("jmp wk\n"), ["wk"]);
+        assert_eq!(names("je wk\n"), ["wk"]);
         // A difference of two symbols folds whatever the binding, as GNU as
         // folds it: `.long glob - .` deposits a constant.
         assert!(names(".long glob - .\n").is_empty());

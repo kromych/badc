@@ -1376,6 +1376,14 @@ fn object_of(name: &str, src: &str) -> Vec<u8> {
     object_for(name, src, "linux-x64")
 }
 
+/// Compile the C source `src` for x86_64 and return the object bytes.
+fn object_of_c(name: &str, src: &str) -> Vec<u8> {
+    let d = dir(name);
+    write(&d, "u.c", src);
+    run_ok(&d, &["-q", "-c", "--target=linux-x64", "u.c", "-o", "u.o"]);
+    std::fs::read(d.join("u.o")).expect("object")
+}
+
 /// Assemble `src` for `target` and return the object bytes.
 fn object_for(name: &str, src: &str, target: &str) -> Vec<u8> {
     let d = dir(name);
@@ -1729,6 +1737,54 @@ fn a_rex_prefix_writes_a_far_branch() {
         t,
         [0x48, 0xff, 0x28, 0x49, 0xff, 0x6d, 0x00, 0x48, 0xff, 0x28]
     );
+}
+
+/// GNU as orders the legacy prefixes segment, address size, operand size,
+/// then repeat / lock, whatever order the statement writes them in, and takes
+/// a memory operand's address size from the base register it names. The three
+/// positions a template holds -- a `.s` unit, file-scope asm, and a function
+/// body -- share the ordering, so each yields GNU as 2.46.1's bytes for the
+/// source below.
+#[test]
+fn legacy_prefixes_take_gnu_as_order_in_every_position() {
+    const BODY: &str = "\tlock cmpxchgw %bx, 2(%rax)\n\
+                        \tlock cmpxchgw %bx, 2(%eax)\n\
+                        \tlock incl %gs:2(%rax)\n\
+                        \tgs lock cmpxchgw %bx, 2(%rax)\n\
+                        \tlock gs cmpxchgw %bx, 2(%rax)\n\
+                        \trep stosw\n\
+                        \trepnz scasb\n";
+    const WANT: [u8; 37] = [
+        0x66, 0xf0, 0x0f, 0xb1, 0x58, 0x02, // lock cmpxchgw %bx, 2(%rax)
+        0x67, 0x66, 0xf0, 0x0f, 0xb1, 0x58, 0x02, // lock cmpxchgw %bx, 2(%eax)
+        0x65, 0xf0, 0xff, 0x40, 0x02, // lock incl %gs:2(%rax)
+        0x65, 0x66, 0xf0, 0x0f, 0xb1, 0x58, 0x02, // gs lock cmpxchgw %bx, 2(%rax)
+        0x65, 0x66, 0xf0, 0x0f, 0xb1, 0x58, 0x02, // lock gs cmpxchgw %bx, 2(%rax)
+        0x66, 0xf3, 0xab, // rep stosw
+        0xf2, 0xae, // repnz scasb
+    ];
+    assert_eq!(
+        text_of("prefix-order-s", &format!("\t.text\np:\n{BODY}")),
+        WANT,
+    );
+    let body_c = BODY.replace('\n', "\\n").replace('\t', "\\t");
+    for (name, src) in [
+        (
+            "prefix-order-file",
+            format!("__asm__(\".text\\npf:\\n{body_c}\");\n"),
+        ),
+        (
+            "prefix-order-body",
+            format!("void f(void) {{ __asm__ volatile(\"{body_c}\"); }}\n"),
+        ),
+    ] {
+        let t = section64(&object_of_c(name, &src), ".text");
+        assert_eq!(
+            t.windows(WANT.len()).filter(|w| *w == WANT).count(),
+            1,
+            "{name}: {t:02x?}"
+        );
+    }
 }
 
 /// `call` has no `rel8` form, so it keeps `e8 rel32` at any distance.

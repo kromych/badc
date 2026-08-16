@@ -6720,6 +6720,25 @@ fn short_branch_form(
     }
 }
 
+/// Legacy prefixes in GNU as order: segment, address size, operand size, then
+/// repeat / lock. `body` carries the size prefixes at its front and `pending`
+/// the bytes prefix statements deposited. Returns the count of `body` bytes
+/// taken; the rest is the caller's to append.
+fn push_legacy_prefixes(
+    out: &mut alloc::vec::Vec<u8>,
+    body: &[u8],
+    seg: Option<u8>,
+    pending: &[u8],
+) -> usize {
+    let is_seg = |b: u8| matches!(b, 0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65);
+    let sizes = body.iter().take_while(|b| matches!(b, 0x66 | 0x67)).count();
+    out.extend(seg);
+    out.extend(pending.iter().copied().filter(|&b| is_seg(b)));
+    out.extend_from_slice(&body[..sizes]);
+    out.extend(pending.iter().copied().filter(|&b| !is_seg(b)));
+    sizes
+}
+
 /// Byte width of a near-branch displacement and whether the operand-size
 /// prefix selects it. The displacement follows the operand size, which is 32
 /// in long and 32-bit modes and 16 in 16-bit mode; an AT&T size suffix
@@ -6793,23 +6812,24 @@ fn encode_one_x86_section_insn(
     let mode = *mode;
     let insns = super::asm::parse_template(text.as_bytes())
         .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
-    // A leading `lock` / `rep` prefix parses as its own entry; it rides in
-    // front of the instruction's bytes.
-    let (prefix, insn) = match insns.as_slice() {
-        [insn] => (None, insn),
-        [
-            super::asm::AsmInsn {
-                mnemonic: Mnemonic::Prefix(b),
-                ..
-            },
-            insn,
-        ] => (Some(*b), insn),
-        _ => {
-            return Err(alloc::format!(
-                "inline asm: replacement `{text}` is not a single instruction"
-            ));
-        }
+    // Each leading `lock` / `rep` / segment prefix parses as its own entry and
+    // rides in front of the instruction's bytes. A prefix statement standing
+    // alone is the instruction, so the run stops one short of the end.
+    let prefix: alloc::vec::Vec<u8> = insns
+        .split_last()
+        .map_or(&[][..], |(_, head)| head)
+        .iter()
+        .map_while(|i| match i.mnemonic {
+            Mnemonic::Prefix(b) => Some(b),
+            _ => None,
+        })
+        .collect();
+    let [insn] = &insns[prefix.len()..] else {
+        return Err(alloc::format!(
+            "inline asm: replacement `{text}` is not a single instruction"
+        ));
     };
+    let prefix = prefix.as_slice();
     let mnem = match insn.mnemonic {
         Mnemonic::Table(n) => n,
         _ => "",
@@ -6828,7 +6848,7 @@ fn encode_one_x86_section_insn(
     // on the general operand path below. The direct-branch forms are built
     // by hand and carry neither prefix byte, so one on them would be
     // dropped rather than encoded.
-    if (prefix.is_some() || insn.rex.is_some())
+    if (!prefix.is_empty() || insn.rex.is_some())
         && (matches!(
             insn.operands.first(),
             Some(AsmOpnd::GotoLabel(_) | AsmOpnd::ImmSym { .. } | AsmOpnd::Label { .. })
@@ -7478,18 +7498,8 @@ fn encode_one_x86_section_insn(
         },
         _ => None,
     };
-    // GNU as orders the prefixes segment, address size, operand size, then
-    // repeat / lock; the encoded body carries the size prefixes at its front,
-    // so the repeat / lock byte goes after them.
-    let sizes = body.iter().take_while(|b| matches!(b, 0x66 | 0x67)).count();
     let mut bytes = alloc::vec::Vec::new();
-    if let Some(seg) = insn.seg.or(operand_seg) {
-        bytes.push(seg);
-    }
-    bytes.extend_from_slice(&body[..sizes]);
-    if let Some(b) = prefix {
-        bytes.push(b);
-    }
+    let sizes = push_legacy_prefixes(&mut bytes, &body, insn.seg.or(operand_seg), prefix);
     // A field of `body` past the size prefixes lands in `bytes` shifted by the
     // segment and repeat / lock bytes only, the size prefixes having moved
     // ahead of them.
@@ -7601,7 +7611,7 @@ fn narrow_imm_form(
     target: &super::ssa::emit_common::AsmSectionTarget,
     off: i64,
     seg: Option<u8>,
-    prefix: Option<u8>,
+    prefix: &[u8],
 ) -> Option<super::ssa::emit_common::AsmShortBranch> {
     use super::asm::Concrete;
     use super::ssa::emit_common::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
@@ -7620,17 +7630,10 @@ fn narrow_imm_form(
     if len != 1 {
         return None;
     }
-    let sizes = a.iter().take_while(|b| matches!(b, 0x66 | 0x67)).count();
+    let mut bytes = alloc::vec::Vec::new();
+    let sizes = push_legacy_prefixes(&mut bytes, &a, seg, prefix);
     if start < sizes {
         return None;
-    }
-    let mut bytes = alloc::vec::Vec::new();
-    if let Some(s) = seg {
-        bytes.push(s);
-    }
-    bytes.extend_from_slice(&a[..sizes]);
-    if let Some(p) = prefix {
-        bytes.push(p);
     }
     let offset = (bytes.len() + start - sizes) as u32;
     bytes.extend_from_slice(&a[sizes..]);
@@ -7660,7 +7663,7 @@ fn narrow_disp_form(
     target: &super::ssa::emit_common::AsmSectionTarget,
     off: i64,
     seg: Option<u8>,
-    prefix: Option<u8>,
+    prefix: &[u8],
 ) -> Option<super::ssa::emit_common::AsmShortBranch> {
     use super::asm::Concrete;
     use super::ssa::emit_common::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
@@ -7693,17 +7696,10 @@ fn narrow_disp_form(
     if len != 1 {
         return None;
     }
-    let sizes = a.iter().take_while(|b| matches!(b, 0x66 | 0x67)).count();
+    let mut bytes = alloc::vec::Vec::new();
+    let sizes = push_legacy_prefixes(&mut bytes, &a, seg, prefix);
     if start < sizes {
         return None;
-    }
-    let mut bytes = alloc::vec::Vec::new();
-    if let Some(s) = seg {
-        bytes.push(s);
-    }
-    bytes.extend_from_slice(&a[..sizes]);
-    if let Some(p) = prefix {
-        bytes.push(p);
     }
     let offset = (bytes.len() + start - sizes) as u32;
     bytes.extend_from_slice(&a[sizes..]);
@@ -8205,9 +8201,18 @@ fn emit_inline_asm(
     // template opens right after the function's compiled code, so it does.
     // Alignment padding depends on it (see `push_x86_exec_align_fill`).
     let mut after_insn = true;
+    // Start of the run of legacy prefix bytes a `lock` / `rep` / segment
+    // statement deposited; the instruction they lead re-places them.
+    let mut prefix_run: Option<usize> = None;
     // Encode each template instruction with its operands resolved to the
     // assigned registers, explicit registers, and immediates.
     for insn in &insns {
+        let pending_at = if matches!(insn.mnemonic, super::asm::Mnemonic::Prefix(_)) {
+            prefix_run.get_or_insert(code.len());
+            None
+        } else {
+            prefix_run.take()
+        };
         // A local-label definition marks the current offset; it emits no bytes.
         if let Some(num) = insn.label_def {
             label_defs.push((num, code.len()));
@@ -8982,18 +8987,22 @@ fn emit_inline_asm(
         {
             return fail("inline asm: a label address immediate with a second immediate");
         }
-        // A segment override is a legacy prefix preceding the opcode. It comes
-        // from a template `%gs:` / `%fs:` or from a `__seg_gs` / `__seg_fs`
-        // memory operand; the two never conflict on one instruction.
+        // A segment override comes from a template `%gs:` / `%fs:` or from a
+        // `__seg_gs` / `__seg_fs` memory operand; the two never conflict on one
+        // instruction. It joins the prefix statements ahead of the instruction.
+        let pending = match pending_at {
+            Some(at) => code.split_off(at),
+            None => alloc::vec::Vec::new(),
+        };
         let insn_at = code.len();
-        if let Some(seg) = insn.seg.or(operand_seg) {
-            code.push(seg);
-        }
         let addr = super::asm::addr_size(insn, super::table::Mode::Bits64);
-        if let Err(m) = super::asm::encode(code, addr, insn.mnemonic, insn.suffix, &concrete) {
+        let mut body = alloc::vec::Vec::new();
+        if let Err(m) = super::asm::encode(&mut body, addr, insn.mnemonic, insn.suffix, &concrete) {
             bail_msg(&m);
             return false;
         }
+        let sizes = push_legacy_prefixes(code, &body, insn.seg.or(operand_seg), &pending);
+        code.extend_from_slice(&body[sizes..]);
         if let Some(rex) = insn.rex
             && let Err(m) = super::asm::splice_rex(code, insn_at, rex)
         {

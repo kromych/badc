@@ -14,13 +14,13 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x220
+               	sub	sp, sp, #0x210
                	str	x19, [sp]
                	sub	x0, x29, #0x200
                	bl	<addr>
                	sxtw	x0, w0
                	sxtw	x0, w0
                	ldr	x19, [sp]
-               	add	sp, sp, #0x220
+               	add	sp, sp, #0x210
                	ldp	x29, x30, [sp], #0x10
                	ret

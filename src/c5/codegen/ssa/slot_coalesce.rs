@@ -60,21 +60,16 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], compact: bool) -> CoalesceDwarf {
 }
 
 fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
-    // A returns-twice call (setjmp family / vfork) re-enters the frame
-    // after the first-return path ran: live ranges from ordinary
-    // liveness do not bound slot lifetime (C99 7.13.2.1p3), so every
-    // slot stays dedicated -- the same rule the register allocator
-    // applies to spill slots.
-    if f.has_returns_twice_call {
-        return BTreeMap::new();
-    }
-    // Stack-pointer asm (setjmp / longjmp / stack-switch idioms) creates
-    // resume points and parked activations the CFG does not model, so
-    // liveness under-approximates slot lifetime the same way; every slot
-    // stays dedicated.
-    if f.has_sp_asm() {
-        return BTreeMap::new();
-    }
+    // A returns-twice call (setjmp family / vfork) re-enters the frame after
+    // the first-return path ran, and stack-pointer asm (longjmp / stack-switch
+    // idioms) parks an activation the CFG does not model. Live ranges from
+    // ordinary liveness do not bound slot lifetime in either case (C99
+    // 7.13.2.1p3), so no two slots may share storage -- the same rule the
+    // register allocator applies to spill slots. Sharing is what liveness
+    // justifies; keeping a slot no instruction and no `FunctionSsa` field
+    // names is not, so such a function still drops its unreferenced slots and
+    // renumbers the survivors one-to-one below.
+    let dedicated = f.has_returns_twice_call || f.has_sp_asm();
     // `synthetic_base > 0` marks a walker-built function with declared
     // locals; hand-built SSA (sys-trampolines, CRT entry) carries 0 and is
     // left alone -- its slot model is not the walker's.
@@ -312,6 +307,11 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         {
             candidates.insert(*off);
         }
+    }
+    // Under `dedicated` no slot may share storage; every candidate keeps its
+    // own offset through the reserved path, which drops the unreferenced.
+    if dedicated {
+        reserved_single.append(&mut candidates);
     }
     // Nothing to share leaves the -O0 frame untouched; the compact mode
     // still repacks so unreferenced slots are dropped.
@@ -714,18 +714,25 @@ mod tests {
         assert_eq!((f.frame_align, f.realign_region_bytes), (0, 0));
     }
 
-    /// Stack-pointer asm pins every slot: resume points and parked
-    /// activations make CFG liveness under-approximate lifetime, so the
-    /// function is left untouched in both modes.
+    /// Stack-pointer asm bars slot sharing -- resume points and parked
+    /// activations make CFG liveness under-approximate lifetime -- but not
+    /// the compact drop, which rests on no instruction naming the slot. Two
+    /// live-disjoint scalars that share without the asm stay dedicated with
+    /// it, while the slots nothing names are dropped either way. -O0 leaves
+    /// such a function untouched.
     #[test]
-    fn sp_asm_function_not_coalesced() {
+    fn sp_asm_keeps_slots_dedicated() {
         use super::super::super::ir::AsmBlock;
-        let build = || {
+        let build = |sp: bool| {
             one_block(
                 alloc::vec![
                     Inst::InlineAsm {
                         asm: alloc::boxed::Box::new(AsmBlock {
-                            template: b"mov %%rsp, (%%rdx)".to_vec(),
+                            template: if sp {
+                                b"mov %%rsp, (%%rdx)".to_vec()
+                            } else {
+                                b"nop".to_vec()
+                            },
                             operands: alloc::vec![],
                             clobber_regs: 0,
                             clobber_fp_regs: 0,
@@ -750,11 +757,33 @@ mod tests {
                 10,
             )
         };
-        for compact in [false, true] {
-            let mut f = build();
-            assert!(coalesce(&mut f, compact).is_empty());
-            assert_eq!(f.locals, 10);
-        }
+        let slot_offs = |f: &FunctionSsa| -> Vec<i64> {
+            f.insts
+                .iter()
+                .filter_map(|i| match i {
+                    Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => Some(*off),
+                    _ => None,
+                })
+                .collect()
+        };
+        // Without the stack-pointer reference the two disjoint scalars share.
+        let mut plain = build(false);
+        coalesce(&mut plain, true);
+        assert_eq!(plain.locals, 1);
+        let po = slot_offs(&plain);
+        assert_eq!(po[0], po[1]);
+
+        // With it each keeps its own slot; the eight unnamed ones still go.
+        let mut f = build(true);
+        coalesce(&mut f, true);
+        assert_eq!(f.locals, 2);
+        let o = slot_offs(&f);
+        assert_ne!(o[0], o[1]);
+
+        // -O0 has nothing to share and leaves the frame as emitted.
+        let mut f0 = build(true);
+        assert!(coalesce(&mut f0, false).is_empty());
+        assert_eq!(f0.locals, 10);
     }
 
     /// An access left in the tape by block deletion (covered by no block)

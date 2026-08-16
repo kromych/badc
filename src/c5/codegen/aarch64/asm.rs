@@ -1979,7 +1979,10 @@ mod tests {
                 b".balign 16, 0xff, 3",
                 I::Align {
                     n: 16,
-                    fill: Some(0xff),
+                    fill: Some(emit_common::AlignFill {
+                        value: 0xff,
+                        width: 1,
+                    }),
                     max: Some(3),
                 },
             ),
@@ -2015,6 +2018,30 @@ mod tests {
                     value: 9,
                 },
             ),
+            (
+                // The `w` / `l` spellings widen the fill unit; the alignment
+                // operand keeps the base directive's convention.
+                b".p2alignl 3, 0x12345678",
+                I::Align {
+                    n: 8,
+                    fill: Some(emit_common::AlignFill {
+                        value: 0x12345678,
+                        width: 4,
+                    }),
+                    max: None,
+                },
+            ),
+            (
+                b".balignw 16, 0x1234, 3",
+                I::Align {
+                    n: 16,
+                    fill: Some(emit_common::AlignFill {
+                        value: 0x1234,
+                        width: 2,
+                    }),
+                    max: Some(3),
+                },
+            ),
             (b".org 16", I::Org(16, 0)),
             (
                 b".org 1b + 4, 0xcc",
@@ -2046,6 +2073,11 @@ mod tests {
             assert_eq!(n, 1);
         }
         assert!(parse_template(b".balign 3").is_err());
+        // GNU as has no `.alignw` / `.alignl`, so neither is a layout
+        // directive and the encoder rejects the mnemonic.
+        for tmpl in [b".alignl 8".as_slice(), b".alignw 8".as_slice()] {
+            assert!(parse_template(tmpl).unwrap()[0].layout.is_none());
+        }
     }
 
     #[test]

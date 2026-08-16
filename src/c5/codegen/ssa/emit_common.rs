@@ -905,12 +905,12 @@ pub(crate) enum AsmSectionItem {
         values: alloc::vec::Vec<AsmSectionValue>,
     },
     /// `.balign n` / `.p2align e`, resolved to a byte alignment. `fill` is an
-    /// explicit fill byte; `None` selects the default (the target NOP in an
+    /// explicit fill unit; `None` selects the default (the target NOP in an
     /// executable section, zero otherwise). `max` is the GNU as maximum skip:
     /// the alignment is dropped when it would need more than `max` bytes.
     Align {
         n: u32,
-        fill: Option<u8>,
+        fill: Option<AlignFill>,
         max: Option<u32>,
     },
     /// `.align n[, fill[, max]]`: GNU as interprets the first argument per
@@ -919,7 +919,7 @@ pub(crate) enum AsmSectionItem {
     /// `max` carry through as for `Align`.
     AlignArch {
         n: u32,
-        fill: Option<u8>,
+        fill: Option<AlignFill>,
         max: Option<u32>,
     },
     /// `.org n[, fill]`: pad to section offset `n` with `fill`, zero by
@@ -4285,12 +4285,60 @@ pub(crate) fn rewrite_multidef_local_labels(text: &str) -> Option<alloc::string:
     Some(out)
 }
 
-/// Parse the operands of `.balign` / `.p2align` / `.align`:
-/// `spec[, fill[, max]]`. GNU as allows an empty fill field
-/// (`.p2align e,,max`) to keep the default fill while giving a max skip.
-/// Returns the alignment spec (interpreted per directive by the caller), the
-/// optional fill byte, and the optional maximum number of bytes to skip.
-pub(crate) fn parse_align_operands(rest: &str) -> Option<(i64, Option<u8>, Option<u32>)> {
+/// How a target reads an alignment directive's first operand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AlignKind {
+    /// `.balign`: a byte count.
+    Bytes,
+    /// `.p2align`: a power-of-two exponent.
+    Pow2,
+    /// `.align`: a byte count on x86 ELF, an exponent on AArch64.
+    Arch,
+}
+
+/// The alignment directive family and the width of the fill unit its
+/// spelling selects. GNU as gives `.balign` and `.p2align` a `w` and an `l`
+/// spelling padding with a 2- or 4-byte value; `.align` has neither.
+pub(crate) fn align_directive(tok: &str) -> Option<(AlignKind, u8)> {
+    let (base, width) = match tok.as_bytes().last() {
+        Some(b'w') => (&tok[..tok.len() - 1], 2u8),
+        Some(b'l') => (&tok[..tok.len() - 1], 4),
+        _ => (tok, 1),
+    };
+    match (base, width) {
+        (".align", 1) => Some((AlignKind::Arch, 1)),
+        (".balign", _) => Some((AlignKind::Bytes, width)),
+        (".p2align", _) => Some((AlignKind::Pow2, width)),
+        _ => None,
+    }
+}
+
+/// An alignment directive's explicit fill: the value and the width in bytes
+/// of the unit repeated over the gap. The value is truncated to the width and
+/// laid down little-endian.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AlignFill {
+    pub(crate) value: u32,
+    pub(crate) width: u8,
+}
+
+impl AlignFill {
+    /// Whether this is the one-byte x86 NOP, which GNU as pads with its
+    /// NOP sequence rather than by repeating the byte.
+    fn is_x86_nop(&self) -> bool {
+        self.width == 1 && self.value as u8 == X86_NOP_OPCODE
+    }
+}
+
+/// Parse the operands of an alignment directive: `spec[, fill[, max]]`.
+/// GNU as allows an empty fill field (`.p2align e,,max`) to keep the default
+/// fill while giving a max skip. `fill_width` is the directive spelling's
+/// fill unit width. Returns the alignment spec (interpreted per directive by
+/// the caller), the optional fill, and the optional maximum bytes to skip.
+pub(crate) fn parse_align_operands(
+    rest: &str,
+    fill_width: u8,
+) -> Option<(i64, Option<AlignFill>, Option<u32>)> {
     let mut fields = rest.split(',').map(str::trim);
     let spec = parse_raw_int(fields.next()?)?;
     let field = |f: Option<&str>| -> Option<Option<i64>> {
@@ -4299,7 +4347,10 @@ pub(crate) fn parse_align_operands(rest: &str) -> Option<(i64, Option<u8>, Optio
             _ => Some(None),
         }
     };
-    let fill = field(fields.next())?.map(|v| v as u8);
+    let fill = field(fields.next())?.map(|v| AlignFill {
+        value: v as u32,
+        width: fill_width,
+    });
     let max = match field(fields.next())? {
         Some(v) => Some(u32::try_from(v).ok()?),
         None => None,
@@ -4308,6 +4359,46 @@ pub(crate) fn parse_align_operands(rest: &str) -> Option<(i64, Option<u8>, Optio
         return None;
     }
     Some((spec, fill, max))
+}
+
+/// Parse an alignment directive to its section item. `kind` selects the
+/// operand's convention and `width` the fill unit; the operand ranges are
+/// GNU as's, with `.align` read as the target reads it.
+fn parse_align_item(
+    kind: AlignKind,
+    width: u8,
+    rest: &str,
+    is_aarch64: bool,
+) -> Result<AsmSectionItem, alloc::string::String> {
+    let bad = || alloc::format!("inline asm: bad alignment `{rest}`");
+    // A zero alignment is an alignment of one in GNU as, which moves nothing.
+    let bytes = |spec: i64| spec == 0 || (spec > 0 && (spec as u64).is_power_of_two());
+    let ok = |spec: i64| match kind {
+        AlignKind::Bytes => bytes(spec),
+        AlignKind::Pow2 => (0..=12).contains(&spec),
+        AlignKind::Arch if is_aarch64 => (0..=12).contains(&spec),
+        AlignKind::Arch => (0..=4096).contains(&spec) && bytes(spec),
+    };
+    let (spec, fill, max) = parse_align_operands(rest, width)
+        .filter(|&(spec, _, _)| ok(spec))
+        .ok_or_else(bad)?;
+    Ok(match kind {
+        AlignKind::Bytes => AsmSectionItem::Align {
+            n: (spec as u32).max(1),
+            fill,
+            max,
+        },
+        AlignKind::Pow2 => AsmSectionItem::Align {
+            n: 1 << spec,
+            fill,
+            max,
+        },
+        AlignKind::Arch => AsmSectionItem::AlignArch {
+            n: spec as u32,
+            fill,
+            max,
+        },
+    })
 }
 
 /// Parse one directive inside a named section. A non-directive token is an
@@ -4356,39 +4447,10 @@ fn parse_section_item(
             values,
         });
     }
+    if let Some((kind, width)) = align_directive(tok) {
+        return parse_align_item(kind, width, rest, is_aarch64);
+    }
     match tok {
-        // A zero alignment is an alignment of one in GNU as, which moves
-        // nothing.
-        ".balign" => {
-            let (n, fill, max) = parse_align_operands(rest)
-                .filter(|&(n, _, _)| n == 0 || (n > 0 && (n as u64).is_power_of_two()))
-                .ok_or_else(|| alloc::format!("inline asm: bad alignment `{rest}`"))?;
-            Ok(AsmSectionItem::Align {
-                n: (n as u32).max(1),
-                fill,
-                max,
-            })
-        }
-        ".align" => {
-            let (n, fill, max) = parse_align_operands(rest)
-                .filter(|&(n, _, _)| (0..=4096).contains(&n))
-                .ok_or_else(|| alloc::format!("inline asm: bad alignment `{rest}`"))?;
-            Ok(AsmSectionItem::AlignArch {
-                n: n as u32,
-                fill,
-                max,
-            })
-        }
-        ".p2align" => {
-            let (e, fill, max) = parse_align_operands(rest)
-                .filter(|&(e, _, _)| (0..=12).contains(&e))
-                .ok_or_else(|| alloc::format!("inline asm: bad alignment `{rest}`"))?;
-            Ok(AsmSectionItem::Align {
-                n: 1 << e,
-                fill,
-                max,
-            })
-        }
         ".org" => {
             // `.org new-lc[, fill]`. The fill byte is the last top-level
             // comma-separated argument; the origin keeps the rest, which is
@@ -5982,18 +6044,76 @@ pub(crate) fn align_item_bytes(n: u32, align_is_p2: bool) -> u32 {
     }
 }
 
-/// The byte pattern that fills an alignment gap. An explicit fill byte is
-/// repeated. With no explicit fill GNU as pads an executable section with the
-/// target NOP encoding (single-byte on x86, the 4-byte instruction on AArch64)
-/// and a data section with zero. The materializer cycles the pattern by
-/// absolute section offset, so the AArch64 NOP lands instruction-aligned.
-pub(crate) fn align_fill_pattern(fill: Option<u8>, exec: bool, aarch64: bool) -> ([u8; 4], usize) {
+/// The byte pattern that fills an alignment gap. An explicit fill unit is
+/// repeated little-endian. With no explicit fill GNU as pads an executable
+/// section with the target NOP encoding (single-byte on x86, the 4-byte
+/// instruction on AArch64) and a data section with zero. The pattern cycles
+/// by absolute section offset: an accepted gap starts on a multiple of the
+/// fill width, so that is also the gap-relative order, and the AArch64 NOP
+/// lands instruction-aligned.
+pub(crate) fn align_fill_pattern(
+    fill: Option<AlignFill>,
+    exec: bool,
+    aarch64: bool,
+) -> ([u8; 4], usize) {
     match (fill, exec, aarch64) {
-        (Some(b), _, _) => ([b, 0, 0, 0], 1),
+        (Some(f), _, _) => (f.value.to_le_bytes(), f.width as usize),
         (None, false, _) => ([0, 0, 0, 0], 1),
         (None, true, false) => ([0x90, 0, 0, 0], 1),
         (None, true, true) => (A64_NOP, A64_NOP.len()),
     }
+}
+
+/// Lay an alignment gap's padding at the end of `out`, whose length is a
+/// section offset, and report how it splits for the mapping symbols: the
+/// leading run's length, which is data, then the rest in the returned class.
+/// `after_insn` reports whether the byte before the gap came from an
+/// instruction, which the x86 NOP sequence depends on.
+///
+/// GNU as requires the gap to be a whole number of fill units, so a `.balignl`
+/// or `.p2alignw` whose padding does not divide by its width is an error
+/// rather than a truncated unit.
+pub(crate) fn push_align_fill(
+    out: &mut alloc::vec::Vec<u8>,
+    gap: usize,
+    fill: Option<AlignFill>,
+    exec: bool,
+    aarch64: bool,
+    after_insn: bool,
+) -> Result<(usize, MapClass), alloc::string::String> {
+    if let Some(f) = fill
+        && !gap.is_multiple_of(f.width as usize)
+    {
+        return Err(alloc::format!(
+            "inline asm: alignment padding ({gap} bytes) not a multiple of {}",
+            f.width
+        ));
+    }
+    // The sub-word remainder of an AArch64 code gap is data and the whole
+    // words are NOPs.
+    if fill.is_none() && exec && aarch64 {
+        return Ok((push_a64_exec_align_fill(out, gap), MapClass::Code));
+    }
+    let nop_fill = fill.is_none_or(|f| f.is_x86_nop());
+    if nop_fill && exec && !aarch64 {
+        push_x86_exec_align_fill(out, gap, after_insn);
+        return Ok((0, MapClass::Code));
+    }
+    let (pat, plen) = align_fill_pattern(fill, exec, aarch64);
+    for _ in 0..gap {
+        out.push(pat[out.len() % plen]);
+    }
+    // The padding holds instructions where the fill is the target NOP, and on
+    // AArch64 also where it is explicit, which GNU as leaves in the
+    // instruction state.
+    Ok((
+        0,
+        if exec && (aarch64 || nop_fill) {
+            MapClass::Code
+        } else {
+            MapClass::Data
+        },
+    ))
 }
 
 /// The AArch64 NOP, `d503201f`. Its length is the instruction size, the
@@ -6061,7 +6181,7 @@ pub(crate) fn step_map_state(
 /// encoding, so an instruction stream lays them down rather than assembling
 /// them.
 pub(crate) fn is_stream_layout_directive(tok: &str) -> bool {
-    matches!(tok, ".align" | ".balign" | ".p2align" | ".org") || is_fill_directive(tok)
+    align_directive(tok).is_some() || tok == ".org" || is_fill_directive(tok)
 }
 
 /// Parse a layout directive to the section item describing it, so an
@@ -6094,23 +6214,16 @@ pub(crate) fn push_a64_stream_layout(
         out: &mut alloc::vec::Vec<u8>,
         data: &mut alloc::vec::Vec<(usize, usize)>,
         n: u32,
-        fill: Option<u8>,
+        fill: Option<AlignFill>,
         max: Option<u32>,
-    ) -> u32 {
+    ) -> Result<u32, alloc::string::String> {
         let at = out.len();
         let gap = align_gap(at as i64, n as i64, max) as usize;
-        match fill {
-            // The sub-word remainder is data and the whole words are NOPs.
-            None => {
-                let zeros = push_a64_exec_align_fill(out, gap);
-                if zeros > 0 {
-                    data.push((at, zeros));
-                }
-            }
-            // GNU as leaves an explicit fill in the instruction state.
-            Some(b) => out.resize(at + gap, b),
+        let (lead, _) = push_align_fill(out, gap, fill, true, true, false)?;
+        if lead > 0 {
+            data.push((at, lead));
         }
-        n
+        Ok(n)
     }
     // A `.org` target below the counter is an error in GNU as, not a rewind.
     fn org(
@@ -6127,9 +6240,9 @@ pub(crate) fn push_a64_stream_layout(
         Ok(1)
     }
     match item {
-        AsmSectionItem::Align { n, fill, max } => Ok(align(out, data, *n, *fill, *max)),
+        AsmSectionItem::Align { n, fill, max } => align(out, data, *n, *fill, *max),
         AsmSectionItem::AlignArch { n, fill, max } => {
-            Ok(align(out, data, align_item_bytes(*n, true), *fill, *max))
+            align(out, data, align_item_bytes(*n, true), *fill, *max)
         }
         AsmSectionItem::Fill { count, unit, value } => {
             let n = eval_fill_count_with(count, at as i64, const_of, resolve).ok_or_else(|| {
@@ -6882,14 +6995,8 @@ pub(crate) fn materialize_asm_sections(
             let resolved;
             let item = match item {
                 AsmSectionItem::AlignArch { n, fill, max } => {
-                    let bytes = align_item_bytes(*n, align_is_p2);
-                    if !bytes.is_power_of_two() {
-                        return Err(alloc::string::String::from(
-                            "inline asm: `.align` is not a power of two",
-                        ));
-                    }
                     resolved = AsmSectionItem::Align {
-                        n: bytes,
+                        n: align_item_bytes(*n, align_is_p2),
                         fill: *fill,
                         max: *max,
                     };
@@ -6922,35 +7029,18 @@ pub(crate) fn materialize_asm_sections(
                     sec.align = sec.align.max(*n);
                     let exec = b.flags.contains('x');
                     if max.is_none_or(|m| gap <= m as usize) {
-                        let nop_fill = matches!(fill, None | Some(X86_NOP_OPCODE));
-                        if exec && align_is_p2 && fill.is_none() {
-                            let zeros = push_a64_exec_align_fill(&mut sec.bytes, gap);
-                            if zeros > 0 {
-                                sec.map.align(map_at, MapClass::Data);
-                            }
-                            sec.map.align(map_at + zeros, MapClass::Code);
-                        } else {
-                            // The padding holds instructions where the fill is
-                            // the target NOP, and on AArch64 also where it is
-                            // an explicit byte, which GNU as leaves in the
-                            // instruction state.
-                            sec.map.align(
-                                map_at,
-                                if exec && (align_is_p2 || nop_fill) {
-                                    MapClass::Code
-                                } else {
-                                    MapClass::Data
-                                },
-                            );
-                            if nop_fill && exec && !align_is_p2 {
-                                push_x86_exec_align_fill(&mut sec.bytes, gap, sec.after_insn);
-                            } else {
-                                let (pat, plen) = align_fill_pattern(*fill, exec, align_is_p2);
-                                for _ in 0..gap {
-                                    sec.bytes.push(pat[sec.bytes.len() % plen]);
-                                }
-                            }
+                        let (lead, class) = push_align_fill(
+                            &mut sec.bytes,
+                            gap,
+                            *fill,
+                            exec,
+                            align_is_p2,
+                            sec.after_insn,
+                        )?;
+                        if lead > 0 {
+                            sec.map.align(map_at, MapClass::Data);
                         }
+                        sec.map.align(map_at + lead, class);
                     }
                 }
                 AsmSectionItem::OrgLabel {
@@ -10639,50 +10729,29 @@ mod asm_section_tests {
 
     #[test]
     fn align_convention_per_arch() {
-        // `.align 3` is 2^3 = 8 bytes under the AArch64 convention and a
-        // (rejected, non-power-of-two) byte count under the x86 one.
-        let text = ".pushsection .t,\"a\"\n.align 3\n.byte 1\n.popsection";
-        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = AsmSectionSink::default();
-        materialize_asm_sections(
-            &blocks,
-            &|_| None,
-            &|_| None,
-            &|_| None,
-            &|_| None,
-            true,
-            &mut sink,
-        )
-        .unwrap();
-        assert_eq!(sink[0].align, 8);
-        let mut sink = AsmSectionSink::default();
-        assert!(
+        // `.align`'s operand is an exponent on AArch64 and a byte count on
+        // x86, so `.align 3` is 8 bytes on the one and rejected as a
+        // non-power-of-two count on the other, and `.align 8` the reverse.
+        let sec_align = |spec: &str, aarch64: bool| -> Result<u32, alloc::string::String> {
+            let text = alloc::format!(".pushsection .t,\"a\"\n.align {spec}\n.byte 1\n.popsection");
+            let AsmExtract { blocks, .. } =
+                extract_asm_sections(&text, aarch64)?.expect("section directives");
+            let mut sink = AsmSectionSink::default();
             materialize_asm_sections(
                 &blocks,
                 &|_| None,
                 &|_| None,
                 &|_| None,
                 &|_| None,
-                false,
-                &mut sink
-            )
-            .is_err()
-        );
-        // `.align 8` under the x86 convention is 8 bytes.
-        let text = ".pushsection .t,\"a\"\n.align 8\n.byte 1\n.popsection";
-        let AsmExtract { blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();
-        let mut sink = AsmSectionSink::default();
-        materialize_asm_sections(
-            &blocks,
-            &|_| None,
-            &|_| None,
-            &|_| None,
-            &|_| None,
-            false,
-            &mut sink,
-        )
-        .unwrap();
-        assert_eq!(sink[0].align, 8);
+                aarch64,
+                &mut sink,
+            )?;
+            Ok(sink[0].align)
+        };
+        assert_eq!(sec_align("3", true).unwrap(), 8);
+        assert!(sec_align("3", false).is_err());
+        assert_eq!(sec_align("8", false).unwrap(), 8);
+        assert_eq!(sec_align("8", true).unwrap(), 256);
     }
 
     #[test]

@@ -25,7 +25,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::super::ir::AsmRegSize;
-use super::super::ssa::emit_common::data_directive_width;
+use super::super::ssa::emit_common::{AlignFill, AsmSectionItem, data_directive_width};
 
 /// Base mnemonic of a template instruction (AT&T size suffix folded
 /// out into [`AsmInsn::suffix`]).
@@ -340,14 +340,15 @@ pub(crate) enum Mnemonic {
     /// expression text is carried in [`AsmInsn::sym_exprs`] and the fill byte
     /// in [`AsmInsn::bytes`].
     Skip,
-    /// `.align n` / `.p2align e` / `.balign n` inside the code stream: pad to
-    /// an alignment boundary. `n` is the resolved byte alignment, `fill` the
-    /// pad byte (the target NOP when absent), `max` the most bytes the pad may
-    /// add. The boundary is section-relative, as in GNU as; the emitter caps
-    /// `n` at the `.text` section alignment so the boundary holds absolutely.
+    /// `.align n` / `.p2align e` / `.balign n` and their fill-width spellings
+    /// inside the code stream: pad to an alignment boundary. `n` is the
+    /// resolved byte alignment, `fill` the pad unit (the target NOP when
+    /// absent), `max` the most bytes the pad may add. The boundary is
+    /// section-relative, as in GNU as; the emitter caps `n` at the `.text`
+    /// section alignment so the boundary holds absolutely.
     Align {
         n: u32,
-        fill: Option<u8>,
+        fill: Option<AlignFill>,
         max: Option<u32>,
     },
     /// A general-purpose / system mnemonic recognized straight from the
@@ -2328,22 +2329,22 @@ fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str], expr: u8) -> Option<(&'a str
     Some((sym, opnd))
 }
 
-/// Parse a `.align` / `.p2align` / `.balign` directive body to a byte
-/// alignment, pad byte, and max-skip. On x86 `.align` / `.balign` take a byte
-/// count; `.p2align` takes a power-of-two exponent. A zero count is an
-/// alignment of one, as GNU as reads it. `None` for a malformed or
-/// out-of-range spec.
-fn parse_align_directive(name: &str, rest: &str) -> Option<(u32, Option<u8>, Option<u32>)> {
-    let (spec, fill, max) = super::super::ssa::emit_common::parse_align_operands(rest.trim())?;
-    let n = match name {
-        ".p2align" => (0..=12).contains(&spec).then(|| 1u32 << spec)?,
-        ".align" | ".balign" => u32::try_from(spec)
-            .ok()
-            .filter(|&n| n <= 4096 && (n == 0 || n.is_power_of_two()))
-            .map(|n| n.max(1))?,
-        _ => return None,
-    };
-    Some((n, fill, max))
+/// Parse an alignment directive body to a byte alignment, fill unit and
+/// max-skip, through the grammar the section engine reads, so a template and
+/// a named section admit the same forms. On x86 `.align` takes a byte count.
+fn parse_align_directive(
+    name: &str,
+    rest: &str,
+) -> Result<(u32, Option<AlignFill>, Option<u32>), String> {
+    use super::super::ssa::emit_common as ec;
+    match ec::parse_stream_layout_item(name, rest.trim(), false) {
+        Some(Ok(AsmSectionItem::Align { n, fill, max })) => Ok((n, fill, max)),
+        Some(Ok(AsmSectionItem::AlignArch { n, fill, max })) => {
+            Ok((ec::align_item_bytes(n, false), fill, max))
+        }
+        Some(Err(e)) => Err(e),
+        _ => Err(format!("inline asm: bad alignment `{rest}`")),
+    }
 }
 
 /// Literal machine bytes for a raw-byte template piece, or `None` when the
@@ -2535,16 +2536,14 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             });
             continue;
         }
-        // `.align n` / `.p2align e` / `.balign n` inside the code stream pad to
-        // an alignment boundary (a `.pushsection` block handles these on its own
-        // path).
+        // The alignment directives inside the code stream pad to an alignment
+        // boundary (a `.pushsection` block handles these on its own path).
         let (dir_tok, dir_rest) = match piece.split_once(char::is_whitespace) {
             Some((t, r)) => (t, r.trim()),
             None => (piece, ""),
         };
-        if matches!(dir_tok, ".align" | ".p2align" | ".balign") {
-            let (n, fill, max) = parse_align_directive(dir_tok, dir_rest)
-                .ok_or_else(|| format!("inline asm: bad alignment `{piece}`"))?;
+        if super::super::ssa::emit_common::align_directive(dir_tok).is_some() {
+            let (n, fill, max) = parse_align_directive(dir_tok, dir_rest)?;
             insns.push(AsmInsn {
                 mnemonic: Mnemonic::Align { n, fill, max },
                 suffix: None,
@@ -5450,8 +5449,37 @@ mod tests {
             insns[0].mnemonic,
             Mnemonic::Align {
                 n: 16,
-                fill: Some(0x90),
+                fill: Some(AlignFill {
+                    value: 0x90,
+                    width: 1
+                }),
                 max: None
+            }
+        );
+        // The `w` / `l` spellings widen the fill unit only; the alignment
+        // operand keeps the base directive's convention.
+        let insns = parse_template(b".p2alignl 4, 0x12345678").unwrap();
+        assert_eq!(
+            insns[0].mnemonic,
+            Mnemonic::Align {
+                n: 16,
+                fill: Some(AlignFill {
+                    value: 0x12345678,
+                    width: 4
+                }),
+                max: None
+            }
+        );
+        let insns = parse_template(b".balignw 16, 0x1234, 3").unwrap();
+        assert_eq!(
+            insns[0].mnemonic,
+            Mnemonic::Align {
+                n: 16,
+                fill: Some(AlignFill {
+                    value: 0x1234,
+                    width: 2
+                }),
+                max: Some(3)
             }
         );
         // A zero count is an alignment of one, which moves nothing.
@@ -5466,8 +5494,11 @@ mod tests {
                 }
             );
         }
-        // A non-power-of-two byte count is rejected.
+        // A non-power-of-two byte count is rejected, and GNU as has no
+        // `.alignw` / `.alignl`.
         assert!(parse_template(b".align 3").is_err());
+        assert!(parse_template(b".alignl 8").is_err());
+        assert!(parse_template(b".alignw 8").is_err());
     }
 
     #[test]

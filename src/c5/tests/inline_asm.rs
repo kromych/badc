@@ -1712,3 +1712,160 @@ fn aarch64_alignment_fill_max_skip_and_zero_match_gnu_as() {
     let (bytes, _) = asm_section(src, ".text");
     assert_eq!(bytes, want);
 }
+
+/// The alignment operand's byte value, fill unit and max skip, however the
+/// item spells them. `aarch64` selects the target's reading of `.align`.
+fn align_shape(
+    item: &crate::c5::codegen::ssa::emit_common::AsmSectionItem,
+    aarch64: bool,
+) -> Option<(
+    u32,
+    Option<crate::c5::codegen::ssa::emit_common::AlignFill>,
+    Option<u32>,
+)> {
+    use crate::c5::codegen::ssa::emit_common::{AsmSectionItem as I, align_item_bytes};
+    match item {
+        I::Align { n, fill, max } => Some((*n, *fill, *max)),
+        I::AlignArch { n, fill, max } => Some((align_item_bytes(*n, aarch64), *fill, *max)),
+        _ => None,
+    }
+}
+
+#[test]
+fn alignment_directive_family_reads_one_grammar_everywhere() {
+    // The section engine, the x86-64 template parser and the AArch64 template
+    // parser have to admit the same alignment directives with the same
+    // operand meanings; a form one accepts and another rejects is the defect
+    // the shared parse exists to rule out.
+    use crate::c5::codegen::ssa::emit_common::parse_stream_layout_item;
+    let ok = [
+        ".balign 16",
+        ".balign 16, 0xff",
+        ".balign 16, 0xff, 3",
+        ".balign 0",
+        ".balignw 16, 0x1234",
+        ".balignl 16, 0x12345678",
+        ".balignw 16",
+        ".balignl 16",
+        ".p2align 4",
+        ".p2align 4,,7",
+        ".p2align 4, 0x90, 7",
+        ".p2alignw 4, 0x1234",
+        ".p2alignl 4, 0x12345678",
+        ".align 0",
+    ];
+    // GNU as has no `w` / `l` spelling of `.align`, rejects a non-power-of-two
+    // byte count and an out-of-range exponent, and takes at most three
+    // operands.
+    let bad = [
+        ".alignw 8",
+        ".alignl 8",
+        ".balign 3",
+        ".balignl 3",
+        ".p2align 13",
+        ".p2alignl 13",
+        ".balign 16, 0xff, 3, 4",
+    ];
+    for t in ok.iter().chain(bad.iter()) {
+        let (tok, rest) = t.split_once(' ').unwrap_or((t, ""));
+        let want_ok = ok.contains(t);
+        for (aarch64, arch) in [(false, "x86_64"), (true, "aarch64")] {
+            let shape = match parse_stream_layout_item(tok, rest.trim(), aarch64) {
+                Some(Ok(item)) => align_shape(&item, aarch64),
+                _ => None,
+            };
+            assert_eq!(shape.is_some(), want_ok, "section engine `{t}` ({arch})");
+            let tmpl = t.as_bytes();
+            let stream = if aarch64 {
+                crate::c5::codegen::aarch64::asm::parse_template(tmpl)
+                    .ok()
+                    .and_then(|i| i.first()?.layout.clone())
+                    .and_then(|it| align_shape(&it, true))
+            } else {
+                crate::c5::codegen::x86_64::asm::parse_template(tmpl)
+                    .ok()
+                    .and_then(|i| match i.first()?.mnemonic {
+                        crate::c5::codegen::x86_64::asm::Mnemonic::Align { n, fill, max } => {
+                            Some((n, fill, max))
+                        }
+                        _ => None,
+                    })
+            };
+            assert_eq!(stream, shape, "template vs section engine `{t}` ({arch})");
+        }
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn alignment_fill_width_family_matches_gnu_as() {
+    // `.balignw` / `.balignl` / `.p2alignw` / `.p2alignl` repeat a 2- or
+    // 4-byte little-endian fill over the gap, truncating a wider value; with
+    // no fill they pad like the unsuffixed spelling. GNU as 2.46.1 emits
+    // these bytes for the same statements.
+    let sec = |body: &str| {
+        let src = alloc::format!("__asm__(\".section .t,\\\"a\\\"\\n\" \"{body}\");\n");
+        asm_section(&src, ".t").0
+    };
+    let cases: &[(&str, &[u8])] = &[
+        (
+            ".byte 0x11,0x22,0x33,0x44\\n .balignl 16, 0x12345678\\n .byte 0xbb\\n",
+            &[
+                0x11, 0x22, 0x33, 0x44, 0x78, 0x56, 0x34, 0x12, 0x78, 0x56, 0x34, 0x12, 0x78, 0x56,
+                0x34, 0x12, 0xbb,
+            ],
+        ),
+        (
+            ".byte 0x11,0x22\\n .balignw 8, 0x1234\\n .byte 0xbb\\n",
+            &[0x11, 0x22, 0x34, 0x12, 0x34, 0x12, 0x34, 0x12, 0xbb],
+        ),
+        (
+            ".byte 0x11,0x22,0x33,0x44\\n .p2alignw 4, 0x1234\\n .byte 0xbb\\n",
+            &[
+                0x11, 0x22, 0x33, 0x44, 0x34, 0x12, 0x34, 0x12, 0x34, 0x12, 0x34, 0x12, 0x34, 0x12,
+                0x34, 0x12, 0xbb,
+            ],
+        ),
+        // A fill wider than the unit keeps the low bytes.
+        (
+            ".byte 0x11,0x22,0x33,0x44\\n .balignl 8, 0x123456789\\n .byte 0xbb\\n",
+            &[0x11, 0x22, 0x33, 0x44, 0x89, 0x67, 0x45, 0x23, 0xbb],
+        ),
+        (
+            ".byte 0x11,0x22,0x33,0x44\\n .balignw 8, 0x12345\\n .byte 0xbb\\n",
+            &[0x11, 0x22, 0x33, 0x44, 0x45, 0x23, 0x45, 0x23, 0xbb],
+        ),
+        // No fill operand: the section default, as for `.balign` itself.
+        (
+            ".byte 0x11,0x22,0x33,0x44\\n .balignl 8\\n .byte 0xbb\\n",
+            &[0x11, 0x22, 0x33, 0x44, 0, 0, 0, 0, 0xbb],
+        ),
+        // A max skip drops the padding, so the gap width never comes up.
+        (
+            ".byte 0x11,0x22,0x33\\n .balignl 16, 0x12345678, 2\\n .byte 0xbb\\n",
+            &[0x11, 0x22, 0x33, 0xbb],
+        ),
+    ];
+    for (body, want) in cases {
+        assert_eq!(&sec(body)[..], *want, "`{body}`");
+    }
+}
+
+#[cfg(feature = "native-emit")]
+#[test]
+fn alignment_fill_width_rejects_a_partial_unit() {
+    // GNU as errors when the padding is not a whole number of fill units.
+    for (d, w) in [(".balignl 16, 0x12345678", 4), (".p2alignw 4, 0x1234", 2)] {
+        let src = alloc::format!(
+            "__asm__(\".section .t,\\\"a\\\"\\n\" \" .byte 0x11\\n {d}\\n .byte 0xbb\\n\");\n"
+        );
+        let e = alloc::format!(
+            "{:?}",
+            crate::Compiler::with_target(src, crate::Target::LinuxAarch64)
+                .compile()
+                .err()
+        );
+        assert!(e.contains(&alloc::format!("not a multiple of {w}")), "{e}");
+    }
+}

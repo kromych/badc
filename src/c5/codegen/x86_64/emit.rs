@@ -8265,11 +8265,10 @@ fn emit_inline_asm(
         if let super::asm::Mnemonic::Align { n, fill, max } = insn.mnemonic {
             *text_align = (*text_align).max(n as usize);
             let gap = super::ssa::emit_common::align_gap(code.len() as i64, n as i64, max) as usize;
-            match fill {
-                Some(b) if b != super::ssa::emit_common::X86_NOP_OPCODE => {
-                    code.resize(code.len() + gap, b)
-                }
-                _ => super::ssa::emit_common::push_x86_exec_align_fill(code, gap, after_insn),
+            if let Err(e) =
+                super::ssa::emit_common::push_align_fill(code, gap, fill, true, false, after_insn)
+            {
+                return fail(&e);
             }
             continue;
         }

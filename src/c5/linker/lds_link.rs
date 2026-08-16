@@ -45,6 +45,7 @@ use super::object::{
     read_struct,
 };
 use crate::c5::object::elf_reloc_types as rt;
+use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
 
 fn err(msg: &str) -> C5Error {
     C5Error::Compile(format!("error: {msg}"))
@@ -1129,9 +1130,6 @@ const SYNTH_REL: &str = ".rel.dyn";
 const SYNTH_RELR: &str = ".relr.dyn";
 const SYNTH_GOT: &str = ".got";
 const SYNTH_GOTPLT: &str = ".got.plt";
-/// The GOT base, named by the psABIs' GOT-relative relocations and by
-/// hand-written PIC that computes the base itself.
-const GOT_SYMBOL: &str = "_GLOBAL_OFFSET_TABLE_";
 const SYNTH_BUILD_ID: &str = ".note.gnu.build-id";
 const SYNTH_COMMON: &str = "COMMON";
 const SYNTH_DYNSYM: &str = ".dynsym";

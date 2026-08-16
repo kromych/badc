@@ -476,10 +476,13 @@ fn fold_asm_sections(
 /// Resolve function-body inline-asm symbol-operand sites (aarch64) on a
 /// single-TU final image. A page / low-12 field against a resolved target
 /// becomes the writers' per-site address fixup; a PC-relative field whose
-/// target landed in the text stream is patched in place. A `movw` group
-/// needs the image base, and a PC-relative field cannot reach the data
-/// segment before layout; both are refused toward the `-c` + link path,
-/// as is a name the image does not define.
+/// target landed in the text stream is patched in place. The GOT base
+/// parks as a [`GotBaseFixup`], the same record the link path hands the
+/// writer. A `movw` group needs the image base, and a PC-relative field
+/// cannot reach the data segment before layout; both are refused toward
+/// the `-c` + link path, as is a name the image does not define.
+///
+/// [`GotBaseFixup`]: crate::c5::codegen::GotBaseFixup
 #[cfg(feature = "native-emit")]
 fn resolve_single_image_asm_sym_fixups(
     program: &Program,
@@ -521,6 +524,8 @@ fn resolve_single_image_asm_sym_fixups(
     enum Loc {
         Text(usize),
         Data(u64),
+        /// The GOT base, carrying the addend as a byte offset from it.
+        GotBase(i64),
         WeakUndef,
     }
     let records = core::mem::take(&mut build.asm_sym_fixups);
@@ -545,6 +550,12 @@ fn resolve_single_image_asm_sym_fixups(
                             Loc::Text(off.wrapping_add_signed(r.addend as isize))
                         } else if let Some(&val) = defined_data_by_name.get(name.as_str()) {
                             Loc::Data((val.max(0) as u64).wrapping_add_signed(r.addend))
+                        } else if name == crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL {
+                            // Linker-defined, so it is looked up after the
+                            // unit's own definitions and ahead of the weak
+                            // rule: the name is declared weak-undefined by
+                            // the usual C idiom for reaching the GOT.
+                            Loc::GotBase(r.addend)
                         } else if weak_names.contains(name.as_str()) {
                             Loc::WeakUndef
                         } else {
@@ -586,6 +597,17 @@ fn resolve_single_image_asm_sym_fixups(
                 target_native_offset: off,
                 part,
             }),
+            // The GOT's address is the writer's to decide, so the site
+            // takes the same record the link path parks for it.
+            (Some(part), Loc::GotBase(off)) => {
+                build
+                    .got_base_fixups
+                    .push(crate::c5::codegen::GotBaseFixup {
+                        instr_offset: r.instr_offset,
+                        got_offset: off,
+                        part,
+                    })
+            }
             // An undefined weak name resolves to address 0, as the linkers
             // resolve it: the `adrp` becomes `movz rd, #0`, the `add` keeps
             // the zero base, and a load/store keeps its zero immediate over
@@ -740,6 +762,23 @@ fn resolve_single_tu_extern_refs(
                 data_offset: (off + addend + 4) as u64,
                 part: AddrPart::Whole,
             });
+            continue;
+        }
+        // The GOT base is linker-defined: looked up after the unit's own
+        // definitions and ahead of the weak rule, since the usual C idiom
+        // for reaching it declares the name weak-undefined. The writer
+        // holds the table's address, so the site parks as the same record
+        // the link path hands it.
+        if r.symbol_name == crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL
+            && let Some(addend) = r.direct_pcrel
+        {
+            build
+                .got_base_fixups
+                .push(crate::c5::codegen::GotBaseFixup {
+                    instr_offset: r.instr_offset,
+                    got_offset: addend + 4,
+                    part: AddrPart::Whole,
+                });
             continue;
         }
         if !weak_names.contains(r.symbol_name.as_str()) {

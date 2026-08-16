@@ -46,9 +46,7 @@ use crate::c5::object::elf_reloc_types::{
     aarch64_pcrel_data_field, aarch64_pcrel_imm_field, x86_64_abs_field, x86_64_pcrel_data_field,
 };
 
-/// The GOT base, named by the psABIs' GOT-relative relocations and by
-/// hand-written PIC that computes the base itself.
-pub(crate) const GOT_BASE_SYMBOL: &str = "_GLOBAL_OFFSET_TABLE_";
+pub(crate) use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL;
 
 /// A relocation whose site reads a GOT slot: the value it wants is the
 /// symbol's address, taken from storage the loader fills, not a

@@ -10,6 +10,11 @@
 use alloc::format;
 use alloc::string::String;
 
+/// The GOT base, named by the psABIs' GOT-relative relocations and by
+/// hand-written PIC that computes the base itself. Every path that
+/// defines or resolves the name spells it from here.
+pub(crate) const GOT_BASE_SYMBOL: &str = "_GLOBAL_OFFSET_TABLE_";
+
 // ---- x86_64 ----
 pub(crate) const R_X86_64_64: u32 = 1;
 pub(crate) const R_X86_64_PC32: u32 = 2;

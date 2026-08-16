@@ -11895,6 +11895,115 @@ fn inline_asm_reads_the_got_base() {
     }
 }
 
+/// The library's single-TU image path resolves the GOT base like the
+/// link path: the writer holds the table's address either way, so the
+/// finalizer parks the site as a GOT-base fixup instead of reporting
+/// the name undefined. Checks the patched operand against the image's
+/// own `.got`, not just the symbol table entry.
+#[cfg(feature = "native-emit")]
+#[test]
+fn single_tu_image_resolves_the_got_base() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        // The import gives the image a GOT to name; without one there
+        // is no table and the symbol table carries no entry either.
+        let src = if target == Target::LinuxX64 {
+            "#pragma dylib(libc, \"libc.so.6\")\n\
+             #pragma binding(libc::printf, \"printf\")\n\
+             int printf(const char *, ...);\n\
+             int main(void) { void *g; __asm__(\"leaq _GLOBAL_OFFSET_TABLE_(%%rip), %0\" \
+             : \"=r\"(g)); return g == 0 ? printf(\"\") : 0; }\n"
+        } else {
+            "#pragma dylib(libc, \"libc.so.6\")\n\
+             #pragma binding(libc::printf, \"printf\")\n\
+             int printf(const char *, ...);\n\
+             int main(void) { void *g; __asm__(\"adrp %0, _GLOBAL_OFFSET_TABLE_\\n\\t\
+             add %0, %0, :lo12:_GLOBAL_OFFSET_TABLE_\" : \"=r\"(g)); \
+             return g == 0 ? printf(\"\") : 0; }\n"
+        };
+        let program =
+            Compiler::with_options(src.to_string(), target, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Executable,
+            ..Default::default()
+        };
+        let image = emit_native_with_options(&program, target, opts)
+            .expect("the single-TU image path resolves the GOT base");
+        let sections = elf_sections(&image);
+        // `elf_sections` carries no address; the checks below need one.
+        let sec_addr = |want: &str| -> u64 {
+            let u16le = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap()) as usize;
+            let u32le = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap()) as usize;
+            let u64le = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+            let shoff = u64le(0x28) as usize;
+            let (shentsize, shnum, shstrndx) = (u16le(0x3A), u16le(0x3C), u16le(0x3E));
+            let strtab = u64le(shoff + shstrndx * shentsize + 0x18) as usize;
+            for i in 0..shnum {
+                let sh = shoff + i * shentsize;
+                let n = strtab + u32le(sh);
+                let end = image[n..].iter().position(|&b| b == 0).unwrap() + n;
+                if &image[n..end] == want.as_bytes() {
+                    return u64le(sh + 0x10);
+                }
+            }
+            panic!("{target:?}: no section `{want}`");
+        };
+        let got_addr = sec_addr(".got");
+        assert!(got_addr != 0, "{target:?}: the GOT has an address");
+
+        let rows: alloc::vec::Vec<_> = elf_symbols(&image)
+            .into_iter()
+            .filter(|(n, _, _, _, _)| n == "_GLOBAL_OFFSET_TABLE_")
+            .collect();
+        assert_eq!(rows.len(), 1, "{target:?}: one GOT base entry");
+        let (_, info, shndx, value, size) = rows[0].clone();
+        // STB_LOCAL << 4 is zero, so the info byte is the type alone.
+        assert_eq!(info, 1, "{target:?}: local OBJECT");
+        assert_eq!(size, 0, "{target:?}: sizeless");
+        assert_eq!(
+            &sections[shndx as usize].0, ".got",
+            "{target:?}: the entry names the GOT"
+        );
+        assert_eq!(value, got_addr, "{target:?}: the entry is the GOT base");
+
+        // The reference site itself must hold the GOT's address, which
+        // is what a bare symbol-table entry does not prove.
+        let text_addr = sec_addr(".text");
+        let text_bytes = &sections
+            .iter()
+            .find(|(n, _, _, _)| n == ".text")
+            .unwrap_or_else(|| panic!("{target:?}: no .text"))
+            .3;
+        let found = if target == Target::LinuxX64 {
+            // `lea r64, [rip+disp32]`: REX.W 8D, modrm mod=00 rm=101.
+            (0..text_bytes.len().saturating_sub(7)).any(|i| {
+                text_bytes[i] & 0xF8 == 0x48
+                    && text_bytes[i + 1] == 0x8D
+                    && text_bytes[i + 2] & 0xC7 == 0x05
+                    && {
+                        let d = i32::from_le_bytes(text_bytes[i + 3..i + 7].try_into().unwrap());
+                        (text_addr + i as u64 + 7).wrapping_add_signed(d as i64) == got_addr
+                    }
+            })
+        } else {
+            // `adrp`: the page of the target, relative to the page of
+            // the instruction.
+            (0..text_bytes.len().saturating_sub(4)).step_by(4).any(|i| {
+                let w = u32::from_le_bytes(text_bytes[i..i + 4].try_into().unwrap());
+                w & 0x9F00_0000 == 0x9000_0000 && {
+                    let imm = (((w >> 3) & 0x001F_FFFC) | ((w >> 29) & 3)) as i32;
+                    let imm = ((imm << 11) >> 11) as i64;
+                    ((text_addr + i as u64) & !0xFFF).wrapping_add_signed(imm << 12)
+                        == got_addr & !0xFFF
+                }
+            })
+        };
+        assert!(found, "{target:?}: no site holds the GOT base address");
+    }
+}
+
 #[cfg(feature = "native-emit")]
 #[test]
 fn inline_asm_branch_to_undefined_symbol_in_final_image_is_diagnosed() {

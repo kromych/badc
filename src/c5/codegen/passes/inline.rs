@@ -150,10 +150,13 @@ struct CallerRegions {
 /// to execute stack-pointer asm (`sp_asm_reachers`): a stack switch lets a
 /// spliced activation stay live -- suspended mid-body on another stack --
 /// while the caller proceeds to further sites, so no two sites may share.
-/// An indirect call's target is not in the static call graph, so `cyclic`
-/// cannot rule the body out of a cycle back into this caller; treat it as
-/// a cycle member. Read by the splice and by the frame budget, which
-/// charges an appending callee once per site.
+/// A body holding an indirect call appends for the same stack-pointer
+/// reason, not for cycle membership: `sp_asm_reachers` propagates along
+/// `Inst::Call` edges only, so it cannot rule a target outside the static
+/// call graph out of executing stack-pointer asm. Nesting is not at issue
+/// -- a splice site is always an `Inst::Call`, so an indirect call
+/// re-activates no region. Read by the splice and by the frame budget,
+/// which charges an appending callee once per site.
 fn region_key(
     caller_pc: usize,
     callee: &FunctionSsa,
@@ -939,9 +942,9 @@ fn is_inline_candidate(
             Inst::Call { ret_agg, .. } if ret_agg.is_none() => {}
             // A call through a function pointer in the same shape. The
             // target is one more value operand for the splice to remap;
-            // because its callee is not known statically it cannot be
-            // ruled out of a call cycle, so the frame-region choice below
-            // gives such a body a fresh region per site.
+            // because it is outside the static call graph it cannot be
+            // ruled out of reaching stack-pointer asm, so the frame-region
+            // choice below gives such a body a fresh region per site.
             Inst::CallIndirect { ret_agg, .. } if ret_agg.is_none() => {}
             // A phi merging values across the callee's own blocks. The
             // multi-block splice translates its incoming values through

@@ -1237,6 +1237,7 @@ pub(crate) fn emit_function(
                     asm_sym_fixups,
                     &mut deferred_regions,
                     text_data_ranges,
+                    text_align,
                     asm_text_labels,
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
@@ -3065,6 +3066,26 @@ fn encode_deferred_asm_region(
                 labels.push((num, bytes.len()));
                 continue;
             }
+            // A layout directive resolves against the region's own counter,
+            // which is where its labels are recorded.
+            if let Some(item) = &insn.layout {
+                let resolve = |name: &str| -> Option<i64> {
+                    let num: u32 = name.strip_suffix(['b', 'f']).unwrap_or(name).parse().ok()?;
+                    labels
+                        .iter()
+                        .rfind(|&&(n, _)| n == num)
+                        .map(|&(_, off)| off as i64)
+                };
+                super::ssa::emit_common::push_a64_stream_layout(
+                    item,
+                    &mut bytes,
+                    &mut data_ranges,
+                    &resolve,
+                    &|_| None,
+                )?;
+                map_state = super::ssa::emit_common::step_map_state(item, map_state, true, true);
+                continue;
+            }
             let class = super::ssa::emit_common::data_directive_class(&insn.mnemonic)
                 .unwrap_or(MapClass::Code);
             if class == MapClass::Code {
@@ -3228,6 +3249,7 @@ fn emit_inline_asm_aarch64(
     asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
     deferred_regions: &mut Vec<DeferredAsmRegion>,
     text_data_ranges: &mut Vec<(usize, usize)>,
+    text_align: &mut usize,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
@@ -3760,10 +3782,43 @@ fn emit_inline_asm_aarch64(
     // stream lays its bytes into `.text`, so the section rule applies.
     let mut map_state: Option<MapClass> = None;
 
+    // Code-stream label names, so a layout directive's expression can read a
+    // named label's offset as it reads a numeric one.
+    let stream_label_names = super::ssa::emit_common::scan_label_names(code_text);
     // Encode each template instruction; raw-byte pieces emit verbatim.
     for insn in &insns {
         if let Some(num) = insn.label_def {
             label_defs.push((num, code.len()));
+            continue;
+        }
+        // A layout directive moves the location counter; `code` is the unit's
+        // whole text stream, so its length is the section offset GNU as
+        // resolves one against. Only a definition already emitted resolves.
+        if let Some(item) = &insn.layout {
+            let resolve = |name: &str| -> Option<i64> {
+                let num = match stream_label_names.iter().position(|&n| n == name) {
+                    Some(i) => super::ssa::emit_common::NAMED_LABEL_BASE + i as u32,
+                    None => name.strip_suffix(['b', 'f'])?.parse().ok()?,
+                };
+                label_defs
+                    .iter()
+                    .rfind(|&&(n, _)| n == num)
+                    .map(|&(_, off)| off as i64)
+            };
+            match super::ssa::emit_common::push_a64_stream_layout(
+                item,
+                code,
+                text_data_ranges,
+                &resolve,
+                &const_of,
+            ) {
+                Ok(n) => *text_align = (*text_align).max(n as usize),
+                Err(m) => {
+                    bail_msg(&m);
+                    return false;
+                }
+            }
+            map_state = super::ssa::emit_common::step_map_state(item, map_state, true, true);
             continue;
         }
         // Every item but a data directive lays down instructions: a raw-byte
@@ -4488,6 +4543,7 @@ fn emit_inst(
     let asm_extern_call_sites = &mut *cx.asm_extern_call_sites;
     let asm_sym_fixups = &mut *cx.asm_sym_fixups;
     let text_data_ranges = &mut *cx.text_data_ranges;
+    let text_align = &mut *cx.text_align;
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca. Non-zero:
@@ -5099,6 +5155,7 @@ fn emit_inst(
             asm_sym_fixups,
             deferred_regions,
             text_data_ranges,
+            text_align,
             asm_text_labels,
             None,
         ),

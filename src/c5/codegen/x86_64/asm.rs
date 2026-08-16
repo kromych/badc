@@ -2330,7 +2330,8 @@ fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str], expr: u8) -> Option<(&'a str
 
 /// Parse a `.align` / `.p2align` / `.balign` directive body to a byte
 /// alignment, pad byte, and max-skip. On x86 `.align` / `.balign` take a byte
-/// count; `.p2align` takes a power-of-two exponent. `None` for a malformed or
+/// count; `.p2align` takes a power-of-two exponent. A zero count is an
+/// alignment of one, as GNU as reads it. `None` for a malformed or
 /// out-of-range spec.
 fn parse_align_directive(name: &str, rest: &str) -> Option<(u32, Option<u8>, Option<u32>)> {
     let (spec, fill, max) = super::super::ssa::emit_common::parse_align_operands(rest.trim())?;
@@ -2338,7 +2339,8 @@ fn parse_align_directive(name: &str, rest: &str) -> Option<(u32, Option<u8>, Opt
         ".p2align" => (0..=12).contains(&spec).then(|| 1u32 << spec)?,
         ".align" | ".balign" => u32::try_from(spec)
             .ok()
-            .filter(|&n| n > 0 && n <= 4096 && n.is_power_of_two())?,
+            .filter(|&n| n <= 4096 && (n == 0 || n.is_power_of_two()))
+            .map(|n| n.max(1))?,
         _ => return None,
     };
     Some((n, fill, max))
@@ -5415,6 +5417,18 @@ mod tests {
                 max: None
             }
         );
+        // A zero count is an alignment of one, which moves nothing.
+        for t in [b".align 0".as_slice(), b".balign 0".as_slice()] {
+            let insns = parse_template(t).unwrap();
+            assert_eq!(
+                insns[0].mnemonic,
+                Mnemonic::Align {
+                    n: 1,
+                    fill: None,
+                    max: None
+                }
+            );
+        }
         // A non-power-of-two byte count is rejected.
         assert!(parse_template(b".align 3").is_err());
     }

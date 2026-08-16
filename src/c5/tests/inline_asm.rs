@@ -1619,3 +1619,49 @@ fn aarch64_pushsection_reads_the_enclosing_template_operands() {
         "the section instruction must use the operand's register"
     );
 }
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_function_body_layout_directives_match_gnu_as() {
+    // `.balign` / `.skip` / `.org` in the main instruction stream. GNU as
+    // 2.46.1 for the same statements in a `.text` body emits 44 bytes: the
+    // `.balign 16` pads with three NOP words, the `.skip` deposits eight
+    // zeros, the instruction after them is already word-aligned, and the
+    // `.org` pads to twelve bytes past the label.
+    let src = "__attribute__((naked)) void probe(void);\n\
+               __attribute__((naked)) void probe(void) { __asm__ volatile(\
+               \"nop\\n\\t.balign 16\\n\\tnop\\n\\t.skip 8\\n\
+               2:\\n\\tnop\\n\\t.org 2b + 12\\n\\tnop\"); }\n";
+    let mut want: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
+    for _ in 0..5 {
+        want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+    }
+    want.resize(28, 0);
+    want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+    want.resize(40, 0);
+    want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+    let (bytes, _) = asm_section(src, ".text");
+    assert_eq!(bytes, want);
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_alignment_fill_max_skip_and_zero_match_gnu_as() {
+    // An explicit fill byte, a max skip that drops the alignment, a sub-word
+    // gap after data, and the zero alignment GNU as reads as one. 2.46.1 for
+    // the same statements emits 28 bytes.
+    let src = "__attribute__((naked)) void probe(void);\n\
+               __attribute__((naked)) void probe(void) { __asm__ volatile(\
+               \"nop\\n\\t.balign 16, 0\\n\\tnop\\n\\t.balign 16, , 2\\n\
+               \\t.byte 7\\n\\t.balign 8\\n\\t.align 0\\n\\t.balign 0\\n\\tnop\"); }\n";
+    let mut want: alloc::vec::Vec<u8> = 0xd503201fu32.to_le_bytes().to_vec();
+    want.resize(16, 0);
+    want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+    want.push(7);
+    want.resize(24, 0);
+    want.extend_from_slice(&0xd503201fu32.to_le_bytes());
+    let (bytes, _) = asm_section(src, ".text");
+    assert_eq!(bytes, want);
+}

@@ -4345,19 +4345,21 @@ fn parse_section_item(
         });
     }
     match tok {
+        // A zero alignment is an alignment of one in GNU as, which moves
+        // nothing.
         ".balign" => {
             let (n, fill, max) = parse_align_operands(rest)
-                .filter(|&(n, _, _)| n > 0 && (n as u64).is_power_of_two())
+                .filter(|&(n, _, _)| n == 0 || (n > 0 && (n as u64).is_power_of_two()))
                 .ok_or_else(|| alloc::format!("inline asm: bad alignment `{rest}`"))?;
             Ok(AsmSectionItem::Align {
-                n: n as u32,
+                n: (n as u32).max(1),
                 fill,
                 max,
             })
         }
         ".align" => {
             let (n, fill, max) = parse_align_operands(rest)
-                .filter(|&(n, _, _)| (1..=4096).contains(&n))
+                .filter(|&(n, _, _)| (0..=4096).contains(&n))
                 .ok_or_else(|| alloc::format!("inline asm: bad alignment `{rest}`"))?;
             Ok(AsmSectionItem::AlignArch {
                 n: n as u32,
@@ -5948,6 +5950,17 @@ pub(crate) fn align_gap(at: i64, align: i64, max: Option<u32>) -> i64 {
     }
 }
 
+/// The byte alignment an `.align` operand requests: a power-of-two exponent
+/// where the target reads it as one (AArch64), a byte count otherwise. A zero
+/// byte count is an alignment of one, as GNU as reads it.
+pub(crate) fn align_item_bytes(n: u32, align_is_p2: bool) -> u32 {
+    if align_is_p2 {
+        1u32 << n.min(12)
+    } else {
+        n.max(1)
+    }
+}
+
 /// The byte pattern that fills an alignment gap. An explicit fill byte is
 /// repeated. With no explicit fill GNU as pads an executable section with the
 /// target NOP encoding (single-byte on x86, the 4-byte instruction on AArch64)
@@ -6011,9 +6024,7 @@ pub(crate) fn step_map_state(
     match item {
         AsmSectionItem::CodeBytes { .. } => Some(MapClass::Code),
         AsmSectionItem::Align { n, .. } => aligned(*n).or(cur),
-        AsmSectionItem::AlignArch { n, .. } => {
-            aligned(if align_is_p2 { 1u32 << n.min(&12) } else { *n }).or(cur)
-        }
+        AsmSectionItem::AlignArch { n, .. } => aligned(align_item_bytes(*n, align_is_p2)).or(cur),
         AsmSectionItem::Data { .. } | AsmSectionItem::Fill { .. } | AsmSectionItem::Bytes(_) => {
             Some(MapClass::Data)
         }
@@ -6021,6 +6032,116 @@ pub(crate) fn step_map_state(
             .iter()
             .fold(cur, |st, it| step_map_state(it, st, exec, align_is_p2)),
         _ => cur,
+    }
+}
+
+/// Whether `tok` names a layout directive: the alignment, space-and-fill and
+/// `.org` families move the location counter instead of depositing an
+/// encoding, so an instruction stream lays them down rather than assembling
+/// them.
+pub(crate) fn is_stream_layout_directive(tok: &str) -> bool {
+    matches!(tok, ".align" | ".balign" | ".p2align" | ".org") || is_fill_directive(tok)
+}
+
+/// Parse a layout directive to the section item describing it, so an
+/// instruction stream and the section engine read one grammar. `None` when
+/// `tok` is not a layout directive.
+pub(crate) fn parse_stream_layout_item(
+    tok: &str,
+    rest: &str,
+    is_aarch64: bool,
+) -> Option<Result<AsmSectionItem, alloc::string::String>> {
+    is_stream_layout_directive(tok).then(|| parse_section_item(tok, rest, is_aarch64))
+}
+
+/// Lay a layout directive into an AArch64 instruction stream at the end of
+/// `out`, whose length is a section offset. `data` collects the runs that are
+/// not instructions, for the mapping symbols; a `.org` records none, as in
+/// GNU as, so the surrounding run covers its gap. `resolve` values a label
+/// reference in a count or an `.org` target and `const_of` an `i`-class
+/// operand. Returns the alignment the directive requests, which the caller
+/// raises the section's by.
+pub(crate) fn push_a64_stream_layout(
+    item: &AsmSectionItem,
+    out: &mut alloc::vec::Vec<u8>,
+    data: &mut alloc::vec::Vec<(usize, usize)>,
+    resolve: &dyn Fn(&str) -> Option<i64>,
+    const_of: &dyn Fn(u8) -> Option<i64>,
+) -> Result<u32, alloc::string::String> {
+    let at = out.len();
+    fn align(
+        out: &mut alloc::vec::Vec<u8>,
+        data: &mut alloc::vec::Vec<(usize, usize)>,
+        n: u32,
+        fill: Option<u8>,
+        max: Option<u32>,
+    ) -> u32 {
+        let at = out.len();
+        let gap = align_gap(at as i64, n as i64, max) as usize;
+        match fill {
+            // The sub-word remainder is data and the whole words are NOPs.
+            None => {
+                let zeros = push_a64_exec_align_fill(out, gap);
+                if zeros > 0 {
+                    data.push((at, zeros));
+                }
+            }
+            // GNU as leaves an explicit fill in the instruction state.
+            Some(b) => out.resize(at + gap, b),
+        }
+        n
+    }
+    // A `.org` target below the counter is an error in GNU as, not a rewind.
+    fn org(
+        out: &mut alloc::vec::Vec<u8>,
+        target: i64,
+        fill: u8,
+    ) -> Result<u32, alloc::string::String> {
+        if target < out.len() as i64 {
+            return Err(alloc::string::String::from(
+                "inline asm: `.org` moves backwards",
+            ));
+        }
+        out.resize(target as usize, fill);
+        Ok(1)
+    }
+    match item {
+        AsmSectionItem::Align { n, fill, max } => Ok(align(out, data, *n, *fill, *max)),
+        AsmSectionItem::AlignArch { n, fill, max } => {
+            Ok(align(out, data, align_item_bytes(*n, true), *fill, *max))
+        }
+        AsmSectionItem::Fill { count, unit, value } => {
+            let n = eval_fill_count_with(count, at as i64, const_of, resolve).ok_or_else(|| {
+                alloc::format!("inline asm: fill count `{count}` is not a constant expression")
+            })?;
+            push_fill(out, n.max(0), *unit, *value);
+            if out.len() > at {
+                data.push((at, out.len() - at));
+            }
+            Ok(1)
+        }
+        AsmSectionItem::Org(n, fill) => org(out, *n as i64, *fill),
+        AsmSectionItem::OrgLabel {
+            label,
+            addend,
+            fill,
+        } => {
+            let base = resolve(label).ok_or_else(|| {
+                alloc::format!("inline asm: `.org` label `{label}` is not defined above")
+            })?;
+            let add = eval_const_expr_ops(addend, const_of).ok_or_else(|| {
+                alloc::string::String::from("inline asm: non-constant `.org` addend")
+            })?;
+            org(out, base + add, *fill)
+        }
+        AsmSectionItem::OrgExpr(expr, fill) => {
+            let target = eval_fill_count_with(expr, at as i64, const_of, resolve)
+                .ok_or_else(|| alloc::format!("inline asm: bad `.org` offset `{expr}`"))?;
+            org(out, target, *fill)
+        }
+        _ => Err(alloc::string::String::from(
+            "inline asm: unsupported layout directive",
+        )),
     }
 }
 
@@ -6493,12 +6614,7 @@ fn measure_round_inner(
                     at += align_gap(at, *n as i64, *max);
                 }
                 AsmSectionItem::AlignArch { n, max, .. } => {
-                    let bytes = if align_is_p2 {
-                        1i64 << (*n).min(12)
-                    } else {
-                        *n as i64
-                    };
-                    at += align_gap(at, bytes, *max);
+                    at += align_gap(at, align_item_bytes(*n, align_is_p2) as i64, *max);
                 }
                 AsmSectionItem::Org(n, _) => at = at.max(*n as i64),
                 AsmSectionItem::OrgLabel { label, addend, .. } => {
@@ -6741,7 +6857,7 @@ pub(crate) fn materialize_asm_sections(
             let resolved;
             let item = match item {
                 AsmSectionItem::AlignArch { n, fill, max } => {
-                    let bytes = if align_is_p2 { 1u32 << n.min(&12) } else { *n };
+                    let bytes = align_item_bytes(*n, align_is_p2);
                     if !bytes.is_power_of_two() {
                         return Err(alloc::string::String::from(
                             "inline asm: `.align` is not a power of two",

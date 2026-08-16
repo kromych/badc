@@ -340,6 +340,10 @@ pub(crate) struct AsmInsnA64 {
     /// symbol name; the emitter resolves it to a rel26 through the same fixup
     /// pass as a compiler-emitted call. `None` for every other instruction.
     pub sym_target: Option<String>,
+    /// A layout directive (`.balign`, `.skip`, `.org`, ...), which moves the
+    /// location counter rather than depositing an encoding. Carried in the
+    /// section engine's form so both paths lay it down the same way.
+    pub layout: Option<emit_common::AsmSectionItem>,
 }
 
 /// A condition-code mnemonic to its 4-bit encoding.
@@ -1224,6 +1228,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: Some(num),
                 sym_target: None,
+                layout: None,
             });
             piece = rest.trim();
         }
@@ -1236,6 +1241,24 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         if let Some(tok) = piece.split_whitespace().next()
             && matches!(tok, ".arch" | ".arch_extension" | ".cpu")
         {
+            continue;
+        }
+        // An alignment, space-and-fill or `.org` directive moves the location
+        // counter; the section engine's parse gives the form the emitter lays
+        // down.
+        let (dir_tok, dir_rest) = match piece.split_once(char::is_whitespace) {
+            Some((t, r)) => (t, r.trim()),
+            None => (piece, ""),
+        };
+        if let Some(item) = emit_common::parse_stream_layout_item(dir_tok, dir_rest, true) {
+            insns.push(AsmInsnA64 {
+                mnemonic: String::from(dir_tok),
+                operands: Vec::new(),
+                bytes: Vec::new(),
+                label_def: None,
+                sym_target: None,
+                layout: Some(item?),
+            });
             continue;
         }
         // A `.byte`-family directive whose arguments are not all constant: an
@@ -1262,6 +1285,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1280,6 +1304,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes,
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1304,6 +1329,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     bytes: Vec::new(),
                     label_def: None,
                     sym_target: None,
+                    layout: None,
                 });
                 continue;
             }
@@ -1333,6 +1359,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     bytes: Vec::new(),
                     label_def: None,
                     sym_target: None,
+                    layout: None,
                 });
                 continue;
             }
@@ -1364,6 +1391,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     bytes: word.to_le_bytes().to_vec(),
                     label_def: None,
                     sym_target: None,
+                    layout: None,
                 });
                 continue;
             }
@@ -1400,6 +1428,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: word.to_le_bytes().to_vec(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1429,6 +1458,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1448,6 +1478,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1474,6 +1505,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1515,6 +1547,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 bytes: Vec::new(),
                 label_def: None,
                 sym_target: None,
+                layout: None,
             });
             continue;
         }
@@ -1536,6 +1569,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                     bytes: Vec::new(),
                     label_def: None,
                     sym_target: Some(String::from(rest)),
+                    layout: None,
                 });
                 continue;
             }
@@ -1568,6 +1602,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             bytes: Vec::new(),
             label_def: None,
             sym_target: None,
+            layout: None,
         });
     }
     Ok(insns)
@@ -1924,6 +1959,93 @@ mod tests {
         // An unknown option and an isb domain option are rejected.
         assert!(parse_template(b"dmb full").is_err());
         assert!(parse_template(b"isb ish").is_err());
+    }
+
+    #[test]
+    fn parse_layout_directives_in_stream() {
+        use emit_common::AsmSectionItem as I;
+        // `.align` takes a power-of-two exponent on AArch64; the fill family
+        // and `.org` carry their operands to the emitter unevaluated.
+        let cases: &[(&[u8], I)] = &[
+            (
+                b".balign 16",
+                I::Align {
+                    n: 16,
+                    fill: None,
+                    max: None,
+                },
+            ),
+            (
+                b".balign 16, 0xff, 3",
+                I::Align {
+                    n: 16,
+                    fill: Some(0xff),
+                    max: Some(3),
+                },
+            ),
+            (
+                b".align 4",
+                I::AlignArch {
+                    n: 4,
+                    fill: None,
+                    max: None,
+                },
+            ),
+            (
+                b".p2align 3",
+                I::Align {
+                    n: 8,
+                    fill: None,
+                    max: None,
+                },
+            ),
+            (
+                b".skip 8",
+                I::Fill {
+                    count: String::from("8"),
+                    unit: 1,
+                    value: 0,
+                },
+            ),
+            (
+                b".fill 3, 4, 9",
+                I::Fill {
+                    count: String::from("3"),
+                    unit: 4,
+                    value: 9,
+                },
+            ),
+            (b".org 16", I::Org(16, 0)),
+            (
+                b".org 1b + 4, 0xcc",
+                I::OrgLabel {
+                    label: String::from("1b"),
+                    addend: String::from("4"),
+                    fill: 0xcc,
+                },
+            ),
+        ];
+        for (tmpl, want) in cases {
+            let insns = parse_template(tmpl).unwrap();
+            assert_eq!(insns.len(), 1);
+            assert_eq!(
+                insns[0].layout.as_ref(),
+                Some(want),
+                "template {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        // A zero alignment is an alignment of one, as GNU as reads it.
+        for tmpl in [b".align 0".as_slice(), b".balign 0".as_slice()] {
+            let insns = parse_template(tmpl).unwrap();
+            let n = match insns[0].layout.as_ref() {
+                Some(I::Align { n, .. }) => *n,
+                Some(I::AlignArch { n, .. }) => 1u32 << n,
+                other => panic!("{other:?}"),
+            };
+            assert_eq!(n, 1);
+        }
+        assert!(parse_template(b".balign 3").is_err());
     }
 
     #[test]

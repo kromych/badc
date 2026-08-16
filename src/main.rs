@@ -391,15 +391,22 @@ impl DepOptions {
 /// * `--noexecstack` / `--no-warn-rwx-segments` -- `.text` is the only
 ///   executable section an assembled unit gets, and no `PT_GNU_STACK`
 ///   program header rides a relocatable object.
+/// * `-march=` -- a ceiling on the instructions the assembler admits, not
+///   a change to how one assembles. badc implements a fixed set and admits
+///   each member unconditionally, so a ceiling at or above that set selects
+///   nothing. It does not reject an instruction above a lower ceiling, which
+///   is the one direction this diverges from gas.
 ///
 /// Anything else is refused: passing it on is not an option, and accepting
 /// it would claim behavior badc does not have.
 fn accept_assembler_option(opt: &str) -> Result<(), String> {
     let name = opt.split_once('=').map_or(opt, |(n, _)| n);
     match name {
-        "--fatal-warnings" | "-mrelax-relocations" | "--noexecstack" | "--no-warn-rwx-segments" => {
-            Ok(())
-        }
+        "--fatal-warnings"
+        | "-mrelax-relocations"
+        | "--noexecstack"
+        | "--no-warn-rwx-segments"
+        | "-march" => Ok(()),
         _ => Err(format!("badc: error: unsupported assembler option `{opt}`")),
     }
 }

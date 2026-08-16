@@ -634,7 +634,9 @@ int f(unsigned *p)
 fn assembler_options_are_checked_rather_than_passed_on() {
     let d = dir("wa");
     write(&d, "leaf.s", LEAF);
-    // The two options the kernel's assembly units carry.
+    // The options the kernel's assembly units carry. `-march=` is the
+    // arm64 defconfig's, and refusing it failed the first unit of the
+    // build -- an instruction-set ceiling selects nothing badc varies.
     run_ok(
         &d,
         &[
@@ -643,6 +645,7 @@ fn assembler_options_are_checked_rather_than_passed_on() {
             &format!("--target={TARGET}"),
             "-Wa,--fatal-warnings",
             "-Wa,-mrelax-relocations=no",
+            "-Wa,-march=armv8.5-a",
             "leaf.s",
             "-o",
             "leaf.o",

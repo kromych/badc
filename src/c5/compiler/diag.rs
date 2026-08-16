@@ -15,8 +15,8 @@ use super::super::ir::BinOp;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
-    VOLATILE_MASK, is_floating_scalar, is_pointer_ty, is_struct_ty, is_struct_value_ty,
-    strip_unsigned, struct_ptr_depth,
+    VOLATILE_MASK, bool_ptr_depth, is_bool_ty, is_floating_scalar, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, strip_unsigned, struct_ptr_depth,
 };
 
 /// A target-vs-source type mismatch reported by
@@ -486,6 +486,12 @@ impl Compiler {
         let act_is_struct = is_struct_ty(actual);
         let decl_is_ptr = is_pointer_ty(declared);
         let act_is_ptr = is_pointer_ty(actual);
+
+        // C99 6.5.16.1p1 admits a pointer as the right operand when the
+        // left has type `_Bool`; 6.3.1.2 converts it to 0 or 1.
+        if is_bool_ty(declared) && bool_ptr_depth(declared) == 0 && act_is_ptr {
+            return None;
+        }
 
         // C's `void *` rule: a pointer to `char` (which c5 uses as
         // its `void *`) is freely interconvertible with any other

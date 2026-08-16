@@ -663,6 +663,59 @@ fn union_target_does_not_raise_the_object_mismatch_constraint() {
     );
 }
 
+#[test]
+fn bool_target_accepts_a_pointer_in_every_assignment_context() {
+    // C99 6.5.16.1p1 lists "the left operand has type _Bool and the right
+    // is a pointer" among the simple-assignment cases, and 6.3.1.2 makes
+    // the conversion yield 0 or 1. The rule reaches every context the
+    // as-if-by-assignment wording covers.
+    let p = compile_str(
+        "struct R { struct R *parent; };\n\
+         _Bool assigned(struct R *r) { return r->parent; }\n\
+         _Bool ints(unsigned int *p) { return p; }\n\
+         void take(_Bool b);\n\
+         void ctx(struct R *r) { _Bool a; a = r; _Bool i = r; take(r); (void)a; (void)i; }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+
+    // The reverse direction is still a mismatch: only `_Bool` on the left
+    // is exempt, and `_Bool *` is a pointer, not the exempt scalar.
+    let p = compile_str(
+        "void f(_Bool b, _Bool *bp) { int *q; q = b; struct S { int a; } *s; s = bp; (void)q; \
+         (void)s; }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(
+        p.warnings
+            .iter()
+            .any(|w| w.contains("integer assigned to pointer in assignment"))
+            && p.warnings
+                .iter()
+                .any(|w| w.contains("incompatible struct types in assignment")),
+        "got: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
+fn pointer_converted_to_bool_yields_zero_or_one() {
+    use super::Vm;
+    use crate::Compiler;
+    // The exemption above must not hide a conversion that keeps the
+    // pointer's bits: 6.3.1.2 compares against 0.
+    let src = "struct R { struct R *parent; };\n\
+               static _Bool assigned(struct R *r) { return r->parent; }\n\
+               static int take(_Bool b) { return (int)b; }\n\
+               int main(void) { struct R a, b; a.parent = &b; b.parent = 0;\n\
+               int acc = assigned(&a); acc = acc * 10 + assigned(&b);\n\
+               acc = acc * 10 + take(&a); return acc * 10 + take(0); }";
+    let got = Vm::new(Compiler::new(src.to_string()).compile().unwrap())
+        .run()
+        .unwrap();
+    assert_eq!(got, 1010);
+}
+
 /// All five targets: `long double` is laid out exactly as `double`
 /// (C99 6.2.5p10 permits any FP type at least as wide as `double`), so
 /// `sizeof` / `_Alignof` / struct offsets match `double`'s on every one.

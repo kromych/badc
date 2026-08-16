@@ -1069,10 +1069,18 @@ fn frame_past_the_immediate_reach_runs() {
         .arg(format!("ulimit -s 65536 && exec {}", path.display()))
         .output()
         .expect("run under a raised stack limit");
+    let meta = std::fs::metadata(&path).map(|m| m.len());
     let _ = std::fs::remove_file(&path);
+    // The shell's own failure codes are indistinguishable from the
+    // program's without its stderr: 126 is "cannot execute" and 127 is
+    // "not found", neither of which says anything about the frame this
+    // test is about. Report what the shell said, and the image size, so a
+    // failure names its own cause instead of only its exit code.
     assert_eq!(
         output.status.code(),
         Some(5),
-        "a frame past the immediate stack-adjustment reach miscomputed"
+        "a frame past the immediate stack-adjustment reach miscomputed; \
+         image {meta:?} bytes, stderr {:?}",
+        String::from_utf8_lossy(&output.stderr),
     );
 }

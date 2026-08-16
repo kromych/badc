@@ -457,6 +457,7 @@ fn synth_program_and_build(
     };
     let build = Build {
         emitted_relocs,
+        named_sections: merged.named_sections.clone(),
         orphaned_data: None,
         stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
@@ -1258,6 +1259,7 @@ mod tests {
         );
         MergedNative {
             applied_text_relocs: Vec::new(),
+            named_sections: Vec::new(),
             text_align: 16,
             // aarch64: `mov w0, #42; ret`.
             text: alloc::vec![0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6],

@@ -263,6 +263,11 @@ pub struct MergedNative {
     pub init_fini_arrays: crate::c5::codegen::InitFiniArrays,
     /// Per-input-section placement records for the merged streams.
     pub section_map: SectionMap,
+    /// C-identifier-named sections grouped across units, in the order
+    /// their bytes sit in the merged streams. A writer able to carry a
+    /// variable section list gives each its own output section; the
+    /// rest leave the bytes in the family they were grouped into.
+    pub named_sections: Vec<crate::c5::codegen::NamedSection>,
 }
 
 /// One input section's placement within a merged output stream.
@@ -555,21 +560,28 @@ fn named_group_order(
     v
 }
 
-/// Record `name`'s merged extent, widening the entry an earlier
-/// contribution opened.
-fn note_extent(
-    extents: &mut Vec<(String, NativeSymSection, u64, u64)>,
-    name: &str,
+/// One grouped name's merged extent. `start` / `end` are offsets in
+/// the merged data stream, or in the zero-fill region when `bss`.
+struct NamedExtent {
+    name: String,
     sec: NativeSymSection,
     start: u64,
     end: u64,
-) {
-    match extents.iter_mut().find(|e| e.0 == name) {
-        Some(e) => {
-            e.2 = e.2.min(start);
-            e.3 = e.3.max(end);
+    align: u64,
+    bss: bool,
+    write: bool,
+}
+
+/// Record one contribution's extent, widening the entry an earlier
+/// contribution to the same name opened.
+fn note_extent(extents: &mut Vec<NamedExtent>, e: NamedExtent) {
+    match extents.iter_mut().find(|x| x.name == e.name) {
+        Some(x) => {
+            x.start = x.start.min(e.start);
+            x.end = x.end.max(e.end);
+            x.align = x.align.max(e.align);
         }
-        None => extents.push((name.to_string(), sec, start, end)),
+        None => extents.push(e),
     }
 }
 
@@ -582,17 +594,29 @@ fn group_named_bytes(
     blob: impl Fn(&NativeObject) -> &Vec<u8>,
     maps: &mut [BlobMap],
     sec: NativeSymSection,
-    extents: &mut Vec<(String, NativeSymSection, u64, u64)>,
+    extents: &mut Vec<NamedExtent>,
 ) {
     let order = named_group_order(objs, fam);
     let any = !order.is_empty();
+    let write = fam != SectionFamily::RoData;
     for (i, s) in order {
         align_up(data, s.align.max(1) as usize);
         let at = data.len() as u64;
         let src = blob(&objs[i]);
         data.extend_from_slice(&src[s.offset as usize..(s.offset + s.size) as usize]);
         maps[i].moved.push((s.offset, s.size, at));
-        note_extent(extents, &s.name, sec, at, at + s.size);
+        note_extent(
+            extents,
+            NamedExtent {
+                name: s.name.clone(),
+                sec,
+                start: at,
+                end: at + s.size,
+                align: s.align.max(1),
+                bss: false,
+                write,
+            },
+        );
     }
     // An offset equal to a region's end names the next region's first
     // byte, so the last group keeps a byte of slack behind it.
@@ -606,7 +630,7 @@ fn group_named_zerofill(
     bss_size: &mut usize,
     objs: &[NativeObject],
     maps: &mut [BlobMap],
-    extents: &mut Vec<(String, NativeSymSection, u64, u64)>,
+    extents: &mut Vec<NamedExtent>,
 ) {
     let order = named_group_order(objs, SectionFamily::Bss);
     let any = !order.is_empty();
@@ -615,7 +639,18 @@ fn group_named_zerofill(
         let at = *bss_size as u64;
         *bss_size += s.size as usize;
         maps[i].moved.push((s.offset, s.size, at));
-        note_extent(extents, &s.name, NativeSymSection::Bss, at, at + s.size);
+        note_extent(
+            extents,
+            NamedExtent {
+                name: s.name.clone(),
+                sec: NativeSymSection::Bss,
+                start: at,
+                end: at + s.size,
+                align: s.align.max(1),
+                bss: true,
+                write: true,
+            },
+        );
     }
     if any {
         *bss_size += 1;
@@ -783,7 +818,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
     let mut relro_map: Vec<BlobMap> = Vec::with_capacity(objs.len());
     let mut rw_map: Vec<BlobMap> = Vec::with_capacity(objs.len());
     let mut bss_map: Vec<BlobMap> = Vec::with_capacity(objs.len());
-    let mut named_extents: Vec<(String, NativeSymSection, u64, u64)> = Vec::new();
+    let mut named_extents: Vec<NamedExtent> = Vec::new();
     for obj in objs {
         align_up(&mut text, obj.text_align.max(16));
         text_align = text_align.max(obj.text_align);
@@ -866,11 +901,24 @@ pub fn link_native_objects_with_shared_libs<'a>(
     // offset space its family uses.
     let start_stop_bounds: Vec<(String, NativeSymSection, u64)> = named_extents
         .iter()
-        .flat_map(|(n, sec, s, e)| {
+        .flat_map(|e| {
             [
-                (format!("__start_{n}"), *sec, *s),
-                (format!("__stop_{n}"), *sec, *e),
+                (format!("__start_{}", e.name), e.sec, e.start),
+                (format!("__stop_{}", e.name), e.sec, e.end),
             ]
+        })
+        .collect();
+    // The same extents as output sections, for a writer that gives
+    // each its own header rather than folding it into the family.
+    let named_sections: Vec<crate::c5::codegen::NamedSection> = named_extents
+        .iter()
+        .map(|e| crate::c5::codegen::NamedSection {
+            name: e.name.clone(),
+            offset: e.start,
+            size: e.end - e.start,
+            align: e.align,
+            bss: e.bss,
+            write: e.write,
         })
         .collect();
 
@@ -2266,6 +2314,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
         data_relro_len,
         data_align,
         bss_size,
+        named_sections,
         defined,
         imports,
         pending_imports,

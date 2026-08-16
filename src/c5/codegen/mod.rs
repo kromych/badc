@@ -1478,10 +1478,30 @@ pub(crate) struct EmittedFinalReloc {
     pub addend: i64,
 }
 
+/// A C-identifier-named input section the merge grouped across units,
+/// for a writer that gives it an output section of its own. `offset`
+/// is into `Build::data`, or into the zero-fill region when `bss`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedSection {
+    pub name: String,
+    pub offset: u64,
+    pub size: u64,
+    pub align: u64,
+    /// Zero-fill: no file bytes.
+    pub bss: bool,
+    /// Loader-writable, as the data and relro families are.
+    pub write: bool,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Build {
     /// Machine code, ready to be placed in `__TEXT,__text`.
     pub text: Vec<u8>,
+    /// Named sections a writer can emit in their own right. Only the
+    /// merged link path fills this; the ELF writer consumes it, and
+    /// the Mach-O and PE writers still fold the bytes into the family
+    /// segment they belong to.
+    pub named_sections: Vec<NamedSection>,
     /// `--emit-relocs` records; empty unless the link requested them.
     pub emitted_relocs: Vec<EmittedFinalReloc>,
     /// Data-import copy relocations resolved against the merged symbol

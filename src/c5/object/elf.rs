@@ -402,6 +402,20 @@ struct SectionPlan {
     counts: [usize; 24],
 }
 
+/// A named section placed in the image: the merge grouped its bytes
+/// contiguously at the end of `slot`'s region, so it takes a header of
+/// its own and the family header stops where the first one begins.
+struct NamedOut<'a> {
+    name: &'a str,
+    slot: Sec,
+    addr: u64,
+    off: u64,
+    size: u64,
+    align: u64,
+    bss: bool,
+    write: bool,
+}
+
 /// Which optional sections an image carries. `dwarf` is a count because
 /// the `.debug_*` run contributes several headers to one slot.
 #[derive(Clone, Copy, Default)]
@@ -417,6 +431,11 @@ struct SectionsPresent {
     rela_text: bool,
     rela_data: bool,
     plt_symtab: bool,
+    /// Named sections carried inside each family's slot.
+    named_rodata: usize,
+    named_relro: usize,
+    named_data: usize,
+    named_bss: usize,
 }
 
 impl SectionPlan {
@@ -426,12 +445,12 @@ impl SectionPlan {
             |s: Sec, n: usize| counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()] = n;
         set(Sec::GnuVersion, p.versions as usize);
         set(Sec::GnuVersionR, p.versions as usize);
-        set(Sec::RoData, p.rodata as usize);
+        set(Sec::RoData, p.rodata as usize + p.named_rodata);
         set(Sec::Tdata, p.tdata as usize);
-        set(Sec::RelRo, p.relro as usize);
-        set(Sec::Data, p.data as usize);
+        set(Sec::RelRo, p.relro as usize + p.named_relro);
+        set(Sec::Data, p.data as usize + p.named_data);
         set(Sec::Tbss, p.tbss as usize);
-        set(Sec::Bss, p.bss as usize);
+        set(Sec::Bss, p.bss as usize + p.named_bss);
         set(Sec::Debug, p.dwarf);
         set(Sec::RelaText, p.rela_text as usize);
         set(Sec::RelaData, p.rela_data as usize);
@@ -492,6 +511,39 @@ fn emit_shdr(
     );
     *cursor += 1;
     write_struct(out, shdr);
+}
+
+/// Emit the headers of `slot`'s named sections, which follow its
+/// family header. Their bytes already sit inside the family's segment;
+/// only the header set changes.
+fn emit_named_shdrs(
+    out: &mut Vec<u8>,
+    plan: &SectionPlan,
+    cursor: &mut usize,
+    slot: Sec,
+    named: &[NamedOut],
+    name_off: &dyn Fn(&str) -> u32,
+) {
+    for n in named.iter().filter(|n| n.slot == slot) {
+        emit_shdr(
+            out,
+            plan,
+            cursor,
+            slot,
+            &Elf64Shdr {
+                sh_name: name_off(n.name),
+                sh_type: if n.bss { 8 } else { SHT_PROGBITS }, // 8: SHT_NOBITS
+                sh_flags: SHF_ALLOC | if n.write { SHF_WRITE } else { 0 },
+                sh_addr: n.addr,
+                sh_offset: n.off,
+                sh_size: n.size,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: n.align,
+                sh_entsize: 0,
+            },
+        );
+    }
 }
 
 /// Dynamic linker path. Selected per machine: `aarch64` lives at
@@ -2229,6 +2281,48 @@ pub(super) fn write(
     let has_tdata = has_tls && tdata_size > 0;
     let has_tbss = has_tls && tbss_size > 0;
     let has_bss = build.bss_size > 0;
+    // Place each named section in the family whose region holds its
+    // bytes. A bss name's offset is already relative to the zero-fill
+    // region; the rest index the data stream the family bases split.
+    let mut named_out: Vec<NamedOut> = build
+        .named_sections
+        .iter()
+        .map(|n| {
+            let (slot, addr, off) = if n.bss {
+                let a = bss_vmaddr + n.offset;
+                (Sec::Bss, a, a - TEXT_VMADDR_BASE)
+            } else if n.offset < ro_len {
+                (Sec::RoData, rodata_vmaddr + n.offset, rodata_off + n.offset)
+            } else if n.offset < relro_total {
+                let d = n.offset - ro_len;
+                (Sec::RelRo, relro_vmaddr + d, relro_off + d)
+            } else {
+                let d = n.offset - relro_total;
+                (Sec::Data, data_vmaddr + d, data_off + d)
+            };
+            NamedOut {
+                name: &n.name,
+                slot,
+                addr,
+                off,
+                size: n.size,
+                align: n.align.max(1),
+                bss: n.bss,
+                write: n.write,
+            }
+        })
+        .collect();
+    named_out.sort_by_key(|n| n.addr);
+    let named_in = |slot: Sec| named_out.iter().filter(move |n| n.slot == slot);
+    // The family header stops where its first named section begins;
+    // the alignment padding behind the last one is a gap, as it is
+    // between any two sections.
+    let family_size = |slot: Sec, full: u64, base: u64| -> u64 {
+        match named_in(slot).map(|n| n.addr).min() {
+            Some(first) => first - base,
+            None => full,
+        }
+    };
     let plan = SectionPlan::new(SectionsPresent {
         versions: has_versions,
         rodata: has_rodata,
@@ -2241,6 +2335,10 @@ pub(super) fn write(
         rela_text: has_rela_text,
         rela_data: has_rela_data,
         plt_symtab: emit_symtab,
+        named_rodata: named_in(Sec::RoData).count(),
+        named_relro: named_in(Sec::RelRo).count(),
+        named_data: named_in(Sec::Data).count(),
+        named_bss: named_in(Sec::Bss).count(),
     });
     // Section symbols the emitted relocations reference: (plan index,
     // vaddr), in symtab order right after the sentinel.
@@ -2410,6 +2508,9 @@ pub(super) fn write(
         ".bss",
         ".comment",
     ]);
+    for n in &named_out {
+        shstrtab_names.push(n.name);
+    }
     if emit_dwarf {
         shstrtab_names.extend_from_slice(&[
             ".debug_info",
@@ -2460,10 +2561,27 @@ pub(super) fn write(
     // .hash + .rela.dyn + .text + (optional .tdata) +
     // .dynamic + .got + (optional .data) + (optional .tbss) +
     // (optional .bss) + 5 .debug_* + .shstrtab. Counted dynamically.
-    let rodata_shndx: u16 = plan.index_of(Sec::RoData);
-    let relro_shndx: u16 = plan.index_of(Sec::RelRo);
     let data_shndx: u16 = plan.index_of(Sec::Data);
     let bss_shndx: u16 = plan.index_of(Sec::Bss);
+    // Header index for a data-stream byte: the named section holding
+    // it, else the family whose region it falls in. A named section's
+    // headers follow its family's, in address order.
+    let data_addr_shndx = |addr: u64, off: u64| -> u16 {
+        let slot = if off < ro_len {
+            Sec::RoData
+        } else if off < relro_total {
+            Sec::RelRo
+        } else if off < file_data_len {
+            Sec::Data
+        } else {
+            Sec::Bss
+        };
+        let base = plan.index_of(slot);
+        match named_in(slot).position(|n| addr >= n.addr && addr < n.addr + n.size) {
+            Some(k) => base + 1 + k as u16,
+            None => base,
+        }
+    };
     let n_section_headers: u64 = plan.len() as u64;
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
     let shstrtab_idx: u16 = plan.index_of(Sec::Shstrtab);
@@ -2646,18 +2764,10 @@ pub(super) fn write(
                 super::DynamicExportSection::Text => {
                     (code_vmaddr + stub_len + e.offset, text_shndx)
                 }
-                super::DynamicExportSection::Data => (
-                    data_off_to_vaddr(e.offset),
-                    if e.offset < ro_len {
-                        rodata_shndx
-                    } else if e.offset < relro_total {
-                        relro_shndx
-                    } else if e.offset < file_data_len {
-                        data_shndx
-                    } else {
-                        bss_shndx
-                    },
-                ),
+                super::DynamicExportSection::Data => {
+                    let addr = data_off_to_vaddr(e.offset);
+                    (addr, data_addr_shndx(addr, e.offset))
+                }
             };
             let binding = if e.weak { STB_WEAK } else { STB_GLOBAL };
             let st_type = if e.is_object { STT_OBJECT } else { STT_FUNC };
@@ -3331,12 +3441,20 @@ pub(super) fn write(
                 sh_flags: SHF_ALLOC,
                 sh_addr: rodata_vmaddr,
                 sh_offset: rodata_off,
-                sh_size: ro_total,
+                sh_size: family_size(Sec::RoData, ro_total, rodata_vmaddr),
                 sh_link: 0,
                 sh_info: 0,
                 sh_addralign: build.data_align.max(8) as u64,
                 sh_entsize: 0,
             },
+        );
+        emit_named_shdrs(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::RoData,
+            &named_out,
+            &name_off,
         );
     }
 
@@ -3417,12 +3535,20 @@ pub(super) fn write(
                 sh_flags: SHF_ALLOC | SHF_WRITE,
                 sh_addr: relro_vmaddr,
                 sh_offset: relro_off,
-                sh_size: relro_size,
+                sh_size: family_size(Sec::RelRo, relro_size, relro_vmaddr),
                 sh_link: 0,
                 sh_info: 0,
                 sh_addralign: data_align,
                 sh_entsize: 0,
             },
+        );
+        emit_named_shdrs(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::RelRo,
+            &named_out,
+            &name_off,
         );
     }
 
@@ -3439,12 +3565,20 @@ pub(super) fn write(
                 sh_flags: SHF_ALLOC | SHF_WRITE,
                 sh_addr: data_vmaddr,
                 sh_offset: data_off,
-                sh_size: data_size,
+                sh_size: family_size(Sec::Data, data_size, data_vmaddr),
                 sh_link: 0,
                 sh_info: 0,
                 sh_addralign: data_align,
                 sh_entsize: 0,
             },
+        );
+        emit_named_shdrs(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Data,
+            &named_out,
+            &name_off,
         );
     }
 
@@ -3488,7 +3622,7 @@ pub(super) fn write(
                 sh_flags: SHF_ALLOC | SHF_WRITE,
                 sh_addr: bss_vmaddr,
                 sh_offset: bss_vmaddr - TEXT_VMADDR_BASE,
-                sh_size: build.bss_size as u64,
+                sh_size: family_size(Sec::Bss, build.bss_size as u64, bss_vmaddr),
                 sh_link: 0,
                 sh_info: 0,
                 // Report bss_vmaddr's own 2-adic alignment (<=16) so
@@ -3496,6 +3630,14 @@ pub(super) fn write(
                 sh_addralign: 1u64 << bss_vmaddr.trailing_zeros().min(4),
                 sh_entsize: 0,
             },
+        );
+        emit_named_shdrs(
+            &mut out,
+            &plan,
+            &mut shdr_cursor,
+            Sec::Bss,
+            &named_out,
+            &name_off,
         );
     }
 
@@ -3951,18 +4093,24 @@ mod tests {
                 rela_text: bits & 64 != 0,
                 rela_data: bits & 2 != 0,
                 plt_symtab: bits & 1 != 0,
+                // Named sections ride in their family's slot, so the
+                // indices past it have to move by their count.
+                named_rodata: (bits & 64 != 0) as usize * 2,
+                named_relro: (bits & 128 != 0) as usize,
+                named_data: (bits & 4 != 0) as usize * 3,
+                named_bss: (bits & 16 != 0) as usize,
             });
             // Independent restatement of the unconditional set: NULL,
             // .interp, .dynsym, .dynstr, .hash, .rela.dyn, .text, .dynamic,
             // .got, .comment, .shstrtab.
             let mut expected = 11;
             expected += 2 * (bits & 1 != 0) as usize; // .gnu.version{,_r}
-            expected += (bits & 64 != 0) as usize; // .rodata
+            expected += (bits & 64 != 0) as usize * 3; // .rodata + 2 named
             expected += (bits & 2 != 0) as usize; // .tdata
-            expected += (bits & 128 != 0) as usize; // .data.rel.ro
-            expected += (bits & 4 != 0) as usize; // .data
+            expected += (bits & 128 != 0) as usize * 2; // .data.rel.ro + 1
+            expected += (bits & 4 != 0) as usize * 4; // .data + 3 named
             expected += (bits & 8 != 0) as usize; // .tbss
-            expected += (bits & 16 != 0) as usize; // .bss
+            expected += (bits & 16 != 0) as usize * 2; // .bss + 1 named
             expected += if bits & 32 != 0 { 5 } else { 0 }; // .debug_*
             expected += (bits & 64 != 0) as usize; // .rela.text
             expected += (bits & 2 != 0) as usize; // .rela.data
@@ -4028,6 +4176,7 @@ mod tests {
         Build {
             text_data_ranges: alloc::vec::Vec::new(),
             emitted_relocs: Vec::new(),
+            named_sections: Vec::new(),
             text_align: 16,
             orphaned_data: None,
             stopped_at_data_liveness: false,

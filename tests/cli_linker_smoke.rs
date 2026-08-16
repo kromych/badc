@@ -4739,6 +4739,63 @@ fn start_stop_bound_a_named_section_across_units() {
     );
 }
 
+/// Section-header names of an ELF64 image, in table order.
+fn elf_section_names(bytes: &[u8]) -> Vec<String> {
+    let u16at = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let (shoff, shnum, shstrndx) = (u64at(40), u16at(60), u16at(62));
+    assert!(shoff != 0 && shnum != 0, "image carries no section headers");
+    let strtab = u64at(shoff + shstrndx * 64 + 24);
+    (0..shnum)
+        .map(|i| {
+            let at = strtab + u32at(shoff + i * 64);
+            let end = at + bytes[at..].iter().position(|&b| b == 0).unwrap_or(0);
+            String::from_utf8_lossy(&bytes[at..end]).into_owned()
+        })
+        .collect()
+}
+
+/// The merged path gives a grouped named section its own ELF section
+/// header, not just `__start_` / `__stop_` bounds over bytes folded
+/// into the family blob. Read-only, writable and zero-initialised
+/// placements each land in the family whose region holds them.
+#[test]
+fn named_sections_get_their_own_elf_section_header() {
+    let dir = tempdir("named-section-header");
+    write_source(
+        &dir,
+        "a.c",
+        "static const long ro __attribute__((section(\"myro\"), used)) = 1;\n\
+         static long rw __attribute__((section(\"myrw\"), used)) = 2;\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern const long __start_myro[], __stop_myro[];\n\
+         int main(void) { return __stop_myro - __start_myro == 1 ? 0 : 1; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link named sections for ELF",
+    );
+    let names = elf_section_names(&std::fs::read(&exe).expect("read image"));
+    for n in ["myro", "myrw"] {
+        assert!(names.iter().any(|s| s == n), "`{n}` in {names:?}");
+    }
+    // The family headers stay, holding what was not grouped out.
+    for n in [".rodata", ".data", ".text"] {
+        assert!(names.iter().any(|s| s == n), "`{n}` in {names:?}");
+    }
+}
+
 /// A unit defining `__start_<name>` itself keeps that definition: bfd
 /// synthesizes the pair only where nothing else does, and
 /// `__start_tty` is an ordinary function in at least one real tree.

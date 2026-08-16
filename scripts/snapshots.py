@@ -23,11 +23,15 @@ the addressing form of an unresolved reference is visible.
 
 Fixtures that fail to compile (missing headers in the stripped fixture
 form, etc.) are logged but don't fail the run.
+
+`--check` follows the regeneration with a git comparison against the
+commit, failing on added, removed and modified snapshots alike.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -353,6 +357,100 @@ def regenerate(root: Path, only: list[str] | None) -> int:
     return 0
 
 
+CHECK_DIFF_LINES = 200
+
+
+def check_clean(root: Path) -> int:
+    """Fail when the regeneration left `tests/snapshots/` differing from
+    the commit.
+
+    `git diff` reports tracked files only, so a fixture added without its
+    snapshots -- whose regeneration writes untracked files -- reads as
+    clean. `git status --porcelain` reports both, and the three cases get
+    separate messages because they take different actions. Fixtures that
+    produce no code take no snapshots and are skipped by design, so the
+    rule is on the generator's output rather than on a fixture count.
+    """
+    out = subprocess.run(
+        ["git", "status", "--porcelain", "-uall", "--", "tests/snapshots"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    added: list[str] = []
+    removed: list[str] = []
+    modified: list[str] = []
+    for line in out.splitlines():
+        status, path = line[:2], line[3:]
+        if status == "??":
+            added.append(path)
+        elif "D" in status:
+            removed.append(path)
+        else:
+            modified.append(path)
+    for label, paths in (
+        ("produced but not committed (a fixture was added without its "
+         "snapshots; commit them)", added),
+        ("committed but no longer produced (the fixture is gone or no "
+         "longer compiles; remove them)", removed),
+        ("differ from the committed copy (compiler output changed)", modified),
+    ):
+        if not paths:
+            continue
+        print(f"[snapshots] {len(paths)} snapshot(s) {label}:")
+        for p in paths[:40]:
+            print(f"  {p}")
+    if modified:
+        diff = subprocess.run(
+            ["git", "--no-pager", "diff", "--", "tests/snapshots"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        for line in diff[:CHECK_DIFF_LINES]:
+            print(line)
+    if added or removed or modified:
+        return 1
+    print("[snapshots] tests/snapshots/ is clean")
+    return 0
+
+
+def self_test() -> int:
+    """Exercise `check_clean` over the three states it separates, in a
+    throwaway repository: the added case is the one `git diff` misses."""
+    env = dict(
+        os.environ,
+        GIT_AUTHOR_NAME="t",
+        GIT_AUTHOR_EMAIL="t@t",
+        GIT_COMMITTER_NAME="t",
+        GIT_COMMITTER_EMAIL="t@t",
+    )
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        snap = root / "tests" / "snapshots" / "ssa"
+        snap.mkdir(parents=True)
+        (snap / "a.ssa").write_text("a\n")
+        for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "s"]):
+            subprocess.run(["git", *cmd], cwd=root, check=True, env=env)
+
+        def state() -> int:
+            return check_clean(root)
+
+        assert state() == 0, "a committed corpus must read clean"
+        (snap / "b.ssa").write_text("b\n")
+        assert state() == 1, "an untracked snapshot must fail"
+        (snap / "b.ssa").unlink()
+        (snap / "a.ssa").unlink()
+        assert state() == 1, "a removed snapshot must fail"
+        (snap / "a.ssa").write_text("changed\n")
+        assert state() == 1, "a modified snapshot must fail"
+        (snap / "a.ssa").write_text("a\n")
+        assert state() == 0, "the restored corpus must read clean again"
+    print("[snapshots] self-test OK")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
@@ -360,8 +458,25 @@ def main(argv: list[str]) -> int:
         nargs="*",
         help="restrict to the given fixture names (with or without .c)",
     )
+    p.add_argument(
+        "--check",
+        action="store_true",
+        help="after regenerating, fail if tests/snapshots/ differs from the "
+        "commit -- added, removed or modified files alike",
+    )
+    p.add_argument(
+        "--self-test",
+        action="store_true",
+        help="check the --check comparison itself and exit; no regeneration",
+    )
     args = p.parse_args(argv)
-    return regenerate(repo_root(), args.only)
+    if args.self_test:
+        return self_test()
+    root = repo_root()
+    rc = regenerate(root, args.only)
+    if rc != 0 or not args.check:
+        return rc
+    return check_clean(root)
 
 
 if __name__ == "__main__":

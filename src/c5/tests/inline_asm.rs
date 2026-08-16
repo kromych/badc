@@ -1713,36 +1713,42 @@ fn aarch64_alignment_fill_max_skip_and_zero_match_gnu_as() {
     assert_eq!(bytes, want);
 }
 
-/// The alignment operand's byte value, fill unit and max skip, however the
-/// item spells them. `aarch64` selects the target's reading of `.align`.
-fn align_shape(
-    item: &crate::c5::codegen::ssa::emit_common::AsmSectionItem,
+/// The alignment item a template parser makes of `tmpl`, or `None` when the
+/// parse rejects it or reads it as something other than a layout directive.
+fn stream_align_item(
+    tmpl: &str,
     aarch64: bool,
-) -> Option<(
-    u32,
-    Option<crate::c5::codegen::ssa::emit_common::AlignFill>,
-    Option<u32>,
-)> {
-    use crate::c5::codegen::ssa::emit_common::{AsmSectionItem as I, align_item_bytes};
-    match item {
-        I::Align { n, fill, max } => Some((*n, *fill, *max)),
-        I::AlignArch { n, fill, max } => Some((align_item_bytes(*n, aarch64), *fill, *max)),
-        _ => None,
+) -> Option<crate::c5::codegen::ssa::emit_common::AsmSectionItem> {
+    let b = tmpl.as_bytes();
+    if aarch64 {
+        crate::c5::codegen::aarch64::asm::parse_template(b)
+            .ok()?
+            .first()?
+            .layout
+            .clone()
+    } else {
+        crate::c5::codegen::x86_64::asm::parse_template(b)
+            .ok()?
+            .first()?
+            .layout
+            .clone()
     }
 }
 
 #[test]
 fn alignment_directive_family_reads_one_grammar_everywhere() {
     // The section engine, the x86-64 template parser and the AArch64 template
-    // parser have to admit the same alignment directives with the same
-    // operand meanings; a form one accepts and another rejects is the defect
-    // the shared parse exists to rule out.
+    // parser have to admit the same alignment directives and read the same
+    // item out of them; a form one accepts and another rejects, or reads
+    // differently, is the defect the shared parse exists to rule out.
     use crate::c5::codegen::ssa::emit_common::parse_stream_layout_item;
     let ok = [
         ".balign 16",
         ".balign 16, 0xff",
         ".balign 16, 0xff, 3",
         ".balign 0",
+        ".balign 2b-1b",
+        ".balign (2b-1b)*2",
         ".balignw 16, 0x1234",
         ".balignl 16, 0x12345678",
         ".balignw 16",
@@ -1750,13 +1756,15 @@ fn alignment_directive_family_reads_one_grammar_everywhere() {
         ".p2align 4",
         ".p2align 4,,7",
         ".p2align 4, 0x90, 7",
+        ".p2align 2b-1b",
         ".p2alignw 4, 0x1234",
         ".p2alignl 4, 0x12345678",
         ".align 0",
+        ".align 2b-1b",
     ];
     // GNU as has no `w` / `l` spelling of `.align`, rejects a non-power-of-two
     // byte count and an out-of-range exponent, and takes at most three
-    // operands.
+    // operands. A count past the section-offset width has no layout either.
     let bad = [
         ".alignw 8",
         ".alignl 8",
@@ -1765,33 +1773,23 @@ fn alignment_directive_family_reads_one_grammar_everywhere() {
         ".p2align 13",
         ".p2alignl 13",
         ".balign 16, 0xff, 3, 4",
+        ".balign 2b -",
+        ".balign 8589934592",
     ];
     for t in ok.iter().chain(bad.iter()) {
         let (tok, rest) = t.split_once(' ').unwrap_or((t, ""));
         let want_ok = ok.contains(t);
         for (aarch64, arch) in [(false, "x86_64"), (true, "aarch64")] {
-            let shape = match parse_stream_layout_item(tok, rest.trim(), aarch64) {
-                Some(Ok(item)) => align_shape(&item, aarch64),
+            let sec = match parse_stream_layout_item(tok, rest.trim(), aarch64) {
+                Some(Ok(item)) => Some(item),
                 _ => None,
             };
-            assert_eq!(shape.is_some(), want_ok, "section engine `{t}` ({arch})");
-            let tmpl = t.as_bytes();
-            let stream = if aarch64 {
-                crate::c5::codegen::aarch64::asm::parse_template(tmpl)
-                    .ok()
-                    .and_then(|i| i.first()?.layout.clone())
-                    .and_then(|it| align_shape(&it, true))
-            } else {
-                crate::c5::codegen::x86_64::asm::parse_template(tmpl)
-                    .ok()
-                    .and_then(|i| match i.first()?.mnemonic {
-                        crate::c5::codegen::x86_64::asm::Mnemonic::Align { n, fill, max } => {
-                            Some((n, fill, max))
-                        }
-                        _ => None,
-                    })
-            };
-            assert_eq!(stream, shape, "template vs section engine `{t}` ({arch})");
+            assert_eq!(sec.is_some(), want_ok, "section engine `{t}` ({arch})");
+            assert_eq!(
+                stream_align_item(t, aarch64),
+                sec,
+                "template vs section engine `{t}` ({arch})"
+            );
         }
     }
 }
@@ -1867,5 +1865,106 @@ fn alignment_fill_width_rejects_a_partial_unit() {
                 .err()
         );
         assert!(e.contains(&alloc::format!("not a multiple of {w}")), "{e}");
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn alignment_over_a_label_difference_matches_gnu_as() {
+    // A backward label difference is a constant where the directive stands,
+    // so it is an alignment operand like any other. GNU as 2.46.1 emits these
+    // bytes; the padding is the section's default fill, which is the AArch64
+    // NOP only for a gap of whole instructions.
+    let sec = |body: &str, flags: &str| {
+        let src = alloc::format!("__asm__(\".section .t,\\\"{flags}\\\"\\n\" \"{body}\");\n");
+        asm_section(&src, ".t").0
+    };
+    let head = " 1: .byte 0x11,0x22,0x33,0x44\\n 2:\\n .byte 0xaa\\n";
+    let cases: &[(&str, &str, &[u8])] = &[
+        // `2b-1b` is 4: three bytes of padding to the next multiple.
+        (
+            ".balign 2b-1b",
+            "a",
+            &[0x11, 0x22, 0x33, 0x44, 0xaa, 0, 0, 0, 0xbb],
+        ),
+        (
+            ".balign (2b-1b)",
+            "a",
+            &[0x11, 0x22, 0x33, 0x44, 0xaa, 0, 0, 0, 0xbb],
+        ),
+        // The expression is the whole GNU as grammar, not just a difference.
+        (
+            ".balign (2b-1b)*2",
+            "a",
+            &[0x11, 0x22, 0x33, 0x44, 0xaa, 0, 0, 0, 0xbb],
+        ),
+        (
+            ".balign 2b-1b, 0x55",
+            "a",
+            &[0x11, 0x22, 0x33, 0x44, 0xaa, 0x55, 0x55, 0x55, 0xbb],
+        ),
+        // `.p2align 4` is a 16-byte boundary: eleven bytes of padding, whose
+        // whole instructions are NOPs in an executable section.
+        (
+            ".p2align 2b-1b",
+            "ax",
+            &[
+                0x11, 0x22, 0x33, 0x44, 0xaa, 0, 0, 0, 0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03,
+                0xd5, 0xbb,
+            ],
+        ),
+        // `.align`'s operand is an exponent on AArch64, so this is 16 too.
+        (
+            ".align 2b-1b",
+            "ax",
+            &[
+                0x11, 0x22, 0x33, 0x44, 0xaa, 0, 0, 0, 0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03,
+                0xd5, 0xbb,
+            ],
+        ),
+    ];
+    for (d, flags, want) in cases {
+        let body = alloc::format!("{head} {d}\\n .byte 0xbb\\n");
+        assert_eq!(&sec(&body, flags)[..], *want, "`{d}`");
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn alignment_over_labels_settles_after_a_deferred_fill_count() {
+    // A first measuring round takes an unresolved `.skip` count as zero
+    // length, which moves the offsets an alignment operand reads. Here that
+    // makes `8b-7b` three in the first round and four in the second, so the
+    // operand's range is judged only once the layout has settled.
+    let src = "__asm__(\".section .t,\\\"a\\\"\\n\"\n\
+               \" 7: .byte 0x11,0x22,0x33\\n .skip 4f-3f\\n 8:\\n\"\n\
+               \" .byte 0xaa\\n .balign 8b-7b\\n .byte 0xbb\\n\"\n\
+               \" 3: .byte 0x99\\n 4:\\n\");\n";
+    assert_eq!(
+        asm_section(src, ".t").0,
+        [0x11, 0x22, 0x33, 0, 0xaa, 0, 0, 0, 0xbb, 0x99]
+    );
+}
+
+#[cfg(feature = "native-emit")]
+#[test]
+fn alignment_over_a_forward_label_difference_is_rejected() {
+    // GNU as reduces an alignment operand where the directive stands, so a
+    // definition placed after it has no value there and the directive is an
+    // error rather than a layout the assembler iterates towards.
+    for d in [".balign 4f-3f", ".p2align 4f-3f", ".align 4f-3f"] {
+        let src = alloc::format!(
+            "__asm__(\".section .t,\\\"a\\\"\\n\" \" .byte 0xaa\\n {d}\\n\
+             \\n .byte 0xbb\\n 3: .byte 0,0,0,0\\n 4:\\n\");\n"
+        );
+        let e = alloc::format!(
+            "{:?}",
+            crate::Compiler::with_target(src, crate::Target::LinuxAarch64)
+                .compile()
+                .err()
+        );
+        assert!(e.contains("is not constant where it stands"), "`{d}`: {e}");
     }
 }

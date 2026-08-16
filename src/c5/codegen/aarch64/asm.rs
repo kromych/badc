@@ -1963,45 +1963,33 @@ mod tests {
 
     #[test]
     fn parse_layout_directives_in_stream() {
-        use emit_common::AsmSectionItem as I;
-        // `.align` takes a power-of-two exponent on AArch64; the fill family
-        // and `.org` carry their operands to the emitter unevaluated.
+        use emit_common::{AlignFill, AlignSpec, AsmSectionItem as I};
+        // `.align` takes a power-of-two exponent on AArch64, and the `w` / `l`
+        // spellings widen the fill unit without changing that convention; the
+        // fill family and `.org` carry their operands to the emitter
+        // unevaluated.
+        let align = |n: u32, fill, max| I::Align {
+            spec: AlignSpec::Bytes(n),
+            fill,
+            max,
+        };
+        let fill = |value: u32, width: u8| Some(AlignFill { value, width });
         let cases: &[(&[u8], I)] = &[
+            (b".balign 16", align(16, None, None)),
+            (b".balign 16, 0xff, 3", align(16, fill(0xff, 1), Some(3))),
+            (b".align 4", align(16, None, None)),
+            (b".p2align 3", align(8, None, None)),
             (
-                b".balign 16",
-                I::Align {
-                    n: 16,
-                    fill: None,
-                    max: None,
-                },
+                b".p2alignl 3, 0x12345678",
+                align(8, fill(0x12345678, 4), None),
             ),
             (
-                b".balign 16, 0xff, 3",
-                I::Align {
-                    n: 16,
-                    fill: Some(emit_common::AlignFill {
-                        value: 0xff,
-                        width: 1,
-                    }),
-                    max: Some(3),
-                },
+                b".balignw 16, 0x1234, 3",
+                align(16, fill(0x1234, 2), Some(3)),
             ),
-            (
-                b".align 4",
-                I::AlignArch {
-                    n: 4,
-                    fill: None,
-                    max: None,
-                },
-            ),
-            (
-                b".p2align 3",
-                I::Align {
-                    n: 8,
-                    fill: None,
-                    max: None,
-                },
-            ),
+            // A zero alignment is an alignment of one, as GNU as reads it.
+            (b".align 0", align(1, None, None)),
+            (b".balign 0", align(1, None, None)),
             (
                 b".skip 8",
                 I::Fill {
@@ -2016,30 +2004,6 @@ mod tests {
                     count: String::from("3"),
                     unit: 4,
                     value: 9,
-                },
-            ),
-            (
-                // The `w` / `l` spellings widen the fill unit; the alignment
-                // operand keeps the base directive's convention.
-                b".p2alignl 3, 0x12345678",
-                I::Align {
-                    n: 8,
-                    fill: Some(emit_common::AlignFill {
-                        value: 0x12345678,
-                        width: 4,
-                    }),
-                    max: None,
-                },
-            ),
-            (
-                b".balignw 16, 0x1234, 3",
-                I::Align {
-                    n: 16,
-                    fill: Some(emit_common::AlignFill {
-                        value: 0x1234,
-                        width: 2,
-                    }),
-                    max: Some(3),
                 },
             ),
             (b".org 16", I::Org(16, 0)),
@@ -2062,16 +2026,16 @@ mod tests {
                 core::str::from_utf8(tmpl).unwrap()
             );
         }
-        // A zero alignment is an alignment of one, as GNU as reads it.
-        for tmpl in [b".align 0".as_slice(), b".balign 0".as_slice()] {
-            let insns = parse_template(tmpl).unwrap();
-            let n = match insns[0].layout.as_ref() {
-                Some(I::Align { n, .. }) => *n,
-                Some(I::AlignArch { n, .. }) => 1u32 << n,
-                other => panic!("{other:?}"),
-            };
-            assert_eq!(n, 1);
-        }
+        // An operand over labels is kept for the emitter to settle where the
+        // directive stands.
+        let insns = parse_template(b"nop\n\t1:\n\t.align 1b-.").unwrap();
+        assert!(matches!(
+            insns.last().unwrap().layout,
+            Some(I::Align {
+                spec: AlignSpec::Expr { pow2: true, .. },
+                ..
+            })
+        ));
         assert!(parse_template(b".balign 3").is_err());
         // GNU as has no `.alignw` / `.alignl`, so neither is a layout
         // directive and the encoder rejects the mnemonic.

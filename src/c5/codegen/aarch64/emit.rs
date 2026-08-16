@@ -3136,6 +3136,8 @@ fn encode_deferred_asm_region(
                         .rfind(|&&(n, _)| n == num)
                         .map(|&(_, off)| off as i64)
                 };
+                let resolved = super::ssa::emit_common::resolve_align_item(item, &resolve)?;
+                let item = resolved.as_ref().unwrap_or(item);
                 super::ssa::emit_common::push_a64_stream_layout(
                     item,
                     &mut bytes,
@@ -3143,7 +3145,7 @@ fn encode_deferred_asm_region(
                     &resolve,
                     &|_| None,
                 )?;
-                map_state = super::ssa::emit_common::step_map_state(item, map_state, true, true);
+                map_state = super::ssa::emit_common::step_map_state(item, map_state, true);
                 continue;
             }
             let class = super::ssa::emit_common::data_directive_class(&insn.mnemonic)
@@ -3875,6 +3877,14 @@ fn emit_inline_asm_aarch64(
                     .rfind(|&&(n, _)| n == num)
                     .map(|&(_, off)| off as i64)
             };
+            let resolved = match super::ssa::emit_common::resolve_align_item(item, &resolve) {
+                Ok(r) => r,
+                Err(m) => {
+                    bail_msg(&m);
+                    return false;
+                }
+            };
+            let item = resolved.as_ref().unwrap_or(item);
             match super::ssa::emit_common::push_a64_stream_layout(
                 item,
                 code,
@@ -3888,7 +3898,7 @@ fn emit_inline_asm_aarch64(
                     return false;
                 }
             }
-            map_state = super::ssa::emit_common::step_map_state(item, map_state, true, true);
+            map_state = super::ssa::emit_common::step_map_state(item, map_state, true);
             continue;
         }
         // Every item but a data directive lays down instructions: a raw-byte

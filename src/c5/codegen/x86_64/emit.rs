@@ -8218,6 +8218,41 @@ fn emit_inline_asm(
             label_defs.push((num, code.len()));
             continue;
         }
+        // `.align` / `.p2align` / `.balign`: pad `code` (the unit's whole
+        // text stream, so its length is a section offset) to the boundary, as
+        // GNU as does section-relative. A boundary above the section default
+        // raises the section alignment, so the padding holds absolutely; the
+        // default fill is the GNU as multi-byte NOP sequence, which an
+        // explicit one-byte-NOP fill also selects. The padding leaves no
+        // instruction boundary of its own.
+        //
+        // An operand over template labels resolves against the definitions
+        // already emitted, as GNU as resolves one where the directive stands.
+        if let Some(super::ssa::emit_common::AsmSectionItem::Align { spec, fill, max }) =
+            &insn.layout
+        {
+            let at = code.len();
+            let n = match spec.bytes(&|name| {
+                super::ssa::emit_common::template_label_offset(
+                    name,
+                    at,
+                    &label_defs,
+                    &code_label_names,
+                )
+                .filter(|&off| off <= at as i64)
+            }) {
+                Ok(n) => n,
+                Err(e) => return fail(&e),
+            };
+            *text_align = (*text_align).max(n as usize);
+            let gap = super::ssa::emit_common::align_gap(at as i64, n as i64, *max) as usize;
+            if let Err(e) =
+                super::ssa::emit_common::push_align_fill(code, gap, *fill, true, false, after_insn)
+            {
+                return fail(&e);
+            }
+            continue;
+        }
         // A raw-byte piece emits its literal bytes with no operand resolution.
         // Both spellings a piece can take -- a hex-byte run and a `.byte`
         // family directive -- are data as far as alignment is concerned.
@@ -8253,23 +8288,6 @@ fn emit_inline_asm(
                 code.extend_from_slice(unit);
             }
             after_insn = false;
-            continue;
-        }
-        // `.align` / `.p2align` / `.balign`: pad `code` (the unit's whole
-        // text stream, so its length is a section offset) to the boundary, as
-        // GNU as does section-relative. A boundary above the section default
-        // raises the section alignment, so the padding holds absolutely; the
-        // default fill is the GNU as multi-byte NOP sequence, which an
-        // explicit one-byte-NOP fill also selects. The padding leaves no
-        // instruction boundary of its own.
-        if let super::asm::Mnemonic::Align { n, fill, max } = insn.mnemonic {
-            *text_align = (*text_align).max(n as usize);
-            let gap = super::ssa::emit_common::align_gap(code.len() as i64, n as i64, max) as usize;
-            if let Err(e) =
-                super::ssa::emit_common::push_align_fill(code, gap, fill, true, false, after_insn)
-            {
-                return fail(&e);
-            }
             continue;
         }
         // A data directive with operand references (`.long %c0`): each

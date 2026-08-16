@@ -25,7 +25,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::super::ir::AsmRegSize;
-use super::super::ssa::emit_common::{AlignFill, AsmSectionItem, data_directive_width};
+use super::super::ssa::emit_common::{AsmSectionItem, data_directive_width};
 
 /// Base mnemonic of a template instruction (AT&T size suffix folded
 /// out into [`AsmInsn::suffix`]).
@@ -340,17 +340,6 @@ pub(crate) enum Mnemonic {
     /// expression text is carried in [`AsmInsn::sym_exprs`] and the fill byte
     /// in [`AsmInsn::bytes`].
     Skip,
-    /// `.align n` / `.p2align e` / `.balign n` and their fill-width spellings
-    /// inside the code stream: pad to an alignment boundary. `n` is the
-    /// resolved byte alignment, `fill` the pad unit (the target NOP when
-    /// absent), `max` the most bytes the pad may add. The boundary is
-    /// section-relative, as in GNU as; the emitter caps `n` at the `.text`
-    /// section alignment so the boundary holds absolutely.
-    Align {
-        n: u32,
-        fill: Option<AlignFill>,
-        max: Option<u32>,
-    },
     /// A general-purpose / system mnemonic recognized straight from the
     /// catalogue, not one of the bespoke forms above. The string is the
     /// catalogue mnemonic; [`encode`] routes it through the table encoder with
@@ -506,6 +495,10 @@ pub(crate) struct AsmInsn {
     /// A local-label definition `N:` at this point; the emitter records the
     /// code offset it stands at. Such a piece carries no mnemonic operands.
     pub label_def: Option<u32>,
+    /// A layout directive, which moves the location counter instead of
+    /// encoding: the section engine's parse of it, laid down by the emitter.
+    /// The piece carries no mnemonic.
+    pub layout: Option<AsmSectionItem>,
 }
 
 /// A resolved operand: a concrete register (with its access size) or an
@@ -2329,19 +2322,13 @@ fn parse_sym_mem<'a>(tok: &'a str, labels: &[&str], expr: u8) -> Option<(&'a str
     Some((sym, opnd))
 }
 
-/// Parse an alignment directive body to a byte alignment, fill unit and
-/// max-skip, through the grammar the section engine reads, so a template and
-/// a named section admit the same forms. On x86 `.align` takes a byte count.
-fn parse_align_directive(
-    name: &str,
-    rest: &str,
-) -> Result<(u32, Option<AlignFill>, Option<u32>), String> {
+/// Parse an alignment directive body through the grammar the section engine
+/// reads, so a template and a named section admit the same forms. On x86
+/// `.align` takes a byte count.
+fn parse_align_directive(name: &str, rest: &str) -> Result<AsmSectionItem, String> {
     use super::super::ssa::emit_common as ec;
     match ec::parse_stream_layout_item(name, rest.trim(), false) {
-        Some(Ok(AsmSectionItem::Align { n, fill, max })) => Ok((n, fill, max)),
-        Some(Ok(AsmSectionItem::AlignArch { n, fill, max })) => {
-            Ok((ec::align_item_bytes(n, false), fill, max))
-        }
+        Some(Ok(item @ AsmSectionItem::Align { .. })) => Ok(item),
         Some(Err(e)) => Err(e),
         _ => Err(format!("inline asm: bad alignment `{rest}`")),
     }
@@ -2448,6 +2435,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 bytes: Vec::new(),
                 sym_exprs: Vec::new(),
                 label_def: Some(num),
+                layout: None,
             });
             piece = rest.trim();
         }
@@ -2495,6 +2483,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 bytes: Vec::new(),
                 sym_exprs,
                 label_def: None,
+                layout: None,
             });
             continue;
         }
@@ -2510,6 +2499,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 bytes,
                 sym_exprs: Vec::new(),
                 label_def: None,
+                layout: None,
             });
             continue;
         }
@@ -2533,6 +2523,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 bytes: (value as u64).to_le_bytes()[..unit as usize].to_vec(),
                 sym_exprs: alloc::vec![String::from(count_expr)],
                 label_def: None,
+                layout: None,
             });
             continue;
         }
@@ -2543,9 +2534,8 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             None => (piece, ""),
         };
         if super::super::ssa::emit_common::align_directive(dir_tok).is_some() {
-            let (n, fill, max) = parse_align_directive(dir_tok, dir_rest)?;
             insns.push(AsmInsn {
-                mnemonic: Mnemonic::Align { n, fill, max },
+                mnemonic: Mnemonic::RawBytes,
                 suffix: None,
                 seg: None,
                 rex: None,
@@ -2553,6 +2543,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 bytes: Vec::new(),
                 sym_exprs: Vec::new(),
                 label_def: None,
+                layout: Some(parse_align_directive(dir_tok, dir_rest)?),
             });
             continue;
         }
@@ -2585,6 +2576,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                     bytes: Vec::new(),
                     sym_exprs: Vec::new(),
                     label_def: None,
+                    layout: None,
                 });
             }
             (mnem_tok, rest) = match rest.find(char::is_whitespace) {
@@ -2626,6 +2618,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 bytes: Vec::new(),
                 sym_exprs: alloc::vec![alloc::string::String::from(rest)],
                 label_def: None,
+                layout: None,
             });
             continue;
         }
@@ -2724,6 +2717,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
             bytes: Vec::new(),
             sym_exprs,
             label_def: None,
+            layout: None,
         });
     }
     Ok(insns)
@@ -5425,80 +5419,66 @@ mod tests {
     #[test]
     fn align_directives() {
         // `.align` / `.balign` take a byte count on x86; `.p2align` an
-        // exponent. Fill and max-skip operands carry through.
-        let insns = parse_template(b"nop\n\t.align 8\n\tnop").unwrap();
-        assert_eq!(
-            insns[1].mnemonic,
-            Mnemonic::Align {
-                n: 8,
-                fill: None,
-                max: None
-            }
-        );
-        let insns = parse_template(b".p2align 4,,7").unwrap();
-        assert_eq!(
-            insns[0].mnemonic,
-            Mnemonic::Align {
-                n: 16,
-                fill: None,
-                max: Some(7)
-            }
-        );
-        let insns = parse_template(b".balign 16, 0x90").unwrap();
-        assert_eq!(
-            insns[0].mnemonic,
-            Mnemonic::Align {
-                n: 16,
-                fill: Some(AlignFill {
-                    value: 0x90,
-                    width: 1
-                }),
-                max: None
-            }
-        );
-        // The `w` / `l` spellings widen the fill unit only; the alignment
-        // operand keeps the base directive's convention.
-        let insns = parse_template(b".p2alignl 4, 0x12345678").unwrap();
-        assert_eq!(
-            insns[0].mnemonic,
-            Mnemonic::Align {
-                n: 16,
-                fill: Some(AlignFill {
-                    value: 0x12345678,
-                    width: 4
-                }),
-                max: None
-            }
-        );
-        let insns = parse_template(b".balignw 16, 0x1234, 3").unwrap();
-        assert_eq!(
-            insns[0].mnemonic,
-            Mnemonic::Align {
-                n: 16,
-                fill: Some(AlignFill {
-                    value: 0x1234,
-                    width: 2
-                }),
-                max: Some(3)
-            }
-        );
-        // A zero count is an alignment of one, which moves nothing.
-        for t in [b".align 0".as_slice(), b".balign 0".as_slice()] {
-            let insns = parse_template(t).unwrap();
+        // exponent. Fill and max-skip operands carry through, and the `w` /
+        // `l` spellings widen the fill unit without changing the alignment
+        // operand's convention.
+        use crate::c5::codegen::ssa::emit_common::{AlignFill, AlignSpec, AsmSectionItem};
+        let align = |n: u32, fill, max| {
+            Some(AsmSectionItem::Align {
+                spec: AlignSpec::Bytes(n),
+                fill,
+                max,
+            })
+        };
+        let fill = |value: u32, width: u8| Some(AlignFill { value, width });
+        let cases: &[(&[u8], Option<AsmSectionItem>)] = &[
+            (b".align 8", align(8, None, None)),
+            (b".p2align 4,,7", align(16, None, Some(7))),
+            (b".balign 16, 0x90", align(16, fill(0x90, 1), None)),
+            (
+                b".p2alignl 4, 0x12345678",
+                align(16, fill(0x12345678, 4), None),
+            ),
+            (
+                b".balignw 16, 0x1234, 3",
+                align(16, fill(0x1234, 2), Some(3)),
+            ),
+            // A zero count is an alignment of one, which moves nothing.
+            (b".align 0", align(1, None, None)),
+            (b".balign 0", align(1, None, None)),
+        ];
+        for (tmpl, want) in cases {
+            let insns = parse_template(tmpl).unwrap();
             assert_eq!(
-                insns[0].mnemonic,
-                Mnemonic::Align {
-                    n: 1,
-                    fill: None,
-                    max: None
-                }
+                &insns[0].layout,
+                want,
+                "template {}",
+                core::str::from_utf8(tmpl).unwrap()
             );
         }
+        // An operand over labels is kept for the emitter to settle where the
+        // directive stands.
+        let insns = parse_template(b"nop\n\t1:\n\t.balign 1b-.").unwrap();
+        assert!(matches!(
+            insns.last().unwrap().layout,
+            Some(AsmSectionItem::Align {
+                spec: AlignSpec::Expr { pow2: false, .. },
+                ..
+            })
+        ));
         // A non-power-of-two byte count is rejected, and GNU as has no
         // `.alignw` / `.alignl`.
-        assert!(parse_template(b".align 3").is_err());
-        assert!(parse_template(b".alignl 8").is_err());
-        assert!(parse_template(b".alignw 8").is_err());
+        for t in [
+            b".align 3".as_slice(),
+            b".alignl 8".as_slice(),
+            b".alignw 8".as_slice(),
+        ] {
+            assert!(
+                parse_template(t).is_err(),
+                "{}",
+                core::str::from_utf8(t).unwrap()
+            );
+        }
     }
 
     #[test]

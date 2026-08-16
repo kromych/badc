@@ -2288,7 +2288,7 @@ fn run_inline_asm(
             // padding, and `.align` padding are opaque to the register model,
             // like the privileged / port ops below: no modelled effect under
             // the VM.
-            Mnemonic::RawBytes | Mnemonic::Data(_) | Mnemonic::Skip | Mnemonic::Align { .. } => {}
+            Mnemonic::RawBytes | Mnemonic::Data(_) | Mnemonic::Skip => {}
             // The interpreter is not a CPU emulator: a mnemonic reached through
             // the catalogue is refused rather than modelled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.

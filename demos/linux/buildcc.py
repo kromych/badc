@@ -38,12 +38,18 @@ Named as the kernel's CC. Per invocation:
 There is no gcc pre-pass and no substitution. Every kernel C object in
 the tree was produced by badc unless its source is on the fallback list.
 
+A warning comes with `rc == 0`, so the success path decides whether it is
+observable. With ``$BADC_WARN_LOG`` set, what badc wrote on a successful
+compile is appended there tagged with the unit, for the caller to
+summarize; without it, it goes to stderr.
+
 Environment: BADC (badc binary, required once a kernel unit appears),
 BADC_REAL_CC (default gcc), BADC_TARGET (default linux-x64),
 BADC_FALLBACK (file of kernel-relative source paths to leave to the real
 compiler), BADC_MANIFEST (append
 `badc|fallback|fail|badc-asm|gas<TAB>source[<TAB>detail]` per kernel unit),
-BADC_TIMEOUT (seconds per badc run, default 300).
+BADC_WARN_LOG (append `cc<TAB>source<TAB>diagnostic` per line badc wrote
+on a successful compile), BADC_TIMEOUT (seconds per badc run, default 300).
 """
 
 from __future__ import annotations
@@ -51,6 +57,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 
 # Flag policy as in sweep.py: keep the preprocessor surface and the code
 # model (-mcmodel=), fold -isystem/-idirafter into -I, honor the recorded
@@ -221,6 +228,26 @@ def manifest(status: str, src: str, detail: str = "") -> None:
         os.close(fd)
 
 
+def warn_log(kind: str, path: str, err: str) -> bool:
+    """Append badc's diagnostics for one successful invocation, one line
+    per diagnostic tagged with the unit it came from. Returns False when
+    no log is configured, leaving the caller to forward them itself."""
+    log = os.environ.get("BADC_WARN_LOG")
+    if not log:
+        return False
+    lines = [f"{kind}\t{path}\t{ln.strip()}\n"
+             for ln in err.splitlines() if ln.strip()]
+    if lines:
+        # One O_APPEND write per invocation keeps parallel jobs from
+        # interleaving a unit's diagnostics with another's.
+        fd = os.open(log, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+        try:
+            os.write(fd, "".join(lines).encode())
+        finally:
+            os.close(fd)
+    return True
+
+
 def fallback_listed(src: str, obj: str) -> bool:
     """True when the source path or the object path is listed. Object
     entries discriminate a compile context: a source shared with an
@@ -312,6 +339,8 @@ def main(argv: list[str]) -> int:
         rc, err = 900, f"timeout after {timeout:.0f}s"
     if rc == 0:
         manifest("badc-asm" if is_asm else "badc", src)
+        if err.strip() and not warn_log("cc", src, err):
+            sys.stderr.write(err if err.endswith("\n") else err + "\n")
         return 0
 
     # Drop any partial object so neither make nor the fallback mistakes it
@@ -349,6 +378,23 @@ def _self_test() -> int:
     assert "-Wall" not in kept
     for spec in ("none", "bti", "standard", "pac-ret+bti"):
         assert f"-mbranch-protection={spec}" in rewrite([f"-mbranch-protection={spec}"])
+
+    # Success-path diagnostics: tagged with the unit when a log is
+    # configured, left to the caller to forward when none is.
+    saved = os.environ.pop("BADC_WARN_LOG", None)
+    try:
+        assert warn_log("cc", "kernel/fork.c", "badc: warning: w\n") is False
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "warnings.txt")
+            os.environ["BADC_WARN_LOG"] = path
+            assert warn_log("cc", "kernel/fork.c", "a\n\nb\n") is True
+            with open(path) as f:
+                assert f.read() == ("cc\tkernel/fork.c\ta\n"
+                                    "cc\tkernel/fork.c\tb\n")
+    finally:
+        os.environ.pop("BADC_WARN_LOG", None)
+        if saved is not None:
+            os.environ["BADC_WARN_LOG"] = saved
     print("linux buildcc: self-test ok", flush=True)
     return 0
 

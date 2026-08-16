@@ -15,6 +15,12 @@ initramfs prints only after its checks pass (initramfs.py). A kernel that boots
 and then cannot serve a procfs read fails on the second, and the failure names
 the file it stopped on.
 
+Diagnostics badc wrote on compiles and links that succeeded are counted by
+cause and reported with the unit and link counts; a warning comes with
+rc == 0, so nothing else in the build states them. The raw lines, each
+tagged with the unit that produced it, stay in `warnings-<arch>.txt` in the
+work directory.
+
 The build step also re-records the compiler identification: it re-runs the
 configuration with the build shim as CC, so CONFIG_CC_VERSION_TEXT -- the
 compiler text in the boot banner and /proc/version -- carries badc's
@@ -62,6 +68,7 @@ import sys
 import time
 from pathlib import Path
 
+import diags
 import kaslr
 
 LINUX_DIR = Path(__file__).resolve().parent
@@ -139,13 +146,14 @@ def cc_version_text(tree: Path) -> str:
 
 
 def build(args, arch: dict, tree: Path, manifest: Path,
-          ld_manifest: Path) -> tuple[int, float, Path]:
+          ld_manifest: Path, warn_log: Path) -> tuple[int, float, Path]:
     env = dict(os.environ)
     env.update(
         BADC=str(args.badc),
         BADC_REAL_CC=args.real_cc,
         BADC_TARGET=arch["target"],
         BADC_MANIFEST=str(manifest),
+        BADC_WARN_LOG=str(warn_log),
         BADC_TIMEOUT=str(args.timeout),
         BADC_LD_REAL=args.real_ld,
         BADC_LD_MANIFEST=str(ld_manifest),
@@ -158,6 +166,7 @@ def build(args, arch: dict, tree: Path, manifest: Path,
 
     manifest.unlink(missing_ok=True)
     ld_manifest.unlink(missing_ok=True)
+    warn_log.unlink(missing_ok=True)
     # `LD=` selects the linker for every link the build makes: the
     # shim (badc, with the delegations ldshim.py records) or the
     # reference linker untouched. It is passed to the configuration
@@ -336,6 +345,8 @@ def _self_test() -> int:
     assert banner_failure("Linux version 7.1.6 (u@h) (gcc 13.2, GNU ld 2.46) #1",
                           cc, True) == "does not identify badc as the compiler"
     assert banner_failure("", cc, True), "a log with no banner cannot pass"
+
+    diags.self_test()
     print("linux verify: self-test ok", flush=True)
     return 0
 
@@ -434,6 +445,7 @@ def main() -> int:
     failures = []
     units = {"badc": [], "fallback": [], "fail": [], "badc-asm": [], "gas": []}
     links = {"badc": [], "ld": [], "fallback": [], "fail": []}
+    diagnostics: collections.Counter = collections.Counter()
     rc, secs, undef = 0, 0.0, 0
     if args.build:
         # Named before anything is built: a console log has to say which
@@ -441,7 +453,9 @@ def main() -> int:
         log(f"linker: {'badc (ldshim.py)' if args.linker == 'badc' else args.real_ld}")
         manifest = args.workdir / f"manifest-{args.arch}.txt"
         ld_manifest = args.workdir / f"ld-manifest-{args.arch}.txt"
-        rc, secs, build_log = build(args, arch, tree, manifest, ld_manifest)
+        warn_log = args.workdir / f"warnings-{args.arch}.txt"
+        rc, secs, build_log = build(args, arch, tree, manifest, ld_manifest,
+                                    warn_log)
         units = read_manifest(manifest)
         links = read_manifest(ld_manifest,
                               ("badc", "ld", "fallback", "fail"))
@@ -478,6 +492,10 @@ def main() -> int:
                                 f"{len(links['fallback'])}")
             if not links["badc"]:
                 failures.append("no link was made by badc")
+
+        diagnostics, lines = diags.summary(warn_log)
+        for line in lines:
+            log(line)
 
         if rc != 0:
             failures.append(f"make exited {rc} (see {build_log})")
@@ -571,6 +589,10 @@ def main() -> int:
                 for u in units["gas"]).most_common(),
             "links": {k: len(v) for k, v in links.items()},
             "links_left_to_ld": links["ld"],
+            # Diagnostics from compiles and links that succeeded, by
+            # (shim, severity, cause) and ranked by incidence.
+            "diagnostics": [[list(k), n]
+                            for k, n in diagnostics.most_common()],
             "undefined_refs": undef, "boots": boots,
             "kaslr": {
                 "configured": kaslr_configured(tree),

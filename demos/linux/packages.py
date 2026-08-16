@@ -56,6 +56,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import diags
+
 LINUX_DIR = Path(__file__).resolve().parent
 REPO_ROOT = LINUX_DIR.parents[1]
 
@@ -390,6 +392,7 @@ def shim_env(args, arch) -> dict:
         BADC_REAL_CC=args.real_cc,
         BADC_TARGET=arch["target"],
         BADC_MANIFEST=str(args.manifest),
+        BADC_WARN_LOG=str(args.warn_log),
         BADC_TIMEOUT=str(args.unit_timeout),
         BADC_LD_REAL=args.real_ld,
         BADC_LD_MANIFEST=str(args.ld_manifest),
@@ -443,6 +446,7 @@ def kbuild(args, arch, tree, targets, extra=(), log_name="build",
 def phase_build(args, arch, tree) -> None:
     args.manifest.unlink(missing_ok=True)
     args.ld_manifest.unlink(missing_ok=True)
+    args.warn_log.unlink(missing_ok=True)
     # Under --keep-going the build is a survey: make carries on past a unit
     # badc rejects so the manifest ranks every failure instead of naming the
     # first. The failing status is still reported, and the manifest counts
@@ -1364,6 +1368,7 @@ def main() -> int:
     args.badc = Path(args.badc).resolve()
     args.manifest = args.workdir / f"manifest-{args.arch}.txt"
     args.ld_manifest = args.workdir / f"ld-manifest-{args.arch}.txt"
+    args.warn_log = args.workdir / f"warnings-{args.arch}.txt"
     if not args.expect_units:
         args.expect_units = arch["expect_units"]
     if {"tree", "build", "package"} & phases and not os.access(args.badc,
@@ -1437,6 +1442,10 @@ def main() -> int:
         report["units"] = assert_manifest(args, failures)
         if args.linker == "badc":
             report["links"] = assert_link_manifest(args, failures)
+        counts, lines = diags.summary(args.warn_log)
+        for line in lines:
+            log(line)
+        report["diagnostics"] = [[list(k), n] for k, n in counts.most_common()]
         report["module_producer"] = assert_module_producer(tree, failures)
 
     if "vm" in phases and not failures:

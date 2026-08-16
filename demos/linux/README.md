@@ -527,6 +527,16 @@ objects are current, so without a floor a tree that rebuilt nothing would
 pass while testing nothing. For the same reason the tree is rebuilt from
 clean by default.
 
+What badc wrote on the compiles and links that *succeeded* is measured
+rather than gated. A warning comes with `rc == 0`, so the shims append it
+to `$BADC_WARN_LOG` -- `warnings-<arch>.txt` in the work directory, one
+line per diagnostic tagged with the unit -- and the gate reports a count
+per cause, the message with its site folded out. A defconfig x86_64 build
+writes tens of thousands of lines under about 130 distinct causes; every
+cause is listed however rare, so one warning among thousands stays
+visible. `diags.py <log>` prints the same summary for a log already
+produced, and `packages.py` reports it the same way.
+
 Per-arch differences (target triple, image path, qemu machine and console)
 are a table in the script; `--arch` selects the row and defaults to the host.
 Run it on the box whose corpus matches, and against a copy: the build writes

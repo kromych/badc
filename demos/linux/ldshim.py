@@ -27,10 +27,17 @@ shows up in the manifest, so a build that used it cannot be mistaken
 for a pure one. It is the only route to the real linker; an emulation
 badc has no backend for is a badc error, not a silent handover.
 
+A warning comes with `rc == 0`. With ``$BADC_WARN_LOG`` set, what badc
+wrote on a successful link is appended there tagged with the output, to
+be summarized with the compile diagnostics; without it, it goes to
+stderr.
+
 Environment: BADC (badc binary, required), BADC_LD_REAL (default ld),
 BADC_LD_FALLBACK (file of output paths to leave to the real linker),
 BADC_LD_MANIFEST (append `badc|fallback|fail<TAB>output[<TAB>detail]`
-per link), BADC_LD_TIMEOUT (seconds per badc link, default 900).
+per link), BADC_WARN_LOG (append `ld<TAB>output<TAB>diagnostic` per line
+badc wrote on a successful link), BADC_LD_TIMEOUT (seconds per badc
+link, default 900).
 """
 
 from __future__ import annotations
@@ -61,6 +68,26 @@ def manifest(status: str, output: str, detail: str = "") -> None:
         os.write(fd, (line + "\n").encode())
     finally:
         os.close(fd)
+
+
+def warn_log(kind: str, path: str, err: str) -> bool:
+    """Append badc's diagnostics for one successful invocation, one line
+    per diagnostic tagged with the output it came from. Returns False when
+    no log is configured, leaving the caller to forward them itself."""
+    log = os.environ.get("BADC_WARN_LOG")
+    if not log:
+        return False
+    lines = [f"{kind}\t{path}\t{ln.strip()}\n"
+             for ln in err.splitlines() if ln.strip()]
+    if lines:
+        # One O_APPEND write per invocation keeps parallel jobs from
+        # interleaving a link's diagnostics with another's.
+        fd = os.open(log, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+        try:
+            os.write(fd, "".join(lines).encode())
+        finally:
+            os.close(fd)
+    return True
 
 
 def fallback_listed(output: str) -> bool:
@@ -103,7 +130,8 @@ def main(argv: list[str]) -> int:
         rc, err = 900, f"timeout after {timeout:.0f}s"
     if rc == 0:
         manifest("badc", out)
-        sys.stderr.write(err)
+        if err.strip() and not warn_log("ld", out, err):
+            sys.stderr.write(err if err.endswith("\n") else err + "\n")
         return 0
 
     # No second linker runs. Drop any partial output so a later make

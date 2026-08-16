@@ -11408,6 +11408,26 @@ mod code_mode_tests {
         );
     }
 
+    /// `.org` reads its target against the final layout, so operator order
+    /// does not decide whether the target reduces. GNU as 2.46.1 accepts
+    /// every spelling with the same padding.
+    #[test]
+    fn file_scope_x86_org_target_folds_regardless_of_association() {
+        for expr in [". + 662b-661b", ". + (662b-661b)", ". + 662b - 661b"] {
+            let bytes = assemble(&alloc::format!(
+                ".pushsection .t,\"ax\"\n\
+                 661:\n\
+                 nop\n\
+                 nop\n\
+                 662:\n\
+                 .org {expr}\n\
+                 ret\n\
+                 .popsection\n"
+            ));
+            assert_eq!(bytes, alloc::vec![0x90, 0x90, 0x00, 0x00, 0xc3], "{expr}");
+        }
+    }
+
     /// `crc32` encodes `r32, r/m8|r/m16|r/m32` and `r64, r/m8|r/m64`: REX.W is
     /// the accumulator width, a register source names the source width, and the
     /// size suffix supplies it only for a memory source. Bytes measured with

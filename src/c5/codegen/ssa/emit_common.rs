@@ -1330,6 +1330,16 @@ impl AsmExprValue {
     }
 }
 
+/// The constant distance from `n` to `p`: locations of one space differ by
+/// their offsets, two references to one undefined symbol cancel.
+fn term_distance(p: &AsmExprTerm, n: &AsmExprTerm) -> Option<i64> {
+    match (&p.space, &n.space) {
+        (Some((ps, po)), Some((ns, no))) if ps == ns => Some(po - no),
+        (None, None) if p.target == n.target => Some(0),
+        _ => None,
+    }
+}
+
 /// A resolved leaf of an expression: an absolute value (a literal, an
 /// operand constant, a `.set` symbol) or a location-valued term.
 pub(crate) enum AsmExprLeaf {
@@ -1429,19 +1439,12 @@ impl AsmExprValue {
         // distance; fold them so the bases free up. Two references to one
         // undefined symbol cancel outright (GNU as folds `x - x`, which is
         // what lets `.if \base == %rsp` compare register text).
-        if let (Some(p), Some(n)) = (&self.pos, &self.neg) {
-            match (&p.space, &n.space) {
-                (Some((ps, po)), Some((ns, no))) if ps == ns => {
-                    self.add += po - no;
-                    self.pos = None;
-                    self.neg = None;
-                }
-                (None, None) if p.target == n.target => {
-                    self.pos = None;
-                    self.neg = None;
-                }
-                _ => {}
-            }
+        if let (Some(p), Some(n)) = (&self.pos, &self.neg)
+            && let Some(delta) = term_distance(p, n)
+        {
+            self.add += delta;
+            self.pos = None;
+            self.neg = None;
         }
         Ok(self)
     }
@@ -5861,6 +5864,10 @@ fn section_start_leaf(sk: &str) -> AsmExprLeaf {
 /// Evaluate an `.org` target expression at offset `at` of section `key`:
 /// an absolute value is a section offset, a location of this section is its
 /// offset. `resolve` answers labels; `.` is supplied here.
+///
+/// A location of this section resolves to its offset, as GNU as does by
+/// deferring an `.org` target to final symbol resolution: operator order
+/// then does not decide whether the target reduces.
 fn eval_org_target(
     expr: &str,
     key: &str,
@@ -5870,12 +5877,21 @@ fn eval_org_target(
 ) -> Result<i64, alloc::string::String> {
     let leaf = |t: &str| -> Option<AsmExprLeaf> {
         if t == "." {
-            return Some(AsmExprLeaf::Loc(AsmExprTerm {
-                space: Some((AsmSpace::Section(alloc::string::String::from(key)), at)),
-                target: AsmSectionTarget::OwnSection(at as u32),
-            }));
+            return Some(AsmExprLeaf::Abs(at));
         }
-        resolve(t)
+        Some(match resolve(t)? {
+            AsmExprLeaf::Loc(AsmExprTerm {
+                space: Some((AsmSpace::Section(k), off)),
+                target,
+            }) => match k == key {
+                true => AsmExprLeaf::Abs(off),
+                false => AsmExprLeaf::Loc(AsmExprTerm {
+                    space: Some((AsmSpace::Section(k), off)),
+                    target,
+                }),
+            },
+            other => other,
+        })
     };
     let ctx = AsmExprCtx {
         resolve: &leaf,

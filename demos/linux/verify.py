@@ -44,13 +44,17 @@ which of the two produced the image it booted.
 The tree must already be configured (setup.py) and must be writable: the build
 runs in it. It is rebuilt from clean by default, because make skips units whose
 objects are already current and a gate that compiles nothing passes vacuously.
+Its configured architecture must be `--arch`, which is checked before the
+build starts; kbuild is then given `ARCH`, and `CROSS_COMPILE` and prefixed
+`--real-cc` / `--real-ld` defaults when the target is not the host.
 
 Each boot runs at a KASLR displacement the gate picked rather than one the
 machine drew, so a displacement-dependent defect is reproducible; see kaslr.py
 for what each architecture allows. `--kaslr-seed` replays one exactly, and
 `--no-build` boots the image already in the tree.
 
-`--self-test` checks the banner reading and takes no tree.
+`--self-test` checks the banner reading and the architecture selection, and
+takes no tree.
 """
 
 from __future__ import annotations
@@ -59,7 +63,6 @@ import argparse
 import collections
 import json
 import os
-import platform
 import re
 import shlex
 import shutil
@@ -70,6 +73,7 @@ from pathlib import Path
 
 import buildcc
 import diags
+import karch
 import kaslr
 
 LINUX_DIR = Path(__file__).resolve().parent
@@ -148,7 +152,7 @@ def cc_version_text(tree: Path) -> str:
 
 def build(args, arch: dict, tree: Path, manifest: Path,
           ld_manifest: Path, warn_log: Path) -> tuple[int, float, Path]:
-    env = dict(os.environ)
+    env = karch.make_env(args.arch)
     env.update(
         BADC=str(args.badc),
         BADC_REAL_CC=args.real_cc,
@@ -351,6 +355,7 @@ def _self_test() -> int:
     # The compile shim's flag classification, which decides what reaches
     # badc; nothing else runs it, and a kernel unit is an hour into a run.
     buildcc._self_test()
+    karch.self_test()
     print("linux verify: self-test ok", flush=True)
     return 0
 
@@ -365,24 +370,26 @@ def kaslr_configured(tree: Path) -> bool:
 
 
 def main() -> int:
-    host = platform.machine()
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--kernel-dir", required=True, type=Path,
                     help="writable, already-configured kernel tree to build")
     ap.add_argument("--arch", choices=sorted(ARCHES),
-                    default="x86_64" if host in ("x86_64", "AMD64") else "aarch64")
+                    default=karch.host_arch())
     ap.add_argument("--badc", type=Path,
                     default=os.environ.get("BADC", REPO_ROOT / "target/release/badc"))
-    ap.add_argument("--real-cc", default=os.environ.get("BADC_REAL_CC", "gcc"))
+    ap.add_argument("--real-cc", default=os.environ.get("BADC_REAL_CC"),
+                    help="compiler for the units badc does not take "
+                         "(default: the target's gcc)")
     ap.add_argument("--linker", choices=("reference", "badc"),
                     default=os.environ.get("BADC_LINKER", "badc"),
                     help="who links: `badc` (the default) runs every link "
                          "through ldshim.py, `reference` leaves them all to "
                          "--real-ld (the contrast run). See README.md")
-    ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL", "ld"),
+    ap.add_argument("--real-ld", default=os.environ.get("BADC_LD_REAL"),
                     help="linker for the steps badc does not implement, and "
-                         "for every step under --linker reference")
+                         "for every step under --linker reference (default: "
+                         "the target's ld)")
     ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--timeout", type=int, default=600, help="seconds per badc unit")
     ap.add_argument("--fallback", help="units to leave to the reference compiler; "
@@ -421,6 +428,10 @@ def main() -> int:
 
     arch = ARCHES[args.arch]
     args.qemu = args.qemu or arch["qemu"]
+    # The fallback compiler and linker have to produce the target's objects,
+    # so an unset default follows --arch rather than naming the host tools.
+    args.real_cc = args.real_cc or karch.tool(args.arch, "gcc")
+    args.real_ld = args.real_ld or karch.tool(args.arch, "ld")
     args.qemu_args = shlex.split(args.qemu_args)
     tree = args.kernel_dir.resolve()
     args.badc = Path(args.badc).resolve()
@@ -432,6 +443,15 @@ def main() -> int:
             f"(cargo build --release --features full)")
     if not (tree / ".config").exists():
         die(f"{tree} is not configured (run setup.py)")
+    # A tree configured for another architecture would otherwise reach make
+    # and fail on the missing image target, naming neither architecture.
+    mismatch = karch.config_mismatch(tree / ".config", args.arch)
+    if mismatch:
+        die(mismatch)
+    if args.build:
+        gap = karch.cross_gap(args.arch)
+        if gap:
+            die(gap)
     if args.build and not os.access(tree, os.W_OK):
         die(f"{tree} is not writable; build a copy, not the reference corpus")
     if args.kaslr_seed and not arch["kaslr_seed_dtb"]:

@@ -24,30 +24,21 @@ from __future__ import annotations
 
 import argparse
 import os
-import platform
 import re
 import subprocess
 import sys
 from pathlib import Path
 
+import karch
+
 LINUX_DIR = Path(__file__).resolve().parent
 REPO_ROOT = LINUX_DIR.parents[1]
 
 TARGETS = {"x86_64": "linux-x64", "aarch64": "linux-aarch64"}
-KARCH = {"x86_64": "x86_64", "aarch64": "arm64"}
 
 
 def log(m: str) -> None:
     print(f"linux probecfg: {m}", flush=True)
-
-
-def host_arch() -> str:
-    m = platform.machine().lower()
-    if m in ("arm64", "aarch64"):
-        return "aarch64"
-    if m in ("x86_64", "amd64"):
-        return "x86_64"
-    return m
 
 
 def read_config(path: Path) -> dict[str, str]:
@@ -68,13 +59,19 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--kernel-dir", type=Path, required=True,
                     help="fresh kernel tree to configure (not the reference build tree)")
-    ap.add_argument("--arch", choices=sorted(TARGETS), default=host_arch())
+    ap.add_argument("--arch", choices=sorted(TARGETS), default=karch.host_arch())
     ap.add_argument("--badc", help="badc binary (default: $BADC or target/release/badc)")
-    ap.add_argument("--ref-cc", default=os.environ.get("PROBECFG_REF_CC", "gcc"),
-                    help="reference compiler for the delegated probe classes")
+    ap.add_argument("--ref-cc", default=os.environ.get("PROBECFG_REF_CC"),
+                    help="reference compiler for the delegated probe classes "
+                         "(default: the target's gcc)")
     ap.add_argument("--config", type=Path,
                     help="starting .config (default: the vendored config for --arch)")
     args = ap.parse_args(argv)
+
+    gap = karch.cross_gap(args.arch)
+    if gap:
+        sys.exit(f"linux probecfg: {gap}")
+    args.ref_cc = args.ref_cc or karch.tool(args.arch, "gcc")
 
     kdir = args.kernel_dir.resolve()
     if not (kdir / "Makefile").is_file():
@@ -105,10 +102,13 @@ def main(argv: list[str] | None = None) -> int:
     text = re.sub(r'(?m)^CONFIG_INITRAMFS_SOURCE=.*$',
                   'CONFIG_INITRAMFS_SOURCE=""', start.read_text())
     (kdir / ".config").write_text(text)
-    env = dict(os.environ, ARCH=KARCH[args.arch])
+    env = karch.make_env(args.arch)
     log(f"reference olddefconfig (CC={args.ref_cc})")
     subprocess.run(["make", "olddefconfig", f"CC={args.ref_cc}"], cwd=kdir,
                    check=True, env=env, stdout=subprocess.DEVNULL)
+    mismatch = karch.config_mismatch(kdir / ".config", args.arch)
+    if mismatch:
+        sys.exit(f"linux probecfg: {mismatch}")
     ref_cfg = read_config(kdir / ".config")
 
     shim = LINUX_DIR / "ccshim.py"

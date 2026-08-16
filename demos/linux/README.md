@@ -61,11 +61,17 @@ kernel and a compiler of different vintages disagree over warnings the kernel
 promotes to errors. The `.cmd` file count is reported and is what says whether
 the build was usable.
 
-The build is native per architecture: run it on a box of the architecture being
-measured.
+`--arch` selects the target rather than following the host: kbuild is given
+`ARCH`, and `CROSS_COMPILE` plus prefixed `--real-cc` / `--real-ld` defaults
+when the target is not the host. A cross target whose `<triple>-` toolchain is
+not on PATH is refused, naming the tools it wants, and a configured tree whose
+architecture is not the one asked for fails at the configure step rather than
+at the missing image target later. Measuring a target on a box of its own
+architecture is still preferred: it is what CI and the pre-push gate do.
 
 Requirements for the reference build: gcc, make, flex, bison, bc, and the
-libelf + openssl development headers.
+libelf + openssl development headers; for a cross target also the matching
+`aarch64-linux-gnu-*` / `x86_64-linux-gnu-*` toolchain.
 
 ## How the sweep works
 

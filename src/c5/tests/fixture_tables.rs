@@ -713,6 +713,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("shebang.c", 7),
     ("adjacent_strings.c", 'f' as i32),
     ("string_concat_encoding_prefix.c", 0),
+    ("utf8_string_prefix_ucn.c", 0),
     ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
@@ -1306,6 +1307,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("shebang.c", 7),
     ("adjacent_strings.c", 'f' as i32),
     ("string_concat_encoding_prefix.c", 0),
+    ("utf8_string_prefix_ucn.c", 0),
     ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
@@ -2075,6 +2077,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("shebang.c", 7),
     ("adjacent_strings.c", 'f' as i32),
     ("string_concat_encoding_prefix.c", 0),
+    ("utf8_string_prefix_ucn.c", 0),
     ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
@@ -3718,6 +3721,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("shebang.c", 7),
     ("adjacent_strings.c", 'f' as i32),
     ("string_concat_encoding_prefix.c", 0),
+    ("utf8_string_prefix_ucn.c", 0),
     ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),

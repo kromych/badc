@@ -2650,3 +2650,61 @@ fn mixed_prefix_string_concatenation_is_rejected() {
     .expect("an unprefixed part joins the run");
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }
+
+#[test]
+fn utf8_prefix_concatenation_is_diagnosed() {
+    // C11 6.4.5p5: `u8` is narrow, so it pairs only with itself and with
+    // an unprefixed part; every wider pairing has no defined result.
+    for src in [
+        r#"int main(void) { return sizeof(u8"a" L"b"); }"#,
+        r#"int main(void) { return sizeof(u8"a" u"b"); }"#,
+        r#"int main(void) { return sizeof(u8"a" U"b"); }"#,
+        r#"int main(void) { return sizeof(L"a" u8"b"); }"#,
+        r#"int main(void) { return sizeof(u"a" u8"b"); }"#,
+        r#"int main(void) { return sizeof(U"a" u8"b"); }"#,
+    ] {
+        expect_compile_error(src, "different encoding prefixes");
+    }
+    // The three cells 6.4.5p5 defines compile and run.
+    let prog = Compiler::new(
+        r#"int main(void) { static char a[] = u8"ab" u8"cd";
+         static char b[] = u8"ab" "cd";
+         static char c[] = "ab" u8"cd";
+         return (int)(sizeof a - 5) + (int)(sizeof b - 5) + (int)(sizeof c - 5)
+         + (a[3] - 'd') + (b[3] - 'd') + (c[3] - 'd'); }"#
+            .to_string(),
+    )
+    .compile()
+    .expect("u8 pairs with itself and with an unprefixed part");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn invalid_universal_character_names_are_diagnosed() {
+    // C11 6.4.3p2 constrains the code points a universal character name
+    // may denote, in a narrow, `u8` and wide literal alike.
+    for src in [
+        r#"char *s = "\uD800";"#,
+        r#"char *s = u8"\uD800";"#,
+        r#"char *s = (char *)L"\uDFFF";"#,
+        r#"char *s = "\u0041";"#,
+        r#"char *s = "\U00110000";"#,
+        r#"char c = '\u009F';"#,
+    ] {
+        expect_compile_error(src, "not a valid universal character name");
+    }
+    // 6.4.3p1 fixes the digit count at four for `\u` and eight for `\U`.
+    for src in [r#"char *s = "\u12";"#, r#"char *s = (char *)U"\U0001F60";"#] {
+        expect_compile_error(src, "incomplete universal character name");
+    }
+    // A name inside the permitted set encodes as UTF-8 and runs.
+    let prog = Compiler::new(
+        r#"int main(void) { static char a[] = u8"\u00E9\U0001F600";
+         return (int)(sizeof a - 7) + ((unsigned char)a[0] - 0xC3)
+         + ((unsigned char)a[2] - 0xF0) + ((unsigned char)a[5] - 0x80); }"#
+            .to_string(),
+    )
+    .compile()
+    .expect("a permitted universal character name encodes as UTF-8");
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}

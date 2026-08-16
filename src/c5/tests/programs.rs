@@ -3060,6 +3060,15 @@ fn string_concat_encoding_prefix() {
 }
 
 #[test]
+fn utf8_string_prefix_ucn() {
+    // C11 6.4.5p3: `u8` is a narrow literal, so it joins an unprefixed
+    // part in a run; 6.4.3 universal character names encode as UTF-8
+    // there and as one code point in a wide literal. Matched against
+    // GCC and clang.
+    assert_eq!(run_fixture("utf8_string_prefix_ucn.c"), 0);
+}
+
+#[test]
 fn const_object_array_bound() {
     // A static `const` integer object folds its value in a later constant
     // expression, so it works as an array bound (a fixed array, not a VLA)

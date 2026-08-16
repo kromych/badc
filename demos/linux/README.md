@@ -270,7 +270,27 @@ leave the unit unprotected under a configuration that says otherwise.
 strength of `CONFIG_ARM64_PTR_AUTH_KERNEL`, so the flag behind it has to
 reach badc. badc rejects the argument sets it does not implement, so a
 spelling it does not cover fails the unit rather than building it
-unprotected. `buildcc.py --self-test` checks the rewrite and takes no tree.
+unprotected.
+
+Every other flag on the command line is accounted for too. It is
+forwarded, or listed in `UNSUPPORTED_*` -- badc has no equivalent and the
+object's difference is measured or not ruled out, so each unit that
+carries one reports `<flag> not applied` down the diagnostic channel and
+the count lands in the build's summary -- or listed in `IGNORE_*` with the
+measurement showing badc's object is the same without it. A flag on no
+list fails the unit and names itself in the manifest. Silently discarding
+what the shim does not recognize is what let `-fno-jump-tables` reach no
+compiler while every `.o.cmd` recorded it: the probe behind it is
+delegated to the reference compiler, so nothing in the build's own
+artifacts disagreed. On the pinned `defconfig` the unsupported set is
+`-funsigned-char`, `-nostdinc`, `-fstack-protector-strong` with its
+`-mstack-protector-guard*` operands, `-ftrivial-auto-var-init=zero`,
+`-fzero-init-padding-bits=all`, `-fstrict-flex-arrays=3`,
+`-fmin-function-alignment=`, `-fpatchable-function-entry=` (x86_64),
+`-fasynchronous-unwind-tables`, `-ffreestanding` and `-fno-builtin*`:
+those properties are not in the built image whatever the configuration
+says. `buildcc.py --self-test` checks the classification and takes no
+tree; `verify.py --self-test` runs it, which CI does on every push.
 
 Everything else (probes, `-E`, `-S`, links, the host tools under
 `scripts/` and `tools/`) goes to gcc untouched, so the configuration and

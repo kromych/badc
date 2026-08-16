@@ -68,6 +68,7 @@ import sys
 import time
 from pathlib import Path
 
+import buildcc
 import diags
 import kaslr
 
@@ -347,6 +348,9 @@ def _self_test() -> int:
     assert banner_failure("", cc, True), "a log with no banner cannot pass"
 
     diags.self_test()
+    # The compile shim's flag classification, which decides what reaches
+    # badc; nothing else runs it, and a kernel unit is an hour into a run.
+    buildcc._self_test()
     print("linux verify: self-test ok", flush=True)
     return 0
 

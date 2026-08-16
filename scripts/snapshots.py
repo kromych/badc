@@ -214,15 +214,20 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> boo
     return proc.returncode == 0
 
 
-def fixture_text_stop_address(map_path: Path) -> int | None:
-    """Return the virtual address one past the fixture's last executable
-    contribution -- its `.text` plus any named executable sections --
-    read from the badc link map. `<internal>` inputs (entry stub, PLT)
-    don't move the boundary and `<runtime/...>` ends the scan, so the
-    caller's `--stop-address` keeps the snapshot to the fixture's own
-    code: the trailing fill and the identical runtime tail every image
-    shares would otherwise churn the whole tree on any runtime edit.
-    None when the map is missing or names no fixture contribution.
+def fixture_text_stop_address(map_path: Path, source: str) -> int | None:
+    """Return the virtual address one past the last `.text` contribution
+    the badc link map attributes to `source`, the path the fixture was
+    compiled from. The caller's `--stop-address` keeps the snapshot to the
+    fixture's own code: the trailing fill and the identical runtime tail
+    every image shares would otherwise churn the whole tree on any runtime
+    edit.
+
+    The fixture's rows are selected by name rather than the other inputs
+    excluded by theirs. An input's label is its path when it has one, so
+    the runtime carries `<runtime/...>` only while it comes from the
+    embedded copy; an installed `$BADC_HOME/lib/runtime.c` labels the same
+    rows with an absolute path, which no exclusion rule can anticipate.
+    None when the map is missing or names no contribution from `source`.
     """
     try:
         text = map_path.read_text()
@@ -242,13 +247,10 @@ def fixture_text_stop_address(map_path: Path) -> int | None:
         # wrapped onto its own line when long; symbol and `*fill*` rows
         # carry no input token and don't match.
         m = re.match(r"\s+(?:\S+\s+)?0x([0-9a-fA-F]+)\s+0x([0-9a-fA-F]+)\s+(\S+)\s*$", line)
-        if not m:
+        if not m or m.group(3) != source:
             continue
-        inp = m.group(3)
-        if inp.startswith("<runtime/"):
-            break
-        if not inp.startswith("<"):
-            last_end = int(m.group(1), 16) + int(m.group(2), 16)
+        end = int(m.group(1), 16) + int(m.group(2), 16)
+        last_end = end if last_end is None else max(last_end, end)
     return last_end
 
 
@@ -260,16 +262,17 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root:
     # produces no link and takes no map (an object carries no runtime).
     map_path = tmp_bin.with_suffix(".map")
     map_flags = [] if "-c" in flags else [f"-Map={map_path}"]
+    rel = str(src.relative_to(root))
     proc = subprocess.run(
         [str(badc), "-q", "-O", f"--target={target}", *flags, *map_flags,
-         "-o", str(tmp_bin), str(src.relative_to(root))],
+         "-o", str(tmp_bin), rel],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         cwd=root,
     )
     if proc.returncode != 0:
         return False
-    stop = None if "-c" in flags else fixture_text_stop_address(map_path)
+    stop = None if "-c" in flags else fixture_text_stop_address(map_path, rel)
     extra: list[str] = []
     if stop is not None:
         extra.append(f"--stop-address=0x{stop:x}")

@@ -21,9 +21,8 @@ Each lane:
   5. Run the gating demos (`GATING_DEMOS` below) through
      `scripts/run_demos.py`, which runs them concurrently; every demo the
      lane's kind selects runs, `--demo-jobs` bounds only how many at once.
-  6. On the lane `--snapshot-box` names, regenerate `tests/snapshots/` and
-     fail on drift, as CI's `snapshots clean` job does. Skip with
-     `--no-snapshots`.
+  6. On Linux lanes, regenerate `tests/snapshots/` and fail on drift, as
+     CI's `snapshots clean` job does. Skip with `--no-snapshots`.
   7. On Linux lanes, compile and link the pinned `defconfig` kernel with
      badc -- CI's kernel corpus, not the vendored minimal configs. Skip
      with `--no-kernel`.
@@ -471,14 +470,7 @@ def main() -> int:
     p.add_argument(
         "--no-snapshots",
         action="store_true",
-        help="skip the snapshot-drift check on the snapshot lane",
-    )
-    p.add_argument(
-        "--snapshot-box",
-        metavar="NAME",
-        help="Linux lane that runs the snapshot-drift check; the check needs "
-        "one lane's release build, not four. No lane runs it unless named: "
-        "regeneration is not host-independent yet (see the note in main)",
+        help="skip the snapshot-drift check on the Linux lanes",
     )
     p.add_argument(
         "--demo-jobs",
@@ -540,30 +532,14 @@ def main() -> int:
                   "run on a box also downloads the release (~150 MB). "
                   "Skip with --no-kernel.")
 
-    # The lane is named rather than picked: `scripts/snapshots.py` is not
-    # host-independent yet. On a linux-x64 host the x64 fixtures link
-    # natively, and on Fedora 44 that map does not yield a `.text` stop
-    # address, so the regeneration appends the runtime tail to the x64
-    # snapshots and every one of them reads as drifted. The aarch64 lane
-    # cross-links both targets and matches the committed corpus.
-    linux_lanes = [b for b in selected if b.kind == "linux"]
-    snapshot_lane = ""
-    if args.no_snapshots:
-        print("snapshot-drift check: SKIPPED (--no-snapshots)")
-    elif not args.snapshot_box:
-        if linux_lanes:
-            print("snapshot-drift check: NO LANE; name one with "
-                  "--snapshot-box (a Linux lane) to gate tests/snapshots/ "
-                  "against drift, as CI's `snapshots clean` job does")
-    elif args.snapshot_box not in {b.short for b in linux_lanes}:
-        print(f"--snapshot-box {args.snapshot_box!r} is not a selected Linux lane",
-              file=sys.stderr)
-        return 2
-    else:
-        snapshot_lane = args.snapshot_box
-        print(f"snapshot-drift check: lane {snapshot_lane}; regenerates "
-              "tests/snapshots/ and fails on drift, as CI's `snapshots clean` "
-              "job does. Needs llvm-objdump. Skip with --no-snapshots.")
+    if any(b.kind == "linux" for b in selected):
+        if args.no_snapshots:
+            print("snapshot-drift check: SKIPPED (--no-snapshots)")
+        else:
+            print("snapshot-drift check: every Linux lane regenerates "
+                  "tests/snapshots/ and fails on drift, as CI's `snapshots "
+                  "clean` job does. Needs llvm-objdump. Skip with "
+                  "--no-snapshots.")
 
     github_token = ""
     try:
@@ -583,7 +559,7 @@ def main() -> int:
             github_token,
             not args.no_kernel,
             not args.no_demos,
-            box.short == snapshot_lane,
+            not args.no_snapshots,
             args.demo_jobs,
         )
 

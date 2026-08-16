@@ -40,15 +40,13 @@ boxes using `./scripts/validate_local_boxes.py`:
     `scripts/run_demos.py` runs the lane's set concurrently. `--demo-jobs`
     bounds how many run at a time, never which ones run; the runner prints
     its roster and its width.
-  * the snapshot-drift check on the Linux lane `--snapshot-box` names --
-    `--snapshot-box krom2` today: regenerate `tests/snapshots/` and fail on
-    drift, as CI's `snapshots clean` job does. It needs `llvm-objdump` -- the
-    committed snapshots were disassembled with it and GNU objdump's text does
-    not match -- and fails the step when it is absent rather than downgrading
-    the check. No lane runs it unless named, because regeneration is not
-    host-independent: on a linux-x64 host the x64 fixtures link natively, and
-    that map yields no `.text` stop address on Fedora 44, so every x64
-    snapshot reads as drifted. Skip with `--no-snapshots`.
+  * the snapshot-drift check on every Linux lane: regenerate
+    `tests/snapshots/` and fail on drift, as CI's `snapshots clean` job does.
+    It needs `llvm-objdump` -- the committed snapshots were disassembled with
+    it and GNU objdump's text does not match -- and fails the step when it is
+    absent rather than downgrading the check. The macOS host regenerates after
+    every commit through the post-commit hook, so it carries no lane step.
+    Skip with `--no-snapshots`.
   * the kernel step: `demos/linux/verify.py --linker badc --no-boot` over the
     pinned `defconfig` release, on each Linux lane
 

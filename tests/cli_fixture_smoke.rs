@@ -1000,6 +1000,40 @@ fn installed_overlay_overrides_embedded() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// An implicit `~/.badc/lib/runtime.c` does not shadow the runtime a
+// source build carries, on the same terms as the header overlay: a stale
+// `--install` would otherwise change every link made on that host.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn implicit_home_runtime_does_not_shadow_embedded() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-implicit-rt-{}", std::process::id()));
+    let home = dir.join("home");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(home.join(".badc/lib")).expect("create temp home");
+    std::fs::write(
+        home.join(".badc/lib/runtime.c"),
+        "this is not valid C @@@\n",
+    )
+    .expect("write installed runtime.c");
+    std::fs::write(dir.join("h.c"), "int main(void){ return 0; }\n").expect("write source");
+    let out = Command::new(badc)
+        .env("HOME", &home)
+        .env_remove("BADC_HOME")
+        .arg(dir.join("h.c"))
+        .arg("-o")
+        .arg(dir.join("h"))
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "the embedded runtime should have been used: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // The include search path must not depend on the working directory: a
 // build system that runs the compiler from a project root whose
 // `./include` holds that project's own headers would otherwise have them

@@ -2350,10 +2350,14 @@ fn run() {
                 _ => {}
             }
         }
-        // Prefer an installed runtime source (~/.badc/lib/<name>) over the
-        // embedded copy, mirroring the header overlay: `badc --install`
-        // writes it there and editing it overrides the built-in runtime.
-        let runtime_dir = badc_home().map(|h| h.join("lib"));
+        // An installed runtime source (`$BADC_HOME/lib/<name>`) replaces the
+        // embedded copy on the header overlay's terms: an explicit
+        // $BADC_HOME outranks the built-in, the implicit ~/.badc does not,
+        // so a stale `--install` cannot shadow the tree a source build
+        // carries.
+        let runtime_dir = badc_home()
+            .filter(|_| std::env::var_os("BADC_HOME").is_some() || source_tree_include().is_none())
+            .map(|h| h.join("lib"));
         for (name, body) in badc::embedded_runtime().iter() {
             let (label, src) = match runtime_dir.as_ref().map(|d| d.join(name)) {
                 Some(p) if p.is_file() => match std::fs::read_to_string(&p) {

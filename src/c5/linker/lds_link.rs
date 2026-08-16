@@ -964,6 +964,17 @@ struct CieKey {
     relocs: Vec<(u64, u32, String, i64)>,
 }
 
+/// One CIE copy, by the input section holding it and its offset there.
+type CieId = (usize, usize);
+
+/// A `.eh_frame` input's entries and the fate of each: for a CIE the
+/// copy that represents it, for an FDE the CIE it will name, and
+/// `None` for an FDE whose code left the link.
+struct EhSurvey {
+    ents: Vec<eh_frame::Entry>,
+    owner: Vec<Option<CieId>>,
+}
+
 struct DynReloc {
     offset: u64,
     rtype: u32,
@@ -2459,13 +2470,19 @@ impl<'a> LdsLinker<'a> {
 
     // ----------------------------------------------- .eh_frame CIEs
 
-    /// Merge the CIEs of the `.eh_frame` inputs of one output section,
-    /// as bfd's `elf-eh-frame.c` does: the first copy in output order
-    /// stays and the FDEs of every dropped copy name it instead. Two
-    /// CIEs are one when the bytes after their length field and the
+    /// Rewrite the `.eh_frame` inputs of one output section the way
+    /// bfd's `elf-eh-frame.c` does: identical CIEs fold into the first
+    /// copy in output order, an FDE describing code that left the link
+    /// goes, and a CIE no surviving FDE names goes with it. Two CIEs
+    /// are one when the bytes after their length field and the
     /// relocations covering them agree; bfd compares a CIE's parsed
     /// fields and the symbol its personality resolves to, and those
     /// follow from byte and relocation equality.
+    ///
+    /// Which CIEs survive is settled over the whole output section
+    /// before any input is rewritten: an FDE in a later input keeps a
+    /// CIE in an earlier one alive, so a single pass could not decide
+    /// it.
     fn build_eh_frame_dedup(&mut self) {
         let mut order: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
         for oi in 0..self.outs.len() {
@@ -2481,9 +2498,17 @@ impl<'a> LdsLinker<'a> {
         }
         let mut built: Vec<(usize, EhFrame)> = Vec::new();
         for inputs in order.values() {
-            let mut canon: HashMap<CieKey, (usize, u64)> = HashMap::new();
-            for &i in inputs {
-                if let Some(f) = self.dedup_eh_frame(i, &mut canon) {
+            let mut canon: HashMap<CieKey, CieId> = HashMap::new();
+            let mut used: HashSet<CieId> = HashSet::new();
+            let surveys: Vec<Option<EhSurvey>> = inputs
+                .iter()
+                .map(|&i| self.survey_eh_frame(i, &mut canon, &mut used))
+                .collect();
+            // Offset a surviving CIE landed at, for the FDEs naming it.
+            let mut placed: HashMap<CieId, (usize, u64)> = HashMap::new();
+            for (&i, survey) in inputs.iter().zip(&surveys) {
+                let Some(s) = survey else { continue };
+                if let Some(f) = self.rewrite_eh_frame(i, s, &used, &mut placed) {
                     built.push((i, f));
                 }
             }
@@ -2528,45 +2553,91 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// Rewrite one `.eh_frame` input against the CIEs already seen in
-    /// its output section, registering its own. `None` when it keeps
-    /// every CIE, which leaves its bytes and offsets untouched.
-    fn dedup_eh_frame(
+    /// Decide the fate of one `.eh_frame` input's entries, registering
+    /// its CIEs in its output section's table and marking the ones a
+    /// surviving FDE needs. `None` leaves the input untouched.
+    fn survey_eh_frame(
         &self,
         i: usize,
-        canon: &mut HashMap<CieKey, (usize, u64)>,
-    ) -> Option<EhFrame> {
+        canon: &mut HashMap<CieKey, CieId>,
+        used: &mut HashSet<CieId>,
+    ) -> Option<EhSurvey> {
         let id = self.insecs[i];
         let o = &self.objects[id.obj];
         let data = o.section_data(&o.sections[id.sec]);
         let ents = eh_frame::entries(data).ok()?;
+        // An FDE names its CIE by a distance back from its own pointer
+        // field, so a well-formed input has that CIE among the entries
+        // ahead of it. Reject the rest before any of it is registered.
+        let cie_offs: HashSet<usize> = ents
+            .iter()
+            .filter(|e| e.cie.is_none())
+            .map(|e| e.off)
+            .collect();
+        if ents
+            .iter()
+            .any(|e| e.cie.is_some_and(|at| !cie_offs.contains(&at)))
+        {
+            return None;
+        }
+        let mut local: HashMap<usize, CieId> = HashMap::new();
+        let mut owner: Vec<Option<CieId>> = Vec::with_capacity(ents.len());
+        for e in &ents {
+            match e.cie {
+                None => {
+                    let c = *canon.entry(self.cie_key(i, data, e)).or_insert((i, e.off));
+                    local.insert(e.off, c);
+                    owner.push(Some(c));
+                }
+                // An FDE describing code that left the link describes
+                // nothing; bfd drops the entry rather than relocate it.
+                Some(_) if self.covers_discarded(i, e.off, e.len) => owner.push(None),
+                Some(at) => {
+                    let c = *local.get(&at)?;
+                    used.insert(c);
+                    owner.push(Some(c));
+                }
+            }
+        }
+        Some(EhSurvey { ents, owner })
+    }
+
+    /// Emit one `.eh_frame` input under the fates the survey settled.
+    /// `None` when every entry stays where it is, which leaves the
+    /// input's bytes and offsets untouched.
+    fn rewrite_eh_frame(
+        &self,
+        i: usize,
+        survey: &EhSurvey,
+        used: &HashSet<CieId>,
+        placed: &mut HashMap<CieId, (usize, u64)>,
+    ) -> Option<EhFrame> {
+        let id = self.insecs[i];
+        let o = &self.objects[id.obj];
+        let data = o.section_data(&o.sections[id.sec]);
+        let ents = &survey.ents;
         let mut bytes: Vec<u8> = Vec::with_capacity(data.len());
         let mut kept: Vec<(u64, u64, u64)> = Vec::new();
         let mut fdes: Vec<(u64, usize, u64)> = Vec::new();
-        // Input offset of each CIE -> the copy that survives.
-        let mut cies: HashMap<usize, (usize, u64)> = HashMap::new();
         let mut dropped = false;
-        for e in &ents {
-            // An FDE describing code that left the link describes
-            // nothing; bfd drops the entry rather than relocate it.
-            if e.cie.is_some() && self.covers_discarded(i, e.off, e.len) {
-                dropped = true;
-                continue;
-            }
-            match e.cie {
-                None => {
-                    let here = (i, bytes.len() as u64);
-                    let seen = *canon.entry(self.cie_key(i, data, e)).or_insert(here);
-                    cies.insert(e.off, seen);
-                    if seen != here {
+        for (e, owner) in ents.iter().zip(&survey.owner) {
+            match (e.cie, owner) {
+                (_, None) => {
+                    dropped = true;
+                    continue;
+                }
+                (None, Some(c)) => {
+                    // A duplicate copy, or one no surviving FDE names.
+                    if *c != (i, e.off) || !used.contains(c) {
                         dropped = true;
                         continue;
                     }
+                    placed.insert(*c, (i, bytes.len() as u64));
                 }
-                Some(at) => fdes.push({
-                    let (sec, off) = *cies.get(&at)?;
-                    (bytes.len() as u64, sec, off)
-                }),
+                (Some(_), Some(c)) => {
+                    let (sec, off) = *placed.get(c)?;
+                    fdes.push((bytes.len() as u64, sec, off));
+                }
             }
             kept.push((e.off as u64, e.len as u64, bytes.len() as u64));
             bytes.extend_from_slice(&data[e.off..e.off + e.len]);
@@ -9312,6 +9383,87 @@ SECTIONS {
             "the surviving CIE keeps its own personality relocation"
         );
         assert_eq!(eh_frame::scan(&body, addr).expect("scans").len(), 3);
+    }
+
+    /// `eh_cie_zr` with a different `DW_CFA_def_cfa` offset, so the two
+    /// fold into nothing.
+    fn eh_cie_zr_alt() -> Vec<u8> {
+        let mut c = eh_cie_zr();
+        c[17] = 0x10;
+        c
+    }
+
+    /// A `.eh_frame` unit: one text section under `text`, a CIE and a
+    /// single FDE covering it.
+    fn eh_unit(text: &str, name: &str, cie: &[u8]) -> Vec<u8> {
+        let mut eh = cie.to_vec();
+        eh.extend_from_slice(&eh_fde(0x1c));
+        TestObj::new()
+            .sec(text, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 8, &[0x90; 8])
+            .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh)
+            .reloc(1, 0x20, 1, rt::R_X86_64_PC32, 0)
+            .sym(name, STB_GLOBAL, STT_FUNC, 0, 0, 8)
+            .build(EM_X86_64)
+    }
+
+    const EH_GC_SCRIPT: &str =
+        "SECTIONS { . = 0x1000; .text : { *(.text*) } .eh_frame : { *(.eh_frame) } }";
+
+    /// `--gc-sections` drops the FDE describing collected code, and the
+    /// CIE only that FDE named goes with it. `.eh_frame` is kept but
+    /// does not propagate, so the collector never reaches the text
+    /// through it.
+    #[test]
+    fn eh_frame_gc_drops_a_collected_fde_and_its_last_cie() {
+        let script = parse_linker_script(EH_GC_SCRIPT).expect("parses");
+        let objs = || {
+            alloc::vec![
+                parse_lds_object("a.o", eh_unit(".text.live", "live", &eh_cie_zr()))
+                    .expect("parses"),
+                parse_lds_object("b.o", eh_unit(".text.dead", "dead", &eh_cie_zr_alt()))
+                    .expect("parses"),
+            ]
+        };
+        let opts = LdsOptions {
+            gc_sections: true,
+            entry_override: Some(String::from("live")),
+            ..LdsOptions::default()
+        };
+        let res = link_with_script(&script, objs(), &opts).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24, "only the live unit's CIE and FDE");
+        assert_eq!(&body[..24], &eh_cie_zr()[..], "the collected CIE is gone");
+        assert_eq!(eh_frame::count_fdes(&body), 1);
+        let syms = image_symbols(&res.image);
+        assert_eq!(
+            eh_frame::scan(&body, addr)
+                .expect("scans")
+                .iter()
+                .map(|e| e.pc)
+                .collect::<Vec<_>>(),
+            alloc::vec![find_sym(&syms, "live")]
+        );
+        // Without the option both units keep everything.
+        let plain = link_with_script(&script, objs(), &LdsOptions::default()).expect("links");
+        assert_eq!(image_section(&plain.image, ".eh_frame").1.len(), 4 * 24);
+    }
+
+    /// A CIE no FDE names describes nothing wherever it came from, so
+    /// bfd drops it whether or not anything was collected.
+    #[test]
+    fn eh_frame_drops_a_cie_no_fde_names() {
+        let script = parse_linker_script(EH_GC_SCRIPT).expect("parses");
+        let lone = TestObj::new()
+            .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh_cie_zr_alt())
+            .build(EM_X86_64);
+        let objs = alloc::vec![
+            parse_lds_object("a.o", eh_unit(".text.live", "live", &eh_cie_zr())).expect("parses"),
+            parse_lds_object("lone.o", lone).expect("parses"),
+        ];
+        let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+        let (_, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24, "the unreferenced CIE contributes none");
+        assert_eq!(eh_frame::count_fdes(&body), 1);
     }
 
     /// An ABS64 against a non-local symbol in an allocated section the

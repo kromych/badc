@@ -42,7 +42,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbx
                	callq	<addr>
                	movq	%rax, %rcx
-               	xorq	%rax, %rax
                	movq	%rbp, %rdx
                	testq	%rbx, %rbx
                	sete	%sil

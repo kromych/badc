@@ -6084,8 +6084,8 @@ fn emit_intrinsic(
         }
         I::FrameAddress => {
             // __builtin_frame_address(0): the current frame pointer (x29).
-            // The level argument (args[0]) is ignored; only level 0 is
-            // supported. Materialise through scratch when the dst spilled.
+            // The parser admits level 0 only, so there is no operand.
+            // Materialise through scratch when the dst spilled.
             let rd = match dst {
                 Place::IntReg(r) => Reg(r),
                 Place::Spill(_) => Reg(16),
@@ -6115,8 +6115,8 @@ fn emit_intrinsic(
         }
         I::ReturnAddress => {
             // __builtin_return_address(0): the saved return address the
-            // AAPCS64 prologue stored at [x29 + 8]. Only level 0 (args[0]
-            // ignored) is supported.
+            // AAPCS64 prologue stored at [x29 + 8]. The parser admits
+            // level 0 only, so there is no operand.
             let rd = match dst {
                 Place::IntReg(r) => Reg(r),
                 Place::Spill(_) => Reg(16),

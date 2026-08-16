@@ -13,7 +13,6 @@ Disassembly of section .text:
 <held_ra>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rax, %rax
                	movq	0x8(%rbp), %rax
                	popq	%rbp
                	retq
@@ -26,7 +25,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	xorq	%rcx, %rcx
                	movq	0x8(%rbp), %rcx
                	cmpq	%rcx, %rax
                	setne	%al
@@ -45,9 +43,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
                	movq	0x8(%rbp), %rax
-               	xorq	%rcx, %rcx
                	movq	0x8(%rbp), %rcx
                	cmpq	%rcx, %rax
                	sete	%al

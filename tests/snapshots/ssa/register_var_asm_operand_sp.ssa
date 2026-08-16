@@ -31,30 +31,30 @@ fn ent_pc=2 n_params=1 variadic=false locals=3
     v3   LocalAddr(-1)                                    -> x0
     v4   Intrinsic { kind=78, args=[] }                   -> x1
     v5   InlineAsm { template="movq %1, %0", ops=2, args=[v3, v4] } -> -
-    v6   LocalAddr(-2)                                    -> x1
-    v7   Imm(0)                                           -> x0
-    v8   Intrinsic { kind=30, args=[v7] }                 -> x2
-    v9   InlineAsm { template="movq %1, %0", ops=2, args=[v6, v8] } -> -
-    v10  LocalAddr(-3)                                    -> x1
-    v11  Intrinsic { kind=78, args=[] }                   -> x2
-    v12  BinopI { op=add, lhs=v11, rhs_imm=8 }            -> x2
-    v13  InlineAsm { template="movq %1, %0", ops=2, args=[v10, v12] } -> -
-    v14  LoadLocal { off=2, kind=I64 }                    -> x1
-    v15  LoadLocal { off=-1, kind=I64 }                   -> x1
-    v16  Store { addr=v1, disp=0, value=v15, kind=I64 }   -> -
-    v17  LoadLocal { off=2, kind=I64 }                    -> x1
-    v18  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
-    v19  Intrinsic { kind=78, args=[] }                   -> x1
-    v20  Store { addr=v1, disp=8, value=v19, kind=I64 }   -> -
-    v21  LoadLocal { off=2, kind=I64 }                    -> x1
-    v22  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x1
-    v23  LoadLocal { off=-2, kind=I64 }                   -> x1
-    v24  Store { addr=v1, disp=16, value=v23, kind=I64 }  -> -
-    v25  LoadLocal { off=2, kind=I64 }                    -> x1
-    v26  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x1
-    v27  LoadLocal { off=-3, kind=I64 }                   -> x1
-    v28  Store { addr=v1, disp=24, value=v27, kind=I64 }  -> -
-    terminator Return(v7)   (exit_acc=v7)
+    v6   LocalAddr(-2)                                    -> x0
+    v7   Intrinsic { kind=30, args=[] }                   -> x1
+    v8   InlineAsm { template="movq %1, %0", ops=2, args=[v6, v7] } -> -
+    v9   LocalAddr(-3)                                    -> x0
+    v10  Intrinsic { kind=78, args=[] }                   -> x1
+    v11  BinopI { op=add, lhs=v10, rhs_imm=8 }            -> x1
+    v12  InlineAsm { template="movq %1, %0", ops=2, args=[v9, v11] } -> -
+    v13  LoadLocal { off=2, kind=I64 }                    -> x0
+    v14  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v15  Store { addr=v1, disp=0, value=v14, kind=I64 }   -> -
+    v16  LoadLocal { off=2, kind=I64 }                    -> x0
+    v17  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
+    v18  Intrinsic { kind=78, args=[] }                   -> x0
+    v19  Store { addr=v1, disp=8, value=v18, kind=I64 }   -> -
+    v20  LoadLocal { off=2, kind=I64 }                    -> x0
+    v21  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
+    v22  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v23  Store { addr=v1, disp=16, value=v22, kind=I64 }  -> -
+    v24  LoadLocal { off=2, kind=I64 }                    -> x0
+    v25  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x0
+    v26  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v27  Store { addr=v1, disp=24, value=v26, kind=I64 }  -> -
+    v28  Imm(0)                                           -> x0
+    terminator Return(v28)   (exit_acc=v28)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=5

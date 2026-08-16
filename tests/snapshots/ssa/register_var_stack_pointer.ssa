@@ -12,9 +12,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
-    v2   Intrinsic { kind=30, args=[v1] }                 -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    v1   Intrinsic { kind=30, args=[] }                   -> x0
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=1

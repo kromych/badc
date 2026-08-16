@@ -9783,7 +9783,7 @@ fn emit_intrinsic(
         }
         I::FrameAddress => {
             // __builtin_frame_address(0): the current frame pointer (rbp).
-            // The level argument is ignored; only level 0 is supported.
+            // The parser admits level 0 only, so there is no operand.
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("FrameAddress: dst not int reg / spill");
             };
@@ -9803,7 +9803,8 @@ fn emit_intrinsic(
         }
         I::ReturnAddress => {
             // __builtin_return_address(0): the return address the call
-            // pushed, at [rbp + 8] above the saved rbp. Level 0 only.
+            // pushed, at [rbp + 8] above the saved rbp. The parser admits
+            // level 0 only, so there is no operand.
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("ReturnAddress: dst not int reg / spill");
             };

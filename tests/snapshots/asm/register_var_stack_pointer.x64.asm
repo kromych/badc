@@ -20,7 +20,6 @@ Disassembly of section .text:
 <read_fp>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rax, %rax
                	movq	%rbp, %rax
                	popq	%rbp
                	retq

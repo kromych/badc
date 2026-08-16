@@ -1137,6 +1137,8 @@ impl Compiler {
                     let fma_id = crate::c5::op::Intrinsic::Fma as i64;
                     let fmaf_id = crate::c5::op::Intrinsic::Fmaf as i64;
                     let trap_id = crate::c5::op::Intrinsic::Trap as i64;
+                    let frame_address_id = crate::c5::op::Intrinsic::FrameAddress as i64;
+                    let return_address_id = crate::c5::op::Intrinsic::ReturnAddress as i64;
                     let intr_kind = crate::c5::op::Intrinsic::from_i64(intrinsic_id);
                     let is_fp_unary = intr_kind.is_some_and(|i| i.is_fp_unary());
                     let is_int_bit_unary = intr_kind.is_some_and(|i| i.is_int_bit_unary());
@@ -1369,6 +1371,34 @@ impl Compiler {
                             self.ast_fpcast();
                             self.ty = Ty::Int as i64;
                         }
+                    } else if intrinsic_id == frame_address_id || intrinsic_id == return_address_id
+                    {
+                        // GCC defines the operand as the number of frames to
+                        // walk up and requires it to be a constant. Level 0
+                        // reads this function's own frame; a higher level
+                        // needs a frame-pointer chain through every caller,
+                        // which no ABI here guarantees, so it is rejected
+                        // rather than answered with level 0. The level is
+                        // consumed at parse time and reaches no operand.
+                        self.expr(Token::Assign as i64)?;
+                        let level = self.ast_acc.and_then(|a| self.expr_const_int(a));
+                        match level {
+                            Some(0) => {}
+                            Some(n) => {
+                                return Err(self.compile_err(format!(
+                                    "`{fn_name}` supports level 0 only, not {n}: \
+                                     reaching a caller's frame needs a frame-pointer \
+                                     chain the ABI does not guarantee"
+                                )));
+                            }
+                            None => {
+                                return Err(self.compile_err(format!(
+                                    "invalid argument to `{fn_name}`: \
+                                     the level must be an integer constant"
+                                )));
+                            }
+                        }
+                        self.ast_acc = None;
                     } else {
                         self.expr(Token::Assign as i64)?;
                         if let Some(a) = self.ast_acc {
@@ -2001,11 +2031,7 @@ impl Compiler {
                     }
                     _ => crate::c5::op::Intrinsic::StackPointer,
                 };
-                let mut args = alloc::vec::Vec::new();
-                if kind == crate::c5::op::Intrinsic::FrameAddress {
-                    // FrameAddress carries the (ignored) level operand.
-                    args.push(self.ast_emit_int_lit(0, Ty::Int as i64));
-                }
+                let args = alloc::vec::Vec::new();
                 let intr_ty = self.ty;
                 let pos = self.ast_src_pos();
                 let id = self.ast.push_expr(

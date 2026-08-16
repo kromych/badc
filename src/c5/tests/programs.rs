@@ -511,6 +511,53 @@ fn builtin_return_address() {
 }
 
 #[test]
+fn builtin_frame_and_return_address_reject_a_non_zero_level() {
+    // GCC types the operand as the number of frames to walk up and
+    // rejects a non-constant one. Only level 0 is answerable here: gcc's
+    // aarch64 backend returns a constant 0 for a higher return-address
+    // level, and on x86-64 the walk yields a stack address once a caller
+    // drops its frame pointer. A diagnostic replaces both wrong answers.
+    use crate::c5::Compiler;
+    for (src, want) in [
+        (
+            "void *f(void){ return __builtin_return_address(1); }",
+            "supports level 0 only",
+        ),
+        (
+            "void *f(void){ return __builtin_frame_address(2); }",
+            "supports level 0 only",
+        ),
+        (
+            "void *f(int n){ return __builtin_return_address(n); }",
+            "must be an integer constant",
+        ),
+        (
+            "void *f(int n){ return __builtin_frame_address(n); }",
+            "must be an integer constant",
+        ),
+    ] {
+        let err = Compiler::new(src.to_string())
+            .compile()
+            .expect_err("a non-zero level must be rejected");
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains(want),
+            "expected {want:?} for {src:?}, got {msg:?}"
+        );
+    }
+    // Level 0 compiles, spelled directly or as a constant expression.
+    for ok in [
+        "void *f(void){ return __builtin_return_address(0); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_frame_address(0); } int main(void){return 0;}",
+        "void *f(void){ return __builtin_return_address(1 - 1); } int main(void){return 0;}",
+    ] {
+        Compiler::new(ok.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("level 0 must compile: {ok:?}: {e:?}"));
+    }
+}
+
+#[test]
 fn atomic_lock_free_widths() {
     // C11 7.17.5: the lock-free predicates report the widths the emit
     // backs. A 16-byte object reports false, matching gcc and clang

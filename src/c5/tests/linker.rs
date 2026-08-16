@@ -14739,9 +14739,12 @@ fn aarch64_function_body_asm_realigns_after_data_like_gnu_as() {
 
 #[test]
 fn aarch64_compiled_objects_mark_their_code_and_data() {
-    // A compiled unit: `.text` opens with `$x`, an embedded jump table is a
-    // `$d` run with `$x` past it, and each non-empty allocatable data
-    // section opens with `$d`. gcc -O2 marks the same places.
+    // A compiled unit: `.text` is code throughout, so it carries `$x` at 0
+    // and nothing else, and each non-empty allocatable data section opens
+    // with `$d` and stays data. A switch jump table is read-only data, so
+    // it lands in `.rodata` and leaves no `$d` run in code; gcc -O2 places
+    // it the same way. A data run embedded in code is marked where it does
+    // occur -- an inline-asm `.byte` run, covered above.
     use crate::c5::Target;
     let mut src = String::from("int g(int x){switch(x){");
     for i in 1..25 {
@@ -14749,22 +14752,24 @@ fn aarch64_compiled_objects_mark_their_code_and_data() {
     }
     src.push_str("default:return 0;}}\nconst int t[4]={1,2,3,4};\nint d[4]={5,6,7,8};\n");
     let got = mapping_symbols(&reloc_tu(&src, Target::LinuxAarch64, true));
-    let text: alloc::vec::Vec<&(String, u64, String)> =
-        got.iter().filter(|(s, ..)| s == ".text").collect();
+    let of = |want: &str| -> alloc::vec::Vec<(u64, String)> {
+        got.iter()
+            .filter(|(s, ..)| s == want)
+            .map(|(_, off, kind)| (*off, kind.clone()))
+            .collect()
+    };
+    // One `$x` at 0 and no second entry: a jump table emitted inline would
+    // show as a `$d` run with `$x` past it.
     assert_eq!(
-        text.len(),
-        3,
-        "expected $x / $d / $x in .text, got {text:?}"
+        of(".text"),
+        alloc::vec![(0, String::from("$x"))],
+        "expected .text to be code throughout, got {got:?}"
     );
-    assert_eq!((text[0].1, text[0].2.as_str()), (0, "$x"));
-    assert_eq!(text[1].2, "$d");
-    assert_eq!(text[2].2, "$x");
-    // The table is the 24 four-byte entries between the two.
-    assert_eq!(text[2].1 - text[1].1, 24 * 4);
     for want in [".data", ".rodata"] {
-        assert!(
-            got.contains(&(String::from(want), 0, String::from("$d"))),
-            "{want} has no $d at 0, got {got:?}"
+        assert_eq!(
+            of(want),
+            alloc::vec![(0, String::from("$d"))],
+            "expected {want} to be data throughout, got {got:?}"
         );
     }
 }

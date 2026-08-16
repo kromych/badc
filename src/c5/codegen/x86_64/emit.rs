@@ -11387,6 +11387,60 @@ mod code_mode_tests {
             "a folded difference relocates: {relocs:?}"
         );
     }
+
+    /// A branch through a `.set` alias takes the location of the name the
+    /// chain ends at and the binding of the name written: a local alias of a
+    /// global resolves in place, a global or weak one keeps its relocation at
+    /// the long form's width. A data field keeps the name written, which is
+    /// what the kernel's `SYM_FUNC_ALIAS` + `EXPORT_SYMBOL` shape reads. Bytes
+    /// from GNU as 2.46.1.
+    #[test]
+    fn file_scope_x86_branch_binds_as_the_alias_name_does() {
+        let (bytes, relocs) = assemble_relocs(
+            ".pushsection .t,\"ax\"\n\
+             .globl gtgt\n\
+             gtgt:\n\
+             ret\n\
+             .set la, gtgt\n\
+             call la\n\
+             jmp la\n\
+             .globl ga\n\
+             .set ga, gtgt\n\
+             call ga\n\
+             .weak wa\n\
+             .set wa, gtgt\n\
+             jmp wa\n\
+             call gtgt\n\
+             .popsection\n\
+             .pushsection .d,\"a\"\n\
+             .quad la\n\
+             .popsection\n",
+        );
+        assert_eq!(
+            bytes[..23],
+            [
+                0xc3, // ret
+                0xe8, 0xfa, 0xff, 0xff, 0xff, // call la    local alias, in place
+                0xeb, 0xf8, // jmp la     local alias, short in place
+                0xe8, 0x00, 0x00, 0x00, 0x00, // call ga    global alias, relocated
+                0xe9, 0x00, 0x00, 0x00, 0x00, // jmp wa     weak alias, long + relocated
+                0xe8, 0x00, 0x00, 0x00, 0x00, // call gtgt
+            ]
+        );
+        let sites: alloc::vec::Vec<(u32, &str, i64)> =
+            relocs.iter().map(|r| (r.0, r.3.as_str(), r.4)).collect();
+        assert_eq!(
+            sites,
+            [
+                (9, "gtgt", -4),
+                (14, "gtgt", -4),
+                (19, "gtgt", -4),
+                (23, "la", 0),
+            ],
+            "an instruction field names the chain end, a data field the name written"
+        );
+    }
+
     /// `.org` reads its target against the final layout, so operator order
     /// does not decide whether the target reduces. GNU as 2.46.1 accepts
     /// every spelling with the same padding.

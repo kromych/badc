@@ -247,9 +247,10 @@ impl Compiler {
                             self.asm_global_names.push(name.clone());
                         }
                     }
-                    engine::AsmSectionItem::Hidden(name) => {
-                        if !self.asm_hidden_names.contains(name) {
-                            self.asm_hidden_names.push(name.clone());
+                    engine::AsmSectionItem::Visibility { name, vis } => {
+                        match self.asm_visibility.iter_mut().find(|(n, _)| n == name) {
+                            Some(e) => e.1 = *vis,
+                            None => self.asm_visibility.push((name.clone(), *vis)),
                         }
                     }
                     engine::AsmSectionItem::SymSet { name, target } => {

@@ -157,7 +157,7 @@ fn synth_program_and_build(
         file_asm: Vec::new(),
         asm_weak_names: Vec::new(),
         asm_global_names: Vec::new(),
-        asm_hidden_names: Vec::new(),
+        asm_visibility: Vec::new(),
         data_align: 8,
         data_ro_len: 0,
         data_relro_len: 0,

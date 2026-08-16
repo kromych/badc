@@ -61,6 +61,29 @@ pub struct FunctionAlias {
     pub weak: bool,
 }
 
+/// ELF symbol visibility, as the `.hidden` / `.internal` / `.protected`
+/// directives name it. The discriminant is the `st_other` visibility field;
+/// `STV_DEFAULT` is the absence of an entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SymVisibility {
+    Internal = 1,
+    Hidden = 2,
+    Protected = 3,
+}
+
+impl SymVisibility {
+    /// The `st_other` visibility value.
+    pub fn stv(self) -> u8 {
+        self as u8
+    }
+
+    /// Whether the visibility keeps the name inside its component. Hidden and
+    /// internal do; protected exports the name but forbids preemption.
+    pub fn is_local_to_component(self) -> bool {
+        matches!(self, SymVisibility::Internal | SymVisibility::Hidden)
+    }
+}
+
 /// A pointer-to-extern-data initializer. The slot at `data_offset` in
 /// [`Program::data`] must hold the runtime address of the data symbol
 /// `symbol_name`, which is defined in another translation unit and
@@ -153,9 +176,10 @@ pub struct Program {
     /// defines nor references still gets an undefined global entry, as
     /// GNU as emits one; `ld -r` carries it into the next link stage.
     pub asm_global_names: Vec<String>,
-    /// `.hidden` symbol names from file-scope asm. The object writer sets
-    /// `STV_HIDDEN` in `st_other` wherever the name surfaces.
-    pub asm_hidden_names: Vec<String>,
+    /// Symbol visibility named by `.hidden` / `.internal` / `.protected` in
+    /// file-scope asm. The object writer sets `st_other` wherever the name
+    /// surfaces. A later directive on the same name wins, as in GNU as.
+    pub asm_visibility: Vec<(String, SymVisibility)>,
     /// Base alignment `data` requires in the image, at least 8;
     /// raised to 16 when a file-scope object carries `_Alignas(16)`
     /// (or the attribute equivalents). The native writers place the
@@ -601,7 +625,7 @@ impl DataOffsets for Program {
             file_asm: _,
             asm_weak_names: _,
             asm_global_names: _,
-            asm_hidden_names: _,
+            asm_visibility: _,
             data_align: _, // an alignment, not an offset
             data_ro_len,
             data_relro_len,
@@ -732,7 +756,7 @@ mod data_offset_tests {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             asm_global_names: Vec::new(),
-            asm_hidden_names: Vec::new(),
+            asm_visibility: Vec::new(),
             data_ro_len: 0,
             data_relro_len: 0,
             data_object_starts: Vec::new(),

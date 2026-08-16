@@ -8793,6 +8793,50 @@ fn asm_hidden_and_reloc_directives_reach_the_object() {
 }
 
 #[test]
+fn asm_visibility_directives_set_st_other() {
+    // `.hidden` / `.internal` / `.protected` each name an `st_other`
+    // visibility; a name no directive covers keeps STV_DEFAULT. The values are
+    // what GNU as 2.46.1 writes for the same directives.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let cases = [
+        ("vh", ".hidden", 2u8),
+        ("vi", ".internal", 1),
+        ("vp", ".protected", 3),
+    ];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let mut src = alloc::string::String::from(
+            "__asm__(\".pushsection .vis,\\\"a\\\"\\n.globl vd\\nvd:\\n\\t.word 0\\n",
+        );
+        for (name, dir, _) in cases {
+            src.push_str(&alloc::format!(
+                ".globl {name}\\n{dir} {name}\\n{name}:\\n\\t.word 0\\n"
+            ));
+        }
+        src.push_str(".popsection\\n\");\nint main(void) { return 0; }\n");
+        let program = Compiler::with_target(src, target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        for (name, dir, stv) in cases {
+            assert_eq!(
+                elf_symbol_st_other(&bytes, name),
+                stv,
+                "{target:?}: `{dir}` visibility"
+            );
+        }
+        assert_eq!(
+            elf_symbol_st_other(&bytes, "vd"),
+            0,
+            "{target:?}: no directive keeps STV_DEFAULT"
+        );
+    }
+}
+
+#[test]
 fn asm_section_org_fills_with_the_named_byte() {
     // `.org new-lc, fill` pads with `fill` rather than zero, and the origin
     // may be a label, a constant or the location counter. The kernel's FRED

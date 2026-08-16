@@ -965,9 +965,13 @@ pub(crate) enum AsmSectionItem {
     /// `.local name`: force local binding. A section label is local by
     /// default, so this only cancels a `.globl` on the same name.
     Local(alloc::string::String),
-    /// `.hidden name`: `STV_HIDDEN` in `st_other`. Visibility is a unit-level
-    /// property of the name, independent of which section defines it.
-    Hidden(alloc::string::String),
+    /// `.hidden` / `.internal` / `.protected name`: the `st_other` visibility.
+    /// Visibility is a unit-level property of the name, independent of which
+    /// section defines it.
+    Visibility {
+        name: alloc::string::String,
+        vis: crate::c5::program::SymVisibility,
+    },
     /// `.type name, @function|@object`: set the named label's ELF symbol
     /// type. The label must be defined in this section.
     Type {
@@ -3535,6 +3539,8 @@ fn is_asm_sym_directive(tok: &str) -> bool {
             | ".weak"
             | ".local"
             | ".hidden"
+            | ".internal"
+            | ".protected"
             | ".type"
             | ".size"
             | ".set"
@@ -3551,6 +3557,8 @@ fn asm_text_has_sym_directive(text: &str) -> bool {
         || text.contains(".weak")
         || text.contains(".local")
         || text.contains(".hidden")
+        || text.contains(".internal")
+        || text.contains(".protected")
         || text.contains(".type")
         || text.contains(".size")
         || text.contains(".set")
@@ -3575,7 +3583,11 @@ fn push_sym_directive_items(
     is_aarch64: bool,
     out: &mut alloc::vec::Vec<AsmSectionItem>,
 ) -> Result<(), alloc::string::String> {
-    if matches!(tok, ".globl" | ".global" | ".weak" | ".local" | ".hidden") && rest.contains(',') {
+    if matches!(
+        tok,
+        ".globl" | ".global" | ".weak" | ".local" | ".hidden" | ".internal" | ".protected"
+    ) && rest.contains(',')
+    {
         for name in rest.split(',') {
             out.push(parse_section_item(tok, name.trim(), is_aarch64)?);
         }
@@ -4488,12 +4500,21 @@ fn parse_section_item(
             }
             Ok(AsmSectionItem::Local(alloc::string::String::from(name)))
         }
-        ".hidden" => {
+        ".hidden" | ".internal" | ".protected" => {
             let name = rest.trim();
             if !is_asm_symbol_name(name) {
                 return Err(alloc::format!("inline asm: bad `{tok}` operand `{rest}`"));
             }
-            Ok(AsmSectionItem::Hidden(alloc::string::String::from(name)))
+            use crate::c5::program::SymVisibility;
+            let vis = match tok {
+                ".internal" => SymVisibility::Internal,
+                ".protected" => SymVisibility::Protected,
+                _ => SymVisibility::Hidden,
+            };
+            Ok(AsmSectionItem::Visibility {
+                name: alloc::string::String::from(name),
+                vis,
+            })
         }
         ".reloc" => parse_reloc_directive(rest),
         // A `.set` / `.equ` names a symbol (`.set alias, target`, a unit-level
@@ -6275,13 +6296,17 @@ fn short_form_fits(
         // name that survives as a symbol rules the narrow form out.
         AsmSectionTarget::Symbol(_) if !short.reloc.pcrel => return false,
         AsmSectionTarget::Symbol(name) => {
-            // The reference takes the location and the binding of the name
-            // its `.set` chain ends at. A `.set` expression name is an
-            // absolute value, not a location in this section, and a weak name
+            // The reference takes the location of the name its `.set` chain
+            // ends at and the binding of the name written, as the
+            // materializer does. A `.set` expression name is an absolute
+            // value, not a location in this section, and a rebindable name
             // may bind to another definition at link time, so either keeps a
             // relocation at the long form's width.
+            if rebindable.contains(name.as_str()) {
+                return false;
+            }
             let name = m.alias_target(name.as_str());
-            if m.symbol(name).is_some() || rebindable.contains(name) {
+            if m.symbol(name).is_some() {
                 return false;
             }
             let (Some(sec), Some(off)) = (m.section(name), m.offset(name)) else {
@@ -6538,7 +6563,7 @@ fn measure_round_inner(
                 | AsmSectionItem::Size { .. }
                 | AsmSectionItem::Weak(_)
                 | AsmSectionItem::Local(_)
-                | AsmSectionItem::Hidden(_)
+                | AsmSectionItem::Visibility { .. }
                 | AsmSectionItem::CondDiag(_)
                 | AsmSectionItem::Cfi(_)
                 | AsmSectionItem::Reloc { .. } => {}
@@ -7196,7 +7221,7 @@ pub(crate) fn materialize_asm_sections(
                 AsmSectionItem::Weak(name) => weak_names.push(name.clone()),
                 // Visibility is carried by name to the object writer, which
                 // sets `st_other` wherever the symbol is emitted.
-                AsmSectionItem::Hidden(_) => {}
+                AsmSectionItem::Visibility { .. } => {}
                 // The rule takes effect at the location counter the directive
                 // was written at, which is this section's current length.
                 AsmSectionItem::Cfi(op) => sink_cfi.push(super::cfi::CfiRecord {
@@ -7694,24 +7719,24 @@ pub(crate) fn materialize_asm_sections(
                             }
                         }
                         let (leaf, local) = match &r.target {
-                            // An instruction field resolves and binds as the
-                            // name its `.set` chain ends at does; a data
+                            // An instruction field resolves at the location
+                            // its `.set` chain ends at, and binds as the name
+                            // written does: an assignment gives the alias its
+                            // own binding, and that is what decides whether
+                            // the link may rebind the reference. A data
                             // directive's field keeps the name written.
-                            AsmSectionTarget::Symbol(n) => {
-                                let n = measured.alias_target(n.as_str());
-                                (
-                                    section_expr_leaf(
-                                        n,
-                                        &key,
-                                        0,
-                                        &measured,
-                                        sink_labels,
-                                        &num_unique,
-                                        label_off,
-                                    ),
-                                    !rebindable.contains(n),
-                                )
-                            }
+                            AsmSectionTarget::Symbol(n) => (
+                                section_expr_leaf(
+                                    measured.alias_target(n.as_str()),
+                                    &key,
+                                    0,
+                                    &measured,
+                                    sink_labels,
+                                    &num_unique,
+                                    label_off,
+                                ),
+                                !rebindable.contains(n.as_str()),
+                            ),
                             _ => (None, true),
                         };
                         match leaf {

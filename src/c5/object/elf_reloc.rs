@@ -32,7 +32,7 @@ use alloc::vec::Vec;
 
 use super::super::codegen::map_syms::{self, MapClass, MapMark};
 use super::super::error::C5Error;
-use super::super::program::{ExportedFunction, Program};
+use super::super::program::{ExportedFunction, Program, SymVisibility};
 use super::Machine;
 use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget};
 use super::elf_class::{
@@ -218,9 +218,10 @@ const SHF_INFO_LINK: u64 = 0x40;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 const STB_WEAK: u8 = 2;
-// st_other visibility (the low two bits of the byte).
+// st_other visibility (the low two bits of the byte). The non-default values
+// come from `SymVisibility`, which the asm directives and the front-end
+// attribute both resolve to.
 const STV_DEFAULT: u8 = 0;
-const STV_HIDDEN: u8 = 2;
 const STT_NOTYPE: u8 = 0;
 const STT_OBJECT: u8 = 1;
 const STT_FUNC: u8 = 2;
@@ -1544,11 +1545,12 @@ pub(super) fn write_relocatable(
             STB_GLOBAL
         }
     };
-    // `__attribute__((visibility("hidden")))` symbols and asm `.hidden`
-    // names: not preemptible, so the symtab entry carries STV_HIDDEN and, on
-    // x86_64, address-of sites resolve PC-relative directly instead of
-    // through the GOT (below).
-    let hidden_names: alloc::collections::BTreeSet<&str> = {
+    // `__attribute__((visibility(...)))` symbols and the asm visibility
+    // directives. A name kept inside its component is not preemptible, so on
+    // x86_64 address-of sites resolve PC-relative directly instead of through
+    // the GOT (below). An asm directive on a name the front end also marked
+    // wins: it names the visibility explicitly.
+    let visibility: alloc::collections::BTreeMap<&str, SymVisibility> = {
         use crate::c5::token::Token;
         program
             .symbols
@@ -1558,17 +1560,11 @@ pub(super) fn write_relocatable(
                     && (s.is_fun_entity() || s.class == Token::Glo as i64)
                     && !s.name.is_empty()
             })
-            .map(|s| s.link_name())
-            .chain(program.asm_hidden_names.iter().map(|s| s.as_str()))
+            .map(|s| (s.link_name(), SymVisibility::Hidden))
+            .chain(program.asm_visibility.iter().map(|(n, v)| (n.as_str(), *v)))
             .collect()
     };
-    let vis_for = |name: &str| -> u8 {
-        if hidden_names.contains(name) {
-            STV_HIDDEN
-        } else {
-            STV_DEFAULT
-        }
-    };
+    let vis_for = |name: &str| -> u8 { visibility.get(name).map_or(STV_DEFAULT, |v| v.stv()) };
     // Addressing form of a cross-TU address materialization. A hidden
     // name is not preemptible, so the direct page-relative pair is
     // correct and keeps the GOT empty. On x86_64 every other name rides
@@ -1582,7 +1578,10 @@ pub(super) fn write_relocatable(
     // exactly that case.
     let kernel_abs = machine == Machine::X86_64 && build.code_model == CodeModel::Kernel;
     let extern_addr_form = |name: &str| -> ExternAddrForm {
-        if hidden_names.contains(name) {
+        if visibility
+            .get(name)
+            .is_some_and(|v| v.is_local_to_component())
+        {
             return ExternAddrForm::Direct;
         }
         match machine {
@@ -1877,9 +1876,9 @@ pub(super) fn write_relocatable(
             }
         }
     }
-    // A `.hidden` name that surfaces nowhere else still gets an undefined
-    // global entry carrying the visibility, as GNU as emits one.
-    for n in program.asm_hidden_names.iter().map(|s| s.as_str()) {
+    // A visibility directive naming a symbol that surfaces nowhere else still
+    // gets an undefined global entry carrying it, as GNU as emits one.
+    for n in program.asm_visibility.iter().map(|(n, _)| n.as_str()) {
         if !defined_fn_names.contains(n)
             && !program.function_aliases.iter().any(|a| a.name == n)
             && !defined_data_by_name.contains_key(n)
@@ -5299,7 +5298,7 @@ mod tests {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             asm_global_names: Vec::new(),
-            asm_hidden_names: Vec::new(),
+            asm_visibility: Vec::new(),
             data_ro_len: 0,
             data_relro_len: 0,
             data_object_starts: Vec::new(),

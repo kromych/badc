@@ -224,17 +224,27 @@ def parse_box(spec: str) -> Box:
     return Box(name=name, host=host, remote_path=path, kind=kind)
 
 
-def stream(prefix: str, cmd: list[str]) -> int:
+def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
     """Run `cmd`, prefixing every output line with `prefix` so
-    parallel lane outputs stay attributable."""
+    parallel lane outputs stay attributable. `stdin_text` is written and
+    the pipe closed before the output is read: it carries the step
+    script, which holds the token, so that neither this process's
+    command line nor the remote shell's exposes it to `ps`. The script
+    is a few KB against a 64K pipe buffer, so the write completes
+    without the reader running."""
     proc = subprocess.Popen(
         cmd,
+        stdin=subprocess.PIPE if stdin_text is not None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         errors="replace",
         bufsize=1,
     )
+    if stdin_text is not None:
+        assert proc.stdin is not None
+        proc.stdin.write(stdin_text)
+        proc.stdin.close()
     assert proc.stdout is not None
     for line in proc.stdout:
         sys.stdout.write(f"[{prefix}] {line}")
@@ -363,7 +373,7 @@ def remote_run_linux(
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
         f"{STEP_FN}; " + " && ".join(steps)
     )
-    return stream(box.short, ["ssh", box.host, inner])
+    return stream(box.short, ["ssh", box.host, "bash -s"], stdin_text=inner)
 
 
 def local_run(
@@ -376,7 +386,7 @@ def local_run(
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
         f"{STEP_FN}; " + " && ".join(posix_steps(box, kernel, demos, snapshots, jobs))
     )
-    return stream(box.short, ["bash", "-c", inner])
+    return stream(box.short, ["bash", "-s"], stdin_text=inner)
 
 
 def sync_windows(box: Box, github_token: str) -> int:

@@ -1000,16 +1000,10 @@ fn is_inline_candidate(
                     return false;
                 }
             }
-            // A segment-relative access reaches here. Splicing one is
-            // operand-correct (`remap_inst_operands` routes both variants)
-            // and the accesses a defconfig build emits are correct, but the
-            // arm also gates every body rejected only for a nested access.
-            // Those carry their own frame slots into each caller, and an
-            // `always_inline` request is exempt from both frame budgets, so
-            // a defconfig caller reaches a 4 KiB frame and the kernel
-            // overflows its 16 KiB task stack during boot. TODO: admit
-            // these once a mandatory splice is charged for the frame it
-            // relocates.
+            // A segment base is per-CPU state, not frame state, so a spliced
+            // access has nothing frame-bound to relocate; `remap_inst_operands`
+            // routes both variants' operands.
+            Inst::SegLoad { .. } | Inst::SegStore { .. } => {}
             _ => {
                 say(format_args!("disallowed inst {:?}", inst));
                 return false;
@@ -4159,11 +4153,11 @@ mod tests {
         assert!(needs_reloc_splice(&input_only));
     }
 
-    /// The operand walk routes both segment-access variants: an unrouted
-    /// address operand would keep the callee's `ValueId` and land the
-    /// access at an unrelated offset from the segment base. The candidate
-    /// filter still keeps such a body out of line, so the routing is
-    /// checked directly.
+    /// Both segment-access variants are inline candidates, and the operand
+    /// walk routes them: an unrouted address operand would keep the callee's
+    /// `ValueId` and land the access at an unrelated offset from the segment
+    /// base. A segment base is per-CPU state rather than frame state, so the
+    /// splice has nothing frame-bound to relocate.
     #[test]
     fn segment_access_operands_are_routed() {
         use crate::c5::ir::AsmSeg;
@@ -4203,8 +4197,10 @@ mod tests {
             ..Default::default()
         };
         let mut reason = alloc::string::String::new();
-        assert!(!is_inline_candidate(&read, 32, abi, Some(&mut reason)));
-        assert!(reason.starts_with("disallowed inst SegLoad"), "{reason}");
+        assert!(
+            is_inline_candidate(&read, 32, abi, Some(&mut reason)),
+            "{reason}"
+        );
         // The same with a store: v3 = v0 + v1, %fs:v3 = v2.
         let write = FunctionSsa {
             n_params: 3,
@@ -4245,8 +4241,10 @@ mod tests {
             ..Default::default()
         };
         reason.clear();
-        assert!(!is_inline_candidate(&write, 32, abi, Some(&mut reason)));
-        assert!(reason.starts_with("disallowed inst SegStore"), "{reason}");
+        assert!(
+            is_inline_candidate(&write, 32, abi, Some(&mut reason)),
+            "{reason}"
+        );
         // Operand routing, the half an allow-list entry cannot supply.
         let remap = alloc::vec![7, 8, 9, 10, 11];
         let mut load = read.insts[3].clone();

@@ -292,7 +292,7 @@ artifacts disagreed. On the pinned `defconfig` the unsupported set is
 `-fstack-protector-strong` with its
 `-mstack-protector-guard*` operands, `-ftrivial-auto-var-init=zero`,
 `-fzero-init-padding-bits=all`, `-fstrict-flex-arrays=3`,
-`-fmin-function-alignment=`, `-fpatchable-function-entry=` (x86_64),
+`-fpatchable-function-entry=` (x86_64),
 `-fasynchronous-unwind-tables`, `-ffreestanding` and `-fno-builtin*`:
 those properties are not in the built image whatever the configuration
 says. `buildcc.py --self-test` checks the classification and takes no

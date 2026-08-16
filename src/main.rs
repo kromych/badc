@@ -218,6 +218,14 @@ Compile knobs:
                            so the unit's remaining `const` objects keep
                            the image's read-only prefix. Implied by
                            -mcmodel=kernel.
+  -fmin-function-alignment=N
+                           Start every function at a multiple of N
+                           bytes (a power of two), filling the gap with
+                           NOPs and raising the code section's own
+                           alignment to match. The default 1 packs each
+                           function against its predecessor. A symbol's
+                           size covers its instructions only; the fill
+                           belongs to no function.
   -fshort-wchar            Give wchar_t an unsigned 16-bit type instead
                            of the target's default, narrowing the
                            elements of L-prefixed string and character
@@ -608,6 +616,7 @@ fn run() {
     // `const` placements in a `-c` object; see `NativeOptions::pic_link`.
     let mut fno_pic = false;
     let mut jump_tables = true;
+    let mut min_function_alignment: u32 = 1;
     let mut code_model = badc::CodeModel::Small;
     let mut code_model_tiny = false;
     let mut hardening = badc::Hardening::NONE;
@@ -1101,6 +1110,23 @@ fn run() {
             // configurations must not take.
             "-fjump-tables" => jump_tables = true,
             "-fno-jump-tables" => jump_tables = false,
+            // gcc `-fmin-function-alignment=N`: every function entry lands
+            // on a multiple of N, which is how a kernel states
+            // CONFIG_FUNCTION_ALIGNMENT. Unlike `-falign-functions` gcc
+            // never skips a large gap under it, and badc never does either.
+            s if s.starts_with("-fmin-function-alignment=") => {
+                let spec = &s["-fmin-function-alignment=".len()..];
+                match spec.parse::<u32>() {
+                    Ok(n) if n.is_power_of_two() => min_function_alignment = n,
+                    _ => {
+                        eprint_diagnostic(format!(
+                            "badc: error: `-fmin-function-alignment=` takes a \
+                             power of two, got `{spec}`"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
             // Code model for `-c` objects; see `CodeModel`. `small` is
             // the default; `kernel` switches external-address
             // materialization to the sign-extended 32-bit absolute form
@@ -2209,6 +2235,7 @@ fn run() {
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
+        reloc_opts.min_function_alignment = min_function_alignment;
         reloc_opts.pic = fpic;
         // These objects are linked into an image below, and every image
         // this toolchain writes takes its data relocations at load time
@@ -2855,6 +2882,7 @@ fn run() {
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
+        reloc_opts.min_function_alignment = min_function_alignment;
         reloc_opts.pic = fpic;
         reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
         reloc_opts.code_model = code_model;
@@ -2989,6 +3017,7 @@ fn run() {
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
         reloc_opts.jump_tables = jump_tables;
+        reloc_opts.min_function_alignment = min_function_alignment;
         reloc_opts.pic = fpic;
         reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
         reloc_opts.code_model = code_model;

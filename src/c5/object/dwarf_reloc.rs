@@ -1155,11 +1155,7 @@ fn build_debug_info(
             Some(off) if off != usize::MAX => off as u64,
             _ => continue,
         };
-        let hi = build
-            .func_ent_pcs
-            .get(i + 1)
-            .and_then(|&next_ent| build.pc_to_native.get(next_ent).copied())
-            .unwrap_or(build.text.len()) as u64;
+        let hi = build.func_code_end(i) as u64;
         let size = hi.saturating_sub(lo);
         if size == 0 {
             continue;

@@ -1778,6 +1778,7 @@ pub(crate) fn lower(
     super::ssa::emit_common::reset_asm_instance();
     let mut code: Vec<u8> = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
+    let mut func_ends: Vec<usize> = Vec::new();
     let mut func_names: Vec<alloc::string::String> = Vec::new();
     let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
@@ -2202,8 +2203,13 @@ pub(crate) fn lower(
         .filter(|s| s.is_fun_entity() && !s.name.is_empty())
         .map(|s| (s.val as usize, s.link_name()))
         .collect();
+    let fn_align = native.min_function_alignment.max(1) as usize;
+    text_align = text_align.max(fn_align);
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
+        // `-fmin-function-alignment=N`: the entry starts at a multiple of
+        // N, the gap filled with one-byte NOPs.
+        super::pad_to_alignment(&mut code, fn_align, &[0x90]);
         pc_to_native[ent_pc] = code.len();
         func_ent_pcs.push(ent_pc);
         func_names.push(func_ssa.name.clone());
@@ -2308,6 +2314,7 @@ pub(crate) fn lower(
                 ),
             )));
         }
+        func_ends.push(code.len());
     }
     #[cfg(feature = "std")]
     if super::ssa::emit_common::time_passes_enabled() {
@@ -2538,6 +2545,7 @@ pub(crate) fn lower(
         func_fixups,
         pc_to_native,
         func_ent_pcs,
+        func_ends,
         func_names,
         func_prologue_native,
         promoted_local_slots,

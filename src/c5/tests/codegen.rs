@@ -6446,6 +6446,105 @@ fn auto_include_retry_emits_what_the_force_include_would() {
     );
 }
 
+/// `.text`'s `sh_addralign` and every `STT_FUNC` symbol's
+/// `(name, st_value, st_size)` from a relocatable ELF64 object.
+#[cfg(feature = "full")]
+fn elf_text_align_and_funcs(bytes: &[u8]) -> (u64, alloc::vec::Vec<(String, u64, u64)>) {
+    let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64le = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap()) as usize;
+    let name_at = |base: usize, off: usize| {
+        let s = base + off;
+        let n = bytes[s..].iter().position(|&c| c == 0).unwrap();
+        String::from_utf8_lossy(&bytes[s..s + n]).into_owned()
+    };
+    let (shoff, shentsize, shnum, shstrndx) = (u64le(0x28), u16le(0x3A), u16le(0x3C), u16le(0x3E));
+    let sh = |i: usize| shoff + i * shentsize;
+    let shstr = u64le(sh(shstrndx) + 0x18);
+    let mut text_align = 0u64;
+    let mut funcs = alloc::vec::Vec::new();
+    for i in 0..shnum {
+        match name_at(shstr, u32le(sh(i))).as_str() {
+            ".text" => text_align = u64le(sh(i) + 0x30) as u64,
+            // SHT_SYMTAB: sh_link names the string table.
+            _ if u32le(sh(i) + 4) == 2 => {
+                let (off, size) = (u64le(sh(i) + 0x18), u64le(sh(i) + 0x20));
+                let str_base = u64le(sh(u32le(sh(i) + 0x28)) + 0x18);
+                for e in (off..off + size).step_by(24) {
+                    // st_info low nibble 2 is STT_FUNC.
+                    if bytes[e + 4] & 0xf == 2 {
+                        funcs.push((
+                            name_at(str_base, u32le(e)),
+                            u64le(e + 8) as u64,
+                            u64le(e + 16) as u64,
+                        ));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    (text_align, funcs)
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
+    // `-fmin-function-alignment=N` starts every function at a multiple of
+    // N and raises `.text`'s own alignment to match, so the placement
+    // holds once the section is placed -- what CONFIG_FUNCTION_ALIGNMENT
+    // states. The fill belongs to no function: each `st_size` stays the
+    // size the packed object gave it, as gcc's does.
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    const SRC: &str = "int one(int x) { return x + 1; }\n\
+                       int two(int x) { return x + 2; }\n\
+                       int three(int x) { return x + 3; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let prog = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"));
+        let base = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default()
+        };
+        let packed = emit_native_with_options(&prog, target, base).expect("emit packed");
+        let aligned = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                min_function_alignment: 32,
+                ..base
+            },
+        )
+        .expect("emit aligned");
+
+        let (_, packed_funcs) = elf_text_align_and_funcs(&packed);
+        let (align, aligned_funcs) = elf_text_align_and_funcs(&aligned);
+        assert_eq!(align, 32, "{target:?}: .text must claim the alignment");
+        assert!(
+            packed_funcs.iter().any(|&(_, v, _)| v % 32 != 0),
+            "{target:?}: the packed object must not already be aligned: {packed_funcs:?}"
+        );
+        for (name, value, size) in &aligned_funcs {
+            assert_eq!(value % 32, 0, "{target:?}: `{name}` at {value:#x}");
+            let (_, _, packed_size) = packed_funcs
+                .iter()
+                .find(|(n, _, _)| n == name)
+                .unwrap_or_else(|| panic!("{target:?}: `{name}` missing from the packed object"));
+            assert_eq!(
+                size, packed_size,
+                "{target:?}: `{name}` size grew by the fill"
+            );
+        }
+    }
+}
+
 #[test]
 fn nostdinc_declines_the_auto_include_retry() {
     // A unit built with `-nostdinc` asked for no library headers, so the

@@ -2175,12 +2175,7 @@ pub(super) fn write_relocatable(
                 ),
             )));
         }
-        let hi = build
-            .func_ent_pcs
-            .get(i + 1)
-            .and_then(|&next_ent| build.pc_to_native.get(next_ent).copied())
-            .unwrap_or(build.text.len());
-        Ok((lo, hi))
+        Ok((lo, build.func_code_end(i)))
     };
     // Function name -> `.symtab` index, for the `.init_array` /
     // `.fini_array` relocations to reference each constructor /
@@ -5413,6 +5408,7 @@ mod tests {
             func_fixups: Vec::new(),
             pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
+            func_ends: Vec::new(),
             func_names: Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             promoted_local_slots: alloc::collections::BTreeMap::new(),

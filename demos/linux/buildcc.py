@@ -170,6 +170,11 @@ FORWARD_PREFIX = (
     # the unit instead of assembling under different rules -- which is what
     # `-Wa,-mrelax-relocations=no` selects for the boot units that pass it.
     "-Wa,",
+    # Function entry alignment. Withheld, functions pack against their
+    # predecessors and CONFIG_FUNCTION_ALIGNMENT does not hold: measured, a
+    # three-function object placed the third at offset 0x61. badc validates
+    # the operand.
+    "-fmin-function-alignment=",
     *HARDENING_PREFIX,
 )
 
@@ -201,9 +206,6 @@ UNSUPPORTED_PREFIX = (
     # badc emits no patch site and no __fentry__ call, so ftrace has nothing
     # to patch in a unit built here.
     "-fpatchable-function-entry",
-    # badc packs functions back to back (.text alignment 1), so the
-    # CONFIG_FUNCTION_ALIGNMENT the kernel states does not hold.
-    "-fmin-function-alignment=",
     # Which trailing arrays __builtin_object_size treats as bounded, hence
     # what the FORTIFY_SOURCE checks are computed against.
     "-fstrict-flex-arrays=",
@@ -262,8 +264,10 @@ IGNORE_EXACT = {
 
 IGNORE_PREFIX = (
     "-fdiagnostics-", "-femit-struct-debug-detailed=",
-    # Alignment padding the kernel asks to be dropped, which badc emits none
-    # of. The alignment it asks to be added is unsupported, above.
+    # Loop / jump / label alignment padding the kernel asks to be dropped,
+    # which badc emits none of. Function alignment it asks to be added
+    # arrives as `-fmin-function-alignment=`, forwarded above; the pinned
+    # defconfig passes no `-falign-functions`.
     "-falign-",
     # Instruction selection. badc's backends emit the base architecture, so
     # the baseline these name is what a unit already gets.
@@ -564,8 +568,10 @@ def _self_test() -> int:
     assert rewrite(["-fno-such-flag"]).unknown == ["-fno-such-flag"]
     assert rewrite(["-Wp,-fno-such-flag"]).unknown == ["-Wp,-fno-such-flag"]
     assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]
+    assert rewrite(["-fmin-function-alignment=16"]).argv == \
+        ["-fmin-function-alignment=16"]
     for flag in ("-fstack-protector-strong",
-                 "-ftrivial-auto-var-init=zero", "-fmin-function-alignment=16",
+                 "-ftrivial-auto-var-init=zero",
                  "-fpatchable-function-entry=16,16", "-fno-builtin-wcslen",
                  "-mstack-protector-guard=sysreg", "-ffreestanding",
                  "-fstrict-flex-arrays=3", "-fasynchronous-unwind-tables"):

@@ -1672,6 +1672,14 @@ pub(crate) struct Build {
     /// lowering (= emission) order. The DWARF builder iterates
     /// this to produce one `Subprog` per function.
     pub func_ent_pcs: Vec<usize>,
+    /// Byte offset just past each function's last instruction, parallel to
+    /// [`Self::func_ent_pcs`]. The next entry's start is not the same
+    /// number under [`NativeOptions::min_function_alignment`], which puts
+    /// fill between the two; a symbol's size and a DWARF subprogram's
+    /// high PC take this instead. Empty for producers that record no ends
+    /// (the linker's synthesized build, test fixtures), where the next
+    /// function's start stands in as before.
+    pub func_ends: Vec<usize>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch
     /// emit loop. Empty entries surface for archive-reloaded
@@ -1966,6 +1974,22 @@ pub(crate) struct Build {
     /// rest of the stream is instructions, so the AArch64 mapping symbols
     /// follow from this.
     pub text_data_ranges: Vec<(usize, usize)>,
+}
+
+impl Build {
+    /// Byte offset just past function `i`'s last instruction. Read from
+    /// [`Self::func_ends`] when the producer recorded one; otherwise the
+    /// next function's entry offset stands in, which is the same number
+    /// when nothing pads between them.
+    pub(crate) fn func_code_end(&self, i: usize) -> usize {
+        if let Some(&end) = self.func_ends.get(i) {
+            return end;
+        }
+        self.func_ent_pcs
+            .get(i + 1)
+            .and_then(|&next| self.pc_to_native.get(next).copied())
+            .unwrap_or(self.text.len())
+    }
 }
 
 /// A named label an inline-asm template defines in the emitted code stream
@@ -2708,6 +2732,27 @@ pub struct NativeOptions {
     /// the relocated field, and the `R_386_*` type numbers. Final
     /// images are unaffected.
     pub elf_class: ElfClass,
+    /// Least alignment every function's entry gets in `.text`
+    /// (`-fmin-function-alignment=N` / `-falign-functions=N`). 1 is the
+    /// default and pads nothing, which is what a function packed against
+    /// its predecessor gets. A larger value fills the gap with the
+    /// target's NOP encoding and raises [`Build::text_align`] to match,
+    /// so the alignment holds absolutely once the section is placed --
+    /// what `CONFIG_FUNCTION_ALIGNMENT` states. A symbol's `st_size`
+    /// covers its code only; the fill belongs to no function.
+    pub min_function_alignment: u32,
+}
+
+/// Fill `code` with `nop` up to a multiple of `align`, for the gap ahead
+/// of a function entry under [`NativeOptions::min_function_alignment`].
+/// `align` is a power of two and `nop.len()` divides it, so the fill is
+/// whole instructions: the gap is unreachable (the preceding function
+/// returns) but decodes, which unwind-metadata generators reading `.text`
+/// as an instruction stream require.
+pub(crate) fn pad_to_alignment(code: &mut Vec<u8>, align: usize, nop: &[u8]) {
+    while !code.len().is_multiple_of(align) {
+        code.extend_from_slice(nop);
+    }
 }
 
 /// x86-64 psABI code model (`-mcmodel=`). Chooses how a relocatable
@@ -2841,6 +2886,7 @@ impl NativeOptions {
             code_model: CodeModel::Small,
             elf_class: ElfClass::Elf64,
             hardening: Hardening::NONE,
+            min_function_alignment: 1,
         }
     }
 

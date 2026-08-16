@@ -512,6 +512,10 @@ fn synth_program_and_build(
         text_abs_relocs,
         func_fixups,
         pc_to_native,
+        // Merged input objects: each function's extent is the span to the
+        // next entry, since the padding an input carries is already in its
+        // `.text` bytes.
+        func_ends: Vec::new(),
         func_ent_pcs,
         func_names,
         func_prologue_native,

@@ -3333,19 +3333,20 @@ fn emit_inline_asm_aarch64(
             return false;
         }
     };
-    let (code_text, section_blocks) = match &extracted {
-        Some(ex) => (ex.code.as_str(), ex.blocks.as_slice()),
-        None => (text, &[][..]),
+    // Owned parts: the blocks are encoded in place below, once the operand
+    // converter exists, while the code text stays borrowable.
+    let (code_owned, mut section_blocks, sym_items) = match extracted {
+        Some(ex) => (Some(ex.code), ex.blocks, ex.sym_items),
+        None => (None, Vec::new(), Vec::new()),
     };
-    if let Err(m) = super::ssa::emit_common::reject_unit_symbol_items(section_blocks) {
+    let code_text: &str = code_owned.as_deref().unwrap_or(text);
+    if let Err(m) = super::ssa::emit_common::reject_unit_symbol_items(&section_blocks) {
         bail_msg(&m);
         return false;
     }
     // The template's symbol directives declare names of the unit; the object
     // writer applies them, where every definition is known.
-    if let Some(ex) = &extracted
-        && let Err(m) = asm_sections.push_sym_decls(&ex.sym_items)
-    {
+    if let Err(m) = asm_sections.push_sym_decls(&sym_items) {
         bail_msg(&m);
         return false;
     }
@@ -3726,6 +3727,15 @@ fn emit_inline_asm_aarch64(
             }
         })
     };
+    // Assemble the instructions of a pushed section to bytes before layout.
+    // The converter above resolves a reference to the enclosing template's
+    // operands, which the file-scope encoder has no notion of.
+    if !section_blocks.is_empty()
+        && let Err(m) = encode_a64_asm_section_code(&mut section_blocks, &conv)
+    {
+        bail_msg(&m);
+        return false;
+    }
     // Local labels: definitions record the code offset they stand at; branches
     // to them emit a placeholder word and are patched once the block's layout
     // is final (a `Nb` reference binds to the most recent definition of N at
@@ -4259,7 +4269,7 @@ fn emit_inline_asm_aarch64(
             Some(bid)
         };
         if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
-            section_blocks,
+            &section_blocks,
             &|idx| const_of(idx),
             &label_off,
             &operand_sym,
@@ -10153,15 +10163,12 @@ fn int_reg(p: Place) -> Option<Reg> {
 
 /// Encode instruction lines in an executable file-scope inline-asm section
 /// (`.pushsection .text,"ax"`) to machine bytes. A file-scope block has no
-/// operands, so every instruction must be register-concrete; a branch to a
-/// symbol needs a relocation the section model does not carry here and is
-/// rejected rather than mis-encoded.
+/// operands, so every instruction must be register-concrete.
 pub(crate) fn encode_a64_file_asm_section_code(
     blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
 ) -> Result<(), alloc::string::String> {
     use super::asm::AsmOpndA64;
-    use super::ssa::emit_common::AsmSectionItem;
-    use super::table::{self, Opnd};
+    use super::table::Opnd;
     let conv = |o: &AsmOpndA64| -> Result<Opnd, alloc::string::String> {
         Ok(match *o {
             AsmOpndA64::Imm(v) => Opnd::Imm(v),
@@ -10223,6 +10230,23 @@ pub(crate) fn encode_a64_file_asm_section_code(
             }
         })
     };
+    encode_a64_asm_section_code(blocks, &conv)
+}
+
+/// Encode instruction lines in an executable inline-asm section
+/// (`.pushsection .text,"ax"`) to machine bytes, replacing each `Code` item
+/// with `CodeBytes`. `conv` resolves an operand to its table form: a
+/// function-body block passes the enclosing template's converter, so a
+/// pushed section may reference its operands; a file-scope block has none and
+/// passes a register-concrete one. Everything else -- the literal pools, the
+/// layout the operand expressions fold against, the symbol relocations -- is
+/// the same in both positions.
+pub(crate) fn encode_a64_asm_section_code(
+    blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
+    conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
+) -> Result<(), alloc::string::String> {
+    use super::ssa::emit_common::AsmSectionItem;
+    use super::table::{self, Opnd};
     assign_a64_literal_pools(blocks)?;
     // An operand expression over labels is folded before its instruction is
     // encoded: on A64 the value selects the form -- a scaled or unscaled
@@ -10235,12 +10259,12 @@ pub(crate) fn encode_a64_file_asm_section_code(
                 return Ok(());
             };
             let mut insns = super::asm::parse_template(text.as_bytes())
-                .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+                .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
             if let Some(measured) = &measured {
                 let mut here = site.and_then(|s| measured.place(s));
                 for insn in &mut insns {
                     fold_a64_layout_operands(insn, key, here, measured)
-                        .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+                        .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
                     here = here.map(|h| h + a64_insn_placeholder_len(insn) as i64);
                 }
             }
@@ -10253,11 +10277,11 @@ pub(crate) fn encode_a64_file_asm_section_code(
                 }
                 if insn.label_def.is_some() {
                     return Err(alloc::format!(
-                        "inline asm: `{text}` in a file-scope section needs a relocation"
+                        "inline asm: `{text}` in a section needs a relocation"
                     ));
                 }
-                if let Some((word, kind, expr)) = encode_a64_sym_insn(insn, &conv)
-                    .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?
+                if let Some((word, kind, expr)) = encode_a64_sym_insn(insn, conv)
+                    .map_err(|m| alloc::format!("{m} (section `{text}`)"))?
                 {
                     // An empty expression marks a `.`-relative form resolved
                     // in place: the word is final, no relocation.
@@ -10278,12 +10302,10 @@ pub(crate) fn encode_a64_file_asm_section_code(
                 }
                 let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
                 for o in &insn.operands {
-                    ops.push(
-                        conv(o).map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?,
-                    );
+                    ops.push(conv(o).map_err(|m| alloc::format!("{m} (section `{text}`)"))?);
                 }
                 let word = table::encode(&insn.mnemonic, &ops)
-                    .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+                    .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
                 bytes.extend_from_slice(&word.to_le_bytes());
             }
             *item = AsmSectionItem::CodeBytes {
@@ -10355,7 +10377,7 @@ fn a64_section_operand_layout(
             return Ok(());
         };
         let insns = super::asm::parse_template(text.as_bytes())
-            .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+            .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
         needs |= insns
             .iter()
             .flat_map(|i| &i.operands)
@@ -10643,7 +10665,7 @@ fn encode_a64_sym_insn(
     }
 }
 
-/// Assign the literal pools of a file-scope asm statement. Each
+/// Assign the literal pools of an asm statement's sections. Each
 /// `ldr Rt, =value` takes an entry of its section's pending pool, sharing one
 /// with an earlier request of the same width and value, and becomes a literal
 /// load of the entry's synthetic label. `.ltorg` and the end of the section
@@ -10681,7 +10703,7 @@ fn assign_a64_literal_pools(
                 AsmSectionItem::Code(text) if text.contains('=') => {
                     let Some(eq) = text.find('=') else { continue };
                     let insns = super::asm::parse_template(text.as_bytes())
-                        .map_err(|m| alloc::format!("{m} (file-scope section `{text}`)"))?;
+                        .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
                     let pool_ops = insns
                         .iter()
                         .flat_map(|i| &i.operands)

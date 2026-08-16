@@ -1528,3 +1528,94 @@ fn a_duplicate_named_label_in_a_code_stream_is_rejected() {
         }
     }
 }
+
+/// The bytes and relocations of one section of a compiled object.
+#[cfg(feature = "native-emit")]
+fn asm_section(
+    src: &str,
+    name: &str,
+) -> (
+    alloc::vec::Vec<u8>,
+    alloc::vec::Vec<(u64, u32, alloc::string::String)>,
+) {
+    let o = asm_obj(src, crate::Target::LinuxAarch64);
+    let s = o
+        .sections
+        .iter()
+        .find(|s| s.name == name)
+        .unwrap_or_else(|| panic!("section `{name}` emitted"));
+    let relocs = s
+        .relocs
+        .iter()
+        .map(|r| (r.offset, r.rtype, o.symbols[r.sym as usize].name.clone()))
+        .collect();
+    (s.bytes.clone(), relocs)
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_pushsection_assembles_instructions_in_both_positions() {
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26,
+    };
+    // A pushed executable section holding instructions, at file scope and in a
+    // function body. GNU as 2.46.1 for the same statements emits 24 bytes --
+    // `nop`, `mov x0, x1`, `b 1b` resolved in place, `bl other`, `adrp x2, g`,
+    // `add x2, x2, :lo12:g` -- with three relocations at 0x0c, 0x10 and 0x14.
+    let body = ".pushsection .text.alt,\\\"ax\\\"\\n\
+                1:\\n\\tnop\\n\\tmov x0, x1\\n\\tb 1b\\n\\tbl other\\n\
+                \\tadrp x2, g\\n\\tadd x2, x2, :lo12:g\\n\\t.popsection";
+    let want: alloc::vec::Vec<u8> = [
+        0xd503201fu32, // nop
+        0xaa0103e0,    // mov x0, x1
+        0x17fffffe,    // b 1b
+        0x94000000,    // bl other
+        0x90000002,    // adrp x2, g
+        0x91000042,    // add x2, x2, :lo12:g
+    ]
+    .iter()
+    .flat_map(|w| w.to_le_bytes())
+    .collect();
+    let want_relocs = [
+        (0x0cu64, R_AARCH64_CALL26, "other"),
+        (0x10, R_AARCH64_ADR_PREL_PG_HI21, "g"),
+        (0x14, R_AARCH64_ADD_ABS_LO12_NC, "g"),
+    ];
+    for src in [
+        alloc::format!("extern void other(void);\nint g;\n__asm__(\"{body}\");\n"),
+        alloc::format!(
+            "extern void other(void);\nint g;\n\
+             void probe(void) {{ __asm__ volatile(\"{body}\"); }}\n"
+        ),
+    ] {
+        let (bytes, relocs) = asm_section(&src, ".text.alt");
+        assert_eq!(bytes, want, "{src}");
+        let got: alloc::vec::Vec<_> = relocs
+            .iter()
+            .map(|(o, t, n)| (*o, *t, n.as_str()))
+            .collect();
+        assert_eq!(got, want_relocs, "{src}");
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_pushsection_reads_the_enclosing_template_operands() {
+    // A pushed section inside a function body resolves the template's
+    // operands: `%c0` takes the constant, and `%0` takes the register the
+    // enclosing stream was given, so the same statement encodes identically
+    // in both places.
+    let src = "void probe(long v) { __asm__ volatile(\
+               \"mov x9, %0\\n\\t.pushsection .text.alt,\\\"ax\\\"\\n\
+               \\tmov x9, %0\\n\\tmov x0, %c1\\n\\t.popsection\" :: \"r\"(v), \"i\"(7)); }\n";
+    let (alt, _) = asm_section(src, ".text.alt");
+    let (text, _) = asm_section(src, ".text");
+    // `movz x0, #7`, which GNU as 2.46.1 emits for `mov x0, 7`.
+    assert_eq!(&alt[4..8], &0xd28000e0u32.to_le_bytes());
+    assert!(
+        text.windows(4).any(|w| w == &alt[..4]),
+        "the section instruction must use the operand's register"
+    );
+}

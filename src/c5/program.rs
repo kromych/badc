@@ -47,18 +47,32 @@ pub struct InitFunc {
     pub is_destructor: bool,
 }
 
-/// A function symbol declared `__attribute__((alias("target")))`: the
-/// object's symbol table carries `name` as an additional symbol at
-/// `target`'s address. The target is a function defined in this unit
-/// (data aliases ride the regular data-symbol path with the target's
-/// offset). `weak` selects STB_WEAK over STB_GLOBAL. TODO: the ELF
-/// writer emits these; the Mach-O / PE final-image symbol tables do
-/// not carry the extra name (calls resolve at parse time regardless).
+/// Where an alias symbol's binding comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AliasBind {
+    /// `__attribute__((alias))` on an external-linkage declarator.
+    Global,
+    /// The same declarator with `__attribute__((weak))`.
+    Weak,
+    /// The same declarator with internal linkage.
+    Local,
+    /// A `.set` of the unit's assembly: local unless a `.globl` / `.weak` of
+    /// the unit declared the name.
+    Assigned,
+}
+
+/// A function symbol declared `__attribute__((alias("target")))` or assigned
+/// by a `.set` of the unit's assembly: the object's symbol table carries
+/// `name` as an additional symbol at `target`'s address. The target is a
+/// function defined in this unit (data aliases ride the regular data-symbol
+/// path with the target's offset). TODO: the ELF writer emits these; the
+/// Mach-O / PE final-image symbol tables do not carry the extra name (calls
+/// resolve at parse time regardless).
 #[derive(Debug, Clone)]
 pub struct FunctionAlias {
     pub name: String,
     pub target: String,
-    pub weak: bool,
+    pub bind: AliasBind,
 }
 
 /// ELF symbol visibility, as the `.hidden` / `.internal` / `.protected`

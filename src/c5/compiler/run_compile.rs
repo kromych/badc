@@ -1280,9 +1280,9 @@ impl Compiler {
                             self.symbols[id_idx].defined_here = true;
                             self.symbols[id_idx].is_alias = true;
                             let name = self.symbols[id_idx].link_name().into();
-                            let weak = self.symbols[id_idx].is_weak;
+                            let bind = alias_bind(&self.symbols[id_idx]);
                             self.function_aliases
-                                .push(crate::c5::program::FunctionAlias { name, target, weak });
+                                .push(crate::c5::program::FunctionAlias { name, target, bind });
                         }
                         // Function prototype, not a definition. C99 6.7
                         // permits several declarators in one declaration,
@@ -2740,7 +2740,7 @@ impl Compiler {
                     .push(crate::c5::program::FunctionAlias {
                         name,
                         target,
-                        weak: true,
+                        bind: crate::c5::program::AliasBind::Weak,
                     });
                 continue;
             }
@@ -2751,9 +2751,9 @@ impl Compiler {
                 self.symbols[id_idx].array_size = self.symbols[tgt].array_size;
             } else {
                 let name = self.symbols[id_idx].link_name().into();
-                let weak = self.symbols[id_idx].is_weak;
+                let bind = alias_bind(&self.symbols[id_idx]);
                 self.function_aliases
-                    .push(crate::c5::program::FunctionAlias { name, target, weak });
+                    .push(crate::c5::program::FunctionAlias { name, target, bind });
             }
         }
         Ok(())
@@ -2922,5 +2922,18 @@ impl Compiler {
         if let Some(sec) = self.pending.attr_section.take() {
             self.symbols[id_idx].section_name = Some(sec);
         }
+    }
+}
+
+/// Binding a `__attribute__((alias))` declarator's symbol takes: its own
+/// linkage, `__attribute__((weak))` overriding.
+fn alias_bind(sym: &crate::c5::symbol::Symbol) -> crate::c5::program::AliasBind {
+    use crate::c5::program::AliasBind;
+    if sym.is_weak {
+        AliasBind::Weak
+    } else if sym.linkage == crate::c5::symbol::Linkage::Internal {
+        AliasBind::Local
+    } else {
+        AliasBind::Global
     }
 }

@@ -2871,12 +2871,16 @@ impl Compiler {
         };
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;
-        // `.set name, target` aliases from file-scope asm; `.weak name` in
-        // the unit selects the weak binding (either order, either statement).
+        // `.set name, target` aliases from file-scope asm. The binding follows
+        // the unit's `.globl` / `.weak` directives, in either order and from
+        // either statement, so the object writer settles it.
         let mut function_aliases = self.function_aliases;
         for (name, target) in self.asm_sym_sets {
-            let weak = self.asm_weak_names.contains(&name);
-            function_aliases.push(crate::c5::program::FunctionAlias { name, target, weak });
+            function_aliases.push(crate::c5::program::FunctionAlias {
+                name,
+                target,
+                bind: crate::c5::program::AliasBind::Assigned,
+            });
         }
         Ok(Program {
             data: self.data,

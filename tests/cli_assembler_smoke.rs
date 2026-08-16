@@ -1689,6 +1689,90 @@ fn a_data_reference_to_a_set_alias_names_the_written_symbol() {
     assert_eq!(named_relocs(&o, ".rela.text"), []);
 }
 
+/// A `.set` alias takes the binding the unit gave the name it assigns: local
+/// unless a `.globl` or a `.weak` of the unit declared it, which is GNU as
+/// 2.46.1's symbol table for the source below. The three positions the
+/// assignment holds -- a `.s` unit, file-scope asm, and a function body's code
+/// stream -- share the rule, and every local entry precedes the rest, as ELF
+/// requires of `sh_info`.
+#[test]
+fn a_set_alias_binds_as_the_unit_declared_the_name() {
+    const LOCAL: u8 = 0;
+    const GLOBAL: u8 = 1;
+    const WEAK: u8 = 2;
+    const BODY: &str = "\t.globl g\ng:\n\tnop\nt:\n\tnop\n\
+                        \t.set la, t\n\t.set ga, g\n\
+                        \t.globl ega\n\t.set ega, g\n\
+                        \t.weak wa\n\t.set wa, t\n\t.set chain, la\n";
+    const WANT: [(&str, u8); 6] = [
+        ("la", LOCAL),
+        ("ga", LOCAL),
+        ("chain", LOCAL),
+        ("g", GLOBAL),
+        ("ega", GLOBAL),
+        ("wa", WEAK),
+    ];
+    let body_c = BODY.replace('\n', "\\n").replace('\t', "\\t");
+    let objects = [
+        (
+            "set-bind-s",
+            object_of("set-bind-s", &format!("\t.text\n{BODY}")),
+        ),
+        (
+            "set-bind-file",
+            object_of_c(
+                "set-bind-file",
+                &format!("__asm__(\".text\\n{body_c}\");\n"),
+            ),
+        ),
+        (
+            "set-bind-body",
+            object_of_c(
+                "set-bind-body",
+                &format!("void f(void) {{ __asm__ volatile(\"{body_c}\"); }}\n"),
+            ),
+        ),
+    ];
+    for (name, bytes) in &objects {
+        let syms = sym_bindings(bytes);
+        for (n, bind) in WANT {
+            let got = syms.iter().find(|s| s.0 == n);
+            assert!(
+                got.is_some_and(|s| s.1 == bind),
+                "{name}: `{n}` in {syms:?}"
+            );
+        }
+        let first_nonlocal = syms.iter().position(|s| s.1 != LOCAL).unwrap_or(syms.len());
+        assert!(
+            syms[first_nonlocal..].iter().all(|s| s.1 != LOCAL),
+            "{name}: a local entry follows a global one: {syms:?}"
+        );
+    }
+}
+
+/// An `__attribute__((alias))` declarator's symbol takes the declarator's own
+/// linkage, as gcc 16.1 emits it: `static` binds it local,
+/// `__attribute__((weak))` weak, and external linkage global.
+#[test]
+fn an_attribute_alias_binds_as_its_declarator() {
+    const LOCAL: u8 = 0;
+    const GLOBAL: u8 = 1;
+    const WEAK: u8 = 2;
+    let bytes = object_of_c(
+        "attr-alias-bind",
+        "void real(void) {}\n\
+         static void sal(void) __attribute__((alias(\"real\")));\n\
+         void gal(void) __attribute__((alias(\"real\")));\n\
+         void wal(void) __attribute__((weak, alias(\"real\")));\n\
+         void use(void) { sal(); }\n",
+    );
+    let syms = sym_bindings(&bytes);
+    for (n, bind) in [("sal", LOCAL), ("gal", GLOBAL), ("wal", WEAK)] {
+        let got = syms.iter().find(|s| s.0 == n);
+        assert!(got.is_some_and(|s| s.1 == bind), "`{n}` in {syms:?}");
+    }
+}
+
 /// A branch target may be an expression over symbols and labels, as every
 /// other operand may. A reference to a symbol at an offset takes `PC32`: the
 /// offset is no entry point, so it binds no PLT slot. A plain reference keeps

@@ -7763,7 +7763,18 @@ pub(crate) fn materialize_asm_sections(
                                 {
                                     continue;
                                 }
-                                r.target = t.target;
+                                // The chain end replaces the name written
+                                // where the link cannot rebind the reference,
+                                // or where the end is a name the link binds
+                                // too. Reducing a rebindable reference to a
+                                // location pins it to this unit's definition.
+                                let end_binds = matches!(
+                                    &t.target,
+                                    AsmSectionTarget::Symbol(e) if non_local.contains(e.as_str())
+                                );
+                                if local || end_binds {
+                                    r.target = t.target;
+                                }
                             }
                             Some(AsmExprLeaf::Abs(_)) => {
                                 return Err(alloc::string::String::from(

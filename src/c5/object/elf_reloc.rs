@@ -2225,16 +2225,30 @@ pub(super) fn write_relocatable(
         Ok((shndx, value, STT_FUNC, hi.saturating_sub(lo) as u64))
     };
     // Binding of an assigned name: local unless a directive of the unit
-    // declared it global or weak.
+    // declared it global or weak. Both channels a directive arrives through
+    // count -- a file-scope statement's and a function-scope one's.
     let set_bind = |n: &str| -> u8 {
-        match build
-            .asm_sym_decls
-            .iter()
-            .find(|d| d.name == n)
-            .map(|d| d.bind)
-        {
-            Some(AsmSymBind::Global | AsmSymBind::Weak) => bind_for(n),
-            _ => STB_LOCAL,
+        let declared = program.asm_global_names.iter().any(|g| g == n)
+            || weak_names.contains(n)
+            || matches!(
+                build
+                    .asm_sym_decls
+                    .iter()
+                    .find(|d| d.name == n)
+                    .map(|d| d.bind),
+                Some(AsmSymBind::Global | AsmSymBind::Weak)
+            );
+        if declared { bind_for(n) } else { STB_LOCAL }
+    };
+    // Binding of an alias symbol: a `.set` assignment follows the unit's
+    // directives, a declarator's own linkage its attributes.
+    let alias_bind = |a: &crate::c5::program::FunctionAlias| -> u8 {
+        use crate::c5::program::AliasBind;
+        match a.bind {
+            AliasBind::Weak => STB_WEAK,
+            AliasBind::Local => STB_LOCAL,
+            AliasBind::Global => bind_for(&a.name),
+            AliasBind::Assigned => set_bind(&a.name),
         }
     };
     // STB_LOCAL function symbols. Emitted before `first_global`
@@ -2328,6 +2342,69 @@ pub(super) fn write_relocatable(
             st_value: value,
             st_size,
         });
+    }
+    // `alias("target")` symbols: an additional name at the target's extent,
+    // following a chain of aliases (`memcpy` -> `__memcpy` -> `__pi_memcpy`)
+    // to its defined end. Resolved once and emitted in two passes, since ELF
+    // requires every LOCAL symbol to precede `sh_info`.
+    let alias_syms: Vec<(u8, Elf64Sym)> = program
+        .function_aliases
+        .iter()
+        .enumerate()
+        .map(|(i, a)| -> Result<(u8, Elf64Sym), C5Error> {
+            let mut target = a.target.as_str();
+            for _ in 0..program.function_aliases.len() {
+                match program.function_aliases.iter().find(|x| x.name == target) {
+                    Some(next) => target = next.target.as_str(),
+                    None => break,
+                }
+            }
+            let bind = alias_bind(a);
+            let st_name = name_offs[fn_alias_names_start + i];
+            let st_other = vis_for(&a.name);
+            if let Some(l) = asm_labels.iter().find(|l| l.name == target) {
+                return Ok((
+                    bind,
+                    Elf64Sym {
+                        st_name,
+                        st_info: pack_sym_info(bind, l.st_type),
+                        st_other,
+                        st_shndx: l.shndx,
+                        st_value: l.value,
+                        st_size: l.st_size,
+                    },
+                ));
+            }
+            let Some(ti) = func_strs.iter().position(|n| n == target) else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("alias `{}`: target `{target}` has no emitted body", a.name),
+                )));
+            };
+            let (lo, hi) = func_extent(ti)?;
+            let (shndx, value) = text_place(lo as u64);
+            Ok((
+                bind,
+                Elf64Sym {
+                    st_name,
+                    st_info: pack_sym_info(bind, STT_FUNC),
+                    st_other,
+                    st_shndx: shndx,
+                    st_value: value,
+                    st_size: hi.saturating_sub(lo) as u64,
+                },
+            ))
+        })
+        .collect::<Result<_, _>>()?;
+    // The local ones, still inside the LOCAL block.
+    for (i, &(bind, sym)) in alias_syms.iter().enumerate() {
+        if bind != STB_LOCAL {
+            continue;
+        }
+        func_symidx_by_name.insert(
+            program.function_aliases[i].name.clone(),
+            symbols.len() as u32,
+        );
+        symbols.push(sym);
     }
     // Internal-linkage data objects: STB_LOCAL + STT_OBJECT, placed
     // through the same layout plan the external ones use, so
@@ -2553,56 +2630,16 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // `alias("target")` function symbols: an additional name at the
-    // target's extent. A `.set alias, target` whose target is a label an
-    // inline-asm section defined aliases that label's placement; a chain
-    // of aliases (`memcpy` -> `__memcpy` -> `__pi_memcpy`) follows to its
-    // defined end.
-    for (i, a) in program.function_aliases.iter().enumerate() {
-        let mut target = a.target.as_str();
-        for _ in 0..program.function_aliases.len() {
-            match program.function_aliases.iter().find(|x| x.name == target) {
-                Some(next) => target = next.target.as_str(),
-                None => break,
-            }
-        }
-        let a = crate::c5::program::FunctionAlias {
-            name: a.name.clone(),
-            target: String::from(target),
-            weak: a.weak,
-        };
-        let a = &a;
-        if let Some(l) = asm_labels.iter().find(|l| l.name == a.target) {
-            func_symidx_by_name.insert(a.name.clone(), symbols.len() as u32);
-            symbols.push(Elf64Sym {
-                st_name: name_offs[fn_alias_names_start + i],
-                st_info: pack_sym_info(if a.weak { STB_WEAK } else { STB_GLOBAL }, l.st_type),
-                st_shndx: l.shndx,
-                st_value: l.value,
-                st_size: l.st_size,
-                ..Default::default()
-            });
+    // Alias symbols a directive bound global or weak.
+    for (i, &(bind, sym)) in alias_syms.iter().enumerate() {
+        if bind == STB_LOCAL {
             continue;
         }
-        let Some(ti) = func_strs.iter().position(|n| n == &a.target) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!(
-                    "alias `{}`: target `{}` has no emitted body",
-                    a.name, a.target
-                ),
-            )));
-        };
-        let (lo, hi) = func_extent(ti)?;
-        let (shndx, value) = text_place(lo as u64);
-        func_symidx_by_name.insert(a.name.clone(), symbols.len() as u32);
-        symbols.push(Elf64Sym {
-            st_name: name_offs[fn_alias_names_start + i],
-            st_info: pack_sym_info(if a.weak { STB_WEAK } else { STB_GLOBAL }, STT_FUNC),
-            st_shndx: shndx,
-            st_value: value,
-            st_size: hi.saturating_sub(lo) as u64,
-            ..Default::default()
-        });
+        func_symidx_by_name.insert(
+            program.function_aliases[i].name.clone(),
+            symbols.len() as u32,
+        );
+        symbols.push(sym);
     }
 
     // Import symbols: STB_WEAK + STT_NOTYPE, SHN_UNDEF. The

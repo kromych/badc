@@ -11450,6 +11450,40 @@ mod code_mode_tests {
         );
     }
 
+    /// The two rules a `.set` alias answers to must agree: the binding the
+    /// symbol table gives the name decides whether the link may rebind a
+    /// reference to it, and a reference the link may rebind cannot reduce to a
+    /// location of this unit. So where the chain ends at a name the link does
+    /// not bind, a rebindable alias keeps its own relocation rather than the
+    /// chain end, and a local one resolves in place. Relocations from GNU as
+    /// 2.46.1 for the same source.
+    #[test]
+    fn a_rebindable_alias_of_a_local_target_keeps_its_relocation() {
+        let (_, relocs) = assemble_relocs(
+            ".pushsection .t,\"ax\"\n\
+             base:\n\
+             ret\n\
+             t:\n\
+             ret\n\
+             .set la, t\n\
+             call la\n\
+             .globl ga\n\
+             .set ga, t\n\
+             call ga\n\
+             .weak wa\n\
+             .set wa, t\n\
+             call wa\n\
+             .popsection\n",
+        );
+        let sites: alloc::vec::Vec<(&str, i64)> =
+            relocs.iter().map(|r| (r.3.as_str(), r.4)).collect();
+        assert_eq!(
+            sites,
+            [("ga", -4), ("wa", -4)],
+            "a local alias resolves in place; a rebindable one names itself"
+        );
+    }
+
     /// `.org` reads its target against the final layout, so operator order
     /// does not decide whether the target reduces. GNU as 2.46.1 accepts
     /// every spelling with the same padding.

@@ -420,6 +420,9 @@ pub(super) fn if_operand_undefined_name(expr: &str) -> Option<&str> {
     is_ident(name).then_some(name)
 }
 
+/// Longest prefix [`literal_prefix_len`] accepts.
+pub(super) const MAX_LITERAL_PREFIX: usize = 2;
+
 /// Identifier check: ASCII letter or `_` to start, alnum or `_`
 /// after. Used to reject `#pragma dylib(123foo, ...)` and similar
 /// up-front so the codegen never has to worry about quirks in the

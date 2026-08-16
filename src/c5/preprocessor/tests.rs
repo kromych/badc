@@ -2694,7 +2694,7 @@ fn merge_test_covers_every_punctuator_pair() {
         for b in 0u8..=255 {
             if super::expand::punct_len(&[a, b], 0) == 2 {
                 assert!(
-                    pp_tokens_would_merge(super::expand::TokKind::Punct, a, b),
+                    pp_tokens_would_merge(super::expand::TokKind::Punct, &[a], b),
                     "punctuator {:?} is not separated by the serializer",
                     core::str::from_utf8(&[a, b]).unwrap_or("<non-utf8>")
                 );
@@ -2722,6 +2722,43 @@ fn serializer_separates_only_real_pastes() {
     // The paste-preventing spaces the byte-level rules do call for.
     let out = process("#define PLUS +\nint z = PLUS+1;\n");
     assert!(out.contains("+ +1"), "`+` `+` must not paste: {out}");
+}
+
+/// An encoding prefix and a following literal are two tokens unless `##`
+/// joins them (C99 6.10.3.2, 6.10.3.3), so the serializer separates them
+/// however the adjacency arises: a literal prefix written before `#param`
+/// in the replacement list, or a parameter substituting to the prefix
+/// before a literal. gcc-16 emits the same separators.
+#[test]
+fn serializer_separates_an_encoding_prefix_from_a_literal() {
+    for (prefix, sep) in [("L", " "), ("u", " "), ("U", " "), ("u8", " ")] {
+        let out = process(&format!("#define S(x) {prefix}#x\nchar *s = S(hi);\n"));
+        assert!(
+            out.contains(&format!("{prefix}{sep}\"hi\"")),
+            "`{prefix}#x` must stay two tokens: {out}"
+        );
+        let out = process(&format!("#define A(x) x\"s\"\nchar *s = A({prefix});\n"));
+        assert!(
+            out.contains(&format!("{prefix}{sep}\"s\"")),
+            "`{prefix}` before a string literal must stay two tokens: {out}"
+        );
+    }
+    // 6.4.4.4p2 has no `u8` character constant, so `u8` and `'c'` are
+    // already two tokens and need no separator.
+    for (prefix, sep) in [("L", " "), ("u", " "), ("U", " "), ("u8", "")] {
+        let out = process(&format!("#define C(x) x'c'\nchar c = C({prefix});\n"));
+        assert!(
+            out.contains(&format!("{prefix}{sep}'c'")),
+            "`{prefix}` before a character constant: {out}"
+        );
+    }
+    // An identifier that is not an encoding prefix cannot absorb a quote,
+    // so no separator is inserted there.
+    let out = process("#define S(x) foo#x\nchar *s = S(hi);\n");
+    assert!(out.contains("foo\"hi\""), "no gratuitous separator: {out}");
+    // `##` is the operator that does join them (6.10.3.3p3).
+    let out = process("#define P(a, b) a##b\nchar *s = P(u8, \"hi\");\n");
+    assert!(out.contains("u8\"hi\""), "`##` must still paste: {out}");
 }
 
 /// `__has_include` resolves through the same code path as `#include`,

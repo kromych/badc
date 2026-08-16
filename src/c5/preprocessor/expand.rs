@@ -19,7 +19,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use hashbrown::HashMap;
 
-use super::text::{is_ident_byte, literal_prefix_len, pp_number_len, skip_literal};
+use super::text::{
+    MAX_LITERAL_PREFIX, is_ident_byte, literal_prefix_len, pp_number_len, skip_literal,
+};
 use super::{FnMacro, Preprocessor};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -396,20 +398,19 @@ impl<'a> Exp<'a> {
         out.reserve(cap);
         let first_at = out.len();
         let mut prev_kind = TokKind::Other;
+        let mut prev_text: &[u8] = b"";
         for &t in toks {
+            let text = self.text(t);
             if out.len() > first_at
                 && (t.space
                     || (relex_safe
-                        && pp_tokens_would_merge(
-                            prev_kind,
-                            *out.as_bytes().last().unwrap(),
-                            self.first_byte(t),
-                        )))
+                        && pp_tokens_would_merge(prev_kind, prev_text, self.first_byte(t))))
             {
                 out.push(' ');
             }
-            out.push_str(self.text(t));
+            out.push_str(text);
             prev_kind = t.kind;
+            prev_text = text.as_bytes();
         }
     }
 
@@ -1279,32 +1280,46 @@ pub(super) fn is_dynamic_predefine(name: &str) -> bool {
     )
 }
 
-/// True when the token ending in `prev` directly followed by a token
+/// True when the token spelled `prev` directly followed by a token
 /// starting with `next` would re-lex as one preprocessing token. The
 /// serializer inserts one space at such boundaries -- white space
 /// between tokens never changes phase-7 semantics -- so substituted text
 /// cannot paste onto its neighbours (C99 6.10.3.3 reserves pasting for
 /// `##`). `prev_kind` is the preceding token's kind, which decides
-/// whether the pp-number continuation rules apply.
+/// whether the pp-number and encoding-prefix rules apply.
 ///
 /// Every case is read off a token-grammar rule rather than listed:
 /// identifier and pp-number continuation (6.4.2.1 / 6.4.8), the
-/// punctuator table `punct_len` matches, and the merge-only pairs.
-pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: u8, next: u8) -> bool {
-    if is_ident_byte(prev) && is_ident_byte(next) {
+/// encoding prefixes `literal_prefix_len` accepts (6.4.4.4 / 6.4.5),
+/// the punctuator table `punct_len` matches, and the merge-only pairs.
+pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: &[u8], next: u8) -> bool {
+    let Some(&last) = prev.last() else {
+        return false;
+    };
+    if is_ident_byte(last) && is_ident_byte(next) {
         return true;
+    }
+    // 6.4.4.4 / 6.4.5: an identifier spelled exactly as an encoding
+    // prefix takes a directly following quote into one literal token.
+    if prev_kind == TokKind::Ident && prev.len() <= MAX_LITERAL_PREFIX {
+        let mut probe = [0u8; MAX_LITERAL_PREFIX + 1];
+        probe[..prev.len()].copy_from_slice(prev);
+        probe[prev.len()] = next;
+        if literal_prefix_len(&probe[..=prev.len()], 0) == Some(prev.len()) {
+            return true;
+        }
     }
     // 6.4.8: a pp-number runs on through `.` and through a sign after an
     // exponent marker, so only a preceding pp-number merges with those.
     if prev_kind == TokKind::Number
         && (next == b'.'
-            || (matches!(prev, b'e' | b'E' | b'p' | b'P') && matches!(next, b'+' | b'-')))
+            || (matches!(last, b'e' | b'E' | b'p' | b'P') && matches!(next, b'+' | b'-')))
     {
         return true;
     }
-    let pair = [prev, next];
+    let pair = [last, next];
     // A `.` before a digit opens a pp-number.
-    if prev == b'.' && pp_number_len(&pair, 0) == 2 {
+    if last == b'.' && pp_number_len(&pair, 0) == 2 {
         return true;
     }
     punct_len(&pair, 0) == 2 || MERGE_ONLY2.iter().any(|p| *p == pair)

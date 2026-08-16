@@ -102,13 +102,18 @@ pub(crate) fn code_stream_marks(len: usize, ranges: &[(usize, usize)]) -> alloc:
 
 /// Fold a section's marks into the offsets its mapping symbols sit at.
 ///
-/// A run opens where the class changes; a section holding only data
-/// carries no mapping symbols, so a data run that opens before the section
-/// has one is held until instructions or an opening mark appear, and then
-/// starts at the offset the data did. A start on the offset of the
-/// previous start replaces it, and a start on the section's end marks no
-/// bytes and is dropped.
-pub(crate) fn fold(marks: &mut [MapMark], len: usize) -> alloc::vec::Vec<(u32, MapClass)> {
+/// A run opens where the class changes. An executable section's leading
+/// data opens a run at once -- a disassembler decodes those bytes as
+/// instructions without a `$d`. Where `exec` is false nothing needs
+/// disambiguating, so a leading data run is held until instructions or an
+/// opening mark appear, and then starts at the offset the data did. A
+/// start on the offset of the previous start replaces it, and a start on
+/// the section's end marks no bytes and is dropped.
+pub(crate) fn fold(
+    marks: &mut [MapMark],
+    len: usize,
+    exec: bool,
+) -> alloc::vec::Vec<(u32, MapClass)> {
     marks.sort_by_key(|m| (m.at, !m.opens));
     let mut starts: alloc::vec::Vec<(u32, MapClass)> = alloc::vec::Vec::new();
     let mut state: Option<MapClass> = None;
@@ -128,7 +133,7 @@ pub(crate) fn fold(marks: &mut [MapMark], len: usize) -> alloc::vec::Vec<(u32, M
     };
     for m in marks.iter() {
         match m.class {
-            MapClass::Data if !m.opens && state.is_none() => {
+            MapClass::Data if !m.opens && !exec && state.is_none() => {
                 held_data.get_or_insert(m.at);
             }
             MapClass::Data => {
@@ -156,7 +161,15 @@ mod tests {
     use super::*;
 
     fn run(marks: &mut [MapMark], len: usize) -> alloc::vec::Vec<(u32, &'static str)> {
-        fold(marks, len)
+        run_in(marks, len, false)
+    }
+
+    fn run_in(
+        marks: &mut [MapMark],
+        len: usize,
+        exec: bool,
+    ) -> alloc::vec::Vec<(u32, &'static str)> {
+        fold(marks, len, exec)
             .into_iter()
             .map(|(o, c)| (o, c.symbol_name()))
             .collect()
@@ -180,6 +193,26 @@ mod tests {
         let mut m = marks();
         m.content(0, 4, MapClass::Data);
         assert_eq!(run(&mut m.0, 4), []);
+    }
+
+    #[test]
+    fn data_only_executable_section_opens_a_data_run() {
+        let mut m = marks();
+        m.content(0, 4, MapClass::Data);
+        assert_eq!(run_in(&mut m.0, 4, true), [(0, "$d")]);
+    }
+
+    #[test]
+    fn an_empty_executable_section_carries_no_runs() {
+        assert_eq!(run_in(&mut [], 0, true), []);
+    }
+
+    #[test]
+    fn executable_leading_data_opens_where_the_data_starts() {
+        let mut m = marks();
+        m.content(8, 4, MapClass::Data);
+        m.content(12, 4, MapClass::Code);
+        assert_eq!(run_in(&mut m.0, 16, true), [(8, "$d"), (12, "$x")]);
     }
 
     #[test]

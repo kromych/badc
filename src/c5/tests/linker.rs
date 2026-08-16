@@ -14032,6 +14032,27 @@ fn aarch64_assembled_shapes_carry_the_mapping_symbols_gnu_as_emits() {
             &[(".ro", 0, "$d")],
         ),
         (
+            "a data-only executable section, whose bytes a disassembler \
+             would otherwise decode as instructions",
+            ".section .xd,\"ax\",@progbits\n\t.word 7\n",
+            &[(".xd", 0, "$d")],
+        ),
+        (
+            "a data-only executable section filled without content",
+            ".section .xd,\"ax\",@progbits\n\t.skip 16\n",
+            &[(".xd", 0, "$d")],
+        ),
+        (
+            "a `.text` carrying only data",
+            ".text\n\t.word 7\n",
+            &[(".text", 0, "$d")],
+        ),
+        (
+            "a writable data-only section, which GNU as leaves bare",
+            ".data\n\t.word 7\n",
+            &[],
+        ),
+        (
             "alternating runs",
             ".section .mix,\"ax\",@progbits\n\tnop\n\t.word 1\n\tnop\n\t.word 2\n\tret\n",
             &[

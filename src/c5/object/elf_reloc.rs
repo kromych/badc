@@ -2387,13 +2387,21 @@ pub(super) fn write_relocatable(
     // since they arrive in section-independent passes, and folded once.
     if machine == Machine::Aarch64 {
         let mut marks: Vec<(u16, MapMark)> = Vec::new();
-        let mut sec_len: alloc::collections::BTreeMap<u16, u64> =
+        // Per output section: its length and whether it is executable,
+        // which decides whether leading data opens a run.
+        let mut sec_shape: alloc::collections::BTreeMap<u16, (u64, bool)> =
             alloc::collections::BTreeMap::new();
-        sec_len.insert(SHIDX_TEXT, carve.text_keep_len as u64);
-        sec_len.insert(SHIDX_DATA, plan.data_len);
-        sec_len.insert(SHIDX_BSS, plan.bss_len);
-        for k in 0..carve.table.entries.len() {
-            sec_len.insert(carve.shndx[k], sizes.get(k).copied().unwrap_or(0));
+        sec_shape.insert(SHIDX_TEXT, (carve.text_keep_len as u64, true));
+        sec_shape.insert(SHIDX_DATA, (plan.data_len, false));
+        sec_shape.insert(SHIDX_BSS, (plan.bss_len, false));
+        for (k, e) in carve.table.entries.iter().enumerate() {
+            sec_shape.insert(
+                carve.shndx[k],
+                (
+                    sizes.get(k).copied().unwrap_or(0),
+                    e.flags & SHF_EXECINSTR != 0,
+                ),
+            );
         }
         // The text stream holds instructions apart from the data ranges the
         // backend recorded. Each mark is split at the carve boundaries it
@@ -2468,8 +2476,8 @@ pub(super) fn write_relocatable(
             let shndx = marks[i].0;
             let j = i + marks[i..].partition_point(|&(s, _)| s == shndx);
             let mut group: Vec<MapMark> = marks[i..j].iter().map(|&(_, m)| m).collect();
-            let len = sec_len.get(&shndx).copied().unwrap_or(0) as usize;
-            for (at, class) in map_syms::fold(&mut group, len) {
+            let (len, exec) = sec_shape.get(&shndx).copied().unwrap_or((0, false));
+            for (at, class) in map_syms::fold(&mut group, len as usize, exec) {
                 symbols.push(Elf64Sym {
                     st_name: name_offs[map_names_start + usize::from(class == MapClass::Data)],
                     st_info: pack_sym_info(STB_LOCAL, STT_NOTYPE),

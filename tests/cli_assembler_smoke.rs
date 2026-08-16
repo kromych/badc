@@ -285,6 +285,24 @@ fn a_folded_expression_immediate_takes_the_narrow_form() {
     assert_eq!(&t[..6], [0x81, 0xed, 0x08, 0, 0, 0]);
 }
 
+/// `inc` / `dec` on a 16- or 32-bit register take the one-byte `0x40+rd` /
+/// `0x48+rd` form outside 64-bit mode, where those opcodes are the REX
+/// prefix instead. Every expectation is GNU as 2.46.1's encoding of the
+/// same source; the kernel's `efi-mixed.S` carries the 32-bit form.
+#[test]
+fn one_byte_inc_and_dec_encode_outside_long_mode() {
+    let t = text_of(
+        "inc32",
+        "\t.code32\n\tinc %ecx\n\tdec %ecx\n\tinc %cx\n\tinc %cl\n\tincl (%ecx)\n",
+    );
+    assert_eq!(t, [0x41, 0x49, 0x66, 0x41, 0xfe, 0xc1, 0xff, 0x01]);
+    let t = text_of("inc16", "\t.code16\n\tinc %cx\n\tdec %cx\n\tinc %ecx\n");
+    assert_eq!(t, [0x41, 0x49, 0x66, 0x41]);
+    // In 64-bit mode the short form is a REX prefix, so the ModRM one stands.
+    let t = text_of("inc64", "\t.code64\n\tinc %ecx\n\tdec %ecx\n\tinc %rcx\n");
+    assert_eq!(t, [0xff, 0xc1, 0xff, 0xc9, 0x48, 0xff, 0xc1]);
+}
+
 #[test]
 fn hidden_visibility_reaches_the_symbol_table() {
     // GNU as 2.46.1 on the same source: `_bss` and `_ebss` are

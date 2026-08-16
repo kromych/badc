@@ -718,7 +718,10 @@ fn encode_best(
 }
 
 /// Forms the external instruction database omits, encoded by the same
-/// interpreter as the generated catalogue. The segment-descriptor loads
+/// interpreter as the generated catalogue. `inc` / `dec` on a 16- or 32-bit
+/// register have a one-byte `+r` encoding outside 64-bit mode, where those
+/// opcodes are the REX prefix instead; the database carries only the
+/// mode-independent `FF /0` and `FF /1`. The segment-descriptor loads
 /// `lsl` / `lar` take a 16-bit source but the destination may be 32-bit; the
 /// generator's uniform-width `r/m` model drops those mixed-width forms. The
 /// source is `r/m16` regardless of whether the assembler wrote a 16- or
@@ -741,6 +744,34 @@ fn encode_best(
 /// destination, which is the same encoding without the 0x66 the generated
 /// 16-bit form carries.
 static FORMS_SUPPLEMENT: &[Form] = &[
+    Form {
+        mnem: Mnem::Inc,
+        mnemonic: "inc",
+        ops: &[OpPat::Reg(W::V)],
+        pp: &[],
+        map: Map::Legacy,
+        opcode: &[0x40],
+        plus_r: true,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Dec,
+        mnemonic: "dec",
+        ops: &[OpPat::Reg(W::V)],
+        pp: &[],
+        map: Map::Legacy,
+        opcode: &[0x48],
+        plus_r: true,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 0,
+        imm: None,
+        imm_op: 255,
+    },
     Form {
         mnem: Mnem::Lsl,
         mnemonic: "lsl",
@@ -1186,6 +1217,17 @@ fn encode_form(
     addr: u8,
 ) -> Result<InsnBuf, String> {
     let mut code = InsnBuf::new();
+    // Opcodes 0x40..0x4F are the REX prefix in long mode, so a legacy `+r`
+    // form based there encodes only in 16- and 32-bit modes.
+    if mode == Mode::Bits64
+        && f.map == Map::Legacy
+        && f.plus_r
+        && matches!(f.opcode, [op] if (0x40..0x50).contains(op))
+    {
+        return Err(String::from(
+            "inline asm: the one-byte `inc`/`dec` form is a REX prefix in 64-bit mode",
+        ));
+    }
     // Address-size prefix: `67` selects the non-default address size. A form
     // with no memory r/m operand addresses nothing and takes none.
     let rm_op = (f.rm != 255).then(|| ops[f.rm as usize]);

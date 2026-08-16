@@ -1614,6 +1614,9 @@ pub struct Compiler {
     /// `.weak` symbol names from file-scope asm, bound STB_WEAK by the
     /// object writer wherever the name surfaces.
     pub(super) asm_weak_names: Vec<String>,
+    /// `.globl` symbol names from file-scope asm, given an undefined global
+    /// entry when the unit neither defines nor references the name.
+    pub(super) asm_global_names: Vec<String>,
     pub(super) asm_hidden_names: Vec<String>,
     /// `.set name, target` symbol aliases from file-scope asm, merged
     /// onto `Program::function_aliases`.
@@ -2315,6 +2318,7 @@ impl Compiler {
             warnings: pp_warnings,
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
+            asm_global_names: Vec::new(),
             asm_hidden_names: Vec::new(),
             asm_sym_sets: Vec::new(),
             asm_validate_sink: Default::default(),
@@ -2870,6 +2874,7 @@ impl Compiler {
             data: self.data,
             file_asm: self.file_asm,
             asm_weak_names: self.asm_weak_names,
+            asm_global_names: self.asm_global_names,
             asm_hidden_names: self.asm_hidden_names,
             data_align: self.data_align,
             data_ro_len: 0,

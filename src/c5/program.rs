@@ -146,9 +146,13 @@ pub struct Program {
     /// `.weak` symbol names from file-scope asm. The object writer
     /// binds the name STB_WEAK wherever it surfaces -- a definition
     /// (function, data, asm-section label, alias) or an undefined
-    /// reference -- and emits a weak undefined entry for a name that
-    /// surfaces nowhere else, as GNU as does.
+    /// reference. A name that surfaces nowhere else gets no entry, as
+    /// GNU as emits none for an unreferenced undefined weak.
     pub asm_weak_names: Vec<String>,
+    /// `.globl` symbol names from file-scope asm. A name the unit neither
+    /// defines nor references still gets an undefined global entry, as
+    /// GNU as emits one; `ld -r` carries it into the next link stage.
+    pub asm_global_names: Vec<String>,
     /// `.hidden` symbol names from file-scope asm. The object writer sets
     /// `STV_HIDDEN` in `st_other` wherever the name surfaces.
     pub asm_hidden_names: Vec<String>,
@@ -596,6 +600,7 @@ impl DataOffsets for Program {
             data: _, // the bytes the offsets index; the pass replaces them wholesale
             file_asm: _,
             asm_weak_names: _,
+            asm_global_names: _,
             asm_hidden_names: _,
             data_align: _, // an alignment, not an offset
             data_ro_len,
@@ -726,6 +731,7 @@ mod data_offset_tests {
             data: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
+            asm_global_names: Vec::new(),
             asm_hidden_names: Vec::new(),
             data_ro_len: 0,
             data_relro_len: 0,

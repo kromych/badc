@@ -7863,7 +7863,8 @@ fn file_scope_asm_weak_and_set_emit_weak_symbols() {
     // `.set alias, target` + `.weak alias` is a weak alias of a function
     // in the unit (the conditional-syscall shape): FUNC, WEAK, the
     // target's value and size. `.weak` on a section label binds the label
-    // weak; `.weak` of an undefined name yields a weak UNDEF entry.
+    // weak; `.weak` of a name the unit neither defines nor references
+    // yields no entry at all, as GNU as 2.46.1 emits none for one.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
         long ni_syscall(void) { return -38; }\n\
@@ -7903,9 +7904,10 @@ fn file_scope_asm_weak_and_set_emit_weak_symbols() {
         let marker = by_name("weak_marker");
         assert_eq!(marker.1 >> 4, STB_WEAK, "{target:?}: weak label binding");
         assert_ne!(marker.2, 0, "{target:?}: weak label is defined");
-        let hook = by_name("optional_hook");
-        assert_eq!(hook.1 >> 4, STB_WEAK, "{target:?}: weak undef binding");
-        assert_eq!(hook.2, 0, "{target:?}: weak undef is SHN_UNDEF");
+        assert!(
+            !symbols.iter().any(|s| s.0 == "optional_hook"),
+            "{target:?}: an unreferenced undefined `.weak` gets no entry"
+        );
     }
 }
 

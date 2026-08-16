@@ -1891,10 +1891,13 @@ pub(super) fn write_relocatable(
             asm_extern_names.push(n);
         }
     }
-    // A `.weak` name that surfaces nowhere else still gets a weak undefined
-    // entry, as GNU as emits one for a `.weak` with no definition.
-    let asm_weak_undef: Vec<&str> = program
-        .asm_weak_names
+    // A `.globl` name that surfaces nowhere else gets an undefined global
+    // entry, as GNU as emits one for a `.globl` with no definition. A
+    // `.weak` in the same position gets none: GNU as emits a weak symbol
+    // only where something references the name, and a reference reaches
+    // `asm_extern_names` above and takes STB_WEAK through `weak_names`.
+    let asm_global_undef: Vec<&str> = program
+        .asm_global_names
         .iter()
         .map(|s| s.as_str())
         .filter(|&n| {
@@ -1905,6 +1908,7 @@ pub(super) fn write_relocatable(
                 && !user_extern_names.contains(&n)
                 && !user_extern_data_names.contains(&n)
                 && !asm_extern_names.contains(&n)
+                && !program.asm_weak_names.iter().any(|w| w == n)
         })
         .collect();
 
@@ -1958,8 +1962,8 @@ pub(super) fn write_relocatable(
     for name in &asm_extern_names {
         all_names.push(*name);
     }
-    let asm_weak_undef_start = all_names.len();
-    for name in &asm_weak_undef {
+    let asm_global_undef_start = all_names.len();
+    for name in &asm_global_undef {
         all_names.push(*name);
     }
     // Standard TLS symbols + local-exec relocations are the ELF interop
@@ -2139,7 +2143,7 @@ pub(super) fn write_relocatable(
                 && !user_extern_names.contains(&d.name.as_str())
                 && !user_extern_data_names.contains(&d.name.as_str())
                 && !asm_extern_names.contains(&d.name.as_str())
-                && !asm_weak_undef.contains(&d.name.as_str())
+                && !asm_global_undef.contains(&d.name.as_str())
         })
         .collect();
     let asm_decl_undef_start = all_names.len();
@@ -2746,11 +2750,12 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // Weak undefined entries for `.weak` names that surface nowhere else.
-    for (i, _name) in asm_weak_undef.iter().enumerate() {
+    // Undefined global entries for `.globl` names that surface nowhere else.
+    for (i, name) in asm_global_undef.iter().enumerate() {
         symbols.push(Elf64Sym {
-            st_name: name_offs[asm_weak_undef_start + i],
-            st_info: pack_sym_info(STB_WEAK, STT_NOTYPE),
+            st_name: name_offs[asm_global_undef_start + i],
+            st_info: pack_sym_info(STB_GLOBAL, STT_NOTYPE),
+            st_other: vis_for(name),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });
@@ -5285,6 +5290,7 @@ mod tests {
             data: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
+            asm_global_names: Vec::new(),
             asm_hidden_names: Vec::new(),
             data_ro_len: 0,
             data_relro_len: 0,

@@ -242,6 +242,11 @@ impl Compiler {
                             self.asm_weak_names.push(name.clone());
                         }
                     }
+                    engine::AsmSectionItem::Global(name) => {
+                        if !self.asm_global_names.contains(name) {
+                            self.asm_global_names.push(name.clone());
+                        }
+                    }
                     engine::AsmSectionItem::Hidden(name) => {
                         if !self.asm_hidden_names.contains(name) {
                             self.asm_hidden_names.push(name.clone());

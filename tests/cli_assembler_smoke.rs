@@ -242,6 +242,66 @@ fn visibility(bytes: &[u8], want: &str) -> Option<u8> {
     None
 }
 
+/// `(name, binding, section index)` of every named symbol table entry.
+fn sym_bindings(bytes: &[u8]) -> Vec<(String, u8, u16)> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum) = (u16at(0x3a), u16at(0x3c));
+    let mut out = Vec::new();
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        if u32at(sh + 4) != 2 {
+            continue;
+        }
+        let off = u64at(sh + 0x18) as usize;
+        let size = u64at(sh + 0x20) as usize;
+        let stroff = u64at(shoff + u32at(sh + 0x28) * shentsize + 0x18) as usize;
+        for e in (0..size).step_by(24) {
+            let sym = off + e;
+            let n = stroff + u32at(sym);
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+            if end == 0 {
+                continue;
+            }
+            let name = String::from_utf8(bytes[n..n + end].to_vec()).unwrap();
+            out.push((name, bytes[sym + 4] >> 4, u16at(sym + 6) as u16));
+        }
+    }
+    out
+}
+
+/// A `.globl` naming a symbol the unit neither defines nor references still
+/// gets an undefined global entry; a `.weak` in the same position gets no
+/// entry at all. Both are GNU as 2.46.1's symbol table for the same source,
+/// and `ld -r` carries the undefined global into the next link stage.
+#[test]
+fn an_unreferenced_globl_declaration_reaches_the_symbol_table() {
+    const STB_GLOBAL: u8 = 1;
+    let bytes = object_of(
+        "globl-undef",
+        "\t.globl before_section\n\t.weak weak_before\n\t.text\n\t.globl after_section\n\
+         \t.weak weak_after\n\t.globl defined_sym\ndefined_sym:\n\tret\n",
+    );
+    let syms = sym_bindings(&bytes);
+    let find = |n: &str| syms.iter().find(|s| s.0 == n).cloned();
+    const SHN_UNDEF: u16 = 0;
+    assert_eq!(
+        find("before_section"),
+        Some((String::from("before_section"), STB_GLOBAL, SHN_UNDEF)),
+        "a `.globl` before any section directive",
+    );
+    assert_eq!(
+        find("after_section"),
+        Some((String::from("after_section"), STB_GLOBAL, SHN_UNDEF)),
+        "a `.globl` inside a section",
+    );
+    assert!(find("defined_sym").is_some_and(|s| s.2 != SHN_UNDEF));
+    assert_eq!(find("weak_before"), None, "an unreferenced `.weak`");
+    assert_eq!(find("weak_after"), None, "an unreferenced `.weak`");
+}
+
 /// An immediate whose expression folds to a value already fixed where the
 /// instruction sits takes the operand's `imm8` form, as GNU as 2.46.1 does;
 /// the kernel's boot decompressor writes `subl $rva(1b), %ebp` this way. A

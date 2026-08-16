@@ -84,6 +84,7 @@ pub(crate) fn walk_program(
     program: &Program,
     target: Target,
     optimize: bool,
+    jump_tables: bool,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
     // Walker entries from AST snapshots, keyed by ent_pc.
     let mut walker_pcs: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
@@ -103,6 +104,7 @@ pub(crate) fn walk_program(
             &program.structs,
             target,
             optimize,
+            jump_tables,
         )
         .map_err(|e| {
             // A deliberate rejection is an ordinary diagnostic; the
@@ -272,9 +274,10 @@ pub(crate) fn produce_ssa_funcs(
     program: &Program,
     target: Target,
     optimize: bool,
+    jump_tables: bool,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
     if !program.finished_functions.is_empty() {
-        let mut funcs = walk_program(program, target, optimize)?;
+        let mut funcs = walk_program(program, target, optimize, jump_tables)?;
         // C99 6.2.2: a function with internal linkage that no reachable
         // code or data references is unobservable; drop it before codegen
         // so the unused `static inline` helpers headers pull into every
@@ -887,7 +890,9 @@ pub(crate) fn compact_program_data(
     if std::env::var("BADC_NO_DATA_DCE").is_ok() {
         return Ok(unchanged());
     }
-    let funcs = produce_ssa_funcs(program, target, optimize)?;
+    // Liveness is over program functions and data; the switch dispatch
+    // form reaches the same set either way.
+    let funcs = produce_ssa_funcs(program, target, optimize, true)?;
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
     let sets = compute_live_sets(&funcs, program, false);

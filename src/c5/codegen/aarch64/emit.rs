@@ -12213,8 +12213,9 @@ mod tests {
 
     fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, Allocation) {
         let program = Compiler::new(src.into()).compile().expect("compile");
-        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false)
-            .expect("produce_ssa_funcs");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("produce_ssa_funcs");
         let main = funcs.into_iter().next().expect("at least one function");
         let alloc = super::super::ssa::reg_alloc::allocate(&main, target);
         (main, alloc)
@@ -12332,8 +12333,9 @@ mod tests {
         )
         .compile()
         .expect("compile");
-        let mut funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false)
-            .expect("ssa");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
         // StoreIndexed is produced by the index fold, which the lowering
         // runs after `produce_ssa_funcs`.
         crate::c5::codegen::passes::index_fold::run(&mut funcs);

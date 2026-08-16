@@ -193,6 +193,10 @@ Compile knobs:
                            whatever the default is. With --gnu the model
                            is reported as __GNUC_GNU_INLINE__ /
                            __GNUC_STDC_INLINE__.
+  -fno-jump-tables         Dispatch every switch through the compare
+                           tree, never a jump table, so no switch takes
+                           an indirect branch. -fjump-tables restores
+                           the default.
   -fshort-wchar            Give wchar_t an unsigned 16-bit type instead
                            of the target's default, narrowing the
                            elements of L-prefixed string and character
@@ -563,6 +567,7 @@ fn run() {
     let mut mno_fp_regs = false;
     let mut mstrict_align = false;
     let mut fpic = false;
+    let mut jump_tables = true;
     let mut code_model = badc::CodeModel::Small;
     let mut code_model_tiny = false;
     let mut hardening = badc::Hardening::NONE;
@@ -1039,6 +1044,13 @@ fn run() {
             // `-c` object's relocation shapes.
             "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => fpic = true,
             "-fno-pic" | "-fno-PIC" | "-fno-pie" | "-fno-PIE" => fpic = false,
+            // gcc / clang `-fno-jump-tables`: a switch never dispatches
+            // through a table, only through the compare tree. Kernels
+            // built with retpoline or indirect-branch tracking pass it
+            // because a table dispatch is an indirect branch those
+            // configurations must not take.
+            "-fjump-tables" => jump_tables = true,
+            "-fno-jump-tables" => jump_tables = false,
             // Code model for `-c` objects; see `CodeModel`. `small` is
             // the default; `kernel` switches external-address
             // materialization to the sign-extended 32-bit absolute form
@@ -2099,6 +2111,7 @@ fn run() {
             .with_inline_cap(inline_cap);
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
+        reloc_opts.jump_tables = jump_tables;
         reloc_opts.pic = fpic;
         // These objects are linked into an image below, and every image
         // this toolchain writes takes its data relocations at load time
@@ -2736,6 +2749,7 @@ fn run() {
             .with_inline_cap(inline_cap);
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
+        reloc_opts.jump_tables = jump_tables;
         reloc_opts.pic = fpic;
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
@@ -2866,6 +2880,7 @@ fn run() {
             .with_inline_cap(inline_cap);
         reloc_opts.no_fp_regs = mno_fp_regs;
         reloc_opts.strict_align = mstrict_align;
+        reloc_opts.jump_tables = jump_tables;
         reloc_opts.pic = fpic;
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;

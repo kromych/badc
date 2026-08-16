@@ -154,6 +154,15 @@ def rewrite(argv: list[str]) -> list[str]:
             # kernel's own `-std=gnu11` has to reach it.
             out.append(a)
             i += 1
+        elif a in ("-fno-jump-tables", "-fjump-tables"):
+            # arch/x86/Makefile adds -fno-jump-tables under
+            # CONFIG_MITIGATION_RETPOLINE and probes it with the IBT
+            # pair: a table dispatch is an indirect branch, which those
+            # configurations forbid unthunked and require a landing pad
+            # at. Dropping it builds every switch with the branch the
+            # configuration rules out, so it is forwarded.
+            out.append(a)
+            i += 1
         elif a == "-mstrict-align":
             # Early-boot units that run with the MMU off are built with
             # this: memory is Device-typed there and an unaligned access

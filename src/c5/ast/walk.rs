@@ -91,6 +91,7 @@ pub(crate) fn walk_function(
     structs: &[crate::c5::compiler::StructDef],
     target: Target,
     optimize: bool,
+    jump_tables: bool,
 ) -> Result<FunctionSsa, WalkError> {
     let FinishedFunction {
         ast,
@@ -481,6 +482,7 @@ pub(crate) fn walk_function(
         indirect_result_slot,
         scalar_return_ty: return_ty,
         optimize,
+        jump_tables,
     };
     // Walk the function body's root statement (a Compound built
     // at function-end by the parser's `parse_block_stmt` /
@@ -598,6 +600,10 @@ struct Walker<'a> {
     /// resolves to 0 here, keeping the front-end constant-condition
     /// fold (and the emitted code) identical to the early answer.
     optimize: bool,
+    /// A dense switch may lower to `Terminator::JumpTable`. Clear under
+    /// `-fno-jump-tables`, which leaves every switch on the compare
+    /// tree so the dispatch takes no indirect branch.
+    jump_tables: bool,
 }
 
 impl<'a> Walker<'a> {
@@ -2537,7 +2543,7 @@ impl<'a> Walker<'a> {
                     b.switch_to(next);
                 }
                 let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
-                if !self.emit_switch_table(b, disc_val, &sorted, deflt) {
+                if !self.jump_tables || !self.emit_switch_table(b, disc_val, &sorted, deflt) {
                     self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
                 }
 
@@ -7624,6 +7630,7 @@ mod tests {
             &[],
             Target::LinuxAarch64,
             false,
+            true,
         )
         .expect("walk");
         let immediates: alloc::vec::Vec<i64> = func
@@ -7683,6 +7690,7 @@ mod tests {
             &[],
             Target::LinuxAarch64,
             false,
+            true,
         )
         .expect("walk");
         let loads: alloc::vec::Vec<_> = func
@@ -7750,6 +7758,7 @@ mod tests {
             &[],
             Target::LinuxAarch64,
             false,
+            true,
         )
         .expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
@@ -7809,6 +7818,7 @@ mod tests {
             &[],
             Target::LinuxAarch64,
             false,
+            true,
         )
         .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
@@ -7848,6 +7858,7 @@ mod tests {
             &[],
             Target::LinuxAarch64,
             false,
+            true,
         )
         .expect_err("Asm must surface as unsupported");
         assert!(matches!(err, WalkError::InvalidStmt { kind: "Asm", .. }));

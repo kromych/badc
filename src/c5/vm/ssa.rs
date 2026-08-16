@@ -3186,6 +3186,7 @@ mod tests {
             &program,
             super::super::super::Target::MacOSAarch64,
             false,
+            true,
         )
         .expect("ssa lift");
         // The first walker-produced function is the user's
@@ -3202,6 +3203,7 @@ mod tests {
             &program,
             super::super::super::Target::MacOSAarch64,
             false,
+            true,
         )
         .expect("ssa lift");
         let binding_names: alloc::vec::Vec<alloc::string::String> = program
@@ -3270,6 +3272,7 @@ mod tests {
             &program,
             super::super::super::Target::MacOSAarch64,
             false,
+            true,
         )
         .expect("ssa lift");
         let mut host = super::super::super::host::StdHost::default();
@@ -3475,6 +3478,7 @@ mod tests {
             &program,
             super::super::super::Target::MacOSAarch64,
             false,
+            true,
         )
         .expect("ssa lift");
         let binding_names: alloc::vec::Vec<alloc::string::String> = program
@@ -3560,6 +3564,7 @@ mod tests {
             &program,
             super::super::super::Target::MacOSAarch64,
             false,
+            true,
         )
         .expect("ssa lift");
         let binding_names: alloc::vec::Vec<alloc::string::String> = program

@@ -106,12 +106,11 @@ impl<H: Host> Vm<H> {
         // function alias of the unit resolves, in the lifted bodies
         // and in the data-slot function addresses.
         let ssa_funcs =
-            super::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false).map(
-                |mut funcs| {
+            super::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false, true)
+                .map(|mut funcs| {
                     super::codegen::ssa::shadow::bind_alias_imports(&program, &mut funcs);
                     funcs
-                },
-            );
+                });
         let mut code_relocs = core::mem::take(&mut program.code_relocs);
         super::codegen::bind_code_reloc_aliases(&program, &mut code_relocs);
         program.code_relocs = code_relocs;

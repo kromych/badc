@@ -633,7 +633,7 @@ fn while_loop_promotes_counter_through_phi_under_phi_promote() {
             .compile()
             .expect("compile failed");
         let mut funcs =
-            produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
+            produce_ssa_funcs(&program, Target::host(), false, true).expect("produce_ssa_funcs");
         for f in &mut funcs {
             crate::c5::codegen::ssa::mem2reg::run(f);
         }
@@ -1963,7 +1963,8 @@ fn dead_strip_drops_unused_static_function() {
     let program = Compiler::new(src.to_string())
         .compile()
         .expect("compile failed");
-    let funcs = produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
+    let funcs =
+        produce_ssa_funcs(&program, Target::host(), false, true).expect("produce_ssa_funcs");
     let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
     assert!(names.contains(&"main"), "entry must survive: {names:?}");
     assert!(
@@ -1994,7 +1995,8 @@ fn asm_template_leading_token_is_not_a_reference() {
     let program = Compiler::new(src.to_string())
         .compile()
         .expect("compile failed");
-    let funcs = produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
+    let funcs =
+        produce_ssa_funcs(&program, Target::host(), false, true).expect("produce_ssa_funcs");
     let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();
     assert!(
         !names.contains(&"nop"),

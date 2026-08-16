@@ -2556,6 +2556,12 @@ pub struct NativeOptions {
     /// from accesses of that width. See [`access_chunk`] and
     /// [`access_pieces`].
     pub strict_align: bool,
+    /// Whether a switch may dispatch through a jump table
+    /// (`-fno-jump-tables` clears it). Cleared, a dense switch lowers
+    /// to the compare tree a sparse one gets, so no indirect branch is
+    /// taken and no table reaches the image -- what retpoline and
+    /// indirect-branch-tracking kernel configurations require.
+    pub jump_tables: bool,
     /// Position-independent relocatable output (`-fPIC` / `-fpic`).
     /// A switch table then emits in the label-difference form the
     /// final images use -- no absolute relocation reaches the object,
@@ -2716,6 +2722,7 @@ impl NativeOptions {
             bss_segregate: true,
             no_fp_regs: false,
             strict_align: false,
+            jump_tables: true,
             pic: false,
             pic_link: false,
             code_model: CodeModel::Small,

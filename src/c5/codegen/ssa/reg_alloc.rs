@@ -2266,7 +2266,7 @@ mod tests {
         let src =
             std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
         let program = Compiler::new(src).compile().expect("compile");
-        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false)
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false, true)
             .expect("produce_ssa_funcs")
     }
 
@@ -2342,9 +2342,13 @@ double f(double a, double b, double c, double d, double e, double h) {
 int main(void) { return 0; }
 "#;
         let program = Compiler::new(src.to_string()).compile().expect("compile");
-        let funcs =
-            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::WindowsX64, false)
-                .expect("produce_ssa_funcs");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::WindowsX64,
+            false,
+            true,
+        )
+        .expect("produce_ssa_funcs");
         for func in &funcs {
             let alloc = allocate(func, Target::WindowsX64);
             for place in &alloc.places {
@@ -2390,8 +2394,9 @@ int main(void) { return 0; }
             .compile()
             .expect("compile");
         for (target, want_scratch) in [(Target::WindowsX64, true), (Target::LinuxX64, false)] {
-            let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false)
-                .expect("ssa");
+            let funcs =
+                crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                    .expect("ssa");
             let f = funcs.iter().find(|f| f.name == "f").expect("f");
             let alloc = allocate(f, target);
             let saves_14_15 = alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15);
@@ -2407,9 +2412,13 @@ int main(void) { return 0; }
         let program = Compiler::new(int_src.to_string())
             .compile()
             .expect("compile");
-        let funcs =
-            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::WindowsX64, false)
-                .expect("ssa");
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::WindowsX64,
+            false,
+            true,
+        )
+        .expect("ssa");
         let g = funcs.iter().find(|f| f.name == "g").expect("g");
         assert!(
             allocate(g, Target::WindowsX64).fp_used.is_empty(),

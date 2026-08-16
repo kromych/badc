@@ -1991,8 +1991,9 @@ fn dense_switch_lowers_to_jump_table_sparse_keeps_tree() {
              case 18: return 7; case 21: return 8; default: return 0; } } \
          int main(void) { return dense8(3) + dense7(0) + half8(0) + sparse8(0); }",
     );
-    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false)
-        .expect("produce_ssa_funcs");
+    let funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false, true)
+            .expect("produce_ssa_funcs");
     let table_of = |name: &str| -> Option<(u32, u32)> {
         let f: &FunctionSsa = funcs.iter().find(|f| f.name == name).unwrap();
         f.blocks.iter().enumerate().find_map(|(b, blk)| {
@@ -3509,8 +3510,8 @@ fn constant_condition_drops_dead_branch_call() {
     )
     .compile()
     .expect("compile");
-    let funcs =
-        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false).expect("ssa");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
     let has_call = |name: &str| -> bool {
         let f = funcs
             .iter()
@@ -3566,7 +3567,8 @@ fn aarch64_fp_access_folds_constant_displacement() {
     .compile()
     .expect("compile");
     let mut funcs =
-        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false).expect("ssa");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+            .expect("ssa");
     crate::c5::codegen::passes::index_fold::run(&mut funcs);
     let mut f32_load = false;
     let mut f64_load = false;
@@ -3707,7 +3709,8 @@ fn ssa_func_named(src: &str, name: &str) -> crate::c5::ir::FunctionSsa {
     let program = crate::Compiler::new(super::with_prelude(&src))
         .compile()
         .expect("compile");
-    let funcs = produce_ssa_funcs(&program, Target::host(), false).expect("produce_ssa_funcs");
+    let funcs =
+        produce_ssa_funcs(&program, Target::host(), false, true).expect("produce_ssa_funcs");
     funcs
         .into_iter()
         .find(|f| f.name == name)
@@ -6708,7 +6711,7 @@ const DENSE_SWITCH_SRC: &str = "int pick(int x) {\n\
      }\n";
 
 /// Compile [`DENSE_SWITCH_SRC`] to a relocatable object for `target`.
-fn dense_switch_object(target: crate::Target, pic: bool) -> alloc::vec::Vec<u8> {
+fn dense_switch_object(target: crate::Target, pic: bool, jump_tables: bool) -> alloc::vec::Vec<u8> {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
     let prog = Compiler::with_options(
         DENSE_SWITCH_SRC.to_string(),
@@ -6720,6 +6723,7 @@ fn dense_switch_object(target: crate::Target, pic: bool) -> alloc::vec::Vec<u8> 
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         pic,
+        jump_tables,
         ..NativeOptions::default()
     };
     emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit object: {e}"))
@@ -6738,7 +6742,7 @@ fn aarch64_switch_table_lands_in_rodata_section_of_object() {
         R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21,
     };
 
-    let bytes = dense_switch_object(Target::LinuxAarch64, false);
+    let bytes = dense_switch_object(Target::LinuxAarch64, false, true);
     let elf = ElfView::new(&bytes);
     let tbl = elf.find(".rodata.jump_tables").expect("no table section");
     const SHF_ALLOC: u64 = 0x2;
@@ -6809,7 +6813,7 @@ fn aarch64_switch_table_pic_object_uses_pcrel_entries() {
     use crate::Target;
     use crate::c5::object::elf_reloc_types::R_AARCH64_PREL32;
 
-    let bytes = dense_switch_object(Target::LinuxAarch64, true);
+    let bytes = dense_switch_object(Target::LinuxAarch64, true, true);
     let elf = ElfView::new(&bytes);
     let tbl = elf.find(".rodata.jump_tables").expect("no table section");
     let tbl_size = elf.sh_size(tbl);
@@ -6825,6 +6829,34 @@ fn aarch64_switch_table_pic_object_uses_pcrel_entries() {
     for (k, r) in rows.iter().enumerate() {
         assert_eq!(r.offset, (k * 4) as u64, "entry {k} offset stride");
         assert_eq!(r.rtype, R_AARCH64_PREL32, "entry {k} relocation kind");
+    }
+}
+
+/// `-fno-jump-tables`: a dense set that would otherwise table-dispatch
+/// stays on the compare tree, so no table section reaches the object
+/// and the dispatch takes no indirect branch. Kernel configurations
+/// building under retpoline or indirect-branch tracking pass the flag
+/// for exactly that reason.
+#[test]
+fn no_jump_tables_keeps_a_dense_switch_on_the_compare_tree() {
+    use crate::Target;
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let with = dense_switch_object(target, false, true);
+        assert!(
+            ElfView::new(&with).find(".rodata.jump_tables").is_some(),
+            "{target:?}: the dense set must table-dispatch by default",
+        );
+        let without = dense_switch_object(target, false, false);
+        let elf = ElfView::new(&without);
+        assert!(
+            elf.find(".rodata.jump_tables").is_none(),
+            "{target:?}: -fno-jump-tables must emit no table section",
+        );
+        assert!(
+            elf.find(".rela.rodata.jump_tables").is_none(),
+            "{target:?}: -fno-jump-tables must emit no table relocations",
+        );
     }
 }
 

@@ -1833,7 +1833,12 @@ pub(crate) fn lower(
         Some(p) => (p.funcs, p.promoted_local_slots),
         None => (
             super::ssa::emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
-                super::ssa::shadow::produce_ssa_funcs(program, target, native.optimize)
+                super::ssa::shadow::produce_ssa_funcs(
+                    program,
+                    target,
+                    native.optimize,
+                    native.jump_tables,
+                )
             })?,
             alloc::collections::BTreeMap::new(),
         ),

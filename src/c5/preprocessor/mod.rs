@@ -185,6 +185,11 @@ pub(crate) struct Preprocessor {
     /// through [`Self::set_unit_model`]. `#if` types an `L'...'`
     /// constant by it, and the `__WCHAR_*__` predefines report it.
     pub(super) wchar: crate::c5::codegen::WcharType,
+    /// Whether plain `char` is signed in this unit, tracking
+    /// `-fsigned-char` / `-funsigned-char` through
+    /// [`Self::set_plain_char_signed`]. `#if` sign-extends a character
+    /// constant by it, and `__CHAR_UNSIGNED__` reports it.
+    pub(super) char_signed: bool,
     fn_macros: HashMap<String, FnMacro>,
     /// One entry per `#pragma dylib(name, "path")`, in the order
     /// declared. Each entry collects the bindings whose
@@ -817,6 +822,7 @@ impl Preprocessor {
             macros,
             target,
             wchar: target.wchar_type(false),
+            char_signed: target.plain_char_signed(),
             fn_macros,
             dylibs: Vec::new(),
             exports: Vec::new(),
@@ -854,6 +860,19 @@ impl Preprocessor {
     pub fn set_unit_model(&mut self, class: ElfClass, model: CodeModel, short_wchar: bool) {
         self.wchar = self.target.wchar_type(short_wchar);
         install_data_model(&mut self.macros, self.target, class, model, short_wchar);
+    }
+
+    /// Select plain `char`'s signedness for this unit (`-fsigned-char` /
+    /// `-funsigned-char`), moving `__CHAR_UNSIGNED__` with it so a
+    /// header cannot read one answer while the front end uses another.
+    pub fn set_plain_char_signed(&mut self, signed: bool) {
+        self.char_signed = signed;
+        if signed {
+            self.macros.remove("__CHAR_UNSIGNED__");
+        } else {
+            self.macros
+                .insert("__CHAR_UNSIGNED__".to_string(), "1".to_string());
+        }
     }
 
     /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`

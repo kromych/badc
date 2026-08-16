@@ -136,6 +136,10 @@ FORWARD_EXACT = {
     # stages L"..." into efi_char16_t (u16) arrays, so a compiler that never
     # sees it lays out the wrong element width.
     "-fshort-wchar", "-fno-short-wchar",
+    # Plain char signedness. The kernel builds every unit -funsigned-char
+    # because the ABI default differs per architecture; it inverts badc's
+    # linux-x64 default and matches its linux-aarch64 one.
+    "-funsigned-char", "-fsigned-char", "-fno-unsigned-char", "-fno-signed-char",
     # The EFI-stub island copies its objects wholesale and rejects any
     # absolute relocation, and the boot decompressor links its objects into a
     # segment that may carry none, so units built position-independent must
@@ -171,10 +175,6 @@ FORWARD_PREFIX = (
 # reaches the build's diagnostic summary rather than only the reader of this
 # file.
 UNSUPPORTED_EXACT = {
-    # Plain `char` is signed in badc's linux-x64 and linux-aarch64 targets,
-    # and the kernel builds every unit with it unsigned. Comparisons and
-    # promotions of a plain `char` differ.
-    "-funsigned-char",
     # badc emits no stack-protector prologue, guard load or __stack_chk_fail
     # call, so a CONFIG_STACKPROTECTOR_STRONG kernel has no canary.
     "-fstack-protector", "-fstack-protector-all", "-fstack-protector-strong",
@@ -563,7 +563,7 @@ def _self_test() -> int:
     # for is `dropped`, which is reported per unit.
     assert rewrite(["-fno-such-flag"]).unknown == ["-fno-such-flag"]
     assert rewrite(["-Wp,-fno-such-flag"]).unknown == ["-Wp,-fno-such-flag"]
-    for flag in ("-funsigned-char", "-fstack-protector-strong", "-nostdinc",
+    for flag in ("-fstack-protector-strong", "-nostdinc",
                  "-ftrivial-auto-var-init=zero", "-fmin-function-alignment=16",
                  "-fpatchable-function-entry=16,16", "-fno-builtin-wcslen",
                  "-mstack-protector-guard=sysreg", "-ffreestanding",
@@ -582,6 +582,10 @@ def _self_test() -> int:
         assert rewrite([flag]).unknown == [flag], flag
     assert rewrite(["-fno-PIE", "-Wa,-mrelax-relocations=no"]).argv == \
         ["-fno-PIE", "-Wa,-mrelax-relocations=no"]
+    # The plain-char selection reaches badc: the kernel passes it on every
+    # unit and it inverts the linux-x64 default.
+    assert rewrite(["-funsigned-char"]) == Rewritten(["-funsigned-char"], [], [])
+    assert rewrite(["-fsigned-char"]) == Rewritten(["-fsigned-char"], [], [])
 
     # Success-path diagnostics: tagged with the unit when a log is
     # configured, left to the caller to forward when none is.

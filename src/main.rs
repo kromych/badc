@@ -204,6 +204,14 @@ Compile knobs:
                            __WCHAR_TYPE__ predefines with it.
                            -fno-short-wchar restores the default, which
                            is already 16-bit on Windows.
+  -fsigned-char            Make plain char signed, whatever the target
+                           ABI selects. -fno-unsigned-char is a synonym.
+  -funsigned-char          Make plain char unsigned, and predefine
+                           __CHAR_UNSIGNED__ so <limits.h> CHAR_MIN /
+                           CHAR_MAX follow. -fno-signed-char is a
+                           synonym. Without either flag the target ABI
+                           decides: unsigned on AArch64 ELF, signed
+                           elsewhere.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
@@ -606,6 +614,9 @@ fn run() {
     let mut gnu89_inline = false;
     // `-fshort-wchar` -- narrow `wchar_t` to an unsigned 16-bit type.
     let mut short_wchar = false;
+    // `-fsigned-char` / `-funsigned-char`; `None` keeps the target ABI's
+    // own plain-`char` signedness.
+    let mut char_signed: Option<bool> = None;
     // Multi-translation-unit linker plumbing. Bytecode `.o`
     // inputs accumulate alongside C sources; `.a` archives
     // arrive either positionally or through `-l<name>` after a
@@ -1109,6 +1120,13 @@ fn run() {
             // reach the front end rather than be dropped as a no-op.
             "-fshort-wchar" => short_wchar = true,
             "-fno-short-wchar" => short_wchar = false,
+            // gcc / clang `-fsigned-char` / `-funsigned-char`: C99
+            // 6.2.5p15 leaves plain `char`'s signedness to the
+            // implementation, and each selects one over the target
+            // default. It changes every `char`-to-`int` conversion, so
+            // it reaches the front end rather than being dropped.
+            "-fsigned-char" | "-fno-unsigned-char" => char_signed = Some(true),
+            "-funsigned-char" | "-fno-signed-char" => char_signed = Some(false),
             // gcc / clang `-std=<dialect>`: the language the unit is
             // written in. badc compiles C99 with the GNU extensions
             // always available, so the dialect selects only whether
@@ -1900,6 +1918,7 @@ fn run() {
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
                 .with_short_wchar(short_wchar)
+                .with_char_signed(char_signed)
                 .with_gnu_dialect(gnu_dialect)
                 .with_asm_source(SourceKind::of(src).is_asm())
                 .with_defines(tu_defines(src, &defines))
@@ -1976,6 +1995,7 @@ fn run() {
             .with_gnu(gnu)
             .with_gnu89_inline(gnu89_inline)
             .with_short_wchar(short_wchar)
+            .with_char_signed(char_signed)
             .with_gnu_dialect(gnu_dialect)
             .with_optimize(optimize_flag)
             .with_defines(defines.clone())
@@ -2073,6 +2093,7 @@ fn run() {
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
                 .with_short_wchar(short_wchar)
+                .with_char_signed(char_signed)
                 .with_gnu_dialect(gnu_dialect)
                 .with_optimize(optimize_flag)
                 .with_asm_source(SourceKind::of(src_path).is_asm())
@@ -2183,6 +2204,7 @@ fn run() {
             gnu_dialect,
             gnu89_inline,
             short_wchar,
+            char_signed,
             optimize_flag,
             export_all,
             show_includes,
@@ -2218,6 +2240,7 @@ fn run() {
                 .with_gnu(gnu)
                 .with_gnu89_inline(gnu89_inline)
                 .with_short_wchar(short_wchar)
+                .with_char_signed(char_signed)
                 .with_gnu_dialect(gnu_dialect)
                 .with_optimize(optimize_flag)
                 .with_defines(copts_defines)
@@ -2810,6 +2833,7 @@ fn run() {
             gnu_dialect,
             gnu89_inline,
             short_wchar,
+            char_signed,
             optimize_flag,
             export_all: false,
             show_includes,
@@ -2942,6 +2966,7 @@ fn run() {
             gnu_dialect,
             gnu89_inline,
             short_wchar,
+            char_signed,
             optimize_flag,
             export_all: false,
             show_includes,
@@ -3339,6 +3364,7 @@ struct CompileCfg<'a> {
     gnu_dialect: bool,
     gnu89_inline: bool,
     short_wchar: bool,
+    char_signed: Option<bool>,
     optimize_flag: bool,
     export_all: bool,
     show_includes: bool,
@@ -3501,6 +3527,7 @@ fn tu_compile_options(
         .with_gnu(cfg.gnu)
         .with_gnu89_inline(cfg.gnu89_inline)
         .with_short_wchar(cfg.short_wchar)
+        .with_char_signed(cfg.char_signed)
         .with_gnu_dialect(cfg.gnu_dialect)
         .with_asm_source(SourceKind::of(src_path).is_asm())
         .with_defines(tu_defines(src_path, cfg.defines))

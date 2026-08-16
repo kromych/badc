@@ -1109,6 +1109,67 @@ fn short_wchar_narrows_wchar_t_from_the_driver() {
     );
 }
 
+/// `-fsigned-char` / `-funsigned-char` reach the front end from the
+/// driver and move `__CHAR_UNSIGNED__` with the type, so `<limits.h>`
+/// and the compiler agree. Without either, the target ABI decides:
+/// unsigned on AArch64 ELF, signed elsewhere, as gcc 16.1.1 and
+/// clang 22.1.8 do on each. The kernel builds every unit
+/// `-funsigned-char`.
+#[test]
+fn char_signedness_flags_reach_the_front_end() {
+    const PP: &str = concat!(
+        "#ifdef __CHAR_UNSIGNED__\n",
+        "plain unsigned\n#else\nplain signed\n#endif\n",
+    );
+    let d = dir("char-signedness");
+    write(&d, "pp.c", PP);
+    for (target, flags, want) in [
+        ("linux-x64", &[][..], "plain signed"),
+        ("linux-aarch64", &[][..], "plain unsigned"),
+        ("macos-aarch64", &[][..], "plain signed"),
+        ("windows-x64", &[][..], "plain signed"),
+        ("linux-x64", &["-funsigned-char"][..], "plain unsigned"),
+        ("linux-x64", &["-fno-signed-char"][..], "plain unsigned"),
+        ("linux-aarch64", &["-fsigned-char"][..], "plain signed"),
+        ("linux-aarch64", &["-fno-unsigned-char"][..], "plain signed"),
+        // The last selection wins, as it does in gcc.
+        (
+            "linux-x64",
+            &["-funsigned-char", "-fsigned-char"][..],
+            "plain signed",
+        ),
+    ] {
+        let tgt = format!("--target={target}");
+        let mut args = vec!["-q", "-E", &tgt];
+        args.extend_from_slice(flags);
+        args.push("pp.c");
+        let out = run_ok(&d, &args);
+        let body: String = out.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(body.contains(want), "{target} {flags:?}: {body}");
+    }
+    // `<limits.h>` keys CHAR_MIN on the predefine, so a unit compiled
+    // with the flag sees the matching range rather than the ABI's.
+    write(
+        &d,
+        "l.c",
+        "#include <limits.h>\nint probe[CHAR_MIN < 0 ? -1 : 1];\n",
+    );
+    run_ok(
+        &d,
+        &[
+            "-q",
+            "-c",
+            "--target=linux-x64",
+            "-funsigned-char",
+            "l.c",
+            "-o",
+            "l.o",
+        ],
+    );
+    let (ok, text) = run(&d, &["-q", "-c", "--target=linux-x64", "l.c", "-o", "ls.o"]);
+    assert!(!ok, "the signed default must give CHAR_MIN < 0: {text}");
+}
+
 /// `-mcmodel` names the selected x86-64 model in a predefine and
 /// `-m16` / `-m32` override the name to the 32-bit model; the aarch64
 /// targets name none. Names are gcc 16.1.1's.

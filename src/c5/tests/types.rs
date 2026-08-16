@@ -138,6 +138,51 @@ fn short_wchar_narrows_wchar_t_on_every_target() {
     );
 }
 
+/// Plain `char`'s signedness is the target ABI's (C99 6.2.5p15 leaves it
+/// to the implementation): unsigned under AAPCS64, signed under the
+/// Linux/x86-64 psABI, Apple's arm64 ABI and MSVC. `-fsigned-char` /
+/// `-funsigned-char` override it on any target. Every dependent fact
+/// moves together -- the `char` type tag, `<limits.h>`'s CHAR_MIN /
+/// CHAR_MAX, the `__CHAR_UNSIGNED__` predefine, a `#if` character
+/// constant and the promotion of a byte above 0x7F -- which is what
+/// gcc 16.1.1 and clang 22.1.8 report on both Linux targets.
+#[test]
+fn plain_char_signedness_follows_the_target_abi_and_its_flags() {
+    use super::Vm;
+    use crate::{CompileOptions, Compiler, Target};
+    let run = |t: Target, sel: Option<bool>| -> i64 {
+        let opts = CompileOptions::default().with_char_signed(sel);
+        Vm::new(
+            Compiler::with_options(PROBE.to_string(), t, opts)
+                .compile()
+                .unwrap(),
+        )
+        .run()
+        .unwrap()
+    };
+    const PROBE: &str = "#include <limits.h>\n\
+         #ifdef __CHAR_UNSIGNED__\n#define PREDEF 1\n#else\n#define PREDEF 0\n#endif\n\
+         #if '\\xFF' < 0\n#define IF_NEG 1\n#else\n#define IF_NEG 0\n#endif\n\
+         int main(void){ return (int)(((char)-1 < 0) * 100000 \
+         + (CHAR_MIN < 0) * 10000 + (CHAR_MAX == 127) * 1000 \
+         + PREDEF * 100 + IF_NEG * 10 + ((int)(char)0x80 < 0)); }";
+    // Signed leaves `__CHAR_UNSIGNED__` undefined and takes 0x80 to -128;
+    // unsigned sets only the predefine and keeps 0x80 positive.
+    const SIGNED: i64 = 111_011;
+    const UNSIGNED: i64 = 100;
+    for (t, dflt) in [
+        (Target::LinuxX64, SIGNED),
+        (Target::LinuxAarch64, UNSIGNED),
+        (Target::MacOSAarch64, SIGNED),
+        (Target::WindowsX64, SIGNED),
+        (Target::WindowsAarch64, SIGNED),
+    ] {
+        assert_eq!(run(t, None), dflt, "{t:?} ABI default");
+        assert_eq!(run(t, Some(true)), SIGNED, "{t:?} under -fsigned-char");
+        assert_eq!(run(t, Some(false)), UNSIGNED, "{t:?} under -funsigned-char");
+    }
+}
+
 /// `wchar_t`'s signedness comes from the target ABI, not from its width:
 /// AAPCS64 makes the 4-byte type unsigned while the Linux/x86-64 psABI
 /// and Apple's arm64 ABI make the same width signed, which is what

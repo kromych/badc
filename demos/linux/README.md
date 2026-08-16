@@ -289,7 +289,7 @@ what the shim does not recognize is what let `-fno-jump-tables` reach no
 compiler while every `.o.cmd` recorded it: the probe behind it is
 delegated to the reference compiler, so nothing in the build's own
 artifacts disagreed. On the pinned `defconfig` the unsupported set is
-`-funsigned-char`, `-nostdinc`, `-fstack-protector-strong` with its
+`-nostdinc`, `-fstack-protector-strong` with its
 `-mstack-protector-guard*` operands, `-ftrivial-auto-var-init=zero`,
 `-fzero-init-padding-bits=all`, `-fstrict-flex-arrays=3`,
 `-fmin-function-alignment=`, `-fpatchable-function-entry=` (x86_64),

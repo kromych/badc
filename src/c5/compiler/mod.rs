@@ -410,6 +410,10 @@ pub struct CompileOptions {
     /// every target, which narrows `L"..."` / `L'...'` elements and the
     /// `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__` predefines with it.
     pub short_wchar: bool,
+    /// `-fsigned-char` / `-funsigned-char`, which C99 6.2.5p15 leaves to
+    /// the implementation. `None` keeps the target ABI's own choice; see
+    /// [`Self::plain_char_signed`], the sole resolution of the pair.
+    pub char_signed: Option<bool>,
 }
 
 impl CompileOptions {
@@ -433,6 +437,23 @@ impl CompileOptions {
     pub fn with_short_wchar(mut self, on: bool) -> Self {
         self.short_wchar = on;
         self
+    }
+
+    /// Select plain `char`'s signedness (`-fsigned-char` /
+    /// `-funsigned-char`); `None` restores the target default.
+    pub fn with_char_signed(mut self, signed: Option<bool>) -> Self {
+        self.char_signed = signed;
+        self
+    }
+
+    /// Whether plain `char` is signed in this unit: the target ABI's
+    /// choice unless an explicit flag overrode it. Every site that
+    /// depends on the signedness -- the `__CHAR_UNSIGNED__` predefine,
+    /// `#if` character constants, the lexer's constant folding and the
+    /// `char` type tag -- resolves it here.
+    pub fn plain_char_signed(&self, target: Target) -> bool {
+        self.char_signed
+            .unwrap_or_else(|| target.plain_char_signed())
     }
 
     /// Mark the input as assembler-with-cpp (a `.S` unit).
@@ -2120,6 +2141,7 @@ impl Compiler {
         // `-mcmodel` moves the `__code_model_*__` name the same way, and
         // `-fshort-wchar` the `wchar_t` pair.
         pp.set_unit_model(opts.elf_class, opts.code_model, opts.short_wchar);
+        pp.set_plain_char_signed(opts.plain_char_signed(target));
         if opts.gnu {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }
@@ -2266,7 +2288,7 @@ impl Compiler {
             let wchar = target.wchar_type(opts.short_wchar);
             l.wchar_bytes = wchar.bytes;
             l.wchar_signed = wchar.signed;
-            l.char_signed = target.plain_char_signed();
+            l.char_signed = opts.plain_char_signed(target);
             l
         };
         Self {

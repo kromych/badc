@@ -261,7 +261,7 @@ impl Compiler {
                 mods.int_base()
             } else if self.lex.tk == Token::Char {
                 self.next()?;
-                mods.char_tag(self.target.plain_char_signed())
+                mods.char_tag(self.lex.char_signed)
             } else if self.lex.tk == Token::Void {
                 self.next()?;
                 // `void *p;` / `void (*fp)(...);` fields. Bare
@@ -405,7 +405,7 @@ impl Compiler {
                 if field_base_tok == Token::Int {
                     field_base = mods.int_base();
                 } else if field_base_tok == Token::Char {
-                    field_base = mods.char_tag(self.target.plain_char_signed());
+                    field_base = mods.char_tag(self.lex.char_signed);
                 }
             }
             field_base = super::types::apply_qual_bits(field_base, leading_quals | trailing_quals);

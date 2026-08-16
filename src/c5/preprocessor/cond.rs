@@ -703,7 +703,7 @@ impl<'a> IfExprParser<'a> {
                     // A single-character constant keeps its char's own
                     // value, sign-extended on signed-plain-char targets.
                     let v = if count == 1 {
-                        if self.pp.target.plain_char_signed() && (0..=0xFF).contains(&last) {
+                        if self.pp.char_signed && (0..=0xFF).contains(&last) {
                             last as u8 as i8 as i64
                         } else {
                             last

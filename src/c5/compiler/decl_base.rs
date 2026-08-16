@@ -1468,7 +1468,7 @@ impl Compiler {
             m.int_base()
         } else if self.lex.tk == Token::Char {
             self.next()?;
-            m.char_tag(self.target.plain_char_signed())
+            m.char_tag(self.lex.char_signed)
         } else if self.lex.tk == Token::Void {
             self.next()?;
             // `void` rides the `unsigned char` representation plus
@@ -1787,7 +1787,7 @@ impl Compiler {
             if base_tok == Token::Int {
                 bt = m.int_base();
             } else if base_tok == Token::Char {
-                bt = m.char_tag(self.target.plain_char_signed());
+                bt = m.char_tag(self.lex.char_signed);
             } else if base_tok == Token::Double && m.saw_long() {
                 self.pending.base_was_long_double = true;
             } else if m.saw_unsigned && self.is_int128_ty(bt) {

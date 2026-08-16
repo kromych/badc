@@ -235,11 +235,12 @@ STEP_MARK = "--- lane step"
 def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
     """Run `cmd`, prefixing every output line with `prefix` so
     parallel lane outputs stay attributable. `stdin_text` is written and
-    the pipe closed before the output is read: it carries the step
-    script, which holds the token, so that neither this process's
-    command line nor the remote shell's exposes it to `ps`. The script
-    is a few KB against a 64K pipe buffer, so the write completes
-    without the reader running."""
+    the pipe closed before the output is read: it carries whatever holds
+    the token -- the whole step script on the POSIX lanes, the token line
+    alone on the Windows ones -- so that neither this process's command
+    line nor the remote shell's exposes it to the process list. Both are
+    well under the 64K pipe buffer, so the write completes without the
+    reader running."""
     proc = subprocess.Popen(
         cmd,
         stdin=subprocess.PIPE if stdin_text is not None else None,
@@ -374,29 +375,71 @@ def posix_steps(
     return steps
 
 
-def remote_run_linux(
+def posix_script(
     box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
-) -> int:
-    steps = posix_steps(box, kernel, demos, snapshots, jobs)
-    inner = (
-        f"cd {box.remote_path} && "
-        f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
-        f"{STEP_FN}; " + " && ".join(steps)
-    )
-    return stream(box.short, ["ssh", box.host, "bash -s"], stdin_text=inner)
-
-
-def local_run(
-    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
-) -> int:
-    """The host lane: the same step list, run in the working tree by a
-    shell rather than over ssh."""
-    inner = (
-        f"cd {shlex.quote(box.remote_path)} && "
+) -> str:
+    """The step script both POSIX lane kinds run, read by `bash -s` from
+    stdin. A `--box` path usually starts with `~`, which expands only
+    unquoted; the host lane's path is REPO_ROOT and is quoted."""
+    path = shlex.quote(box.remote_path) if box.kind == "macos" else box.remote_path
+    return (
+        f"cd {path} && "
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
         f"{STEP_FN}; " + " && ".join(posix_steps(box, kernel, demos, snapshots, jobs))
     )
-    return stream(box.short, ["bash", "-s"], stdin_text=inner)
+
+
+def windows_inner(box: Box, demos: bool, jobs: int) -> str:
+    """The Windows lane's `cmd /c` chain, which carries no secret: the
+    token arrives on stdin and `set /p` reads it into the environment
+    before the chain starts.
+
+    The two token statements are joined with `&` rather than `&&` -- an
+    empty token, from a failed `gh auth token`, makes `set /p` report
+    failure, and that must not abort the run. The clear ahead of it keeps
+    that case from inheriting a value the box already had. Everything
+    after is `&&`-chained, so the first failing step ends the lane with
+    its own status. `exit /b` is not used anywhere in the chain: it ends
+    the whole `cmd /c` rather than one step."""
+    # cmd's path separator is the backslash; forward slashes from a
+    # caller-supplied --box arg work for some commands but not for
+    # `cd /d`, which silently returns success without changing the cwd.
+    remote_path = box.remote_path.replace("/", "\\")
+    named = [
+        ("cargo build", "cargo build --release --locked --features full"),
+        ("cargo test", "cargo test --release --features full"),
+    ]
+    if demos:
+        named.append(("demo phase", demo_command(box, jobs, "python")))
+    # cmd has no `step()` equivalent, so each step announces itself as the
+    # chain reaches it, and the last announcement names the step that failed.
+    parts = [f"cd /d {remote_path}"]
+    for label, cmd in named:
+        parts.append(f"echo {STEP_MARK} {label}")
+        parts.append(cmd)
+    return "set GITHUB_TOKEN= & set /p GITHUB_TOKEN= & " + " && ".join(parts)
+
+
+def lane_invocation(
+    box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
+) -> tuple[list[str], str]:
+    """The argv and the stdin text for a lane's test phase. The token is
+    only ever in the stdin half: a command line is readable from the
+    process list by any local user, on the driver host and on the box
+    alike."""
+    if box.kind == "windows":
+        # The chain is quoted whole so the ssh-side cmd /c treats it as one
+        # cmd context. Unquoted, only the first `&&` chunk runs under the
+        # inner cd and the rest run in the login cwd, where there is no
+        # Cargo.toml.
+        return (
+            ["ssh", box.host, f'cmd /c "{windows_inner(box, demos, jobs)}"'],
+            github_token + "\n",
+        )
+    script = posix_script(box, github_token, kernel, demos, snapshots, jobs)
+    if box.kind == "macos":
+        return ["bash", "-s"], script
+    return ["ssh", box.host, "bash -s"], script
 
 
 def sync_windows(box: Box, github_token: str) -> int:
@@ -478,42 +521,6 @@ def sync_windows(box: Box, github_token: str) -> int:
     )
 
 
-# `_kernel` and `_snapshots` are unused: both steps are Linux-lane
-# dimensions, and the parameters are present only so both lane kinds
-# dispatch through one signature.
-def remote_run_windows(
-    box: Box, github_token: str, _kernel: bool, demos: bool, _snapshots: bool, jobs: int
-) -> int:
-    # cmd's path separator is the backslash; forward slashes from a
-    # caller-supplied --box arg work for some commands but not for
-    # `cd /d`, which silently returns success without changing the cwd.
-    remote_path = box.remote_path.replace("/", "\\")
-    # cmd has no `step()` equivalent, so each step announces itself as
-    # the chain reaches it. `&&` stops at the first failure, so the last
-    # announcement names the step that failed and the summary can report
-    # it rather than a bare exit code.
-    parts = [
-        f"cd /d {remote_path}",
-        f"set GITHUB_TOKEN={github_token}",
-    ]
-    named = [
-        ("cargo build", "cargo build --release --locked --features full"),
-        ("cargo test", "cargo test --release --features full"),
-    ]
-    if demos:
-        named.append(("demo phase", demo_command(box, jobs, "python")))
-    for label, cmd in named:
-        parts.append(f"echo {STEP_MARK} {label}")
-        parts.append(cmd)
-    inner = " && ".join(parts)
-    # Quote the entire command so the outer ssh-side cmd /c treats the
-    # whole `cd && ... && cargo ...` chain as one cmd context. Without
-    # the quotes only the first `&&` chunk runs under the inner cd; the
-    # rest run in the outer shell's cwd (C:\Users\krom) and fail to find
-    # Cargo.toml.
-    return stream(box.short, ["ssh", box.host, f'cmd /c "{inner}"'])
-
-
 def sync_none(box: Box, github_token: str) -> int:
     """The host lane runs in the working tree; nothing to ship."""
     return 0
@@ -523,20 +530,61 @@ def run_box(
     box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool, jobs: int
 ) -> int:
     sync = {"linux": sync_linux, "windows": sync_windows, "macos": sync_none}[box.kind]
-    test = {
-        "linux": remote_run_linux,
-        "windows": remote_run_windows,
-        "macos": local_run,
-    }[box.kind]
     rc = sync(box, github_token)
     if rc != 0:
         sys.stdout.write(f"[{box.short}] SYNC FAILED ({rc})\n")
         return rc
     start = time.time()
-    rc = test(box, github_token, kernel, demos, snapshots, jobs)
+    argv, stdin_text = lane_invocation(
+        box, github_token, kernel, demos, snapshots, jobs
+    )
+    rc = stream(box.short, argv, stdin_text=stdin_text)
     sys.stdout.write(f"[{box.short}] lane wall clock {time.time() - start:.0f}s\n")
     sys.stdout.write(f"[{box.short}] {'OK' if rc == 0 else f'FAIL ({rc})'}\n")
     return rc
+
+
+def self_test() -> int:
+    """Check the two properties a lane's transport has to hold: the token
+    reaches the box without ever entering a command line, and a failing
+    step still fails the lane and is still named in the summary."""
+    token = "canary-Tok3n-VALUE"
+    boxes = [
+        Box("lin", "h", "~/src/compilers/badc/", "linux"),
+        Box("win", "h", "R:/src/compilers/badc/", "windows"),
+        Box("mac", "", str(REPO_ROOT), "macos"),
+    ]
+    for box in boxes:
+        for demos in (False, True):
+            argv, stdin_text = lane_invocation(box, token, True, demos, True, DEMO_JOBS)
+            assert not any(token in a for a in argv), f"{box.kind}: token in {argv}"
+            assert token in stdin_text, f"{box.kind}: token not delivered"
+
+    win = Box("win", "h", "R:/src/compilers/badc/", "windows")
+    inner = windows_inner(win, True, DEMO_JOBS)
+    assert inner.startswith("set GITHUB_TOKEN= & set /p GITHUB_TOKEN= & ")
+    assert "cd /d R:\\src\\compilers\\badc" in inner
+    # Every step announces itself, and the commands between announcements
+    # are `&&`-joined so the first failure ends the chain. `exit /b` would
+    # end the whole `cmd /c` at the step that used it.
+    assert "exit /b" not in inner
+    for label in ("cargo build", "cargo test", "demo phase"):
+        assert f" && echo {STEP_MARK} {label} && " in f" && {inner} && ", label
+    assert "run_demos.py" in inner
+    assert "run_demos.py" not in windows_inner(win, False, DEMO_JOBS)
+
+    # A failing step has to leave the lane red with the failing step's own
+    # status, and to leave its announcement in LANE_STEP for the summary.
+    LANE_STEP.pop("selftest", None)
+    rc = stream(
+        "selftest",
+        ["bash", "-s"],
+        stdin_text=f"echo '{STEP_MARK} cargo build'\necho '{STEP_MARK} cargo test'\nexit 3\n",
+    )
+    assert rc == 3, f"a failing step must fail the lane, got {rc}"
+    assert LANE_STEP.get("selftest") == f"{STEP_MARK} cargo test", LANE_STEP
+    print("[validate_local_boxes] self-test OK")
+    return 0
 
 
 def main() -> int:
@@ -547,10 +595,16 @@ def main() -> int:
         "--box",
         action="append",
         type=parse_box,
-        required=True,
+        default=[],
         metavar="NAME=HOST:PATH:KIND",
         help="add one lane; repeat for additional lanes. `NAME=macos` is "
         "the host lane and takes no host or path",
+    )
+    p.add_argument(
+        "--self-test",
+        action="store_true",
+        help="check the lane transports -- no token on any command line, a "
+        "failing step still red and still named -- and exit; no lane runs",
     )
     p.add_argument(
         "--no-kernel",
@@ -585,6 +639,8 @@ def main() -> int:
         "is gated instead of the commit that will be pushed",
     )
     args = p.parse_args()
+    if args.self_test:
+        return self_test()
     selected: list[Box] = args.box
     if not selected:
         print("no boxes selected", file=sys.stderr)

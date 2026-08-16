@@ -1242,9 +1242,11 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         // operand reference (`.long %c0`) or an expression over template
         // labels (`.byte 662b-661b`) resolves its value at emit time; the
         // directive keyword rides the mnemonic field.
+        // `.word` always takes this path: its element is 4 bytes on AArch64,
+        // where the shared raw-byte reader lays down the 2-byte default.
         if let Some((tok, rest)) = piece.split_once(char::is_whitespace)
             && emit_common::data_directive_width(tok).is_some()
-            && emit_common::parse_raw_template(piece.as_bytes()).is_none()
+            && (tok == ".word" || emit_common::parse_raw_template(piece.as_bytes()).is_none())
         {
             let mut operands = Vec::new();
             for a in split_operands(rest) {

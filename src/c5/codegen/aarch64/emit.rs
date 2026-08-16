@@ -3776,6 +3776,8 @@ fn emit_inline_asm_aarch64(
         // argument must resolve to a compile-time constant, emitted
         // little-endian at the directive width.
         if let Some(w) = super::super::ssa::emit_common::data_directive_width(&insn.mnemonic) {
+            // `.word` is target-dependent: 4 bytes on AArch64.
+            let w = if insn.mnemonic == ".word" { 4 } else { w };
             if class == MapClass::Data {
                 text_data_ranges.push((code.len(), w * insn.operands.len()));
             }

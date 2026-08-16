@@ -2451,6 +2451,7 @@ fn asm_label_difference_in_an_aarch64_function_body_stream() {
                 "662:\n\t"
                 ".byte 662b-661b\n\t"
                 ".short 662b-661b\n\t"
+                ".word 662b-661b\n\t"
                 ".long 662b-661b\n\t"
                 ".quad 662b-661b\n\t"
                 ".byte 664f-663f\n"
@@ -2468,6 +2469,7 @@ fn asm_label_difference_in_an_aarch64_function_body_stream() {
         0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5, // the two bracketed nops
         0x08, // .byte  662b-661b
         0x08, 0x00, // .short
+        0x08, 0x00, 0x00, 0x00, // .word: four bytes on AArch64
         0x08, 0x00, 0x00, 0x00, // .long
         0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // .quad
         0x0c, // .byte 664f-663f: three instructions follow

@@ -113,6 +113,7 @@ pub(crate) fn compile_function_to_bytes(
                     &alloc::collections::BTreeMap::new(),
                     &alloc::collections::BTreeMap::new(),
                     &mut asm_text_labels,
+                    &mut None,
                     false,
                     false,
                     super::super::Hardening::NONE,

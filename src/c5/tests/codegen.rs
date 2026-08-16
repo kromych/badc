@@ -7463,6 +7463,80 @@ fn a64_branch_protection_skips_a_naked_body() {
     assert_ne!(first, 0xD503_245F, "no pad ahead of a naked body");
 }
 
+#[test]
+fn a64_asm_template_ending_in_data_pads_only_ahead_of_an_instruction() {
+    // GNU as brings an executable section's counter to the instruction
+    // boundary when it assembles an instruction out of the data mapping
+    // state, not at the end of a data run. A naked function's body is its
+    // inline asm, so a template ending in a data directive is the last
+    // content of the section and takes no padding; an ordinary function's
+    // epilogue follows, and the padding is the gap ahead of it. Every
+    // expectation was read off `as` (binutils 2.46.1) for the same input.
+    const NAKED: &str = "__attribute__((naked)) void f(void) { __asm__(\".byte 9\"); }\n";
+    const NAKED_TWO: &str = "__attribute__((naked)) void f(void) \
+         { __asm__(\".byte 9\"); __asm__(\".byte 8\"); }\n";
+    const NAKED_THEN_INSN: &str = "__attribute__((naked)) void f(void) \
+         { __asm__(\".byte 9\"); __asm__(\"nop\"); }\n";
+    const ORDINARY: &str = "void f(void) { __asm__(\".byte 9\"); }\n";
+    let text = |src: &str| {
+        elf_text(&emit_hardened(
+            src,
+            crate::Target::LinuxAarch64,
+            crate::Hardening::NONE,
+        ))
+    };
+    assert_eq!(text(NAKED), alloc::vec![0x09], "a naked body pads nothing");
+    assert_eq!(
+        text(NAKED_TWO),
+        alloc::vec![0x09, 0x08],
+        "consecutive data templates stay adjacent"
+    );
+    assert_eq!(
+        text(NAKED_THEN_INSN),
+        alloc::vec![0x09, 0, 0, 0, 0x1f, 0x20, 0x03, 0xd5],
+        "an instruction in a later template takes the padding"
+    );
+    assert_eq!(
+        text(ORDINARY)[..4],
+        [0x09, 0, 0, 0],
+        "an epilogue takes the padding"
+    );
+    // A clobber gives the block a save/restore pair, so the padding is the
+    // gap ahead of the restore rather than the end of the body.
+    const NAKED_CLOBBER: &str = "__attribute__((naked)) void f(void) \
+         { __asm__(\".byte 9\" ::: \"x5\"); }\n";
+    let clobber = text(NAKED_CLOBBER);
+    let at = clobber
+        .iter()
+        .position(|&b| b == 0x09)
+        .expect("the data byte");
+    assert_eq!(
+        clobber[at..at + 4],
+        [0x09, 0, 0, 0],
+        "the restore takes the padding"
+    );
+    assert_eq!(clobber.len() % 4, 0, "the body ends on an instruction");
+    // The mapping state spans the section, so the next function's entry pays
+    // the padding its predecessor's data tail left owing. GNU as gives the
+    // same layout, `g` at 1 and its first instruction at 4.
+    const TWO_NAKED: &str = "__attribute__((naked)) void f(void) \
+         { __asm__(\".byte 9\"); }\n\
+         __attribute__((naked)) void g(void) { __asm__(\"nop\"); }\n";
+    assert_eq!(
+        text(TWO_NAKED),
+        alloc::vec![0x09, 0, 0, 0, 0x1f, 0x20, 0x03, 0xd5],
+        "the next function's entry takes the padding"
+    );
+    const NAKED_THEN_ORDINARY: &str = "__attribute__((naked)) void f(void) \
+         { __asm__(\".byte 9\"); }\n\
+         int g(int x) { return x + 1; }\n";
+    assert_eq!(
+        text(NAKED_THEN_ORDINARY)[..4],
+        [0x09, 0, 0, 0],
+        "an ordinary entry takes it too"
+    );
+}
+
 const PACIASP: u32 = 0xD503_233F;
 const AUTIASP: u32 = 0xD503_23BF;
 const A64_RET: u32 = 0xD65F_03C0;

@@ -2060,6 +2060,7 @@ pub(crate) fn lower(
     let mut text_align: usize = 16;
     let mut label_relocs: Vec<super::LabelReloc> = Vec::new();
     let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut text_map_state: Option<super::map_syms::MapClass> = None;
     let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
@@ -2143,6 +2144,7 @@ pub(crate) fn lower(
                 &name2entpc,
                 &data_sym_offsets,
                 &mut asm_text_labels,
+                &mut text_map_state,
                 native.no_fp_regs,
                 native.strict_align,
                 native.hardening,

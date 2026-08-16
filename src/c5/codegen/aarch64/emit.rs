@@ -876,6 +876,10 @@ pub(crate) fn emit_function(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
+    // The text stream's mapping state spans the section, not the function: a
+    // body ending in data leaves the counter off the instruction boundary and
+    // the next function's first instruction pays the padding, as under GNU as.
+    text_map_state: &mut Option<super::super::map_syms::MapClass>,
     no_fp_regs: bool,
     strict_align: bool,
     hardening: super::Hardening,
@@ -943,6 +947,10 @@ pub(crate) fn emit_function(
     // inline-asm body is the entire function (an interrupt vector or ISR
     // returning via `eret`). The matching `Terminator::Return` emits nothing.
     if !func.is_naked {
+        // The entry is this function's first instruction, so it pays any
+        // realignment a preceding body left owing. The symbol keeps the
+        // offset it was placed at, as a label does under GNU as.
+        a64_align_asm_stream(code, text_data_ranges, text_map_state);
         // Branch protection: a function entry is reachable by `BLR` and
         // by a `BR` through x16/x17 (a PLT trampoline's), so it takes a
         // `BTI C` ahead of the prologue. A naked function is excluded --
@@ -1147,6 +1155,12 @@ pub(crate) fn emit_function(
         alloc::collections::BTreeSet::new()
     };
     for (block_idx, block) in func.blocks.iter().enumerate() {
+        // The landing pad is the block's first byte, so a realignment due
+        // ahead of it comes before the offset every branch resolves to.
+        let bti = bti_targets.contains(&(block_idx as BlockId));
+        if bti {
+            a64_align_asm_stream(code, text_data_ranges, text_map_state);
+        }
         block_offsets[block_idx] = code.len();
         super::ssa::emit_common::record_block_start_pc(
             block_idx,
@@ -1154,7 +1168,7 @@ pub(crate) fn emit_function(
             pc_to_native,
             code.len(),
         );
-        if bti_targets.contains(&(block_idx as BlockId)) {
+        if bti {
             emit(code, super::encode::BTI_J);
         }
         for v in block.inst_range.clone() {
@@ -1177,6 +1191,10 @@ pub(crate) fn emit_function(
             // ParamRef already placed by the entry parallel copy.
             if param_prebatched[v as usize] {
                 continue;
+            }
+            // An inline-asm block takes the mapping state itself.
+            if !matches!(inst, Inst::InlineAsm { .. }) {
+                a64_align_asm_stream(code, text_data_ranges, text_map_state);
             }
             super::ssa::emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
             // GCC `&&label`: materialize the block's address with a
@@ -1238,6 +1256,7 @@ pub(crate) fn emit_function(
                     &mut deferred_regions,
                     text_data_ranges,
                     text_align,
+                    text_map_state,
                     asm_text_labels,
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
@@ -1307,6 +1326,7 @@ pub(crate) fn emit_function(
                     macho_tlv_fixups,
                     macho_tlv_descriptors,
                     &mut deferred_regions,
+                    text_map_state,
                     asm_text_labels,
                 )
             };
@@ -1353,6 +1373,11 @@ pub(crate) fn emit_function(
                     direct_pcrel: None,
                 });
             }
+        }
+        // The phi moves and the terminator below are instructions, except
+        // for a naked function's synthetic return, which emits nothing.
+        if !(func.is_naked && matches!(block.terminator, Terminator::Return(_))) {
+            a64_align_asm_stream(code, text_data_ranges, text_map_state);
         }
         // Predecessor-exit moves for any phi at every CFG
         // successor's head. A Return / TailExt block has no
@@ -1723,6 +1748,9 @@ pub(crate) fn emit_function(
     // section), and rewrite the `.altinstructions` fields that point at its
     // labels to the region's final text offset.
     let mut deferred_bases: Vec<usize> = Vec::with_capacity(deferred_regions.len());
+    if !deferred_regions.is_empty() {
+        a64_align_asm_stream(code, text_data_ranges, text_map_state);
+    }
     for region in &deferred_regions {
         let base = code.len();
         deferred_bases.push(base);
@@ -3089,7 +3117,7 @@ fn encode_deferred_asm_region(
             let class = super::ssa::emit_common::data_directive_class(&insn.mnemonic)
                 .unwrap_or(MapClass::Code);
             if class == MapClass::Code {
-                a64_align_asm_stream(&mut bytes, &mut data_ranges, map_state);
+                a64_align_asm_stream(&mut bytes, &mut data_ranges, &mut map_state);
             }
             map_state = Some(class);
             if !insn.bytes.is_empty() {
@@ -3151,7 +3179,7 @@ fn encode_deferred_asm_region(
     }
     // What follows the region in `.text` is instructions, so a replacement
     // ending in data realigns here.
-    a64_align_asm_stream(&mut bytes, &mut data_ranges, map_state);
+    a64_align_asm_stream(&mut bytes, &mut data_ranges, &mut map_state);
     // Resolve the region-local label branches: a forward reference binds the
     // next definition after the branch, a backward one the most recent at or
     // before it (GNU-as `Nf` / `Nb`). The displacement is region-relative and
@@ -3206,17 +3234,19 @@ fn template_expr_value(
     })
 }
 
-/// Bring an inline-asm stream to the instruction boundary out of the data
-/// mapping state, as GNU as does in an executable section. The gap is under
-/// one instruction, so the shared fill lays it down as zeros; the padding
-/// is part of the data run it follows.
+/// Bring a stream to the instruction boundary out of the data mapping
+/// state, as GNU as does in an executable section, and leave `state` on the
+/// instructions the caller is about to lay down. The gap is under one
+/// instruction, so the shared fill lays it down as zeros; the padding is
+/// part of the data run it follows.
 fn a64_align_asm_stream(
     code: &mut Vec<u8>,
     text_data_ranges: &mut Vec<(usize, usize)>,
-    state: Option<super::super::map_syms::MapClass>,
+    state: &mut Option<super::super::map_syms::MapClass>,
 ) {
-    let gap = super::super::ssa::emit_common::insn_align_gap(code.len() as i64, state, true, true)
+    let gap = super::super::ssa::emit_common::insn_align_gap(code.len() as i64, *state, true, true)
         as usize;
+    *state = Some(super::super::map_syms::MapClass::Code);
     if gap == 0 {
         return;
     }
@@ -3250,6 +3280,7 @@ fn emit_inline_asm_aarch64(
     deferred_regions: &mut Vec<DeferredAsmRegion>,
     text_data_ranges: &mut Vec<(usize, usize)>,
     text_align: &mut usize,
+    text_map_state: &mut Option<super::super::map_syms::MapClass>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
@@ -3429,6 +3460,13 @@ fn emit_inline_asm_aarch64(
     // region is carved from sp around the template as a self-contained pair.
     let size = (((n_cap + n_saved + n_fp_saved) * 8) as u32 + 15) & !15;
     let carve = func.is_naked && size > 0;
+    // An empty region means no entry or exit work: every capture, save and
+    // operand load addresses it, and an operand with no register takes no
+    // slot. The template's own realignment is per instruction below.
+    let mut map_state = *text_map_state;
+    if size > 0 {
+        a64_align_asm_stream(code, text_data_ranges, &mut map_state);
+    }
     let region_base: u32 = if carve {
         if size > MAX_UNPROBED_STACK_STEP {
             bail_msg("aarch64 inline asm: operand frame too large");
@@ -3778,9 +3816,9 @@ fn emit_inline_asm_aarch64(
     // block).
     let mut goto_sites: Vec<(usize, LabelBranch, usize)> = Vec::new();
 
-    // The mapping state the template has left the stream in; the main
-    // stream lays its bytes into `.text`, so the section rule applies.
-    let mut map_state: Option<MapClass> = None;
+    // The mapping state the stream is in on entry; it spans the section, so
+    // a template ending in data pads only where an instruction follows.
+    let mut map_state = *text_map_state;
 
     // Code-stream label names, so a layout directive's expression can read a
     // named label's offset as it reads a numeric one.
@@ -3827,7 +3865,7 @@ fn emit_inline_asm_aarch64(
         let class = super::super::ssa::emit_common::data_directive_class(&insn.mnemonic)
             .unwrap_or(MapClass::Code);
         if class == MapClass::Code {
-            a64_align_asm_stream(code, text_data_ranges, map_state);
+            a64_align_asm_stream(code, text_data_ranges, &mut map_state);
         }
         map_state = Some(class);
         if !insn.bytes.is_empty() {
@@ -4110,9 +4148,6 @@ fn emit_inline_asm_aarch64(
             insn_expr_fixups.push((site, insn.mnemonic.clone(), ops, idx, expr));
         }
     }
-    // The block's exit work is instructions, so a template ending in data
-    // realigns here.
-    a64_align_asm_stream(code, text_data_ranges, map_state);
     // Settle the deferred expression fields and words: the layout is final,
     // so a forward reference now has its definition.
     for (site, at, width, expr) in &expr_fixups {
@@ -4378,6 +4413,9 @@ fn emit_inline_asm_aarch64(
             emit(code, enc_add_imm(Reg(31), Reg(31), size));
         }
     };
+    if size > 0 {
+        a64_align_asm_stream(code, text_data_ranges, &mut map_state);
+    }
     let exit_start = code.len();
     if !emit_outputs(code) {
         bail_msg("aarch64 inline asm: unsupported output width");
@@ -4499,6 +4537,7 @@ fn emit_inline_asm_aarch64(
         bail_msg("aarch64 inline asm: `%l` label reference outside `asm goto`");
         return false;
     }
+    *text_map_state = map_state;
     true
 }
 
@@ -4512,6 +4551,7 @@ fn emit_inst(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     deferred_regions: &mut Vec<DeferredAsmRegion>,
+    text_map_state: &mut Option<super::super::map_syms::MapClass>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
 ) -> bool {
     // Unpack the read-only per-function context into the per-field names the
@@ -5156,6 +5196,7 @@ fn emit_inst(
             deferred_regions,
             text_data_ranges,
             text_align,
+            text_map_state,
             asm_text_labels,
             None,
         ),
@@ -12216,6 +12257,7 @@ mod tests {
                 &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
                 &mut Vec::new(),
+                &mut None,
                 false,
                 false,
                 super::super::Hardening::NONE,
@@ -12401,6 +12443,7 @@ mod tests {
                 &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
                 &mut Vec::new(),
+                &mut None,
                 false,
                 false,
                 super::super::Hardening::NONE,
@@ -12485,6 +12528,7 @@ mod tests {
                 &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
                 &mut Vec::new(),
+                &mut None,
                 false,
                 false,
                 super::super::Hardening::NONE,

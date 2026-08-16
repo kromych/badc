@@ -2373,6 +2373,9 @@ pub(crate) fn lower(
     Ok(Build {
         emitted_relocs: Vec::new(),
         named_sections: Vec::new(),
+        // The GOT base is a cross-unit link fact; the single-TU emit
+        // has no table to name.
+        got_base_fixups: Vec::new(),
         asm_sections: asm_section_list,
         asm_sym_decls,
         text_data_ranges,

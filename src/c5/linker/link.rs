@@ -46,6 +46,10 @@ use crate::c5::object::elf_reloc_types::{
     aarch64_pcrel_data_field, aarch64_pcrel_imm_field, x86_64_abs_field, x86_64_pcrel_data_field,
 };
 
+/// The GOT base, named by the psABIs' GOT-relative relocations and by
+/// hand-written PIC that computes the base itself.
+pub(crate) const GOT_BASE_SYMBOL: &str = "_GLOBAL_OFFSET_TABLE_";
+
 /// A relocation whose site reads a GOT slot: the value it wants is the
 /// symbol's address, taken from storage the loader fills, not a
 /// PC-relative distance to the symbol itself.
@@ -389,7 +393,10 @@ fn merged_target(
             Ok(MergedTarget::Data(value + addend))
         }
         NativeSymSection::Bss => Ok(MergedTarget::Data(data_len as i64 + value + addend)),
-        NativeSymSection::Undef
+        // The GOT is not part of either merged stream; a reference to
+        // it parks on its own section rather than an offset.
+        NativeSymSection::Got
+        | NativeSymSection::Undef
         | NativeSymSection::Abs
         | NativeSymSection::Common
         | NativeSymSection::Tls
@@ -1110,6 +1117,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 | NativeSymSection::DebugStr
                 | NativeSymSection::Undef
                 | NativeSymSection::Abs
+                | NativeSymSection::Got
                 | NativeSymSection::Common => continue,
             };
             let merged = MergedSymbol {
@@ -1252,6 +1260,25 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 // `STT_NOTYPE` the reference toolchain gives `_edata`
                 // and `__bss_start`.
                 kind: super::object::STT_NOTYPE,
+                visibility: super::object::STV_DEFAULT,
+                weak: false,
+            },
+        );
+    }
+
+    // The GOT base. The psABIs make it a linker-defined local OBJECT
+    // on the section holding the GOT; hand-written PIC computes the
+    // base from it. Its address belongs to the image writer, so the
+    // entry names the section and carries offset zero. A unit that
+    // defines the name itself keeps its definition.
+    if !defined.contains_key(GOT_BASE_SYMBOL) {
+        defined.insert(
+            GOT_BASE_SYMBOL,
+            MergedSymbol {
+                section: NativeSymSection::Got,
+                value: 0,
+                size: 0,
+                kind: super::object::STT_OBJECT,
                 visibility: super::object::STV_DEFAULT,
                 weak: false,
             },
@@ -1452,7 +1479,21 @@ pub fn link_native_objects_with_shared_libs<'a>(
                     )?;
                 }
                 NativeSymSection::Undef => {
-                    if let Some(def) = defined.get(sym.name.as_str()) {
+                    if defined.get(sym.name.as_str()).map(|d| d.section)
+                        == Some(NativeSymSection::Got)
+                    {
+                        // The GOT's address is the image writer's to
+                        // decide, so the site waits for it like any
+                        // other cross-section reference.
+                        park_section_ref(
+                            &mut pending_imports,
+                            patch_offset,
+                            reloc,
+                            reloc.addend,
+                            NativeSymSection::Got,
+                            &origin.at(machine, reloc.rtype, &sym.name, reloc.offset),
+                        )?;
+                    } else if let Some(def) = defined.get(sym.name.as_str()) {
                         // Cross-unit reference to a globally
                         // defined symbol. Text-section targets
                         // can be patched in place because the
@@ -1628,10 +1669,12 @@ pub fn link_native_objects_with_shared_libs<'a>(
                 }
                 NativeSymSection::DebugAbbrev
                 | NativeSymSection::DebugLine
-                | NativeSymSection::DebugStr => {
+                | NativeSymSection::DebugStr
+                | NativeSymSection::Got => {
                     // `.rela.text` shouldn't target a DWARF section
                     // symbol; the producer routes those through
                     // `.rela.debug_info` / `.rela.debug_line` instead.
+                    // No input symbol carries the GOT section.
                     return Err(err(&format!(
                         "link_native_objects: `.rela.text` reloc targets {:?} symbol",
                         sym.section,
@@ -1970,6 +2013,12 @@ pub fn link_native_objects_with_shared_libs<'a>(
                     return Err(err(&format!(
                         "link_native_objects: .rela.data ABS symbol `{}` reached the \
                          section-relative path",
+                        sym.name,
+                    )));
+                }
+                NativeSymSection::Got => {
+                    return Err(err(&format!(
+                        "link_native_objects: input symbol `{}` carries the GOT section",
                         sym.name,
                     )));
                 }

@@ -5381,6 +5381,7 @@ mod tests {
             text_data_ranges: alloc::vec::Vec::new(),
             emitted_relocs: Vec::new(),
             named_sections: Vec::new(),
+            got_base_fixups: Vec::new(),
             text_align: 16,
             orphaned_data: None,
             stopped_at_data_liveness: false,

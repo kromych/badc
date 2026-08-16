@@ -1129,6 +1129,9 @@ const SYNTH_REL: &str = ".rel.dyn";
 const SYNTH_RELR: &str = ".relr.dyn";
 const SYNTH_GOT: &str = ".got";
 const SYNTH_GOTPLT: &str = ".got.plt";
+/// The GOT base, named by the psABIs' GOT-relative relocations and by
+/// hand-written PIC that computes the base itself.
+const GOT_SYMBOL: &str = "_GLOBAL_OFFSET_TABLE_";
 const SYNTH_BUILD_ID: &str = ".note.gnu.build-id";
 const SYNTH_COMMON: &str = "COMMON";
 const SYNTH_DYNSYM: &str = ".dynsym";
@@ -1502,15 +1505,22 @@ impl<'a> LdsLinker<'a> {
                 .opts
                 .pack_relative_relocs
                 .then(|| self.push_synth_section(SYNTH_RELR, SHT_RELR, SHF_ALLOC));
+            let synth = self.synth_obj;
+            let slot = self.class.addr_size();
+            self.objects[synth].sections[rela].entsize = rela_ent;
+            if let Some(relr) = relr {
+                self.objects[synth].sections[relr].entsize = slot;
+            }
+        }
+        // bfd builds the GOT for every dynamic image, and on demand
+        // wherever an input names its base, so a static link reading
+        // `_GLOBAL_OFFSET_TABLE_` still has an address to give it.
+        if self.opts.emit == LdsEmit::Dyn || self.referenced.contains(GOT_SYMBOL) {
             let got = self.push_synth_section(SYNTH_GOT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let gotplt = self.push_synth_section(SYNTH_GOTPLT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let synth = self.synth_obj;
             let slot = self.class.addr_size();
             let reserved = self.got_reserved();
-            self.objects[synth].sections[rela].entsize = rela_ent;
-            if let Some(relr) = relr {
-                self.objects[synth].sections[relr].entsize = slot;
-            }
             self.objects[synth].sections[got].entsize = slot;
             // .got: the reserved header, where this target keeps it;
             // GOT slots append per use.
@@ -1518,6 +1528,8 @@ impl<'a> LdsLinker<'a> {
             // .got.plt: three reserved slots, no PLT entries.
             self.objects[synth].sections[gotplt].entsize = slot;
             self.objects[synth].sections[gotplt].size = 3 * slot;
+        }
+        if self.opts.emit == LdsEmit::Dyn {
             self.synthesize_dynamic_sections();
         }
     }
@@ -4424,6 +4436,16 @@ impl<'a> LdsLinker<'a> {
         self.got_addr_prevpass()
     }
 
+    /// Output section the GOT base sits in, where the script kept it.
+    fn got_symbol_out(&self) -> Option<usize> {
+        if self.got_on_got_plt()
+            && let Some(out) = self.kept_synth(SYNTH_GOTPLT)
+        {
+            return Some(out);
+        }
+        self.kept_synth(SYNTH_GOT)
+    }
+
     /// The address of the first GOT entry, past the reserved header.
     fn got_slot_base(&self) -> Option<u64> {
         Some(self.got_addr_prevpass()? + self.got_reserved() * self.class.addr_size())
@@ -4867,7 +4889,7 @@ impl<'a> LdsLinker<'a> {
                     }
                 };
             }
-            if sym.name == "_GLOBAL_OFFSET_TABLE_" {
+            if sym.name == GOT_SYMBOL {
                 return self
                     .got_symbol_addr()
                     .map(|g| g.wrapping_add(r.addend as u64));
@@ -4972,14 +4994,18 @@ impl<'a> LdsLinker<'a> {
                 rt::R_X86_64_64 => {
                     w(buf, site, &sa.to_le_bytes());
                 }
-                rt::R_X86_64_PC64 => {
+                // GOTPC's symbol is `_GLOBAL_OFFSET_TABLE_`, so `sa` is
+                // already the GOT base and the field is the same
+                // pc-relative difference the PC forms write.
+                rt::R_X86_64_PC64 | rt::R_X86_64_GOTPC64 => {
                     w(buf, site, &sa.wrapping_sub(p).to_le_bytes());
                 }
-                rt::R_X86_64_PC32 | rt::R_X86_64_PLT32 => {
+                rt::R_X86_64_PC32 | rt::R_X86_64_PLT32 | rt::R_X86_64_GOTPC32 => {
                     let v = sa.wrapping_sub(p) as i64;
                     if (v as i32) as i64 != v {
                         errors.push(format!(
-                            "relocation truncated: R_X86_64_PC32 against `{}' (0x{v:x})",
+                            "relocation truncated: {} against `{}' (0x{v:x})",
+                            rt::x86_64_reloc_desc(r.rtype),
                             name()
                         ));
                     }
@@ -6054,6 +6080,26 @@ impl<'a> LdsLinker<'a> {
                 other: 0,
                 shndx: SHN_UNDEF,
                 value: 0,
+                size: 0,
+            });
+        }
+        // bfd defines `_GLOBAL_OFFSET_TABLE_` on the section it built
+        // the GOT in, as a sizeless local OBJECT, and emits no entry
+        // where the link built no GOT. Measured against GNU ld 2.46.1:
+        // on x86 the entry names `.got.plt` in every mode, on aarch64
+        // it names `.got` for non-PIC output and is absolute for PIE
+        // and shared objects.
+        if let (Some(value), Some(out)) = (self.got_symbol_addr(), self.got_symbol_out()) {
+            let abs = self.machine == EM_AARCH64 && self.opts.emit == LdsEmit::Dyn;
+            if track {
+                index.by_name.insert(GOT_SYMBOL.to_string(), syms.len());
+            }
+            syms.push(FinalSym {
+                name: GOT_SYMBOL.to_string(),
+                info: (STB_LOCAL << 4) | STT_OBJECT,
+                other: STV_DEFAULT,
+                shndx: if abs { SHN_ABS } else { out_shndx(out) },
+                value,
                 size: 0,
             });
         }
@@ -10435,6 +10481,172 @@ SECTIONS {
                 .iter()
                 .any(|s| s.0 == ".got" && s.4 != 0),
             "`.got` reserves no header where `.got.plt` carries it"
+        );
+    }
+
+    /// A script naming every section the GOT-base tests place.
+    const GOT_SYM_SCRIPT: &str = r#"
+SECTIONS {
+  . = 0x400000 + SIZEOF_HEADERS;
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .gnu.hash : { *(.gnu.hash) }
+  .dynamic : { *(.dynamic) }
+  .rela.dyn : { *(.rela.dyn) }
+  .text : { *(.text) }
+  .got : { *(.got) }
+  .got.plt : { *(.got.plt) }
+  .data : { *(.data) }
+}
+"#;
+
+    /// An object naming the GOT base from `.text` and from `.data`.
+    /// Symtab: null(0), .text(1), .data(2), then the reference.
+    fn got_sym_object(machine: u16, pcrel: u32, wide: u32) -> Vec<u8> {
+        TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0u8; 16],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sym(GOT_SYMBOL, STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .reloc(0, 0, 3, pcrel, -4)
+            .reloc(1, 0, 3, wide, 0)
+            .build(machine)
+    }
+
+    /// `(value, st_info, st_shndx)` of the GOT base symbol, or `None`
+    /// where the link emitted no entry for it.
+    fn got_sym_row(image: &[u8]) -> Option<(u64, u8, u16)> {
+        let vals = image_symbols(image);
+        let rows = image_sym_rows(image);
+        let v = vals.iter().find(|(n, _, _)| n == GOT_SYMBOL)?;
+        let r = rows.iter().find(|(n, _, _)| n == GOT_SYMBOL)?;
+        Some((v.1, r.1, r.2))
+    }
+
+    fn link_got_sym(machine: u16, emit: LdsEmit, pcrel: u32, wide: u32) -> LdsResult {
+        let script = parse_linker_script(GOT_SYM_SCRIPT).expect("script parses");
+        let obj = got_sym_object(machine, pcrel, wide);
+        let opts = LdsOptions {
+            emit,
+            ..Default::default()
+        };
+        link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", obj).expect("parses")],
+            &opts,
+        )
+        .expect("links")
+    }
+
+    /// bfd defines `_GLOBAL_OFFSET_TABLE_` as a sizeless local OBJECT
+    /// on `.got.plt` for the x86 targets, in a static link as in a
+    /// dynamic one, and builds the section on demand where an input
+    /// names the symbol. Both GOTPC forms yield that same base
+    /// relative to their own site. Measured against GNU ld 2.46.1 on
+    /// linux-x86_64.
+    #[test]
+    fn x86_64_got_symbol_and_gotpc_forms_follow_ld() {
+        for emit in [LdsEmit::Exec, LdsEmit::Dyn] {
+            let res = link_got_sym(EM_X86_64, emit, rt::R_X86_64_GOTPC32, rt::R_X86_64_GOTPC64);
+            let secs = readelf_sections(&res.image);
+            let addr = |n: &str| {
+                secs.iter()
+                    .find(|s| s.0 == n)
+                    .unwrap_or_else(|| panic!("{n} in output"))
+                    .2
+            };
+            let got = addr(".got.plt");
+            let (value, info, shndx) = got_sym_row(&res.image).expect("GOT base symbol");
+            assert_eq!(value, got, "{emit:?}: value is the `.got.plt` address");
+            assert_eq!(
+                info,
+                (STB_LOCAL << 4) | STT_OBJECT,
+                "{emit:?}: local object"
+            );
+            assert_eq!(
+                shndx,
+                section_index(&res.image, ".got.plt") as u16,
+                "{emit:?}: the entry names `.got.plt`"
+            );
+            let text = section_file_off(&res.image, addr(".text"));
+            let field = i32::from_le_bytes(res.image[text..text + 4].try_into().unwrap()) as i64;
+            assert_eq!(
+                field + 4 + addr(".text") as i64,
+                got as i64,
+                "{emit:?}: R_X86_64_GOTPC32"
+            );
+            let data = section_file_off(&res.image, addr(".data"));
+            let wide = i64::from_le_bytes(res.image[data..data + 8].try_into().unwrap());
+            assert_eq!(
+                wide + addr(".data") as i64,
+                got as i64,
+                "{emit:?}: R_X86_64_GOTPC64"
+            );
+        }
+    }
+
+    /// aarch64 keeps the GOT base on `.got`, one reserved slot ahead of
+    /// the first entry. Measured against GNU ld 2.46.1 on
+    /// linux-aarch64: the entry names `.got` for non-PIC output and is
+    /// absolute for a PIE or a shared object.
+    #[test]
+    fn aarch64_got_symbol_follows_ld() {
+        for (emit, absolute) in [(LdsEmit::Exec, false), (LdsEmit::Dyn, true)] {
+            let res = link_got_sym(
+                EM_AARCH64,
+                emit,
+                rt::R_AARCH64_ADR_PREL_PG_HI21,
+                rt::R_AARCH64_ABS64,
+            );
+            let secs = readelf_sections(&res.image);
+            let got = secs
+                .iter()
+                .find(|s| s.0 == ".got")
+                .unwrap_or_else(|| panic!("{emit:?}: `.got` in output"));
+            let (value, info, shndx) = got_sym_row(&res.image).expect("GOT base symbol");
+            assert_eq!(value, got.2, "{emit:?}: value is the `.got` address");
+            assert_eq!(got.3, 8, "{emit:?}: one reserved slot");
+            assert_eq!(
+                info,
+                (STB_LOCAL << 4) | STT_OBJECT,
+                "{emit:?}: local object"
+            );
+            let want = if absolute {
+                SHN_ABS
+            } else {
+                section_index(&res.image, ".got") as u16
+            };
+            assert_eq!(shndx, want, "{emit:?}: section the entry names");
+        }
+    }
+
+    /// bfd emits no `_GLOBAL_OFFSET_TABLE_` where the link built no
+    /// GOT, so a static link that never names it carries neither the
+    /// symbol nor the sections.
+    #[test]
+    fn no_got_symbol_where_the_link_builds_no_got() {
+        let script = parse_linker_script(GOT_SYM_SCRIPT).expect("script parses");
+        let a = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+            .build(EM_X86_64);
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &LdsOptions::default(),
+        )
+        .expect("links");
+        assert!(got_sym_row(&res.image).is_none(), "no GOT, no entry");
+        assert!(
+            !readelf_sections(&res.image)
+                .iter()
+                .any(|s| s.0.starts_with(".got")),
+            "no GOT sections"
         );
     }
 

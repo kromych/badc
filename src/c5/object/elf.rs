@@ -2414,7 +2414,7 @@ pub(super) fn write(
         super::Machine::Aarch64 => 12, // adrp + ldr + br
         super::Machine::X86_64 => 6,   // jmp qword ptr [rip+disp32]
     };
-    let (mut plt_symtab_bytes, plt_strtab_bytes) = if emit_plt_symtab {
+    let (mut plt_symtab_bytes, mut plt_strtab_bytes) = if emit_plt_symtab {
         build_plt_symtab(build, dwarf_text_vmaddr, trampoline_size, text_shndx)
     } else if emit_symtab {
         let mut st = Vec::with_capacity(ELF64_SYM_SIZE as usize);
@@ -2452,6 +2452,24 @@ pub(super) fn write(
         }
         let at = ELF64_SYM_SIZE as usize;
         plt_symtab_bytes.splice(at..at, prefix);
+    }
+    // bfd defines `_GLOBAL_OFFSET_TABLE_` on the section holding the
+    // GOT, a sizeless local OBJECT, wherever the link built one. All
+    // entries here are local, so it appends without moving an index.
+    if !plt_symtab_bytes.is_empty() && got_size > 0 {
+        let st_name = plt_strtab_bytes.len() as u32;
+        plt_strtab_bytes.extend_from_slice(b"_GLOBAL_OFFSET_TABLE_\0");
+        write_struct(
+            &mut plt_symtab_bytes,
+            &Elf64Sym {
+                st_name,
+                st_info: STT_OBJECT,
+                st_other: 0,
+                st_shndx: plan.index_of(Sec::Got),
+                st_value: got_vmaddr,
+                st_size: 0,
+            },
+        );
     }
     let post_dwarf_off = dwarf_frame_off + dwarf_sections.debug_frame.len() as u64;
     let (rela_text_off, rela_data_off, post_rela_off) = if has_rela_text || has_rela_data {
@@ -3924,6 +3942,19 @@ pub(super) fn write(
         )?;
     }
 
+    // `_GLOBAL_OFFSET_TABLE_` references: the GOT's own address.
+    for fx in &build.got_base_fixups {
+        patch_addr_load(
+            machine,
+            &mut out,
+            code_place,
+            stub_len + fx.instr_offset as u64,
+            got_vmaddr.wrapping_add(fx.got_offset as u64),
+            fx.part,
+            "GOT base fixup",
+        )?;
+    }
+
     // Function-pointer literals.
     for fx in &build.func_fixups {
         // Targets are byte offsets within build.text -- shift by
@@ -4177,6 +4208,7 @@ mod tests {
             text_data_ranges: alloc::vec::Vec::new(),
             emitted_relocs: Vec::new(),
             named_sections: Vec::new(),
+            got_base_fixups: Vec::new(),
             text_align: 16,
             orphaned_data: None,
             stopped_at_data_liveness: false,

@@ -1562,6 +1562,11 @@ pub(crate) struct Build {
     /// left for a load-of-data-address sequence. The writer patches it
     /// with the page-relative address of `__data + data_offset`.
     pub data_fixups: Vec<DataFixup>,
+    /// Sites naming the GOT base. Populated only by the multi-object
+    /// synthesizer, from a reference to `_GLOBAL_OFFSET_TABLE_`; the
+    /// ELF writer resolves them against the `.got` it lays out and the
+    /// other container writers reject them.
+    pub got_base_fixups: Vec<GotBaseFixup>,
     /// Read-only data the emit produced (switch dispatch tables) with
     /// its code-reference and slot fixups. See [`RodataBuild`].
     pub rodata: RodataBuild,
@@ -2002,6 +2007,19 @@ pub(crate) struct GotFixup {
     /// data import emits no `jmp [IAT]` trampoline. On aarch64 the
     /// adrp + ldr form already loads the slot, so the flag is unused.
     pub is_data_load: bool,
+}
+
+/// A site holding the GOT base plus `got_offset`, the value
+/// `_GLOBAL_OFFSET_TABLE_` names. Same encoding shapes as
+/// [`DataFixup`]; the writer supplies the table's runtime address.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GotBaseFixup {
+    /// Byte offset within `Build::text` of the relocated instruction.
+    pub instr_offset: usize,
+    /// Byte offset from the table's base.
+    pub got_offset: i64,
+    /// Fields of the reference this record covers.
+    pub part: AddrPart,
 }
 
 /// Relocation for `Inst::ImmData`: the codegen emits an

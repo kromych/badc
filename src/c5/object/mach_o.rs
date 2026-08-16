@@ -2823,6 +2823,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         data_vmaddr + got_section_offset_in_segment,
         &build.got_fixups,
     )?;
+    if !build.got_base_fixups.is_empty() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
+            "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a Mach-O image has none",
+        )));
+    }
     apply_data_fixups(
         &mut out,
         code_file_offset,
@@ -3147,6 +3152,7 @@ mod tests {
             text_data_ranges: alloc::vec::Vec::new(),
             emitted_relocs: Vec::new(),
             named_sections: Vec::new(),
+            got_base_fixups: Vec::new(),
             text_align: 16,
             orphaned_data: None,
             stopped_at_data_liveness: false,

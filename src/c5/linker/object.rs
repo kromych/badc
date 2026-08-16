@@ -553,6 +553,11 @@ pub enum NativeSymSection {
     /// `SHN_ABS` -- absolute symbol, typically the file symbol.
     /// The linker doesn't relocate these.
     Abs,
+    /// The merged image's global offset table. No input symbol carries
+    /// it: the linker gives it to `_GLOBAL_OFFSET_TABLE_`, whose
+    /// address the image writer decides, and a reference to it parks
+    /// until the writer commits the GOT's placement.
+    Got,
     /// `SHN_COMMON` -- C99 6.9.2 tentative definition. The
     /// symbol carries a size (`NativeSymbol::size`) and a
     /// requested byte alignment (`NativeSymbol::value`); the

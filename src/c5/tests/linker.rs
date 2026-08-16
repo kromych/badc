@@ -11823,6 +11823,78 @@ fn inline_asm_branch_to_undefined_symbol_emits_a_call_relocation() {
 /// The same inline-asm branch in a single-TU final image has no link
 /// step to bind it, so an undefined non-weak target is a diagnostic
 /// rather than a placeholder that faults at run time.
+/// The GOT base is linker-defined, not an import: hand-written PIC
+/// names `_GLOBAL_OFFSET_TABLE_` to compute it, so the reference
+/// resolves against the image's own `.got` and the symbol table
+/// carries the sizeless local OBJECT bfd gives it.
+#[cfg(feature = "native-emit")]
+#[test]
+fn inline_asm_reads_the_got_base() {
+    use crate::c5::linker::{
+        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        // The import gives the image a GOT to name; without one there
+        // is no table and bfd defines no symbol either.
+        let src = if target == Target::LinuxX64 {
+            "#pragma dylib(libc, \"libc.so.6\")\n\
+             #pragma binding(libc::printf, \"printf\")\n\
+             int printf(const char *, ...);\n\
+             int main(void) { void *g; __asm__(\"leaq _GLOBAL_OFFSET_TABLE_(%%rip), %0\" \
+             : \"=r\"(g)); return g == 0 ? printf(\"\") : 0; }\n"
+        } else {
+            "#pragma dylib(libc, \"libc.so.6\")\n\
+             #pragma binding(libc::printf, \"printf\")\n\
+             int printf(const char *, ...);\n\
+             int main(void) { void *g; __asm__(\"adrp %0, _GLOBAL_OFFSET_TABLE_\\n\\t\
+             add %0, %0, :lo12:_GLOBAL_OFFSET_TABLE_\" : \"=r\"(g)); \
+             return g == 0 ? printf(\"\") : 0; }\n"
+        };
+        let program =
+            Compiler::with_options(src.to_string(), target, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let obj_bytes = emit_native_with_options(&program, target, opts).expect("emit object");
+        let obj = parse_native_elf(&obj_bytes).expect("parse ET_REL");
+        let mut merged = link_native_objects(&[obj]).expect("the GOT base is defined by the link");
+        let plt = if target == Target::LinuxX64 {
+            emit_x86_64_plt(&mut merged)
+        } else {
+            emit_aarch64_plt(&mut merged)
+        }
+        .expect("plt");
+        let image = write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+        )
+        .expect("write executable");
+        let sections = elf_sections(&image);
+        let rows: alloc::vec::Vec<_> = elf_symbols(&image)
+            .into_iter()
+            .filter(|(n, _, _, _, _)| n == "_GLOBAL_OFFSET_TABLE_")
+            .collect();
+        assert_eq!(rows.len(), 1, "{target:?}: one GOT base entry");
+        let (_, info, shndx, value, size) = rows[0].clone();
+        // STB_LOCAL << 4 is zero, so the info byte is the type alone.
+        assert_eq!(info, 1, "{target:?}: local OBJECT");
+        assert_eq!(size, 0, "{target:?}: sizeless");
+        let home = &sections[shndx as usize].0;
+        assert_eq!(home, ".got", "{target:?}: the entry names the GOT");
+        assert!(value != 0, "{target:?}: the entry carries an address");
+    }
+}
+
 #[cfg(feature = "native-emit")]
 #[test]
 fn inline_asm_branch_to_undefined_symbol_in_final_image_is_diagnosed() {

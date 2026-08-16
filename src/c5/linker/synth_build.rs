@@ -137,6 +137,7 @@ fn synth_program_and_build(
     let imports = synth_imports(merged, target)?;
     let SynthFixups {
         got: got_fixups,
+        got_base: got_base_fixups,
         data: data_fixups,
         func: func_fixups,
         text_pcrel: text_pcrel_relocs,
@@ -483,6 +484,7 @@ fn synth_program_and_build(
         init_fini_arrays: merged.init_fini_arrays,
         entry_offset,
         got_fixups,
+        got_base_fixups,
         data_fixups,
         // Object-linked jump tables ride in the merged data stream
         // (input `.rodata` folds into it); the direct-lowering rodata
@@ -774,6 +776,7 @@ fn dylib_name_from_path(path: &str) -> String {
 /// function-pointer / data reference site.
 struct SynthFixups {
     got: Vec<GotFixup>,
+    got_base: Vec<crate::c5::codegen::GotBaseFixup>,
     data: Vec<DataFixup>,
     func: Vec<FuncFixup>,
     text_pcrel: Vec<crate::c5::codegen::TextPcRelReloc>,
@@ -786,6 +789,7 @@ fn synth_fixups(
     text_abs: TextAbsolute,
 ) -> Result<SynthFixups, C5Error> {
     let mut got_fixups: Vec<GotFixup> = Vec::new();
+    let mut got_base_fixups: Vec<crate::c5::codegen::GotBaseFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
     let mut text_pcrel: Vec<crate::c5::codegen::TextPcRelReloc> = Vec::new();
@@ -850,6 +854,7 @@ fn synth_fixups(
                     reloc,
                     text_abs,
                     &mut got_fixups,
+                    &mut got_base_fixups,
                     &mut data_fixups,
                     &mut func_fixups,
                 )?;
@@ -860,6 +865,7 @@ fn synth_fixups(
                     reloc,
                     text_abs,
                     &mut got_fixups,
+                    &mut got_base_fixups,
                     &mut data_fixups,
                     &mut func_fixups,
                 )?;
@@ -869,6 +875,7 @@ fn synth_fixups(
 
     Ok(SynthFixups {
         got: got_fixups,
+        got_base: got_base_fixups,
         data: data_fixups,
         func: func_fixups,
         text_pcrel,
@@ -881,6 +888,7 @@ fn project_aarch64_pending(
     reloc: &super::link::PendingImportReloc,
     text_abs: TextAbsolute,
     got_fixups: &mut Vec<GotFixup>,
+    got_base_fixups: &mut Vec<crate::c5::codegen::GotBaseFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
@@ -923,6 +931,14 @@ fn project_aarch64_pending(
             func_fixups.push(FuncFixup {
                 instr_offset: reloc.text_offset as usize,
                 target_native_offset: reloc.addend as usize,
+                part,
+            });
+            Ok(())
+        }
+        NativeSymSection::Got => {
+            got_base_fixups.push(crate::c5::codegen::GotBaseFixup {
+                instr_offset: reloc.text_offset as usize,
+                got_offset: reloc.addend,
                 part,
             });
             Ok(())
@@ -1008,6 +1024,7 @@ fn project_x86_64_pending(
     reloc: &super::link::PendingImportReloc,
     text_abs: TextAbsolute,
     got_fixups: &mut Vec<GotFixup>,
+    got_base_fixups: &mut Vec<crate::c5::codegen::GotBaseFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
@@ -1054,6 +1071,14 @@ fn project_x86_64_pending(
             func_fixups.push(FuncFixup {
                 instr_offset,
                 target_native_offset: target_byte_offset as usize,
+                part: AddrPart::Whole,
+            });
+            Ok(())
+        }
+        NativeSymSection::Got => {
+            got_base_fixups.push(crate::c5::codegen::GotBaseFixup {
+                instr_offset,
+                got_offset: target_byte_offset,
                 part: AddrPart::Whole,
             });
             Ok(())

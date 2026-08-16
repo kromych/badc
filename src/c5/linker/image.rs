@@ -911,6 +911,7 @@ fn patch_data_refs(
             NativeSymSection::Undef
             | NativeSymSection::Abs
             | NativeSymSection::Common
+            | NativeSymSection::Got
             | NativeSymSection::Tls
             | NativeSymSection::DebugAbbrev
             | NativeSymSection::DebugLine

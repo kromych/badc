@@ -1065,6 +1065,11 @@ pub(super) fn write(
             )?;
         }
     }
+    if !build.got_base_fixups.is_empty() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
+            "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a PE image has no GOT",
+        )));
+    }
     for f in &build.data_fixups {
         let instr_off = (f.instr_offset as u32) + text_prologue_len;
         patch_addr_load(

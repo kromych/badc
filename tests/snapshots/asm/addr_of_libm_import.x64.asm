@@ -32,9 +32,9 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
-               	movq	<rip>, %rax
-               	movq	<rip>, %rbx
-               	movq	<rip>, %r12
+               	movq	<rip>, %rax       # <addr>
+               	movq	<rip>, %rbx       # <addr>
+               	movq	<rip>, %r12       # <addr>
                	xorq	%r13, %r13
                	movq	%r13, %xmm0
                	callq	*%rax

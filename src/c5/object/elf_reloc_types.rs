@@ -28,6 +28,10 @@ pub(crate) const R_X86_64_PC8: u32 = 15;
 pub(crate) const R_X86_64_DTPOFF64: u32 = 17;
 pub(crate) const R_X86_64_TPOFF32: u32 = 23;
 pub(crate) const R_X86_64_PC64: u32 = 24;
+/// `GOT + A - P` against `_GLOBAL_OFFSET_TABLE_`: the GOT base computed
+/// from the program counter, 4 bytes wide and 8 for the `64` form.
+pub(crate) const R_X86_64_GOTPC32: u32 = 26;
+pub(crate) const R_X86_64_GOTPC64: u32 = 29;
 pub(crate) const R_X86_64_REX_GOTPCRELX: u32 = 42;
 
 // ---- i386 ----

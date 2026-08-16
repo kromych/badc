@@ -251,6 +251,13 @@ pub(crate) struct Preprocessor {
     /// as a compiler driver adds `/usr/include`); a cross build or a
     /// `--freestanding` / `--nostdinc` build leaves it empty.
     system_fallback_paths: Vec<String>,
+    /// `-nostdinc`: withdraw the standard library headers from
+    /// `#include` resolution. The bundled set and `system_fallback_paths`
+    /// leave the search, so a name no `-I` / `-iquote` path carries is an
+    /// error instead of resolving to badc's own libc. The compiler-owned
+    /// headers ([`crate::c5::headers::COMPILER_OWNED_HEADERS`]) stay, as
+    /// gcc's builtins do.
+    nostdinc: bool,
     /// Headers to splice in front of the user's translation unit,
     /// before any source line is preprocessed. Mirrors gcc /
     /// clang's `-include FILE` flag: each name resolves through
@@ -833,6 +840,7 @@ impl Preprocessor {
             own_header_roots: Vec::new(),
             quote_search_paths: Vec::new(),
             system_fallback_paths: Vec::new(),
+            nostdinc: false,
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
             warnings: Vec::new(),
@@ -1020,6 +1028,12 @@ impl Preprocessor {
         if !self.system_fallback_paths.iter().any(|p| p == path) {
             self.system_fallback_paths.push(path.to_string());
         }
+    }
+
+    /// gcc / clang `-nostdinc`: take the standard library headers off the
+    /// `#include` search. See [`Preprocessor::nostdinc`].
+    pub fn set_nostdinc(&mut self, on: bool) {
+        self.nostdinc = on;
     }
 
     /// Add a header to splice in front of the user's translation

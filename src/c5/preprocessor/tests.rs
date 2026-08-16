@@ -2083,6 +2083,45 @@ fn bundled_header_resolves_bundled_includes_over_search_paths() {
     assert!(out.contains("file_clone_range"), "{out}");
 }
 
+#[test]
+fn nostdinc_withdraws_the_bundled_headers_but_keeps_the_compiler_owned_ones() {
+    // `-nostdinc` takes the standard library headers off the search, so a
+    // name only the bundled set carries stops resolving; a `-I` directory
+    // that carries it still does. The compiler's own headers stay
+    // reachable, since the flag withdraws the library, not the builtins.
+    let base = std::env::temp_dir().join(format!("badc-nostdinc-{}", std::process::id()));
+    let sys = base.join("sys");
+    std::fs::create_dir_all(&sys).unwrap();
+    std::fs::write(sys.join("types.h"), "int tree_types_marker;\n").unwrap();
+
+    let mut off = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    off.process("#include <sys/types.h>\n")
+        .expect("the bundled sys/types.h resolves without the flag");
+
+    let mut on = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    on.set_nostdinc(true);
+    let err = on
+        .process("#include <sys/types.h>\n")
+        .expect_err("under -nostdinc no search path carries the name");
+    assert!(format!("{err:?}").contains("not found"), "{err:?}");
+
+    let mut named = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    named.set_nostdinc(true);
+    named.add_search_path(base.to_str().unwrap());
+    let out = named
+        .process("#include <sys/types.h>\n")
+        .expect("a -I directory still resolves the name");
+    assert!(out.contains("tree_types_marker"), "{out}");
+
+    let mut owned = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    owned.set_nostdinc(true);
+    let out = owned
+        .process("#include <_builtins.h>\nint f(int x) { return __builtin_expect(x, 1); }\n")
+        .expect("the __builtin_* thunk header stays reachable");
+    std::fs::remove_dir_all(&base).ok();
+    assert!(out.contains("return (x);"), "{out}");
+}
+
 /// The computed-include macro chain of the tests below: the header
 /// name is assembled from a parameter inside `<dir/n.h>`, so a
 /// digit-leading argument substitutes as the tokens `1x` `.` `h`.

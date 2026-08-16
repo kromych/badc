@@ -109,6 +109,15 @@ Compile knobs:
   -iquote path             Add a search path for #include \"...\" only,
                            probed after the including file's directory
                            and before the -I paths. Repeatable.
+  -nostdinc                Drop the bundled standard headers and the
+                           system directories from the #include search,
+                           leaving only -I, -iquote and the including
+                           file's own directory. A name none of those
+                           carries is an error instead of resolving to
+                           badc's libc, and the auto-include retry is
+                           off. The compiler's own headers
+                           (`_builtins.h`, `arm_neon.h`) stay, as gcc's
+                           builtins do.
   -include FILE            Splice the named header in front of the
                            source as if `#include \"FILE\"` opened
                            the translation unit. Repeatable; later
@@ -633,6 +642,7 @@ fn run() {
     // `-fsigned-char` / `-funsigned-char`; `None` keeps the target ABI's
     // own plain-`char` signedness.
     let mut char_signed: Option<bool> = None;
+    let mut nostdinc = false;
     // Multi-translation-unit linker plumbing. Bytecode `.o`
     // inputs accumulate alongside C sources; `.a` archives
     // arrive either positionally or through `-l<name>` after a
@@ -1149,6 +1159,11 @@ fn run() {
             // it reaches the front end rather than being dropped.
             "-fsigned-char" | "-fno-unsigned-char" => char_signed = Some(true),
             "-funsigned-char" | "-fno-signed-char" => char_signed = Some(false),
+            // gcc / clang `-nostdinc`: the standard headers leave the
+            // `#include` search, so a name no `-I` / `-iquote` path carries
+            // is an error rather than a bind to badc's bundled libc. A
+            // freestanding tree that supplies its own headers passes it.
+            "-nostdinc" => nostdinc = true,
             // gcc / clang `-std=<dialect>`: the language the unit is
             // written in. badc compiles C99 with the GNU extensions
             // always available, so the dialect selects only whether
@@ -1941,6 +1956,7 @@ fn run() {
                 .with_gnu89_inline(gnu89_inline)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
+                .with_nostdinc(nostdinc)
                 .with_gnu_dialect(gnu_dialect)
                 .with_asm_source(SourceKind::of(src).is_asm())
                 .with_defines(tu_defines(src, &defines))
@@ -2018,6 +2034,7 @@ fn run() {
             .with_gnu89_inline(gnu89_inline)
             .with_short_wchar(short_wchar)
             .with_char_signed(char_signed)
+            .with_nostdinc(nostdinc)
             .with_gnu_dialect(gnu_dialect)
             .with_optimize(optimize_flag)
             .with_defines(defines.clone())
@@ -2116,6 +2133,7 @@ fn run() {
                 .with_gnu89_inline(gnu89_inline)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
+                .with_nostdinc(nostdinc)
                 .with_gnu_dialect(gnu_dialect)
                 .with_optimize(optimize_flag)
                 .with_asm_source(SourceKind::of(src_path).is_asm())
@@ -2227,6 +2245,7 @@ fn run() {
             gnu89_inline,
             short_wchar,
             char_signed,
+            nostdinc,
             optimize_flag,
             export_all,
             show_includes,
@@ -2263,6 +2282,7 @@ fn run() {
                 .with_gnu89_inline(gnu89_inline)
                 .with_short_wchar(short_wchar)
                 .with_char_signed(char_signed)
+                .with_nostdinc(nostdinc)
                 .with_gnu_dialect(gnu_dialect)
                 .with_optimize(optimize_flag)
                 .with_defines(copts_defines)
@@ -2857,6 +2877,7 @@ fn run() {
             gnu89_inline,
             short_wchar,
             char_signed,
+            nostdinc,
             optimize_flag,
             export_all: false,
             show_includes,
@@ -2991,6 +3012,7 @@ fn run() {
             gnu89_inline,
             short_wchar,
             char_signed,
+            nostdinc,
             optimize_flag,
             export_all: false,
             show_includes,
@@ -3406,6 +3428,7 @@ struct CompileCfg<'a> {
     gnu89_inline: bool,
     short_wchar: bool,
     char_signed: Option<bool>,
+    nostdinc: bool,
     optimize_flag: bool,
     export_all: bool,
     show_includes: bool,
@@ -3569,6 +3592,7 @@ fn tu_compile_options(
         .with_gnu89_inline(cfg.gnu89_inline)
         .with_short_wchar(cfg.short_wchar)
         .with_char_signed(cfg.char_signed)
+        .with_nostdinc(cfg.nostdinc)
         .with_gnu_dialect(cfg.gnu_dialect)
         .with_asm_source(SourceKind::of(src_path).is_asm())
         .with_defines(tu_defines(src_path, cfg.defines))

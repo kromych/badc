@@ -35,14 +35,18 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 }
 
 /// Header names whose contents are part of the compiler implementation:
-/// intrinsic wrappers built on badc's own inline-asm encoders. Another
-/// compiler's copy of such a header is written against that compiler's
-/// builtins and can never compile here, so when a build line puts a foreign
-/// toolchain's private include directory on the search path (kernel-style
-/// `-isystem $(cc -print-file-name=include)` folded into `-I`), these names
-/// must still resolve to the embedded copy. Ordinary headers keep the usual
-/// order (`-I` shadows the embedded set, as it does in gcc and clang).
-pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &["arm_neon.h"];
+/// the `__builtin_*` thunks every unit is given, and intrinsic wrappers
+/// built on badc's own inline-asm encoders. Another compiler's copy of such
+/// a header is written against that compiler's builtins and can never
+/// compile here, so when a build line puts a foreign toolchain's private
+/// include directory on the search path (kernel-style `-isystem
+/// $(cc -print-file-name=include)` folded into `-I`), these names must still
+/// resolve to the embedded copy. They are also the set `-nostdinc` keeps:
+/// that flag withdraws the standard library headers, as it does in gcc,
+/// and leaves the compiler's own facilities in place. Ordinary headers keep
+/// the usual order (`-I` shadows the embedded set, as it does in gcc and
+/// clang).
+pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &["_builtins.h", "arm_neon.h"];
 
 /// Whether `name` is a compiler-owned intrinsic header.
 pub(super) fn compiler_owned_header(name: &str) -> bool {

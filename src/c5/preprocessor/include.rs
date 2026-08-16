@@ -415,6 +415,13 @@ impl Preprocessor {
             }
         }
         let _ = source_dir;
+        // `-nostdinc` withdraws the standard library headers and the system
+        // directories below, leaving only what the command line named. A
+        // name none of those paths carries is then the "not found" error
+        // gcc raises, not a silent bind to badc's own libc.
+        if self.nostdinc {
+            return None;
+        }
         if let Some(found) = self.own_header(name) {
             return Some(found);
         }

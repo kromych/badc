@@ -148,6 +148,10 @@ FORWARD_EXACT = {
     # name the branch targets, which the ORC pass requires.
     "-fPIC", "-fpic", "-fPIE", "-fpie", "-fno-pic", "-fno-PIC",
     "-fno-pie", "-fno-PIE",
+    # The kernel supplies every header it includes and states that the
+    # compiler must supply none. Withheld, a `#include <...>` its own tree
+    # does not carry resolves from badc's bundled libc instead of failing.
+    "-nostdinc",
 }
 
 FORWARD_PREFIX = (
@@ -178,10 +182,6 @@ UNSUPPORTED_EXACT = {
     # badc emits no stack-protector prologue, guard load or __stack_chk_fail
     # call, so a CONFIG_STACKPROTECTOR_STRONG kernel has no canary.
     "-fstack-protector", "-fstack-protector-all", "-fstack-protector-strong",
-    # badc searches its bundled headers whatever the include flags say, so a
-    # `#include <...>` the kernel means to resolve against its own tree can
-    # reach a bundled one.
-    "-nostdinc",
     # badc recognizes calls by libc name and folds them (strlen of a literal
     # becomes its length), which these switch off.
     "-fno-builtin", "-ffreestanding",
@@ -563,7 +563,8 @@ def _self_test() -> int:
     # for is `dropped`, which is reported per unit.
     assert rewrite(["-fno-such-flag"]).unknown == ["-fno-such-flag"]
     assert rewrite(["-Wp,-fno-such-flag"]).unknown == ["-Wp,-fno-such-flag"]
-    for flag in ("-fstack-protector-strong", "-nostdinc",
+    assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]
+    for flag in ("-fstack-protector-strong",
                  "-ftrivial-auto-var-init=zero", "-fmin-function-alignment=16",
                  "-fpatchable-function-entry=16,16", "-fno-builtin-wcslen",
                  "-mstack-protector-guard=sysreg", "-ffreestanding",
@@ -602,11 +603,12 @@ def _self_test() -> int:
             # An unapplied flag goes down the same channel, once per
             # spelling, so the build's diagnostic summary counts it.
             os.truncate(path, 0)
-            report_unsupported("mm/slub.c", ["-nostdinc", "-nostdinc"])
+            report_unsupported("mm/slub.c", ["-funsigned-char",
+                                            "-funsigned-char"])
             with open(path) as f:
                 assert f.read() == ("flag\tmm/slub.c\tbuildcc: warning: "
-                                    "-nostdinc not applied: badc has no "
-                                    "equivalent\n")
+                                    "-funsigned-char not applied: badc has "
+                                    "no equivalent\n")
     finally:
         os.environ.pop("BADC_WARN_LOG", None)
         if saved is not None:

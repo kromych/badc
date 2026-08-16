@@ -330,6 +330,12 @@ pub struct CompileOptions {
     /// tree's `libc/include`, `$BADC_HOME/include`). A bundled name
     /// found there replaces the in-binary body.
     pub own_header_roots: Vec<String>,
+    /// `-nostdinc` -- the bundled standard headers and the system
+    /// directories leave the `#include` search, so only `-I`, `-iquote`
+    /// and the including file's directory resolve a name. The auto-include
+    /// retry is off with it: a unit that asked for no library headers must
+    /// not be given one. See [`Preprocessor::set_nostdinc`].
+    pub nostdinc: bool,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
     /// Filename string used in compiler diagnostics
@@ -436,6 +442,12 @@ impl CompileOptions {
     /// Narrow `wchar_t` to an unsigned 16-bit type (`-fshort-wchar`).
     pub fn with_short_wchar(mut self, on: bool) -> Self {
         self.short_wchar = on;
+        self
+    }
+    /// Take the standard library headers off the `#include` search
+    /// (`-nostdinc`).
+    pub fn with_nostdinc(mut self, on: bool) -> Self {
+        self.nostdinc = on;
         self
     }
 
@@ -2160,6 +2172,7 @@ impl Compiler {
         for path in &opts.own_header_roots {
             pp.add_own_header_root(path);
         }
+        pp.set_nostdinc(opts.nostdinc);
         // The GCC `__builtin_*` library thunks, which gcc and clang give
         // every unit with no `#include`. The header is only `#define`s of
         // names C99 7.1.3 reserves to the implementation, so it declares
@@ -2584,6 +2597,13 @@ impl Compiler {
         let Some((source, mut opts)) = retry_state else {
             return result;
         };
+        // C99 7.1.4p2's permission to use a library function without a
+        // declaration is a hosted-implementation one, and the header it
+        // would splice in is off the search under `-nostdinc`. The
+        // undeclared-function error stands instead.
+        if opts.nostdinc {
+            return result;
+        }
         // Auto-include retry. Each pass that fails on an undeclared
         // function names the header declaring it; force-include that
         // header and run again. Looping (rather than retrying once)

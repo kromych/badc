@@ -6446,6 +6446,34 @@ fn auto_include_retry_emits_what_the_force_include_would() {
     );
 }
 
+#[test]
+fn nostdinc_declines_the_auto_include_retry() {
+    // A unit built with `-nostdinc` asked for no library headers, so the
+    // C99 7.1.4p2 recovery must not splice one in: the undeclared-function
+    // error stands. Without the flag the same source compiles.
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "unsigned long probe(const char *s) { return strlen(s); }\n";
+    let target = Target::LinuxX64;
+    let base = CompileOptions::default().with_no_entry_point(true);
+
+    let hosted = Compiler::with_options(src.to_string(), target, base.clone())
+        .compile()
+        .expect("the retry recovers the undeclared library function");
+    assert!(
+        hosted.auto_includes.iter().any(|n| n == "strlen"),
+        "expected the retry to record the recovered name, got {:?}",
+        hosted.auto_includes
+    );
+
+    let err = Compiler::with_options(src.to_string(), target, base.with_nostdinc(true))
+        .compile()
+        .expect_err("under -nostdinc the undeclared call must not recover");
+    assert!(
+        format!("{err:?}").contains("unknown function `strlen`"),
+        "{err:?}"
+    );
+}
+
 /// A dense case set lowers to a table dispatch whose table must stay
 /// out of the code section: unwind-metadata generators decode `.text`
 /// as a pure instruction stream and reject embedded data. The

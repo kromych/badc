@@ -224,6 +224,14 @@ def parse_box(spec: str) -> Box:
     return Box(name=name, host=host, remote_path=path, kind=kind)
 
 
+# The step a lane was last seen entering, per lane, so the closing
+# summary can name what failed instead of only its exit code. POSIX
+# lanes report from `step()` on failure; Windows lanes announce each
+# step as they enter it, and the chain stops at the one that failed.
+LANE_STEP: dict[str, str] = {}
+STEP_MARK = "--- lane step"
+
+
 def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
     """Run `cmd`, prefixing every output line with `prefix` so
     parallel lane outputs stay attributable. `stdin_text` is written and
@@ -247,6 +255,8 @@ def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
         proc.stdin.close()
     assert proc.stdout is not None
     for line in proc.stdout:
+        if line.startswith(STEP_MARK):
+            LANE_STEP[prefix] = line.strip()
         sys.stdout.write(f"[{prefix}] {line}")
         sys.stdout.flush()
     return proc.wait()
@@ -478,14 +488,23 @@ def remote_run_windows(
     # caller-supplied --box arg work for some commands but not for
     # `cd /d`, which silently returns success without changing the cwd.
     remote_path = box.remote_path.replace("/", "\\")
+    # cmd has no `step()` equivalent, so each step announces itself as
+    # the chain reaches it. `&&` stops at the first failure, so the last
+    # announcement names the step that failed and the summary can report
+    # it rather than a bare exit code.
     parts = [
         f"cd /d {remote_path}",
         f"set GITHUB_TOKEN={github_token}",
-        "cargo build --release --locked --features full",
-        "cargo test --release --features full",
+    ]
+    named = [
+        ("cargo build", "cargo build --release --locked --features full"),
+        ("cargo test", "cargo test --release --features full"),
     ]
     if demos:
-        parts.append(demo_command(box, jobs, "python"))
+        named.append(("demo phase", demo_command(box, jobs, "python")))
+    for label, cmd in named:
+        parts.append(f"echo {STEP_MARK} {label}")
+        parts.append(cmd)
     inner = " && ".join(parts)
     # Quote the entire command so the outer ssh-side cmd /c treats the
     # whole `cd && ... && cargo ...` chain as one cmd context. Without
@@ -644,7 +663,11 @@ def main() -> int:
     for box in selected:
         rc = results.get(box.short, -1)
         marker = "OK" if rc == 0 else f"FAIL ({rc})"
-        print(f"  {box.short:<6} {marker}")
+        where = "" if rc == 0 else LANE_STEP.get(box.short, "")
+        # Strip the marker prefix: the summary column supplies the context.
+        if where.startswith(STEP_MARK):
+            where = where[len(STEP_MARK) :].strip()
+        print(f"  {box.short:<6} {marker}{'  ' + where if where else ''}")
     return 0 if all(rc == 0 for rc in results.values()) else 1
 
 

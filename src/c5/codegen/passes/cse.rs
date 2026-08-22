@@ -265,7 +265,11 @@ fn branch_pinned(func: &FunctionSsa, use_counts: &[u32]) -> Vec<bool> {
                 {
                     (*op, Some(*lhs))
                 }
-                Inst::BinopI { op, lhs, rhs_imm: 0 } => (*op, Some(*lhs)),
+                Inst::BinopI {
+                    op,
+                    lhs,
+                    rhs_imm: 0,
+                } => (*op, Some(*lhs)),
                 Inst::Binop { op, .. } | Inst::BinopI { op, .. } => (*op, None),
                 _ => break,
             };
@@ -837,13 +841,7 @@ mod tests {
     #[test]
     fn sibling_block_duplicate_is_not_merged() {
         let mut f = fresh(
-            alloc::vec![
-                Inst::Imm(3),
-                Inst::Imm(5),
-                muli(0, 7),
-                add(0, 1),
-                add(0, 1)
-            ],
+            alloc::vec![Inst::Imm(3), Inst::Imm(5), muli(0, 7), add(0, 1), add(0, 1)],
             alloc::vec![
                 blk(0..3, bz(2, 2, 1), 2),
                 blk(3..4, Terminator::Return(3), 3),

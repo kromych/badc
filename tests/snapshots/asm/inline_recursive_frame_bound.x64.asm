@@ -46,14 +46,13 @@ Disassembly of section .text:
                	xorq	%rbx, %rbx
                	jmp	<addr>
                	leaq	-0x100(%rbp), %r13
-               	movslq	%ebx, %r12
                	leaq	(%r14,%r12), %rdi
                	callq	<addr>
                	movl	%eax, (%r13,%r12,4)
                	movslq	%ebx, %rax
                	leaq	0x1(%rax), %rbx
-               	movslq	%ebx, %rax
-               	cmpq	$0x40, %rax
+               	movslq	%ebx, %r12
+               	cmpq	$0x40, %r12
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rbx

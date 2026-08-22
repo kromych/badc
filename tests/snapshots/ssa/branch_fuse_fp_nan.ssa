@@ -137,12 +137,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
   block 27  start_pc=0
     v83  LoadLocal { off=-1, kind=F64 }                   -> d0
     v84  Imm(4611686018427387904)                         -> x0
-    v85  Binop { op=flt, lhs=v7, rhs=v84 }                -> x0
+    v85  Binop { op=flt, lhs=v7, rhs=v84 }                -> x1
     terminator Bz { cond=v85, target=b47, fall=b28 }   (exit_acc=v85)
   block 28  start_pc=0
     v87  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v88  Imm(4611686018427387904)                         -> x0
-    v89  Binop { op=fgt, lhs=v7, rhs=v88 }                -> x0
+    v88  Imm(4611686018427387904)                         -> x1
+    v89  Binop { op=fgt, lhs=v7, rhs=v84 }                -> x0
     terminator Bz { cond=v89, target=b30, fall=b29 }   (exit_acc=v89)
   block 29  start_pc=0
     v90  Imm(18)                                          -> x0

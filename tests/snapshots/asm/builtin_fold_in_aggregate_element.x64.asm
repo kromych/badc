@@ -47,6 +47,6 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	retq
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	retq

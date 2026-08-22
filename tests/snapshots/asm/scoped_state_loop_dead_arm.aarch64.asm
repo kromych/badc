@@ -24,43 +24,43 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x2, #0x0                // =0
-               	mov	x0, #0x3                // =3
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
-               	b	<addr>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldr	x4, [x3]
-               	add	x4, x4, x1
-               	str	x4, [x3]
-               	add	x2, x2, #0x1
-               	mov	w0, w0
-               	cmp	x0, #0x2
-               	b.lo	<addr>
-               	cmp	x0, #0x3
-               	b.lo	<addr>
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x3                // =3
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	cmp	x1, x0
-               	cset	x0, ne
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
-               	mov	x0, #0x0                // =0
-               	mov	x3, x0
+               	mov	x4, x1
                	b	<addr>
-               	mov	x0, #0x1                // =1
-               	mov	x3, #0x0                // =0
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
+               	ldr	x6, [x5]
+               	add	x6, x6, x0
+               	str	x6, [x5]
+               	add	x4, x4, #0x1
+               	cmp	x3, #0x2
+               	b.lo	<addr>
+               	cmp	x3, #0x3
+               	b.lo	<addr>
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x2, [x2]
+               	cmp	x0, x2
+               	cset	x2, ne
+               	sxtw	x2, w2
+               	cbnz	x2, <addr>
+               	mov	x2, x1
+               	mov	x3, x1
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x3, x0
+               	mov	x2, #0x1                // =1
+               	mov	x3, x1
+               	b	<addr>
+               	mov	x2, x1
+               	mov	x3, x1
                	b	<addr>
                	b	<addr>
-               	mov	w3, w0
+               	mov	w3, w2
                	cbnz	x3, <addr>
-               	cmp	x2, #0x1
+               	cmp	x4, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret

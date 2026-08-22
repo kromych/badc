@@ -34,7 +34,6 @@ Disassembly of section .text:
                	andq	$-0x10, %rcx
                	orq	$0x5, %rcx
                	movl	%ecx, (%rax)
-               	leaq	-0x8(%rbp), %rax
                	movl	0x4(%rax), %edx
                	andq	$-0x10, %rdx
                	orq	$0x3, %rdx

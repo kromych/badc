@@ -45,48 +45,38 @@ Disassembly of section .text:
                	movq	0x28(%rcx), %rdx
                	movq	%rdx, 0x28(%rax)
                	popq	%rdx
-               	leaq	-0x30(%rbp), %rcx
-               	leaq	-0x30(%rbp), %rax
-               	leaq	-0x30(%rbp), %rdx
-               	addq	$0x20, %rdx
-               	movq	%rdx, %rsi
-               	subq	%rcx, %rsi
+               	movq	%rax, %rcx
+               	leaq	0x20(%rax), %rdx
+               	movq	%rdx, %rcx
+               	subq	%rax, %rcx
+               	movq	%rcx, %rsi
+               	sarq	$0x3f, %rsi
                	movq	%rsi, %rdi
-               	sarq	$0x3f, %rdi
                	shrq	$0x3c, %rdi
-               	addq	%rdi, %rsi
-               	sarq	$0x4, %rsi
-               	shlq	$0x4, %rsi
-               	addq	%rax, %rsi
-               	leaq	-0x30(%rbp), %rdi
-               	addq	$0x20, %rdi
-               	cmpq	%rdi, %rsi
+               	leaq	(%rcx,%rdi), %r8
+               	sarq	$0x4, %r8
+               	shlq	$0x4, %r8
+               	addq	%rax, %r8
+               	cmpq	%rdx, %r8
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movq	%rcx, %r10
-               	movq	%rdx, %rcx
-               	subq	%r10, %rcx
-               	movq	%rcx, %rdx
-               	sarq	$0x3f, %rdx
-               	shrq	$0x3c, %rdx
-               	addq	%rdx, %rcx
+               	addq	%rdi, %rcx
                	sarq	$0x4, %rcx
                	shlq	$0x4, %rcx
                	leaq	0x10(%rax), %rdx
-               	addq	%rdx, %rcx
-               	leaq	-0x30(%rbp), %rdx
-               	addq	$0x30, %rdx
-               	cmpq	%rdx, %rcx
+               	addq	%rcx, %rdx
+               	leaq	-0x30(%rbp), %rcx
+               	leaq	0x30(%rcx), %rsi
+               	cmpq	%rsi, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	addq	$0x20, %rax
-               	leaq	-0x30(%rbp), %rcx
                	addq	$0x20, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>

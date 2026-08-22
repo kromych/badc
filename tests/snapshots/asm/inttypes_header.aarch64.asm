@@ -24,28 +24,28 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	mov	x0, #0x4                // =4
                	stur	x0, [x29, #-0x8]
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
+               	mov	x2, x0
+               	mov	x2, x0
+               	mov	x1, x0
+               	mov	x2, x0
+               	mov	x2, x0
+               	mov	x1, x0
+               	mov	x2, x0
+               	mov	x2, x0
+               	mov	x1, x0
+               	mov	x1, x0
                	mov	x0, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
+               	mov	x2, x0
+               	mov	x1, x0
+               	mov	x2, x0
+               	mov	x1, x0
+               	mov	x2, x0
+               	mov	x2, x0
+               	mov	x1, x0
+               	mov	x2, x0
+               	mov	x2, x0
+               	mov	x1, x0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

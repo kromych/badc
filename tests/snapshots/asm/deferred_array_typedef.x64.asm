@@ -64,20 +64,20 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	retq
                	xorq	%rax, %rax
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	movsbq	(%rax), %rax
-               	cmpq	$0x73, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movq	%rax, %rcx
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %rcx
+               	movsbq	(%rcx), %rcx
+               	cmpq	$0x73, %rcx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
+               	movq	%rax, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
                	movq	%rdx, %rdi

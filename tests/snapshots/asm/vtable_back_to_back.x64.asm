@@ -43,21 +43,19 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	-0x18(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
+               	leaq	-0x18(%rbp), %rdi
+               	xorq	%rax, %rax
+               	movq	%rax, (%rdi)
+               	movq	%rax, 0x8(%rdi)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
-               	leaq	-0x18(%rbp), %rdi
                	leaq	<rip>, %rsi
                	movl	$0x2a, %edx
                	movl	$0x8, %ecx
                	callq	*%rax
-               	leaq	-0x18(%rbp), %rax
-               	movq	(%rax), %rax
-               	movq	0x8(%rax), %rax
                	leaq	-0x18(%rbp), %rdi
+               	movq	(%rdi), %rax
+               	movq	0x8(%rax), %rax
                	leaq	-0x8(%rbp), %rsi
                	movl	$0x1, %edx
                	callq	*%rax

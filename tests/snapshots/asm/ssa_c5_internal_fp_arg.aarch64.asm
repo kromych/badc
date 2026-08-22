@@ -27,9 +27,9 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	scvtf	d0, x1
                	fmov	d16, x3
-               	fadd	d0, d16, d0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fadd	d1, d16, d0
+               	scvtf	d0, x0
+               	fcmp	d1, d0
                	cset	x1, mi
                	sxtw	x1, w1
                	cmp	x1, #0x1
@@ -40,7 +40,6 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0xd00000000000     // =228698418577408
                	movk	x1, #0x4062, lsl #48
-               	scvtf	d0, x0
                	fmov	d16, x1
                	fcmp	d16, d0
                	cset	x1, mi
@@ -50,9 +49,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	scvtf	d0, x0
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fcmp	d0, d0
                	cset	x1, ls
                	sxtw	x1, w1
                	cmp	x1, #0x1
@@ -61,12 +58,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	scvtf	d0, x0
                	mov	x1, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x1
-               	fadd	d0, d0, d17
-               	scvtf	d1, x0
-               	fcmp	d0, d1
+               	fadd	d1, d0, d17
+               	fcmp	d1, d0
                	cset	x0, ls
                	sxtw	x0, w0
                	cbz	x0, <addr>

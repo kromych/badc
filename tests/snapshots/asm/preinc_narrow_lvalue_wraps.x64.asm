@@ -30,59 +30,63 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
+               	movq	%r12, 0x8(%rsp)
                	movl	$0x1, %eax
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
-               	movl	$0x1, %eax
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
-               	movl	$0x1, %eax
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
-               	movl	$0x1, %eax
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
-               	movl	$0x1, %eax
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
-               	movl	$0xff, %eax
-               	movb	%al, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	xorq	%rcx, %rcx
-               	movzbq	(%rax), %rdx
-               	incq	%rdx
-               	movb	%dl, (%rax)
-               	movzbq	(%rax), %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	movq	%rcx, %rdx
+               	movq	%rax, %rdx
+               	movq	%rax, %rdx
+               	movq	%rcx, %rdx
+               	movq	%rax, %rdx
+               	movq	%rax, %rdx
                	movl	$0x1, %ecx
-               	movslq	%ecx, %rax
-               	cmpq	$0x1, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movzbq	-0x8(%rbp), %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	movq	%rcx, %rax
                	xorq	%rax, %rax
+               	movq	%rax, %rdx
+               	movq	%rcx, %rdx
+               	movq	%rcx, %rdx
+               	movq	%rax, %rdx
+               	movl	$0xff, %edx
+               	movb	%dl, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rdx
+               	movzbq	(%rdx), %rsi
+               	incq	%rsi
+               	movb	%sil, (%rdx)
+               	movzbq	(%rdx), %rdx
+               	testq	%rdx, %rdx
+               	jne	<addr>
+               	movq	%rcx, %rdx
+               	movslq	%edx, %rdx
+               	cmpq	$0x1, %rdx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
+               	movzbq	-0x8(%rbp), %rdx
+               	testq	%rdx, %rdx
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
+               	je	<addr>
                	movslq	%eax, %rax
-               	movq	%rax, %rbx
-               	orq	$0x0, %rbx
-               	movslq	%ebx, %rsi
+               	movq	%rax, %r12
+               	orq	$0x0, %r12
+               	movslq	%r12d, %rbx
                	leaq	<rip>, %rdi
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	movslq	%ebx, %rax
+               	movq	%rbx, %rax
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
+               	movq	%rcx, %rax
                	jmp	<addr>
                	jmp	<addr>
+               	movq	%rax, %rdx
                	jmp	<addr>

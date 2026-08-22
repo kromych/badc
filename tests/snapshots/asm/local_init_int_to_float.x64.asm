@@ -167,11 +167,10 @@ Disassembly of section .text:
                	movss	%xmm14, -0x18(%rbp,%riz)
                	movss	-0x18(%rbp,%riz), %xmm0
                	cvttss2si	%xmm0, %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x3, %rcx
+               	movslq	%eax, %rsi
+               	cmpq	$0x3, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -185,11 +184,10 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	cvttsd2si	%xmm0, %rax
-               	movslq	%eax, %rcx
-               	cmpq	$-0x2, %rcx
+               	movslq	%eax, %rsi
+               	cmpq	$-0x2, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax

@@ -27,10 +27,9 @@ Disassembly of section .text:
                	str	x10, [x0, #0x8]
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x14
-               	sub	x1, x29, #0x20
-               	add	x1, x1, #0x4
-               	sub	x0, x0, x1
+               	add	x1, x0, #0x14
+               	add	x0, x0, #0x4
+               	sub	x0, x1, x0
                	asr	x1, x0, #63
                	lsr	x1, x1, #62
                	add	x0, x0, x1

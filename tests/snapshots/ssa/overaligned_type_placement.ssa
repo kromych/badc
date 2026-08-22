@@ -115,21 +115,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v81  Imm(44)                                          -> x2
     v82  Store { addr=v80, disp=0, value=v81, kind=I32 }  -> -
     v83  Load { addr=v71, disp=0, kind=I32 }              -> x0
-    v84  BinopI { op=ne, lhs=v83, rhs_imm=11 }            -> x0
-    v85  Imm(1)                                           -> x1
+    v84  BinopI { op=ne, lhs=v83, rhs_imm=11 }            -> x1
+    v85  Imm(1)                                           -> x0
     v86  Imm(0)                                           -> x2
     terminator Bnz { cond=v84, target=b30, fall=b15 }   (exit_acc=v84)
   block 15  start_pc=0
-    v87  ImmData(256)                                     -> x0
-    v88  Load { addr=v87, disp=0, kind=I32 }              -> x0
+    v87  ImmData(256)                                     -> x1
+    v88  Load { addr=v87, disp=0, kind=I32 }              -> x1
     v89  BinopI { op=ne, lhs=v88, rhs_imm=22 }            -> x1
-    v90  BinopI { op=ne, lhs=v89, rhs_imm=0 }             -> x0
-    v91  Imm(0)                                           -> x0
+    v90  BinopI { op=ne, lhs=v89, rhs_imm=0 }             -> x2
+    v91  Imm(0)                                           -> x2
     terminator Jmp(b16)   (exit_acc=v89)
   block 16  start_pc=0
     v92  Phi { incoming=[b30:v85, b15:v89], kind=I64 }    -> x1
-    v93  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v94  Imm(1)                                           -> x0
+    v93  LoadLocal { off=-1, kind=I64 }                   -> x2
+    v94  Imm(1)                                           -> x2
     v95  Imm(0)                                           -> x2
     terminator Bnz { cond=v92, target=b29, fall=b17 }   (exit_acc=v92)
   block 17  start_pc=0
@@ -140,7 +140,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v100 Imm(0)                                           -> x1
     terminator Jmp(b18)   (exit_acc=v98)
   block 18  start_pc=0
-    v101 Phi { incoming=[b29:v94, b17:v98], kind=I64 }    -> x0
+    v101 Phi { incoming=[b29:v85, b17:v98], kind=I64 }    -> x0
     v102 LoadLocal { off=-1, kind=I64 }                   -> x1
     v103 Imm(0)                                           -> x1
     terminator Bnz { cond=v101, target=b28, fall=b19 }   (exit_acc=v101)

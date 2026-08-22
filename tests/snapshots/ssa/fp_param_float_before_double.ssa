@@ -20,7 +20,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v10  Imm(0)                                           -> x1
     v11  FpCast { kind=F32ToF64, value=v8 }               -> d0
     v12  FpCast { kind=F32ToF64, value=v8 }               -> d1
-    v13  Binop { op=fne, lhs=v11, rhs=v12 }               -> x0
+    v13  Binop { op=fne, lhs=v11, rhs=v11 }               -> x0
     terminator Bz { cond=v13, target=b4, fall=b3 }   (exit_acc=v13)
   block 3  start_pc=0
     v14  Imm(2)                                           -> x0
@@ -40,20 +40,20 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v26  Binop { op=fadd, lhs=v24, rhs=v25 }              -> d0
     v27  Binop { op=fadd, lhs=v26, rhs=v18 }              -> d0
     v28  Imm(4621819117588971520)                         -> x0
-    v29  Binop { op=fne, lhs=v27, rhs=v28 }               -> x0
+    v29  Binop { op=fne, lhs=v27, rhs=v28 }               -> x1
     terminator Bz { cond=v29, target=b6, fall=b5 }   (exit_acc=v29)
   block 5  start_pc=0
     v30  Imm(3)                                           -> x0
     terminator Return(v30)   (exit_acc=v30)
   block 6  start_pc=0
-    v31  Imm(4617315517961601024)                         -> x0
+    v31  Imm(4617315517961601024)                         -> x1
     v32  Imm(1086324736)                                  -> x2 [f32]
-    v33  Imm(0)                                           -> x1
-    v34  Imm(0)                                           -> x1
-    v35  Imm(4621819117588971520)                         -> x1
-    v36  Binop { op=fmul, lhs=v31, rhs=v35 }              -> d0
+    v33  Imm(0)                                           -> x6
+    v34  Imm(0)                                           -> x6
+    v35  Imm(4621819117588971520)                         -> x6
+    v36  Binop { op=fmul, lhs=v31, rhs=v28 }              -> d0
     v37  FpCast { kind=F32ToF64, value=v32 }              -> d0
-    v38  Fma { a=v31, b=v35, c=v37, neg_product=false, neg_addend=false } -> d0
+    v38  Fma { a=v31, b=v28, c=v37, neg_product=false, neg_addend=false } -> d0
     v39  Imm(4633078116657397760)                         -> x0
     v40  Binop { op=fne, lhs=v38, rhs=v39 }               -> x0
     terminator Bz { cond=v40, target=b8, fall=b7 }   (exit_acc=v40)

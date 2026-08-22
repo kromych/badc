@@ -52,9 +52,9 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	movl	$0xb, %eax
-               	xorq	%rax, %rax
-               	leaq	<rip>, %rdi
                	xorq	%rsi, %rsi
+               	movq	%rsi, %rax
+               	leaq	<rip>, %rdi
                	movl	$0xa, %edx
                	callq	<addr>
                	cmpq	$0x3039, %rax           # imm = 0x3039

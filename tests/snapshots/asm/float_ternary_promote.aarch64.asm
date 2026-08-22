@@ -51,7 +51,6 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	sub	x16, x29, #0x18
                	ldr	s1, [x16]
-               	mov	x0, #0x0                // =0
                	fmov	s17, w0
                	fcmp	s1, s17
                	b.pl	<addr>

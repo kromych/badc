@@ -7,14 +7,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=16
     v1   LocalAddr(-16)                                   -> x0
     v2   Imm(1)                                           -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 }    -> -
-    v4   LocalAddr(-16)                                   -> x0
-    v5   BinopI { op=add, lhs=v4, rhs_imm=64 }            -> x1
+    v4   LocalAddr(-16)                                   -> x1
+    v5   BinopI { op=add, lhs=v1, rhs_imm=64 }            -> x1
     v6   Imm(2)                                           -> x1
-    v7   Store { addr=v4, disp=64, value=v6, kind=I64 }   -> -
-    v8   LocalAddr(-16)                                   -> x0
-    v9   BinopI { op=add, lhs=v8, rhs_imm=64 }            -> x0
-    v10  LocalAddr(-16)                                   -> x1
-    v11  Binop { op=sub, lhs=v9, rhs=v10 }                -> x0
+    v7   Store { addr=v1, disp=64, value=v6, kind=I64 }   -> -
+    v8   LocalAddr(-16)                                   -> x1
+    v9   BinopI { op=add, lhs=v1, rhs_imm=64 }            -> x1
+    v10  LocalAddr(-16)                                   -> x2
+    v11  Binop { op=sub, lhs=v9, rhs=v1 }                 -> x0
     v12  BinopI { op=ne, lhs=v11, rhs_imm=64 }            -> x0
     terminator Bz { cond=v12, target=b2, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0

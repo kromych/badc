@@ -34,32 +34,31 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movl	%edi, 0x10(%rbp)
-               	leaq	-0x10(%rbp), %rcx
-               	xorq	%rax, %rax
+               	leaq	-0x10(%rbp), %rax
+               	xorq	%rcx, %rcx
                	leaq	<rip>, %rdx        # <addr>
-               	movq	%rdx, (%rcx)
-               	leaq	-0x10(%rbp), %rcx
+               	movq	%rdx, (%rax)
                	leaq	<rip>, %rdx        # <addr>
-               	movq	%rdx, 0x8(%rcx)
-               	movl	%eax, -0x18(%rbp)
-               	movl	%eax, -0x20(%rbp)
+               	movq	%rdx, 0x8(%rax)
+               	movl	%ecx, -0x18(%rbp)
+               	movl	%ecx, -0x20(%rbp)
                	jmp	<addr>
-               	movslq	-0x18(%rbp), %rax
-               	addq	$0x2, %rax
-               	movl	%eax, -0x18(%rbp)
-               	movslq	-0x20(%rbp), %rax
-               	incq	%rax
-               	movl	%eax, -0x20(%rbp)
+               	movslq	-0x18(%rbp), %rcx
+               	addq	$0x2, %rcx
+               	movl	%ecx, -0x18(%rbp)
+               	movslq	-0x20(%rbp), %rcx
+               	incq	%rcx
+               	movl	%ecx, -0x20(%rbp)
                	jmp	<addr>
-               	movslq	-0x18(%rbp), %rax
-               	incq	%rax
-               	movl	%eax, -0x18(%rbp)
-               	movslq	-0x20(%rbp), %rax
-               	incq	%rax
-               	movl	%eax, -0x20(%rbp)
-               	movslq	-0x20(%rbp), %rax
-               	movslq	0x10(%rbp), %rcx
-               	cmpq	%rcx, %rax
+               	movslq	-0x18(%rbp), %rcx
+               	incq	%rcx
+               	movl	%ecx, -0x18(%rbp)
+               	movslq	-0x20(%rbp), %rcx
+               	incq	%rcx
+               	movl	%ecx, -0x20(%rbp)
+               	movslq	-0x20(%rbp), %rcx
+               	movslq	0x10(%rbp), %rdx
+               	cmpq	%rdx, %rcx
                	jl	<addr>
                	movslq	-0x18(%rbp), %rax
                	addq	$0x20, %rsp
@@ -68,11 +67,10 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
-               	leaq	-0x10(%rbp), %rax
                	movslq	-0x20(%rbp), %rcx
                	andq	$0x1, %rcx
-               	movq	(%rax,%rcx,8), %rax
-               	jmpq	*%rax
+               	movq	(%rax,%rcx,8), %rcx
+               	jmpq	*%rcx
 
 <main>:
                	pushq	%rbp

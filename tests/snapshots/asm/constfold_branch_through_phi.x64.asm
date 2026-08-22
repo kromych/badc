@@ -27,16 +27,16 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x1, %eax
-               	movl	$0x8, %eax
-               	movl	$0x1, %eax
+               	movq	%rax, %rcx
+               	movl	$0x8, %ecx
+               	movq	%rcx, %rdx
                	movl	$0x2, %eax
                	movl	$0xa, %eax
-               	movl	$0x64, %eax
-               	movl	$0x8, %eax
-               	movl	$0xa, %eax
-               	movl	$0x64, %eax
+               	movq	%rax, %rdx
+               	movl	$0x64, %edx
+               	movq	%rdx, %rsi
                	movabsq	$-0x2, %rax
                	movl	$0x1, %eax
-               	movl	$0x1, %eax
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq

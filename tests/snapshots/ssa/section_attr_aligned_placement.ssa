@@ -216,7 +216,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v145 BinopI { op=add, lhs=v1, rhs_imm=8192 }          -> x1
     v146 ImmData(12288)                                   -> x2
     v147 BinopI { op=add, lhs=v1, rhs_imm=8192 }          -> x0
-    v148 Binop { op=ne, lhs=v145, rhs=v147 }              -> x0
+    v148 Binop { op=ne, lhs=v145, rhs=v145 }              -> x0
     terminator Bz { cond=v148, target=b30, fall=b29 }   (exit_acc=v148)
   block 29  start_pc=0
     v149 Imm(15)                                          -> x0

@@ -14,8 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x1, #0x0                // =0
-               	mov	x1, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
+               	mov	x2, x0
+               	mov	x2, x0
+               	mov	x1, x0
                	ret

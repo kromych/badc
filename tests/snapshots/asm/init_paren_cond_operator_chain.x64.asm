@@ -105,9 +105,9 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	retq
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	retq
                	jmp	<addr>
                	jmp	<addr>

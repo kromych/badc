@@ -64,15 +64,15 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	ldr	x0, [x0]
-               	ldur	x1, [x29, #-0x8]
-               	mov	x2, #0x5                // =5
-               	str	x2, [x1]
-               	ldur	x1, [x29, #-0x8]
-               	ldr	x1, [x1]
-               	add	x0, x0, x1
+               	ldur	x2, [x29, #-0x8]
+               	mov	x3, #0x5                // =5
+               	str	x3, [x2]
+               	ldur	x2, [x29, #-0x8]
+               	ldr	x2, [x2]
+               	add	x0, x0, x2
                	cmp	x0, #0x8
                	b.eq	<addr>
-               	mov	x0, #0x3                // =3
+               	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

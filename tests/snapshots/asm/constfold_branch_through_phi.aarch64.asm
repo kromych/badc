@@ -15,19 +15,19 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x1                // =1
-               	mov	x0, #0x8                // =8
-               	mov	x0, #0x1                // =1
+               	mov	x1, x0
+               	mov	x1, #0x8                // =8
+               	mov	x2, x1
                	mov	x0, #0x2                // =2
                	mov	x0, #0xa                // =10
-               	mov	x0, #0x64               // =100
-               	mov	x0, #0x8                // =8
-               	mov	x0, #0xa                // =10
-               	mov	x0, #0x64               // =100
+               	mov	x2, x0
+               	mov	x2, #0x64               // =100
+               	mov	x3, x2
                	mov	x0, #0xfffe             // =65534
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
+               	mov	x1, x0
                	mov	x0, #0x0                // =0
                	ret

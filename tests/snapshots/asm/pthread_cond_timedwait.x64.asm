@@ -79,14 +79,12 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x1, %ecx
-               	movq	%rcx, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rbx, 0x8(%rax)
+               	leaq	-0x10(%rbp), %rdx
+               	movl	$0x1, %eax
+               	movq	%rax, (%rdx)
+               	movq	%rbx, 0x8(%rdx)
                	leaq	-0x40(%rbp), %rdi
                	leaq	-0x68(%rbp), %rsi
-               	leaq	-0x10(%rbp), %rdx
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax

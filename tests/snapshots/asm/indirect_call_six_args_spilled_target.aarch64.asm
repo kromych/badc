@@ -35,28 +35,25 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x1, [x0]
-               	sub	x0, x29, #0x48
-               	mov	x1, #0x3                // =3
-               	str	x1, [x0, #0x10]
-               	sub	x0, x29, #0x28
-               	mov	x1, #0x7                // =7
-               	str	x1, [x0, #0x10]
-               	sub	x0, x29, #0x50
-               	sub	x2, x29, #0x48
-               	sub	x3, x29, #0x28
+               	sub	x1, x29, #0x48
+               	mov	x2, #0x3                // =3
+               	str	x2, [x1, #0x10]
+               	sub	x2, x29, #0x28
+               	mov	x3, #0x7                // =7
+               	str	x3, [x2, #0x10]
                	mov	x4, #0x5                // =5
                	mov	x5, #0x9                // =9
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
-               	ldr	x1, [x0]
+               	mov	x3, #0x0                // =0
+               	stur	w3, [x29, #-0x8]
+               	ldr	x3, [x0]
                	sub	x6, x29, #0x8
+               	add	x1, x1, #0x10
                	add	x2, x2, #0x10
-               	add	x3, x3, #0x10
-               	mov	x9, x1
-               	mov	x1, x6
-               	mov	x16, x3
+               	mov	x9, x3
                	mov	x3, x4
-               	mov	x4, x16
+               	mov	x4, x2
+               	mov	x2, x1
+               	mov	x1, x6
                	blr	x9
                	ldursw	x1, [x29, #-0x8]
                	add	x0, x0, x1

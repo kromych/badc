@@ -47,21 +47,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
     v29  BinopI { op=add, lhs=v19, rhs_imm=16 }           -> x1
     v30  Imm(4)                                           -> x1
     v31  BinopI { op=add, lhs=v19, rhs_imm=20 }           -> x1
-    v32  Load { addr=v19, disp=20, kind=I16 }             -> x0
-    v33  Imm(30)                                          -> x1
-    v34  Imm(8444249301319680)                            -> x1
-    v35  BinopI { op=ne, lhs=v32, rhs_imm=30 }            -> x0
+    v32  Load { addr=v19, disp=20, kind=I16 }             -> x1
+    v33  Imm(30)                                          -> x2
+    v34  Imm(8444249301319680)                            -> x2
+    v35  BinopI { op=ne, lhs=v32, rhs_imm=30 }            -> x1
     terminator Bz { cond=v35, target=b8, fall=b7 }   (exit_acc=v35)
   block 7  start_pc=0
     v36  Imm(6)                                           -> x0
     terminator Return(v36)   (exit_acc=v36)
   block 8  start_pc=0
-    v37  LoadLocal { off=-7, kind=I64 }                   -> x0
-    v38  LocalAddr(-6)                                    -> x0
-    v39  Imm(0)                                           -> x0
+    v37  LoadLocal { off=-7, kind=I64 }                   -> x1
+    v38  LocalAddr(-6)                                    -> x1
+    v39  Imm(0)                                           -> x1
     terminator Jmp(b9)   (exit_acc=v39)
   block 9  start_pc=0
-    v41  LocalAddr(-6)                                    -> x0
+    v41  LocalAddr(-6)                                    -> x1
     v42  Imm(0)                                           -> x1
     v43  LoadLocal { off=-7, kind=I64 }                   -> x1
     v44  LocalAddr(-6)                                    -> x1
@@ -70,8 +70,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=7
   block 10  start_pc=0
     v47  LoadLocal { off=-7, kind=I64 }                   -> x1
     v48  Imm(12)                                          -> x1
-    v49  BinopI { op=add, lhs=v41, rhs_imm=12 }           -> x1
-    v50  Load { addr=v41, disp=12, kind=I16 }             -> x0
+    v49  BinopI { op=add, lhs=v19, rhs_imm=12 }           -> x1
+    v50  Load { addr=v19, disp=12, kind=I16 }             -> x0
     v51  Imm(18)                                          -> x1
     v52  Imm(5066549580791808)                            -> x1
     v53  BinopI { op=ne, lhs=v50, rhs_imm=18 }            -> x0

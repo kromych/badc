@@ -42,22 +42,22 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v31  Imm(0)                                           -> x1
     terminator Jmp(b5)   (exit_acc=v30)
   block 5  start_pc=0
-    v32  Phi { incoming=[b4:v30], kind=I64 }              -> x0
-    v33  LoadLocal { off=-1, kind=I64 }                   -> x1
+    v32  Phi { incoming=[b4:v30], kind=I64 }              -> x1
+    v33  LoadLocal { off=-1, kind=I64 }                   -> x2
     terminator Jmp(b6)   (exit_acc=v32)
   block 6  start_pc=0
-    v35  Imm(-9223372036854775808)                        -> x0
-    v36  Imm(0)                                           -> x0
-    v37  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v38  Imm(0)                                           -> x0
-    v39  Imm(-1)                                          -> x0
-    v40  Imm(9223372036854775807)                         -> x0
-    v41  Imm(1)                                           -> x0
-    v42  Imm(0)                                           -> x0
+    v35  Imm(-9223372036854775808)                        -> x1
+    v36  Imm(0)                                           -> x1
+    v37  LoadLocal { off=-1, kind=I64 }                   -> x1
+    v38  Imm(0)                                           -> x1
+    v39  Imm(-1)                                          -> x1
+    v40  Imm(9223372036854775807)                         -> x1
+    v41  Imm(1)                                           -> x1
+    v42  Imm(0)                                           -> x1
     terminator Jmp(b7)   (exit_acc=v42)
   block 7  start_pc=0
-    v44  Imm(0)                                           -> x0
-    terminator Return(v44)   (exit_acc=v44)
+    v44  Imm(0)                                           -> x1
+    terminator Return(v30)   (exit_acc=v30)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

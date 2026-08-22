@@ -1,7 +1,7 @@
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=3
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(48)                                      -> x1
@@ -323,8 +323,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v165 Imm(8)                                           -> x1
     v166 BinopI { op=add, lhs=v141, rhs_imm=8 }           -> x0
     v167 Imm(9)                                           -> x0
-    v168 Imm(0)                                           -> x0
-    v169 Imm(0)                                           -> x1
+    v168 Imm(0)                                           -> x3
+    v169 Imm(0)                                           -> x0
     terminator Jmp(b56)   (exit_acc=v168)
   block 56  start_pc=0
     v170 Phi { incoming=[b55:v168], kind=I64 }            -> x0
@@ -341,10 +341,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v178 Imm(0)                                           -> x0
     v179 Imm(14)                                          -> x0
     v180 Imm(0)                                           -> x0
-    v181 Imm(0)                                           -> x1
-    terminator Jmp(b59)   (exit_acc=v180)
+    v181 Imm(0)                                           -> x0
+    terminator Jmp(b59)   (exit_acc=v168)
   block 59  start_pc=0
-    v182 Phi { incoming=[b58:v180], kind=I64 }            -> x0
+    v182 Phi { incoming=[b58:v168], kind=I64 }            -> x0
     v183 LoadLocal { off=-3, kind=I64 }                   -> x1
     terminator Jmp(b60)   (exit_acc=v182)
   block 60  start_pc=0
@@ -355,7 +355,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v187 ImmData(40)                                      -> x7
     v188 CallExt { binding_idx=0, args=[v187], fp_arg_mask=0x0 } -> x0
     v189 Imm(0)                                           -> x0
-    terminator Return(v189)   (exit_acc=v189)
+    terminator Return(v168)   (exit_acc=v168)
   block 62  start_pc=0
     terminator Jmp(b50)
   block 63  start_pc=0

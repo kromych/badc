@@ -27,24 +27,21 @@ Disassembly of section .text:
                	str	x1, [x0, #0x28]
                	str	x1, [x0, #0x30]
                	str	x1, [x0, #0x38]
-               	mov	x0, #0x8                // =8
-               	sub	x1, x29, #0x40
+               	mov	x1, #0x8                // =8
                	str	x0, [sp, #0x8]
-               	str	x1, [sp]
+               	str	x0, [sp]
                	ldr	x0, [sp]
                	prfm	pldl1keep, [x0]
                	ldr	x0, [sp, #0x8]
-               	sub	x1, x29, #0x40
                	str	x0, [sp, #0x8]
-               	str	x1, [sp]
+               	str	x0, [sp]
                	ldr	x0, [sp]
                	prfm	pstl1strm, [x0, #0x10]
                	ldr	x0, [sp, #0x8]
-               	sub	x1, x29, #0x40
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
+               	str	x0, [sp]
+               	str	x1, [sp, #0x8]
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x8]
                	prfm	pldl2keep, [x0, x1]

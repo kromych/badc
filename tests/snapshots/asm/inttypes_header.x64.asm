@@ -33,27 +33,27 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	movl	$0x4, %eax
                	movq	%rax, -0x8(%rbp)
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
                	xorq	%rax, %rax
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
+               	movq	%rax, %rdx
+               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rdx
+               	movq	%rax, %rdx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
+               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rdx
+               	movq	%rax, %rdx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	xorq	%rax, %rax
-               	xorq	%rcx, %rcx
-               	xorq	%rax, %rax
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	xorq	%rax, %rax
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rdx
+               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rdx
+               	movq	%rax, %rdx
                	xorq	%rax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp

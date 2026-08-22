@@ -68,8 +68,6 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rdx
                	addq	$0x4, %rdx
-               	movq	%rcx, %rsi
-               	shlq	$0x3, %rsi
                	addq	%rsi, %rdx
                	movslq	0x4(%rdx), %rdx
                	cmpq	$0x8, %rdx

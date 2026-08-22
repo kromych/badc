@@ -58,8 +58,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator AsmGoto { table=0 }   [b2, b21]
   block 2  start_pc=0
     v15  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
-    v17  Extend { value=v15, kind=I32 }                   -> x1
+    v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x2
+    v17  Extend { value=v15, kind=I32 }                   -> x2
     terminator Jmp(b3)   (exit_acc=v15)
   block 3  start_pc=0
     v24  Phi { incoming=[b2:v15, b21:v21], kind=I64 }     -> x0
@@ -75,9 +75,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator Jmp(b7)
   block 7  start_pc=0
     v25  Imm(20)                                          -> x0
-    v26  Imm(0)                                           -> x1
-    v27  LocalAddr(-1)                                    -> x1
-    v28  InlineAsm { template="mov %1, %0\n\taddl $1, %0\n\tcmpl $10, %1\n\tjg %l0", ops=2, args=[v27, v25] } -> -
+    v26  Imm(0)                                           -> x2
+    v27  LocalAddr(-1)                                    -> x2
+    v28  InlineAsm { template="mov %1, %0\n\taddl $1, %0\n\tcmpl $10, %1\n\tjg %l0", ops=2, args=[v13, v25] } -> -
     terminator AsmGoto { table=1 }   [b8, b20]
   block 8  start_pc=0
     v29  LoadLocal { off=-1, kind=I32 }                   -> x0
@@ -133,10 +133,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
   block 21  start_pc=0
     v18  LoadLocal { off=-1, kind=I32 }                   -> x0
     v19  BinopI { op=add, lhs=v18, rhs_imm=100 }          -> x0
-    v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x1
+    v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x2
     v21  Extend { value=v19, kind=I32 }                   -> x0
-    v22  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x1
-    v23  Extend { value=v21, kind=I32 }                   -> x1
+    v22  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x2
+    v23  Extend { value=v21, kind=I32 }                   -> x2
     terminator Jmp(b3)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

@@ -2035,6 +2035,14 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::index_fold::run (aarch64)", || {
             crate::c5::codegen::passes::index_fold::run(&mut ssa_funcs);
         });
+        // Dominator-scoped CSE of pure arithmetic and address values.
+        // After the index fold, so merging cannot weld two `base + K`
+        // addresses the fold would have turned into displacements; the
+        // canonical bases then feed store forwarding.
+        super::ssa::emit_common::time_pass("passes::cse::run (aarch64)", || {
+            let caps = super::ssa::reg_alloc::bank_capacity(target);
+            crate::c5::codegen::passes::cse::run(&mut ssa_funcs, caps);
+        });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
         // are both normalised to the same `(base, disp)`. Bounded by

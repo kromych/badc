@@ -45,22 +45,21 @@ Disassembly of section .text:
                	movq	-0x78(%rbp), %rcx
                	movq	-0x70(%rbp), %rdx
                	movq	-0x68(%rbp), %rbx
-               	movl	-0x10(%rbp), %ecx
-               	leaq	-0x10(%rbp), %rdx
+               	movl	-0x10(%rbp), %edx
                	leaq	-0x18(%rbp), %rsi
                	leaq	-0x20(%rbp), %rdi
                	leaq	-0x28(%rbp), %r8
-               	xorq	%rax, %rax
+               	xorq	%rcx, %rcx
                	movq	%rax, -0x80(%rbp)
                	movq	%rcx, -0x78(%rbp)
                	movq	%rdx, -0x70(%rbp)
                	movq	%rbx, -0x68(%rbp)
-               	movq	%rdx, -0x60(%rbp)
+               	movq	%rax, -0x60(%rbp)
                	movq	%rsi, -0x58(%rbp)
                	movq	%rdi, -0x50(%rbp)
                	movq	%r8, -0x48(%rbp)
-               	movq	%rax, -0x40(%rbp)
-               	movq	%rax, -0x38(%rbp)
+               	movq	%rcx, -0x40(%rbp)
+               	movq	%rcx, -0x38(%rbp)
                	movq	-0x40(%rbp), %rax
                	movq	-0x38(%rbp), %rcx
                	cpuid
@@ -77,7 +76,7 @@ Disassembly of section .text:
                	movq	-0x70(%rbp), %rdx
                	movq	-0x68(%rbp), %rbx
                	movl	-0x10(%rbp), %eax
-               	cmpq	%rax, %rcx
+               	cmpq	%rax, %rdx
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

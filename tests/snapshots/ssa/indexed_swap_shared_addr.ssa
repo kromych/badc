@@ -134,55 +134,55 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v122 Imm(0)                                           -> x1
     terminator Jmp(b4)   (exit_acc=v120)
   block 4  start_pc=0
-    v123 Phi { incoming=[b3:v120], kind=I64 }             -> x0
-    v124 LoadLocal { off=-6, kind=I64 }                   -> x1
-    v125 Imm(1)                                           -> x1
-    v126 Imm(0)                                           -> x1
+    v123 Phi { incoming=[b3:v120], kind=I64 }             -> x1
+    v124 LoadLocal { off=-6, kind=I64 }                   -> x2
+    v125 Imm(1)                                           -> x2
+    v126 Imm(0)                                           -> x2
     terminator Jmp(b5)   (exit_acc=v123)
   block 5  start_pc=0
-    v127 Imm(0)                                           -> x0
-    v128 Imm(16)                                          -> x0
-    v129 Imm(0)                                           -> x0
-    v130 LoadLocal { off=-3, kind=I64 }                   -> x0
-    v131 Imm(0)                                           -> x0
+    v127 Imm(0)                                           -> x1
+    v128 Imm(16)                                          -> x1
+    v129 Imm(0)                                           -> x1
+    v130 LoadLocal { off=-3, kind=I64 }                   -> x1
+    v131 Imm(0)                                           -> x1
     v132 Imm(0)                                           -> x1
     v133 Imm(0)                                           -> x1
-    terminator Jmp(b6)   (exit_acc=v131)
+    terminator Jmp(b6)   (exit_acc=v120)
   block 6  start_pc=0
-    v134 Phi { incoming=[b5:v131], kind=I64 }             -> x0
-    v135 LoadLocal { off=-6, kind=I64 }                   -> x1
-    v136 Imm(1)                                           -> x1
-    v137 Imm(0)                                           -> x1
+    v134 Phi { incoming=[b5:v120], kind=I64 }             -> x1
+    v135 LoadLocal { off=-6, kind=I64 }                   -> x2
+    v136 Imm(1)                                           -> x2
+    v137 Imm(0)                                           -> x2
     terminator Jmp(b7)   (exit_acc=v134)
   block 7  start_pc=0
-    v138 Imm(0)                                           -> x0
-    v139 Imm(24)                                          -> x0
-    v140 Imm(0)                                           -> x0
-    v141 LoadLocal { off=-2, kind=I64 }                   -> x0
-    v142 Imm(0)                                           -> x0
+    v138 Imm(0)                                           -> x1
+    v139 Imm(24)                                          -> x1
+    v140 Imm(0)                                           -> x1
+    v141 LoadLocal { off=-2, kind=I64 }                   -> x1
+    v142 Imm(0)                                           -> x1
     v143 Imm(0)                                           -> x1
     v144 Imm(0)                                           -> x1
-    terminator Jmp(b8)   (exit_acc=v142)
+    terminator Jmp(b8)   (exit_acc=v120)
   block 8  start_pc=0
-    v145 Phi { incoming=[b7:v142], kind=I64 }             -> x0
-    v146 LoadLocal { off=-6, kind=I64 }                   -> x1
-    v147 Imm(0)                                           -> x1
+    v145 Phi { incoming=[b7:v120], kind=I64 }             -> x1
+    v146 LoadLocal { off=-6, kind=I64 }                   -> x2
+    v147 Imm(0)                                           -> x2
     terminator Jmp(b9)   (exit_acc=v145)
   block 9  start_pc=0
-    v148 Imm(0)                                           -> x0
-    v149 Imm(32)                                          -> x0
-    v150 Imm(0)                                           -> x0
-    v151 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v152 Imm(0)                                           -> x0
+    v148 Imm(0)                                           -> x1
+    v149 Imm(32)                                          -> x1
+    v150 Imm(0)                                           -> x1
+    v151 LoadLocal { off=-1, kind=I64 }                   -> x1
+    v152 Imm(0)                                           -> x1
     v153 Imm(0)                                           -> x1
-    terminator Jmp(b10)   (exit_acc=v152)
+    terminator Jmp(b10)   (exit_acc=v120)
   block 10  start_pc=0
-    v154 Phi { incoming=[b9:v152], kind=I64 }             -> x0
-    v155 LoadLocal { off=-6, kind=I64 }                   -> x1
+    v154 Phi { incoming=[b9:v120], kind=I64 }             -> x1
+    v155 LoadLocal { off=-6, kind=I64 }                   -> x2
     terminator Jmp(b11)   (exit_acc=v154)
   block 11  start_pc=0
-    v157 Imm(0)                                           -> x0
-    terminator Return(v157)   (exit_acc=v157)
+    v157 Imm(0)                                           -> x1
+    terminator Return(v120)   (exit_acc=v120)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

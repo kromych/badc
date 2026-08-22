@@ -44,13 +44,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v99  Imm(4)                                           -> x6
     v100 Store { addr=v96, disp=0, value=v99, kind=I32 }  -> -
     v101 ImmData(24)                                      -> x0
-    v102 Imm(0)                                           -> x6
-    v103 LoadLocal { off=-7, kind=I64 }                   -> x6
+    v102 Imm(0)                                           -> x7
+    v103 LoadLocal { off=-7, kind=I64 }                   -> x7
     v104 Store { addr=v101, disp=0, value=v12, kind=I64 } -> -
     v105 ImmData(40)                                      -> x0
-    v106 Imm(0)                                           -> x6
-    v107 Imm(0)                                           -> x6
-    v108 Imm(6)                                           -> x6
+    v106 Imm(0)                                           -> x7
+    v107 Imm(0)                                           -> x7
+    v108 Imm(6)                                           -> x7
     v109 Store { addr=v105, disp=0, value=v108, kind=I32 } -> -
     v110 Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v110)
@@ -66,7 +66,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v29  ImmData(16)                                      -> x0
     v30  Load { addr=v29, disp=0, kind=I64 }              -> x0
     v31  BinopI { op=ne, lhs=v30, rhs_imm=4369 }          -> x0
-    v32  Imm(0)                                           -> x6
+    v32  Imm(0)                                           -> x8
     terminator Bnz { cond=v31, target=b26, fall=b5 }   (exit_acc=v31)
   block 5  start_pc=0
     v33  ImmData(32)                                      -> x0
@@ -74,11 +74,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v35  BinopI { op=xor, lhs=v34, rhs_imm=4 }            -> x0
     v36  BinopI { op=and, lhs=v35, rhs_imm=4294967295 }   -> x0
     v37  BinopI { op=ne, lhs=v36, rhs_imm=0 }             -> x0
-    v38  Imm(0)                                           -> x6
+    v38  Imm(0)                                           -> x8
     terminator Jmp(b6)   (exit_acc=v37)
   block 6  start_pc=0
     v39  Phi { incoming=[b26:v31, b5:v37], kind=I64 }     -> x0
-    v40  LoadLocal { off=-10, kind=I64 }                  -> x6
+    v40  LoadLocal { off=-10, kind=I64 }                  -> x8
     terminator Bz { cond=v39, target=b8, fall=b7 }   (exit_acc=v39)
   block 7  start_pc=0
     v41  Imm(2)                                           -> x0
@@ -87,7 +87,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v42  ImmData(24)                                      -> x0
     v43  Load { addr=v42, disp=0, kind=I64 }              -> x0
     v44  BinopI { op=ne, lhs=v43, rhs_imm=8738 }          -> x0
-    v45  Imm(0)                                           -> x6
+    v45  Imm(0)                                           -> x8
     terminator Bnz { cond=v44, target=b25, fall=b9 }   (exit_acc=v44)
   block 9  start_pc=0
     v46  ImmData(40)                                      -> x0
@@ -95,11 +95,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v48  BinopI { op=xor, lhs=v47, rhs_imm=6 }            -> x0
     v49  BinopI { op=and, lhs=v48, rhs_imm=4294967295 }   -> x0
     v50  BinopI { op=ne, lhs=v49, rhs_imm=0 }             -> x0
-    v51  Imm(0)                                           -> x6
+    v51  Imm(0)                                           -> x8
     terminator Jmp(b10)   (exit_acc=v50)
   block 10  start_pc=0
     v52  Phi { incoming=[b25:v44, b9:v50], kind=I64 }     -> x0
-    v53  LoadLocal { off=-10, kind=I64 }                  -> x6
+    v53  LoadLocal { off=-10, kind=I64 }                  -> x8
     terminator Bz { cond=v52, target=b12, fall=b11 }   (exit_acc=v52)
   block 11  start_pc=0
     v54  Imm(3)                                           -> x0
@@ -114,14 +114,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     terminator Jmp(b13)
   block 13  start_pc=0
     v111 ImmData(56)                                      -> x0
-    v112 Imm(0)                                           -> x6
-    v113 LoadLocal { off=-9, kind=I64 }                   -> x6
+    v112 Imm(0)                                           -> x8
+    v113 LoadLocal { off=-9, kind=I64 }                   -> x8
     v114 Store { addr=v111, disp=0, value=v5, kind=I64 }  -> -
     v115 ImmData(72)                                      -> x0
     v116 Imm(0)                                           -> x1
     v117 Imm(0)                                           -> x1
     v118 Imm(4)                                           -> x1
-    v119 Store { addr=v115, disp=0, value=v118, kind=I32 } -> -
+    v119 Store { addr=v115, disp=0, value=v99, kind=I32 } -> -
     v120 ImmData(64)                                      -> x0
     v121 Imm(0)                                           -> x1
     v122 LoadLocal { off=-7, kind=I64 }                   -> x1
@@ -130,7 +130,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v125 Imm(0)                                           -> x1
     v126 Imm(0)                                           -> x1
     v127 Imm(6)                                           -> x1
-    v128 Store { addr=v124, disp=0, value=v127, kind=I32 } -> -
+    v128 Store { addr=v124, disp=0, value=v108, kind=I32 } -> -
     v129 Imm(0)                                           -> x0
     terminator Jmp(b14)   (exit_acc=v129)
   block 14  start_pc=0

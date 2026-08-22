@@ -28,21 +28,22 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	x20, [sp, #-0x50]!
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
-               	mov	x0, #0x40400000         // =1077936128
-               	fmov	d0, x0
+               	stp	x20, x21, [sp, #-0x60]!
+               	stp	x22, x23, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x50]
+               	add	x29, sp, #0x50
+               	mov	x20, #0x40400000        // =1077936128
+               	fmov	d0, x20
                	bl	<addr>
-               	mov	x0, #0x40c00000         // =1086324736
-               	fmov	s17, w0
+               	mov	x21, #0x40c00000        // =1086324736
+               	fmov	s17, w21
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x60
                	ret
-               	mov	x20, #0x40400000        // =1077936128
                	fmov	d0, x20
                	bl	<addr>
                	fmov	s16, w20
@@ -50,8 +51,9 @@ Disassembly of section .text:
                	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x60
                	ret
                	mov	x0, #0x40800000         // =1082130432
                	fmov	d0, x0
@@ -61,34 +63,36 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x60
                	ret
-               	mov	x0, #0x3fc00000         // =1069547520
-               	mov	x1, #0x40000000         // =1073741824
-               	fmov	d0, x0
-               	fmov	d1, x1
+               	mov	x22, #0x3fc00000        // =1069547520
+               	mov	x23, #0x40000000        // =1073741824
+               	fmov	d0, x22
+               	fmov	d1, x23
                	bl	<addr>
                	mov	x0, #0x40600000         // =1080033280
                	fmov	s17, w0
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x60
                	ret
                	mov	x0, #0x40a00000         // =1084227584
-               	mov	x1, #0x40000000         // =1073741824
                	fmov	s16, w0
-               	fmov	s17, w1
+               	fmov	s17, w23
                	fmul	s0, s16, s17
                	mov	x0, #0x41200000         // =1092616192
                	fmov	s17, w0
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x60
                	ret
                	mov	x0, #0x40e00000         // =1088421888
                	fmov	s16, w0
@@ -102,19 +106,19 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x60
                	ret
-               	mov	x0, #0x40400000         // =1077936128
-               	fmov	d0, x0
+               	fmov	d0, x20
                	bl	<addr>
-               	mov	x0, #0x40c00000         // =1086324736
-               	fmov	s17, w0
+               	fmov	s17, w21
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x60
                	ret
                	mov	x0, #0x40400000         // =1077936128
                	fmov	d0, x0
@@ -124,12 +128,12 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x60
                	ret
-               	mov	x0, #0x3fc00000         // =1069547520
                	mov	x1, #0x40000000         // =1073741824
-               	fmov	d0, x0
+               	fmov	d0, x22
                	fmov	d1, x1
                	bl	<addr>
                	mov	x0, #0x40600000         // =1080033280
@@ -137,10 +141,12 @@ Disassembly of section .text:
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x60
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x20, [sp], #0x50
+               	ldp	x29, x30, [sp, #0x50]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x60
                	ret

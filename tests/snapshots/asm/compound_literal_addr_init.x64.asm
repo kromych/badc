@@ -142,7 +142,7 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	jmp	<addr>
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

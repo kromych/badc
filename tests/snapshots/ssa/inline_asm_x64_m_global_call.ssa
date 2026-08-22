@@ -22,27 +22,27 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)
   block 1  start_pc=0
-    v12  LocalAddr(-1)                                    -> x0
-    v13  ImmData(8)                                       -> x1
-    v14  BinopI { op=add, lhs=v13, rhs_imm=8 }            -> x1
+    v12  LocalAddr(-1)                                    -> x2
+    v13  ImmData(8)                                       -> x0
+    v14  BinopI { op=add, lhs=v13, rhs_imm=8 }            -> x0
     v15  InlineAsm { template="call *%1", ops=2, args=[v12, v14] } -> -
     v16  LoadLocal { off=-1, kind=I32 }                   -> x0
     v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x1
-    v18  Extend { value=v16, kind=I32 }                   -> x6
+    v18  Extend { value=v16, kind=I32 }                   -> x7
     terminator Jmp(b2)   (exit_acc=v16)
   block 2  start_pc=0
     v1   Imm(0)                                           -> x1
     v2   ImmData(8)                                       -> x1
-    v3   BinopI { op=add, lhs=v2, rhs_imm=8 }             -> x2
-    v4   ImmCode(ent_pc=1)                                -> x2
+    v3   BinopI { op=add, lhs=v2, rhs_imm=8 }             -> x6
+    v4   ImmCode(ent_pc=1)                                -> x6
     v5   Store { addr=v2, disp=8, value=v4, kind=I64 }    -> -
     v6   Extend { value=v18, kind=I32 }                   -> x1
     terminator Jmp(b3)
   block 3  start_pc=0
     v19  LocalAddr(-1)                                    -> x1
-    v20  ImmData(8)                                       -> x2
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x2
-    v22  InlineAsm { template="call *%1", ops=2, args=[v19, v21] } -> -
+    v20  ImmData(8)                                       -> x1
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
+    v22  InlineAsm { template="call *%1", ops=2, args=[v12, v21] } -> -
     v23  LoadLocal { off=-1, kind=I32 }                   -> x1
     v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x2
     v25  Extend { value=v23, kind=I32 }                   -> x2

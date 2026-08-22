@@ -1076,1567 +1076,1306 @@ Disassembly of section .text:
                	movq	%r10, -0x1048(%rbp)
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx
-               	leaq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	leaq	(%rax), %rcx
                	leaq	-0x20(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x20(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x30(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x30(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x40(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x40(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x50(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x50(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x60(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x60(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x70(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x70(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x80(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x80(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x90(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x90(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x100(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x100(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x110(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x110(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x120(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x120(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x130(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x130(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x140(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x140(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x150(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x150(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x160(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x160(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x170(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x170(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x180(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x180(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x190(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x190(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1a0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1a0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1b0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1b0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1c0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1c0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1d0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1d0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1e0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1e0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1f0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1f0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x200(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x200(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x210(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x210(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x220(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x220(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x230(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x230(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x240(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x240(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x250(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x250(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x260(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x260(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x270(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x270(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x280(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x280(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x290(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x290(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x2a0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x2a0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x2b0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x2b0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x2c0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x2c0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x2d0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x2d0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x2e0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x2e0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x2f0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x2f0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x300(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x300(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x310(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x310(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x320(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x320(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x330(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x330(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x340(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x340(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x350(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x350(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x360(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x360(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x370(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x370(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x380(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x380(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x390(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x390(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x3a0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x3a0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x3b0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x3b0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x3c0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x3c0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x3d0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x3d0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x3e0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x3e0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x3f0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x3f0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x400(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x400(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x410(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x410(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x420(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x420(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x430(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x430(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x440(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x440(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x450(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x450(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x460(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x460(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x470(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x470(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x480(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x480(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x490(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x490(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x4a0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x4a0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x4b0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x4b0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x4c0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x4c0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x4d0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x4d0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x4e0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x4e0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x4f0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x4f0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x500(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x500(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x510(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x510(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x520(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x520(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x530(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x530(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x540(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x540(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x550(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x550(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x560(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x560(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x570(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x570(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x580(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x580(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x590(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x590(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x5a0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x5a0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x5b0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x5b0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x5c0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x5c0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x5d0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x5d0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x5e0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x5e0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x5f0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x5f0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x600(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x600(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x610(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x610(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x620(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x620(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x630(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x630(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x640(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x640(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x650(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x650(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x660(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x660(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x670(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x670(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x680(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x680(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x690(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x690(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x6a0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x6a0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x6b0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x6b0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x6c0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x6c0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x6d0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x6d0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x6e0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x6e0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x6f0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x6f0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x700(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x700(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x710(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x710(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x720(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x720(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x730(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x730(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x740(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x740(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x750(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x750(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x760(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x760(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x770(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x770(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x780(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x780(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x790(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x790(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x7a0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x7a0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x7b0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x7b0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x7c0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x7c0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x7d0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x7d0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x7e0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x7e0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x7f0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x7f0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x800(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x800(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x810(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x810(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x820(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x820(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x830(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x830(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x840(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x840(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x850(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x850(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x860(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x860(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x870(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x870(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x880(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x880(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x890(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x890(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x8a0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x8a0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x8b0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x8b0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x8c0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x8c0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x8d0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x8d0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x8e0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x8e0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x8f0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x8f0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x900(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x900(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x910(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x910(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x920(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x920(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x930(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x930(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x940(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x940(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x950(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x950(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x960(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x960(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x970(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x970(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x980(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x980(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x990(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x990(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x9a0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x9a0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x9b0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x9b0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x9c0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x9c0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x9d0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x9d0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x9e0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x9e0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x9f0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x9f0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa00(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa00(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa10(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa20(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa20(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa30(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa30(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa40(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa40(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa50(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa50(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa60(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa60(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa70(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa70(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa80(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa80(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xa90(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xa90(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xaa0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xaa0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xab0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xab0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xac0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xac0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xad0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xad0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xae0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xae0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xaf0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xaf0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb00(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb00(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb10(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb20(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb20(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb30(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb30(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb40(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb40(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb50(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb50(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb60(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb60(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb70(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb70(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb80(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb80(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xb90(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xb90(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xba0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xba0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xbb0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xbb0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xbc0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xbc0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xbd0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xbd0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xbe0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xbe0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xbf0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xbf0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc00(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc00(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc10(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc20(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc20(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc30(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc30(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc40(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc40(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc50(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc50(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc60(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc60(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc70(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc70(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc80(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc80(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xc90(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xc90(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xca0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xca0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xcb0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xcb0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xcc0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xcc0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xcd0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xcd0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xce0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xce0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xcf0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xcf0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd00(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd00(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd10(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd20(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd20(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd30(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd30(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd40(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd40(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd50(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd50(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd60(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd60(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd70(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd70(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd80(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd80(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xd90(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xd90(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xda0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xda0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xdb0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xdb0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xdc0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xdc0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xdd0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xdd0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xde0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xde0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xdf0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xdf0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe00(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe00(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe10(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe20(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe20(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe30(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe30(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe40(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe40(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe50(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe50(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe60(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe60(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe70(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe70(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe80(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe80(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xe90(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xe90(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xea0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xea0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xeb0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xeb0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xec0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xec0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xed0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xed0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xee0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xee0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xef0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xef0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf00(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf00(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf10(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf20(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf20(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf30(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf30(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf40(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf40(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf50(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf50(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf60(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf60(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf70(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf70(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf80(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf80(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xf90(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xf90(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xfa0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xfa0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xfb0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xfb0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xfc0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xfc0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xfd0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xfd0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xfe0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xfe0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0xff0(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0xff0(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1000(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1000(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1010(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1010(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1020(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1020(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1030(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1030(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1040(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1040(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rax, %rcx
                	leaq	-0x1050(%rbp), %rax
                	movq	(%rax), %rdx
-               	leaq	-0x1050(%rbp), %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
@@ -3694,14 +3433,11 @@ Disassembly of section .text:
                	movq	%r15, 0x20(%rsp)
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	movq	%rax, %rdx
-               	shlq	$0x4, %rdx
-               	addq	%rcx, %rdx
-               	movq	%rax, (%rdx)
-               	movq	%rax, %rdx
-               	shlq	$0x4, %rdx
-               	addq	%rdx, %rcx
+               	leaq	<rip>, %rdx
+               	movq	%rax, %rsi
+               	shlq	$0x4, %rsi
+               	leaq	(%rdx,%rsi), %rcx
+               	movq	%rax, (%rcx)
                	movq	%rax, %rdx
                	shlq	%rdx
                	movq	%rdx, 0x8(%rcx)

@@ -58,14 +58,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v41  Binop { op=add, lhs=v38, rhs=v40 }               -> x2
     v42  Load { addr=v41, disp=0, kind=I32 }              -> x2
     v43  BinopI { op=ne, lhs=v42, rhs_imm=7 }             -> x2
-    v44  Imm(0)                                           -> x6
+    v44  Imm(0)                                           -> x7
     terminator Bnz { cond=v43, target=b12, fall=b10 }   (exit_acc=v43)
   block 10  start_pc=0
     v49  ImmData(56)                                      -> x2
     v50  BinopI { op=add, lhs=v49, rhs_imm=4 }            -> x2
-    v51  Extend { value=v31, kind=I32 }                   -> x6
-    v52  BinopI { op=shl, lhs=v32, rhs_imm=3 }            -> x6
-    v53  Binop { op=add, lhs=v50, rhs=v52 }               -> x2
+    v51  Extend { value=v31, kind=I32 }                   -> x7
+    v52  BinopI { op=shl, lhs=v32, rhs_imm=3 }            -> x7
+    v53  Binop { op=add, lhs=v50, rhs=v40 }               -> x2
     v54  BinopI { op=add, lhs=v53, rhs_imm=4 }            -> x6
     v55  Load { addr=v53, disp=4, kind=I32 }              -> x2
     v56  BinopI { op=ne, lhs=v55, rhs_imm=8 }             -> x2

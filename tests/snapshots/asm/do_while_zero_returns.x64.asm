@@ -55,8 +55,8 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	xorq	%rax, %rax
                	movl	$0x1, %eax
-               	movl	$0x1, %eax
+               	movq	%rax, %rcx
                	movabsq	$-0x1, %rax
-               	movabsq	$-0x1, %rax
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq

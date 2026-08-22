@@ -35,10 +35,10 @@ Disassembly of section .text:
                	movq	(%rcx), %rdx
                	movq	%rdx, (%rax)
                	popq	%rdx
-               	xorq	%rcx, %rcx
-               	xorq	%rcx, %rcx
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rdx
+               	movq	%rax, %rdx
+               	movq	%rax, %rcx
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq

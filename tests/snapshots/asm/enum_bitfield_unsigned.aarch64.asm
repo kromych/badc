@@ -28,37 +28,35 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	mov	w1, w0
                	mov	x17, #0x7               // =7
-               	and	x1, x1, x17
-               	cmp	x1, #0x6
+               	and	x2, x1, x17
+               	cmp	x2, #0x6
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	w0, w0
                	mov	x17, #0xfff8            // =65528
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x1, x17
                	mov	x17, #0x4               // =4
                	orr	x0, x0, x17
                	stur	w0, [x29, #-0x8]
                	mov	w1, w0
                	mov	x17, #0x7               // =7
-               	and	x1, x1, x17
-               	cmp	x1, #0x4
+               	and	x2, x1, x17
+               	cmp	x2, #0x4
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	w0, w0
                	mov	x17, #0xfff8            // =65528
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	and	x0, x0, x17
+               	and	x0, x1, x17
                	mov	x17, #0x2               // =2
                	orr	x0, x0, x17
                	stur	w0, [x29, #-0x8]

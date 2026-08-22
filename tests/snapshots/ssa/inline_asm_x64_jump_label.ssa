@@ -6,23 +6,23 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)
   block 1  start_pc=0
-    v3   ImmData(16)                                      -> x0
-    v4   Imm(0)                                           -> x1
+    v3   ImmData(16)                                      -> x1
+    v4   Imm(0)                                           -> x0
     v5   InlineAsm { template="1:jmp %l0\n\t.pushsection __jump_table, \"aw\" \n\t.balign 8 \n\t.long 1b - . \n\t.long %l0 - . \n\t.quad %c0 + %c1 - .\n\t.popsection \n\t", ops=2, args=[v3, v4] } -> -
     terminator AsmGoto { table=0 }   [b2, b5]
   block 2  start_pc=0
     v6   Imm(2)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v6)
   block 3  start_pc=0
-    v8   Phi { incoming=[b2:v6, b5:v7], kind=I64 }        -> x0
+    v8   Phi { incoming=[b2:v6, b5:v4], kind=I64 }        -> x0
     terminator Jmp(b4)   (exit_acc=v8)
   block 4  start_pc=0
     v1   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x1
     v2   Extend { value=v8, kind=I32 }                    -> x0
     terminator Return(v2)   (exit_acc=v2)
   block 5  start_pc=0
-    v7   Imm(0)                                           -> x0
-    terminator Jmp(b3)   (exit_acc=v7)
+    v7   Imm(0)                                           -> x1
+    terminator Jmp(b3)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

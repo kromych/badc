@@ -75,15 +75,14 @@ Disassembly of section .text:
                	movq	%r10, %rax
                	movslq	(%rax), %rdx
                	leaq	<rip>, %rdi
-               	movslq	%ebx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	movslq	%ebx, %rax
                	leaq	0x1(%rax), %rbx
-               	movslq	%ebx, %rax
-               	movslq	-0xc8(%rbp), %rcx
-               	cmpq	%rcx, %rax
+               	movslq	%ebx, %rsi
+               	movslq	-0xc8(%rbp), %rax
+               	cmpq	%rax, %rsi
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rdi

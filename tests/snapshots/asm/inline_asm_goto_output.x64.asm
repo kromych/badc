@@ -133,7 +133,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x14, %eax
-               	leaq	-0x8(%rbp), %rcx
                	movq	%rax, -0x30(%rbp)
                	movq	%rbx, -0x28(%rbp)
                	movq	%rcx, -0x20(%rbp)

@@ -5061,6 +5061,14 @@ fn qsort_scan_extend_dedup() {
 }
 
 #[test]
+fn cross_block_cse() {
+    // Dominator-scoped CSE: duplicates at dominated positions reuse the
+    // dominating value, and the cases the pressure gate declines keep
+    // computing the same results.
+    assert_eq!(run_fixture("cross_block_cse.c"), 0);
+}
+
+#[test]
 fn tailcall_return_extension() {
     // int-returning tail callee under an unsigned-returning caller:
     // the widened value must zero-extend (bit 31 set).

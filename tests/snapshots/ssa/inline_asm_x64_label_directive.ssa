@@ -6,11 +6,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)
   block 1  start_pc=0
-    v8   LocalAddr(-1)                                    -> x0
+    v8   LocalAddr(-1)                                    -> x1
     v9   InlineAsm { template="1:  .irp num,0,1,2,3\n    .equ .L__xld\\num, (\\num * 3 + 1)\n    .endr\n    movl $(.L__xld0 + .L__xld1 + .L__xld2 + .L__xld3), %0\n", ops=1, args=[v8] } -> -
     v10  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x1
-    v12  Extend { value=v10, kind=I32 }                   -> x1
+    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x2
+    v12  Extend { value=v10, kind=I32 }                   -> x2
     terminator Jmp(b2)   (exit_acc=v10)
   block 2  start_pc=0
     v1   BinopI { op=ne, lhs=v10, rhs_imm=22 }            -> x0
@@ -20,7 +20,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     terminator Return(v2)   (exit_acc=v2)
   block 4  start_pc=0
     v13  LocalAddr(-1)                                    -> x0
-    v14  InlineAsm { template="2: 3:  .macro xld_set dst, val\n    movl $\\val, \\dst\n    .endm\n    xld_set %0, 77\n    .purgem xld_set\n", ops=1, args=[v13] } -> -
+    v14  InlineAsm { template="2: 3:  .macro xld_set dst, val\n    movl $\\val, \\dst\n    .endm\n    xld_set %0, 77\n    .purgem xld_set\n", ops=1, args=[v8] } -> -
     v15  LoadLocal { off=-1, kind=I32 }                   -> x0
     v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
     v17  Extend { value=v15, kind=I32 }                   -> x1

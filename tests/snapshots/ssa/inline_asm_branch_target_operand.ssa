@@ -54,17 +54,17 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
   block 1  start_pc=0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
-    v21  LocalAddr(-2)                                    -> x0
-    v22  Imm(1)                                           -> x1
+    v21  LocalAddr(-2)                                    -> x1
+    v22  Imm(1)                                           -> x0
     v23  InlineAsm { template="call helper_%c1", ops=2, args=[v21, v22] } -> -
     v24  LoadLocal { off=-1, kind=I32 }                   -> x0
     v25  LoadLocal { off=-2, kind=I32 }                   -> x0
     v26  BinopI { op=add, lhs=v25, rhs_imm=0 }            -> x0
-    v27  Imm(0)                                           -> x1
-    v28  Extend { value=v26, kind=I32 }                   -> x1
-    v29  LocalAddr(-2)                                    -> x1
+    v27  Imm(0)                                           -> x2
+    v28  Extend { value=v26, kind=I32 }                   -> x2
+    v29  LocalAddr(-2)                                    -> x2
     v30  Imm(2)                                           -> x2
-    v31  InlineAsm { template="call helper_%c1", ops=2, args=[v29, v30] } -> -
+    v31  InlineAsm { template="call helper_%c1", ops=2, args=[v21, v30] } -> -
     v32  Extend { value=v26, kind=I32 }                   -> x1
     v33  LoadLocal { off=-2, kind=I32 }                   -> x1
     v34  Binop { op=add, lhs=v26, rhs=v33 }               -> x0

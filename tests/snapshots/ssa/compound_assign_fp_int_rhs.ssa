@@ -21,54 +21,54 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 2  start_pc=0
     v12  LoadLocal { off=-1, kind=F64 }                   -> d0
     v13  Imm(2)                                           -> x0
-    v14  Imm(4611686018427387904)                         -> x0
+    v14  Imm(4611686018427387904)                         -> x2
     v15  Binop { op=fmul, lhs=v12, rhs=v14 }              -> d0
     v16  StoreLocal { off=-1, value=v15, kind=F64 }       -> -
-    v17  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v17  LoadLocal { off=-1, kind=F64 }                   -> d1
     v18  Imm(4613937818241073152)                         -> x0
-    v19  Fneg(v18)                                        -> d1
-    v20  Binop { op=fne, lhs=v17, rhs=v19 }               -> x0
+    v19  Fneg(v18)                                        -> d0
+    v20  Binop { op=fne, lhs=v17, rhs=v19 }               -> x1
     terminator Bz { cond=v20, target=b4, fall=b3 }   (exit_acc=v20)
   block 3  start_pc=0
     v21  Imm(1)                                           -> x0
     terminator Return(v21)   (exit_acc=v21)
   block 4  start_pc=0
-    v22  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v23  Imm(1)                                           -> x0
-    v24  Imm(4607182418800017408)                         -> x0
-    v25  Binop { op=fadd, lhs=v22, rhs=v24 }              -> d0
+    v22  LoadLocal { off=-1, kind=F64 }                   -> d1
+    v23  Imm(1)                                           -> x1
+    v24  Imm(4607182418800017408)                         -> x1
+    v25  Binop { op=fadd, lhs=v22, rhs=v24 }              -> d1
     v26  StoreLocal { off=-1, value=v25, kind=F64 }       -> -
-    v27  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v28  Imm(4611686018427387904)                         -> x0
-    v29  Fneg(v28)                                        -> d1
-    v30  Binop { op=fne, lhs=v27, rhs=v29 }               -> x0
+    v27  LoadLocal { off=-1, kind=F64 }                   -> d1
+    v28  Imm(4611686018427387904)                         -> x6
+    v29  Fneg(v14)                                        -> d2
+    v30  Binop { op=fne, lhs=v27, rhs=v29 }               -> x2
     terminator Bz { cond=v30, target=b6, fall=b5 }   (exit_acc=v30)
   block 5  start_pc=0
     v31  Imm(1)                                           -> x0
     terminator Return(v31)   (exit_acc=v31)
   block 6  start_pc=0
-    v32  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v33  Imm(1)                                           -> x0
-    v34  Imm(4607182418800017408)                         -> x0
-    v35  Binop { op=fsub, lhs=v32, rhs=v34 }              -> d0
+    v32  LoadLocal { off=-1, kind=F64 }                   -> d1
+    v33  Imm(1)                                           -> x2
+    v34  Imm(4607182418800017408)                         -> x2
+    v35  Binop { op=fsub, lhs=v32, rhs=v24 }              -> d1
     v36  StoreLocal { off=-1, value=v35, kind=F64 }       -> -
-    v37  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v38  Imm(4613937818241073152)                         -> x0
-    v39  Fneg(v38)                                        -> d1
-    v40  Binop { op=fne, lhs=v37, rhs=v39 }               -> x0
+    v37  LoadLocal { off=-1, kind=F64 }                   -> d1
+    v38  Imm(4613937818241073152)                         -> x2
+    v39  Fneg(v18)                                        -> d2
+    v40  Binop { op=fne, lhs=v37, rhs=v19 }               -> x2
     terminator Bz { cond=v40, target=b8, fall=b7 }   (exit_acc=v40)
   block 7  start_pc=0
     v41  Imm(1)                                           -> x0
     terminator Return(v41)   (exit_acc=v41)
   block 8  start_pc=0
     v42  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v43  Imm(3)                                           -> x0
-    v44  Imm(4613937818241073152)                         -> x0
-    v45  Binop { op=fdiv, lhs=v42, rhs=v44 }              -> d0
+    v43  Imm(3)                                           -> x2
+    v44  Imm(4613937818241073152)                         -> x2
+    v45  Binop { op=fdiv, lhs=v42, rhs=v18 }              -> d0
     v46  StoreLocal { off=-1, value=v45, kind=F64 }       -> -
     v47  LoadLocal { off=-1, kind=F64 }                   -> d0
     v48  Imm(4607182418800017408)                         -> x0
-    v49  Fneg(v48)                                        -> d1
+    v49  Fneg(v24)                                        -> d1
     v50  Binop { op=fne, lhs=v47, rhs=v49 }               -> x0
     terminator Bz { cond=v50, target=b10, fall=b9 }   (exit_acc=v50)
   block 9  start_pc=0

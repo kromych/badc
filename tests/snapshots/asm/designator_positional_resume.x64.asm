@@ -51,24 +51,24 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	leaq	-0x10(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movzbq	0x8(%rcx), %rdx
-               	movb	%dl, 0x8(%rax)
-               	movzbq	0x9(%rcx), %rdx
-               	movb	%dl, 0x9(%rax)
-               	movzbq	0xa(%rcx), %rdx
-               	movb	%dl, 0xa(%rax)
-               	movzbq	0xb(%rcx), %rdx
-               	movb	%dl, 0xb(%rax)
-               	popq	%rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	leaq	-0x10(%rbp), %rsi
-               	xorq	%rax, %rax
+               	leaq	<rip>, %rcx
+               	pushq	%rax
+               	movq	(%rcx), %rax
+               	movq	%rax, (%rsi)
+               	movzbq	0x8(%rcx), %rax
+               	movb	%al, 0x8(%rsi)
+               	movzbq	0x9(%rcx), %rax
+               	movb	%al, 0x9(%rsi)
+               	movzbq	0xa(%rcx), %rax
+               	movb	%al, 0xa(%rsi)
+               	movzbq	0xb(%rcx), %rax
+               	movb	%al, 0xb(%rsi)
+               	popq	%rax
+               	movq	%rsi, %rcx
                	jmp	<addr>
                	leaq	(%rsi,%rcx), %rdi
                	movsbq	(%rdi), %rdi

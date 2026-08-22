@@ -309,22 +309,23 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	movq	%rdi, %rax
-               	shlq	$0x3f, %rax
-               	movq	%r9, %rcx
+               	movq	%rdi, %rcx
                	shlq	$0x3f, %rcx
+               	movq	%r9, %rax
+               	shlq	$0x3f, %rax
                	movq	%rdi, %rdx
                	shrq	%rdx
-               	orq	%rdx, %rcx
+               	orq	%rax, %rdx
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	cmpq	%r11, %rax
+               	movq	%rcx, %rax
+               	cmpq	%r11, %rcx
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movabsq	$-0x7ff76ee65dd54cc5, %r11 # imm = 0x80089119A22AB33B
-               	movq	%rcx, %rax
-               	cmpq	%r11, %rcx
+               	movq	%rdx, %rax
+               	cmpq	%r11, %rdx
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -380,10 +381,9 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	movq	%rdi, %rax
-               	shlq	$0x3f, %rax
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	cmpq	%r11, %rax
+               	movq	%rcx, %rax
+               	cmpq	%r11, %rcx
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -477,11 +477,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rdx
+               	movq	%rax, %rcx
+               	movq	%rax, %rdx
+               	movq	%rax, %rcx
                	xorq	%rcx, %rcx
                	leaq	<rip>, %rax
                	addq	$0xc, %rax

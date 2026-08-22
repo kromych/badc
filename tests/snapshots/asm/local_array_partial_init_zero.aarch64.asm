@@ -27,11 +27,10 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	cmp	x1, #0x28
                	b.lt	<addr>
-               	sub	x0, x29, #0xa8
-               	ldr	w1, [x0]
-               	sub	x0, x29, #0xa8
-               	ldr	w0, [x0, #0x9c]
-               	add	x0, x1, x0
+               	sub	x4, x29, #0xa8
+               	ldr	w0, [x4]
+               	ldr	w1, [x4, #0x9c]
+               	add	x0, x0, x1
                	mov	w0, w0
                	stur	w0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x8]
@@ -50,30 +49,27 @@ Disassembly of section .text:
                	str	x0, [x1, #0x50]
                	str	x0, [x1, #0x58]
                	str	w0, [x1, #0x60]
-               	mov	x2, x0
+               	mov	x3, x0
                	b	<addr>
-               	mov	w3, w2
-               	sub	x2, x29, #0x70
-               	ldr	w2, [x2, x1, lsl #2]
-               	add	x2, x3, x2
-               	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0x19
+               	mov	w3, w3
+               	ldr	w5, [x1, x2, lsl #2]
+               	add	x3, x3, x5
+               	add	x0, x2, #0x1
+               	sxtw	x2, w0
+               	cmp	x2, #0x19
                	b.lt	<addr>
-               	mov	w5, w2
+               	mov	w5, w3
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sub	x2, x29, #0xa8
-               	mov	x3, #0x5678             // =22136
-               	movk	x3, #0x1234, lsl #16
-               	str	w3, [x2, x1, lsl #2]
+               	mov	x2, #0x5678             // =22136
+               	movk	x2, #0x1234, lsl #16
+               	str	w2, [x4, x1, lsl #2]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x28
                	b.lt	<addr>
                	sub	x0, x29, #0xa8
                	ldr	w1, [x0]
-               	sub	x0, x29, #0xa8
                	ldr	w0, [x0, #0x9c]
                	add	x0, x1, x0
                	mov	w0, w0
@@ -94,17 +90,16 @@ Disassembly of section .text:
                	str	x0, [x1, #0x50]
                	str	x0, [x1, #0x58]
                	str	w0, [x1, #0x60]
-               	mov	x2, x0
+               	mov	x3, x0
                	b	<addr>
-               	mov	w3, w2
-               	sub	x2, x29, #0x70
-               	ldr	w2, [x2, x1, lsl #2]
-               	add	x2, x3, x2
-               	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0x19
+               	mov	w3, w3
+               	ldr	w4, [x1, x2, lsl #2]
+               	add	x3, x3, x4
+               	add	x0, x2, #0x1
+               	sxtw	x2, w0
+               	cmp	x2, #0x19
                	b.lt	<addr>
-               	mov	w1, w2
+               	mov	w1, w3
                	mov	w0, w5
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1

@@ -45,15 +45,15 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
-               	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
-               	movl	$0x3, %edx
+               	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
+               	movl	$0x3, %ecx
                	movl	$0x4, %esi
                	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rdx, %xmm0
+               	cvtsi2sd	%rcx, %xmm0
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rsi, %xmm1
                	movapd	%xmm1, %xmm15
-               	movq	%rcx, %xmm1
+               	movq	%rdx, %xmm1
                	mulsd	%xmm15, %xmm1
                	movq	%rax, %xmm14
                	movapd	%xmm0, %xmm15
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	movl	$0x3, %eax
+               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

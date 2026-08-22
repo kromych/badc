@@ -26,62 +26,48 @@ Disassembly of section .text:
                	int3
 
 <run>:
-               	xorq	%rcx, %rcx
+               	xorq	%rdx, %rdx
                	movl	$0x1, %eax
                	jmp	<addr>
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0x0, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	incq	%rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0x2, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0x3, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0x4, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0x5, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0x6, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0x7, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0x8, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0x9, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0xa, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0xb, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0xc, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0xd, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0xe, %rdx
-               	addq	%rdx, %rcx
-               	imulq	$0x64, %rax, %rdx
-               	addq	$0xf, %rdx
-               	addq	%rdx, %rcx
-               	leaq	0x1(%rsi), %rax
-               	movslq	%eax, %rsi
-               	cmpq	$0x5, %rsi
+               	imulq	$0x64, %rax, %rcx
+               	leaq	(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0x1(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0x2(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0x3(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0x4(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0x5(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0x6(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	addq	$0x7, %rcx
+               	addq	%rcx, %rdx
+               	imulq	$0x64, %rax, %rcx
+               	leaq	0x8(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0x9(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0xa(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0xb(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0xc(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0xd(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	leaq	0xe(%rcx), %rsi
+               	addq	%rsi, %rdx
+               	addq	$0xf, %rcx
+               	addq	%rcx, %rdx
+               	leaq	0x1(%rdi), %rax
+               	movslq	%eax, %rdi
+               	cmpq	$0x5, %rdi
                	jl	<addr>
-               	movslq	%ecx, %rax
+               	movslq	%edx, %rax
                	retq
 
 <main>:

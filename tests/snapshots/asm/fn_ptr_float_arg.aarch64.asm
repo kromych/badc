@@ -14,10 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0x40200000         // =1075838976
-               	mov	x1, #0x40000000         // =1073741824
-               	fmov	s16, w0
-               	fmov	s17, w1
+               	mov	x1, #0x40200000         // =1075838976
+               	mov	x2, #0x40000000         // =1073741824
+               	fmov	s16, w1
+               	fmov	s17, w2
                	fmul	s0, s16, s17
                	fcvtzs	x0, s0
                	sxtw	x0, w0
@@ -34,8 +34,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x0, #0x40200000         // =1075838976
-               	fmov	s16, w0
+               	fmov	s16, w1
                	fcvtzs	x0, s16
                	add	x0, x0, #0xa
                	sxtw	x0, w0
@@ -44,9 +43,8 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	mov	x0, #0x40600000         // =1080033280
-               	mov	x1, #0x40000000         // =1073741824
                	fmov	s16, w0
-               	fmov	s17, w1
+               	fmov	s17, w2
                	fmul	s0, s16, s17
                	fcvtzs	x0, s0
                	sxtw	x0, w0

@@ -6,6 +6,7 @@ pub(crate) mod byteload;
 pub(crate) mod const_global_fold;
 pub(crate) mod constfold;
 pub(crate) mod constfold_branch;
+pub(crate) mod cse;
 pub(crate) mod dedup_imm;
 pub(crate) mod drop_redundant_extend;
 pub(crate) mod fma;

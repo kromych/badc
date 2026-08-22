@@ -142,11 +142,10 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rax
                	movq	%rax, -0x70(%rbp)
-               	movq	%rax, -0x68(%rbp)
-               	movq	%rcx, -0x60(%rbp)
+               	movq	%rcx, -0x68(%rbp)
+               	movq	%rax, -0x60(%rbp)
                	movq	-0x60(%rbp), %rax
                	movq	-0x68(%rbp), %r10
                	movq	%rax, (%r10)

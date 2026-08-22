@@ -15,48 +15,39 @@ Disassembly of section .text:
 
 <main>:
                	mov	x2, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x3, #0x0                // =0
+               	mov	x0, x2
+               	mov	x3, x2
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
+               	adrp	x6, <page>
+               	add	x6, x6, <lo12>
                	mov	x17, #0x30              // =48
-               	mul	x6, x4, x17
-               	add	x5, x5, x6
+               	mul	x5, x4, x17
+               	add	x7, x6, x5
                	lsl	x6, x1, #4
-               	add	x5, x5, x6
-               	add	x6, x5, #0x0
-               	add	x5, x2, #0x1
-               	str	w2, [x6]
+               	add	x7, x7, x6
+               	add	x8, x7, #0x0
+               	add	x7, x2, #0x1
+               	str	w2, [x8]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x17, #0x30              // =48
-               	mul	x6, x4, x17
-               	add	x2, x2, x6
-               	lsl	x6, x1, #4
-               	add	x6, x2, x6
-               	add	x2, x5, #0x1
-               	str	w5, [x6, #0x4]
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	mov	x17, #0x30              // =48
-               	mul	x6, x4, x17
-               	add	x5, x5, x6
-               	lsl	x6, x1, #4
-               	add	x6, x5, x6
-               	add	x5, x2, #0x1
-               	str	w2, [x6, #0x8]
+               	add	x2, x2, x5
+               	add	x8, x2, x6
+               	add	x2, x7, #0x1
+               	str	w7, [x8, #0x4]
+               	adrp	x7, <page>
+               	add	x7, x7, <lo12>
+               	add	x7, x7, x5
+               	add	x8, x7, x6
+               	add	x7, x2, #0x1
+               	str	w2, [x8, #0x8]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x17, #0x30              // =48
-               	mul	x6, x4, x17
-               	add	x2, x2, x6
-               	lsl	x6, x1, #4
-               	add	x6, x2, x6
-               	add	x2, x5, #0x1
-               	str	w5, [x6, #0xc]
+               	add	x2, x2, x5
+               	add	x5, x2, x6
+               	add	x2, x7, #0x1
+               	str	w7, [x5, #0xc]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x3
@@ -79,44 +70,35 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
                	b	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	lsl	x3, x0, #3
-               	add	x2, x2, x3
-               	add	x3, x2, #0x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	lsl	x3, x1, #3
+               	add	x0, x0, x3
+               	add	x5, x0, #0x0
                	mov	x17, #0xa               // =10
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x0
-               	str	w2, [x3]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	lsl	x3, x0, #3
-               	add	x3, x2, x3
-               	mov	x17, #0xa               // =10
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x1
-               	str	w2, [x3, #0x4]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	lsl	x3, x0, #3
-               	add	x3, x2, x3
-               	mov	x17, #0xa               // =10
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x2
-               	str	w2, [x3, #0x8]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	lsl	x3, x0, #3
-               	add	x3, x2, x3
-               	mov	x17, #0xa               // =10
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x3
-               	str	w2, [x3, #0xc]
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0x3
+               	mul	x0, x1, x17
+               	add	x4, x0, #0x0
+               	str	w4, [x5]
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	add	x5, x4, x3
+               	add	x4, x0, #0x1
+               	str	w4, [x5, #0x4]
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	add	x5, x4, x3
+               	add	x4, x0, #0x2
+               	str	w4, [x5, #0x8]
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	add	x3, x4, x3
+               	add	x0, x0, #0x3
+               	str	w0, [x3, #0xc]
+               	add	x2, x1, #0x1
+               	sxtw	x1, w2
+               	cmp	x1, #0x3
                	b.lt	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

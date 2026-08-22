@@ -39,8 +39,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rdx, (%rax)
                	leaq	<rip>, %rax
-               	movl	$0x6, %esi
-               	movl	%esi, (%rax)
+               	movl	$0x6, %edi
+               	movl	%edi, (%rax)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x9, %rax
@@ -86,13 +86,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
-               	movl	$0x4, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%esi, (%rax)
                	leaq	<rip>, %rax
                	movq	%rdx, (%rax)
                	leaq	<rip>, %rax
-               	movl	$0x6, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%edi, (%rax)
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	cmpq	$0x1111, %rax           # imm = 0x1111

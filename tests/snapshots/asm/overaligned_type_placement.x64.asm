@@ -110,14 +110,13 @@ Disassembly of section .text:
                	movl	%edx, (%rcx)
                	movslq	(%rax), %rax
                	cmpq	$0xb, %rax
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x16, %rax
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rcx
+               	cmpq	$0x16, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
@@ -157,4 +156,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	movq	%rax, %rcx
                	jmp	<addr>

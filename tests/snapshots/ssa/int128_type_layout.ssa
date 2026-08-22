@@ -6,17 +6,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)
   block 1  start_pc=0
-    v3   ImmData(16)                                      -> x0
-    v4   LocalAddr(-4)                                    -> x1
-    v5   Mcpy { dst=v4, src=v3, size=16, align=16 }       -> x1
-    v6   LocalAddr(-4)                                    -> x1
-    v7   Mcpy { dst=v3, src=v6, size=16, align=16 }       -> x0
-    v8   LocalAddr(-4)                                    -> x0
+    v3   ImmData(16)                                      -> x1
+    v4   LocalAddr(-4)                                    -> x0
+    v5   Mcpy { dst=v4, src=v3, size=16, align=16 }       -> x2
+    v6   LocalAddr(-4)                                    -> x2
+    v7   Mcpy { dst=v3, src=v4, size=16, align=16 }       -> x1
+    v8   LocalAddr(-4)                                    -> x1
     v9   LocalAddr(-2)                                    -> x1
-    v10  Mcpy { dst=v9, src=v8, size=16, align=16 }       -> x0
-    v11  LocalAddr(-4)                                    -> x0
-    v12  LocalAddr(-2)                                    -> x1
-    v13  Mcpy { dst=v11, src=v12, size=16, align=16 }     -> x0
+    v10  Mcpy { dst=v9, src=v4, size=16, align=16 }       -> x2
+    v11  LocalAddr(-4)                                    -> x2
+    v12  LocalAddr(-2)                                    -> x2
+    v13  Mcpy { dst=v4, src=v9, size=16, align=16 }       -> x0
     v14  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v14)
   block 2  start_pc=0

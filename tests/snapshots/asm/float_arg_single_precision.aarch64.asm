@@ -14,35 +14,34 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0x3fc00000         // =1069547520
-               	mov	x1, #0x3e800000         // =1048576000
-               	fmov	s16, w0
-               	fmov	s17, w1
-               	fmul	s0, s16, s17
-               	mov	x0, #0x3ec00000         // =1052770304
+               	mov	x1, #0x3fc00000         // =1069547520
+               	mov	x0, #0x3e800000         // =1048576000
+               	fmov	s16, w1
                	fmov	s17, w0
+               	fmul	s0, s16, s17
+               	mov	x1, #0x3ec00000         // =1052770304
+               	fmov	s17, w1
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x40200000         // =1075838976
-               	fmov	s16, w0
+               	mov	x1, #0x40200000         // =1075838976
+               	fmov	s16, w1
                	fneg	s0, s16
-               	mov	x0, #0x40800000         // =1082130432
-               	fmov	s17, w0
+               	mov	x1, #0x40800000         // =1082130432
+               	fmov	s17, w1
                	fmul	s0, s0, s17
-               	mov	x0, #0x41200000         // =1092616192
-               	fmov	s16, w0
+               	mov	x1, #0x41200000         // =1092616192
+               	fmov	s16, w1
                	fneg	s1, s16
                	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x0, #0x3f000000         // =1056964608
-               	mov	x1, #0x3e800000         // =1048576000
+               	mov	x1, #0x3f000000         // =1056964608
                	mov	x2, #0x3e000000         // =1040187392
-               	fmov	s16, w0
-               	fmov	s17, w1
+               	fmov	s16, w1
+               	fmov	s17, w0
                	fadd	s0, s16, s17
                	fmov	s17, w2
                	fadd	s0, s0, s17

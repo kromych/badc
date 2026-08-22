@@ -58,11 +58,8 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	movq	%rdx, (%rax)
                	movq	%rdx, 0x8(%rax)
-               	leaq	-0x20(%rbp), %rax
                	movq	%rcx, (%rax)
-               	leaq	-0x20(%rbp), %rax
                	movq	%rsi, 0x8(%rax)
-               	leaq	-0x20(%rbp), %rax
                	movq	(%rax), %r12
                	movq	0x8(%rax), %r13
                	testq	%r12, %r12
@@ -105,9 +102,7 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)
-               	leaq	-0x18(%rbp), %rax
                	movq	%rdx, (%rax)
-               	leaq	-0x18(%rbp), %rax
                	movq	%rsi, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
                	movq	(%rax), %rcx
@@ -160,18 +155,15 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	xorq	%rdx, %rdx
-               	movq	%rax, %rsi
-               	shlq	$0x0, %rsi
-               	leaq	-0x18(%rbp), %rax
                	xorq	%rcx, %rcx
+               	movq	%rax, %rdx
+               	shlq	$0x0, %rdx
+               	leaq	-0x18(%rbp), %rax
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)
+               	movq	%rcx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	movq	%rdx, (%rax)
-               	leaq	-0x18(%rbp), %rax
-               	movq	%rsi, 0x8(%rax)
-               	leaq	-0x18(%rbp), %rax
+               	movq	%rdx, 0x8(%rax)
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rdx
                	testq	%rcx, %rcx
@@ -195,18 +187,15 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	xorq	%rdx, %rdx
-               	movq	%rax, %rsi
-               	shlq	$0x24, %rsi
-               	leaq	-0x18(%rbp), %rax
                	xorq	%rcx, %rcx
+               	movq	%rax, %rdx
+               	shlq	$0x24, %rdx
+               	leaq	-0x18(%rbp), %rax
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)
+               	movq	%rcx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	movq	%rdx, (%rax)
-               	leaq	-0x18(%rbp), %rax
-               	movq	%rsi, 0x8(%rax)
-               	leaq	-0x18(%rbp), %rax
+               	movq	%rdx, 0x8(%rax)
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rdx
                	testq	%rcx, %rcx
@@ -246,9 +235,7 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)
-               	leaq	-0x28(%rbp), %rax
                	movq	%rdx, (%rax)
-               	leaq	-0x28(%rbp), %rax
                	movq	%rsi, 0x8(%rax)
                	leaq	-0x28(%rbp), %rax
                	movq	0x8(%rax), %rax

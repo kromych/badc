@@ -20,8 +20,8 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	stur	x0, [x29, #-0x20]
                	ldur	x0, [x29, #-0x20]
-               	mov	x1, #0x1                // =1
-               	str	w1, [x0]
+               	mov	x2, #0x1                // =1
+               	str	w2, [x0]
                	mov	x1, #0x16               // =22
                	str	w1, [x0, #0x4]
                	mov	x1, #0x14d              // =333
@@ -32,8 +32,8 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x12]
                	mov	x1, #0x63               // =99
                	str	w1, [x0, #0x4]
-               	mov	x2, #0x309              // =777
-               	str	x2, [x0, #0x8]
+               	mov	x3, #0x309              // =777
+               	str	x3, [x0, #0x8]
                	sxtw	x1, w1
                	add	x1, x1, #0x1
                	str	w1, [x0, #0x4]
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0x4]
                	cmp	x1, #0x64
                	b.eq	<addr>
-               	mov	x0, #0x1                // =1
+               	mov	x0, x2
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

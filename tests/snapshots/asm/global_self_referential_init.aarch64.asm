@@ -38,7 +38,6 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30
                	ret
-               	add	x0, x20, #0x10
                	ldr	x1, [x20, #0x18]
                	cmp	x1, x0
                	b.eq	<addr>
@@ -56,18 +55,17 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30
                	ret
-               	ldr	x0, [x20, #0x28]
-               	add	x1, x20, #0x50
-               	cmp	x0, x1
+               	ldr	x1, [x20, #0x28]
+               	add	x0, x20, #0x50
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30
                	ret
-               	ldr	x0, [x20, #0x48]
-               	add	x1, x20, #0x50
-               	cmp	x0, x1
+               	ldr	x1, [x20, #0x48]
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x20]

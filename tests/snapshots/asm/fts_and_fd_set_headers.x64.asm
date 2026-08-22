@@ -40,12 +40,10 @@ Disassembly of section .text:
                	movzbq	0x1(%rcx), %rdx
                	movb	%dl, 0x1(%rax)
                	popq	%rdx
-               	leaq	-0x10(%rbp), %rax
-               	leaq	-0x18(%rbp), %rcx
-               	movq	%rcx, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rdx, 0x8(%rax)
+               	movq	%rax, %rcx
                	leaq	-0x10(%rbp), %rdi
+               	movq	%rax, (%rdi)
+               	movq	%rdx, 0x8(%rdi)
                	movl	$0x14, %esi
                	xorl	%eax, %eax
                	callq	<addr>

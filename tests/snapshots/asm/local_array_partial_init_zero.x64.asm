@@ -38,10 +38,9 @@ Disassembly of section .text:
                	movslq	%eax, %rcx
                	cmpq	$0x28, %rcx
                	jl	<addr>
-               	leaq	-0xa8(%rbp), %rax
-               	movl	(%rax), %ecx
-               	leaq	-0xa8(%rbp), %rax
-               	movl	0x9c(%rax), %eax
+               	leaq	-0xa8(%rbp), %rdi
+               	movl	(%rdi), %eax
+               	movl	0x9c(%rdi), %ecx
                	addq	%rcx, %rax
                	movl	%eax, %eax
                	movl	%eax, -0x8(%rbp)
@@ -61,29 +60,26 @@ Disassembly of section .text:
                	movq	%rax, 0x50(%rcx)
                	movq	%rax, 0x58(%rcx)
                	movl	%eax, 0x60(%rcx)
-               	movq	%rax, %rdx
+               	movq	%rax, %rsi
                	jmp	<addr>
-               	movl	%edx, %esi
-               	leaq	-0x70(%rbp), %rdx
-               	movl	(%rdx,%rcx,4), %edx
-               	addq	%rsi, %rdx
-               	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x19, %rcx
+               	movl	%esi, %esi
+               	movl	(%rcx,%rdx,4), %r8d
+               	addq	%r8, %rsi
+               	leaq	0x1(%rdx), %rax
+               	movslq	%eax, %rdx
+               	cmpq	$0x19, %rdx
                	jl	<addr>
-               	movl	%edx, %r8d
+               	movl	%esi, %r8d
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	-0xa8(%rbp), %rdx
-               	movl	$0x12345678, %esi       # imm = 0x12345678
-               	movl	%esi, (%rdx,%rcx,4)
+               	movl	$0x12345678, %edx       # imm = 0x12345678
+               	movl	%edx, (%rdi,%rcx,4)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x28, %rcx
                	jl	<addr>
                	leaq	-0xa8(%rbp), %rax
                	movl	(%rax), %ecx
-               	leaq	-0xa8(%rbp), %rax
                	movl	0x9c(%rax), %eax
                	addq	%rcx, %rax
                	movl	%eax, %eax
@@ -104,17 +100,16 @@ Disassembly of section .text:
                	movq	%rax, 0x50(%rcx)
                	movq	%rax, 0x58(%rcx)
                	movl	%eax, 0x60(%rcx)
-               	movq	%rax, %rdx
+               	movq	%rax, %rsi
                	jmp	<addr>
-               	movl	%edx, %esi
-               	leaq	-0x70(%rbp), %rdx
-               	movl	(%rdx,%rcx,4), %edx
-               	addq	%rsi, %rdx
-               	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x19, %rcx
+               	movl	%esi, %esi
+               	movl	(%rcx,%rdx,4), %edi
+               	addq	%rdi, %rsi
+               	leaq	0x1(%rdx), %rax
+               	movslq	%eax, %rdx
+               	cmpq	$0x19, %rdx
                	jl	<addr>
-               	movl	%edx, %ecx
+               	movl	%esi, %ecx
                	movl	%r8d, %eax
                	testq	%rax, %rax
                	je	<addr>

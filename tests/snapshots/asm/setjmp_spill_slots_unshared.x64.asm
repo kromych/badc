@@ -154,11 +154,10 @@ Disassembly of section .text:
                	cmpq	%r10, %rcx
                	je	<addr>
                	orq	$0x80, %rax
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
+               	movslq	%eax, %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax

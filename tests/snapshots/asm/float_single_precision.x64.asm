@@ -38,7 +38,30 @@ Disassembly of section .text:
                	addss	%xmm15, %xmm0
                	movss	%xmm0, -0x18(%rbp,%riz)
                	movss	-0x18(%rbp,%riz), %xmm0
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x18(%rbp,%riz)
+               	movss	-0x18(%rbp,%riz), %xmm0
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x18(%rbp,%riz)
+               	movss	-0x18(%rbp,%riz), %xmm0
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x18(%rbp,%riz)
+               	movss	-0x18(%rbp,%riz), %xmm0
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x18(%rbp,%riz)
+               	movss	-0x18(%rbp,%riz), %xmm0
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x18(%rbp,%riz)
+               	movss	-0x18(%rbp,%riz), %xmm0
+               	movq	%rax, %xmm15
+               	addss	%xmm15, %xmm0
+               	movss	%xmm0, -0x18(%rbp,%riz)
+               	movss	-0x18(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
                	movss	%xmm0, -0x18(%rbp,%riz)
@@ -48,37 +71,6 @@ Disassembly of section .text:
                	addss	%xmm15, %xmm0
                	movss	%xmm0, -0x18(%rbp,%riz)
                	movss	-0x18(%rbp,%riz), %xmm0
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
-               	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
-               	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
-               	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
-               	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
-               	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
-               	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm0
-               	movss	%xmm0, -0x18(%rbp,%riz)
-               	movss	-0x18(%rbp,%riz), %xmm0
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
                	movss	%xmm0, -0x18(%rbp,%riz)

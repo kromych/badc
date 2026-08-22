@@ -63,7 +63,6 @@ Disassembly of section .text:
                	jbe	<addr>
                	movss	-0x18(%rbp,%riz), %xmm0
                	movss	-0x18(%rbp,%riz), %xmm1
-               	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomiss	%xmm1, %xmm15
                	jbe	<addr>

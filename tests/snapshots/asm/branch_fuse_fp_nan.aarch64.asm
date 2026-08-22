@@ -88,7 +88,6 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d1, d17
                	b.pl	<addr>
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fcmp	d1, d17
                	b.le	<addr>

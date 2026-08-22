@@ -31,25 +31,24 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x1, %eax
                	movl	%eax, -0x8(%rbp)
-               	movl	$0x2, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
-               	cmpq	$0x2, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movl	$0x2, %ecx
+               	movl	%ecx, -0x8(%rbp)
+               	movslq	-0x8(%rbp), %rcx
+               	cmpq	$0x2, %rcx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	movslq	-0x8(%rbp), %rax
-               	cmpq	$0x2, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movslq	-0x8(%rbp), %rcx
+               	cmpq	$0x2, %rcx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
                	jmp	<addr>
                	jmp	<addr>

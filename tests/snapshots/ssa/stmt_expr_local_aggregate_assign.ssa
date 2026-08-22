@@ -87,39 +87,39 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v75  Imm(0)                                           -> x1
     terminator Jmp(b5)   (exit_acc=v74)
   block 5  start_pc=0
-    v76  Phi { incoming=[b4:v74], kind=I64 }              -> x0
-    v77  LoadLocal { off=-2, kind=I64 }                   -> x1
+    v76  Phi { incoming=[b4:v74], kind=I64 }              -> x1
+    v77  LoadLocal { off=-2, kind=I64 }                   -> x2
     terminator Jmp(b6)   (exit_acc=v76)
   block 6  start_pc=0
-    v79  Imm(160)                                         -> x0
+    v79  Imm(160)                                         -> x1
     terminator Jmp(b7)
   block 7  start_pc=0
-    v85  Imm(160)                                         -> x0
-    v86  Imm(0)                                           -> x0
-    v87  Imm(0)                                           -> x0
-    v88  Imm(0)                                           -> x0
-    v89  Imm(5)                                           -> x0
-    v90  Imm(0)                                           -> x0
-    v91  Imm(160)                                         -> x0
-    v92  Imm(-16)                                         -> x0
-    v93  Imm(4294967280)                                  -> x0
-    v94  Imm(160)                                         -> x0
-    v95  Imm(0)                                           -> x0
-    v96  Imm(5)                                           -> x0
-    v97  Imm(5)                                           -> x0
-    v98  Imm(165)                                         -> x0
-    v99  Imm(0)                                           -> x0
-    v100 Imm(165)                                         -> x0
-    v101 Imm(165)                                         -> x0
+    v85  Imm(160)                                         -> x1
+    v86  Imm(0)                                           -> x1
+    v87  Imm(0)                                           -> x1
+    v88  Imm(0)                                           -> x1
+    v89  Imm(5)                                           -> x1
+    v90  Imm(0)                                           -> x1
+    v91  Imm(160)                                         -> x1
+    v92  Imm(-16)                                         -> x1
+    v93  Imm(4294967280)                                  -> x1
+    v94  Imm(160)                                         -> x1
+    v95  Imm(0)                                           -> x1
+    v96  Imm(5)                                           -> x1
+    v97  Imm(5)                                           -> x1
+    v98  Imm(165)                                         -> x1
+    v99  Imm(0)                                           -> x1
+    v100 Imm(165)                                         -> x1
+    v101 Imm(165)                                         -> x1
     terminator Jmp(b8)   (exit_acc=v101)
   block 8  start_pc=0
-    v80  Imm(0)                                           -> x0
-    v81  Imm(0)                                           -> x0
-    v82  Imm(0)                                           -> x0
+    v80  Imm(0)                                           -> x1
+    v81  Imm(0)                                           -> x1
+    v82  Imm(0)                                           -> x1
     terminator Jmp(b9)   (exit_acc=v82)
   block 9  start_pc=0
-    v84  Imm(0)                                           -> x0
-    terminator Return(v84)   (exit_acc=v84)
+    v84  Imm(0)                                           -> x1
+    terminator Return(v74)   (exit_acc=v74)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

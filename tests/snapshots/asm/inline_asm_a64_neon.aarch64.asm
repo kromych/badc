@@ -38,16 +38,15 @@ Disassembly of section .text:
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x2a               // =42
-               	mov	x1, #0xa                // =10
-               	sub	x2, x29, #0x8
+               	mov	x2, #0xa                // =10
                	str	x0, [sp, #0x18]
                	str	x1, [sp, #0x20]
                	str	x2, [sp, #0x28]
                	str	d0, [sp, #0x30]
                	str	d1, [sp, #0x38]
-               	str	x2, [sp]
+               	str	x1, [sp]
                	str	x0, [sp, #0x8]
-               	str	x1, [sp, #0x10]
+               	str	x2, [sp, #0x10]
                	ldr	x1, [sp, #0x8]
                	ldr	x2, [sp, #0x10]
                	dup	v0.4s, w1

@@ -17,11 +17,11 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x2, x0, #0x0
-               	str	w1, [x2]
+               	add	x1, x0, #0x0
+               	str	w2, [x1]
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0x10
@@ -47,11 +47,11 @@ Disassembly of section .text:
                	ldr	x19, [sp], #0x20
                	ret
                	ldrsw	x0, [x1]
-               	mrs	x2, TPIDR_EL0
-               	add	x2, x2, #0x0, lsl #12   // =0x0
-               	add	x2, x2, #0x18
-               	ldrsw	x2, [x2]
-               	add	x0, x0, x2
+               	mrs	x3, TPIDR_EL0
+               	add	x3, x3, #0x0, lsl #12   // =0x0
+               	add	x3, x3, #0x18
+               	ldrsw	x3, [x3]
+               	add	x0, x0, x3
                	str	w0, [x1]
                	sxtw	x0, w0
                	cmp	x0, #0x4
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x0, x2
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
                	ret

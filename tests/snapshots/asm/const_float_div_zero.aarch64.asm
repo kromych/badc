@@ -26,39 +26,31 @@ Disassembly of section .text:
                	b.gt	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	d0, [x0]
-               	mov	x0, #0xc8a0             // =51360
-               	movk	x0, #0x85eb, lsl #16
-               	movk	x0, #0xccf3, lsl #32
-               	movk	x0, #0x7fe1, lsl #48
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	d0, [x1]
                	fmov	d16, x0
                	fneg	d1, d16
                	fcmp	d0, d1
                	b.mi	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	d0, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	d0, [x1]
                	fcmp	d0, d0
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	mov	x2, #0x4000000000000000 // =4611686018427387904
                	mov	x1, #0x0                // =0
-               	fmov	d16, x0
+               	fmov	d16, x2
                	fmov	d17, x1
                	fdiv	d0, d16, d17
-               	mov	x0, #0xc8a0             // =51360
-               	movk	x0, #0x85eb, lsl #16
-               	movk	x0, #0xccf3, lsl #32
-               	movk	x0, #0x7fe1, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
                	b.gt	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x0, x1
                	ret

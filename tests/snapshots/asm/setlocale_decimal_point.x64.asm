@@ -43,14 +43,10 @@ Disassembly of section .text:
                	xorq	%rdi, %rdi
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rax)
-               	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
                	movq	%rcx, 0x8(%rax)
-               	leaq	-0x18(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	movq	%rcx, 0x10(%rax)
-               	leaq	-0x18(%rbp), %rax
-               	movq	0x10(%rax), %rsi
+               	leaq	<rip>, %rsi
+               	movq	%rsi, 0x10(%rax)
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax

@@ -382,27 +382,27 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp
                	movq	%rbx, (%rsp)
-               	leaq	-0x40(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	movq	0x10(%rcx), %rdx
-               	movq	%rdx, 0x10(%rax)
-               	movq	0x18(%rcx), %rdx
-               	movq	%rdx, 0x18(%rax)
-               	movq	0x20(%rcx), %rdx
-               	movq	%rdx, 0x20(%rax)
-               	movq	0x28(%rcx), %rdx
-               	movq	%rdx, 0x28(%rax)
-               	movq	0x30(%rcx), %rdx
-               	movq	%rdx, 0x30(%rax)
-               	movq	0x38(%rcx), %rdx
-               	movq	%rdx, 0x38(%rax)
-               	popq	%rdx
                	leaq	-0x40(%rbp), %rdi
+               	leaq	<rip>, %rax
+               	pushq	%rcx
+               	movq	(%rax), %rcx
+               	movq	%rcx, (%rdi)
+               	movq	0x8(%rax), %rcx
+               	movq	%rcx, 0x8(%rdi)
+               	movq	0x10(%rax), %rcx
+               	movq	%rcx, 0x10(%rdi)
+               	movq	0x18(%rax), %rcx
+               	movq	%rcx, 0x18(%rdi)
+               	movq	0x20(%rax), %rcx
+               	movq	%rcx, 0x20(%rdi)
+               	movq	0x28(%rax), %rcx
+               	movq	%rcx, 0x28(%rdi)
+               	movq	0x30(%rax), %rcx
+               	movq	%rcx, 0x30(%rdi)
+               	movq	0x38(%rax), %rcx
+               	movq	%rcx, 0x38(%rdi)
+               	popq	%rcx
+               	movq	%rdi, %rax
                	movl	$0x64, %esi
                	callq	<addr>
                	movq	%rax, %rbx

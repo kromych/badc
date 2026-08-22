@@ -33,12 +33,12 @@ Disassembly of section .text:
                	str	x0, [x16]
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
-               	sub	x1, x29, #0x40
-               	sub	x2, x29, #0x18
+               	sub	x2, x29, #0x40
+               	sub	x1, x29, #0x18
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
-               	str	x1, [sp]
-               	str	x2, [sp, #0x8]
+               	str	x2, [sp]
+               	str	x1, [sp, #0x8]
                	ldr	x16, [sp, #0x8]
                	ldr	x1, [x16]
                	ldr	x0, [x1, #0x8]!
@@ -48,12 +48,11 @@ Disassembly of section .text:
                	str	x1, [x16]
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
-               	sub	x1, x29, #0x38
-               	sub	x2, x29, #0x18
+               	sub	x2, x29, #0x38
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
-               	str	x1, [sp]
-               	str	x2, [sp, #0x8]
+               	str	x2, [sp]
+               	str	x1, [sp, #0x8]
                	ldr	x16, [sp, #0x8]
                	ldr	x1, [x16]
                	ldr	x0, [x1], #0x8
@@ -66,12 +65,12 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	stur	x2, [x29, #-0x10]
-               	mov	x1, #0x6                // =6
-               	sub	x4, x29, #0x10
+               	mov	x4, #0x6                // =6
+               	sub	x1, x29, #0x10
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
-               	str	x4, [sp]
-               	str	x1, [sp, #0x8]
+               	str	x1, [sp]
+               	str	x4, [sp, #0x8]
                	ldr	x16, [sp]
                	ldr	x0, [x16]
                	ldr	x1, [sp, #0x8]
@@ -80,12 +79,11 @@ Disassembly of section .text:
                	str	x0, [x16]
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
-               	sub	x1, x29, #0x8
-               	sub	x4, x29, #0x10
+               	sub	x4, x29, #0x8
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
-               	str	x1, [sp]
-               	str	x4, [sp, #0x8]
+               	str	x4, [sp]
+               	str	x1, [sp, #0x8]
                	ldr	x16, [sp, #0x8]
                	ldr	x1, [x16]
                	ldrb	w0, [x1], #0x1

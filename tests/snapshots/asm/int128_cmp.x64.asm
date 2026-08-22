@@ -489,12 +489,14 @@ Disassembly of section .text:
                	cmpq	%rsi, %rdx
                	sete	%r9b
                	movzbq	%r9b, %r9
-               	andq	$0x1, %r9
-               	orq	%r8, %r9
-               	testq	%r9, %r9
+               	movq	%r9, %r12
+               	andq	$0x1, %r12
+               	movq	%r8, %r13
+               	orq	%r12, %r13
+               	testq	%r13, %r13
                	sete	%r8b
                	movzbq	%r8b, %r8
-               	testq	%r9, %r9
+               	testq	%r13, %r13
                	je	<addr>
                	xorq	%r8, %r8
                	testq	%r8, %r8
@@ -511,11 +513,8 @@ Disassembly of section .text:
                	cmpq	%rsi, %rdx
                	setb	%r8b
                	movzbq	%r8b, %r8
-               	cmpq	%rsi, %rdx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	andq	$0x1, %rdx
-               	orq	%r8, %rdx
+               	movq	%r8, %rdx
+               	orq	%r12, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movl	$0xb, %eax
@@ -529,31 +528,28 @@ Disassembly of section .text:
                	retq
                	movq	(%rbx), %rdx
                	testq	%rax, %rax
-               	setb	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rax, %rax
-               	sete	%r8b
+               	setb	%r8b
                	movzbq	%r8b, %r8
+               	testq	%rax, %rax
+               	sete	%sil
+               	movzbq	%sil, %rsi
                	cmpq	%rdx, %rcx
                	setb	%dl
                	movzbq	%dl, %rdx
-               	andq	%r8, %rdx
-               	orq	%rdx, %rsi
+               	andq	%rsi, %rdx
+               	orq	%rdx, %r8
                	movl	$0x1, %edx
-               	testq	%rsi, %rsi
+               	testq	%r8, %r8
                	jne	<addr>
                	movq	(%rdi), %rdx
                	testq	%rax, %rax
-               	seta	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
+               	seta	%dil
+               	movzbq	%dil, %rdi
                	cmpq	%rcx, %rdx
-               	setb	%cl
-               	movzbq	%cl, %rcx
-               	andq	%rcx, %rax
-               	orq	%rsi, %rax
+               	setb	%al
+               	movzbq	%al, %rax
+               	andq	%rsi, %rax
+               	orq	%rdi, %rax
                	testq	%rax, %rax
                	sete	%dl
                	movzbq	%dl, %rdx

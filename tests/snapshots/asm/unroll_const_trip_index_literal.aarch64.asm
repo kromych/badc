@@ -14,142 +14,84 @@ Disassembly of section .text:
                	brk	#0x1
 
 <bank_init>:
-               	add	x2, x0, #0x0
-               	mov	x3, #0x1                // =1
-               	str	w3, [x2]
-               	add	x2, x0, #0x0
-               	str	x1, [x2, #0x20]
-               	add	x2, x0, #0x0
+               	mov	x2, x1
+               	add	x4, x0, #0x0
+               	mov	x1, #0x1                // =1
+               	str	w1, [x4]
+               	str	x2, [x4, #0x20]
                	mov	x3, #0x0                // =0
-               	str	w3, [x2, #0x4]
-               	add	x2, x0, #0x0
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2, #0x28]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x30]
-               	add	x2, x0, #0x30
-               	str	x1, [x2, #0x20]
-               	add	x2, x0, #0x30
-               	mov	x3, #0x1                // =1
-               	str	w3, [x2, #0x4]
-               	add	x2, x0, #0x30
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2, #0x28]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x60]
-               	add	x2, x0, #0x60
-               	str	x1, [x2, #0x20]
-               	add	x2, x0, #0x60
-               	mov	x3, #0x2                // =2
-               	str	w3, [x2, #0x4]
-               	add	x2, x0, #0x60
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2, #0x28]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x90]
-               	add	x2, x0, #0x90
-               	str	x1, [x2, #0x20]
-               	add	x2, x0, #0x90
-               	mov	x3, #0x3                // =3
-               	str	w3, [x2, #0x4]
-               	add	x2, x0, #0x90
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2, #0x28]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0xc0]
-               	add	x2, x0, #0xc0
-               	str	x1, [x2, #0x20]
-               	add	x2, x0, #0xc0
-               	mov	x3, #0x4                // =4
-               	str	w3, [x2, #0x4]
-               	add	x2, x0, #0xc0
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2, #0x28]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0xf0]
-               	add	x2, x0, #0xf0
-               	str	x1, [x2, #0x20]
-               	add	x2, x0, #0xf0
-               	mov	x3, #0x5                // =5
-               	str	w3, [x2, #0x4]
-               	add	x2, x0, #0xf0
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2, #0x28]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x120]
-               	add	x2, x0, #0x120
-               	str	x1, [x2, #0x20]
-               	add	x2, x0, #0x120
-               	mov	x3, #0x6                // =6
-               	str	w3, [x2, #0x4]
-               	add	x2, x0, #0x120
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2, #0x28]
-               	mov	x2, #0x1                // =1
-               	str	w2, [x0, #0x150]
-               	add	x2, x0, #0x150
-               	str	x1, [x2, #0x20]
-               	add	x2, x0, #0x150
-               	mov	x3, #0x7                // =7
-               	str	w3, [x2, #0x4]
-               	add	x2, x0, #0x150
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2, #0x28]
-               	add	x2, x0, #0x180
-               	add	x2, x2, #0x0
-               	mov	x3, #0x2                // =2
-               	str	w3, [x2]
-               	add	x2, x0, #0x180
-               	add	x2, x2, #0x0
-               	str	x1, [x2, #0x20]
-               	add	x2, x0, #0x180
-               	add	x2, x2, #0x0
-               	mov	x3, #0x20               // =32
-               	str	w3, [x2, #0x4]
-               	add	x2, x0, #0x180
-               	add	x2, x2, #0x0
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2, #0x28]
-               	add	x2, x0, #0x180
-               	add	x2, x2, #0x0
-               	mov	x3, #0xb00              // =2816
-               	str	x3, [x2, #0x10]
-               	add	x2, x0, #0x180
-               	mov	x3, #0x2                // =2
-               	str	w3, [x2, #0x30]
-               	add	x2, x0, #0x180
-               	add	x2, x2, #0x30
-               	str	x1, [x2, #0x20]
-               	add	x2, x0, #0x180
-               	add	x2, x2, #0x30
-               	mov	x3, #0x21               // =33
-               	str	w3, [x2, #0x4]
-               	add	x2, x0, #0x180
-               	add	x2, x2, #0x30
-               	mov	x3, #0x0                // =0
-               	str	x3, [x2, #0x28]
-               	add	x2, x0, #0x180
-               	add	x2, x2, #0x30
-               	mov	x3, #0x1600             // =5632
-               	str	x3, [x2, #0x10]
-               	add	x2, x0, #0x180
-               	mov	x3, #0x2                // =2
-               	str	w3, [x2, #0x60]
-               	add	x2, x0, #0x180
-               	add	x2, x2, #0x60
-               	str	x1, [x2, #0x20]
+               	str	w3, [x4, #0x4]
+               	str	x3, [x4, #0x28]
+               	str	w1, [x0, #0x30]
+               	add	x4, x0, #0x30
+               	str	x2, [x4, #0x20]
+               	str	w1, [x4, #0x4]
+               	str	x3, [x4, #0x28]
+               	str	w1, [x0, #0x60]
+               	add	x4, x0, #0x60
+               	str	x2, [x4, #0x20]
+               	mov	x5, #0x2                // =2
+               	str	w5, [x4, #0x4]
+               	str	x3, [x4, #0x28]
+               	str	w1, [x0, #0x90]
+               	add	x4, x0, #0x90
+               	str	x2, [x4, #0x20]
+               	mov	x6, #0x3                // =3
+               	str	w6, [x4, #0x4]
+               	str	x3, [x4, #0x28]
+               	str	w1, [x0, #0xc0]
+               	add	x4, x0, #0xc0
+               	str	x2, [x4, #0x20]
+               	mov	x6, #0x4                // =4
+               	str	w6, [x4, #0x4]
+               	str	x3, [x4, #0x28]
+               	str	w1, [x0, #0xf0]
+               	add	x4, x0, #0xf0
+               	str	x2, [x4, #0x20]
+               	mov	x6, #0x5                // =5
+               	str	w6, [x4, #0x4]
+               	str	x3, [x4, #0x28]
+               	str	w1, [x0, #0x120]
+               	add	x4, x0, #0x120
+               	str	x2, [x4, #0x20]
+               	mov	x6, #0x6                // =6
+               	str	w6, [x4, #0x4]
+               	str	x3, [x4, #0x28]
+               	str	w1, [x0, #0x150]
+               	add	x1, x0, #0x150
+               	str	x2, [x1, #0x20]
+               	mov	x4, #0x7                // =7
+               	str	w4, [x1, #0x4]
+               	str	x3, [x1, #0x28]
                	add	x1, x0, #0x180
-               	add	x1, x1, #0x60
-               	mov	x2, #0x22               // =34
-               	str	w2, [x1, #0x4]
-               	add	x1, x0, #0x180
-               	add	x1, x1, #0x60
-               	mov	x2, #0x0                // =0
-               	str	x2, [x1, #0x28]
-               	add	x0, x0, #0x180
-               	add	x0, x0, #0x60
-               	mov	x1, #0x2100             // =8448
-               	str	x1, [x0, #0x10]
+               	add	x3, x1, #0x0
+               	str	w5, [x3]
+               	str	x2, [x3, #0x20]
+               	mov	x4, #0x20               // =32
+               	str	w4, [x3, #0x4]
+               	mov	x4, #0x0                // =0
+               	str	x4, [x3, #0x28]
+               	mov	x6, #0xb00              // =2816
+               	str	x6, [x3, #0x10]
+               	str	w5, [x1, #0x30]
+               	add	x3, x1, #0x30
+               	str	x2, [x3, #0x20]
+               	mov	x5, #0x21               // =33
+               	str	w5, [x3, #0x4]
+               	str	x4, [x3, #0x28]
+               	mov	x5, #0x1600             // =5632
+               	str	x5, [x3, #0x10]
+               	mov	x3, #0x2                // =2
+               	str	w3, [x1, #0x60]
+               	add	x3, x1, #0x60
+               	str	x2, [x3, #0x20]
+               	mov	x1, #0x22               // =34
+               	str	w1, [x3, #0x4]
+               	add	x2, x0, #0x180
+               	add	x1, x2, #0x60
+               	str	x4, [x1, #0x28]
+               	mov	x0, #0x2100             // =8448
+               	str	x0, [x1, #0x10]
                	mov	x0, #0x0                // =0
                	ret
 
@@ -169,37 +111,28 @@ Disassembly of section .text:
                	mov	x0, x21
                	b	<addr>
                	mov	x17, #0x30              // =48
-               	mul	x2, x1, x17
-               	add	x2, x20, x2
-               	ldr	w2, [x2]
+               	mul	x3, x1, x17
+               	add	x2, x20, x3
+               	ldr	w4, [x2]
                	mov	x17, #0x1               // =1
-               	eor	x2, x2, x17
-               	mov	w3, w2
-               	cmp	x3, #0x0
-               	cset	x2, ne
-               	cbnz	x3, <addr>
-               	mov	x17, #0x30              // =48
-               	mul	x2, x1, x17
-               	add	x2, x20, x2
-               	ldr	x2, [x2, #0x20]
-               	cmp	x2, x22
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	mov	x17, #0x30              // =48
-               	mul	x2, x1, x17
-               	add	x2, x20, x2
-               	ldr	w2, [x2, #0x4]
-               	mov	w3, w1
-               	cmp	x2, x3
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	mov	x17, #0x30              // =48
-               	mul	x2, x1, x17
-               	add	x2, x20, x2
+               	eor	x4, x4, x17
+               	mov	w5, w4
+               	cmp	x5, #0x0
+               	cset	x4, ne
+               	cbnz	x5, <addr>
+               	ldr	x4, [x2, #0x20]
+               	cmp	x4, x22
+               	cset	x4, ne
+               	cbnz	x4, <addr>
+               	ldr	w4, [x2, #0x4]
+               	mov	w5, w1
+               	cmp	x4, x5
+               	cset	x4, ne
+               	cbnz	x4, <addr>
                	ldr	x2, [x2, #0x28]
                	cmp	x2, #0x0
-               	cset	x2, ne
-               	cbz	x2, <addr>
+               	cset	x4, ne
+               	cbz	x4, <addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>
@@ -207,64 +140,44 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	cmp	x1, #0x8
                	b.lt	<addr>
-               	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
                	b	<addr>
-               	add	x2, x20, #0x180
+               	add	x3, x20, #0x180
                	mov	x17, #0x30              // =48
-               	mul	x3, x0, x17
-               	add	x2, x2, x3
-               	ldr	w2, [x2]
+               	mul	x4, x0, x17
+               	add	x1, x3, x4
+               	ldr	w5, [x1]
                	mov	x17, #0x2               // =2
-               	eor	x2, x2, x17
-               	mov	w3, w2
-               	cmp	x3, #0x0
-               	cset	x2, ne
-               	cbnz	x3, <addr>
-               	add	x2, x20, #0x180
-               	mov	x17, #0x30              // =48
-               	mul	x3, x0, x17
-               	add	x2, x2, x3
-               	ldr	x2, [x2, #0x20]
-               	cmp	x2, x22
-               	cset	x2, ne
-               	cbnz	x2, <addr>
-               	add	x2, x20, #0x180
-               	mov	x17, #0x30              // =48
-               	mul	x3, x0, x17
-               	add	x2, x2, x3
-               	ldr	w3, [x2, #0x4]
-               	add	x2, x0, #0x20
-               	sxtw	x2, w2
-               	mov	w2, w2
-               	cmp	x3, x2
+               	eor	x5, x5, x17
+               	mov	w6, w5
+               	cmp	x6, #0x0
+               	cset	x5, ne
+               	cbnz	x6, <addr>
+               	ldr	x5, [x1, #0x20]
+               	cmp	x5, x22
+               	cset	x5, ne
+               	cbnz	x5, <addr>
+               	ldr	w6, [x1, #0x4]
+               	add	x5, x0, #0x20
+               	sxtw	x5, w5
+               	mov	w5, w5
+               	cmp	x6, x5
                	b.ne	<addr>
-               	add	x2, x20, #0x180
-               	mov	x17, #0x30              // =48
-               	mul	x3, x0, x17
-               	add	x2, x2, x3
-               	ldr	x2, [x2, #0x28]
-               	cbnz	x2, <addr>
-               	add	x2, x20, #0x180
-               	mov	x17, #0x30              // =48
-               	mul	x3, x0, x17
-               	add	x2, x2, x3
-               	ldr	x3, [x2, #0x10]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsw	x2, [x2, x0, lsl #2]
-               	lsl	x2, x2, #8
-               	cmp	x3, x2
+               	ldr	x5, [x1, #0x28]
+               	cbnz	x5, <addr>
+               	ldr	x6, [x1, #0x10]
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
+               	ldrsw	x5, [x5, x0, lsl #2]
+               	lsl	x5, x5, #8
+               	cmp	x6, x5
                	b.ne	<addr>
-               	add	x2, x20, #0x180
-               	mov	x17, #0x30              // =48
-               	mul	x3, x0, x17
-               	add	x2, x2, x3
-               	ldr	x2, [x2, #0x10]
-               	add	x21, x21, x2
+               	ldr	x1, [x1, #0x10]
+               	add	x21, x21, x1
                	b	<addr>
                	b	<addr>
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
+               	add	x2, x0, #0x1
+               	sxtw	x0, w2
                	cmp	x0, #0x3
                	b.lt	<addr>
                	mov	x17, #0x4200            // =16896

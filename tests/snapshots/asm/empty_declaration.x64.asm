@@ -36,24 +36,24 @@ Disassembly of section .text:
                	movq	%rdx, (%rax)
                	popq	%rdx
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	leaq	<rip>, %rax
-               	movl	$0xb, %ecx
-               	movl	%ecx, (%rax)
-               	leaq	<rip>, %rdx
-               	movl	$0xc, %ecx
-               	movl	%ecx, (%rdx)
-               	movslq	(%rax), %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	leaq	<rip>, %rcx
+               	movl	$0xb, %edx
+               	movl	%edx, (%rcx)
+               	leaq	<rip>, %rdi
+               	movl	$0xc, %esi
+               	movl	%esi, (%rdi)
+               	movslq	(%rcx), %rcx
+               	movslq	%esi, %rsi
+               	addq	%rsi, %rcx
                	movslq	%ecx, %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x17, %rax
+               	cmpq	$0x17, %rcx
                	je	<addr>
-               	movl	$0xb, %eax
+               	movq	%rdx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq

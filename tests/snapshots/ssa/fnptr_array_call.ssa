@@ -23,8 +23,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v1   LocalAddr(-1)                                    -> x0
     v2   ImmData(8)                                       -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 }    -> -
-    v4   LocalAddr(-1)                                    -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v4   LocalAddr(-1)                                    -> x1
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=mk2
 fn ent_pc=3 n_params=0 variadic=false locals=1
@@ -34,8 +34,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v1   LocalAddr(-1)                                    -> x0
     v2   ImmData(16)                                      -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 }    -> -
-    v4   LocalAddr(-1)                                    -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v4   LocalAddr(-1)                                    -> x1
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=pick
 fn ent_pc=4 n_params=1 variadic=false locals=0

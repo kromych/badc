@@ -29,8 +29,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movabsq	$0x4045000000000000, %rax # imm = 0x4045000000000000
-               	movq	%rax, %xmm14
+               	movabsq	$0x4045000000000000, %rdx # imm = 0x4045000000000000
+               	movq	%rdx, %xmm14
                	movsd	%xmm14, -0x20(%rbp,%riz)
                	xorq	%rax, %rax
                	movq	%rax, %xmm14
@@ -38,33 +38,29 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rcx
                	movq	%rax, (%rcx)
                	movsd	-0x20(%rbp,%riz), %xmm0
-               	leaq	-0x8(%rbp), %rax
-               	movsd	%xmm0, (%rax,%riz)
+               	movsd	%xmm0, (%rcx,%riz)
                	movsd	%xmm0, -0x18(%rbp,%riz)
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	(%rcx), %rcx
                	movabsq	$0x4045000000000000, %r11 # imm = 0x4045000000000000
-               	cmpq	%r11, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	cmpq	%r11, %rcx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movsd	-0x18(%rbp,%riz), %xmm0
-               	movabsq	$0x4045000000000000, %rax # imm = 0x4045000000000000
-               	movq	%rax, %xmm15
+               	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	sete	%al
-               	movzbq	%al, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
+               	andq	%r10, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
                	jmp	<addr>
                	jmp	<addr>

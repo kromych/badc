@@ -8,14 +8,14 @@ fn ent_pc=0 n_params=1 variadic=false locals=4
     v2   StoreLocal { off=2, value=v1, kind=I32 }         -> -
     v3   LocalAddr(-3)                                    -> x0
     v4   ImmData(8)                                       -> x1
-    v5   Mcpy { dst=v3, src=v4, size=24, align=8 }        -> x0
-    v6   Imm(0)                                           -> x0
+    v5   Mcpy { dst=v3, src=v4, size=24, align=8 }        -> x1
+    v6   Imm(0)                                           -> x1
     v7   StoreLocal { off=-4, value=v6, kind=I32 }        -> -
-    v8   LocalAddr(-3)                                    -> x0
+    v8   LocalAddr(-3)                                    -> x1
     v9   Extend { value=v1, kind=I32 }                    -> x1
     v10  BinopI { op=shl, lhs=v9, rhs_imm=3 }             -> x2
-    v11  Binop { op=add, lhs=v8, rhs=v10 }                -> x2
-    v12  LoadIndexed { base=v8, index=v9, scale=8, kind=I64 } -> x0
+    v11  Binop { op=add, lhs=v3, rhs=v10 }                -> x2
+    v12  LoadIndexed { base=v3, index=v9, scale=8, kind=I64 } -> x0
     terminator GotoIndirect(v12)   (exit_acc=v12)
   block 1  start_pc=0
     v13  Imm(10)                                          -> x0

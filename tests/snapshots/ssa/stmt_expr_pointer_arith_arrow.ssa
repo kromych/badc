@@ -51,11 +51,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
   block 4  start_pc=0
     v42  LocalAddr(-4)                                    -> x0
     v43  Imm(20)                                          -> x1
-    v44  BinopI { op=add, lhs=v42, rhs_imm=20 }           -> x0
-    v45  Imm(0)                                           -> x1
-    v46  LocalAddr(-4)                                    -> x1
+    v44  BinopI { op=add, lhs=v42, rhs_imm=20 }           -> x1
+    v45  Imm(0)                                           -> x2
+    v46  LocalAddr(-4)                                    -> x2
     v47  Imm(4)                                           -> x2
-    v48  BinopI { op=add, lhs=v46, rhs_imm=4 }            -> x1
+    v48  BinopI { op=add, lhs=v42, rhs_imm=4 }            -> x0
     v49  Imm(0)                                           -> x2
     v50  LoadLocal { off=-7, kind=I64 }                   -> x2
     v51  LoadLocal { off=-7, kind=I64 }                   -> x2

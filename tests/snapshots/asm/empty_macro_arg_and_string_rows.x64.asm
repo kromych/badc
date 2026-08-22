@@ -26,36 +26,34 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	cmpq	$0x1, %rcx
-               	movl	$0x1, %edx
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rax
+               	cmpq	$0x1, %rax
+               	movl	$0x1, %eax
                	jne	<addr>
-               	movslq	0x4(%rax), %rcx
-               	cmpq	$0x17, %rcx
+               	movslq	0x4(%rcx), %rdx
+               	cmpq	$0x17, %rdx
                	setne	%dl
                	movzbq	%dl, %rdx
-               	movl	$0x1, %ecx
                	testq	%rdx, %rdx
                	jne	<addr>
-               	movslq	0x8(%rax), %rcx
-               	cmpq	$0x4, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	movslq	0x8(%rcx), %rdx
+               	cmpq	$0x4, %rdx
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
-               	movslq	0xc(%rax), %rax
-               	cmpq	$0x5, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	movslq	0xc(%rcx), %rcx
+               	cmpq	$0x5, %rcx
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movsbq	(%rax), %rax
-               	cmpq	$0x68, %rax
-               	movl	$0x1, %eax
+               	leaq	<rip>, %rcx
+               	movsbq	(%rcx), %rcx
+               	cmpq	$0x68, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	0x4(%rax), %rax
@@ -84,5 +82,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	movq	%rax, %rdx
                	jmp	<addr>
+               	movq	%rax, %rdx
                	jmp	<addr>

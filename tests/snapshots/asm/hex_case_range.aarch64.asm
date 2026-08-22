@@ -38,28 +38,28 @@ Disassembly of section .text:
                	fmov	d16, x0
                	sub	x17, x29, #0x10
                	str	d16, [x17]
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
+               	mov	x1, #0x1                // =1
+               	mov	x0, x1
+               	mov	x0, x1
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x1                // =1
+               	mov	x2, x0
+               	mov	x1, x0
+               	mov	x1, #0x2                // =2
+               	mov	x2, x1
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x2                // =2
-               	mov	x0, #0x2                // =2
+               	mov	x1, x0
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	sub	x16, x29, #0x10
                	ldr	d0, [x16]
-               	mov	x0, #0x4028000000000000 // =4622945017495814144
-               	fmov	d17, x0
+               	mov	x1, #0x4028000000000000 // =4622945017495814144
+               	fmov	d17, x1
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

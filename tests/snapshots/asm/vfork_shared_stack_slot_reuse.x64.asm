@@ -314,11 +314,10 @@ Disassembly of section .text:
                	cmpq	%r10, %rax
                	je	<addr>
                	orq	$0x800, %rbx            # imm = 0x800
-               	movslq	%ebx, %rax
-               	testq	%rax, %rax
+               	movslq	%ebx, %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%ebx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax

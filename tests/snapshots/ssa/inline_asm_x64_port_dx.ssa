@@ -13,52 +13,52 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
   block 2  start_pc=0
     v5   Imm(112)                                         -> x0
     v6   Imm(0)                                           -> x0
-    v7   LocalAddr(-1)                                    -> x0
-    v8   Imm(112)                                         -> x1
+    v7   LocalAddr(-1)                                    -> x1
+    v8   Imm(112)                                         -> x0
     v9   InlineAsm { template="inb (%%dx), %b0", ops=2, args=[v7, v8] } -> -
-    v10  LoadLocal { off=-1, kind=U8 }                    -> x0
+    v10  LoadLocal { off=-1, kind=U8 }                    -> x1
     terminator Jmp(b3)   (exit_acc=v10)
   block 3  start_pc=0
-    v11  Imm(0)                                           -> x1
-    v12  Imm(112)                                         -> x1
-    v13  Imm(0)                                           -> x1
-    v14  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x0
-    v15  Imm(112)                                         -> x1
-    v16  InlineAsm { template="outb %b0, (%%dx)", ops=2, args=[v14, v15] } -> -
+    v11  Imm(0)                                           -> x2
+    v12  Imm(112)                                         -> x2
+    v13  Imm(0)                                           -> x2
+    v14  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x1
+    v15  Imm(112)                                         -> x2
+    v16  InlineAsm { template="outb %b0, (%%dx)", ops=2, args=[v14, v8] } -> -
     v17  Imm(0)                                           -> x0
     terminator Jmp(b4)   (exit_acc=v17)
   block 4  start_pc=0
     v18  Imm(112)                                         -> x0
     v19  Imm(0)                                           -> x0
-    v20  LocalAddr(-1)                                    -> x0
-    v21  Imm(112)                                         -> x1
+    v20  LocalAddr(-1)                                    -> x1
+    v21  Imm(112)                                         -> x0
     v22  InlineAsm { template="inw (%%dx), %w0", ops=2, args=[v20, v21] } -> -
-    v23  LoadLocal { off=-1, kind=U16 }                   -> x0
+    v23  LoadLocal { off=-1, kind=U16 }                   -> x1
     terminator Jmp(b5)   (exit_acc=v23)
   block 5  start_pc=0
-    v24  Imm(0)                                           -> x1
-    v25  Imm(112)                                         -> x1
-    v26  Imm(0)                                           -> x1
-    v27  BinopI { op=and, lhs=v23, rhs_imm=65535 }        -> x0
-    v28  Imm(112)                                         -> x1
-    v29  InlineAsm { template="outw %w0, (%%dx)", ops=2, args=[v27, v28] } -> -
+    v24  Imm(0)                                           -> x2
+    v25  Imm(112)                                         -> x2
+    v26  Imm(0)                                           -> x2
+    v27  BinopI { op=and, lhs=v23, rhs_imm=65535 }        -> x1
+    v28  Imm(112)                                         -> x2
+    v29  InlineAsm { template="outw %w0, (%%dx)", ops=2, args=[v27, v21] } -> -
     v30  Imm(0)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v30)
   block 6  start_pc=0
     v31  Imm(112)                                         -> x0
     v32  Imm(0)                                           -> x0
-    v33  LocalAddr(-1)                                    -> x0
-    v34  Imm(112)                                         -> x1
+    v33  LocalAddr(-1)                                    -> x1
+    v34  Imm(112)                                         -> x0
     v35  InlineAsm { template="inl (%%dx), %0", ops=2, args=[v33, v34] } -> -
-    v36  LoadLocal { off=-1, kind=U32 }                   -> x0
+    v36  LoadLocal { off=-1, kind=U32 }                   -> x1
     terminator Jmp(b7)   (exit_acc=v36)
   block 7  start_pc=0
-    v37  Imm(0)                                           -> x1
-    v38  Imm(112)                                         -> x1
-    v39  Imm(0)                                           -> x1
-    v40  BinopI { op=and, lhs=v36, rhs_imm=4294967295 }   -> x0
-    v41  Imm(112)                                         -> x1
-    v42  InlineAsm { template="outl %0, (%%dx)", ops=2, args=[v40, v41] } -> -
+    v37  Imm(0)                                           -> x2
+    v38  Imm(112)                                         -> x2
+    v39  Imm(0)                                           -> x2
+    v40  BinopI { op=and, lhs=v36, rhs_imm=4294967295 }   -> x1
+    v41  Imm(112)                                         -> x2
+    v42  InlineAsm { template="outl %0, (%%dx)", ops=2, args=[v40, v34] } -> -
     v43  Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v43)
   block 8  start_pc=0

@@ -6,10 +6,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-3)                                    -> x0
     v2   Imm(8)                                           -> x1
-    v3   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
-    v4   LocalAddr(-3)                                    -> x1
+    v3   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
+    v4   LocalAddr(-3)                                    -> x2
     v5   Imm(0)                                           -> x2
-    v6   Binop { op=sub, lhs=v3, rhs=v4 }                 -> x0
+    v6   Binop { op=sub, lhs=v3, rhs=v1 }                 -> x0
     v7   BinopI { op=ne, lhs=v6, rhs_imm=8 }              -> x0
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0

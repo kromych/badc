@@ -28,8 +28,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
                	ret
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
+               	mov	x1, #0x0                // =0
+               	stur	w1, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
                	cmp	x0, #0x0
                	b.lt	<addr>
@@ -38,12 +38,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x0, x1
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp], #0x30
                	ret
                	brk	#0
-               	mov	x0, #0x0                // =0
+               	mov	x0, x1
                	b	<addr>
                	brk	#0
                	mov	x0, #0x0                // =0

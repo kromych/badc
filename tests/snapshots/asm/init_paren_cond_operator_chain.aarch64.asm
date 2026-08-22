@@ -85,9 +85,9 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ret
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
                	ret
                	b	<addr>
                	b	<addr>

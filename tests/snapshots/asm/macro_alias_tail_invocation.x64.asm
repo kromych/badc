@@ -110,13 +110,13 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movl	$0x2c, %ecx
+               	movl	$0x2c, %edx
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rdx
-               	incq	%rdx
+               	movslq	(%rax), %rsi
+               	incq	%rsi
+               	movl	%esi, (%rax)
+               	leaq	<rip>, %rax
                	movl	%edx, (%rax)
-               	leaq	<rip>, %rax
-               	movl	%ecx, (%rax)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x3, %rax
@@ -133,7 +133,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	xorq	%rax, %rax
+               	movq	%rcx, %rax
                	retq
                	jmp	<addr>
                	jmp	<addr>

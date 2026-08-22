@@ -62,31 +62,23 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	sub	x0, x29, #0x40
-               	add	x0, x0, #0x0
-               	mov	x1, #0x7                // =7
-               	str	x1, [x0]
-               	sub	x0, x29, #0x40
+               	add	x1, x0, #0x0
+               	mov	x2, #0x7                // =7
+               	str	x2, [x1]
                	mov	x1, #0x1118             // =4376
                	str	x1, [x0, #0x8]
-               	sub	x0, x29, #0x40
                	mov	x1, #0x2229             // =8745
                	str	x1, [x0, #0x10]
-               	sub	x0, x29, #0x40
                	mov	x1, #0x333a             // =13114
                	str	x1, [x0, #0x18]
-               	sub	x0, x29, #0x40
                	mov	x1, #0x444b             // =17483
                	str	x1, [x0, #0x20]
-               	sub	x0, x29, #0x40
                	mov	x1, #0x555c             // =21852
                	str	x1, [x0, #0x28]
-               	sub	x0, x29, #0x40
                	mov	x1, #0x666d             // =26221
                	str	x1, [x0, #0x30]
-               	sub	x0, x29, #0x40
                	mov	x1, #0x777e             // =30590
                	str	x1, [x0, #0x38]
-               	sub	x0, x29, #0x40
                	mov	x1, #0x5                // =5
                	bl	<addr>
                	mov	x17, #0xbf84            // =49028

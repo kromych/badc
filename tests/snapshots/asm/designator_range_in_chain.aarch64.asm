@@ -53,7 +53,6 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	add	x2, x2, #0x4
-               	lsl	x3, x1, #3
                	add	x2, x2, x3
                	ldrsw	x2, [x2, #0x4]
                	cmp	x2, #0x8

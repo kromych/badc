@@ -14,15 +14,15 @@ fn ent_pc=0 n_params=1 variadic=true locals=4
   block 1  start_pc=0
     v15  LocalAddr(-3)                                    -> x2
     v16  Imm(8)                                           -> x7
-    v17  Intrinsic { kind=5, args=[v15, v16] }            -> x2
-    v18  LocalAddr(-4)                                    -> x7
-    v19  Mcpy { dst=v18, src=v17, size=8, align=4 }       -> x2
-    v20  Extend { value=v8, kind=I32 }                    -> x2
-    v21  LocalAddr(-4)                                    -> x2
-    v22  Load { addr=v21, disp=0, kind=I32 }              -> x7
-    v23  LocalAddr(-4)                                    -> x2
-    v24  BinopI { op=add, lhs=v23, rhs_imm=4 }            -> x8
-    v25  Load { addr=v23, disp=4, kind=I32 }              -> x2
+    v17  Intrinsic { kind=5, args=[v15, v16] }            -> x7
+    v18  LocalAddr(-4)                                    -> x2
+    v19  Mcpy { dst=v18, src=v17, size=8, align=4 }       -> x7
+    v20  Extend { value=v8, kind=I32 }                    -> x7
+    v21  LocalAddr(-4)                                    -> x7
+    v22  Load { addr=v18, disp=0, kind=I32 }              -> x7
+    v23  LocalAddr(-4)                                    -> x8
+    v24  BinopI { op=add, lhs=v18, rhs_imm=4 }            -> x8
+    v25  Load { addr=v18, disp=4, kind=I32 }              -> x2
     v26  Binop { op=add, lhs=v22, rhs=v25 }               -> x2
     v27  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> x7
     v28  Extend { value=v26, kind=I32 }                   -> x7
@@ -57,10 +57,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
     v2   ImmData(8)                                       -> x1
-    v3   Mcpy { dst=v1, src=v2, size=8, align=8 }         -> x0
-    v4   LocalAddr(-1)                                    -> x0
+    v3   Mcpy { dst=v1, src=v2, size=8, align=8 }         -> x1
+    v4   LocalAddr(-1)                                    -> x1
     v5   ImmData(16)                                      -> x1
-    v6   Mcpy { dst=v4, src=v5, size=8, align=8 }         -> x0
+    v6   Mcpy { dst=v1, src=v5, size=8, align=8 }         -> x0
     v7   Imm(2)                                           -> x7
     v8   LocalAddr(-1)                                    -> x0
     v9   LocalAddr(-1)                                    -> x0

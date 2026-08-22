@@ -24,12 +24,9 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	sxtw	x1, w0
                	cbz	x1, <addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	sxtw	x0, w0
-               	mov	x16, x1
-               	mov	x1, x0
-               	mov	x0, x16
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	mov	x0, x2
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x1                // =1

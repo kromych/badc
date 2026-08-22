@@ -281,6 +281,32 @@ pub(crate) fn usable_gpr_count(target: Target) -> usize {
     (banks.caller_gprs.len() + banks.callee_gprs.len()).min(max_gpr)
 }
 
+/// Registers `color_graph` may hand out, indexed `[integer, FP]`, after
+/// the bank size caps. `callee` is the subset a value whose live range
+/// spans a call must come from. `passes::cse` compares the live-value
+/// counts a merge would raise against these.
+#[derive(Clone, Copy)]
+pub(crate) struct BankCapacity {
+    pub total: [u32; 2],
+    pub callee: [u32; 2],
+}
+
+pub(crate) fn bank_capacity(target: Target) -> BankCapacity {
+    let banks = RegBanks::for_target(target);
+    let (max_gpr, max_fpr) = pool_size_limits();
+    let cap = |bank: &[u8], max: usize| bank.len().min(max) as u32;
+    BankCapacity {
+        total: [
+            cap(banks.callee_gprs, max_gpr) + cap(banks.caller_gprs, max_gpr),
+            cap(banks.callee_fprs, max_fpr) + cap(banks.caller_fprs, max_fpr),
+        ],
+        callee: [
+            cap(banks.callee_gprs, max_gpr),
+            cap(banks.callee_fprs, max_fpr),
+        ],
+    }
+}
+
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
 /// Callee-saved registers the emit pass reserves as fixed scratch and

@@ -133,8 +133,8 @@ Disassembly of section .text:
                	movabsq	$0x3fe0000000000000, %rdi # imm = 0x3FE0000000000000
                	movq	%rdi, %xmm0
                	callq	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm15
+               	xorq	%rbx, %rbx
+               	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
@@ -151,7 +151,6 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rbx, %rbx
                	movq	%rbx, %xmm0
                	callq	<addr>
                	movq	%rbx, %xmm15

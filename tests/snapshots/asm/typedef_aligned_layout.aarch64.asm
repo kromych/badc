@@ -23,116 +23,101 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	add	x17, sp, #0x10
                	str	w0, [x17]
-               	add	x0, sp, #0x20
-               	mov	x1, #0x2                // =2
-               	strb	w1, [x0]
-               	mov	x0, sp
-               	mov	x1, #0x3                // =3
-               	strb	w1, [x0]
-               	add	x0, sp, #0x30
-               	mov	x1, #0x4                // =4
-               	strb	w1, [x0]
-               	add	x0, sp, #0x40
-               	mov	x1, #0x5                // =5
-               	str	w1, [x0]
-               	add	x0, sp, #0x50
-               	mov	x1, #0x6                // =6
-               	strb	w1, [x0]
+               	add	x1, sp, #0x20
+               	mov	x0, #0x2                // =2
+               	strb	w0, [x1]
+               	mov	x2, sp
+               	mov	x0, #0x3                // =3
+               	strb	w0, [x2]
+               	add	x3, sp, #0x30
+               	mov	x0, #0x4                // =4
+               	strb	w0, [x3]
+               	add	x4, sp, #0x40
+               	mov	x0, #0x5                // =5
+               	str	w0, [x4]
+               	add	x5, sp, #0x50
+               	mov	x0, #0x6                // =6
+               	strb	w0, [x5]
                	sub	x0, x29, #0x58
-               	mov	x1, #0x7                // =7
-               	strb	w1, [x0]
-               	sub	x0, x29, #0x58
-               	add	x0, x0, #0x1
-               	mov	x1, #0x8                // =8
-               	str	w1, [x0]
-               	add	x0, sp, #0x10
+               	mov	x6, #0x7                // =7
+               	strb	w6, [x0]
+               	add	x7, x0, #0x1
+               	mov	x6, #0x8                // =8
+               	str	w6, [x7]
+               	add	x6, sp, #0x10
                	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
-               	cbz	x0, <addr>
+               	and	x6, x6, x17
+               	cbz	x6, <addr>
                	mov	x0, #0x1e               // =30
                	sub	sp, x29, #0x60
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, sp, #0x20
                	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
-               	cbz	x0, <addr>
+               	and	x6, x1, x17
+               	cbz	x6, <addr>
                	mov	x0, #0x1f               // =31
                	sub	sp, x29, #0x60
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, sp
                	mov	x17, #0x1f              // =31
-               	and	x0, x0, x17
-               	cbz	x0, <addr>
+               	and	x6, x2, x17
+               	cbz	x6, <addr>
                	mov	x0, #0x20               // =32
                	sub	sp, x29, #0x60
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, sp, #0x30
                	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
-               	cbz	x0, <addr>
+               	and	x6, x3, x17
+               	cbz	x6, <addr>
                	mov	x0, #0x21               // =33
                	sub	sp, x29, #0x60
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, sp, #0x40
                	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
-               	cbz	x0, <addr>
+               	and	x6, x4, x17
+               	cbz	x6, <addr>
                	mov	x0, #0x22               // =34
                	sub	sp, x29, #0x60
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, sp, #0x50
                	mov	x17, #0xf               // =15
-               	and	x0, x0, x17
-               	cbz	x0, <addr>
+               	and	x6, x5, x17
+               	cbz	x6, <addr>
                	mov	x0, #0x23               // =35
                	sub	sp, x29, #0x60
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x58
                	mov	x17, #0x7               // =7
-               	and	x0, x0, x17
-               	cbz	x0, <addr>
+               	and	x6, x0, x17
+               	cbz	x6, <addr>
                	mov	x0, #0x24               // =36
                	sub	sp, x29, #0x60
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x16, sp, #0x10
-               	ldrsw	x0, [x16]
-               	add	x0, x0, #0x9
-               	add	x1, sp, #0x20
+               	ldrsw	x6, [x16]
+               	add	x6, x6, #0x9
                	ldrb	w1, [x1]
-               	add	x0, x0, x1
-               	mov	x1, sp
-               	ldrb	w1, [x1]
-               	add	x0, x0, x1
-               	add	x1, sp, #0x30
-               	ldrb	w1, [x1]
-               	add	x0, x0, x1
-               	add	x1, sp, #0x40
-               	ldrsw	x1, [x1]
-               	add	x0, x0, x1
-               	add	x1, sp, #0x50
-               	ldrb	w1, [x1]
-               	add	x0, x0, x1
-               	sub	x1, x29, #0x58
-               	ldrb	w1, [x1]
-               	add	x0, x0, x1
-               	sub	x1, x29, #0x58
-               	add	x1, x1, #0x1
-               	ldrsw	x1, [x1]
-               	add	x0, x0, x1
+               	add	x1, x6, x1
+               	ldrb	w2, [x2]
+               	add	x1, x1, x2
+               	ldrb	w2, [x3]
+               	add	x1, x1, x2
+               	ldrsw	x2, [x4]
+               	add	x1, x1, x2
+               	ldrb	w2, [x5]
+               	add	x1, x1, x2
+               	ldrb	w2, [x0]
+               	add	x1, x1, x2
+               	ldrsw	x0, [x7]
+               	add	x0, x1, x0
                	sub	x0, x0, #0x9
                	sub	x0, x0, #0x24
                	sxtw	x0, w0

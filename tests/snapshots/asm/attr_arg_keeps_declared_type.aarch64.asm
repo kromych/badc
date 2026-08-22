@@ -26,24 +26,21 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	mov	w1, w0
                	add	x3, x2, x1
                	ldrb	w3, [x3]
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	add	x1, x4, x1
-               	ldrb	w1, [x1]
-               	cmp	x3, x1
+               	add	x4, x4, x1
+               	ldrb	w4, [x4]
+               	cmp	x3, x4
                	b.ne	<addr>
-               	mov	w0, w0
-               	add	x0, x0, #0x1
+               	add	x0, x1, #0x1
                	mov	w1, w0
                	cmp	x1, #0x18
                	b.lo	<addr>
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x8
-               	sub	x1, x29, #0x10
-               	sub	x0, x0, x1
+               	add	x1, x0, #0x8
+               	sub	x0, x1, x0
                	cmp	x0, #0x8
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

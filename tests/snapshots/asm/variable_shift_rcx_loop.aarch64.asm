@@ -38,5 +38,5 @@ Disassembly of section .text:
                	cmp	x1, #0x64
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	ret

@@ -29,13 +29,11 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
-               	leaq	-0x10(%rbp), %rcx
-               	leaq	-0x8(%rbp), %rdx
-               	movabsq	$-0x2152411021524111, %rax # imm = 0xDEADBEEFDEADBEEF
-               	movq	%rax, (%rcx)
-               	movq	%rax, (%rdx)
                	leaq	-0x10(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
+               	movabsq	$-0x2152411021524111, %rdx # imm = 0xDEADBEEFDEADBEEF
+               	movq	%rdx, (%rax)
+               	movq	%rdx, (%rcx)
                	movq	%rax, -0x40(%rbp)
                	movq	%rdx, -0x38(%rbp)
                	movq	%rax, -0x30(%rbp)
@@ -101,7 +99,6 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movabsq	$-0x2152411021524111, %rcx # imm = 0xDEADBEEFDEADBEEF
                	movq	%rcx, (%rax)
-               	leaq	-0x8(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
                	movq	%rax, -0x18(%rbp)
                	movl	$0x99, %eax
@@ -124,44 +121,39 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movl	$0xbeef, %ecx           # imm = 0xBEEF
                	movw	%cx, (%rax)
-               	leaq	-0x8(%rbp), %rcx
-               	xorq	%rax, %rax
-               	movw	%ax, 0x2(%rcx)
-               	leaq	-0x8(%rbp), %rcx
+               	xorq	%rcx, %rcx
+               	movw	%cx, 0x2(%rax)
                	movl	$0xfeed, %edx           # imm = 0xFEED
-               	movw	%dx, 0x4(%rcx)
-               	leaq	-0x8(%rbp), %rcx
-               	addq	$0x2, %rcx
+               	movw	%dx, 0x4(%rax)
+               	addq	$0x2, %rax
                	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
+               	movq	%rax, -0x18(%rbp)
                	movl	$0x11223344, %eax       # imm = 0x11223344
                	movq	-0x18(%rbp), %r10
                	movw	%ax, (%r10)
                	movq	-0x20(%rbp), %rax
-               	leaq	-0x8(%rbp), %rcx
-               	movzwq	(%rcx), %rcx
-               	xorq	$0xbeef, %rcx           # imm = 0xBEEF
+               	leaq	-0x8(%rbp), %rax
+               	movzwq	(%rax), %rdx
+               	xorq	$0xbeef, %rdx           # imm = 0xBEEF
+               	movl	%edx, %edx
+               	testq	%rdx, %rdx
+               	jne	<addr>
+               	movzwq	0x2(%rax), %rcx
+               	xorq	$0x3344, %rcx           # imm = 0x3344
                	movl	%ecx, %ecx
                	testq	%rcx, %rcx
-               	jne	<addr>
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	0x2(%rax), %rax
-               	xorq	$0x3344, %rax           # imm = 0x3344
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	xorq	%rcx, %rcx
-               	testq	%rax, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	xorq	%rdx, %rdx
+               	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	-0x8(%rbp), %rax
                	movzwq	0x4(%rax), %rax
                	xorq	$0xfeed, %rax           # imm = 0xFEED
                	movl	%eax, %eax
                	testq	%rax, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	movslq	%ecx, %rax
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	movslq	%edx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq

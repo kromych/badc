@@ -11,27 +11,27 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v5   Imm(72057594037927936)                           -> x1
     v6   ImmData(32)                                      -> x1
     v7   Store { addr=v6, disp=0, value=v3, kind=I8 }     -> -
-    v8   Imm(9)                                           -> x0
-    v9   Imm(38654705664)                                 -> x0
-    v10  Imm(0)                                           -> x0
+    v8   Imm(9)                                           -> x1
+    v9   Imm(38654705664)                                 -> x1
+    v10  Imm(0)                                           -> x1
     terminator Jmp(b1)   (exit_acc=v10)
   block 1  start_pc=0
     v12  ImmData(48)                                      -> x1
-    v13  Imm(0)                                           -> x0
-    v14  Imm(1)                                           -> x0
-    v15  Store { addr=v12, disp=0, value=v14, kind=I8 }   -> -
+    v13  Imm(0)                                           -> x2
+    v14  Imm(1)                                           -> x2
+    v15  Store { addr=v12, disp=0, value=v3, kind=I8 }    -> -
     v16  Imm(72057594037927936)                           -> x1
     v17  ImmData(56)                                      -> x1
-    v18  Store { addr=v17, disp=0, value=v14, kind=I8 }   -> -
-    v19  Imm(7)                                           -> x0
-    v20  Imm(30064771072)                                 -> x0
-    v21  Imm(0)                                           -> x0
+    v18  Store { addr=v17, disp=0, value=v3, kind=I8 }    -> -
+    v19  Imm(7)                                           -> x1
+    v20  Imm(30064771072)                                 -> x1
+    v21  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v21)
   block 2  start_pc=0
-    v23  ImmData(64)                                      -> x0
-    v24  Imm(0)                                           -> x1
-    v25  Imm(1)                                           -> x1
-    v26  Store { addr=v23, disp=0, value=v25, kind=I8 }   -> -
+    v23  ImmData(64)                                      -> x1
+    v24  Imm(0)                                           -> x2
+    v25  Imm(1)                                           -> x2
+    v26  Store { addr=v23, disp=0, value=v3, kind=I8 }    -> -
     v27  Imm(72057594037927936)                           -> x0
     v28  Imm(6)                                           -> x0
     v29  Imm(25769803776)                                 -> x0

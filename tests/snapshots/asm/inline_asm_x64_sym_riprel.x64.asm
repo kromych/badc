@@ -58,14 +58,13 @@ Disassembly of section .text:
                	movq	-0x18(%rbp), %r10
                	movq	%rax, (%r10)
                	movq	-0x20(%rbp), %rax
-               	movq	-0x10(%rbp), %rax
-               	cmpq	$0x2a, %rax
+               	movq	-0x10(%rbp), %rcx
+               	cmpq	$0x2a, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x10(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
                	movq	%rax, -0x18(%rbp)
                	movq	<rip>, %rax

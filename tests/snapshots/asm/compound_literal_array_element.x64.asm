@@ -66,16 +66,16 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	retq
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	leaq	<rip>, %rax
-               	movq	0x18(%rax), %rax
-               	movsbq	(%rax), %rax
-               	cmpq	$0x62, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	leaq	<rip>, %rcx
+               	movq	0x18(%rcx), %rcx
+               	movsbq	(%rcx), %rcx
+               	cmpq	$0x62, %rcx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	xorq	%rax, %rax
                	retq

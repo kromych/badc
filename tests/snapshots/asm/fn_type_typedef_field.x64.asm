@@ -34,14 +34,11 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rax
                	movq	%rdi, (%rax)
-               	movq	%rdi, %rax
-               	shlq	%rax
-               	movslq	%eax, %rcx
-               	leaq	-0x10(%rbp), %rax
+               	movq	%rdi, %rcx
+               	shlq	%rcx
+               	movslq	%ecx, %rcx
                	movq	%rcx, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rax
                	movq	%rax, %rcx
                	movq	(%rcx), %rax
                	movq	0x8(%rcx), %rdx
@@ -67,15 +64,14 @@ Disassembly of section .text:
                	movq	%rcx, 0x8(%rbx)
                	popq	%rcx
                	movq	%rbx, %rax
-               	leaq	-0x20(%rbp), %rax
-               	movq	(%rax), %rax
+               	leaq	-0x20(%rbp), %rcx
+               	movq	(%rcx), %rax
                	cmpq	$0x7, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
-               	movq	0x8(%rax), %rax
+               	movq	0x8(%rcx), %rax
                	cmpq	$0xe, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -90,8 +86,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rax
+               	leaq	-0x10(%rbp), %rbx
+               	movq	(%rbx), %rax
                	cmpq	$0x5, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -101,8 +97,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	0x8(%rax), %rax
+               	movq	0x8(%rbx), %rax
                	cmpq	$0xa, %rax
                	setne	%al
                	movzbq	%al, %rax

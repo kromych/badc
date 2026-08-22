@@ -28,8 +28,11 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
                	leaq	<rip>, %rdi
-               	xorq	%rsi, %rsi
+               	xorq	%rbx, %rbx
+               	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	subq	$0x10, %rsp
@@ -43,10 +46,12 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xb, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
-               	xorq	%rsi, %rsi
+               	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	subq	$0x10, %rsp
@@ -60,6 +65,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xc, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
@@ -74,8 +81,12 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq

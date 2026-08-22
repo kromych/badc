@@ -31,7 +31,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movl	$0x2, %eax
                	movl	$0x4, %eax
-               	movl	$0x4, %eax
+               	movq	%rax, %rcx
                	movl	$0x8, %eax
                	xorq	%rax, %rax
                	movl	$0x63, %eax

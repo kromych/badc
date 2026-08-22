@@ -62,16 +62,16 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	movl	$0x14, %eax
                	movl	$0x1e, %eax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movl	$0x1, %ecx
+               	movq	%rcx, %rdx
                	movl	$0x1e, %eax
-               	movl	$0x1, %eax
-               	movl	$0x1e, %eax
-               	movl	$0x1, %eax
-               	movl	$0x1e, %eax
-               	movl	$0x1, %eax
-               	movl	$0x1e, %eax
+               	movq	%rax, %rcx
+               	movl	$0x1, %ecx
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq

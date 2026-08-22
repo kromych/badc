@@ -29,39 +29,36 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp
-               	leaq	-0x30(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	movq	0x10(%rcx), %rdx
-               	movq	%rdx, 0x10(%rax)
-               	movq	0x18(%rcx), %rdx
-               	movq	%rdx, 0x18(%rax)
-               	popq	%rdx
+               	leaq	-0x30(%rbp), %rdx
+               	leaq	<rip>, %rax
+               	pushq	%rcx
+               	movq	(%rax), %rcx
+               	movq	%rcx, (%rdx)
+               	movq	0x8(%rax), %rcx
+               	movq	%rcx, 0x8(%rdx)
+               	movq	0x10(%rax), %rcx
+               	movq	%rcx, 0x10(%rdx)
+               	movq	0x18(%rax), %rcx
+               	movq	%rcx, 0x18(%rdx)
+               	popq	%rcx
+               	movq	%rdx, %rax
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	-0x50(%rbp), %rdx
-               	leaq	-0x30(%rbp), %rsi
-               	movq	(%rsi,%rcx,8), %rsi
-               	movq	%rsi, (%rdx,%rcx,8)
+               	leaq	-0x50(%rbp), %rsi
+               	movq	(%rdx,%rcx,8), %rdi
+               	movq	%rdi, (%rsi,%rcx,8)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x4, %rcx
                	jl	<addr>
                	leaq	-0x50(%rbp), %rax
-               	addq	$0x0, %rax
-               	movq	(%rax), %rax
                	leaq	(%rax), %rcx
-               	leaq	-0x50(%rbp), %rax
-               	movq	0x8(%rax), %rax
-               	addq	%rax, %rcx
-               	leaq	-0x50(%rbp), %rax
-               	movq	0x10(%rax), %rax
-               	addq	%rax, %rcx
-               	leaq	-0x50(%rbp), %rax
+               	movq	(%rcx), %rcx
+               	addq	$0x0, %rcx
+               	movq	0x8(%rax), %rdx
+               	addq	%rdx, %rcx
+               	movq	0x10(%rax), %rdx
+               	addq	%rdx, %rcx
                	movq	0x18(%rax), %rax
                	addq	%rcx, %rax
                	addq	$0x55, %rax

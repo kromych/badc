@@ -47,31 +47,24 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
-               	addq	$0x0, %rax
-               	movl	$0x1, %ecx
-               	movb	%cl, (%rax)
-               	leaq	-0x8(%rbp), %rax
+               	leaq	(%rax), %rcx
+               	movl	$0x1, %edx
+               	movb	%dl, (%rcx)
                	movl	$0x2, %ecx
                	movb	%cl, 0x1(%rax)
-               	leaq	-0x8(%rbp), %rax
                	movl	$0x3, %ecx
                	movb	%cl, 0x2(%rax)
-               	leaq	-0x8(%rbp), %rax
                	movl	$0x4, %ecx
                	movb	%cl, 0x3(%rax)
-               	leaq	-0x8(%rbp), %rax
                	movl	$0x5, %ecx
                	movb	%cl, 0x4(%rax)
-               	leaq	-0x8(%rbp), %rax
                	movl	$0x6, %ecx
                	movb	%cl, 0x5(%rax)
-               	leaq	-0x8(%rbp), %rax
                	movl	$0x7, %ecx
                	movb	%cl, 0x6(%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movl	$0x8, %ecx
-               	movb	%cl, 0x7(%rax)
                	leaq	-0x8(%rbp), %rdi
+               	movl	$0x8, %eax
+               	movb	%al, 0x7(%rdi)
                	callq	<addr>
                	movabsq	$0x102030405060708, %r11 # imm = 0x102030405060708
                	cmpq	%r11, %rax

@@ -9,11 +9,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
   block 1  start_pc=0
     v7   Imm(5)                                           -> x0
     v8   StoreLocal { off=-2, value=v7, kind=I32 }        -> -
-    v9   LocalAddr(-2)                                    -> x0
+    v9   LocalAddr(-2)                                    -> x1
     v10  InlineAsm { template="jmp wkst\n\taddl $100, %0\n.weak wkst\nwkst:\n\taddl $1, %0", ops=1, args=[v9] } -> -
     v11  LoadLocal { off=-2, kind=I32 }                   -> x0
-    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
-    v13  Extend { value=v11, kind=I32 }                   -> x1
+    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x2
+    v13  Extend { value=v11, kind=I32 }                   -> x2
     terminator Jmp(b2)   (exit_acc=v11)
   block 2  start_pc=0
     v2   BinopI { op=ne, lhs=v11, rhs_imm=6 }             -> x0
@@ -27,11 +27,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
   block 5  start_pc=0
     v14  Imm(2)                                           -> x0
     v15  StoreLocal { off=-2, value=v14, kind=I32 }       -> -
-    v16  Imm(2)                                           -> x0
-    v17  StoreLocal { off=-1, value=v16, kind=I32 }       -> -
+    v16  Imm(2)                                           -> x2
+    v17  StoreLocal { off=-1, value=v14, kind=I32 }       -> -
     v18  LocalAddr(-2)                                    -> x0
-    v19  LocalAddr(-1)                                    -> x1
-    v20  InlineAsm { template="jmp 1f\n\taddl $100, %0\n1:\n\taddl $20, %0\n\tsubl $1, %1\n\tjne 1b\n\tjmp 2f\n\t.skip 130, 0x90\n2:", ops=2, args=[v18, v19] } -> -
+    v19  LocalAddr(-1)                                    -> x0
+    v20  InlineAsm { template="jmp 1f\n\taddl $100, %0\n1:\n\taddl $20, %0\n\tsubl $1, %1\n\tjne 1b\n\tjmp 2f\n\t.skip 130, 0x90\n2:", ops=2, args=[v9, v19] } -> -
     v21  LoadLocal { off=-2, kind=I32 }                   -> x0
     v22  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x1
     v23  Extend { value=v21, kind=I32 }                   -> x1

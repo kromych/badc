@@ -483,129 +483,128 @@ Disassembly of section .text:
                	movq	%rcx, %r10
                	movq	0x38(%rsp), %rcx
                	andq	%r10, %rcx
-               	xorq	%rcx, %rax
-               	movl	%eax, %ecx
-               	movq	%rcx, %rdx
+               	xorq	%rax, %rcx
+               	movl	%ecx, %eax
+               	movq	%rax, %rdx
                	andq	$0x4, %rdx
                	shlq	$0x3, %rdx
                	movl	%edx, %edx
                	movl	%edx, %edx
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	andq	$0x4000, %rsi           # imm = 0x4000
                	shlq	$0x4, %rsi
                	movl	%esi, %esi
                	orq	%rsi, %rdx
+               	movl	%edx, %esi
+               	movq	%rax, %rdx
+               	andq	$0x12020120, %rdx       # imm = 0x12020120
                	movl	%edx, %edx
-               	andq	$0x12020120, %rcx       # imm = 0x12020120
-               	movl	%ecx, %ecx
-               	movq	%rcx, %rsi
-               	shlq	$0x5, %rsi
-               	movl	%esi, %esi
-               	shrq	$0x1b, %rcx
-               	orq	%rsi, %rcx
-               	movl	%ecx, %ecx
-               	orq	%rdx, %rcx
-               	movl	%ecx, %edx
-               	movl	%eax, %ecx
-               	movq	%rcx, %rsi
+               	movq	%rdx, %rdi
+               	shlq	$0x5, %rdi
+               	movl	%edi, %edi
+               	shrq	$0x1b, %rdx
+               	orq	%rdi, %rdx
+               	movl	%edx, %edx
+               	orq	%rsi, %rdx
+               	movl	%edx, %edx
+               	movq	%rax, %rsi
                	andq	$0x100000, %rsi         # imm = 0x100000
                	shlq	$0x6, %rsi
                	movl	%esi, %esi
                	orq	%rsi, %rdx
                	movl	%edx, %edx
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	andq	$0x8000, %rsi           # imm = 0x8000
                	shlq	$0x9, %rsi
                	movl	%esi, %esi
                	orq	%rsi, %rdx
                	movl	%edx, %edx
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	andq	$0x4000000, %rsi        # imm = 0x4000000
                	shrq	$0x16, %rsi
                	orq	%rsi, %rdx
                	movl	%edx, %edx
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	andq	$0x1, %rsi
                	shlq	$0xb, %rsi
                	movl	%esi, %esi
                	orq	%rsi, %rdx
+               	movl	%edx, %esi
+               	movq	%rax, %rdx
+               	andq	$0x20000200, %rdx       # imm = 0x20000200
                	movl	%edx, %edx
-               	andq	$0x20000200, %rcx       # imm = 0x20000200
-               	movl	%ecx, %ecx
-               	movq	%rcx, %rsi
-               	shlq	$0xc, %rsi
-               	movl	%esi, %esi
-               	shrq	$0x14, %rcx
-               	orq	%rsi, %rcx
-               	movl	%ecx, %ecx
-               	orq	%rdx, %rcx
-               	movl	%ecx, %edx
-               	movl	%eax, %ecx
-               	movq	%rcx, %rsi
+               	movq	%rdx, %rdi
+               	shlq	$0xc, %rdi
+               	movl	%edi, %edi
+               	shrq	$0x14, %rdx
+               	orq	%rdi, %rdx
+               	movl	%edx, %edx
+               	orq	%rsi, %rdx
+               	movl	%edx, %edx
+               	movq	%rax, %rsi
                	andq	$0x200000, %rsi         # imm = 0x200000
                	shrq	$0x13, %rsi
                	orq	%rsi, %rdx
                	movl	%edx, %edx
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	andq	$0x40, %rsi
                	shlq	$0xe, %rsi
                	movl	%esi, %esi
                	orq	%rsi, %rdx
                	movl	%edx, %edx
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	andq	$0x10000, %rsi          # imm = 0x10000
                	shlq	$0xf, %rsi
                	movl	%esi, %esi
                	orq	%rsi, %rdx
                	movl	%edx, %edx
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	andq	$0x2, %rsi
                	shlq	$0x10, %rsi
                	movl	%esi, %esi
                	orq	%rsi, %rdx
+               	movl	%edx, %esi
+               	movq	%rax, %rdx
+               	andq	$0x40801800, %rdx       # imm = 0x40801800
                	movl	%edx, %edx
-               	andq	$0x40801800, %rcx       # imm = 0x40801800
-               	movl	%ecx, %ecx
-               	movq	%rcx, %rsi
-               	shlq	$0x11, %rsi
-               	movl	%esi, %esi
-               	shrq	$0xf, %rcx
-               	orq	%rsi, %rcx
-               	movl	%ecx, %ecx
-               	orq	%rdx, %rcx
-               	movl	%ecx, %edx
-               	movl	%eax, %ecx
-               	movq	%rcx, %rsi
+               	movq	%rdx, %rdi
+               	shlq	$0x11, %rdi
+               	movl	%edi, %edi
+               	shrq	$0xf, %rdx
+               	orq	%rdi, %rdx
+               	movl	%edx, %edx
+               	orq	%rsi, %rdx
+               	movl	%edx, %edx
+               	movq	%rax, %rsi
                	andq	$0x80000, %rsi          # imm = 0x80000
                	shrq	$0xd, %rsi
                	orq	%rsi, %rdx
                	movl	%edx, %edx
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	andq	$0x10, %rsi
                	shlq	$0x15, %rsi
                	movl	%esi, %esi
                	orq	%rsi, %rdx
                	movl	%edx, %edx
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	andq	$0x1000000, %rsi        # imm = 0x1000000
                	shrq	$0xa, %rsi
                	orq	%rsi, %rdx
+               	movl	%edx, %esi
+               	movl	$0x88000008, %edx       # imm = 0x88000008
+               	andq	%rax, %rdx
                	movl	%edx, %edx
-               	movl	$0x88000008, %r11d      # imm = 0x88000008
-               	andq	%r11, %rcx
-               	movl	%ecx, %ecx
-               	movq	%rcx, %rsi
-               	shlq	$0x18, %rsi
-               	movl	%esi, %esi
-               	shrq	$0x8, %rcx
-               	orq	%rsi, %rcx
-               	movl	%ecx, %ecx
-               	orq	%rdx, %rcx
-               	movl	%ecx, %ecx
-               	movl	%eax, %eax
-               	movq	%rax, %rdx
-               	andq	$0x480, %rdx            # imm = 0x480
-               	shrq	$0x7, %rdx
+               	movq	%rdx, %rdi
+               	shlq	$0x18, %rdi
+               	movl	%edi, %edi
+               	shrq	$0x8, %rdx
+               	orq	%rdi, %rdx
+               	movl	%edx, %edx
+               	orq	%rsi, %rdx
+               	movl	%edx, %edx
+               	movq	%rax, %rcx
+               	andq	$0x480, %rcx            # imm = 0x480
+               	shrq	$0x7, %rcx
                	orq	%rdx, %rcx
                	movl	%ecx, %ecx
                	andq	$0x442000, %rax         # imm = 0x442000

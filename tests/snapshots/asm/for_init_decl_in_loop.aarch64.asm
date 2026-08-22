@@ -14,78 +14,48 @@ Disassembly of section .text:
                	brk	#0x1
 
 <run>:
-               	mov	x1, #0x0                // =0
-               	mov	x0, #0x1                // =1
+               	mov	x2, #0x0                // =0
+               	mov	x1, #0x1                // =1
                	b	<addr>
                	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x0
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x1
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x2
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x3
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x4
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x5
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x6
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x7
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x8
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x9
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0xa
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0xb
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0xc
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0xd
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0xe
-               	add	x1, x1, x2
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0xf
-               	add	x1, x1, x2
-               	add	x0, x3, #0x1
-               	sxtw	x3, w0
-               	cmp	x3, #0x5
+               	mul	x0, x1, x17
+               	add	x3, x0, #0x0
+               	add	x2, x2, x3
+               	add	x3, x0, #0x1
+               	add	x2, x2, x3
+               	add	x3, x0, #0x2
+               	add	x2, x2, x3
+               	add	x3, x0, #0x3
+               	add	x2, x2, x3
+               	add	x3, x0, #0x4
+               	add	x2, x2, x3
+               	add	x3, x0, #0x5
+               	add	x2, x2, x3
+               	add	x3, x0, #0x6
+               	add	x2, x2, x3
+               	add	x3, x0, #0x7
+               	add	x2, x2, x3
+               	add	x3, x0, #0x8
+               	add	x2, x2, x3
+               	add	x3, x0, #0x9
+               	add	x2, x2, x3
+               	add	x3, x0, #0xa
+               	add	x2, x2, x3
+               	add	x3, x0, #0xb
+               	add	x2, x2, x3
+               	add	x3, x0, #0xc
+               	add	x2, x2, x3
+               	add	x3, x0, #0xd
+               	add	x2, x2, x3
+               	add	x3, x0, #0xe
+               	add	x2, x2, x3
+               	add	x0, x0, #0xf
+               	add	x2, x2, x0
+               	add	x1, x4, #0x1
+               	sxtw	x4, w1
+               	cmp	x4, #0x5
                	b.lt	<addr>
-               	sxtw	x0, w1
+               	sxtw	x0, w2
                	ret
 
 <main>:

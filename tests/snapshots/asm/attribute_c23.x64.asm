@@ -44,13 +44,13 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
-               	movl	$0xa, %eax
-               	movl	$0xb, %eax
-               	xorq	%rax, %rax
-               	movl	$0x1, %eax
-               	movabsq	$-0x1, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movl	$0xa, %ecx
+               	movl	$0xb, %ecx
+               	movq	%rax, %rcx
+               	movl	$0x1, %ecx
+               	movabsq	$-0x1, %rcx
+               	movq	%rax, %rcx
                	retq
 
 <die>:

@@ -14,34 +14,32 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
-               	cmp	x1, #0x1
-               	mov	x2, #0x1                // =1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x0, [x1]
+               	cmp	x0, #0x1
+               	mov	x0, #0x1                // =1
                	b.ne	<addr>
-               	ldrsw	x1, [x0, #0x4]
-               	cmp	x1, #0x17
+               	ldrsw	x2, [x1, #0x4]
+               	cmp	x2, #0x17
                	cset	x2, ne
-               	mov	x1, #0x1                // =1
                	cbnz	x2, <addr>
-               	ldrsw	x1, [x0, #0x8]
-               	cmp	x1, #0x4
-               	cset	x1, ne
-               	cbnz	x1, <addr>
-               	ldrsw	x0, [x0, #0xc]
-               	cmp	x0, #0x5
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	ldrsw	x2, [x1, #0x8]
+               	cmp	x2, #0x4
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	ldrsw	x1, [x1, #0xc]
+               	cmp	x1, #0x5
+               	cset	x2, ne
+               	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrb	w1, [x1]
                	mov	x17, #0x68              // =104
-               	eor	x0, x0, x17
-               	mov	w1, w0
-               	mov	x0, #0x1                // =1
+               	eor	x1, x1, x17
+               	mov	w1, w1
                	cbnz	x1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -71,5 +69,7 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	b	<addr>
+               	mov	x2, x0
                	b	<addr>
+               	mov	x2, x0
                	b	<addr>

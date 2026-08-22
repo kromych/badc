@@ -60,43 +60,33 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x40a00000, %eax       # imm = 0x40A00000
-               	movq	%rax, %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
                	movq	%rax, %xmm1
                	movl	$0x80000000, %r10d      # imm = 0x80000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movq	%rax, %xmm0
+               	movl	$0x80000000, %r10d      # imm = 0x80000000
+               	movq	%r10, %xmm15
+               	xorpd	%xmm15, %xmm0
+               	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	$0x40a00000, %eax       # imm = 0x40A00000
                	movl	$0x40a00000, %r11d      # imm = 0x40A00000
-               	movq	%r11, %xmm0
+               	movq	%r11, %xmm1
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movl	$0x40a00000, %eax       # imm = 0x40A00000
-               	movq	%rax, %xmm0
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
-               	movq	%rax, %xmm1
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	movapd	%xmm0, %xmm1
+               	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movl	$0x40a00000, %eax       # imm = 0x40A00000
                	movl	$0x40a00000, %r11d      # imm = 0x40A00000
                	movq	%r11, %xmm0
                	movq	%rax, %xmm15

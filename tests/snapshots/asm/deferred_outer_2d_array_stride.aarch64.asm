@@ -17,14 +17,13 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x1, x0, #0x10
-               	sub	x1, x1, x0
-               	cmp	x1, #0x10
+               	sub	x2, x1, x0
+               	cmp	x2, #0x10
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	add	x1, x0, #0x20
-               	add	x2, x0, #0x10
-               	sub	x1, x1, x2
+               	add	x2, x0, #0x20
+               	sub	x1, x2, x1
                	cmp	x1, #0x10
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

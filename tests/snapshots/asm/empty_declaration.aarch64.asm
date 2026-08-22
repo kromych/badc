@@ -25,26 +25,26 @@ Disassembly of section .text:
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x1, #0xb                // =11
-               	str	w1, [x0]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	mov	x1, #0xc                // =12
-               	str	w1, [x2]
-               	ldrsw	x0, [x0]
+               	mov	x1, x0
+               	mov	x1, x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x2, #0xb                // =11
+               	str	w2, [x1]
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	mov	x3, #0xc                // =12
+               	str	w3, [x4]
+               	ldrsw	x1, [x1]
+               	sxtw	x3, w3
+               	add	x1, x1, x3
                	sxtw	x1, w1
-               	add	x0, x0, x1
-               	sxtw	x0, w0
-               	cmp	x0, #0x17
+               	cmp	x1, #0x17
                	b.eq	<addr>
-               	mov	x0, #0xb                // =11
+               	mov	x0, x2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

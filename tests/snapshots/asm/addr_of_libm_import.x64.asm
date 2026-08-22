@@ -91,7 +91,7 @@ Disassembly of section .text:
                	movq	0x8(%rcx), %rdx
                	movq	%rdx, 0x8(%rax)
                	popq	%rdx
-               	leaq	-0x10(%rbp), %rax
+               	movq	%rax, %rcx
                	xorq	%rbx, %rbx
                	movq	(%rax), %rax
                	movq	%rbx, %xmm0
@@ -109,11 +109,11 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
-               	xorq	%rdi, %rdi
-               	movq	%rdi, %xmm0
+               	xorq	%rbx, %rbx
+               	movq	%rbx, %xmm0
                	callq	*%rax
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm15
+               	movabsq	$0x3ff0000000000000, %r12 # imm = 0x3FF0000000000000
+               	movq	%r12, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -124,12 +124,10 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rdi, %rdi
-               	movq	%rdi, %xmm0
+               	movq	%rbx, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm15
+               	movq	%r12, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>

@@ -4,43 +4,43 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(1069547520)                                  -> x0 [f32]
-    v2   Imm(1048576000)                                  -> x1 [f32]
+    v1   Imm(1069547520)                                  -> x1 [f32]
+    v2   Imm(1048576000)                                  -> x0 [f32]
     v3   Imm(0)                                           -> x2
     v4   Imm(0)                                           -> x2
     v5   Binop { op=fmul, lhs=v1, rhs=v2 }                -> d0 [f32]
-    v6   Imm(0)                                           -> x0
+    v6   Imm(0)                                           -> x1
     v7   LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
-    v8   Imm(1052770304)                                  -> x0 [f32]
-    v9   Binop { op=fne, lhs=v5, rhs=v8 }                 -> x0
+    v8   Imm(1052770304)                                  -> x1 [f32]
+    v9   Binop { op=fne, lhs=v5, rhs=v8 }                 -> x1
     terminator Bz { cond=v9, target=b2, fall=b1 }   (exit_acc=v9)
   block 1  start_pc=0
     v10  Imm(1)                                           -> x0
     terminator Return(v10)   (exit_acc=v10)
   block 2  start_pc=0
-    v11  Imm(1075838976)                                  -> x0 [f32]
+    v11  Imm(1075838976)                                  -> x1 [f32]
     v12  Fneg(v11)                                        -> d0 [f32]
-    v13  Imm(1082130432)                                  -> x0 [f32]
-    v14  Imm(0)                                           -> x1
-    v15  Imm(0)                                           -> x1
+    v13  Imm(1082130432)                                  -> x1 [f32]
+    v14  Imm(0)                                           -> x2
+    v15  Imm(0)                                           -> x2
     v16  Binop { op=fmul, lhs=v12, rhs=v13 }              -> d0 [f32]
-    v17  Imm(0)                                           -> x0
+    v17  Imm(0)                                           -> x1
     v18  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
-    v19  Imm(1092616192)                                  -> x0 [f32]
+    v19  Imm(1092616192)                                  -> x1 [f32]
     v20  Fneg(v19)                                        -> d1 [f32]
-    v21  Binop { op=fne, lhs=v16, rhs=v20 }               -> x0
+    v21  Binop { op=fne, lhs=v16, rhs=v20 }               -> x1
     terminator Bz { cond=v21, target=b4, fall=b3 }   (exit_acc=v21)
   block 3  start_pc=0
     v22  Imm(2)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
   block 4  start_pc=0
-    v23  Imm(1056964608)                                  -> x0 [f32]
-    v24  Imm(1048576000)                                  -> x1 [f32]
+    v23  Imm(1056964608)                                  -> x1 [f32]
+    v24  Imm(1048576000)                                  -> x2 [f32]
     v25  Imm(1040187392)                                  -> x2 [f32]
     v26  Imm(0)                                           -> x6
     v27  Imm(0)                                           -> x6
     v28  Imm(0)                                           -> x6
-    v29  Binop { op=fadd, lhs=v23, rhs=v24 }              -> d0 [f32]
+    v29  Binop { op=fadd, lhs=v23, rhs=v2 }               -> d0 [f32]
     v30  Binop { op=fadd, lhs=v29, rhs=v25 }              -> d0 [f32]
     v31  Imm(0)                                           -> x0
     v32  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]

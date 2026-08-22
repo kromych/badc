@@ -46,16 +46,16 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	mov	x0, #0x14               // =20
                	mov	x0, #0x1e               // =30
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, #0x1                // =1
+               	mov	x2, x1
                	mov	x0, #0x1e               // =30
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1e               // =30
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1e               // =30
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1e               // =30
+               	mov	x1, x0
+               	mov	x1, #0x1                // =1
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
                	mov	x0, #0x0                // =0
                	ret

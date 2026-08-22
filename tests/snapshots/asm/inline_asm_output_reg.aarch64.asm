@@ -30,34 +30,33 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
-               	mov	x0, #0xa                // =10
-               	sub	x1, x29, #0x10
+               	mov	x1, #0xa                // =10
+               	sub	x0, x29, #0x10
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
+               	str	x0, [sp]
+               	str	x1, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	add	x0, x1, #0x7
                	ldr	x16, [sp]
                	str	x0, [x16]
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
-               	ldur	x0, [x29, #-0x10]
-               	cmp	x0, #0x11
+               	ldur	x1, [x29, #-0x10]
+               	cmp	x1, #0x11
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x6                // =6
-               	sub	x1, x29, #0x10
+               	mov	x1, #0x6                // =6
                	sub	x2, x29, #0x8
                	str	x0, [sp, #0x18]
                	str	x1, [sp, #0x20]
                	str	x2, [sp, #0x28]
-               	str	x1, [sp]
+               	str	x0, [sp]
                	str	x2, [sp, #0x8]
-               	str	x0, [sp, #0x10]
+               	str	x1, [sp, #0x10]
                	ldr	x2, [sp, #0x10]
                	mov	x0, x2
                	mov	x1, x2

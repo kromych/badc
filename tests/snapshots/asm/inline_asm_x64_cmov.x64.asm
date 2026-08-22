@@ -99,15 +99,14 @@ Disassembly of section .text:
                	movq	-0x28(%rbp), %rbx
                	movq	-0x8(%rbp), %r8
                	cmpq	$0x2a, %rdx
-               	sete	%al
-               	movzbq	%al, %rax
-               	xorq	%rcx, %rcx
-               	testq	%rax, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	xorq	%rax, %rax
+               	testq	%rcx, %rcx
                	je	<addr>
                	cmpq	$0x2a, %rsi
                	sete	%cl
                	movzbq	%cl, %rcx
-               	xorq	%rax, %rax
                	testq	%rcx, %rcx
                	je	<addr>
                	cmpq	$0x2a, %rdi
@@ -130,4 +129,5 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+               	movq	%rax, %rcx
                	jmp	<addr>

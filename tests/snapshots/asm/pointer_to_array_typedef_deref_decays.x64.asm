@@ -33,44 +33,40 @@ Disassembly of section .text:
                	movq	%rax, -0x50(%rbp)
                	leaq	-0x40(%rbp), %rax
                	movq	%rax, -0x48(%rbp)
-               	leaq	-0x40(%rbp), %rax
                	movq	-0x50(%rbp), %rcx
                	movq	%rcx, (%rax)
-               	leaq	-0x40(%rbp), %rax
                	movq	-0x50(%rbp), %rcx
                	movq	%rcx, 0x38(%rax)
-               	movq	-0x48(%rbp), %rax
-               	movq	-0x50(%rbp), %rcx
-               	addq	$0x1234568, %rcx        # imm = 0x1234568
-               	movq	%rcx, (%rax)
-               	incq	%rcx
-               	movq	%rcx, 0x38(%rax)
-               	leaq	-0x40(%rbp), %rcx
-               	movq	(%rcx), %rcx
-               	cmpq	$0x1234567, %rcx        # imm = 0x1234567
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	movq	-0x48(%rbp), %rcx
+               	movq	-0x50(%rbp), %rdx
+               	addq	$0x1234568, %rdx        # imm = 0x1234568
+               	movq	%rdx, (%rcx)
+               	incq	%rdx
+               	movq	%rdx, 0x38(%rcx)
+               	movq	(%rax), %rdx
+               	cmpq	$0x1234567, %rdx        # imm = 0x1234567
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
-               	leaq	-0x40(%rbp), %rcx
-               	movq	0x38(%rcx), %rcx
-               	cmpq	$0x1234568, %rcx        # imm = 0x1234568
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	movq	0x38(%rax), %rax
+               	cmpq	$0x1234568, %rax        # imm = 0x1234568
+               	setne	%dl
+               	movzbq	%dl, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	movq	(%rax), %rcx
-               	cmpq	$0x1234567, %rcx        # imm = 0x1234567
+               	movq	(%rcx), %rax
+               	cmpq	$0x1234567, %rax        # imm = 0x1234567
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	movq	0x38(%rax), %rax
+               	movq	0x38(%rcx), %rax
                	cmpq	$0x1234568, %rax        # imm = 0x1234568
                	je	<addr>
                	movl	$0x3, %eax

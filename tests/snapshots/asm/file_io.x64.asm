@@ -38,8 +38,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	%rax, %rbx
-               	movslq	%ebx, %rax
-               	testq	%rax, %rax
+               	movslq	%ebx, %r13
+               	testq	%r13, %r13
                	jge	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -52,8 +52,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
-               	movslq	%ebx, %rdi
                	movl	$0x9, %edx
+               	movq	%r13, %rdi
                	movq	%r12, %rsi
                	xorl	%eax, %eax
                	callq	<addr>

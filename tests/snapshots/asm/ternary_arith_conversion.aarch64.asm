@@ -17,14 +17,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d16, x0
+               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
+               	fmov	d16, x1
                	sub	x17, x29, #0x10
                	str	d16, [x17]
                	sub	x16, x29, #0x10
                	ldr	d0, [x16]
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d17, x0
+               	fmov	d17, x1
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
@@ -37,7 +36,6 @@ Disassembly of section .text:
                	str	d16, [x17]
                	sub	x16, x29, #0x10
                	ldr	d0, [x16]
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fcmp	d0, d17
                	b.eq	<addr>
@@ -45,27 +43,23 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d16, x0
+               	fmov	d16, x1
                	sub	x17, x29, #0x10
                	str	d16, [x17]
                	sub	x16, x29, #0x10
                	ldr	d0, [x16]
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d17, x0
+               	fmov	d17, x1
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d16, x0
                	sub	x17, x29, #0x10
                	str	d16, [x17]
                	sub	x16, x29, #0x10
                	ldr	d0, [x16]
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fcmp	d0, d17
                	b.eq	<addr>
@@ -73,28 +67,25 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3f800000         // =1065353216
-               	fmov	s16, w0
+               	mov	x2, #0x3f800000         // =1065353216
+               	fmov	s16, w2
                	fcvt	d0, s16
                	sub	x17, x29, #0x10
                	str	d0, [x17]
                	sub	x16, x29, #0x10
                	ldr	d0, [x16]
-               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d17, x0
+               	fmov	d17, x1
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d16, x0
                	sub	x17, x29, #0x10
                	str	d16, [x17]
                	sub	x16, x29, #0x10
                	ldr	d0, [x16]
-               	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fcmp	d0, d17
                	b.eq	<addr>
@@ -102,14 +93,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3f800000         // =1065353216
-               	fmov	s16, w0
+               	fmov	s16, w2
                	sub	x17, x29, #0x10
                	str	s16, [x17]
                	sub	x16, x29, #0x10
                	ldr	s0, [x16]
-               	mov	x0, #0x3f800000         // =1065353216
-               	fmov	s17, w0
+               	fmov	s17, w2
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
@@ -122,7 +111,6 @@ Disassembly of section .text:
                	str	s16, [x17]
                	sub	x16, x29, #0x10
                	ldr	s0, [x16]
-               	mov	x0, #0x40000000         // =1073741824
                	fmov	s17, w0
                	fcmp	s0, s17
                	b.eq	<addr>

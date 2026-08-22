@@ -47,8 +47,8 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x500(%rbp), %rax
                	movss	0x20(%rax,%riz), %xmm0
-               	movl	$0x40000000, %eax       # imm = 0x40000000
-               	movq	%rax, %xmm15
+               	movl	$0x40000000, %ecx       # imm = 0x40000000
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -56,13 +56,11 @@ Disassembly of section .text:
                	addq	$0x500, %rsp            # imm = 0x500
                	popq	%rbp
                	retq
-               	leaq	-0x500(%rbp), %rcx
-               	movl	$0x42c60000, %eax       # imm = 0x42C60000
-               	movq	%rax, %xmm14
-               	movss	%xmm14, (%rcx,%riz)
-               	leaq	-0x500(%rbp), %rcx
-               	movss	(%rcx,%riz), %xmm0
-               	movq	%rax, %xmm15
+               	movl	$0x42c60000, %ecx       # imm = 0x42C60000
+               	movq	%rcx, %xmm14
+               	movss	%xmm14, (%rax,%riz)
+               	movss	(%rax,%riz), %xmm0
+               	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>

@@ -29,5 +29,5 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	movl	$0x1, %eax
                	movl	$0x2a, %eax
-               	movl	$0x2a, %eax
+               	movq	%rax, %rcx
                	retq

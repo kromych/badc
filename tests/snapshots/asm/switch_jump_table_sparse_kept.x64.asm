@@ -99,8 +99,8 @@ Disassembly of section .text:
                	cmpq	$0xa, %rdx
                	jl	<addr>
                	movabsq	$-0x1, %rax
-               	movabsq	$-0x1, %rax
-               	movabsq	$-0x1, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq
                	movl	$0x1, %eax

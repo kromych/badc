@@ -190,8 +190,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %rax
                	andq	$0xff, %rax
-               	movsbq	%al, %rax
-               	cmpq	$-0x1, %rax
+               	movsbq	%al, %rcx
+               	cmpq	$-0x1, %rcx
                	je	<addr>
                	movl	$0xc, %eax
                	movq	(%rsp), %rbx
@@ -199,9 +199,7 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	%rbx, %rax
-               	andq	$0xff, %rax
-               	movsbq	%al, %rax
+               	movq	%rcx, %rax
                	shlq	$0x8, %rax
                	movq	%r12, %rcx
                	andq	$0xff, %rcx

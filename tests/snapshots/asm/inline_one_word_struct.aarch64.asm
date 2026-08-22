@@ -17,33 +17,28 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	sub	x0, x29, #0x28
-               	add	x0, x0, #0x0
+               	sub	x2, x29, #0x28
+               	add	x0, x2, #0x0
                	mov	x1, #0x64               // =100
                	str	x1, [x0]
-               	sub	x0, x29, #0x28
-               	mov	x1, #0xc8               // =200
-               	str	x1, [x0, #0x8]
-               	sub	x0, x29, #0x28
-               	mov	x1, #0x12c              // =300
-               	str	x1, [x0, #0x10]
-               	sub	x0, x29, #0x28
-               	mov	x1, #0x190              // =400
-               	str	x1, [x0, #0x18]
-               	sub	x0, x29, #0x28
-               	mov	x1, #0x1f4              // =500
-               	str	x1, [x0, #0x20]
-               	sub	x3, x29, #0x28
+               	mov	x0, #0xc8               // =200
+               	str	x0, [x2, #0x8]
+               	mov	x0, #0x12c              // =300
+               	str	x0, [x2, #0x10]
+               	mov	x0, #0x190              // =400
+               	str	x0, [x2, #0x18]
+               	mov	x0, #0x1f4              // =500
+               	str	x0, [x2, #0x20]
                	mov	x0, #0x0                // =0
-               	mov	x2, x0
+               	mov	x3, x0
                	b	<addr>
-               	ldr	x4, [x3, x1, lsl #3]
-               	add	x2, x2, x4
+               	ldr	x4, [x2, x1, lsl #3]
+               	add	x3, x3, x4
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x5
                	b.lt	<addr>
-               	cmp	x2, #0x5dc
+               	cmp	x3, #0x5dc
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0

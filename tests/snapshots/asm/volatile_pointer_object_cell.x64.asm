@@ -71,15 +71,15 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movq	(%rax), %rax
-               	movq	-0x8(%rbp), %rcx
-               	movl	$0x5, %edx
-               	movq	%rdx, (%rcx)
-               	movq	-0x8(%rbp), %rcx
-               	movq	(%rcx), %rcx
-               	addq	%rcx, %rax
+               	movq	-0x8(%rbp), %rdx
+               	movl	$0x5, %esi
+               	movq	%rsi, (%rdx)
+               	movq	-0x8(%rbp), %rdx
+               	movq	(%rdx), %rdx
+               	addq	%rdx, %rax
                	cmpq	$0x8, %rax
                	je	<addr>
-               	movl	$0x3, %eax
+               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

@@ -14,42 +14,49 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x19, [sp, #-0x60]!
-               	stp	x29, x30, [sp, #0x50]
-               	add	x29, sp, #0x50
-               	sub	x0, x29, #0x38
+               	stp	x20, x21, [sp, #-0x70]!
+               	str	x19, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x60]
+               	add	x29, sp, #0x60
+               	sub	x20, x29, #0x38
+               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
+               	ldp	x29, x30, [sp, #0x60]
+               	ldr	x19, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x70
                	ret
-               	sub	x0, x29, #0x38
                	mov	x1, #0x1                // =1
+               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
+               	ldp	x29, x30, [sp, #0x60]
+               	ldr	x19, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x70
                	ret
-               	sub	x0, x29, #0x30
-               	sub	x1, x29, #0x38
+               	sub	x21, x29, #0x30
+               	mov	x0, x21
+               	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
+               	ldp	x29, x30, [sp, #0x60]
+               	ldr	x19, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x70
                	ret
-               	sub	x0, x29, #0x30
+               	mov	x0, x21
                	bl	<addr>
                	sxtw	x0, w0
-               	sub	x0, x29, #0x38
+               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x50]
-               	ldr	x19, [sp], #0x60
+               	ldp	x29, x30, [sp, #0x60]
+               	ldr	x19, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x70
                	ret

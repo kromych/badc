@@ -29,12 +29,11 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movabsq	$0x4045000000000000, %rax # imm = 0x4045000000000000
-               	xorq	%rcx, %rcx
-               	movq	%rcx, -0x8(%rbp)
-               	movq	%rax, -0x8(%rbp)
-               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movabsq	$0x4045000000000000, %rcx # imm = 0x4045000000000000
                	xorq	%rax, %rax
+               	movq	%rax, -0x8(%rbp)
+               	movq	%rcx, -0x8(%rbp)
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	movq	%rax, -0x8(%rbp)
                	movsd	%xmm0, -0x8(%rbp,%riz)
                	movq	-0x8(%rbp), %rax

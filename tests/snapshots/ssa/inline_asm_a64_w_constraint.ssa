@@ -9,21 +9,21 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v3   LoadLocal { off=-2, kind=I64 }                   -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
-    v14  Imm(4631107791820423168)                         -> x0
-    v15  Imm(0)                                           -> x1
-    v16  Imm(0)                                           -> x1
-    v17  Imm(0)                                           -> x1
+    v14  Imm(4631107791820423168)                         -> x1
+    v15  Imm(0)                                           -> x0
+    v16  Imm(0)                                           -> x0
+    v17  Imm(0)                                           -> x0
     v18  StoreLocal { off=-1, value=v17, kind=I64 }       -> -
-    v19  Imm(0)                                           -> x1
+    v19  Imm(0)                                           -> x2
     v20  StoreLocal { off=-1, value=v14, kind=I64 }       -> -
-    v21  Imm(0)                                           -> x0
+    v21  Imm(0)                                           -> x1
     v22  LoadLocal { off=-1, kind=F64 }                   -> d0
     terminator Jmp(b2)   (exit_acc=v22)
   block 2  start_pc=0
-    v23  Imm(0)                                           -> x0
-    v24  Imm(0)                                           -> x0
-    v25  Imm(0)                                           -> x0
-    v26  StoreLocal { off=-1, value=v25, kind=I64 }       -> -
+    v23  Imm(0)                                           -> x1
+    v24  Imm(0)                                           -> x1
+    v25  Imm(0)                                           -> x1
+    v26  StoreLocal { off=-1, value=v17, kind=I64 }       -> -
     v27  Imm(0)                                           -> x0
     v28  StoreLocal { off=-1, value=v22, kind=F64 }       -> -
     v29  Imm(0)                                           -> x0

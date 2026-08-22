@@ -54,8 +54,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	callq	*%rax
-               	leaq	-0x18(%rbp), %rax
-               	movq	0x8(%rax), %rax
+               	leaq	-0x18(%rbp), %rdi
+               	movq	0x8(%rdi), %rax
                	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
                	cmpq	%r11, %rax
                	jb	<addr>
@@ -72,12 +72,11 @@ Disassembly of section .text:
                	movq	%rax, (%rbx)
                	movl	$0x9, %eax
                	movl	%eax, (%r12)
-               	leaq	-0x18(%rbp), %rdi
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	callq	*%rax
-               	leaq	-0x18(%rbp), %rax
-               	movq	0x8(%rax), %rax
+               	leaq	-0x18(%rbp), %rdi
+               	movq	0x8(%rdi), %rax
                	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
                	cmpq	%r11, %rax
                	jb	<addr>
@@ -92,14 +91,13 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x7ffffffffffffffc, %rax # imm = 0x8000000000000004
                	movq	%rax, (%rbx)
-               	leaq	-0x18(%rbp), %rdi
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	callq	*%rax
                	leaq	-0x18(%rbp), %rax
-               	movq	0x8(%rax), %rax
+               	movq	0x8(%rax), %rcx
                	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rcx
                	jb	<addr>
                	movabsq	$-0x16, %rax
                	cmpq	$-0x16, %rax
@@ -116,57 +114,44 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x18(%rbp), %rax
-               	movq	0x8(%rax), %rcx
-               	leaq	-0x18(%rbp), %rax
-               	movl	0x10(%rax), %eax
-               	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%rcx, %r10
-               	movq	%rdx, %rcx
-               	subq	%r10, %rcx
-               	movl	$0x1, %edx
-               	movl	%eax, %edx
-               	cmpq	%rcx, %rdx
+               	movq	0x8(%rax), %rdx
+               	movl	0x10(%rax), %ecx
+               	movabsq	$0x7fffffffffffffff, %rax # imm = 0x7FFFFFFFFFFFFFFF
+               	movq	%rdx, %r10
+               	movq	%rax, %rdx
+               	subq	%r10, %rdx
+               	movl	$0x1, %eax
+               	movl	%ecx, %eax
+               	cmpq	%rdx, %rax
                	jae	<addr>
-               	movl	%eax, %eax
                	movl	%eax, %eax
                	movslq	%eax, %rax
                	jmp	<addr>
-               	movl	%ecx, %eax
+               	movl	%edx, %eax
                	jmp	<addr>
-               	leaq	-0x18(%rbp), %rax
-               	movq	0x8(%rax), %rcx
-               	leaq	-0x18(%rbp), %rax
-               	movl	0x10(%rax), %eax
+               	movq	0x8(%rdi), %rax
+               	movl	0x10(%rdi), %ecx
                	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%rcx, %r10
-               	movq	%rdx, %rcx
-               	subq	%r10, %rcx
-               	movl	$0x1, %edx
-               	movl	%eax, %edx
-               	cmpq	%rcx, %rdx
+               	subq	%rax, %rdx
+               	movl	$0x1, %eax
+               	movl	%ecx, %eax
+               	cmpq	%rdx, %rax
                	jae	<addr>
-               	movl	%eax, %eax
                	movl	%eax, %eax
                	movslq	%eax, %rax
                	jmp	<addr>
-               	movl	%ecx, %eax
+               	movl	%edx, %eax
                	jmp	<addr>
-               	leaq	-0x18(%rbp), %rax
-               	movq	0x8(%rax), %rcx
-               	leaq	-0x18(%rbp), %rax
-               	movl	0x10(%rax), %eax
+               	movq	0x8(%rdi), %rax
+               	movl	0x10(%rdi), %ecx
                	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%rcx, %r10
-               	movq	%rdx, %rcx
-               	subq	%r10, %rcx
-               	movl	$0x1, %edx
-               	movl	%eax, %edx
-               	cmpq	%rcx, %rdx
+               	subq	%rax, %rdx
+               	movl	$0x1, %eax
+               	movl	%ecx, %eax
+               	cmpq	%rdx, %rax
                	jae	<addr>
-               	movl	%eax, %eax
                	movl	%eax, %eax
                	movslq	%eax, %rax
                	jmp	<addr>
-               	movl	%ecx, %eax
+               	movl	%edx, %eax
                	jmp	<addr>

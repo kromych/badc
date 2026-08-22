@@ -77,10 +77,10 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
                	xorq	%rdi, %rdi
+               	movq	%rdi, %rax
+               	movq	%rdi, %rax
+               	movq	%rdi, %rax
                	callq	<addr>
                	cmpq	$0xd, %rax
                	setne	%al

@@ -209,21 +209,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v159 Imm(44)                                          -> x2
     v160 Store { addr=v158, disp=0, value=v159, kind=I32 } -> -
     v161 Load { addr=v145, disp=0, kind=I32 }             -> x0
-    v162 BinopI { op=ne, lhs=v161, rhs_imm=11 }           -> x0
-    v163 Imm(1)                                           -> x1
+    v162 BinopI { op=ne, lhs=v161, rhs_imm=11 }           -> x1
+    v163 Imm(1)                                           -> x0
     v164 Imm(0)                                           -> x2
     terminator Bnz { cond=v162, target=b33, fall=b23 }   (exit_acc=v162)
   block 23  start_pc=0
-    v165 ImmData(32768)                                   -> x0
-    v166 Load { addr=v165, disp=0, kind=I32 }             -> x0
+    v165 ImmData(32768)                                   -> x1
+    v166 Load { addr=v165, disp=0, kind=I32 }             -> x1
     v167 BinopI { op=ne, lhs=v166, rhs_imm=22 }           -> x1
-    v168 BinopI { op=ne, lhs=v167, rhs_imm=0 }            -> x0
-    v169 Imm(0)                                           -> x0
+    v168 BinopI { op=ne, lhs=v167, rhs_imm=0 }            -> x2
+    v169 Imm(0)                                           -> x2
     terminator Jmp(b24)   (exit_acc=v167)
   block 24  start_pc=0
     v170 Phi { incoming=[b33:v163, b23:v167], kind=I64 }  -> x1
-    v171 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v172 Imm(1)                                           -> x0
+    v171 LoadLocal { off=-1, kind=I64 }                   -> x2
+    v172 Imm(1)                                           -> x2
     v173 Imm(0)                                           -> x2
     terminator Bnz { cond=v170, target=b32, fall=b25 }   (exit_acc=v170)
   block 25  start_pc=0
@@ -235,7 +235,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v179 Imm(0)                                           -> x1
     terminator Jmp(b26)   (exit_acc=v177)
   block 26  start_pc=0
-    v180 Phi { incoming=[b32:v172, b25:v177], kind=I64 }  -> x0
+    v180 Phi { incoming=[b32:v163, b25:v177], kind=I64 }  -> x0
     v181 LoadLocal { off=-1, kind=I64 }                   -> x1
     v182 Imm(0)                                           -> x1
     terminator Bnz { cond=v180, target=b31, fall=b27 }   (exit_acc=v180)

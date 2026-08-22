@@ -14,11 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
+               	adrp	x6, <page>
+               	add	x6, x6, <lo12>
                	mov	x0, #0x2710             // =10000
-               	str	w0, [x5]
-               	ldrsw	x0, [x5]
+               	str	w0, [x6]
+               	ldrsw	x0, [x6]
                	mov	x2, #0x0                // =0
                	b	<addr>
                	mov	x3, #0x1000             // =4096
@@ -38,17 +38,17 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x0, #0x1                // =1
-               	str	w0, [x5]
-               	ldrsw	x0, [x5]
+               	mov	x3, #0x1                // =1
+               	str	w3, [x6]
+               	ldrsw	x0, [x6]
                	mov	x2, #0x0                // =0
                	b	<addr>
-               	mov	x3, #0x1000             // =4096
-               	mov	x4, #0x1                // =1
-               	cmp	x1, x3
+               	mov	x4, #0x1000             // =4096
+               	mov	x5, x3
+               	cmp	x1, x4
                	b.hs	<addr>
                	b	<addr>
-               	mov	x1, x3
+               	mov	x1, x4
                	mov	w1, w1
                	add	x2, x2, x1
                	sub	x0, x0, x1
@@ -59,17 +59,16 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x0, #0x0                // =0
-               	str	w0, [x5]
-               	ldrsw	x0, [x5]
                	mov	x2, #0x0                // =0
+               	str	w2, [x6]
+               	ldrsw	x0, [x6]
                	b	<addr>
-               	mov	x3, #0x1000             // =4096
-               	mov	x4, #0x1                // =1
-               	cmp	x1, x3
+               	mov	x4, #0x1000             // =4096
+               	mov	x5, x3
+               	cmp	x1, x4
                	b.hs	<addr>
                	b	<addr>
-               	mov	x1, x3
+               	mov	x1, x4
                	mov	w1, w1
                	add	x2, x2, x1
                	sub	x0, x0, x1

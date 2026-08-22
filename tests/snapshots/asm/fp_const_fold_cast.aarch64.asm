@@ -45,8 +45,8 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	mov	x0, #-0x3ff8000000000000 // =-4609434218613702656
-               	mov	x1, #0x4008000000000000 // =4613937818241073152
-               	fmov	d16, x1
+               	mov	x2, #0x4008000000000000 // =4613937818241073152
+               	fmov	d16, x2
                	fneg	d0, d16
                	fmov	d16, x0
                	fcmp	d16, d0
@@ -77,7 +77,6 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	ret
                	mov	x0, #0x40000000         // =1073741824
-               	mov	x1, #0x40400000         // =1077936128
                	fmov	s16, w1
                	fmov	s17, w0
                	fmul	s0, s16, s17

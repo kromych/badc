@@ -120,7 +120,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x3, %eax
-               	movl	$0x3, %eax
+               	movq	%rax, %rcx
                	movl	$0x5, %edx
                	movq	%rbx, %rdi
                	movq	%rbx, %rsi
@@ -183,8 +183,8 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	0x2(%rbx), %rcx
-               	cmpq	%rcx, %rax
+               	leaq	0x2(%rbx), %r12
+               	cmpq	%r12, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -215,8 +215,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	0x2(%rbx), %rcx
-               	cmpq	%rcx, %rax
+               	cmpq	%r12, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

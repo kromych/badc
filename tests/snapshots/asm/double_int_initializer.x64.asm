@@ -47,9 +47,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movsd	(%rax,%riz), %xmm0
-               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
+               	leaq	<rip>, %rcx
+               	movsd	(%rcx,%riz), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

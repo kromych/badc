@@ -5,7 +5,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(0)                                       -> x0
-    v2   Imm(1)                                           -> x1
+    v2   Imm(1)                                           -> x7
     v3   Store { addr=v1, disp=0, value=v2, kind=I32 }    -> -
     v4   ImmData(0)                                       -> x0
     v5   Imm(0)                                           -> x1
@@ -16,7 +16,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v9)
   block 1  start_pc=0
     v10  Imm(1)                                           -> x0
-    terminator Return(v10)   (exit_acc=v10)
+    terminator Return(v2)   (exit_acc=v2)
   block 2  start_pc=0
     v11  ImmData(0)                                       -> x0
     v12  Load { addr=v11, disp=0, kind=I32 }              -> x0
@@ -26,10 +26,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v14  Imm(2)                                           -> x0
     terminator Return(v14)   (exit_acc=v14)
   block 4  start_pc=0
-    v15  Imm(1)                                           -> x7
+    v15  Imm(1)                                           -> x0
     v16  ImmData(88)                                      -> x6
     v17  ImmData(104)                                     -> x2
-    v18  CallExt { binding_idx=151, args=[v15, v16, v17], fp_arg_mask=0x0 } -> x0
+    v18  CallExt { binding_idx=151, args=[v2, v16, v17], fp_arg_mask=0x0 } -> x0
     v19  BinopI { op=ne, lhs=v18, rhs_imm=-1 }            -> x0
     terminator Bz { cond=v19, target=b6, fall=b5 }   (exit_acc=v19)
   block 5  start_pc=0

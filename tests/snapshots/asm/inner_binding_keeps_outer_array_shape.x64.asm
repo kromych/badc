@@ -27,8 +27,8 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	jmp	<addr>
                	movl	$0x1, %eax
                	movslq	%eax, %rcx
@@ -36,6 +36,6 @@ Disassembly of section .text:
                	jl	<addr>
                	movl	$0x1, %eax
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
                	retq

@@ -199,22 +199,22 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v137 LocalAddr(-1)                                    -> x0
     v138 BinopI { op=and, lhs=v121, rhs_imm=255 }         -> x0
     v139 BinopI { op=shl, lhs=v138, rhs_imm=56 }          -> x1
-    v140 Extend { value=v138, kind=I8 }                   -> x0
-    v141 Imm(0)                                           -> x1
-    v142 Extend { value=v140, kind=I32 }                  -> x1
-    v143 BinopI { op=ne, lhs=v140, rhs_imm=-1 }           -> x0
+    v140 Extend { value=v138, kind=I8 }                   -> x1
+    v141 Imm(0)                                           -> x2
+    v142 Extend { value=v140, kind=I32 }                  -> x2
+    v143 BinopI { op=ne, lhs=v140, rhs_imm=-1 }           -> x2
     terminator Bz { cond=v143, target=b24, fall=b23 }   (exit_acc=v143)
   block 23  start_pc=0
     v144 Imm(12)                                          -> x0
     terminator Return(v144)   (exit_acc=v144)
   block 24  start_pc=0
-    v145 Imm(256)                                         -> x0
-    v146 LocalAddr(-1)                                    -> x0
-    v147 Imm(0)                                           -> x0
-    v148 BinopI { op=and, lhs=v121, rhs_imm=255 }         -> x0
-    v149 BinopI { op=shl, lhs=v148, rhs_imm=56 }          -> x1
-    v150 Extend { value=v148, kind=I8 }                   -> x0
-    v151 BinopI { op=shl, lhs=v150, rhs_imm=8 }           -> x0
+    v145 Imm(256)                                         -> x2
+    v146 LocalAddr(-1)                                    -> x2
+    v147 Imm(0)                                           -> x2
+    v148 BinopI { op=and, lhs=v121, rhs_imm=255 }         -> x2
+    v149 BinopI { op=shl, lhs=v138, rhs_imm=56 }          -> x2
+    v150 Extend { value=v138, kind=I8 }                   -> x0
+    v151 BinopI { op=shl, lhs=v140, rhs_imm=8 }           -> x0
     v152 BinopI { op=shl, lhs=v151, rhs_imm=32 }          -> x1
     v153 Extend { value=v151, kind=I32 }                  -> x1
     v154 LocalAddr(-1)                                    -> x1

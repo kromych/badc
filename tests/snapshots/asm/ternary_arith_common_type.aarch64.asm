@@ -17,8 +17,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
-               	mov	x0, #0xffff             // =65535
-               	movk	x0, #0xffff, lsl #16
+               	mov	x1, x0
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32

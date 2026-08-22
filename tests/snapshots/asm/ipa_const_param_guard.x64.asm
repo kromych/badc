@@ -634,7 +634,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	movl	$0x1, %eax
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
                	popq	%rbp

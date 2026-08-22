@@ -171,8 +171,7 @@ Disassembly of section .text:
                	movl	$0xe, %eax
                	retq
                	leaq	0x2000(%rax), %rcx
-               	addq	$0x2000, %rax           # imm = 0x2000
-               	cmpq	%rax, %rcx
+               	cmpq	%rcx, %rcx
                	je	<addr>
                	movl	$0xf, %eax
                	retq

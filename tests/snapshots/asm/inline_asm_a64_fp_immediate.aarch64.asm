@@ -27,15 +27,14 @@ Disassembly of section .text:
                	str	x0, [x16]
                	ldr	x0, [sp, #0x8]
                	ldr	d0, [sp, #0x10]
-               	ldur	x0, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
                	mov	x17, #0x4000000000000000 // =4611686018427387904
-               	cmp	x0, x17
+               	cmp	x1, x17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
                	str	x0, [sp, #0x8]
                	str	d0, [sp, #0x10]
                	str	x0, [sp]

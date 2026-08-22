@@ -102,7 +102,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm1, %xmm15
                	jbe	<addr>
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm1
                	jbe	<addr>

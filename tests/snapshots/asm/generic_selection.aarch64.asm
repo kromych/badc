@@ -70,7 +70,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x0, x1
                	ret
                	b	<addr>
                	b	<addr>

@@ -20,7 +20,6 @@ Disassembly of section .text:
                	mov	x0, #0x29               // =41
                	stur	w0, [x29, #-0x10]
                	sub	x0, x29, #0x10
-               	sub	x0, x29, #0x10
                	ldursw	x0, [x29, #-0x10]
                	add	x0, x0, #0x1
                	stur	w0, [x29, #-0x10]

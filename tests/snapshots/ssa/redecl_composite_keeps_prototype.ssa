@@ -39,10 +39,10 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
     v2   BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
-    v3   Load { addr=v1, disp=4, kind=U32 }               -> x0
-    v4   BinopI { op=shl, lhs=v3, rhs_imm=32 }            -> x0
-    v5   LocalAddr(-1)                                    -> x1
-    v6   Load { addr=v5, disp=0, kind=U32 }               -> x1
+    v3   Load { addr=v1, disp=4, kind=U32 }               -> x1
+    v4   BinopI { op=shl, lhs=v3, rhs_imm=32 }            -> x1
+    v5   LocalAddr(-1)                                    -> x2
+    v6   Load { addr=v1, disp=0, kind=U32 }               -> x0
     v7   Binop { op=or, lhs=v4, rhs=v6 }                  -> x0
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=4 ---

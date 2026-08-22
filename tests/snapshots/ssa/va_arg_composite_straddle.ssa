@@ -36,25 +36,25 @@ fn ent_pc=1 n_params=1 variadic=true locals=6
     v22  LocalAddr(-3)                                    -> x0
     v23  Imm(8)                                           -> x1
     v24  Intrinsic { kind=5, args=[v22, v23] }            -> x0
-    v25  Load { addr=v24, disp=0, kind=I64 }              -> x1
+    v25  Load { addr=v24, disp=0, kind=I64 }              -> x2
     v26  Imm(0)                                           -> x0
     v27  LocalAddr(-3)                                    -> x0
     v28  Intrinsic { kind=6, args=[v27] }                 -> x0
-    v29  LocalAddr(-5)                                    -> x0
+    v29  LocalAddr(-5)                                    -> x1
     v30  Load { addr=v29, disp=0, kind=I64 }              -> x0
     v31  BinopI { op=ne, lhs=v30, rhs_imm=111 }           -> x0
-    v32  Imm(0)                                           -> x2
+    v32  Imm(0)                                           -> x6
     terminator Bnz { cond=v31, target=b11, fall=b5 }   (exit_acc=v31)
   block 5  start_pc=0
     v33  LocalAddr(-5)                                    -> x0
-    v34  BinopI { op=add, lhs=v33, rhs_imm=8 }            -> x2
-    v35  Load { addr=v33, disp=8, kind=I64 }              -> x0
+    v34  BinopI { op=add, lhs=v29, rhs_imm=8 }            -> x0
+    v35  Load { addr=v29, disp=8, kind=I64 }              -> x0
     v36  BinopI { op=ne, lhs=v35, rhs_imm=222 }           -> x0
-    v37  Imm(0)                                           -> x2
+    v37  Imm(0)                                           -> x1
     terminator Jmp(b6)   (exit_acc=v36)
   block 6  start_pc=0
     v38  Phi { incoming=[b11:v31, b5:v36], kind=I64 }     -> x0
-    v39  LoadLocal { off=-6, kind=I64 }                   -> x2
+    v39  LoadLocal { off=-6, kind=I64 }                   -> x1
     terminator Bz { cond=v38, target=b8, fall=b7 }   (exit_acc=v38)
   block 7  start_pc=0
     v40  Imm(1)                                           -> x0
@@ -80,10 +80,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v1   LocalAddr(-2)                                    -> x0
     v2   Imm(111)                                         -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 }    -> -
-    v4   LocalAddr(-2)                                    -> x0
-    v5   BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x1
+    v4   LocalAddr(-2)                                    -> x1
+    v5   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
     v6   Imm(222)                                         -> x1
-    v7   Store { addr=v4, disp=8, value=v6, kind=I64 }    -> -
+    v7   Store { addr=v1, disp=8, value=v6, kind=I64 }    -> -
     v8   Imm(1)                                           -> x7
     v9   Imm(2)                                           -> x6
     v10  Imm(3)                                           -> x2

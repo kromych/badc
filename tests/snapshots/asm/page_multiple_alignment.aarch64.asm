@@ -132,14 +132,13 @@ Disassembly of section .text:
                	str	w2, [x1]
                	ldrsw	x0, [x0]
                	cmp	x0, #0xb
-               	mov	x1, #0x1                // =1
-               	b.ne	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	cmp	x0, #0x16
-               	cset	x1, ne
                	mov	x0, #0x1                // =1
+               	b.ne	<addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x1, [x1]
+               	cmp	x1, #0x16
+               	cset	x1, ne
                	cbnz	x1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -164,4 +163,5 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
+               	mov	x1, x0
                	b	<addr>

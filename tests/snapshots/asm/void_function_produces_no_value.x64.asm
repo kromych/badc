@@ -40,7 +40,7 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rcx, %rcx
+               	movq	%rax, %rcx
                	retq

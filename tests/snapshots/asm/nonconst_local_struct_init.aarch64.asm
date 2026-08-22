@@ -18,32 +18,32 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	sub	x0, x29, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	sub	x1, x29, #0x10
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldrb	w10, [x1, #0x8]
-               	strb	w10, [x0, #0x8]
-               	ldrb	w10, [x1, #0x9]
-               	strb	w10, [x0, #0x9]
-               	ldrb	w10, [x1, #0xa]
-               	strb	w10, [x0, #0xa]
-               	ldrb	w10, [x1, #0xb]
-               	strb	w10, [x0, #0xb]
+               	ldr	x10, [x2]
+               	str	x10, [x1]
+               	ldrb	w10, [x2, #0x8]
+               	strb	w10, [x1, #0x8]
+               	ldrb	w10, [x2, #0x9]
+               	strb	w10, [x1, #0x9]
+               	ldrb	w10, [x2, #0xa]
+               	strb	w10, [x1, #0xa]
+               	ldrb	w10, [x2, #0xb]
+               	strb	w10, [x1, #0xb]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -26,10 +26,10 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r9
                	movl	$0x2710, %eax           # imm = 0x2710
-               	movl	%eax, (%r8)
-               	movslq	(%r8), %rax
+               	movl	%eax, (%r9)
+               	movslq	(%r9), %rax
                	xorq	%rdx, %rdx
                	jmp	<addr>
                	movl	$0x1000, %esi           # imm = 0x1000
@@ -48,17 +48,17 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	$0x1, %eax
-               	movl	%eax, (%r8)
-               	movslq	(%r8), %rax
+               	movl	$0x1, %esi
+               	movl	%esi, (%r9)
+               	movslq	(%r9), %rax
                	xorq	%rdx, %rdx
                	jmp	<addr>
-               	movl	$0x1000, %esi           # imm = 0x1000
-               	movl	$0x1, %edi
-               	cmpq	%rsi, %rcx
+               	movl	$0x1000, %edi           # imm = 0x1000
+               	movq	%rsi, %r8
+               	cmpq	%rdi, %rcx
                	jae	<addr>
                	jmp	<addr>
-               	movq	%rsi, %rcx
+               	movq	%rdi, %rcx
                	movl	%ecx, %ecx
                	addq	%rcx, %rdx
                	subq	%rcx, %rax
@@ -69,17 +69,16 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	xorq	%rax, %rax
-               	movl	%eax, (%r8)
-               	movslq	(%r8), %rax
                	xorq	%rdx, %rdx
+               	movl	%edx, (%r9)
+               	movslq	(%r9), %rax
                	jmp	<addr>
-               	movl	$0x1000, %esi           # imm = 0x1000
-               	movl	$0x1, %edi
-               	cmpq	%rsi, %rcx
+               	movl	$0x1000, %edi           # imm = 0x1000
+               	movq	%rsi, %r8
+               	cmpq	%rdi, %rcx
                	jae	<addr>
                	jmp	<addr>
-               	movq	%rsi, %rcx
+               	movq	%rdi, %rcx
                	movl	%ecx, %ecx
                	addq	%rcx, %rdx
                	subq	%rcx, %rax

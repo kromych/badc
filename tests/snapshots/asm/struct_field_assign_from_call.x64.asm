@@ -27,13 +27,12 @@ Disassembly of section .text:
 
 <wrap>:
                	movq	0x8(%rdi), %rcx
-               	movq	0x18(%rdi), %rdx
-               	movl	$0x4, %eax
-               	movl	%eax, 0x14(%rdi)
+               	movq	0x18(%rdi), %r8
+               	movl	$0x4, %edx
+               	movl	%edx, 0x14(%rdi)
                	movl	$0x1234abcd, %eax       # imm = 0x1234ABCD
                	movq	%rax, 0x8(%rdi)
-               	movl	$0x4, %eax
-               	movl	%eax, 0x24(%rdi)
+               	movl	%edx, 0x24(%rdi)
                	movl	$0x1234abcd, %eax       # imm = 0x1234ABCD
                	movq	%rax, 0x18(%rdi)
                	movq	0x8(%rdi), %rax
@@ -42,7 +41,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movq	0x18(%rdi), %rax
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %r8
                	jne	<addr>
                	movl	$0x2, %eax
                	retq
@@ -78,11 +77,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movslq	%eax, %rcx
-               	testq	%rcx, %rcx
+               	movslq	%eax, %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%eax, %rsi
                	movq	0x8(%rbx), %rdx
                	movq	0x18(%rbx), %rcx
                	movslq	0x14(%rbx), %r8

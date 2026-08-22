@@ -17,16 +17,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v7   Load { addr=v6, disp=0, kind=F64 }               -> d0
     v8   Imm(4617315517961601024)                         -> x0
     v9   Fneg(v8)                                         -> d1
-    v10  Binop { op=fne, lhs=v7, rhs=v9 }                 -> x0
+    v10  Binop { op=fne, lhs=v7, rhs=v9 }                 -> x1
     terminator Bz { cond=v10, target=b4, fall=b3 }   (exit_acc=v10)
   block 3  start_pc=0
     v11  Imm(2)                                           -> x0
     terminator Return(v11)   (exit_acc=v11)
   block 4  start_pc=0
-    v12  ImmData(24)                                      -> x0
+    v12  ImmData(24)                                      -> x1
     v13  Load { addr=v12, disp=0, kind=F64 }              -> d0
-    v14  Imm(4617315517961601024)                         -> x0
-    v15  Binop { op=fne, lhs=v13, rhs=v14 }               -> x0
+    v14  Imm(4617315517961601024)                         -> x1
+    v15  Binop { op=fne, lhs=v13, rhs=v8 }                -> x0
     terminator Bz { cond=v15, target=b6, fall=b5 }   (exit_acc=v15)
   block 5  start_pc=0
     v16  Imm(3)                                           -> x0

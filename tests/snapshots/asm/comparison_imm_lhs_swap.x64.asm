@@ -35,13 +35,13 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	movl	$0x6, %eax
                	movl	$0x7, %eax
-               	movl	$0x8, %eax
-               	leaq	<rip>, %rdi
                	movl	$0x8, %esi
+               	movq	%rsi, %rax
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	popq	%rbp
                	retq

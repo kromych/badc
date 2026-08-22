@@ -33,21 +33,19 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x500
                	ldr	s0, [x0, #0x20]
-               	mov	x0, #0x40000000         // =1073741824
-               	fmov	s17, w0
+               	mov	x1, #0x40000000         // =1073741824
+               	fmov	s17, w1
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x500
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x500
-               	mov	x0, #0x42c60000         // =1120272384
-               	fmov	s16, w0
-               	str	s16, [x1]
-               	sub	x1, x29, #0x500
-               	ldr	s0, [x1]
-               	fmov	s17, w0
+               	mov	x1, #0x42c60000         // =1120272384
+               	fmov	s16, w1
+               	str	s16, [x0]
+               	ldr	s0, [x0]
+               	fmov	s17, w1
                	fcmp	s0, s17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

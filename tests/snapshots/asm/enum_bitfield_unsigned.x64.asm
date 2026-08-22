@@ -34,26 +34,28 @@ Disassembly of section .text:
                	orq	$0x6, %rax
                	movl	%eax, -0x8(%rbp)
                	movl	%eax, %ecx
-               	andq	$0x7, %rcx
-               	cmpq	$0x6, %rcx
+               	movq	%rcx, %rdx
+               	andq	$0x7, %rdx
+               	cmpq	$0x6, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	%eax, %eax
+               	movq	%rcx, %rax
                	andq	$-0x8, %rax
                	orq	$0x4, %rax
                	movl	%eax, -0x8(%rbp)
                	movl	%eax, %ecx
-               	andq	$0x7, %rcx
-               	cmpq	$0x4, %rcx
+               	movq	%rcx, %rdx
+               	andq	$0x7, %rdx
+               	cmpq	$0x4, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	%eax, %eax
+               	movq	%rcx, %rax
                	andq	$-0x8, %rax
                	orq	$0x2, %rax
                	movl	%eax, -0x8(%rbp)

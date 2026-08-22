@@ -40,9 +40,8 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	xorq	%rbx, %rbx
                	jmp	<addr>
-               	leaq	<rip>, %rax
-               	movslq	%ebx, %rcx
-               	imulq	$0x18, %rcx, %rcx
+               	leaq	<rip>, %rcx
+               	imulq	$0x18, %rax, %rax
                	addq	%rcx, %rax
                	movq	(%rax), %rax
                	callq	*%rax
@@ -239,9 +238,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
+               	movq	%rax, %rcx
                	callq	<addr>
                	movq	%rax, %rcx
                	movslq	%ecx, %rax

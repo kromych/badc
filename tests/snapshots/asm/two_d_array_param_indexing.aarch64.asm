@@ -17,16 +17,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x400
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	sub	x2, x29, #0x400
-               	lsl	x3, x1, #2
-               	add	x3, x2, x3
                	mov	x2, #0x0                // =0
+               	mov	x0, x2
+               	b	<addr>
+               	sub	x4, x29, #0x400
+               	lsl	x5, x1, #2
+               	add	x3, x4, x5
                	strh	w2, [x3]
-               	sub	x3, x29, #0x400
-               	lsl	x4, x1, #2
-               	add	x3, x3, x4
                	strh	w2, [x3, #0x2]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
@@ -35,10 +32,8 @@ Disassembly of section .text:
                	sub	x0, x29, #0x400
                	mov	x1, #0x1234             // =4660
                	strh	w1, [x0, #0x14]
-               	sub	x0, x29, #0x400
                	mov	x1, #0x10               // =16
                	strh	w1, [x0, #0x16]
-               	sub	x0, x29, #0x400
                	add	x0, x0, #0x14
                	ldrh	w1, [x0]
                	ldrh	w0, [x0, #0x2]
@@ -51,36 +46,24 @@ Disassembly of section .text:
                	add	sp, sp, #0x400
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
                	b	<addr>
-               	sub	x2, x29, #0x78
+               	sub	x4, x29, #0x78
                	mov	x17, #0xc               // =12
-               	mul	x3, x0, x17
-               	add	x2, x2, x3
-               	add	x3, x2, #0x0
+               	mul	x5, x1, x17
+               	add	x3, x4, x5
+               	add	x7, x3, #0x0
                	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x0
-               	str	w2, [x3]
-               	sub	x2, x29, #0x78
-               	mov	x17, #0xc               // =12
-               	mul	x3, x0, x17
-               	add	x3, x2, x3
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x1
-               	str	w2, [x3, #0x4]
-               	sub	x2, x29, #0x78
-               	mov	x17, #0xc               // =12
-               	mul	x3, x0, x17
-               	add	x3, x2, x3
-               	mov	x17, #0x64              // =100
-               	mul	x2, x0, x17
-               	add	x2, x2, #0x2
-               	str	w2, [x3, #0x8]
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0xa
+               	mul	x0, x1, x17
+               	add	x6, x0, #0x0
+               	str	w6, [x7]
+               	add	x6, x0, #0x1
+               	str	w6, [x3, #0x4]
+               	add	x0, x0, #0x2
+               	str	w0, [x3, #0x8]
+               	add	x2, x1, #0x1
+               	sxtw	x1, w2
+               	cmp	x1, #0xa
                	b.lt	<addr>
                	sub	x0, x29, #0x78
                	add	x0, x0, #0x54
@@ -96,44 +79,32 @@ Disassembly of section .text:
                	add	sp, sp, #0x400
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
                	b	<addr>
-               	sub	x2, x29, #0x20
-               	lsl	x3, x0, #2
-               	add	x2, x2, x3
-               	add	x3, x2, #0x0
-               	add	x2, x0, #0x41
-               	add	x2, x2, #0x0
+               	sub	x4, x29, #0x20
+               	lsl	x5, x1, #2
+               	add	x3, x4, x5
+               	add	x7, x3, #0x0
+               	add	x0, x1, #0x41
+               	add	x6, x0, #0x0
                	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	strb	w2, [x3]
-               	sub	x2, x29, #0x20
-               	lsl	x3, x0, #2
-               	add	x3, x2, x3
-               	add	x2, x0, #0x41
-               	add	x2, x2, #0x1
+               	and	x6, x6, x17
+               	strb	w6, [x7]
+               	add	x6, x0, #0x1
                	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	strb	w2, [x3, #0x1]
-               	sub	x2, x29, #0x20
-               	lsl	x3, x0, #2
-               	add	x3, x2, x3
-               	add	x2, x0, #0x41
-               	add	x2, x2, #0x2
+               	and	x6, x6, x17
+               	strb	w6, [x3, #0x1]
+               	add	x6, x0, #0x2
                	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	strb	w2, [x3, #0x2]
-               	sub	x2, x29, #0x20
-               	lsl	x3, x0, #2
-               	add	x3, x2, x3
-               	add	x2, x0, #0x41
-               	add	x2, x2, #0x3
+               	and	x6, x6, x17
+               	strb	w6, [x3, #0x2]
+               	add	x0, x0, #0x3
                	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	strb	w2, [x3, #0x3]
-               	add	x1, x0, #0x1
-               	sxtw	x0, w1
-               	cmp	x0, #0x8
+               	and	x0, x0, x17
+               	strb	w0, [x3, #0x3]
+               	add	x2, x1, #0x1
+               	sxtw	x1, w2
+               	cmp	x1, #0x8
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	add	x0, x0, #0xc

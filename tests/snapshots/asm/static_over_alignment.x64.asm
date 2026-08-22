@@ -29,9 +29,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x3, %ecx
                	movl	%ecx, (%rax)
-               	movq	%rax, %rcx
-               	andq	$0x3f, %rcx
-               	testq	%rcx, %rcx
+               	movq	%rax, %rdx
+               	andq	$0x3f, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -41,12 +41,12 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax
-               	movl	$0x9, %ecx
-               	movb	%cl, (%rax)
+               	movl	$0x9, %edx
+               	movb	%dl, (%rax)
                	andq	$0xfff, %rax            # imm = 0xFFF
                	testq	%rax, %rax
                	je	<addr>
-               	movl	$0x3, %eax
+               	movq	%rcx, %rax
                	retq
                	leaq	<rip>, %rax
                	movsbq	(%rax), %rax

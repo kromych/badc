@@ -17,29 +17,24 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	mov	x2, #0xb                // =11
-               	mov	x3, #0x16               // =22
+               	mov	x3, #0xb                // =11
+               	mov	x4, #0x16               // =22
                	sub	x0, x29, #0x18
                	mov	x1, #0x0                // =0
                	str	x1, [x0]
                	str	x1, [x0, #0x8]
                	str	w1, [x0, #0x10]
-               	mov	x0, #0x1                // =1
-               	sub	x1, x29, #0x18
-               	str	w0, [x1]
-               	sub	x0, x29, #0x18
-               	str	w3, [x0, #0x8]
-               	sub	x0, x29, #0x18
-               	str	w2, [x0, #0x4]
-               	mov	x1, #0x4                // =4
-               	sub	x0, x29, #0x18
-               	str	w1, [x0, #0x10]
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
+               	mov	x2, #0x1                // =1
+               	str	w2, [x0]
+               	str	w4, [x0, #0x8]
+               	str	w3, [x0, #0x4]
+               	mov	x3, #0x4                // =4
+               	str	w3, [x0, #0x10]
+               	mov	x0, x2
+               	mov	x0, x2
+               	mov	x0, x2
+               	mov	x0, x1
+               	mov	x0, x1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -66,13 +61,13 @@ Disassembly of section .text:
                	strb	w10, [x0, #0x13]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, x0
+               	mov	x1, #0x0                // =0
+               	stur	w1, [x29, #-0x8]
+               	mov	x1, x0
                	mov	x0, #0xb                // =11
                	mov	x1, #0x16               // =22
                	bl	<addr>

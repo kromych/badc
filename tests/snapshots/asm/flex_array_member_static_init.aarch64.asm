@@ -33,22 +33,22 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	sub	x3, x29, #0x8
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
+               	ldr	x10, [x0]
+               	str	x10, [x3]
                	ldr	x10, [sp], #0x10
+               	mov	x0, x3
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	add	x3, x2, #0x18
-               	add	x3, x3, x1
-               	ldrb	w3, [x3]
-               	sub	x4, x29, #0x8
+               	add	x4, x2, #0x18
                	add	x4, x4, x1
                	ldrb	w4, [x4]
-               	cmp	x3, x4
+               	add	x5, x3, x1
+               	ldrb	w5, [x5]
+               	cmp	x4, x5
                	b.ne	<addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0

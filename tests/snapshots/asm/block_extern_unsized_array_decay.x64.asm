@@ -41,15 +41,14 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	0x4(%rax), %rdx
                	leaq	0x4(%rax), %rcx
-               	cmpq	%rcx, %rdx
+               	leaq	0x4(%rax), %rdx
+               	cmpq	%rdx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
-               	addq	$0x4, %rax
-               	movslq	(%rax), %rax
+               	movslq	(%rdx), %rax
                	cmpq	$0x14, %rax
                	setne	%cl
                	movzbq	%cl, %rcx

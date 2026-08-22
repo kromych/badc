@@ -86,31 +86,24 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
                	leaq	-0x40(%rbp), %rax
-               	addq	$0x0, %rax
-               	movl	$0x7, %ecx
-               	movq	%rcx, (%rax)
-               	leaq	-0x40(%rbp), %rax
+               	leaq	(%rax), %rcx
+               	movl	$0x7, %edx
+               	movq	%rdx, (%rcx)
                	movl	$0x1118, %ecx           # imm = 0x1118
                	movq	%rcx, 0x8(%rax)
-               	leaq	-0x40(%rbp), %rax
                	movl	$0x2229, %ecx           # imm = 0x2229
                	movq	%rcx, 0x10(%rax)
-               	leaq	-0x40(%rbp), %rax
                	movl	$0x333a, %ecx           # imm = 0x333A
                	movq	%rcx, 0x18(%rax)
-               	leaq	-0x40(%rbp), %rax
                	movl	$0x444b, %ecx           # imm = 0x444B
                	movq	%rcx, 0x20(%rax)
-               	leaq	-0x40(%rbp), %rax
                	movl	$0x555c, %ecx           # imm = 0x555C
                	movq	%rcx, 0x28(%rax)
-               	leaq	-0x40(%rbp), %rax
                	movl	$0x666d, %ecx           # imm = 0x666D
                	movq	%rcx, 0x30(%rax)
-               	leaq	-0x40(%rbp), %rax
-               	movl	$0x777e, %ecx           # imm = 0x777E
-               	movq	%rcx, 0x38(%rax)
                	leaq	-0x40(%rbp), %rdi
+               	movl	$0x777e, %eax           # imm = 0x777E
+               	movq	%rax, 0x38(%rdi)
                	movl	$0x5, %esi
                	callq	<addr>
                	cmpq	$0x14ebf84, %rax        # imm = 0x14EBF84

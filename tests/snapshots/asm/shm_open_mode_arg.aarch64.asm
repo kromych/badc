@@ -15,7 +15,7 @@ Disassembly of section .text:
 
 <main>:
                	stp	x20, x21, [sp, #-0x100]!
-               	str	x22, [sp, #0x10]
+               	stp	x22, x23, [sp, #0x10]
                	str	x19, [sp, #0x20]
                	stp	x29, x30, [sp, #0xf0]
                	add	x29, sp, #0xf0
@@ -30,7 +30,7 @@ Disassembly of section .text:
                	mov	x1, x22
                	bl	<addr>
                	sxtw	x0, w0
-               	sub	x0, x29, #0xc0
+               	mov	x0, x21
                	bl	<addr>
                	sxtw	x0, w0
                	sub	x0, x29, #0xc0
@@ -39,22 +39,23 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x21, x0
-               	sxtw	x0, w21
-               	cmp	x0, #0x0
+               	sxtw	x22, w21
+               	cmp	x22, #0x0
                	b.ge	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0xf0]
                	ldr	x19, [sp, #0x20]
-               	ldr	x22, [sp, #0x10]
+               	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x100
                	ret
-               	sxtw	x0, w21
-               	sub	x1, x29, #0x80
+               	sub	x23, x29, #0x80
+               	mov	x0, x22
+               	mov	x1, x23
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x20, #0x2               // =2
-               	sxtw	x0, w21
+               	mov	x0, x22
                	bl	<addr>
                	sxtw	x0, w0
                	sub	x0, x29, #0xc0
@@ -63,11 +64,10 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	ldp	x29, x30, [sp, #0xf0]
                	ldr	x19, [sp, #0x20]
-               	ldr	x22, [sp, #0x10]
+               	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x100
                	ret
-               	sub	x0, x29, #0x80
-               	ldrsw	x0, [x0, #0x10]
+               	ldrsw	x0, [x23, #0x10]
                	mov	x17, #0x1ff             // =511
                	and	x0, x0, x17
                	cmp	x0, #0x180

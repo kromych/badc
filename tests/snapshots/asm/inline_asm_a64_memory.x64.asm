@@ -41,10 +41,10 @@ Disassembly of section .text:
                	movq	0x18(%rcx), %rdx
                	movq	%rdx, 0x18(%rax)
                	popq	%rdx
-               	leaq	-0x20(%rbp), %rax
+               	movq	%rax, %rcx
                	movl	$0x2a, %ecx
                	movq	%rcx, (%rax)
-               	movl	$0x2a, %eax
+               	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq

@@ -44,21 +44,21 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
+               	leaq	-0x8(%rbp), %rsi
+               	leaq	<rip>, %rax
+               	pushq	%rcx
+               	movq	(%rax), %rcx
+               	movq	%rcx, (%rsi)
+               	popq	%rcx
+               	movq	%rsi, %rax
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	0x18(%rdx), %rsi
-               	addq	%rcx, %rsi
-               	movsbq	(%rsi), %rsi
-               	leaq	-0x8(%rbp), %rdi
+               	leaq	0x18(%rdx), %rdi
                	addq	%rcx, %rdi
                	movsbq	(%rdi), %rdi
-               	cmpq	%rdi, %rsi
+               	leaq	(%rsi,%rcx), %r8
+               	movsbq	(%r8), %r8
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx

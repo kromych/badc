@@ -17,8 +17,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]
-               	mov	x1, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d17, x1
+               	mov	x2, #0x3ff8000000000000 // =4609434218613702656
+               	fmov	d17, x2
                	fcmp	d0, d17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -31,41 +31,30 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	d0, [x0, #0x10]
+               	ldr	d1, [x0, #0x10]
                	mov	x1, #0x94000000         // =2483027968
                	movk	x1, #0x449a, lsl #32
                	movk	x1, #0x421e, lsl #48
                	fmov	d16, x1
-               	fneg	d1, d16
-               	fcmp	d0, d1
+               	fneg	d0, d16
+               	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	ldr	d0, [x0]
-               	ldr	d1, [x0, #0x8]
-               	fadd	d0, d0, d1
-               	ldr	d1, [x0, #0x10]
-               	fadd	d0, d0, d1
-               	mov	x0, #0x94000000         // =2483027968
-               	movk	x0, #0x449a, lsl #32
-               	movk	x0, #0x421e, lsl #48
-               	fmov	d16, x0
-               	fneg	d1, d16
+               	ldr	d1, [x0]
+               	ldr	d2, [x0, #0x8]
+               	fadd	d1, d1, d2
+               	ldr	d2, [x0, #0x10]
+               	fadd	d1, d1, d2
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
-               	fadd	d1, d1, d17
-               	fcmp	d0, d1
+               	fadd	d2, d0, d17
+               	fcmp	d1, d2
                	cset	x0, gt
                	cbnz	x0, <addr>
-               	mov	x0, #0x94000000         // =2483027968
-               	movk	x0, #0x449a, lsl #32
-               	movk	x0, #0x421e, lsl #48
-               	fmov	d16, x0
-               	fneg	d1, d16
-               	mov	x0, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d17, x0
-               	fsub	d1, d1, d17
-               	fcmp	d0, d1
+               	fmov	d17, x2
+               	fsub	d0, d0, d17
+               	fcmp	d1, d0
                	cset	x0, mi
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4

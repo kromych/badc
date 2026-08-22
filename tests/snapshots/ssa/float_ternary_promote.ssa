@@ -64,18 +64,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v14  StoreLocal { off=-3, value=v13, kind=F32 }       -> -
     v15  LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
     v16  Imm(0)                                           -> x0 [f32]
-    v17  Binop { op=fgt, lhs=v15, rhs=v16 }               -> x0
+    v17  Binop { op=fgt, lhs=v15, rhs=v16 }               -> x1
     terminator Bz { cond=v17, target=b26, fall=b13 }   (exit_acc=v17)
   block 13  start_pc=0
     v18  LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
-    v19  Imm(0)                                           -> x0
+    v19  Imm(0)                                           -> x1
     terminator Jmp(b14)   (exit_acc=v18)
   block 14  start_pc=0
     v23  Phi { incoming=[b13:v18, b26:v21], kind=F32 }    -> d0 [f32]
     v24  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
     v25  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
-    v26  Imm(0)                                           -> x0 [f32]
-    v27  Binop { op=flt, lhs=v25, rhs=v26 }               -> x0
+    v26  Imm(0)                                           -> x1 [f32]
+    v27  Binop { op=flt, lhs=v25, rhs=v16 }               -> x0
     terminator Bz { cond=v27, target=b25, fall=b15 }   (exit_acc=v27)
   block 15  start_pc=0
     v28  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
@@ -132,7 +132,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
   block 26  start_pc=0
     v20  LoadLocal { off=-3, kind=F32 }                   -> d0 [f32]
     v21  Fneg(v20)                                        -> d0 [f32]
-    v22  Imm(0)                                           -> x0
+    v22  Imm(0)                                           -> x1
     terminator Jmp(b14)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

@@ -23,7 +23,6 @@ Disassembly of section .text:
                	str	d16, [x17]
                	sub	x16, x29, #0x38
                	ldr	d0, [x16]
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
                	fcmp	d0, d17
                	b.eq	<addr>

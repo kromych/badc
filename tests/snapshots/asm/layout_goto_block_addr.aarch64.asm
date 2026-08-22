@@ -19,44 +19,42 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	stur	w0, [x29, #0x10]
-               	sub	x1, x29, #0x10
-               	mov	x0, #0x0                // =0
+               	sub	x0, x29, #0x10
+               	mov	x1, #0x0                // =0
                	adr	x2, <addr>
-               	str	x2, [x1]
-               	sub	x1, x29, #0x10
+               	str	x2, [x0]
                	adr	x2, <addr>
-               	str	x2, [x1, #0x8]
-               	stur	w0, [x29, #-0x18]
-               	stur	w0, [x29, #-0x20]
+               	str	x2, [x0, #0x8]
+               	stur	w1, [x29, #-0x18]
+               	stur	w1, [x29, #-0x20]
                	b	<addr>
-               	ldursw	x0, [x29, #-0x18]
-               	add	x0, x0, #0x2
-               	stur	w0, [x29, #-0x18]
-               	ldursw	x0, [x29, #-0x20]
-               	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x20]
+               	ldursw	x1, [x29, #-0x18]
+               	add	x1, x1, #0x2
+               	stur	w1, [x29, #-0x18]
+               	ldursw	x1, [x29, #-0x20]
+               	add	x1, x1, #0x1
+               	stur	w1, [x29, #-0x20]
                	b	<addr>
-               	ldursw	x0, [x29, #-0x18]
-               	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x18]
-               	ldursw	x0, [x29, #-0x20]
-               	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x20]
-               	ldursw	x0, [x29, #-0x20]
-               	ldursw	x1, [x29, #0x10]
-               	cmp	x0, x1
+               	ldursw	x1, [x29, #-0x18]
+               	add	x1, x1, #0x1
+               	stur	w1, [x29, #-0x18]
+               	ldursw	x1, [x29, #-0x20]
+               	add	x1, x1, #0x1
+               	stur	w1, [x29, #-0x20]
+               	ldursw	x1, [x29, #-0x20]
+               	ldursw	x2, [x29, #0x10]
+               	cmp	x1, x2
                	b.lt	<addr>
                	ldursw	x0, [x29, #-0x18]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
                	ret
-               	sub	x0, x29, #0x10
                	ldursw	x1, [x29, #-0x20]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	ldr	x0, [x0, x1, lsl #3]
-               	br	x0
+               	ldr	x1, [x0, x1, lsl #3]
+               	br	x1
 
 <main>:
                	str	x20, [sp, #-0x20]!

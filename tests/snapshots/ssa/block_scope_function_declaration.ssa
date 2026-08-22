@@ -156,18 +156,18 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v61  Imm(0)                                           -> x1
     terminator Jmp(b25)   (exit_acc=v60)
   block 25  start_pc=0
-    v62  Phi { incoming=[b24:v60], kind=I64 }             -> x0
-    v63  LoadLocal { off=-1, kind=I64 }                   -> x1
+    v62  Phi { incoming=[b24:v60], kind=I64 }             -> x1
+    v63  LoadLocal { off=-1, kind=I64 }                   -> x2
     terminator Jmp(b26)   (exit_acc=v62)
   block 26  start_pc=0
-    v65  Imm(7)                                           -> x0
-    v66  Imm(0)                                           -> x0
-    v67  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v68  Imm(0)                                           -> x0
+    v65  Imm(7)                                           -> x1
+    v66  Imm(0)                                           -> x1
+    v67  LoadLocal { off=-1, kind=I32 }                   -> x1
+    v68  Imm(0)                                           -> x1
     terminator Jmp(b27)   (exit_acc=v68)
   block 27  start_pc=0
-    v69  Imm(0)                                           -> x0
-    terminator Return(v69)   (exit_acc=v69)
+    v69  Imm(0)                                           -> x1
+    terminator Return(v60)   (exit_acc=v60)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=sum3
 fn ent_pc=7 n_params=3 variadic=false locals=0

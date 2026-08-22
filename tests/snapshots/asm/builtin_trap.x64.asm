@@ -40,8 +40,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	movl	%eax, -0x8(%rbp)
+               	xorq	%rcx, %rcx
+               	movl	%ecx, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	testq	%rax, %rax
                	jl	<addr>
@@ -51,12 +51,12 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	ud2
-               	xorq	%rax, %rax
+               	movq	%rcx, %rax
                	jmp	<addr>
                	ud2
                	xorq	%rax, %rax

@@ -44,9 +44,9 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %rdx
                	movq	%rdx, 0x10(%rax)
                	popq	%rdx
-               	xorq	%rax, %rax
-               	movl	%eax, -0x20(%rbp)
-               	leaq	-0x18(%rbp), %rax
+               	movq	%rax, %rcx
+               	xorq	%rcx, %rcx
+               	movl	%ecx, -0x20(%rbp)
                	movslq	%edi, %rcx
                	movq	(%rax,%rcx,8), %rax
                	jmpq	*%rax

@@ -31,9 +31,9 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movl	$0x5, %eax
                	movl	%eax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x10(%rbp), %rcx
                	movq	%rax, -0x30(%rbp)
-               	movq	%rax, -0x28(%rbp)
+               	movq	%rcx, -0x28(%rbp)
                	movq	-0x28(%rbp), %r10
                	movl	(%r10), %eax
                	jmp	<addr>
@@ -53,14 +53,12 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %eax
                	movl	%eax, -0x10(%rbp)
-               	movl	$0x2, %eax
                	movl	%eax, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	leaq	-0x8(%rbp), %rcx
+               	leaq	-0x8(%rbp), %rax
                	movq	%rax, -0x30(%rbp)
                	movq	%rbx, -0x28(%rbp)
-               	movq	%rax, -0x20(%rbp)
-               	movq	%rcx, -0x18(%rbp)
+               	movq	%rcx, -0x20(%rbp)
+               	movq	%rax, -0x18(%rbp)
                	movq	-0x20(%rbp), %r10
                	movl	(%r10), %eax
                	movq	-0x18(%rbp), %r10

@@ -45,12 +45,7 @@ Disassembly of section .text:
                	movabsq	$0x43e0000000000000, %rdi # imm = 0x43E0000000000000
                	movq	%rdi, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%dil
-               	movzbq	%dil, %rdi
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdi
-               	testq	%rdi, %rdi
+               	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -69,12 +64,7 @@ Disassembly of section .text:
                	movabsq	$0x43e56a95319d63e1, %rdx # imm = 0x43E56A95319D63E1
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	testq	%rdx, %rdx
+               	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -93,12 +83,7 @@ Disassembly of section .text:
                	movabsq	$0x43f0000000000000, %rdx # imm = 0x43F0000000000000
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	testq	%rdx, %rdx
+               	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	retq
@@ -117,12 +102,7 @@ Disassembly of section .text:
                	movabsq	$0x4059000000000000, %rdx # imm = 0x4059000000000000
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	testq	%rdx, %rdx
+               	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
                	retq
@@ -134,12 +114,7 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
                	retq
@@ -158,12 +133,7 @@ Disassembly of section .text:
                	movl	$0x5f000000, %eax       # imm = 0x5F000000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
                	retq

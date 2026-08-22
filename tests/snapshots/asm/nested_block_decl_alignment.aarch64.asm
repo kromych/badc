@@ -27,9 +27,7 @@ Disassembly of section .text:
                	mov	x1, sp
                	mov	x17, #0x3f              // =63
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	cbnz	x1, <addr>
                	mov	x0, sp
                	ldrb	w0, [x0]
                	mov	x17, #0x7               // =7
@@ -37,8 +35,6 @@ Disassembly of section .text:
                	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	sxtw	x0, w0
                	sub	sp, x29, #0x10
                	add	sp, sp, #0x10
@@ -60,9 +56,7 @@ Disassembly of section .text:
                	mov	x1, sp
                	mov	x17, #0x3f              // =63
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	cbnz	x1, <addr>
                	mov	x0, sp
                	ldr	w0, [x0]
                	mov	x17, #0x9               // =9
@@ -70,8 +64,6 @@ Disassembly of section .text:
                	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	sxtw	x0, w0
                	sub	sp, x29, #0x50
                	add	sp, sp, #0x50
@@ -90,9 +82,7 @@ Disassembly of section .text:
                	str	w2, [x1]
                	mov	x17, #0x3f              // =63
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	cbnz	x1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	w0, [x0]
@@ -101,19 +91,15 @@ Disassembly of section .text:
                	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	sxtw	x1, w0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x2, #0x5                // =5
                	strb	w2, [x0]
                	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x2, eq
+               	and	x2, x0, x17
                	mov	x0, #0x0                // =0
-               	cbz	x2, <addr>
+               	cbnz	x2, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0]
@@ -122,8 +108,6 @@ Disassembly of section .text:
                	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	sxtw	x0, w0
                	add	x20, x1, x0
                	bl	<addr>

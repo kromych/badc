@@ -34,25 +34,18 @@ Disassembly of section .text:
                	mov	x17, #0x1               // =1
                	movk	x17, #0x4, lsl #16
                	cmp	x0, x17
-               	cset	x5, ne
                	mov	x0, #0x1                // =1
-               	cbnz	x5, <addr>
+               	b.ne	<addr>
                	mov	w0, w1
                	cmp	x0, #0x2
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	mov	x1, #0x1                // =1
                	cbnz	x0, <addr>
                	cmp	x2, #0x0
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x1, ne
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	cmp	x3, #0x7
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	cmp	x4, #0x3

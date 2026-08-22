@@ -2207,13 +2207,14 @@ pub(crate) fn emit_function(
                     target,
                     fall_through,
                 } => {
-                    if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ true) {
-                        emit_local_branch(
+                    if let Some(fused) = fused_branch_cc(func, alloc, cond, /* negate */ true) {
+                        emit_fused_branch(
                             code,
                             &mut branch_fixups,
                             &branch_short,
-                            LocalBranchKind::Jcc(cc),
+                            fused,
                             target,
+                            fall_through,
                         );
                         if fall_through as usize != block_idx + 1 {
                             emit_local_branch(
@@ -2256,13 +2257,14 @@ pub(crate) fn emit_function(
                     target,
                     fall_through,
                 } => {
-                    if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ false) {
-                        emit_local_branch(
+                    if let Some(fused) = fused_branch_cc(func, alloc, cond, /* negate */ false) {
+                        emit_fused_branch(
                             code,
                             &mut branch_fixups,
                             &branch_short,
-                            LocalBranchKind::Jcc(cc),
+                            fused,
                             target,
+                            fall_through,
                         );
                         if fall_through as usize != block_idx + 1 {
                             emit_local_branch(
@@ -2560,6 +2562,63 @@ struct BranchFixup {
     /// `true` when the branch sits in an inline-asm template, whose bytes
     /// are emitted before relaxation runs and may not change length.
     pinned_long: bool,
+}
+
+/// Emit a fused terminator's branch shape: the single `jcc`, or the
+/// parity pair an FP `==` / `!=` needs (`JpOr` sends the unordered
+/// case to `target`, `JnpAnd` to `fall_through`). The caller emits
+/// the trailing `jmp fall_through` when the layout needs one.
+fn emit_fused_branch(
+    code: &mut alloc::vec::Vec<u8>,
+    branch_fixups: &mut alloc::vec::Vec<BranchFixup>,
+    branch_short: &[bool],
+    fused: FusedBranch,
+    target: super::super::ir::BlockId,
+    fall_through: super::super::ir::BlockId,
+) {
+    match fused {
+        FusedBranch::Jcc(cc) => {
+            emit_local_branch(
+                code,
+                branch_fixups,
+                branch_short,
+                LocalBranchKind::Jcc(cc),
+                target,
+            );
+        }
+        FusedBranch::JpOr(cc) => {
+            emit_local_branch(
+                code,
+                branch_fixups,
+                branch_short,
+                LocalBranchKind::Jcc(Cc::P),
+                target,
+            );
+            emit_local_branch(
+                code,
+                branch_fixups,
+                branch_short,
+                LocalBranchKind::Jcc(cc),
+                target,
+            );
+        }
+        FusedBranch::JnpAnd(cc) => {
+            emit_local_branch(
+                code,
+                branch_fixups,
+                branch_short,
+                LocalBranchKind::Jcc(Cc::P),
+                fall_through,
+            );
+            emit_local_branch(
+                code,
+                branch_fixups,
+                branch_short,
+                LocalBranchKind::Jcc(cc),
+                target,
+            );
+        }
+    }
 }
 
 /// Emit a local branch to `target`, choosing the 2-byte rel8 short form
@@ -3109,15 +3168,38 @@ fn emit_struct_param_scatter(
     }
 }
 
-/// Return the x86_64 condition code to use for `Jcc` when the
-/// terminator's cond was flagged as branch-fused by the allocator.
-/// `negate` is true for `Bz` (branch when comparison failed).
+/// Branch shape for a fused compare's terminator. An integer compare
+/// and the parity-clean FP compares take one `jcc`; `ucomisd` raises
+/// PF on an unordered (NaN) compare, so `==` / `!=` need it tested by
+/// a second branch (C99 6.5.9p3: `==` yields 0 on NaN, `!=` yields 1).
+enum FusedBranch {
+    /// `jcc target`.
+    Jcc(Cc),
+    /// Taken when PF=1 or `cc` holds: `jp target ; jcc target`.
+    JpOr(Cc),
+    /// Taken when PF=0 and `cc` holds: `jp fall_through ; jcc target`.
+    JnpAnd(Cc),
+}
+
+/// Whether a fused `Flt` / `Fle` compare emits `ucomisd rhs, lhs`.
+/// The swap turns them into the `>` / `>=` shapes whose `A` / `Ae`
+/// (and inverted `Be` / `B`) condition codes are exact under the
+/// unordered flag state, so the branch needs no parity test. The
+/// compare emit and [`fused_branch_cc`] both derive the swap from the
+/// inst so they agree.
+fn fused_fp_swaps_operands(op: BinOp) -> bool {
+    matches!(op, BinOp::Flt | BinOp::Fle)
+}
+
+/// Return the branch shape to use when the terminator's cond was
+/// flagged as branch-fused by the allocator. `negate` is true for
+/// `Bz` (branch when comparison failed).
 fn fused_branch_cc(
     func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
     cond: super::super::ir::ValueId,
     negate: bool,
-) -> Option<Cc> {
+) -> Option<FusedBranch> {
     if !alloc
         .branch_fused
         .get(cond as usize)
@@ -3130,11 +3212,41 @@ fn fused_branch_cc(
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => *op,
         _ => return None,
     };
-    let positive = int_cmp_cc(op)?;
-    if !negate {
-        return Some(positive);
+    if let Some(positive) = int_cmp_cc(op) {
+        // A `cmp`-set flag state is never "unordered": inverting the
+        // cc is the exact negation.
+        let cc = if negate { invert_cc(positive)? } else { positive };
+        return Some(FusedBranch::Jcc(cc));
     }
-    Some(match positive {
+    // FP compares. `ucomisd` leaves ZF=PF=CF=1 on NaN: `A` / `Ae` are
+    // false there and their inversions `Be` / `B` true, matching C99
+    // 6.5.8p6 for the ordered compares (`Flt` / `Fle` were emitted
+    // operand-swapped into those shapes); `==` / `!=` carry the
+    // parity test in the branch shape.
+    Some(match op {
+        BinOp::Fgt | BinOp::Flt => FusedBranch::Jcc(if negate { Cc::Be } else { Cc::A }),
+        BinOp::Fge | BinOp::Fle => FusedBranch::Jcc(if negate { Cc::B } else { Cc::Ae }),
+        BinOp::Feq => {
+            if negate {
+                FusedBranch::JpOr(Cc::Ne)
+            } else {
+                FusedBranch::JnpAnd(Cc::E)
+            }
+        }
+        BinOp::Fne => {
+            if negate {
+                FusedBranch::JnpAnd(Cc::E)
+            } else {
+                FusedBranch::JpOr(Cc::Ne)
+            }
+        }
+        _ => return None,
+    })
+}
+
+/// Logical complement of an integer-compare condition code.
+fn invert_cc(cc: Cc) -> Option<Cc> {
+    Some(match cc {
         Cc::E => Cc::Ne,
         Cc::Ne => Cc::E,
         Cc::L => Cc::Ge,
@@ -4943,12 +5055,24 @@ fn emit_binop(
         let Some(dm) = materialize_fp(code, rhs_place, SCRATCH_XMM15, frame) else {
             return fail("Fcmp: rhs not fp reg / spill / int reg");
         };
+        // When a fused branch reads the flags, `Flt` / `Fle` compare
+        // with the operands swapped so the branch takes the
+        // parity-clean `A` / `Ae` shapes (see `fused_fp_swaps_operands`).
+        let fused = alloc.branch_fused.get(v as usize).copied().unwrap_or(false);
+        let (dn, dm) = if fused && fused_fp_swaps_operands(op) {
+            (dm, dn)
+        } else {
+            (dn, dm)
+        };
         // The compare width follows the operands' precision (C99
         // 6.3.1.8): two f32 operands use `ucomiss`, else `ucomisd`.
         if alloc.is_f32(lhs) || alloc.is_f32(rhs) {
             emit_ucomiss(code, dn, dm);
         } else {
             emit_ucomisd(code, dn, dm);
+        }
+        if fused {
+            return true;
         }
         let Some(rd) = int_or_spill_dst(dst) else {
             return fail("Fcmp: dst not int reg / spill");

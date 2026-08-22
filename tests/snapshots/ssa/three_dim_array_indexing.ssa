@@ -125,8 +125,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v107 Load { addr=v1, disp=0, kind=U8 }                -> x1
     v108 BinopI { op=xor, lhs=v107, rhs_imm=1 }           -> x1
     v109 BinopI { op=and, lhs=v108, rhs_imm=4294967295 }  -> x1
-    v110 BinopI { op=ne, lhs=v109, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v110, target=b8, fall=b7 }   (exit_acc=v110)
+    v110 BinopI { op=ne, lhs=v109, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v109, target=b8, fall=b7 }   (exit_acc=v110)
   block 7  start_pc=0
     v111 Imm(4)                                           -> x0
     terminator Return(v111)   (exit_acc=v111)
@@ -140,8 +140,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v118 Load { addr=v1, disp=11, kind=U8 }               -> x1
     v119 BinopI { op=xor, lhs=v118, rhs_imm=12 }          -> x1
     v120 BinopI { op=and, lhs=v119, rhs_imm=4294967295 }  -> x1
-    v121 BinopI { op=ne, lhs=v120, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v121, target=b10, fall=b9 }   (exit_acc=v121)
+    v121 BinopI { op=ne, lhs=v120, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v120, target=b10, fall=b9 }   (exit_acc=v121)
   block 9  start_pc=0
     v122 Imm(5)                                           -> x0
     terminator Return(v122)   (exit_acc=v122)
@@ -156,8 +156,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v130 Load { addr=v1, disp=23, kind=U8 }               -> x1
     v131 BinopI { op=xor, lhs=v130, rhs_imm=24 }          -> x1
     v132 BinopI { op=and, lhs=v131, rhs_imm=4294967295 }  -> x1
-    v133 BinopI { op=ne, lhs=v132, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v133, target=b12, fall=b11 }   (exit_acc=v133)
+    v133 BinopI { op=ne, lhs=v132, rhs_imm=0 }            -> x2
+    terminator Bz { cond=v132, target=b12, fall=b11 }   (exit_acc=v133)
   block 11  start_pc=0
     v134 Imm(6)                                           -> x0
     terminator Return(v134)   (exit_acc=v134)

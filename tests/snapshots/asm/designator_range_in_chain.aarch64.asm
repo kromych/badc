@@ -20,8 +20,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	add	x2, x2, #0x8
                	ldr	x2, [x2, x1, lsl #3]
-               	cmp	x2, #0x0
-               	b.ne	<addr>
+               	cbnz	x2, <addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x4

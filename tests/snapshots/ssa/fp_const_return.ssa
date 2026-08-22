@@ -43,7 +43,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
   block 6  start_pc=0
     v14  Extend { value=v7, kind=I32 }                    -> x1
     v15  BinopI { op=eq, lhs=v8, rhs_imm=0 }              -> x1
-    terminator Bz { cond=v15, target=b8, fall=b7 }   (exit_acc=v15)
+    terminator Bnz { cond=v8, target=b8, fall=b7 }   (exit_acc=v15)
   block 7  start_pc=0
     v28  Imm(0)                                           -> x0
     terminator Return(v28)   (exit_acc=v28)

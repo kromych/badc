@@ -67,11 +67,11 @@ Disassembly of section .text:
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
                	addq	%rsi, %rdx
-               	movslq	(%rdx), %rdx
-               	testq	%rdx, %rdx
+               	movslq	(%rdx), %rsi
+               	testq	%rsi, %rsi
                	setne	%dl
                	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	testq	%rsi, %rsi
                	jne	<addr>
                	leaq	<rip>, %rdx
                	movq	%rcx, %rsi

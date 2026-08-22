@@ -48,11 +48,11 @@ Disassembly of section .text:
                	movl	$0x4241, %ecx           # imm = 0x4241
                	movw	%cx, 0x2(%rax)
                	leaq	-0x20(%rbp), %rax
-               	movsbq	(%rax), %rax
-               	testq	%rax, %rax
+               	movsbq	(%rax), %rcx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x20(%rbp), %rax
                	movsbq	0x1(%rax), %rax

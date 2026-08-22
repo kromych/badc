@@ -473,8 +473,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v454 BinopI { op=eq, lhs=v450, rhs_imm=17 }           -> x0
     v455 BinopI { op=shl, lhs=v454, rhs_imm=32 }          -> x1
     v456 Extend { value=v454, kind=I32 }                  -> x0
-    v457 BinopI { op=eq, lhs=v456, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v457, target=b15, fall=b14 }   (exit_acc=v457)
+    v457 BinopI { op=eq, lhs=v456, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v456, target=b15, fall=b14 }   (exit_acc=v457)
   block 14  start_pc=0
     v458 Imm(14)                                          -> x0
     terminator Return(v458)   (exit_acc=v458)
@@ -512,8 +512,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v489 BinopI { op=eq, lhs=v485, rhs_imm=0 }            -> x0
     v490 BinopI { op=shl, lhs=v489, rhs_imm=32 }          -> x1
     v491 Extend { value=v489, kind=I32 }                  -> x0
-    v492 BinopI { op=eq, lhs=v491, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v492, target=b17, fall=b16 }   (exit_acc=v492)
+    v492 BinopI { op=eq, lhs=v491, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v491, target=b17, fall=b16 }   (exit_acc=v492)
   block 16  start_pc=0
     v493 Imm(15)                                          -> x0
     terminator Return(v493)   (exit_acc=v493)

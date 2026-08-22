@@ -51,9 +51,6 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	seta	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -83,9 +80,6 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
                	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -117,9 +111,6 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	seta	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -149,9 +140,6 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
                	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -183,9 +171,6 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	seta	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -214,9 +199,6 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
                	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -247,9 +229,6 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	seta	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -278,9 +257,6 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
                	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax

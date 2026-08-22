@@ -1199,8 +1199,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=14
     v24  Load { addr=v23, disp=0, kind=U8 }               -> x0
     v25  BinopI { op=xor, lhs=v24, rhs_imm=77 }           -> x0
     v26  BinopI { op=and, lhs=v25, rhs_imm=4294967295 }   -> x0
-    v27  BinopI { op=eq, lhs=v26, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v27, target=b7, fall=b5 }   (exit_acc=v27)
+    v27  BinopI { op=eq, lhs=v26, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v26, target=b7, fall=b5 }   (exit_acc=v27)
   block 5  start_pc=0
     v28  Imm(0)                                           -> x0
     v29  Imm(0)                                           -> x1

@@ -46,8 +46,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, ls
@@ -58,8 +57,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, ls
@@ -70,8 +68,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi
@@ -82,8 +79,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi
@@ -94,8 +90,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi
@@ -115,8 +110,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi
@@ -133,8 +127,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, ls
@@ -145,8 +138,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi
@@ -166,8 +158,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi
@@ -184,8 +175,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, ls
@@ -196,8 +186,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi
@@ -217,8 +206,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi
@@ -235,8 +223,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, ls
@@ -247,8 +234,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi
@@ -268,8 +254,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi
@@ -286,8 +271,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, ls
@@ -298,8 +282,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x1, #0x0                // =0
                	cmp	x1, #0x1
                	cset	x1, hi

@@ -184,27 +184,19 @@ Disassembly of section .text:
                	movss	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
                	movl	$0x1, %ecx
-               	testq	%rax, %rax
+               	jp	<addr>
                	jne	<addr>
                	leaq	-0x50(%rbp), %rax
                	movss	0x4(%rax,%riz), %xmm0
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
+               	setp	%r10b
+               	movzbq	%r10b, %r10
+               	orq	%r10, %rcx
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
@@ -218,9 +210,6 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x50(%rbp), %rax
@@ -293,13 +282,8 @@ Disassembly of section .text:
                	movss	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
+               	jp	<addr>
                	jne	<addr>
                	leaq	-0x78(%rbp), %rax
                	movss	0x4(%rax,%riz), %xmm0
@@ -311,9 +295,6 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	movl	$0x1, %ecx
                	testq	%rax, %rax
                	jne	<addr>
@@ -322,14 +303,11 @@ Disassembly of section .text:
                	movl	$0x40600000, %eax       # imm = 0x40600000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
+               	setp	%r10b
+               	movzbq	%r10b, %r10
+               	orq	%r10, %rcx
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
@@ -343,9 +321,6 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x78(%rbp), %rax
@@ -386,13 +361,8 @@ Disassembly of section .text:
                	movsd	(%rax,%riz), %xmm0
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
+               	jp	<addr>
                	jne	<addr>
                	leaq	-0xa8(%rbp), %rax
                	movsd	0x8(%rax,%riz), %xmm0
@@ -404,9 +374,6 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0xa8(%rbp), %rax

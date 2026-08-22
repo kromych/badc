@@ -41,19 +41,13 @@ Disassembly of section .text:
                	cmpq	%rsi, %rdx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	setne	%dl
-               	movzbq	%dl, %rdx
                	xorq	%rsi, %rsi
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	0x8(%rcx), %rdx
                	movsbq	0x8(%rax), %rsi
                	cmpq	%rsi, %rdx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	setne	%sil
+               	sete	%sil
                	movzbq	%sil, %rsi
                	xorq	%rdi, %rdi
                	testq	%rsi, %rsi
@@ -61,10 +55,7 @@ Disassembly of section .text:
                	movslq	0xc(%rcx), %rdx
                	movslq	0xc(%rax), %rsi
                	cmpq	%rsi, %rdx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	setne	%dil
+               	sete	%dil
                	movzbq	%dil, %rdi
                	xorq	%rdx, %rdx
                	testq	%rdi, %rdi
@@ -73,9 +64,6 @@ Disassembly of section .text:
                	movsbq	0x10(%rax), %rsi
                	cmpq	%rsi, %rdx
                	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	setne	%dl
                	movzbq	%dl, %rdx
                	movslq	%edx, %rdx
                	testq	%rdx, %rdx
@@ -96,19 +84,13 @@ Disassembly of section .text:
                	cmpq	%rdi, %rsi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	setne	%sil
-               	movzbq	%sil, %rsi
                	xorq	%rdi, %rdi
                	testq	%rsi, %rsi
                	je	<addr>
                	movsbq	0x8(%rdx), %rsi
                	movsbq	0x8(%rax), %rdi
                	cmpq	%rdi, %rsi
-               	sete	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	setne	%dil
+               	sete	%dil
                	movzbq	%dil, %rdi
                	xorq	%r8, %r8
                	testq	%rdi, %rdi
@@ -116,10 +98,7 @@ Disassembly of section .text:
                	movslq	0xc(%rdx), %rsi
                	movslq	0xc(%rax), %rdi
                	cmpq	%rdi, %rsi
-               	sete	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	setne	%r8b
+               	sete	%r8b
                	movzbq	%r8b, %r8
                	xorq	%rsi, %rsi
                	testq	%r8, %r8
@@ -127,10 +106,7 @@ Disassembly of section .text:
                	movsbq	0x10(%rdx), %rdx
                	movsbq	0x10(%rax), %rsi
                	cmpq	%rsi, %rdx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	setne	%sil
+               	sete	%sil
                	movzbq	%sil, %rsi
                	movslq	%esi, %rdx
                	testq	%rdx, %rdx
@@ -151,19 +127,13 @@ Disassembly of section .text:
                	cmpq	%rdi, %rsi
                	sete	%sil
                	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	setne	%sil
-               	movzbq	%sil, %rsi
                	xorq	%rdi, %rdi
                	testq	%rsi, %rsi
                	je	<addr>
                	movsbq	0x8(%rdx), %rsi
                	movsbq	0x8(%rax), %rdi
                	cmpq	%rdi, %rsi
-               	sete	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	setne	%dil
+               	sete	%dil
                	movzbq	%dil, %rdi
                	xorq	%r8, %r8
                	testq	%rdi, %rdi
@@ -171,10 +141,7 @@ Disassembly of section .text:
                	movslq	0xc(%rdx), %rsi
                	movslq	0xc(%rax), %rdi
                	cmpq	%rdi, %rsi
-               	sete	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	setne	%r8b
+               	sete	%r8b
                	movzbq	%r8b, %r8
                	xorq	%rsi, %rsi
                	testq	%r8, %r8
@@ -182,10 +149,7 @@ Disassembly of section .text:
                	movsbq	0x10(%rdx), %rdx
                	movsbq	0x10(%rax), %rax
                	cmpq	%rax, %rdx
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%sil
+               	sete	%sil
                	movzbq	%sil, %rsi
                	movslq	%esi, %rax
                	testq	%rax, %rax
@@ -225,11 +189,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movzbq	0x8(%rax), %rax
                	xorq	$0x7, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movl	%eax, %ecx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movzbq	0x9(%rax), %rax
@@ -245,17 +209,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x1, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	movl	$0x1, %ecx
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x8(%rax), %rax
                	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
                	movl	$0x1, %eax
@@ -264,9 +222,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	0xc(%rax), %rax
                	cmpq	$0x3, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -283,16 +238,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x1, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -310,17 +259,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x1, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x8(%rax), %rax
                	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

@@ -6647,9 +6647,7 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x2, lsl #12  // =0x2000
                	sub	x0, x0, #0x328
-               	ldrb	w0, [x0]
-               	cmp	x0, #0x0
-               	cset	x1, ne
+               	ldrb	w1, [x0]
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	sub	x0, x29, #0x2, lsl #12  // =0x2000
@@ -6657,8 +6655,6 @@ Disassembly of section .text:
                	mov	x17, #0x1000            // =4096
                	add	x0, x0, x17
                	ldrb	w0, [x0]
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
@@ -6681,8 +6677,6 @@ Disassembly of section .text:
                	mov	x17, #0x68              // =104
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	mov	x1, #0x1                // =1
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x4, lsl #12  // =0x4000
@@ -6692,16 +6686,12 @@ Disassembly of section .text:
                	eor	x0, x0, x17
                	mov	w0, w0
                	cmp	x0, #0x0
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x1, ne
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	sub	x0, x29, #0x4, lsl #12  // =0x4000
                	sub	x0, x0, #0x330
                	ldrb	w0, [x0, #0x5]
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
@@ -6720,10 +6710,10 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x8, lsl #12  // =0x8000
                	sub	x0, x0, #0x990
-               	ldrb	w0, [x0]
-               	cmp	x0, #0x0
+               	ldrb	w1, [x0]
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	sub	x0, x29, #0x8, lsl #12  // =0x8000
                	sub	x0, x0, #0x990
                	mov	x17, #0x2000            // =8192

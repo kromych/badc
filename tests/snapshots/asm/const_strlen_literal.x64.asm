@@ -155,11 +155,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
                	xorq	$0x1, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movl	%eax, %ecx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	0x1c(%rax), %rax
@@ -210,11 +210,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	0x20(%rax), %eax
                	xorq	$0x2, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movl	%eax, %ecx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	0x3c(%rax), %rax

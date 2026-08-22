@@ -59,16 +59,10 @@ Disassembly of section .text:
                	leaq	-0x58(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpq	$0x7, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x58(%rbp), %rax
                	movslq	0x4(%rax), %rax
                	cmpq	$0x8, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
                	movl	$0x1, %eax

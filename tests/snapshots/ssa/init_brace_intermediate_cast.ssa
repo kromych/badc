@@ -134,8 +134,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v80  ImmData(192)                                     -> x0
     v81  Imm(0)                                           -> x1
     v82  Load { addr=v80, disp=0, kind=I64 }              -> x0
-    v83  BinopI { op=ne, lhs=v82, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v83, target=b26, fall=b25 }   (exit_acc=v83)
+    v83  BinopI { op=ne, lhs=v82, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v82, target=b26, fall=b25 }   (exit_acc=v83)
   block 25  start_pc=0
     v84  Imm(13)                                          -> x0
     terminator Return(v84)   (exit_acc=v84)

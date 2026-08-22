@@ -2729,14 +2729,17 @@ fn alloc_save_base(frame: Frame, alloc: &Allocation) -> u32 {
 /// `cond` was flagged as branch-fused by the allocator. `negate`
 /// is true for `Bz` (branch when comparison failed); false for
 /// `Bnz`. Returns `None` when fusion doesn't apply (caller falls
-/// back to the unfused `cbz` / `cbnz` path).
+/// back to the unfused `cbz` / `cbnz` path). The FP conditions map
+/// as the `fcmp` + `cset` pair does, and `Cond::flip` is an exact
+/// NZCV complement, so an inverted FP branch is taken on the
+/// unordered (NaN) state exactly when C99 6.5.8p6 / 6.5.9p3
+/// require the negated comparison to hold.
 fn fused_branch_cond(
     func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
     cond: super::super::ir::ValueId,
     negate: bool,
 ) -> Option<super::encode::Cond> {
-    use super::encode::Cond;
     if !alloc
         .branch_fused
         .get(cond as usize)
@@ -2749,35 +2752,8 @@ fn fused_branch_cond(
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => *op,
         _ => return None,
     };
-    let positive = match op {
-        BinOp::Eq => Cond::Eq,
-        BinOp::Ne => Cond::Ne,
-        BinOp::Lt => Cond::Lt,
-        BinOp::Gt => Cond::Gt,
-        BinOp::Le => Cond::Le,
-        BinOp::Ge => Cond::Ge,
-        BinOp::Ult => Cond::Lo,
-        BinOp::Ugt => Cond::Hi,
-        BinOp::Ule => Cond::Ls,
-        BinOp::Uge => Cond::Hs,
-        _ => return None,
-    };
-    if !negate {
-        return Some(positive);
-    }
-    Some(match positive {
-        Cond::Eq => Cond::Ne,
-        Cond::Ne => Cond::Eq,
-        Cond::Lt => Cond::Ge,
-        Cond::Gt => Cond::Le,
-        Cond::Le => Cond::Gt,
-        Cond::Ge => Cond::Lt,
-        Cond::Lo => Cond::Hs,
-        Cond::Hi => Cond::Ls,
-        Cond::Ls => Cond::Hi,
-        Cond::Hs => Cond::Lo,
-        _ => return None,
-    })
+    let positive = compare_cond(op).or_else(|| fp_compare_cond(op))?;
+    Some(if negate { positive.flip() } else { positive })
 }
 
 /// Emit one SSA instruction. Returns `false` for any op the thin
@@ -9169,6 +9145,12 @@ fn emit_binop(
             emit(code, enc_fcmp_s(dn, dm));
         } else {
             emit(code, enc_fcmp_d(dn, dm));
+        }
+        // When the terminator's b.cond consumes the flags directly,
+        // drop the cset materialisation -- the comparison value is
+        // dead.
+        if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+            return true;
         }
         emit(code, enc_cset(rd, cond));
         if let Place::Spill(slot) = dst {

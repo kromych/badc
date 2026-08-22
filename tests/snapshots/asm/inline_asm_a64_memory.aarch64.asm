@@ -136,13 +136,10 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x18]
                	ldur	x0, [x29, #-0x38]
                	cmp	x0, #0x100
-               	cset	x1, ne
                	mov	x0, #0x1                // =1
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldur	x0, [x29, #-0x30]
                	cmp	x0, #0x2
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	ldursw	x0, [x29, #-0x28]

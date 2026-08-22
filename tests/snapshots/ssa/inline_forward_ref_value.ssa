@@ -27,7 +27,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=1
     v19  Imm(0)                                           -> x1
     v20  LoadLocal { off=-1, kind=I64 }                   -> x1
     v21  BinopI { op=eq, lhs=v16, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v21, target=b3, fall=b2 }   (exit_acc=v21)
+    terminator Bnz { cond=v16, target=b3, fall=b2 }   (exit_acc=v21)
   block 2  start_pc=0
     v41  Imm(-1)                                          -> x0
     terminator Return(v41)   (exit_acc=v41)

@@ -47,8 +47,7 @@ Disassembly of section .text:
                	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	ldr	x0, [x4, #0x18]
@@ -83,8 +82,7 @@ Disassembly of section .text:
                	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldr	x0, [x3, #0x18]
@@ -118,10 +116,10 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	x0, x1
                	cset	x0, eq
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	sxtw	x1, w0
+               	cmp	x1, #0x0
                	cset	x0, eq
-               	cbnz	x0, <addr>
+               	cbz	x1, <addr>
                	ldrb	w0, [x3, #0x2a]
                	mov	x17, #0x1               // =1
                	eor	x0, x0, x17
@@ -149,10 +147,10 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	x0, x1
                	cset	x0, eq
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	sxtw	x1, w0
+               	cmp	x1, #0x0
                	cset	x0, eq
-               	cbnz	x0, <addr>
+               	cbz	x1, <addr>
                	ldrb	w0, [x3, #0x35]
                	mov	x17, #0x2               // =2
                	eor	x0, x0, x17
@@ -180,10 +178,10 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	x0, x1
                	cset	x0, eq
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	sxtw	x1, w0
+               	cmp	x1, #0x0
                	cset	x0, eq
-               	cbnz	x0, <addr>
+               	cbz	x1, <addr>
                	ldrb	w0, [x3, #0x40]
                	mov	x17, #0x3               // =3
                	eor	x0, x0, x17
@@ -222,8 +220,7 @@ Disassembly of section .text:
                	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0xa                // =10
                	ret
                	adrp	x0, <page>
@@ -255,10 +252,10 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	x0, x1
                	cset	x0, eq
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	sxtw	x1, w0
+               	cmp	x1, #0x0
                	cset	x0, eq
-               	cbnz	x0, <addr>
+               	cbz	x1, <addr>
                	mov	x0, #0x0                // =0
                	cbz	x0, <addr>
                	mov	x0, #0xc                // =12
@@ -283,10 +280,10 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	x0, x1
                	cset	x0, eq
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	sxtw	x1, w0
+               	cmp	x1, #0x0
                	cset	x0, eq
-               	cbnz	x0, <addr>
+               	cbz	x1, <addr>
                	mov	x0, #0x0                // =0
                	cbz	x0, <addr>
                	mov	x0, #0xd                // =13
@@ -311,8 +308,7 @@ Disassembly of section .text:
                	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0xe                // =14
                	ret
                	adrp	x0, <page>
@@ -336,8 +332,7 @@ Disassembly of section .text:
                	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0xf                // =15
                	ret
                	adrp	x0, <page>
@@ -360,8 +355,7 @@ Disassembly of section .text:
                	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x11               // =17
                	ret
                	mov	x0, #0x0                // =0

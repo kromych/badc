@@ -94,8 +94,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x20, #0x8]
                	cmp	x0, #0x1
                	cset	x0, ne
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cbnz	x0, <addr>
                	ldrsw	x0, [x20, #0x18]
                	cmp	x0, #0x2
@@ -195,16 +193,12 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x7]
                	mov	x17, #0x69              // =105
                	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	cset	x1, ne
+               	mov	w1, w0
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	sub	x0, x29, #0x50
                	ldr	x0, [x0]
                	ldrb	w0, [x0, #0x8]
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>

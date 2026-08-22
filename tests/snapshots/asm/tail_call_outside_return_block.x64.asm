@@ -44,34 +44,22 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	%edi, %eax
                	cmpq	$0x40001, %rax          # imm = 0x40001
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	%esi, %eax
                	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	movl	$0x1, %ecx
                	testq	%rax, %rax
                	jne	<addr>
                	testq	%rdx, %rdx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
                	cmpq	$0x7, %r9
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

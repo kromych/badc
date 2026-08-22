@@ -44,11 +44,11 @@ Disassembly of section .text:
                	movl	%eax, (%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	(%rbx), %eax
-               	testq	%rax, %rax
+               	movl	(%rbx), %ecx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
@@ -66,11 +66,11 @@ Disassembly of section .text:
                	movl	%eax, (%rbx)
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	(%rbx), %eax
-               	testq	%rax, %rax
+               	movl	(%rbx), %ecx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movl	(%rax), %eax

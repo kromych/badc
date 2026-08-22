@@ -8,8 +8,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v2   Load { addr=v1, disp=0, kind=F64 }               -> d0
     v3   Imm(9214871658872686752)                         -> x0
     v4   Binop { op=fgt, lhs=v2, rhs=v3 }                 -> x0
-    v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
+    v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x1
+    terminator Bnz { cond=v4, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(1)                                           -> x0
     terminator Return(v6)   (exit_acc=v6)
@@ -19,8 +19,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v9   Imm(9214871658872686752)                         -> x0
     v10  Fneg(v9)                                         -> d1
     v11  Binop { op=flt, lhs=v8, rhs=v10 }                -> x0
-    v12  BinopI { op=eq, lhs=v11, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v12, target=b4, fall=b3 }   (exit_acc=v12)
+    v12  BinopI { op=eq, lhs=v11, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v11, target=b4, fall=b3 }   (exit_acc=v12)
   block 3  start_pc=0
     v13  Imm(2)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)
@@ -41,8 +41,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v23  LoadLocal { off=-1, kind=F64 }                   -> d1
     v24  Imm(9214871658872686752)                         -> x0
     v25  Binop { op=fgt, lhs=v21, rhs=v24 }               -> x0
-    v26  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v26, target=b8, fall=b7 }   (exit_acc=v26)
+    v26  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v25, target=b8, fall=b7 }   (exit_acc=v26)
   block 7  start_pc=0
     v27  Imm(4)                                           -> x0
     terminator Return(v27)   (exit_acc=v27)

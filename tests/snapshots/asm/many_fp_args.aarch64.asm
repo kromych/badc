@@ -67,8 +67,7 @@ Disassembly of section .text:
                	movk	x0, #0x404b, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -91,8 +90,7 @@ Disassembly of section .text:
                	mov	x0, #0x4073000000000000 // =4644055640749113344
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret

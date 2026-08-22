@@ -56,15 +56,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v19  BinopI { op=eq, lhs=v12, rhs_imm=0 }             -> x6
     v20  Imm(1)                                           -> x0
     v21  Imm(0)                                           -> x7
-    terminator Bnz { cond=v19, target=b17, fall=b5 }   (exit_acc=v19)
+    terminator Bz { cond=v12, target=b17, fall=b5 }   (exit_acc=v19)
   block 5  start_pc=0
     v22  LoadLocal { off=-1, kind=I64 }                   -> x0
     v23  BinopI { op=eq, lhs=v14, rhs_imm=0 }             -> x0
-    v24  BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> x0
+    v24  BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> x6
     v25  Imm(0)                                           -> x6
-    terminator Jmp(b6)   (exit_acc=v24)
+    terminator Jmp(b6)   (exit_acc=v23)
   block 6  start_pc=0
-    v26  Phi { incoming=[b17:v20, b5:v24], kind=I64 }     -> x0
+    v26  Phi { incoming=[b17:v20, b5:v23], kind=I64 }     -> x0
     v27  LoadLocal { off=-1, kind=I64 }                   -> x6
     v28  Imm(0)                                           -> x6
     terminator Bnz { cond=v26, target=b16, fall=b7 }   (exit_acc=v26)

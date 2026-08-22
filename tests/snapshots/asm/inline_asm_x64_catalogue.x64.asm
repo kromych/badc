@@ -111,28 +111,19 @@ Disassembly of section .text:
                	cmpq	$0x7, %rsi
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	xorq	%rcx, %rcx
                	testq	%rax, %rax
                	je	<addr>
                	movq	-0x28(%rbp), %rax
                	cmpq	$0xf, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%cl
+               	sete	%cl
                	movzbq	%cl, %rcx
                	xorq	%rdx, %rdx
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	-0x20(%rbp), %rax
                	cmpq	$0x64, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%dl
+               	sete	%dl
                	movzbq	%dl, %rdx
                	xorq	%rax, %rax
                	testq	%rdx, %rdx
@@ -140,9 +131,6 @@ Disassembly of section .text:
                	movq	-0x18(%rbp), %rax
                	cmpq	$0xa, %rax
                	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>

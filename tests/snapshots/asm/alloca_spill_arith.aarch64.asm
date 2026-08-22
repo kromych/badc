@@ -126,12 +126,9 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0x3]
                	add	x0, x4, x0
                	cmp	x2, #0xe0
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	b.ne	<addr>
                	cmp	x3, #0x8
                	cset	x1, eq
-               	cmp	x1, #0x0
-               	cset	x1, ne
                	cbz	x1, <addr>
                	cmp	x0, #0x7
                	cset	x1, eq

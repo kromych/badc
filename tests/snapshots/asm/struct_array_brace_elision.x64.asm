@@ -48,11 +48,11 @@ Disassembly of section .text:
                	movq	%rcx, %r9
                	shlq	$0x3, %r9
                	addq	%r9, %rdx
-               	movslq	(%rdx), %rdx
-               	testq	%rdx, %rdx
+               	movslq	(%rdx), %r9
+               	testq	%r9, %r9
                	setne	%dl
                	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	testq	%r9, %r9
                	jne	<addr>
                	movq	%rdi, %rdx
                	shlq	$0x4, %rdx
@@ -94,11 +94,11 @@ Disassembly of section .text:
                	movq	%rcx, %r9
                	shlq	$0x3, %r9
                	addq	%r9, %rdx
-               	movslq	(%rdx), %rdx
-               	testq	%rdx, %rdx
+               	movslq	(%rdx), %r9
+               	testq	%r9, %r9
                	setne	%dl
                	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	testq	%r9, %r9
                	jne	<addr>
                	movq	%rdi, %rdx
                	shlq	$0x4, %rdx
@@ -220,11 +220,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movslq	0x8(%rax), %rax
-               	testq	%rax, %rax
+               	movslq	0x8(%rax), %rcx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0xc(%rax), %rax
@@ -274,11 +274,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movslq	0x20(%rax), %rax
-               	testq	%rax, %rax
+               	movslq	0x20(%rax), %rcx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x2c(%rax), %rax

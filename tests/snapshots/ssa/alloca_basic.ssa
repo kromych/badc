@@ -289,8 +289,8 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2   BinopI { op=ne, lhs=v1, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v2, target=b2, fall=b1 }   (exit_acc=v2)
+    v2   BinopI { op=ne, lhs=v1, rhs_imm=0 }              -> x1
+    terminator Bz { cond=v1, target=b2, fall=b1 }   (exit_acc=v2)
   block 1  start_pc=0
     v3   ImmData(20)                                      -> x7
     v4   CallExt { binding_idx=0, args=[v3], fp_arg_mask=0x0 } -> x0
@@ -310,8 +310,8 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     terminator Return(v13)   (exit_acc=v13)
   block 4  start_pc=0
     v14  Call { target_pc=8, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v15  BinopI { op=ne, lhs=v14, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v15, target=b6, fall=b5 }   (exit_acc=v15)
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v14, target=b6, fall=b5 }   (exit_acc=v15)
   block 5  start_pc=0
     v16  ImmData(51)                                      -> x7
     v17  CallExt { binding_idx=0, args=[v16], fp_arg_mask=0x0 } -> x0
@@ -332,8 +332,8 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v27  Imm(51)                                          -> x7
     v28  Call { target_pc=10, args=[v27], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v29  BinopI { op=ne, lhs=v28, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v29, target=b10, fall=b9 }   (exit_acc=v29)
+    v29  BinopI { op=ne, lhs=v28, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v28, target=b10, fall=b9 }   (exit_acc=v29)
   block 9  start_pc=0
     v30  ImmData(83)                                      -> x7
     v31  CallExt { binding_idx=0, args=[v30], fp_arg_mask=0x0 } -> x0

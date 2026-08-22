@@ -139,11 +139,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v40  ImmData(72)                                      -> x1
     v41  Load { addr=v40, disp=0, kind=I64 }              -> x1
     v42  Binop { op=eq, lhs=v39, rhs=v41 }                -> x0
-    v43  BinopI { op=ne, lhs=v42, rhs_imm=0 }             -> x0
+    v43  BinopI { op=ne, lhs=v42, rhs_imm=0 }             -> x1
     v44  Imm(0)                                           -> x1
-    terminator Jmp(b12)   (exit_acc=v43)
+    terminator Jmp(b12)   (exit_acc=v42)
   block 12  start_pc=0
-    v45  Phi { incoming=[b18:v36, b11:v43], kind=I64 }    -> x0
+    v45  Phi { incoming=[b18:v36, b11:v42], kind=I64 }    -> x0
     v46  LoadLocal { off=-2, kind=I64 }                   -> x1
     v47  Imm(0)                                           -> x1
     terminator Bnz { cond=v45, target=b17, fall=b13 }   (exit_acc=v45)

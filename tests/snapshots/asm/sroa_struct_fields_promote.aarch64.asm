@@ -78,8 +78,7 @@ Disassembly of section .text:
                	mov	x4, #0x0                // =0
                	b	<addr>
                	mov	w4, w0
-               	cmp	x4, #0x0
-               	b.ne	<addr>
+               	cbnz	x4, <addr>
                	mov	x17, #0x5               // =5
                	mul	x0, x3, x17
                	add	x5, x5, x0
@@ -151,8 +150,7 @@ Disassembly of section .text:
                	mov	x4, #0x0                // =0
                	b	<addr>
                	mov	w4, w0
-               	cmp	x4, #0x0
-               	b.ne	<addr>
+               	cbnz	x4, <addr>
                	cmp	x3, #0xd
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

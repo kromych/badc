@@ -24,17 +24,13 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fneg	d1, d16
                	fcmp	d0, d1
-               	cset	x2, mi
                	mov	x0, #0x0                // =0
-               	cbz	x2, <addr>
+               	b.pl	<addr>
                	fadd	d1, d0, d0
                	fcmp	d1, d0
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
@@ -47,17 +43,13 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fneg	d1, d16
                	fcmp	d0, d1
-               	cset	x2, mi
                	mov	x0, #0x0                // =0
-               	cbz	x2, <addr>
+               	b.pl	<addr>
                	fadd	d1, d0, d0
                	fcmp	d1, d0
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
@@ -70,17 +62,13 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fneg	d1, d16
                	fcmp	d0, d1
-               	cset	x2, mi
                	mov	x0, #0x0                // =0
-               	cbz	x2, <addr>
+               	b.pl	<addr>
                	fadd	d1, d0, d0
                	fcmp	d1, d0
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	ldr	d0, [x1]
@@ -91,8 +79,7 @@ Disassembly of section .text:
                	movk	x0, #0x7fe1, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ls
-               	cbz	x0, <addr>
+               	b.hi	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	mov	x0, #0x0                // =0

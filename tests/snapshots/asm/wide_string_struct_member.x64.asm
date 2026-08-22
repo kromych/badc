@@ -50,40 +50,28 @@ Disassembly of section .text:
                	cmpq	$0x68, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	xorq	%rdx, %rdx
                	testq	%rcx, %rcx
                	je	<addr>
                	movslq	0x8(%rax), %rcx
                	cmpq	$0x69, %rcx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	setne	%dl
+               	sete	%dl
                	movzbq	%dl, %rdx
-               	xorq	%rcx, %rcx
+               	xorq	%rsi, %rsi
                	testq	%rdx, %rdx
                	je	<addr>
                	movslq	0xc(%rax), %rcx
                	testq	%rcx, %rcx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	xorq	%rdx, %rdx
-               	testq	%rcx, %rcx
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	xorq	%rcx, %rcx
+               	testq	%rsi, %rsi
                	je	<addr>
                	movslq	0x10(%rax), %rax
                	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x2, %eax
                	addq	$0x30, %rsp

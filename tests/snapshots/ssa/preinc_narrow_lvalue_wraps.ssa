@@ -245,8 +245,8 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v165 BinopI { op=add, lhs=v164, rhs_imm=1 }           -> x2
     v166 Store { addr=v159, disp=0, value=v165, kind=I8 } -> -
     v167 Load { addr=v159, disp=0, kind=U8 }              -> x0
-    v168 BinopI { op=eq, lhs=v167, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v168, target=b51, fall=b42 }   (exit_acc=v168)
+    v168 BinopI { op=eq, lhs=v167, rhs_imm=0 }            -> x2
+    terminator Bnz { cond=v167, target=b51, fall=b42 }   (exit_acc=v168)
   block 42  start_pc=0
     v169 Imm(1)                                           -> x1
     v170 Imm(0)                                           -> x0

@@ -19,8 +19,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -33,7 +32,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	udf	#0x0
+		...
 
 <boot>:
                	mov	x0, #0x7                // =7

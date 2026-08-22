@@ -186,11 +186,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 9  start_pc=0
     v150 LoadLocal { off=-1, kind=I32 }                   -> x0
     v151 BinopI { op=ne, lhs=v144, rhs_imm=200 }          -> x0
-    v152 BinopI { op=ne, lhs=v151, rhs_imm=0 }            -> x0
+    v152 BinopI { op=ne, lhs=v151, rhs_imm=0 }            -> x1
     v153 Imm(0)                                           -> x1
-    terminator Jmp(b10)   (exit_acc=v152)
+    terminator Jmp(b10)   (exit_acc=v151)
   block 10  start_pc=0
-    v154 Phi { incoming=[b26:v148, b9:v152], kind=I64 }   -> x0
+    v154 Phi { incoming=[b26:v148, b9:v151], kind=I64 }   -> x0
     v155 LoadLocal { off=-1, kind=I64 }                   -> x1
     v156 Imm(0)                                           -> x1
     terminator Bnz { cond=v154, target=b25, fall=b11 }   (exit_acc=v154)

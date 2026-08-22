@@ -82,10 +82,7 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	%rdi, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x80(%rbp), %rax
                	movq	(%rax), %rcx
@@ -97,9 +94,6 @@ Disassembly of section .text:
                	addq	$0x3, %rax
                	movslq	%eax, %rax
                	cmpq	%rax, %rcx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -182,10 +176,7 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	%rdi, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x80(%rbp), %rax
                	movq	(%rax), %rcx
@@ -197,9 +188,6 @@ Disassembly of section .text:
                	addq	$0x3, %rax
                	movslq	%eax, %rax
                	cmpq	%rax, %rcx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

@@ -51,10 +51,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	cmpq	$-0x1, %rax
-               	setbe	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	jbe	<addr>
                	movl	$0x28, %eax
                	addq	$0x20, %rsp
                	popq	%rbp

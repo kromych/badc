@@ -121,8 +121,8 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v115 Extend { value=v113, kind=I32 }                  -> x2
     v116 Imm(0)                                           -> x6
     v117 LoadLocal { off=-1, kind=I32 }                   -> x6
-    v118 BinopI { op=eq, lhs=v115, rhs_imm=0 }            -> x2
-    terminator Bz { cond=v118, target=b2, fall=b1 }   (exit_acc=v118)
+    v118 BinopI { op=eq, lhs=v115, rhs_imm=0 }            -> x6
+    terminator Bnz { cond=v115, target=b2, fall=b1 }   (exit_acc=v118)
   block 1  start_pc=0
     v119 Imm(-1)                                          -> x0
     terminator Return(v119)   (exit_acc=v119)

@@ -35,8 +35,7 @@ Disassembly of section .text:
                	mov	x17, #0x1f              // =31
                	and	x1, x1, x17
                	orr	x0, x0, x1
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	sub	sp, x29, #0xa0
                	add	sp, sp, #0xa0
@@ -59,23 +58,17 @@ Disassembly of section .text:
                	mov	x17, #0xb               // =11
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	mov	x1, #0x1                // =1
                	cbnz	x0, <addr>
                	add	x0, sp, #0x60
                	ldrsw	x0, [x0, #0xc]
                	cmp	x0, #0x16
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x1, ne
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	add	x16, sp, #0x40
                	ldr	x0, [x16]
                	cmp	x0, #0x21
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	add	x0, sp, #0x80

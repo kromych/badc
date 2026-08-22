@@ -137,8 +137,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v46  Bswap { value=v45, width=2 }                     -> x0
     v47  BinopI { op=xor, lhs=v46, rhs_imm=13330 }        -> x0
     v48  BinopI { op=and, lhs=v47, rhs_imm=4294967295 }   -> x0
-    v49  BinopI { op=ne, lhs=v48, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v49, target=b24, fall=b23 }   (exit_acc=v49)
+    v49  BinopI { op=ne, lhs=v48, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v48, target=b24, fall=b23 }   (exit_acc=v49)
   block 23  start_pc=0
     v50  Imm(9)                                           -> x0
     terminator Return(v50)   (exit_acc=v50)

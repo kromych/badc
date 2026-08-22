@@ -121,24 +121,14 @@ Disassembly of section .text:
                	movsd	(%rax,%riz), %xmm2
                	cvtss2sd	%xmm0, %xmm0
                	ucomisd	%xmm0, %xmm2
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0xd, %eax
                	retq
                	leaq	<rip>, %rax
                	movsd	(%rax,%riz), %xmm0
                	ucomisd	%xmm1, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0xe, %eax
                	retq

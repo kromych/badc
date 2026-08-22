@@ -248,19 +248,13 @@ Disassembly of section .text:
                	retq
                	movl	%edx, %eax
                	xorq	$0x9, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	movl	%eax, %ecx
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	%esi, %eax
                	xorq	$0x9, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax

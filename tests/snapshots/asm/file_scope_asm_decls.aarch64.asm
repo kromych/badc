@@ -47,14 +47,10 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x1, x0
                	add	x2, x29, #0x0
-               	cmp	x20, #0x0
-               	cset	x3, eq
                	mov	x0, #0x1                // =1
-               	cbnz	x3, <addr>
+               	cbz	x20, <addr>
                	cmp	x1, #0x0
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cbnz	x0, <addr>
                	cmp	x2, #0x0
                	cset	x0, eq

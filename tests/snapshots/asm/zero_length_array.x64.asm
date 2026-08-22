@@ -42,19 +42,13 @@ Disassembly of section .text:
                	retq
                	movzbq	0x4(%rax), %rcx
                	xorq	$0xa, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	movl	%ecx, %edx
                	movl	$0x1, %ecx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movzbq	0x5(%rax), %rcx
                	xorq	$0x14, %rcx
                	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
@@ -85,11 +79,11 @@ Disassembly of section .text:
                	movb	%cl, 0x5(%rax)
                	movzbq	0x4(%rax), %rcx
                	xorq	$0xab, %rcx
-               	movl	%ecx, %ecx
-               	testq	%rcx, %rcx
+               	movl	%ecx, %edx
+               	testq	%rdx, %rdx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movzbq	0x5(%rax), %rcx
                	xorq	$0xcd, %rcx

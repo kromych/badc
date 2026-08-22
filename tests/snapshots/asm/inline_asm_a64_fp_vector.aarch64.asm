@@ -40,8 +40,7 @@ Disassembly of section .text:
                	mov	x0, #0x42280000         // =1109917696
                	fmov	s17, w0
                	fcmp	s0, s17
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	sxtw	x0, w0
                	add	sp, sp, #0x50

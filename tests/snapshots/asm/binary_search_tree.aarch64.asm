@@ -20,8 +20,7 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x20, x0
                	mov	x21, x1
-               	cmp	x20, #0x0
-               	b.ne	<addr>
+               	cbnz	x20, <addr>
                	mov	x0, #0x18               // =24
                	bl	<addr>
                	mov	x1, #0x0                // =0
@@ -53,8 +52,7 @@ Disassembly of section .text:
 <search>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -102,8 +100,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	mov	x1, x21
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
@@ -111,8 +108,7 @@ Disassembly of section .text:
                	mov	x1, #0x28               // =40
                	mov	x0, x20
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20

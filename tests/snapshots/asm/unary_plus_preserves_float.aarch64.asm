@@ -29,8 +29,7 @@ Disassembly of section .text:
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -40,8 +39,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, mi
-               	cbz	x0, <addr>
+               	b.pl	<addr>
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x0
                	fneg	d0, d16
@@ -52,8 +50,7 @@ Disassembly of section .text:
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -64,8 +61,7 @@ Disassembly of section .text:
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -75,8 +71,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, mi
-               	cbz	x0, <addr>
+               	b.pl	<addr>
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x0
                	fneg	d1, d16
@@ -88,8 +83,7 @@ Disassembly of section .text:
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -99,8 +93,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, mi
-               	cbz	x0, <addr>
+               	b.pl	<addr>
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x0
                	fneg	d1, d16
@@ -121,8 +114,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, mi
-               	cbz	x0, <addr>
+               	b.pl	<addr>
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x0
                	fneg	d1, d16
@@ -136,8 +128,7 @@ Disassembly of section .text:
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -152,8 +143,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, mi
-               	cbz	x0, <addr>
+               	b.pl	<addr>
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x0
                	fneg	d1, d16
@@ -168,8 +158,7 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fneg	d1, d16
                	fcmp	d0, d1
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

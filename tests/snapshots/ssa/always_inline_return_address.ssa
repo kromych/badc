@@ -13,15 +13,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v7   Extend { value=v5, kind=I32 }                    -> x0
     v8   Imm(0)                                           -> x1
     v9   Extend { value=v7, kind=I32 }                    -> x1
-    v10  BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v10, target=b2, fall=b1 }   (exit_acc=v10)
+    v10  BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x1
+    terminator Bnz { cond=v7, target=b2, fall=b1 }   (exit_acc=v10)
   block 1  start_pc=0
     v11  Imm(1)                                           -> x0
     terminator Return(v11)   (exit_acc=v11)
   block 2  start_pc=0
     v12  Intrinsic { kind=66, args=[] }                   -> x0
-    v13  BinopI { op=eq, lhs=v12, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v13, target=b4, fall=b3 }   (exit_acc=v13)
+    v13  BinopI { op=eq, lhs=v12, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v12, target=b4, fall=b3 }   (exit_acc=v13)
   block 3  start_pc=0
     v14  Imm(2)                                           -> x0
     terminator Return(v14)   (exit_acc=v14)

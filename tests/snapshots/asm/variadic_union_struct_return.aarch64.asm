@@ -95,8 +95,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x1]
                	sub	x2, x29, #0x30
                	sub	x2, x29, #0x10
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	ldrb	w0, [x0]
                	add	x0, x0, x1
                	str	w0, [x2]

@@ -137,19 +137,13 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movzbq	(%rcx), %rax
                	xorq	$0x9, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	movl	%eax, %edx
                	movl	$0x1, %eax
                	testq	%rdx, %rdx
                	jne	<addr>
                	movzbq	0x3(%rcx), %rax
                	xorq	$0x6, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax

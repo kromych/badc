@@ -59,8 +59,7 @@ Disassembly of section .text:
                	cset	x0, ne
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x22, [sp, #0x10]
@@ -135,8 +134,7 @@ Disassembly of section .text:
                	cset	x0, ne
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x22, [sp, #0x10]
@@ -172,8 +170,7 @@ Disassembly of section .text:
                	ret
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0xc                // =12
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x22, [sp, #0x10]
@@ -194,10 +191,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0xe                // =14
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x22, [sp, #0x10]
@@ -237,12 +231,9 @@ Disassembly of section .text:
                	mov	x17, #0xff              // =255
                	and	x1, x22, x17
                	cmp	x1, #0x1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	mov	x17, #0xff              // =255
                	and	x1, x21, x17
-               	cmp	x1, #0x0
-               	cset	x1, ne
                	cmp	x1, #0x0
                	cset	x20, ne
                	cbnz	x20, <addr>

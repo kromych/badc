@@ -76,8 +76,7 @@ Disassembly of section .text:
                	sxtw	x1, w0
                	cmp	x1, #0x0
                	b.gt	<addr>
-               	cmp	x2, #0x0
-               	b.eq	<addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	mov	x0, #0x0                // =0

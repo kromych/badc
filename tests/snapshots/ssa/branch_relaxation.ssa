@@ -14,8 +14,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v14  Extend { value=v6, kind=I32 }                    -> x6
     v15  Imm(3)                                           -> x6
     v16  Binop { op=mod, lhs=v8, rhs=v15 }                -> x6
-    v17  BinopI { op=eq, lhs=v16, rhs_imm=0 }             -> x6
-    terminator Bz { cond=v17, target=b4, fall=b2 }   (exit_acc=v17)
+    v17  BinopI { op=eq, lhs=v16, rhs_imm=0 }             -> x8
+    terminator Bnz { cond=v16, target=b4, fall=b2 }   (exit_acc=v17)
   block 2  start_pc=0
     v21  Extend { value=v7, kind=I32 }                    -> x6
     v22  Extend { value=v6, kind=I32 }                    -> x6
@@ -83,8 +83,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v16  Extend { value=v9, kind=I32 }                    -> x6
     v17  Imm(3)                                           -> x6
     v18  Binop { op=mod, lhs=v11, rhs=v17 }               -> x6
-    v19  BinopI { op=eq, lhs=v18, rhs_imm=0 }             -> x6
-    terminator Bz { cond=v19, target=b5, fall=b3 }   (exit_acc=v19)
+    v19  BinopI { op=eq, lhs=v18, rhs_imm=0 }             -> x7
+    terminator Bnz { cond=v18, target=b5, fall=b3 }   (exit_acc=v19)
   block 3  start_pc=0
     v23  Extend { value=v10, kind=I32 }                   -> x6
     v24  Extend { value=v9, kind=I32 }                    -> x6

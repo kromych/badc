@@ -128,13 +128,16 @@ pub(crate) struct Allocation {
     /// can pick the right sign-extend width without re-walking the
     /// inst's operands.
     pub sxtw_k: Vec<i64>,
-    /// True for `Binop` / `BinopI` comparison insts that the
-    /// allocator recognised as the source of a `Bz` / `Bnz`
-    /// terminator's cond, with cond consumed only by that
-    /// terminator and the inst sitting in the last slot of its
-    /// block. The emit pass skips the `cset` materialisation and
-    /// the terminator emits `b.cond` (aarch64) or `j.cond`
-    /// (x86_64) directly off the flags set by `cmp`.
+    /// True for `Binop` / `BinopI` comparison insts (integer and FP)
+    /// that the allocator recognised as the source of a `Bz` / `Bnz`
+    /// terminator's cond, with cond consumed only by that terminator
+    /// and every instruction between the compare and the block's end
+    /// leaving the host flags untouched. The emit pass skips the
+    /// `cset` / `setcc` materialisation and the terminator emits
+    /// `b.cond` (aarch64) or `j.cond` (x86_64) directly off the flags
+    /// the compare set. The compare's value keeps its place: on
+    /// x86_64 the destination register doubles as the operand-staging
+    /// scratch, so its color stays in the used sets.
     pub branch_fused: Vec<bool>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
@@ -601,22 +604,118 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             *slot = slot.saturating_sub(1);
         }
     }
-    // Recognise comparison-feeding-branch sites. The terminator's
-    // cond must be the immediately-preceding inst in its block,
-    // be a Binop / BinopI with a comparison op, and have a single
-    // consumer (the terminator). Mark it; the emit pass drops the
-    // `cset` and the terminator picks `b.cond` instead of `cbz`.
+    // Recognise comparison-feeding-branch sites. The terminator's cond
+    // must be a Binop / BinopI comparison defined in the same block
+    // with the terminator as its single consumer, and every following
+    // instruction the emit produces code for must leave the host flags
+    // untouched, so the branch reads the flags the comparison set. The
+    // emit drops the `cset` / `setcc` materialisation and the
+    // terminator branches on the condition directly (`b.cond` / `jcc`,
+    // with the per-arch FP forms covering the unordered cases). The
+    // phi predecessor moves emitted between the body and the
+    // terminator use only flag-transparent instructions (mov / xchg /
+    // spill load / store / movz / fmov) except the case guarded below.
+    let is_compare_op = |op: BinOp| {
+        matches!(
+            op,
+            BinOp::Eq
+                | BinOp::Ne
+                | BinOp::Lt
+                | BinOp::Gt
+                | BinOp::Le
+                | BinOp::Ge
+                | BinOp::Ult
+                | BinOp::Ugt
+                | BinOp::Ule
+                | BinOp::Uge
+                | BinOp::Feq
+                | BinOp::Fne
+                | BinOp::Flt
+                | BinOp::Fgt
+                | BinOp::Fle
+                | BinOp::Fge
+        )
+    };
+    let is_x86 = target.is_x86_64();
+    // Whether the inst's lowering writes the host flags. On x86_64
+    // every integer ALU op does, a zero immediate materialises as
+    // `xor r, r`, and the unsigned FP converts test the sign bit with
+    // flag-setting arithmetic; scalar SSE and the mov / lea / movzx
+    // families do not. On aarch64 only the comparisons reach a
+    // flag-setting form (`subs` / `fcmp`).
+    let flags_survive = |inst: &Inst| -> bool {
+        match inst {
+            Inst::Imm(k) => !(is_x86 && *k == 0),
+            Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
+            | Inst::BlockAddr(_)
+            | Inst::LocalAddr(_)
+            | Inst::ParamRef { .. }
+            | Inst::Phi { .. }
+            | Inst::Load { .. }
+            | Inst::LoadLocal { .. }
+            | Inst::LoadIndexed { .. }
+            | Inst::Store { .. }
+            | Inst::StoreLocal { .. }
+            | Inst::StoreIndexed { .. }
+            | Inst::Extend { .. }
+            | Inst::Fneg(_)
+            | Inst::Fma { .. } => true,
+            Inst::FpCast { kind, .. } => {
+                !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
+            }
+            Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
+                if is_x86 {
+                    matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
+                } else {
+                    !is_compare_op(*op)
+                }
+            }
+            _ => false,
+        }
+    };
+    // Whether the edge `pred -> succ` carries an FP-classed phi income
+    // that is the integer constant zero: its predecessor-exit move
+    // re-materialises the bits through the integer scratch, which on
+    // x86_64 is a flag-writing `xor`.
+    let fp_zero_phi_income = |succ: super::super::ir::BlockId,
+                              pred: super::super::ir::BlockId|
+     -> bool {
+        let Some(block) = func.blocks.get(succ as usize) else {
+            return false;
+        };
+        for i in block.inst_range.clone() {
+            let Some(Inst::Phi { incoming, kind }) = func.insts.get(i as usize) else {
+                break;
+            };
+            if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                continue;
+            }
+            if incoming.iter().any(|&(p, s)| {
+                p == pred && matches!(func.insts.get(s as usize), Some(Inst::Imm(0)))
+            }) {
+                return true;
+            }
+        }
+        false
+    };
     let mut branch_fused: Vec<bool> = vec![false; func.insts.len()];
-    for block in &func.blocks {
-        let cond = match block.terminator {
-            super::super::ir::Terminator::Bz { cond, .. }
-            | super::super::ir::Terminator::Bnz { cond, .. } => cond,
+    for (bidx, block) in func.blocks.iter().enumerate() {
+        let (cond, target_blk, fall_through) = match block.terminator {
+            super::super::ir::Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            }
+            | super::super::ir::Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => (cond, target, fall_through),
             _ => continue,
         };
-        if cond == NO_VALUE {
-            continue;
-        }
-        if cond + 1 != block.inst_range.end {
+        if cond == NO_VALUE || !block.inst_range.contains(&cond) {
             continue;
         }
         if use_counts.get(cond as usize).copied().unwrap_or(0) != 1 {
@@ -625,16 +724,26 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         let is_compare = matches!(
             func.insts.get(cond as usize),
             Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. })
-                if matches!(
-                    op,
-                    BinOp::Eq | BinOp::Ne
-                        | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge
-                        | BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge
-                )
+                if is_compare_op(*op)
         );
-        if is_compare {
-            branch_fused[cond as usize] = true;
+        if !is_compare {
+            continue;
         }
+        let window_ok = ((cond + 1)..block.inst_range.end).all(|p| {
+            let inst = &func.insts[p as usize];
+            // A dead pure inst emits no code (`is_dead_pure`).
+            (inst.is_pure() && use_counts[p as usize] == 0) || flags_survive(inst)
+        });
+        if !window_ok {
+            continue;
+        }
+        if is_x86
+            && (fp_zero_phi_income(target_blk, bidx as super::super::ir::BlockId)
+                || fp_zero_phi_income(fall_through, bidx as super::super::ir::BlockId))
+        {
+            continue;
+        }
+        branch_fused[cond as usize] = true;
     }
     // Drop the "value-also-in-acc" propagate slot for stores whose
     // defined value is unread. c5 store ops leave the stored value
@@ -3520,5 +3629,240 @@ int main(void) { return 0; }
              ({small_rescan} -> {large_rescan} visits); the bound above \
              no longer proves anything",
         );
+    }
+
+    fn func_with(insts: Vec<Inst>, blocks: Vec<super::super::super::ir::Block>) -> FunctionSsa {
+        let n = insts.len();
+        FunctionSsa {
+            name: alloc::string::String::new(),
+            ent_pc: 0,
+            end_pc: 0,
+            locals: 0,
+            n_params: 0,
+            is_variadic: false,
+            is_inline: false,
+            is_always_inline: false,
+            is_noinline: false,
+            is_naked: false,
+            section: None,
+            is_weak: false,
+            is_internal: false,
+            const_params: 0,
+            inst_src: vec![(0, 0); n],
+            f32_values: vec![false; n],
+            param_fp_mask: 0,
+            agg_descs: Vec::new(),
+            param_aggs: Vec::new(),
+            param_local_slots: Vec::new(),
+            ret_agg: None,
+            ret_is_fp: false,
+            ret_type_tag: 0,
+            indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
+            label_data_relocs: Vec::new(),
+            jump_tables: Vec::new(),
+            synthetic_base: 0,
+            multi_cell_slots: Vec::new(),
+            over_aligned: Default::default(),
+            frame_align: 0,
+            realign_region_bytes: 0,
+            has_returns_twice_call: false,
+            did_unroll: false,
+            did_inline: false,
+            insts,
+            blocks,
+            extern_call_refs: Vec::new(),
+            extern_imm_code_refs: Vec::new(),
+            extern_imm_data_refs: Vec::new(),
+            extern_tls_refs: Vec::new(),
+        }
+    }
+
+    /// One block holding `insts` and branching on `cond`, plus the two
+    /// empty successors.
+    fn branch_func(insts: Vec<Inst>, cond: ValueId) -> FunctionSsa {
+        use super::super::super::ir::Block;
+        let n = insts.len() as u32;
+        func_with(
+            insts,
+            vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..n,
+                    terminator: Terminator::Bz {
+                        cond,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                    exit_acc: cond,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: n..n,
+                    terminator: Terminator::Return(NO_VALUE),
+                    exit_acc: NO_VALUE,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: n..n,
+                    terminator: Terminator::Return(NO_VALUE),
+                    exit_acc: NO_VALUE,
+                },
+            ],
+        )
+    }
+
+    fn load_i64() -> Inst {
+        Inst::LoadLocal {
+            off: 2,
+            kind: LoadKind::I64,
+            volatile: false,
+        }
+    }
+
+    fn store_of(value: ValueId) -> Inst {
+        Inst::StoreLocal {
+            off: -1,
+            value,
+            kind: StoreKind::I64,
+            volatile: false,
+        }
+    }
+
+    /// An immediate between the compare and the branch: on aarch64 the
+    /// materialisation (`movz`) leaves the flags alone and the compare
+    /// fuses; on x86_64 a zero immediate lowers to a flag-writing
+    /// `xor r, r` and the compare must stay materialised.
+    #[test]
+    fn branch_fusion_window_is_target_flag_aware() {
+        let build = || {
+            branch_func(
+                vec![
+                    load_i64(),
+                    Inst::BinopI {
+                        op: BinOp::Lt,
+                        lhs: 0,
+                        rhs_imm: 5,
+                    },
+                    Inst::Imm(0),
+                    store_of(2),
+                ],
+                1,
+            )
+        };
+        let a64 = allocate(&build(), Target::LinuxAarch64);
+        assert!(a64.branch_fused[1]);
+        let x64 = allocate(&build(), Target::LinuxX64);
+        assert!(!x64.branch_fused[1]);
+    }
+
+    /// Integer ALU work between the compare and the branch writes
+    /// RFLAGS on x86_64 but not NZCV on aarch64.
+    #[test]
+    fn alu_in_the_window_blocks_fusion_on_x86_64_only() {
+        let build = || {
+            branch_func(
+                vec![
+                    load_i64(),
+                    Inst::BinopI {
+                        op: BinOp::Lt,
+                        lhs: 0,
+                        rhs_imm: 5,
+                    },
+                    Inst::BinopI {
+                        op: BinOp::Add,
+                        lhs: 0,
+                        rhs_imm: 7,
+                    },
+                    store_of(2),
+                ],
+                1,
+            )
+        };
+        assert!(allocate(&build(), Target::LinuxAarch64).branch_fused[1]);
+        assert!(!allocate(&build(), Target::LinuxX64).branch_fused[1]);
+    }
+
+    /// A compare with a second consumer keeps its materialisation on
+    /// both targets.
+    #[test]
+    fn multi_use_compare_stays_materialized() {
+        let build = || {
+            branch_func(
+                vec![
+                    load_i64(),
+                    Inst::BinopI {
+                        op: BinOp::Lt,
+                        lhs: 0,
+                        rhs_imm: 5,
+                    },
+                    store_of(1),
+                ],
+                1,
+            )
+        };
+        assert!(!allocate(&build(), Target::LinuxAarch64).branch_fused[1]);
+        assert!(!allocate(&build(), Target::LinuxX64).branch_fused[1]);
+    }
+
+    /// FP comparisons fuse like the integer ones; the per-arch
+    /// terminators cover the unordered cases.
+    #[test]
+    fn fp_compare_feeding_a_branch_fuses() {
+        let build = || {
+            branch_func(
+                vec![
+                    Inst::LoadLocal {
+                        off: 2,
+                        kind: LoadKind::F64,
+                        volatile: false,
+                    },
+                    Inst::LoadLocal {
+                        off: 3,
+                        kind: LoadKind::F64,
+                        volatile: false,
+                    },
+                    Inst::Binop {
+                        op: BinOp::Flt,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                ],
+                2,
+            )
+        };
+        assert!(allocate(&build(), Target::LinuxAarch64).branch_fused[2]);
+        assert!(allocate(&build(), Target::LinuxX64).branch_fused[2]);
+    }
+
+    /// A dead pure inst in the window emits no code, so it cannot
+    /// clobber flags; the fused compare keeps its single terminator
+    /// use and its place, so its color stays in the used sets the
+    /// prologue saves from.
+    #[test]
+    fn dead_window_insts_do_not_block_fusion() {
+        let f = branch_func(
+            vec![
+                load_i64(),
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 0,
+                    rhs_imm: 5,
+                },
+                // Dead renormalize left by the branch-cond fold.
+                Inst::BinopI {
+                    op: BinOp::Ne,
+                    lhs: 1,
+                    rhs_imm: 0,
+                },
+            ],
+            1,
+        );
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let alloc = allocate(&f, target);
+            assert!(alloc.branch_fused[1]);
+            assert_eq!(alloc.use_counts[1], 1);
+            assert!(matches!(alloc.places[1], Place::IntReg(_)));
+        }
     }
 }

@@ -19,8 +19,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=9
     v13  StoreLocal { off=-1, value=v5, kind=I64, volatile } -> -
     v14  LoadLocal { off=-1, kind=I64, volatile }         -> x1
     v15  BinopI { op=and, lhs=v14, rhs_imm=1 }            -> x1
-    v16  BinopI { op=eq, lhs=v15, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v16, target=b2, fall=b1 }   (exit_acc=v16)
+    v16  BinopI { op=eq, lhs=v15, rhs_imm=0 }             -> x2
+    terminator Bnz { cond=v15, target=b2, fall=b1 }   (exit_acc=v16)
   block 1  start_pc=0
     v17  Imm(1)                                           -> x0
     terminator Return(v17)   (exit_acc=v17)

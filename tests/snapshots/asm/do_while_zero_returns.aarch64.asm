@@ -30,8 +30,7 @@ Disassembly of section .text:
 
 <classify>:
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
                	ret
                	cmp	x0, #0x0

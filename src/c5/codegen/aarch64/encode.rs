@@ -961,6 +961,9 @@ pub(crate) enum Cond {
     Lo = 0x3,
     /// FP "less than" -- N==1, set by FCMP when Dn < Dm (ordered).
     Mi = 0x4,
+    /// N==0, the exact complement of `Mi`; taken by a `Bz`-fused FP
+    /// `<` branch, including the unordered case FCMP leaves N clear.
+    Pl = 0x5,
     /// Unsigned `>`. After SUBS, set when C==1 && Z==0.
     Hi = 0x8,
     /// FP "less than or equal" / unsigned `<=` -- C==0 || Z==1.
@@ -985,8 +988,10 @@ impl Cond {
     /// variant. Used by the cmp+branch fusion peephole: when a
     /// `BinOp::Lt` is followed by a `Terminator::Bz`, the
     /// branch fires on "(lhs < rhs) is false", i.e. "lhs >= rhs"
-    /// -- so `Cond::Lt.flip() == Cond::Ge`.
-    fn flip(self) -> Cond {
+    /// -- so `Cond::Lt.flip() == Cond::Ge`. The complement is exact
+    /// over the NZCV states, so it also inverts an FCMP condition
+    /// correctly for the unordered (NaN) state.
+    pub(crate) fn flip(self) -> Cond {
         match self {
             Cond::Eq => Cond::Ne,
             Cond::Ne => Cond::Eq,
@@ -998,11 +1003,8 @@ impl Cond {
             Cond::Hs => Cond::Lo,
             Cond::Hi => Cond::Ls,
             Cond::Ls => Cond::Hi,
-            // Mi <-> Pl -- FP comparisons go through the cset-only
-            // path so the cmp+branch fusion peephole shouldn't
-            // reach here, but map to the closest integer flip in
-            // case it does.
-            Cond::Mi => Cond::Ge,
+            Cond::Mi => Cond::Pl,
+            Cond::Pl => Cond::Mi,
         }
     }
 }
@@ -2073,6 +2075,12 @@ pub(crate) fn lower(
             }
         }
     }
+    // Branch on a zero test's operand directly. Immediately before
+    // allocation so every mid-end fold keyed on the compare shape has
+    // run.
+    for f in ssa_funcs.iter_mut() {
+        crate::c5::codegen::passes::constfold_branch::strip_zero_test_conds(f);
+    }
     let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
         super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (aarch64)", || {
             ssa_funcs
@@ -2981,13 +2989,25 @@ mod tests {
 
     #[test]
     fn cond_flip_round_trips() {
-        for c in [Cond::Eq, Cond::Ne, Cond::Lt, Cond::Ge, Cond::Gt, Cond::Le] {
+        for c in [
+            Cond::Eq,
+            Cond::Ne,
+            Cond::Lt,
+            Cond::Ge,
+            Cond::Gt,
+            Cond::Le,
+            Cond::Mi,
+            Cond::Pl,
+        ] {
             assert_eq!(c.flip().flip(), c, "double flip should be identity");
+            // The architectural inversion flips bit 0 of the encoding.
+            assert_eq!(c.flip() as u32, (c as u32) ^ 1);
         }
         // Spot checks of the inversion semantics.
         assert_eq!(Cond::Eq.flip(), Cond::Ne);
         assert_eq!(Cond::Lt.flip(), Cond::Ge);
         assert_eq!(Cond::Gt.flip(), Cond::Le);
+        assert_eq!(Cond::Mi.flip(), Cond::Pl);
     }
 
     #[test]

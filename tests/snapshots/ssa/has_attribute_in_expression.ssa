@@ -6,16 +6,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(24)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I32 }               -> x0
-    v3   BinopI { op=eq, lhs=v2, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
+    v3   BinopI { op=eq, lhs=v2, rhs_imm=0 }              -> x1
+    terminator Bnz { cond=v2, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   Imm(40)                                          -> x0
     terminator Return(v4)   (exit_acc=v4)
   block 2  start_pc=0
     v5   ImmData(32)                                      -> x0
     v6   Load { addr=v5, disp=0, kind=I32 }               -> x0
-    v7   BinopI { op=ne, lhs=v6, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v7, target=b4, fall=b3 }   (exit_acc=v7)
+    v7   BinopI { op=ne, lhs=v6, rhs_imm=0 }              -> x1
+    terminator Bz { cond=v6, target=b4, fall=b3 }   (exit_acc=v7)
   block 3  start_pc=0
     v8   Imm(41)                                          -> x0
     terminator Return(v8)   (exit_acc=v8)

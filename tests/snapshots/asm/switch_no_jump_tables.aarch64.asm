@@ -53,8 +53,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	add	x0, x0, #0x2
                	b	<addr>
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x0, #0x1                // =1
                	b	<addr>
 

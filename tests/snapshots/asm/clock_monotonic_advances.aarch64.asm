@@ -29,8 +29,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50
@@ -97,8 +96,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x20
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50

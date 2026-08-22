@@ -129,10 +129,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=21
     v92  Imm(0)                                           -> x1
     v93  Imm(8)                                           -> x1
     v94  BinopI { op=add, lhs=v91, rhs_imm=8 }            -> x1
-    v95  Load { addr=v91, disp=8, kind=I32 }              -> x0
+    v95  Load { addr=v91, disp=8, kind=I32 }              -> x1
     v96  BinopI { op=ne, lhs=v95, rhs_imm=0 }             -> x0
-    v97  Imm(0)                                           -> x1
-    terminator Bnz { cond=v96, target=b37, fall=b18 }   (exit_acc=v96)
+    v97  Imm(0)                                           -> x2
+    terminator Bnz { cond=v95, target=b37, fall=b18 }   (exit_acc=v96)
   block 18  start_pc=0
     v98  ImmData(184)                                     -> x0
     v99  Imm(16)                                          -> x1

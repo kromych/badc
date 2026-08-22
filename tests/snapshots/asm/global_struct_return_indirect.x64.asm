@@ -82,19 +82,13 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rax
                	movl	(%rax), %eax
                	xorq	$0x1, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	movl	%eax, %ecx
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x90(%rbp), %rax
                	movslq	0x4(%rax), %rax
                	cmpq	$0x2, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

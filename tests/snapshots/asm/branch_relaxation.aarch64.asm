@@ -14,22 +14,21 @@ Disassembly of section .text:
                	brk	#0x1
 
 <classify>:
-               	mov	x3, x0
-               	sxtw	x3, w3
+               	mov	x4, x0
+               	sxtw	x4, w4
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	b	<addr>
-               	mov	x4, #0x3                // =3
-               	sdiv	x17, x2, x4
-               	msub	x4, x17, x4, x2
-               	cmp	x4, #0x0
-               	b.ne	<addr>
+               	mov	x3, #0x3                // =3
+               	sdiv	x17, x2, x3
+               	msub	x3, x17, x3, x2
+               	cbnz	x3, <addr>
                	add	x0, x0, x1
                	b	<addr>
-               	mov	x4, #0x3                // =3
-               	sdiv	x17, x2, x4
-               	msub	x4, x17, x4, x2
-               	cmp	x4, #0x1
+               	mov	x3, #0x3                // =3
+               	sdiv	x17, x2, x3
+               	msub	x3, x17, x3, x2
+               	cmp	x3, #0x1
                	b.ne	<addr>
                	sub	x0, x0, #0x1
                	b	<addr>
@@ -37,7 +36,7 @@ Disassembly of section .text:
                	b	<addr>
                	add	x1, x2, #0x1
                	sxtw	x2, w1
-               	cmp	x2, x3
+               	cmp	x2, x4
                	b.lt	<addr>
                	sxtw	x0, w0
                	ret
@@ -49,8 +48,7 @@ Disassembly of section .text:
                	mov	x3, #0x3                // =3
                	sdiv	x17, x2, x3
                	msub	x3, x17, x3, x2
-               	cmp	x3, #0x0
-               	b.ne	<addr>
+               	cbnz	x3, <addr>
                	add	x0, x0, x1
                	b	<addr>
                	mov	x3, #0x3                // =3

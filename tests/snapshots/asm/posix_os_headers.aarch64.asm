@@ -88,8 +88,7 @@ Disassembly of section .text:
                	ldrsh	x0, [x0, #0x6]
                	mov	x17, #0x1               // =1
                	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x19, [sp, #0x10]

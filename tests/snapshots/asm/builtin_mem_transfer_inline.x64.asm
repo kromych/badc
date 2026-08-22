@@ -65,17 +65,11 @@ Disassembly of section .text:
                	leaq	-0x460(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	%r12, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	movl	$0x1, %ecx
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x460(%rbp), %rax
                	movq	0x8(%rax), %rcx
                	cmpq	%r13, %rcx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
                	movl	$0x1, %eax
@@ -85,9 +79,6 @@ Disassembly of section .text:
                	movl	0x10(%rax), %eax
                	movl	$0xdeadbeef, %r11d      # imm = 0xDEADBEEF
                	cmpq	%r11, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

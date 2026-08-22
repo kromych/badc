@@ -33,8 +33,8 @@ Disassembly of section .text:
                	movq	%rax, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
-               	movq	%rsp, %rsi
-               	subq	%r11, %rsi
+               	movq	%rsp, %rdi
+               	subq	%r11, %rdi
                	shrq	$0xc, %r11
                	testq	%r11, %r11
                	je	<addr>
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1, %r11
                	jne	<addr>
-               	movq	%rsi, %rsp
+               	movq	%rdi, %rsp
                	movl	$0x7, %eax
                	movq	%rax, %r11
                	addq	$0xf, %r11
@@ -85,55 +85,46 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rdx, %rsp
-               	movq	%rsi, %rdi
-               	andq	$0xf, %rdi
+               	movq	%rdi, %rsi
+               	andq	$0xf, %rsi
                	movq	%rax, %r8
                	andq	$0xf, %r8
-               	orq	%r8, %rdi
+               	orq	%r8, %rsi
                	movq	%rcx, %r8
                	andq	$0xf, %r8
-               	orq	%r8, %rdi
+               	orq	%r8, %rsi
                	movq	%rdx, %r8
                	andq	$0xf, %r8
-               	orq	%r8, %rdi
-               	testq	%rdi, %rdi
+               	orq	%r8, %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
                	movl	$0x1, %eax
                	leaq	-0x50(%rbp), %rsp
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rdi, %rdi
+               	xorq	%rsi, %rsi
                	movl	$0xb, %r8d
-               	movb	%r8b, (%rsi)
+               	movb	%r8b, (%rdi)
                	movl	$0x16, %r8d
                	movb	%r8b, 0x6(%rax)
                	movl	$0x21, %r8d
                	movb	%r8b, 0x20(%rcx)
                	movl	$0x2c, %r8d
                	movb	%r8b, 0x63(%rdx)
-               	movsbq	(%rsi), %rsi
-               	cmpq	$0xb, %rsi
-               	sete	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	movsbq	(%rdi), %rdi
+               	cmpq	$0xb, %rdi
+               	jne	<addr>
                	movsbq	0x6(%rax), %rax
                	cmpq	$0x16, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%dil
-               	movzbq	%dil, %rdi
+               	sete	%sil
+               	movzbq	%sil, %rsi
                	xorq	%rax, %rax
-               	testq	%rdi, %rdi
+               	testq	%rsi, %rsi
                	je	<addr>
                	movsbq	0x20(%rcx), %rax
                	cmpq	$0x21, %rax
                	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>

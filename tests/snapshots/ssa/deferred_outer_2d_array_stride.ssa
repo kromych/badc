@@ -83,10 +83,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v53  Imm(32)                                          -> x1
     v54  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x1
     v55  Imm(0)                                           -> x1
-    v56  Load { addr=v1, disp=32, kind=I64 }              -> x1
+    v56  Load { addr=v1, disp=32, kind=I64 }              -> x2
     v57  BinopI { op=ne, lhs=v56, rhs_imm=0 }             -> x1
-    v58  Imm(0)                                           -> x2
-    terminator Bnz { cond=v57, target=b21, fall=b13 }   (exit_acc=v57)
+    v58  Imm(0)                                           -> x6
+    terminator Bnz { cond=v56, target=b21, fall=b13 }   (exit_acc=v57)
   block 13  start_pc=0
     v59  ImmData(32)                                      -> x1
     v60  Imm(32)                                          -> x1

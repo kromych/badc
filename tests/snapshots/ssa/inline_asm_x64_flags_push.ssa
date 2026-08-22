@@ -15,8 +15,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     terminator Jmp(b2)   (exit_acc=v33)
   block 2  start_pc=0
     v2   BinopI { op=and, lhs=v33, rhs_imm=64 }           -> x0
-    v3   BinopI { op=eq, lhs=v2, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v3, target=b4, fall=b3 }   (exit_acc=v3)
+    v3   BinopI { op=eq, lhs=v2, rhs_imm=0 }              -> x1
+    terminator Bnz { cond=v2, target=b4, fall=b3 }   (exit_acc=v3)
   block 3  start_pc=0
     v4   Imm(1)                                           -> x0
     terminator Return(v4)   (exit_acc=v4)
@@ -50,8 +50,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
   block 10  start_pc=0
     v10  BinopI { op=xor, lhs=v43, rhs_imm=4660 }         -> x0
     v11  BinopI { op=and, lhs=v10, rhs_imm=4294967295 }   -> x0
-    v12  BinopI { op=ne, lhs=v11, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v12, target=b12, fall=b11 }   (exit_acc=v12)
+    v12  BinopI { op=ne, lhs=v11, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v11, target=b12, fall=b11 }   (exit_acc=v12)
   block 11  start_pc=0
     v13  Imm(3)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)
@@ -68,8 +68,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
   block 14  start_pc=0
     v15  BinopI { op=xor, lhs=v48, rhs_imm=48879 }        -> x0
     v16  BinopI { op=and, lhs=v15, rhs_imm=4294967295 }   -> x0
-    v17  BinopI { op=ne, lhs=v16, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v17, target=b16, fall=b15 }   (exit_acc=v17)
+    v17  BinopI { op=ne, lhs=v16, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v16, target=b16, fall=b15 }   (exit_acc=v17)
   block 15  start_pc=0
     v18  Imm(4)                                           -> x0
     terminator Return(v18)   (exit_acc=v18)
@@ -90,8 +90,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v23  InlineAsm { template="push %1\n\tpopf\n\tpushf\n\tpop %0", ops=2, args=[v21, v53] } -> -
     v24  LoadLocal { off=-2, kind=I64 }                   -> x0
     v25  BinopI { op=and, lhs=v24, rhs_imm=64 }           -> x0
-    v26  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v26, target=b20, fall=b19 }   (exit_acc=v26)
+    v26  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v25, target=b20, fall=b19 }   (exit_acc=v26)
   block 19  start_pc=0
     v27  Imm(5)                                           -> x0
     terminator Return(v27)   (exit_acc=v27)

@@ -575,7 +575,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v184 Imm(0)                                           -> x0
     v185 Extend { value=v183, kind=I32 }                  -> x0
     v186 BinopI { op=ne, lhs=v185, rhs_imm=0 }            -> x2
-    terminator Bz { cond=v186, target=b54, fall=b53 }   (exit_acc=v186)
+    terminator Bz { cond=v185, target=b54, fall=b53 }   (exit_acc=v186)
   block 53  start_pc=0
     v187 Extend { value=v183, kind=I32 }                  -> x1
     v188 BinopI { op=shl, lhs=v185, rhs_imm=32 }          -> x2

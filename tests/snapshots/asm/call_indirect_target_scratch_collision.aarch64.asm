@@ -53,7 +53,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x20, #0x0
                	cset	x0, eq
-               	cbz	x0, <addr>
+               	cbnz	x20, <addr>
                	ldursw	x0, [x29, #-0x10]
                	mov	x17, #0x40              // =64
                	movk	x17, #0x1, lsl #16

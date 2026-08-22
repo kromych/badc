@@ -15,21 +15,22 @@ Disassembly of section .text:
 
 <find_next>:
                	mov	x3, x0
-               	mov	x4, #0x64               // =100
-               	cmp	x2, #0x64
+               	mov	x1, x2
+               	mov	x2, #0x64               // =100
+               	cmp	x1, #0x64
                	b.lo	<addr>
-               	mov	x0, x4
+               	mov	x0, x2
                	ret
-               	lsr	x0, x2, #6
-               	ldr	x1, [x3, x0, lsl #3]
+               	lsr	x0, x1, #6
+               	ldr	x4, [x3, x0, lsl #3]
                	mov	x5, #0xffff             // =65535
                	movk	x5, #0xffff, lsl #16
                	movk	x5, #0xffff, lsl #32
                	movk	x5, #0xffff, lsl #48
                	mov	x17, #0x3f              // =63
-               	and	x2, x2, x17
-               	lsl	x2, x5, x2
-               	and	x1, x1, x2
+               	and	x1, x1, x17
+               	lsl	x1, x5, x1
+               	and	x1, x4, x1
                	b	<addr>
                	add	x1, x0, #0x1
                	lsl	x1, x1, #6
@@ -37,9 +38,8 @@ Disassembly of section .text:
                	b.hs	<addr>
                	add	x0, x0, #0x1
                	ldr	x1, [x3, x0, lsl #3]
-               	cmp	x1, #0x0
-               	b.eq	<addr>
-               	lsl	x2, x0, #6
+               	cbz	x1, <addr>
+               	lsl	x3, x0, #6
                	sub	x0, x1, #0x1
                	mvn	x1, x1
                	and	x0, x0, x1
@@ -77,11 +77,11 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	mov	x17, #0x7f              // =127
                	and	x0, x0, x17
-               	add	x0, x2, x0
+               	add	x0, x3, x0
                	cmp	x0, #0x64
                	b.ls	<addr>
                	b	<addr>
-               	mov	x4, x0
+               	mov	x2, x0
                	b	<addr>
                	b	<addr>
 

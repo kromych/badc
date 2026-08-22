@@ -44,8 +44,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v27  Phi { incoming=[b8:v8, b13:v26], kind=I64 }      -> x0
     terminator Jmp(b10)   (exit_acc=v27)
   block 10  start_pc=0
-    v9   BinopI { op=ne, lhs=v27, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v9, target=b12, fall=b11 }   (exit_acc=v9)
+    v9   BinopI { op=ne, lhs=v27, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v27, target=b12, fall=b11 }   (exit_acc=v9)
   block 11  start_pc=0
     v10  Imm(2)                                           -> x0
     terminator Return(v10)   (exit_acc=v10)

@@ -98,8 +98,7 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x18]
                	ldur	x0, [x29, #-0x18]
                	mvn	x0, x0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

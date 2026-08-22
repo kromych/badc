@@ -93,9 +93,6 @@ Disassembly of section .text:
                	movzbq	(%rax), %rax
                	xorq	$0x42, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	movl	$0x1, %ecx
                	testq	%rax, %rax
                	jne	<addr>
@@ -103,9 +100,6 @@ Disassembly of section .text:
                	movzbq	0x1(%rax), %rax
                	xorq	$0x41, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
@@ -116,9 +110,6 @@ Disassembly of section .text:
                	movzbq	0x2(%rax), %rax
                	xorq	$0x44, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax

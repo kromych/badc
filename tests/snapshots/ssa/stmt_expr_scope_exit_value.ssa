@@ -304,8 +304,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=11
     v101 Store { addr=v1, disp=0, value=v100, kind=I32 }  -> -
     v102 StoreLocal { off=-7, value=v100, kind=I32 }      -> -
     v103 Extend { value=v100, kind=I32 }                  -> x0
-    v104 BinopI { op=eq, lhs=v103, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v104, target=b35, fall=b26 }   (exit_acc=v104)
+    v104 BinopI { op=eq, lhs=v103, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v103, target=b35, fall=b26 }   (exit_acc=v104)
   block 26  start_pc=0
     v107 LoadLocal { off=-7, kind=I32 }                   -> x0
     v108 BinopI { op=add, lhs=v107, rhs_imm=3 }           -> x0

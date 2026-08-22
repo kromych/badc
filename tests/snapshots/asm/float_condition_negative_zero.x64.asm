@@ -38,23 +38,13 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x10(%rbp,%riz)
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0x1, %ecx
                	movsd	-0x10(%rbp,%riz), %xmm1
                	ucomisd	%xmm0, %xmm1
-               	sete	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jp	<addr>
+               	je	<addr>
                	orq	$0x2, %rcx
                	xorq	%rax, %rax
                	jmp	<addr>
@@ -65,12 +55,7 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rdx
-               	testq	%rdx, %rdx
+               	jp	<addr>
                	jne	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -79,23 +64,13 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	orq	$0x8, %rcx
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	movslq	%eax, %rax

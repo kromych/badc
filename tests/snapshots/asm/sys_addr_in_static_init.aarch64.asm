@@ -30,8 +30,7 @@ Disassembly of section .text:
                	mov	x1, x2
                	blr	x9
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x20]

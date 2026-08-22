@@ -46,14 +46,8 @@ Disassembly of section .text:
                	movsd	(%rax,%riz), %xmm0
                	movabsq	$0x400b333333333333, %rax # imm = 0x400B333333333333
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	setb	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	ucomisd	%xmm0, %xmm15
+               	jbe	<addr>
                	movl	$0x4, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -63,10 +57,7 @@ Disassembly of section .text:
                	movabsq	$0x400ccccccccccccd, %rax # imm = 0x400CCCCCCCCCCCCD
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jbe	<addr>
                	movl	$0x5, %eax
                	addq	$0x20, %rsp
                	popq	%rbp

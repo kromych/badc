@@ -82,8 +82,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	b	<addr>
                	add	x1, x2, #0x1

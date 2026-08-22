@@ -500,8 +500,8 @@ fn ent_pc=24 n_params=0 variadic=false locals=3
     v412 Imm(-1)                                          -> x1
     v413 LoadLocal { off=-3, kind=I64 }                   -> x1
     v414 BinopI { op=ule, lhs=v392, rhs_imm=-1 }          -> x1
-    v415 BinopI { op=eq, lhs=v414, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v415, target=b62, fall=b61 }   (exit_acc=v415)
+    v415 BinopI { op=eq, lhs=v414, rhs_imm=0 }            -> x2
+    terminator Bnz { cond=v414, target=b62, fall=b61 }   (exit_acc=v415)
   block 61  start_pc=0
     v416 Imm(40)                                          -> x0
     terminator Return(v416)   (exit_acc=v416)

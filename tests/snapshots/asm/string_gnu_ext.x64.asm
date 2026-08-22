@@ -370,8 +370,8 @@ Disassembly of section .text:
                	testq	%r12, %r12
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	testq	%r12, %r12
+               	je	<addr>
                	leaq	<rip>, %rsi
                	movq	%r12, %rdi
                	xorl	%eax, %eax
@@ -401,8 +401,8 @@ Disassembly of section .text:
                	testq	%r12, %r12
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	testq	%r12, %r12
+               	je	<addr>
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
                	xorl	%eax, %eax
@@ -428,17 +428,16 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %rcx
+               	testq	%rax, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rax, %rax
+               	je	<addr>
+               	movsbq	(%rax), %rcx
                	testq	%rcx, %rcx
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movsbq	(%rcx), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x13, %eax
                	movq	(%rsp), %rbx
@@ -447,7 +446,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movq	%rcx, %rdi
+               	movq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movzbq	%al, %rax

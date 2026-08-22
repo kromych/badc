@@ -223,8 +223,7 @@ Disassembly of section .text:
                	str	w0, [x20]
                	stur	w0, [x29, #-0x38]
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	ldursw	x0, [x29, #-0x38]
                	add	x0, x0, #0x3
                	sxtw	x0, w0

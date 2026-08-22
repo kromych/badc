@@ -37,14 +37,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rbx, %xmm15
-               	ucomisd	%xmm15, %xmm0
-               	setbe	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	ucomisd	%xmm0, %xmm15
+               	jb	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
@@ -58,10 +52,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setae	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jb	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp
@@ -74,12 +65,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
@@ -129,14 +115,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rbx, %xmm15
-               	ucomiss	%xmm15, %xmm0
-               	setbe	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	ucomiss	%xmm0, %xmm15
+               	jb	<addr>
                	movl	$0x7, %eax
                	movq	(%rsp), %rbx
                	addq	$0x10, %rsp

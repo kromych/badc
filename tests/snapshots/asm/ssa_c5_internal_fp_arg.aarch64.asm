@@ -45,8 +45,7 @@ Disassembly of section .text:
                	fcmp	d16, d0
                	cset	x1, mi
                	sxtw	x1, w1
-               	cmp	x1, #0x0
-               	b.eq	<addr>
+               	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
@@ -70,8 +69,7 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	cset	x0, ls
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20

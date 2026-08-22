@@ -99,11 +99,11 @@ Disassembly of section .text:
                	jl	<addr>
                	movzbq	0x15(%rdx), %rax
                	xorq	$0x25, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movl	%eax, %ecx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movzbq	0x16(%rdx), %rax
                	xorq	$0x30, %rax

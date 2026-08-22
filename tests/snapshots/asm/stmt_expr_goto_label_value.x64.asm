@@ -26,23 +26,24 @@ Disassembly of section .text:
                	int3
 
 <find_next>:
-               	movl	$0x64, %esi
-               	cmpq	$0x64, %rdx
+               	movq	%rdx, %rcx
+               	movl	$0x64, %edx
+               	cmpq	$0x64, %rcx
                	jb	<addr>
-               	movq	%rsi, %rax
-               	retq
                	movq	%rdx, %rax
+               	retq
+               	movq	%rcx, %rax
                	shrq	$0x6, %rax
-               	movq	(%rdi,%rax,8), %rcx
+               	movq	(%rdi,%rax,8), %rsi
                	movabsq	$-0x1, %r8
-               	andq	$0x3f, %rdx
-               	movq	%rdx, %r10
-               	movq	%r8, %rdx
-               	pushq	%rcx
+               	andq	$0x3f, %rcx
+               	movq	%rcx, %r10
+               	movq	%r8, %rcx
+               	movq	%rcx, %r11
                	movq	%r10, %rcx
-               	shlq	%cl, %rdx
-               	popq	%rcx
-               	andq	%rdx, %rcx
+               	shlq	%cl, %r11
+               	movq	%r11, %rcx
+               	andq	%rsi, %rcx
                	jmp	<addr>
                	leaq	0x1(%rax), %rcx
                	shlq	$0x6, %rcx
@@ -52,8 +53,8 @@ Disassembly of section .text:
                	movq	(%rdi,%rax,8), %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movq	%rax, %rdx
-               	shlq	$0x6, %rdx
+               	movq	%rax, %rsi
+               	shlq	$0x6, %rsi
                	leaq	-0x1(%rcx), %rax
                	xorq	$-0x1, %rcx
                	andq	%rcx, %rax
@@ -83,11 +84,11 @@ Disassembly of section .text:
                	shrq	$0x20, %rcx
                	addq	%rcx, %rax
                	andq	$0x7f, %rax
-               	addq	%rdx, %rax
+               	addq	%rsi, %rax
                	cmpq	$0x64, %rax
                	jbe	<addr>
                	jmp	<addr>
-               	movq	%rax, %rsi
+               	movq	%rax, %rdx
                	jmp	<addr>
                	jmp	<addr>
 

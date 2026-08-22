@@ -24,9 +24,7 @@ Disassembly of section .text:
                	fmul	d0, d16, d17
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, gt
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b.gt	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0xc8a0             // =51360
@@ -42,9 +40,7 @@ Disassembly of section .text:
                	movk	x0, #0x7f61, lsl #16
                	fmov	s17, w0
                	fcmp	s0, s17
-               	cset	x0, gt
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b.gt	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0xc8a0             // =51360
@@ -57,8 +53,7 @@ Disassembly of section .text:
                	fmul	d0, d16, d17
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ls
-               	cbz	x0, <addr>
+               	b.hi	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	mov	x0, #0x0                // =0

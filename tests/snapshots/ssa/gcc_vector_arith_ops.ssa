@@ -265,8 +265,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v204 Imm(16)                                          -> x2
     v205 Imm(68719476736)                                 -> x0
     v206 Call { target_pc=0, args=[v202, v203, v204], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v207 BinopI { op=eq, lhs=v206, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v207, target=b7, fall=b6 }   (exit_acc=v207)
+    v207 BinopI { op=eq, lhs=v206, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v206, target=b7, fall=b6 }   (exit_acc=v207)
   block 6  start_pc=0
     v208 Imm(1)                                           -> x0
     terminator Return(v208)   (exit_acc=v208)
@@ -427,8 +427,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v352 Imm(16)                                          -> x2
     v353 Imm(68719476736)                                 -> x0
     v354 Call { target_pc=0, args=[v350, v351, v352], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v355 BinopI { op=eq, lhs=v354, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v355, target=b14, fall=b13 }   (exit_acc=v355)
+    v355 BinopI { op=eq, lhs=v354, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v354, target=b14, fall=b13 }   (exit_acc=v355)
   block 13  start_pc=0
     v356 Imm(2)                                           -> x0
     terminator Return(v356)   (exit_acc=v356)
@@ -589,8 +589,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v500 Imm(16)                                          -> x2
     v501 Imm(68719476736)                                 -> x0
     v502 Call { target_pc=0, args=[v498, v499, v500], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v503 BinopI { op=eq, lhs=v502, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v503, target=b21, fall=b20 }   (exit_acc=v503)
+    v503 BinopI { op=eq, lhs=v502, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v502, target=b21, fall=b20 }   (exit_acc=v503)
   block 20  start_pc=0
     v504 Imm(3)                                           -> x0
     terminator Return(v504)   (exit_acc=v504)
@@ -749,8 +749,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v646 Imm(16)                                          -> x2
     v647 Imm(68719476736)                                 -> x0
     v648 Call { target_pc=0, args=[v644, v645, v646], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v649 BinopI { op=eq, lhs=v648, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v649, target=b28, fall=b27 }   (exit_acc=v649)
+    v649 BinopI { op=eq, lhs=v648, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v648, target=b28, fall=b27 }   (exit_acc=v649)
   block 27  start_pc=0
     v650 Imm(4)                                           -> x0
     terminator Return(v650)   (exit_acc=v650)
@@ -909,8 +909,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v792 Imm(16)                                          -> x2
     v793 Imm(68719476736)                                 -> x0
     v794 Call { target_pc=0, args=[v790, v791, v792], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v795 BinopI { op=eq, lhs=v794, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v795, target=b35, fall=b34 }   (exit_acc=v795)
+    v795 BinopI { op=eq, lhs=v794, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v794, target=b35, fall=b34 }   (exit_acc=v795)
   block 34  start_pc=0
     v796 Imm(5)                                           -> x0
     terminator Return(v796)   (exit_acc=v796)
@@ -971,8 +971,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v840 Imm(16)                                          -> x2
     v841 Imm(68719476736)                                 -> x0
     v842 Call { target_pc=0, args=[v838, v839, v840], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v843 BinopI { op=eq, lhs=v842, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v843, target=b42, fall=b41 }   (exit_acc=v843)
+    v843 BinopI { op=eq, lhs=v842, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v842, target=b42, fall=b41 }   (exit_acc=v843)
   block 41  start_pc=0
     v844 Imm(6)                                           -> x0
     terminator Return(v844)   (exit_acc=v844)
@@ -1033,8 +1033,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v888 Imm(16)                                          -> x2
     v889 Imm(68719476736)                                 -> x0
     v890 Call { target_pc=0, args=[v886, v887, v888], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v891 BinopI { op=eq, lhs=v890, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v891, target=b49, fall=b48 }   (exit_acc=v891)
+    v891 BinopI { op=eq, lhs=v890, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v890, target=b49, fall=b48 }   (exit_acc=v891)
   block 48  start_pc=0
     v892 Imm(7)                                           -> x0
     terminator Return(v892)   (exit_acc=v892)
@@ -1095,8 +1095,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v936 Imm(16)                                          -> x2
     v937 Imm(68719476736)                                 -> x0
     v938 Call { target_pc=0, args=[v934, v935, v936], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v939 BinopI { op=eq, lhs=v938, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v939, target=b56, fall=b55 }   (exit_acc=v939)
+    v939 BinopI { op=eq, lhs=v938, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v938, target=b56, fall=b55 }   (exit_acc=v939)
   block 55  start_pc=0
     v940 Imm(8)                                           -> x0
     terminator Return(v940)   (exit_acc=v940)
@@ -1258,8 +1258,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v1085 Imm(16)                                          -> x2
     v1086 Imm(68719476736)                                 -> x0
     v1087 Call { target_pc=0, args=[v1083, v1084, v1085], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1088 BinopI { op=eq, lhs=v1087, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v1088, target=b63, fall=b62 }   (exit_acc=v1088)
+    v1088 BinopI { op=eq, lhs=v1087, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v1087, target=b63, fall=b62 }   (exit_acc=v1088)
   block 62  start_pc=0
     v1089 Imm(9)                                           -> x0
     terminator Return(v1089)   (exit_acc=v1089)
@@ -1421,8 +1421,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v1234 Imm(16)                                          -> x2
     v1235 Imm(68719476736)                                 -> x0
     v1236 Call { target_pc=0, args=[v1232, v1233, v1234], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1237 BinopI { op=eq, lhs=v1236, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v1237, target=b70, fall=b69 }   (exit_acc=v1237)
+    v1237 BinopI { op=eq, lhs=v1236, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v1236, target=b70, fall=b69 }   (exit_acc=v1237)
   block 69  start_pc=0
     v1238 Imm(10)                                          -> x0
     terminator Return(v1238)   (exit_acc=v1238)
@@ -1584,8 +1584,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v1383 Imm(16)                                          -> x2
     v1384 Imm(68719476736)                                 -> x0
     v1385 Call { target_pc=0, args=[v1381, v1382, v1383], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1386 BinopI { op=eq, lhs=v1385, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v1386, target=b77, fall=b76 }   (exit_acc=v1386)
+    v1386 BinopI { op=eq, lhs=v1385, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v1385, target=b77, fall=b76 }   (exit_acc=v1386)
   block 76  start_pc=0
     v1387 Imm(11)                                          -> x0
     terminator Return(v1387)   (exit_acc=v1387)
@@ -1745,8 +1745,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v1530 Imm(16)                                          -> x2
     v1531 Imm(68719476736)                                 -> x0
     v1532 Call { target_pc=0, args=[v1528, v1529, v1530], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1533 BinopI { op=eq, lhs=v1532, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v1533, target=b84, fall=b83 }   (exit_acc=v1533)
+    v1533 BinopI { op=eq, lhs=v1532, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v1532, target=b84, fall=b83 }   (exit_acc=v1533)
   block 83  start_pc=0
     v1534 Imm(12)                                          -> x0
     terminator Return(v1534)   (exit_acc=v1534)
@@ -1906,8 +1906,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v1677 Imm(16)                                          -> x2
     v1678 Imm(68719476736)                                 -> x0
     v1679 Call { target_pc=0, args=[v1675, v1676, v1677], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1680 BinopI { op=eq, lhs=v1679, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v1680, target=b91, fall=b90 }   (exit_acc=v1680)
+    v1680 BinopI { op=eq, lhs=v1679, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v1679, target=b91, fall=b90 }   (exit_acc=v1680)
   block 90  start_pc=0
     v1681 Imm(13)                                          -> x0
     terminator Return(v1681)   (exit_acc=v1681)
@@ -1969,8 +1969,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v1726 Imm(16)                                          -> x2
     v1727 Imm(68719476736)                                 -> x0
     v1728 Call { target_pc=0, args=[v1724, v1725, v1726], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1729 BinopI { op=eq, lhs=v1728, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v1729, target=b98, fall=b97 }   (exit_acc=v1729)
+    v1729 BinopI { op=eq, lhs=v1728, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v1728, target=b98, fall=b97 }   (exit_acc=v1729)
   block 97  start_pc=0
     v1730 Imm(14)                                          -> x0
     terminator Return(v1730)   (exit_acc=v1730)
@@ -2076,8 +2076,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v1819 Imm(16)                                          -> x2
     v1820 Imm(68719476736)                                 -> x0
     v1821 Call { target_pc=0, args=[v1817, v1818, v1819], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1822 BinopI { op=eq, lhs=v1821, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v1822, target=b105, fall=b104 }   (exit_acc=v1822)
+    v1822 BinopI { op=eq, lhs=v1821, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v1821, target=b105, fall=b104 }   (exit_acc=v1822)
   block 104  start_pc=0
     v1823 Imm(15)                                          -> x0
     terminator Return(v1823)   (exit_acc=v1823)
@@ -2183,8 +2183,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v1912 Imm(16)                                          -> x2
     v1913 Imm(68719476736)                                 -> x0
     v1914 Call { target_pc=0, args=[v1910, v1911, v1912], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1915 BinopI { op=eq, lhs=v1914, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v1915, target=b112, fall=b111 }   (exit_acc=v1915)
+    v1915 BinopI { op=eq, lhs=v1914, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v1914, target=b112, fall=b111 }   (exit_acc=v1915)
   block 111  start_pc=0
     v1916 Imm(16)                                          -> x0
     terminator Return(v1916)   (exit_acc=v1916)
@@ -2290,8 +2290,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2005 Imm(16)                                          -> x2
     v2006 Imm(68719476736)                                 -> x0
     v2007 Call { target_pc=0, args=[v2003, v2004, v2005], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2008 BinopI { op=eq, lhs=v2007, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2008, target=b119, fall=b118 }   (exit_acc=v2008)
+    v2008 BinopI { op=eq, lhs=v2007, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2007, target=b119, fall=b118 }   (exit_acc=v2008)
   block 118  start_pc=0
     v2009 Imm(17)                                          -> x0
     terminator Return(v2009)   (exit_acc=v2009)
@@ -2395,8 +2395,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2096 Imm(16)                                          -> x2
     v2097 Imm(68719476736)                                 -> x0
     v2098 Call { target_pc=0, args=[v2094, v2095, v2096], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2099 BinopI { op=eq, lhs=v2098, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2099, target=b126, fall=b125 }   (exit_acc=v2099)
+    v2099 BinopI { op=eq, lhs=v2098, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2098, target=b126, fall=b125 }   (exit_acc=v2099)
   block 125  start_pc=0
     v2100 Imm(18)                                          -> x0
     terminator Return(v2100)   (exit_acc=v2100)
@@ -2500,8 +2500,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2187 Imm(16)                                          -> x2
     v2188 Imm(68719476736)                                 -> x0
     v2189 Call { target_pc=0, args=[v2185, v2186, v2187], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2190 BinopI { op=eq, lhs=v2189, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2190, target=b133, fall=b132 }   (exit_acc=v2190)
+    v2190 BinopI { op=eq, lhs=v2189, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2189, target=b133, fall=b132 }   (exit_acc=v2190)
   block 132  start_pc=0
     v2191 Imm(19)                                          -> x0
     terminator Return(v2191)   (exit_acc=v2191)
@@ -2608,8 +2608,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2281 Imm(16)                                          -> x2
     v2282 Imm(68719476736)                                 -> x0
     v2283 Call { target_pc=0, args=[v2279, v2280, v2281], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2284 BinopI { op=eq, lhs=v2283, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2284, target=b140, fall=b139 }   (exit_acc=v2284)
+    v2284 BinopI { op=eq, lhs=v2283, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2283, target=b140, fall=b139 }   (exit_acc=v2284)
   block 139  start_pc=0
     v2285 Imm(20)                                          -> x0
     terminator Return(v2285)   (exit_acc=v2285)
@@ -2716,8 +2716,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2375 Imm(16)                                          -> x2
     v2376 Imm(68719476736)                                 -> x0
     v2377 Call { target_pc=0, args=[v2373, v2374, v2375], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2378 BinopI { op=eq, lhs=v2377, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2378, target=b147, fall=b146 }   (exit_acc=v2378)
+    v2378 BinopI { op=eq, lhs=v2377, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2377, target=b147, fall=b146 }   (exit_acc=v2378)
   block 146  start_pc=0
     v2379 Imm(21)                                          -> x0
     terminator Return(v2379)   (exit_acc=v2379)
@@ -2824,8 +2824,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2469 Imm(16)                                          -> x2
     v2470 Imm(68719476736)                                 -> x0
     v2471 Call { target_pc=0, args=[v2467, v2468, v2469], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2472 BinopI { op=eq, lhs=v2471, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2472, target=b154, fall=b153 }   (exit_acc=v2472)
+    v2472 BinopI { op=eq, lhs=v2471, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2471, target=b154, fall=b153 }   (exit_acc=v2472)
   block 153  start_pc=0
     v2473 Imm(22)                                          -> x0
     terminator Return(v2473)   (exit_acc=v2473)
@@ -2930,8 +2930,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2561 Imm(16)                                          -> x2
     v2562 Imm(68719476736)                                 -> x0
     v2563 Call { target_pc=0, args=[v2559, v2560, v2561], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2564 BinopI { op=eq, lhs=v2563, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2564, target=b161, fall=b160 }   (exit_acc=v2564)
+    v2564 BinopI { op=eq, lhs=v2563, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2563, target=b161, fall=b160 }   (exit_acc=v2564)
   block 160  start_pc=0
     v2565 Imm(23)                                          -> x0
     terminator Return(v2565)   (exit_acc=v2565)
@@ -3036,8 +3036,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2653 Imm(16)                                          -> x2
     v2654 Imm(68719476736)                                 -> x0
     v2655 Call { target_pc=0, args=[v2651, v2652, v2653], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2656 BinopI { op=eq, lhs=v2655, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2656, target=b168, fall=b167 }   (exit_acc=v2656)
+    v2656 BinopI { op=eq, lhs=v2655, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2655, target=b168, fall=b167 }   (exit_acc=v2656)
   block 167  start_pc=0
     v2657 Imm(24)                                          -> x0
     terminator Return(v2657)   (exit_acc=v2657)
@@ -3113,8 +3113,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2716 Imm(16)                                          -> x2
     v2717 Imm(68719476736)                                 -> x0
     v2718 Call { target_pc=0, args=[v2714, v2715, v2716], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2719 BinopI { op=eq, lhs=v2718, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2719, target=b175, fall=b174 }   (exit_acc=v2719)
+    v2719 BinopI { op=eq, lhs=v2718, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2718, target=b175, fall=b174 }   (exit_acc=v2719)
   block 174  start_pc=0
     v2720 Imm(25)                                          -> x0
     terminator Return(v2720)   (exit_acc=v2720)
@@ -3190,8 +3190,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2779 Imm(16)                                          -> x2
     v2780 Imm(68719476736)                                 -> x0
     v2781 Call { target_pc=0, args=[v2777, v2778, v2779], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2782 BinopI { op=eq, lhs=v2781, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2782, target=b182, fall=b181 }   (exit_acc=v2782)
+    v2782 BinopI { op=eq, lhs=v2781, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2781, target=b182, fall=b181 }   (exit_acc=v2782)
   block 181  start_pc=0
     v2783 Imm(26)                                          -> x0
     terminator Return(v2783)   (exit_acc=v2783)
@@ -3267,8 +3267,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2842 Imm(16)                                          -> x2
     v2843 Imm(68719476736)                                 -> x0
     v2844 Call { target_pc=0, args=[v2840, v2841, v2842], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2845 BinopI { op=eq, lhs=v2844, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2845, target=b189, fall=b188 }   (exit_acc=v2845)
+    v2845 BinopI { op=eq, lhs=v2844, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2844, target=b189, fall=b188 }   (exit_acc=v2845)
   block 188  start_pc=0
     v2846 Imm(27)                                          -> x0
     terminator Return(v2846)   (exit_acc=v2846)
@@ -3344,8 +3344,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2905 Imm(16)                                          -> x2
     v2906 Imm(68719476736)                                 -> x0
     v2907 Call { target_pc=0, args=[v2903, v2904, v2905], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2908 BinopI { op=eq, lhs=v2907, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2908, target=b196, fall=b195 }   (exit_acc=v2908)
+    v2908 BinopI { op=eq, lhs=v2907, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2907, target=b196, fall=b195 }   (exit_acc=v2908)
   block 195  start_pc=0
     v2909 Imm(28)                                          -> x0
     terminator Return(v2909)   (exit_acc=v2909)
@@ -3421,8 +3421,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v2968 Imm(16)                                          -> x2
     v2969 Imm(68719476736)                                 -> x0
     v2970 Call { target_pc=0, args=[v2966, v2967, v2968], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v2971 BinopI { op=eq, lhs=v2970, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v2971, target=b203, fall=b202 }   (exit_acc=v2971)
+    v2971 BinopI { op=eq, lhs=v2970, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v2970, target=b203, fall=b202 }   (exit_acc=v2971)
   block 202  start_pc=0
     v2972 Imm(29)                                          -> x0
     terminator Return(v2972)   (exit_acc=v2972)
@@ -3499,8 +3499,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3032 Imm(16)                                          -> x2
     v3033 Imm(68719476736)                                 -> x0
     v3034 Call { target_pc=0, args=[v3030, v3031, v3032], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3035 BinopI { op=eq, lhs=v3034, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3035, target=b210, fall=b209 }   (exit_acc=v3035)
+    v3035 BinopI { op=eq, lhs=v3034, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3034, target=b210, fall=b209 }   (exit_acc=v3035)
   block 209  start_pc=0
     v3036 Imm(30)                                          -> x0
     terminator Return(v3036)   (exit_acc=v3036)
@@ -3577,8 +3577,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3096 Imm(16)                                          -> x2
     v3097 Imm(68719476736)                                 -> x0
     v3098 Call { target_pc=0, args=[v3094, v3095, v3096], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3099 BinopI { op=eq, lhs=v3098, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3099, target=b217, fall=b216 }   (exit_acc=v3099)
+    v3099 BinopI { op=eq, lhs=v3098, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3098, target=b217, fall=b216 }   (exit_acc=v3099)
   block 216  start_pc=0
     v3100 Imm(31)                                          -> x0
     terminator Return(v3100)   (exit_acc=v3100)
@@ -3655,8 +3655,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3160 Imm(16)                                          -> x2
     v3161 Imm(68719476736)                                 -> x0
     v3162 Call { target_pc=0, args=[v3158, v3159, v3160], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3163 BinopI { op=eq, lhs=v3162, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3163, target=b224, fall=b223 }   (exit_acc=v3163)
+    v3163 BinopI { op=eq, lhs=v3162, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3162, target=b224, fall=b223 }   (exit_acc=v3163)
   block 223  start_pc=0
     v3164 Imm(32)                                          -> x0
     terminator Return(v3164)   (exit_acc=v3164)
@@ -3731,8 +3731,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3222 Imm(16)                                          -> x2
     v3223 Imm(68719476736)                                 -> x0
     v3224 Call { target_pc=0, args=[v3220, v3221, v3222], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3225 BinopI { op=eq, lhs=v3224, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3225, target=b231, fall=b230 }   (exit_acc=v3225)
+    v3225 BinopI { op=eq, lhs=v3224, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3224, target=b231, fall=b230 }   (exit_acc=v3225)
   block 230  start_pc=0
     v3226 Imm(33)                                          -> x0
     terminator Return(v3226)   (exit_acc=v3226)
@@ -3807,8 +3807,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3284 Imm(16)                                          -> x2
     v3285 Imm(68719476736)                                 -> x0
     v3286 Call { target_pc=0, args=[v3282, v3283, v3284], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3287 BinopI { op=eq, lhs=v3286, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3287, target=b238, fall=b237 }   (exit_acc=v3287)
+    v3287 BinopI { op=eq, lhs=v3286, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3286, target=b238, fall=b237 }   (exit_acc=v3287)
   block 237  start_pc=0
     v3288 Imm(34)                                          -> x0
     terminator Return(v3288)   (exit_acc=v3288)
@@ -3869,8 +3869,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3332 Imm(16)                                          -> x2
     v3333 Imm(68719476736)                                 -> x0
     v3334 Call { target_pc=0, args=[v3330, v3331, v3332], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3335 BinopI { op=eq, lhs=v3334, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3335, target=b245, fall=b244 }   (exit_acc=v3335)
+    v3335 BinopI { op=eq, lhs=v3334, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3334, target=b245, fall=b244 }   (exit_acc=v3335)
   block 244  start_pc=0
     v3336 Imm(35)                                          -> x0
     terminator Return(v3336)   (exit_acc=v3336)
@@ -3931,8 +3931,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3380 Imm(16)                                          -> x2
     v3381 Imm(68719476736)                                 -> x0
     v3382 Call { target_pc=0, args=[v3378, v3379, v3380], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3383 BinopI { op=eq, lhs=v3382, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3383, target=b252, fall=b251 }   (exit_acc=v3383)
+    v3383 BinopI { op=eq, lhs=v3382, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3382, target=b252, fall=b251 }   (exit_acc=v3383)
   block 251  start_pc=0
     v3384 Imm(36)                                          -> x0
     terminator Return(v3384)   (exit_acc=v3384)
@@ -3993,8 +3993,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3428 Imm(16)                                          -> x2
     v3429 Imm(68719476736)                                 -> x0
     v3430 Call { target_pc=0, args=[v3426, v3427, v3428], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3431 BinopI { op=eq, lhs=v3430, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3431, target=b259, fall=b258 }   (exit_acc=v3431)
+    v3431 BinopI { op=eq, lhs=v3430, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3430, target=b259, fall=b258 }   (exit_acc=v3431)
   block 258  start_pc=0
     v3432 Imm(37)                                          -> x0
     terminator Return(v3432)   (exit_acc=v3432)
@@ -4055,8 +4055,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3476 Imm(16)                                          -> x2
     v3477 Imm(68719476736)                                 -> x0
     v3478 Call { target_pc=0, args=[v3474, v3475, v3476], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3479 BinopI { op=eq, lhs=v3478, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3479, target=b266, fall=b265 }   (exit_acc=v3479)
+    v3479 BinopI { op=eq, lhs=v3478, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3478, target=b266, fall=b265 }   (exit_acc=v3479)
   block 265  start_pc=0
     v3480 Imm(38)                                          -> x0
     terminator Return(v3480)   (exit_acc=v3480)
@@ -4117,8 +4117,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3524 Imm(16)                                          -> x2
     v3525 Imm(68719476736)                                 -> x0
     v3526 Call { target_pc=0, args=[v3522, v3523, v3524], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3527 BinopI { op=eq, lhs=v3526, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3527, target=b273, fall=b272 }   (exit_acc=v3527)
+    v3527 BinopI { op=eq, lhs=v3526, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3526, target=b273, fall=b272 }   (exit_acc=v3527)
   block 272  start_pc=0
     v3528 Imm(39)                                          -> x0
     terminator Return(v3528)   (exit_acc=v3528)
@@ -4179,8 +4179,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3572 Imm(16)                                          -> x2
     v3573 Imm(68719476736)                                 -> x0
     v3574 Call { target_pc=0, args=[v3570, v3571, v3572], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3575 BinopI { op=eq, lhs=v3574, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3575, target=b280, fall=b279 }   (exit_acc=v3575)
+    v3575 BinopI { op=eq, lhs=v3574, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3574, target=b280, fall=b279 }   (exit_acc=v3575)
   block 279  start_pc=0
     v3576 Imm(40)                                          -> x0
     terminator Return(v3576)   (exit_acc=v3576)
@@ -4241,8 +4241,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3620 Imm(16)                                          -> x2
     v3621 Imm(68719476736)                                 -> x0
     v3622 Call { target_pc=0, args=[v3618, v3619, v3620], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3623 BinopI { op=eq, lhs=v3622, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3623, target=b287, fall=b286 }   (exit_acc=v3623)
+    v3623 BinopI { op=eq, lhs=v3622, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3622, target=b287, fall=b286 }   (exit_acc=v3623)
   block 286  start_pc=0
     v3624 Imm(41)                                          -> x0
     terminator Return(v3624)   (exit_acc=v3624)
@@ -4303,8 +4303,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3668 Imm(16)                                          -> x2
     v3669 Imm(68719476736)                                 -> x0
     v3670 Call { target_pc=0, args=[v3666, v3667, v3668], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3671 BinopI { op=eq, lhs=v3670, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3671, target=b294, fall=b293 }   (exit_acc=v3671)
+    v3671 BinopI { op=eq, lhs=v3670, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3670, target=b294, fall=b293 }   (exit_acc=v3671)
   block 293  start_pc=0
     v3672 Imm(42)                                          -> x0
     terminator Return(v3672)   (exit_acc=v3672)
@@ -4365,8 +4365,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3716 Imm(16)                                          -> x2
     v3717 Imm(68719476736)                                 -> x0
     v3718 Call { target_pc=0, args=[v3714, v3715, v3716], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3719 BinopI { op=eq, lhs=v3718, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3719, target=b301, fall=b300 }   (exit_acc=v3719)
+    v3719 BinopI { op=eq, lhs=v3718, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3718, target=b301, fall=b300 }   (exit_acc=v3719)
   block 300  start_pc=0
     v3720 Imm(43)                                          -> x0
     terminator Return(v3720)   (exit_acc=v3720)
@@ -4427,8 +4427,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3764 Imm(16)                                          -> x2
     v3765 Imm(68719476736)                                 -> x0
     v3766 Call { target_pc=0, args=[v3762, v3763, v3764], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3767 BinopI { op=eq, lhs=v3766, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3767, target=b308, fall=b307 }   (exit_acc=v3767)
+    v3767 BinopI { op=eq, lhs=v3766, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3766, target=b308, fall=b307 }   (exit_acc=v3767)
   block 307  start_pc=0
     v3768 Imm(44)                                          -> x0
     terminator Return(v3768)   (exit_acc=v3768)
@@ -4533,8 +4533,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3856 Imm(8)                                           -> x2
     v3857 Imm(34359738368)                                 -> x0
     v3858 Call { target_pc=0, args=[v3854, v3855, v3856], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3859 BinopI { op=eq, lhs=v3858, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3859, target=b315, fall=b314 }   (exit_acc=v3859)
+    v3859 BinopI { op=eq, lhs=v3858, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3858, target=b315, fall=b314 }   (exit_acc=v3859)
   block 314  start_pc=0
     v3860 Imm(45)                                          -> x0
     terminator Return(v3860)   (exit_acc=v3860)
@@ -4639,8 +4639,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v3948 Imm(8)                                           -> x2
     v3949 Imm(34359738368)                                 -> x0
     v3950 Call { target_pc=0, args=[v3946, v3947, v3948], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v3951 BinopI { op=eq, lhs=v3950, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v3951, target=b322, fall=b321 }   (exit_acc=v3951)
+    v3951 BinopI { op=eq, lhs=v3950, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v3950, target=b322, fall=b321 }   (exit_acc=v3951)
   block 321  start_pc=0
     v3952 Imm(46)                                          -> x0
     terminator Return(v3952)   (exit_acc=v3952)
@@ -4744,8 +4744,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v4039 Imm(32)                                          -> x2
     v4040 Imm(137438953472)                                -> x0
     v4041 Call { target_pc=0, args=[v4037, v4038, v4039], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v4042 BinopI { op=eq, lhs=v4041, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v4042, target=b329, fall=b328 }   (exit_acc=v4042)
+    v4042 BinopI { op=eq, lhs=v4041, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v4041, target=b329, fall=b328 }   (exit_acc=v4042)
   block 328  start_pc=0
     v4043 Imm(47)                                          -> x0
     terminator Return(v4043)   (exit_acc=v4043)
@@ -4849,8 +4849,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v4136 Imm(32)                                          -> x2
     v4137 Imm(137438953472)                                -> x0
     v4138 Call { target_pc=0, args=[v4134, v4135, v4136], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v4139 BinopI { op=eq, lhs=v4138, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v4139, target=b336, fall=b335 }   (exit_acc=v4139)
+    v4139 BinopI { op=eq, lhs=v4138, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v4138, target=b336, fall=b335 }   (exit_acc=v4139)
   block 335  start_pc=0
     v4140 Imm(48)                                          -> x0
     terminator Return(v4140)   (exit_acc=v4140)
@@ -5019,8 +5019,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v4284 Imm(16)                                          -> x2
     v4285 Imm(68719476736)                                 -> x0
     v4286 Call { target_pc=0, args=[v4282, v4283, v4284], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v4287 BinopI { op=eq, lhs=v4286, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v4287, target=b344, fall=b343 }   (exit_acc=v4287)
+    v4287 BinopI { op=eq, lhs=v4286, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v4286, target=b344, fall=b343 }   (exit_acc=v4287)
   block 343  start_pc=0
     v4288 Imm(49)                                          -> x0
     terminator Return(v4288)   (exit_acc=v4288)
@@ -5179,8 +5179,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v4430 Imm(16)                                          -> x2
     v4431 Imm(68719476736)                                 -> x0
     v4432 Call { target_pc=0, args=[v4428, v4429, v4430], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v4433 BinopI { op=eq, lhs=v4432, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v4433, target=b351, fall=b350 }   (exit_acc=v4433)
+    v4433 BinopI { op=eq, lhs=v4432, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v4432, target=b351, fall=b350 }   (exit_acc=v4433)
   block 350  start_pc=0
     v4434 Imm(50)                                          -> x0
     terminator Return(v4434)   (exit_acc=v4434)
@@ -5285,8 +5285,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v4522 Imm(16)                                          -> x2
     v4523 Imm(68719476736)                                 -> x0
     v4524 Call { target_pc=0, args=[v4520, v4521, v4522], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v4525 BinopI { op=eq, lhs=v4524, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v4525, target=b358, fall=b357 }   (exit_acc=v4525)
+    v4525 BinopI { op=eq, lhs=v4524, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v4524, target=b358, fall=b357 }   (exit_acc=v4525)
   block 357  start_pc=0
     v4526 Imm(51)                                          -> x0
     terminator Return(v4526)   (exit_acc=v4526)
@@ -5393,8 +5393,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v4616 Imm(16)                                          -> x2
     v4617 Imm(68719476736)                                 -> x0
     v4618 Call { target_pc=0, args=[v4614, v4615, v4616], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v4619 BinopI { op=eq, lhs=v4618, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v4619, target=b365, fall=b364 }   (exit_acc=v4619)
+    v4619 BinopI { op=eq, lhs=v4618, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v4618, target=b365, fall=b364 }   (exit_acc=v4619)
   block 364  start_pc=0
     v4620 Imm(52)                                          -> x0
     terminator Return(v4620)   (exit_acc=v4620)
@@ -5458,8 +5458,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v4667 Imm(16)                                          -> x2
     v4668 Imm(68719476736)                                 -> x0
     v4669 Call { target_pc=0, args=[v4665, v4666, v4667], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v4670 BinopI { op=eq, lhs=v4669, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v4670, target=b372, fall=b371 }   (exit_acc=v4670)
+    v4670 BinopI { op=eq, lhs=v4669, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v4669, target=b372, fall=b371 }   (exit_acc=v4670)
   block 371  start_pc=0
     v4671 Imm(53)                                          -> x0
     terminator Return(v4671)   (exit_acc=v4671)
@@ -5524,8 +5524,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v4719 Imm(16)                                          -> x2
     v4720 Imm(68719476736)                                 -> x0
     v4721 Call { target_pc=0, args=[v4717, v4718, v4719], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v4722 BinopI { op=eq, lhs=v4721, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v4722, target=b379, fall=b378 }   (exit_acc=v4722)
+    v4722 BinopI { op=eq, lhs=v4721, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v4721, target=b379, fall=b378 }   (exit_acc=v4722)
   block 378  start_pc=0
     v4723 Imm(54)                                          -> x0
     terminator Return(v4723)   (exit_acc=v4723)
@@ -5653,8 +5653,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v4834 Imm(16)                                          -> x2
     v4835 Imm(68719476736)                                 -> x0
     v4836 Call { target_pc=0, args=[v4832, v4833, v4834], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v4837 BinopI { op=eq, lhs=v4836, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v4837, target=b386, fall=b385 }   (exit_acc=v4837)
+    v4837 BinopI { op=eq, lhs=v4836, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v4836, target=b386, fall=b385 }   (exit_acc=v4837)
   block 385  start_pc=0
     v4838 Imm(55)                                          -> x0
     terminator Return(v4838)   (exit_acc=v4838)
@@ -5780,8 +5780,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v4947 Imm(16)                                          -> x2
     v4948 Imm(68719476736)                                 -> x0
     v4949 Call { target_pc=0, args=[v4945, v4946, v4947], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v4950 BinopI { op=eq, lhs=v4949, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v4950, target=b393, fall=b392 }   (exit_acc=v4950)
+    v4950 BinopI { op=eq, lhs=v4949, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v4949, target=b393, fall=b392 }   (exit_acc=v4950)
   block 392  start_pc=0
     v4951 Imm(56)                                          -> x0
     terminator Return(v4951)   (exit_acc=v4951)
@@ -5907,8 +5907,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v5060 Imm(16)                                          -> x2
     v5061 Imm(68719476736)                                 -> x0
     v5062 Call { target_pc=0, args=[v5058, v5059, v5060], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5063 BinopI { op=eq, lhs=v5062, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v5063, target=b400, fall=b399 }   (exit_acc=v5063)
+    v5063 BinopI { op=eq, lhs=v5062, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v5062, target=b400, fall=b399 }   (exit_acc=v5063)
   block 399  start_pc=0
     v5064 Imm(57)                                          -> x0
     terminator Return(v5064)   (exit_acc=v5064)
@@ -6034,8 +6034,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v5173 Imm(16)                                          -> x2
     v5174 Imm(68719476736)                                 -> x0
     v5175 Call { target_pc=0, args=[v5171, v5172, v5173], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5176 BinopI { op=eq, lhs=v5175, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v5176, target=b407, fall=b406 }   (exit_acc=v5176)
+    v5176 BinopI { op=eq, lhs=v5175, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v5175, target=b407, fall=b406 }   (exit_acc=v5176)
   block 406  start_pc=0
     v5177 Imm(58)                                          -> x0
     terminator Return(v5177)   (exit_acc=v5177)
@@ -6159,8 +6159,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v5284 Imm(16)                                          -> x2
     v5285 Imm(68719476736)                                 -> x0
     v5286 Call { target_pc=0, args=[v5282, v5283, v5284], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5287 BinopI { op=eq, lhs=v5286, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v5287, target=b414, fall=b413 }   (exit_acc=v5287)
+    v5287 BinopI { op=eq, lhs=v5286, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v5286, target=b414, fall=b413 }   (exit_acc=v5287)
   block 413  start_pc=0
     v5288 Imm(59)                                          -> x0
     terminator Return(v5288)   (exit_acc=v5288)
@@ -6284,8 +6284,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v5395 Imm(16)                                          -> x2
     v5396 Imm(68719476736)                                 -> x0
     v5397 Call { target_pc=0, args=[v5393, v5394, v5395], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5398 BinopI { op=eq, lhs=v5397, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v5398, target=b421, fall=b420 }   (exit_acc=v5398)
+    v5398 BinopI { op=eq, lhs=v5397, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v5397, target=b421, fall=b420 }   (exit_acc=v5398)
   block 420  start_pc=0
     v5399 Imm(60)                                          -> x0
     terminator Return(v5399)   (exit_acc=v5399)
@@ -6408,8 +6408,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v5505 Imm(16)                                          -> x2
     v5506 Imm(68719476736)                                 -> x0
     v5507 Call { target_pc=0, args=[v5503, v5504, v5505], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5508 BinopI { op=eq, lhs=v5507, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v5508, target=b428, fall=b427 }   (exit_acc=v5508)
+    v5508 BinopI { op=eq, lhs=v5507, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v5507, target=b428, fall=b427 }   (exit_acc=v5508)
   block 427  start_pc=0
     v5509 Imm(61)                                          -> x0
     terminator Return(v5509)   (exit_acc=v5509)
@@ -6533,8 +6533,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v5616 Imm(16)                                          -> x2
     v5617 Imm(68719476736)                                 -> x0
     v5618 Call { target_pc=0, args=[v5614, v5615, v5616], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5619 BinopI { op=eq, lhs=v5618, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v5619, target=b435, fall=b434 }   (exit_acc=v5619)
+    v5619 BinopI { op=eq, lhs=v5618, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v5618, target=b435, fall=b434 }   (exit_acc=v5619)
   block 434  start_pc=0
     v5620 Imm(62)                                          -> x0
     terminator Return(v5620)   (exit_acc=v5620)
@@ -6658,8 +6658,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v5727 Imm(16)                                          -> x2
     v5728 Imm(68719476736)                                 -> x0
     v5729 Call { target_pc=0, args=[v5725, v5726, v5727], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5730 BinopI { op=eq, lhs=v5729, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v5730, target=b442, fall=b441 }   (exit_acc=v5730)
+    v5730 BinopI { op=eq, lhs=v5729, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v5729, target=b442, fall=b441 }   (exit_acc=v5730)
   block 441  start_pc=0
     v5731 Imm(63)                                          -> x0
     terminator Return(v5731)   (exit_acc=v5731)
@@ -6787,8 +6787,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v5842 Imm(16)                                          -> x2
     v5843 Imm(68719476736)                                 -> x0
     v5844 Call { target_pc=0, args=[v5840, v5841, v5842], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5845 BinopI { op=eq, lhs=v5844, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v5845, target=b449, fall=b448 }   (exit_acc=v5845)
+    v5845 BinopI { op=eq, lhs=v5844, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v5844, target=b449, fall=b448 }   (exit_acc=v5845)
   block 448  start_pc=0
     v5846 Imm(64)                                          -> x0
     terminator Return(v5846)   (exit_acc=v5846)
@@ -6914,8 +6914,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v5955 Imm(16)                                          -> x2
     v5956 Imm(68719476736)                                 -> x0
     v5957 Call { target_pc=0, args=[v5953, v5954, v5955], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v5958 BinopI { op=eq, lhs=v5957, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v5958, target=b456, fall=b455 }   (exit_acc=v5958)
+    v5958 BinopI { op=eq, lhs=v5957, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v5957, target=b456, fall=b455 }   (exit_acc=v5958)
   block 455  start_pc=0
     v5959 Imm(65)                                          -> x0
     terminator Return(v5959)   (exit_acc=v5959)
@@ -7041,8 +7041,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v6068 Imm(16)                                          -> x2
     v6069 Imm(68719476736)                                 -> x0
     v6070 Call { target_pc=0, args=[v6066, v6067, v6068], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6071 BinopI { op=eq, lhs=v6070, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v6071, target=b463, fall=b462 }   (exit_acc=v6071)
+    v6071 BinopI { op=eq, lhs=v6070, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v6070, target=b463, fall=b462 }   (exit_acc=v6071)
   block 462  start_pc=0
     v6072 Imm(66)                                          -> x0
     terminator Return(v6072)   (exit_acc=v6072)
@@ -7129,8 +7129,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v6142 Imm(16)                                          -> x2
     v6143 Imm(68719476736)                                 -> x0
     v6144 Call { target_pc=0, args=[v6140, v6141, v6142], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6145 BinopI { op=eq, lhs=v6144, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v6145, target=b470, fall=b469 }   (exit_acc=v6145)
+    v6145 BinopI { op=eq, lhs=v6144, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v6144, target=b470, fall=b469 }   (exit_acc=v6145)
   block 469  start_pc=0
     v6146 Imm(67)                                          -> x0
     terminator Return(v6146)   (exit_acc=v6146)
@@ -7184,8 +7184,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v6183 Imm(16)                                          -> x2
     v6184 Imm(68719476736)                                 -> x0
     v6185 Call { target_pc=0, args=[v6181, v6182, v6183], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6186 BinopI { op=eq, lhs=v6185, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v6186, target=b477, fall=b476 }   (exit_acc=v6186)
+    v6186 BinopI { op=eq, lhs=v6185, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v6185, target=b477, fall=b476 }   (exit_acc=v6186)
   block 476  start_pc=0
     v6187 Imm(68)                                          -> x0
     terminator Return(v6187)   (exit_acc=v6187)
@@ -7311,8 +7311,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v6296 Imm(16)                                          -> x2
     v6297 Imm(68719476736)                                 -> x0
     v6298 Call { target_pc=0, args=[v6294, v6295, v6296], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6299 BinopI { op=eq, lhs=v6298, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v6299, target=b484, fall=b483 }   (exit_acc=v6299)
+    v6299 BinopI { op=eq, lhs=v6298, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v6298, target=b484, fall=b483 }   (exit_acc=v6299)
   block 483  start_pc=0
     v6300 Imm(69)                                          -> x0
     terminator Return(v6300)   (exit_acc=v6300)
@@ -7440,8 +7440,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v6411 Imm(16)                                          -> x2
     v6412 Imm(68719476736)                                 -> x0
     v6413 Call { target_pc=0, args=[v6409, v6410, v6411], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6414 BinopI { op=eq, lhs=v6413, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v6414, target=b491, fall=b490 }   (exit_acc=v6414)
+    v6414 BinopI { op=eq, lhs=v6413, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v6413, target=b491, fall=b490 }   (exit_acc=v6414)
   block 490  start_pc=0
     v6415 Imm(70)                                          -> x0
     terminator Return(v6415)   (exit_acc=v6415)
@@ -7565,8 +7565,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v6522 Imm(16)                                          -> x2
     v6523 Imm(68719476736)                                 -> x0
     v6524 Call { target_pc=0, args=[v6520, v6521, v6522], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6525 BinopI { op=eq, lhs=v6524, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v6525, target=b498, fall=b497 }   (exit_acc=v6525)
+    v6525 BinopI { op=eq, lhs=v6524, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v6524, target=b498, fall=b497 }   (exit_acc=v6525)
   block 497  start_pc=0
     v6526 Imm(71)                                          -> x0
     terminator Return(v6526)   (exit_acc=v6526)
@@ -7690,8 +7690,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v6633 Imm(16)                                          -> x2
     v6634 Imm(68719476736)                                 -> x0
     v6635 Call { target_pc=0, args=[v6631, v6632, v6633], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6636 BinopI { op=eq, lhs=v6635, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v6636, target=b505, fall=b504 }   (exit_acc=v6636)
+    v6636 BinopI { op=eq, lhs=v6635, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v6635, target=b505, fall=b504 }   (exit_acc=v6636)
   block 504  start_pc=0
     v6637 Imm(97)                                          -> x0
     terminator Return(v6637)   (exit_acc=v6637)
@@ -7814,8 +7814,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v6743 Imm(16)                                          -> x2
     v6744 Imm(68719476736)                                 -> x0
     v6745 Call { target_pc=0, args=[v6741, v6742, v6743], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6746 BinopI { op=eq, lhs=v6745, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v6746, target=b512, fall=b511 }   (exit_acc=v6746)
+    v6746 BinopI { op=eq, lhs=v6745, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v6745, target=b512, fall=b511 }   (exit_acc=v6746)
   block 511  start_pc=0
     v6747 Imm(98)                                          -> x0
     terminator Return(v6747)   (exit_acc=v6747)
@@ -7941,8 +7941,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v6856 Imm(16)                                          -> x2
     v6857 Imm(68719476736)                                 -> x0
     v6858 Call { target_pc=0, args=[v6854, v6855, v6856], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6859 BinopI { op=eq, lhs=v6858, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v6859, target=b519, fall=b518 }   (exit_acc=v6859)
+    v6859 BinopI { op=eq, lhs=v6858, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v6858, target=b519, fall=b518 }   (exit_acc=v6859)
   block 518  start_pc=0
     v6860 Imm(99)                                          -> x0
     terminator Return(v6860)   (exit_acc=v6860)
@@ -8066,8 +8066,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v6967 Imm(16)                                          -> x2
     v6968 Imm(68719476736)                                 -> x0
     v6969 Call { target_pc=0, args=[v6965, v6966, v6967], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6970 BinopI { op=eq, lhs=v6969, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v6970, target=b526, fall=b525 }   (exit_acc=v6970)
+    v6970 BinopI { op=eq, lhs=v6969, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v6969, target=b526, fall=b525 }   (exit_acc=v6970)
   block 525  start_pc=0
     v6971 Imm(100)                                         -> x0
     terminator Return(v6971)   (exit_acc=v6971)
@@ -8131,8 +8131,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v7018 Imm(16)                                          -> x2
     v7019 Imm(68719476736)                                 -> x0
     v7020 Call { target_pc=0, args=[v7016, v7017, v7018], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7021 BinopI { op=eq, lhs=v7020, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v7021, target=b533, fall=b532 }   (exit_acc=v7021)
+    v7021 BinopI { op=eq, lhs=v7020, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v7020, target=b533, fall=b532 }   (exit_acc=v7021)
   block 532  start_pc=0
     v7022 Imm(101)                                         -> x0
     terminator Return(v7022)   (exit_acc=v7022)
@@ -8196,8 +8196,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v7069 Imm(16)                                          -> x2
     v7070 Imm(68719476736)                                 -> x0
     v7071 Call { target_pc=0, args=[v7067, v7068, v7069], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7072 BinopI { op=eq, lhs=v7071, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v7072, target=b540, fall=b539 }   (exit_acc=v7072)
+    v7072 BinopI { op=eq, lhs=v7071, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v7071, target=b540, fall=b539 }   (exit_acc=v7072)
   block 539  start_pc=0
     v7073 Imm(102)                                         -> x0
     terminator Return(v7073)   (exit_acc=v7073)
@@ -8321,8 +8321,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v7180 Imm(16)                                          -> x2
     v7181 Imm(68719476736)                                 -> x0
     v7182 Call { target_pc=0, args=[v7178, v7179, v7180], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7183 BinopI { op=eq, lhs=v7182, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v7183, target=b547, fall=b546 }   (exit_acc=v7183)
+    v7183 BinopI { op=eq, lhs=v7182, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v7182, target=b547, fall=b546 }   (exit_acc=v7183)
   block 546  start_pc=0
     v7184 Imm(72)                                          -> x0
     terminator Return(v7184)   (exit_acc=v7184)
@@ -8387,8 +8387,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v7318 Imm(16)                                          -> x2
     v7319 Imm(68719476736)                                 -> x0
     v7320 Call { target_pc=0, args=[v7316, v7317, v7318], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7321 BinopI { op=eq, lhs=v7320, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v7321, target=b554, fall=b553 }   (exit_acc=v7321)
+    v7321 BinopI { op=eq, lhs=v7320, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v7320, target=b554, fall=b553 }   (exit_acc=v7321)
   block 553  start_pc=0
     v7322 Imm(96)                                          -> x0
     terminator Return(v7322)   (exit_acc=v7322)
@@ -8511,8 +8511,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v7341 LocalAddr(-363)                                  -> x6
     v7342 Imm(16)                                          -> x2
     v7343 Call { target_pc=0, args=[v7340, v7341, v7342], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7344 BinopI { op=eq, lhs=v7343, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v7344, target=b561, fall=b560 }   (exit_acc=v7344)
+    v7344 BinopI { op=eq, lhs=v7343, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v7343, target=b561, fall=b560 }   (exit_acc=v7344)
   block 560  start_pc=0
     v7345 Imm(73)                                          -> x0
     terminator Return(v7345)   (exit_acc=v7345)
@@ -8633,8 +8633,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v7451 LocalAddr(-359)                                  -> x6
     v7452 Imm(16)                                          -> x2
     v7453 Call { target_pc=0, args=[v7450, v7451, v7452], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7454 BinopI { op=eq, lhs=v7453, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v7454, target=b567, fall=b566 }   (exit_acc=v7454)
+    v7454 BinopI { op=eq, lhs=v7453, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v7453, target=b567, fall=b566 }   (exit_acc=v7454)
   block 566  start_pc=0
     v7455 Imm(74)                                          -> x0
     terminator Return(v7455)   (exit_acc=v7455)
@@ -8694,8 +8694,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v7500 LocalAddr(-355)                                  -> x6
     v7501 Imm(16)                                          -> x2
     v7502 Call { target_pc=0, args=[v7499, v7500, v7501], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7503 BinopI { op=eq, lhs=v7502, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v7503, target=b573, fall=b572 }   (exit_acc=v7503)
+    v7503 BinopI { op=eq, lhs=v7502, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v7502, target=b573, fall=b572 }   (exit_acc=v7503)
   block 572  start_pc=0
     v7504 Imm(75)                                          -> x0
     terminator Return(v7504)   (exit_acc=v7504)
@@ -8813,8 +8813,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v7607 LocalAddr(-351)                                  -> x6
     v7608 Imm(16)                                          -> x2
     v7609 Call { target_pc=0, args=[v7606, v7607, v7608], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7610 BinopI { op=eq, lhs=v7609, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v7610, target=b579, fall=b578 }   (exit_acc=v7610)
+    v7610 BinopI { op=eq, lhs=v7609, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v7609, target=b579, fall=b578 }   (exit_acc=v7610)
   block 578  start_pc=0
     v7611 Imm(76)                                          -> x0
     terminator Return(v7611)   (exit_acc=v7611)
@@ -8862,8 +8862,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v7644 LocalAddr(-347)                                  -> x6
     v7645 Imm(16)                                          -> x2
     v7646 Call { target_pc=0, args=[v7643, v7644, v7645], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7647 BinopI { op=eq, lhs=v7646, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v7647, target=b585, fall=b584 }   (exit_acc=v7647)
+    v7647 BinopI { op=eq, lhs=v7646, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v7646, target=b585, fall=b584 }   (exit_acc=v7647)
   block 584  start_pc=0
     v7648 Imm(77)                                          -> x0
     terminator Return(v7648)   (exit_acc=v7648)
@@ -9104,8 +9104,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v7882 Imm(16)                                          -> x2
     v7883 Imm(68719476736)                                 -> x0
     v7884 Call { target_pc=0, args=[v7880, v7881, v7882], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v7885 BinopI { op=eq, lhs=v7884, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v7885, target=b587, fall=b586 }   (exit_acc=v7885)
+    v7885 BinopI { op=eq, lhs=v7884, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v7884, target=b587, fall=b586 }   (exit_acc=v7885)
   block 586  start_pc=0
     v7887 Imm(78)                                          -> x0
     terminator Return(v7887)   (exit_acc=v7887)
@@ -9349,8 +9349,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v8121 Imm(16)                                          -> x2
     v8122 Imm(68719476736)                                 -> x0
     v8123 Call { target_pc=0, args=[v8119, v8120, v8121], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v8124 BinopI { op=eq, lhs=v8123, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v8124, target=b590, fall=b589 }   (exit_acc=v8124)
+    v8124 BinopI { op=eq, lhs=v8123, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v8123, target=b590, fall=b589 }   (exit_acc=v8124)
   block 589  start_pc=0
     v8126 Imm(79)                                          -> x0
     terminator Return(v8126)   (exit_acc=v8126)
@@ -9594,8 +9594,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v8360 Imm(16)                                          -> x2
     v8361 Imm(68719476736)                                 -> x0
     v8362 Call { target_pc=0, args=[v8358, v8359, v8360], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v8363 BinopI { op=eq, lhs=v8362, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v8363, target=b593, fall=b592 }   (exit_acc=v8363)
+    v8363 BinopI { op=eq, lhs=v8362, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v8362, target=b593, fall=b592 }   (exit_acc=v8363)
   block 592  start_pc=0
     v8365 Imm(80)                                          -> x0
     terminator Return(v8365)   (exit_acc=v8365)
@@ -9839,8 +9839,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v8599 Imm(16)                                          -> x2
     v8600 Imm(68719476736)                                 -> x0
     v8601 Call { target_pc=0, args=[v8597, v8598, v8599], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v8602 BinopI { op=eq, lhs=v8601, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v8602, target=b596, fall=b595 }   (exit_acc=v8602)
+    v8602 BinopI { op=eq, lhs=v8601, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v8601, target=b596, fall=b595 }   (exit_acc=v8602)
   block 595  start_pc=0
     v8604 Imm(81)                                          -> x0
     terminator Return(v8604)   (exit_acc=v8604)
@@ -10084,8 +10084,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v8838 Imm(16)                                          -> x2
     v8839 Imm(68719476736)                                 -> x0
     v8840 Call { target_pc=0, args=[v8836, v8837, v8838], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v8841 BinopI { op=eq, lhs=v8840, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v8841, target=b599, fall=b598 }   (exit_acc=v8841)
+    v8841 BinopI { op=eq, lhs=v8840, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v8840, target=b599, fall=b598 }   (exit_acc=v8841)
   block 598  start_pc=0
     v8843 Imm(82)                                          -> x0
     terminator Return(v8843)   (exit_acc=v8843)
@@ -10133,8 +10133,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v8881 Imm(16)                                          -> x2
     v8882 Imm(68719476736)                                 -> x0
     v8883 Call { target_pc=0, args=[v8879, v8880, v8881], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v8884 BinopI { op=eq, lhs=v8883, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v8884, target=b602, fall=b601 }   (exit_acc=v8884)
+    v8884 BinopI { op=eq, lhs=v8883, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v8883, target=b602, fall=b601 }   (exit_acc=v8884)
   block 601  start_pc=0
     v8886 Imm(83)                                          -> x0
     terminator Return(v8886)   (exit_acc=v8886)
@@ -10182,8 +10182,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v8924 Imm(16)                                          -> x2
     v8925 Imm(68719476736)                                 -> x0
     v8926 Call { target_pc=0, args=[v8922, v8923, v8924], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v8927 BinopI { op=eq, lhs=v8926, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v8927, target=b605, fall=b604 }   (exit_acc=v8927)
+    v8927 BinopI { op=eq, lhs=v8926, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v8926, target=b605, fall=b604 }   (exit_acc=v8927)
   block 604  start_pc=0
     v8929 Imm(84)                                          -> x0
     terminator Return(v8929)   (exit_acc=v8929)
@@ -10231,8 +10231,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v8967 Imm(16)                                          -> x2
     v8968 Imm(68719476736)                                 -> x0
     v8969 Call { target_pc=0, args=[v8965, v8966, v8967], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v8970 BinopI { op=eq, lhs=v8969, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v8970, target=b608, fall=b607 }   (exit_acc=v8970)
+    v8970 BinopI { op=eq, lhs=v8969, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v8969, target=b608, fall=b607 }   (exit_acc=v8970)
   block 607  start_pc=0
     v8972 Imm(85)                                          -> x0
     terminator Return(v8972)   (exit_acc=v8972)
@@ -10476,8 +10476,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v9206 Imm(16)                                          -> x2
     v9207 Imm(68719476736)                                 -> x0
     v9208 Call { target_pc=0, args=[v9204, v9205, v9206], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v9209 BinopI { op=eq, lhs=v9208, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v9209, target=b611, fall=b610 }   (exit_acc=v9209)
+    v9209 BinopI { op=eq, lhs=v9208, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v9208, target=b611, fall=b610 }   (exit_acc=v9209)
   block 610  start_pc=0
     v9211 Imm(86)                                          -> x0
     terminator Return(v9211)   (exit_acc=v9211)
@@ -10721,8 +10721,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v9445 Imm(16)                                          -> x2
     v9446 Imm(68719476736)                                 -> x0
     v9447 Call { target_pc=0, args=[v9443, v9444, v9445], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v9448 BinopI { op=eq, lhs=v9447, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v9448, target=b614, fall=b613 }   (exit_acc=v9448)
+    v9448 BinopI { op=eq, lhs=v9447, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v9447, target=b614, fall=b613 }   (exit_acc=v9448)
   block 613  start_pc=0
     v9450 Imm(87)                                          -> x0
     terminator Return(v9450)   (exit_acc=v9450)
@@ -10854,8 +10854,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v9572 Imm(16)                                          -> x2
     v9573 Imm(68719476736)                                 -> x0
     v9574 Call { target_pc=0, args=[v9570, v9571, v9572], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v9575 BinopI { op=eq, lhs=v9574, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v9575, target=b617, fall=b616 }   (exit_acc=v9575)
+    v9575 BinopI { op=eq, lhs=v9574, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v9574, target=b617, fall=b616 }   (exit_acc=v9575)
   block 616  start_pc=0
     v9577 Imm(88)                                          -> x0
     terminator Return(v9577)   (exit_acc=v9577)
@@ -10903,8 +10903,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v9615 Imm(16)                                          -> x2
     v9616 Imm(68719476736)                                 -> x0
     v9617 Call { target_pc=0, args=[v9613, v9614, v9615], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v9618 BinopI { op=eq, lhs=v9617, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v9618, target=b620, fall=b619 }   (exit_acc=v9618)
+    v9618 BinopI { op=eq, lhs=v9617, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v9617, target=b620, fall=b619 }   (exit_acc=v9618)
   block 619  start_pc=0
     v9793 Imm(89)                                          -> x0
     terminator Return(v9793)   (exit_acc=v9793)
@@ -11084,8 +11084,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v9789 LocalAddr(-339)                                  -> x6
     v9790 Imm(16)                                          -> x2
     v9791 Call { target_pc=0, args=[v9788, v9789, v9790], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v9792 BinopI { op=eq, lhs=v9791, rhs_imm=0 }           -> x0
-    terminator Bz { cond=v9792, target=b623, fall=b622 }   (exit_acc=v9792)
+    v9792 BinopI { op=eq, lhs=v9791, rhs_imm=0 }           -> x1
+    terminator Bnz { cond=v9791, target=b623, fall=b622 }   (exit_acc=v9792)
   block 622  start_pc=0
     v9794 Imm(90)                                          -> x0
     terminator Return(v9794)   (exit_acc=v9794)
@@ -11373,8 +11373,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v10067 LocalAddr(-343)                                  -> x6
     v10068 Imm(16)                                          -> x2
     v10069 Call { target_pc=0, args=[v10066, v10067, v10068], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10070 BinopI { op=eq, lhs=v10069, rhs_imm=0 }          -> x0
-    terminator Bz { cond=v10070, target=b629, fall=b628 }   (exit_acc=v10070)
+    v10070 BinopI { op=eq, lhs=v10069, rhs_imm=0 }          -> x1
+    terminator Bnz { cond=v10069, target=b629, fall=b628 }   (exit_acc=v10070)
   block 628  start_pc=0
     v10071 Imm(91)                                          -> x0
     terminator Return(v10071)   (exit_acc=v10071)
@@ -11701,8 +11701,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v10383 LocalAddr(-287)                                  -> x6
     v10384 Imm(16)                                          -> x2
     v10385 Call { target_pc=0, args=[v10382, v10383, v10384], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10386 BinopI { op=eq, lhs=v10385, rhs_imm=0 }          -> x0
-    terminator Bz { cond=v10386, target=b635, fall=b634 }   (exit_acc=v10386)
+    v10386 BinopI { op=eq, lhs=v10385, rhs_imm=0 }          -> x1
+    terminator Bnz { cond=v10385, target=b635, fall=b634 }   (exit_acc=v10386)
   block 634  start_pc=0
     v10387 Imm(92)                                          -> x0
     terminator Return(v10387)   (exit_acc=v10387)
@@ -11813,8 +11813,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v10483 LocalAddr(-283)                                  -> x6
     v10484 Imm(16)                                          -> x2
     v10485 Call { target_pc=0, args=[v10482, v10483, v10484], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10486 BinopI { op=eq, lhs=v10485, rhs_imm=0 }          -> x0
-    terminator Bz { cond=v10486, target=b641, fall=b640 }   (exit_acc=v10486)
+    v10486 BinopI { op=eq, lhs=v10485, rhs_imm=0 }          -> x1
+    terminator Bnz { cond=v10485, target=b641, fall=b640 }   (exit_acc=v10486)
   block 640  start_pc=0
     v10487 Imm(93)                                          -> x0
     terminator Return(v10487)   (exit_acc=v10487)
@@ -12107,8 +12107,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v10765 LocalAddr(-279)                                  -> x6
     v10766 Imm(16)                                          -> x2
     v10767 Call { target_pc=0, args=[v10764, v10765, v10766], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10768 BinopI { op=eq, lhs=v10767, rhs_imm=0 }          -> x0
-    terminator Bz { cond=v10768, target=b647, fall=b646 }   (exit_acc=v10768)
+    v10768 BinopI { op=eq, lhs=v10767, rhs_imm=0 }          -> x1
+    terminator Bnz { cond=v10767, target=b647, fall=b646 }   (exit_acc=v10768)
   block 646  start_pc=0
     v10769 Imm(94)                                          -> x0
     terminator Return(v10769)   (exit_acc=v10769)
@@ -12265,8 +12265,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v10911 LocalAddr(-272)                                  -> x6
     v10912 Imm(16)                                          -> x2
     v10913 Call { target_pc=0, args=[v10910, v10911, v10912], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v10914 BinopI { op=eq, lhs=v10913, rhs_imm=0 }          -> x0
-    terminator Bz { cond=v10914, target=b653, fall=b652 }   (exit_acc=v10914)
+    v10914 BinopI { op=eq, lhs=v10913, rhs_imm=0 }          -> x1
+    terminator Bnz { cond=v10913, target=b653, fall=b652 }   (exit_acc=v10914)
   block 652  start_pc=0
     v10915 Imm(95)                                          -> x0
     terminator Return(v10915)   (exit_acc=v10915)
@@ -12427,8 +12427,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v11061 LocalAddr(-268)                                  -> x6
     v11062 Imm(16)                                          -> x2
     v11063 Call { target_pc=0, args=[v11060, v11061, v11062], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v11064 BinopI { op=eq, lhs=v11063, rhs_imm=0 }          -> x0
-    terminator Bz { cond=v11064, target=b659, fall=b658 }   (exit_acc=v11064)
+    v11064 BinopI { op=eq, lhs=v11063, rhs_imm=0 }          -> x1
+    terminator Bnz { cond=v11063, target=b659, fall=b658 }   (exit_acc=v11064)
   block 658  start_pc=0
     v11065 Imm(103)                                         -> x0
     terminator Return(v11065)   (exit_acc=v11065)
@@ -12584,8 +12584,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=731
     v11206 LocalAddr(-259)                                  -> x6
     v11207 Imm(16)                                          -> x2
     v11208 Call { target_pc=0, args=[v11205, v11206, v11207], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v11209 BinopI { op=eq, lhs=v11208, rhs_imm=0 }          -> x0
-    terminator Bz { cond=v11209, target=b665, fall=b664 }   (exit_acc=v11209)
+    v11209 BinopI { op=eq, lhs=v11208, rhs_imm=0 }          -> x1
+    terminator Bnz { cond=v11208, target=b665, fall=b664 }   (exit_acc=v11209)
   block 664  start_pc=0
     v11210 Imm(104)                                         -> x0
     terminator Return(v11210)   (exit_acc=v11210)

@@ -106,15 +106,13 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	w1, w2
                	mov	w0, w5
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	w0, w1
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10

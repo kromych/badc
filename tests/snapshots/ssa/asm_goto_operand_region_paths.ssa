@@ -213,8 +213,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v103 Store { addr=v101, disp=8, value=v100, kind=I64 } -> -
     v104 LocalAddr(-2)                                    -> x0
     v105 BinopI { op=and, lhs=v104, rhs_imm=15 }          -> x0
-    v106 BinopI { op=ne, lhs=v105, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v106, target=b59, fall=b29 }   (exit_acc=v106)
+    v106 BinopI { op=ne, lhs=v105, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v105, target=b59, fall=b29 }   (exit_acc=v106)
   block 29  start_pc=0
     v107 Imm(-100)                                        -> x0
     terminator Jmp(b30)   (exit_acc=v107)
@@ -244,8 +244,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v146 Store { addr=v144, disp=8, value=v143, kind=I64 } -> -
     v147 LocalAddr(-2)                                    -> x0
     v148 BinopI { op=and, lhs=v147, rhs_imm=15 }          -> x0
-    v149 BinopI { op=ne, lhs=v148, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v149, target=b55, fall=b34 }   (exit_acc=v149)
+    v149 BinopI { op=ne, lhs=v148, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v148, target=b55, fall=b34 }   (exit_acc=v149)
   block 34  start_pc=0
     v150 Imm(-100)                                        -> x0
     terminator Jmp(b35)   (exit_acc=v150)

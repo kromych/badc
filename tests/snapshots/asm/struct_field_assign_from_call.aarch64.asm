@@ -76,8 +76,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	sxtw	x1, w0
-               	cmp	x1, #0x0
-               	b.eq	<addr>
+               	cbz	x1, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sxtw	x0, w0

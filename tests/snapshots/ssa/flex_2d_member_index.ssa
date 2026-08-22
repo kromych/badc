@@ -182,10 +182,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     v36  BinopI { op=add, lhs=v1, rhs_imm=21 }            -> x0
     v37  Load { addr=v1, disp=21, kind=U8 }               -> x0
     v38  BinopI { op=xor, lhs=v37, rhs_imm=37 }           -> x0
-    v39  BinopI { op=and, lhs=v38, rhs_imm=4294967295 }   -> x0
+    v39  BinopI { op=and, lhs=v38, rhs_imm=4294967295 }   -> x1
     v40  BinopI { op=ne, lhs=v39, rhs_imm=0 }             -> x0
-    v41  Imm(0)                                           -> x1
-    terminator Bnz { cond=v40, target=b32, fall=b10 }   (exit_acc=v40)
+    v41  Imm(0)                                           -> x6
+    terminator Bnz { cond=v39, target=b32, fall=b10 }   (exit_acc=v40)
   block 10  start_pc=0
     v164 LoadLocal { off=-10, kind=I64 }                  -> x0
     v165 BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x0
@@ -217,8 +217,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     v185 Load { addr=v180, disp=1, kind=U8 }              -> x1
     v186 BinopI { op=xor, lhs=v185, rhs_imm=33 }          -> x1
     v187 BinopI { op=and, lhs=v186, rhs_imm=4294967295 }  -> x1
-    v188 BinopI { op=ne, lhs=v187, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v188, target=b15, fall=b14 }   (exit_acc=v188)
+    v188 BinopI { op=ne, lhs=v187, rhs_imm=0 }            -> x6
+    terminator Bz { cond=v187, target=b15, fall=b14 }   (exit_acc=v188)
   block 14  start_pc=0
     v189 Imm(2)                                           -> x0
     terminator Return(v189)   (exit_acc=v189)
@@ -236,8 +236,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     v200 Load { addr=v1, disp=17, kind=U8 }               -> x0
     v201 BinopI { op=xor, lhs=v200, rhs_imm=171 }         -> x0
     v202 BinopI { op=and, lhs=v201, rhs_imm=4294967295 }  -> x0
-    v203 BinopI { op=ne, lhs=v202, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v203, target=b17, fall=b16 }   (exit_acc=v203)
+    v203 BinopI { op=ne, lhs=v202, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v202, target=b17, fall=b16 }   (exit_acc=v203)
   block 16  start_pc=0
     v204 Imm(3)                                           -> x0
     terminator Return(v204)   (exit_acc=v204)

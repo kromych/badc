@@ -29,10 +29,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v15  ImmData(8)                                       -> x1
     v16  Imm(8)                                           -> x1
     v17  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
-    v18  Load { addr=v1, disp=8, kind=I32 }               -> x1
+    v18  Load { addr=v1, disp=8, kind=I32 }               -> x2
     v19  BinopI { op=ne, lhs=v18, rhs_imm=0 }             -> x1
-    v20  Imm(0)                                           -> x2
-    terminator Bnz { cond=v19, target=b14, fall=b5 }   (exit_acc=v19)
+    v20  Imm(0)                                           -> x6
+    terminator Bnz { cond=v18, target=b14, fall=b5 }   (exit_acc=v19)
   block 5  start_pc=0
     v21  ImmData(8)                                       -> x1
     v22  Imm(8)                                           -> x1

@@ -36,8 +36,7 @@ Disassembly of section .text:
                	mov	x4, #0x0                // =0
                	b	<addr>
                	mov	w4, w1
-               	cmp	x4, #0x0
-               	b.ne	<addr>
+               	cbnz	x4, <addr>
                	add	x0, x2, #0x7
                	sxth	x0, w0
                	mov	x17, #0xff              // =255
@@ -91,8 +90,7 @@ Disassembly of section .text:
                	mov	x4, #0x0                // =0
                	b	<addr>
                	mov	w4, w1
-               	cmp	x4, #0x0
-               	b.ne	<addr>
+               	cbnz	x4, <addr>
                	cmp	x3, #0xd
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

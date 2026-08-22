@@ -235,9 +235,8 @@ Disassembly of section .text:
                	ldr	d0, [x16]
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
                	mov	x2, #0x1                // =1
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	sub	x16, x29, #0x58
                	ldr	d0, [x16]
                	scvtf	d1, x1
@@ -245,8 +244,6 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fdiv	d1, d1, d17
                	fcmp	d0, d1
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x2, ne
                	mov	x0, #0x1                // =1
                	cbnz	x2, <addr>
@@ -257,8 +254,6 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fdiv	d1, d1, d17
                	fcmp	d0, d1
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	sub	x16, x29, #0x48

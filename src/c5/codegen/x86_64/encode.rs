@@ -2195,6 +2195,12 @@ pub(crate) fn lower(
             }
         }
     }
+    // Branch on a zero test's operand directly. Immediately before
+    // allocation so every mid-end fold keyed on the compare shape has
+    // run.
+    for f in ssa_funcs.iter_mut() {
+        crate::c5::codegen::passes::constfold_branch::strip_zero_test_conds(f);
+    }
     let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
         super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (x86_64)", || {
             ssa_funcs

@@ -19,8 +19,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x20, x0
-               	cmp	x20, #0x0
-               	b.ne	<addr>
+               	cbnz	x20, <addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
@@ -46,8 +45,7 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x20, x0
                	mov	x21, x1
-               	cmp	x20, #0x0
-               	b.ne	<addr>
+               	cbnz	x20, <addr>
                	mov	x0, #0x18               // =24
                	bl	<addr>
                	mov	x1, #0x0                // =0

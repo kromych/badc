@@ -92,10 +92,10 @@ Disassembly of section .text:
                	sub	x0, x29, #0xa0
                	bl	<addr>
                	sxtw	x0, w0
-               	sxtw	x0, w23
-               	cmp	x0, #0x0
+               	sxtw	x1, w23
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	sxtw	x0, w24
                	cmp	x0, #0x0
                	cset	x0, ne
@@ -107,8 +107,7 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x100
                	ret
-               	cmp	x21, #0x0
-               	b.ne	<addr>
+               	cbnz	x21, <addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0xf0]

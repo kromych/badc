@@ -7,11 +7,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v1   Imm(0)                                           -> x0
     v2   StoreLocal { off=-2, value=v1, kind=I32, volatile } -> -
     v3   ImmData(24)                                      -> x3
-    v4   CallExt { binding_idx=0, args=[v3], fp_arg_mask=0x0 } -> x0
-    v5   Imm(0)                                           -> x1
-    v6   Extend { value=v4, kind=I32 }                    -> x1
+    v4   CallExt { binding_idx=0, args=[v3], fp_arg_mask=0x0 } -> x1
+    v5   Imm(0)                                           -> x0
+    v6   Extend { value=v4, kind=I32 }                    -> x0
     v7   BinopI { op=eq, lhs=v6, rhs_imm=0 }              -> x2
-    terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
+    terminator Bnz { cond=v6, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
     v8   Imm(1)                                           -> x0
     v9   StoreLocal { off=-2, value=v8, kind=I32, volatile } -> -
@@ -20,7 +20,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v12  CallExt { binding_idx=1, args=[v3, v11], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
   block 2  start_pc=0
-    v13  Extend { value=v4, kind=I32 }                    -> x0
+    v13  Extend { value=v4, kind=I32 }                    -> x1
     v14  BinopI { op=ne, lhs=v6, rhs_imm=7 }              -> x0
     v15  Imm(0)                                           -> x1
     terminator Bnz { cond=v14, target=b7, fall=b3 }   (exit_acc=v14)

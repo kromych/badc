@@ -49,10 +49,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	cmpq	$0x11, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%cl
+               	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	sete	%al

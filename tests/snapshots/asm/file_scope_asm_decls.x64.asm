@@ -58,17 +58,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rcx
                	movq	%rbp, %rdx
-               	testq	%rbx, %rbx
-               	sete	%sil
-               	movzbq	%sil, %rsi
                	movl	$0x1, %eax
-               	testq	%rsi, %rsi
-               	jne	<addr>
+               	testq	%rbx, %rbx
+               	je	<addr>
                	testq	%rcx, %rcx
                	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>

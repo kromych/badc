@@ -42,10 +42,7 @@ Disassembly of section .text:
                	mov	x17, #0x80000000        // =2147483648
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -63,9 +60,7 @@ Disassembly of section .text:
                	mov	w0, w0
                	mov	x17, #0x80000000        // =2147483648
                	cmp	x0, x17
-               	cset	x0, hi
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b.hi	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -74,9 +69,7 @@ Disassembly of section .text:
                	mov	w0, w0
                	mov	x17, #0x80000000        // =2147483648
                	cmp	x0, x17
-               	cset	x0, hs
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b.hs	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -85,9 +78,7 @@ Disassembly of section .text:
                	mov	w0, w0
                	mov	x17, #0x80000000        // =2147483648
                	cmp	x0, x17
-               	cset	x0, ls
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b.ls	<addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -96,8 +87,7 @@ Disassembly of section .text:
                	mov	x17, #0x80000000        // =2147483648
                	add	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

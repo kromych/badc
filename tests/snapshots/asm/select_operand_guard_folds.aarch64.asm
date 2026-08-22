@@ -108,8 +108,7 @@ Disassembly of section .text:
                	mov	x17, #0x3               // =3
                	and	x0, x0, x17
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>

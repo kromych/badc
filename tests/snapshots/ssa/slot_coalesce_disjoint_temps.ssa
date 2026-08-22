@@ -54,10 +54,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v55  BinopI { op=shru, lhs=v54, rhs_imm=63 }          -> x3
     v56  Binop { op=add, lhs=v52, rhs=v55 }               -> x12
     v57  BinopI { op=and, lhs=v56, rhs_imm=1 }            -> x12
-    v58  Binop { op=sub, lhs=v57, rhs=v55 }               -> x3
+    v58  Binop { op=sub, lhs=v57, rhs=v55 }               -> x12
     v59  BinopI { op=eq, lhs=v58, rhs_imm=0 }             -> x3
-    v60  Imm(0)                                           -> x12
-    terminator Bnz { cond=v59, target=b28, fall=b8 }   (exit_acc=v59)
+    v60  Imm(0)                                           -> x13
+    terminator Bz { cond=v58, target=b28, fall=b8 }   (exit_acc=v59)
   block 8  start_pc=0
     v61  Extend { value=v49, kind=I32 }                   -> x3
     v62  BinopI { op=gt, lhs=v52, rhs_imm=50 }            -> x3
@@ -131,10 +131,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v119 BinopI { op=shru, lhs=v118, rhs_imm=63 }         -> x3
     v120 Binop { op=add, lhs=v116, rhs=v119 }             -> x12
     v121 BinopI { op=and, lhs=v120, rhs_imm=1 }           -> x12
-    v122 Binop { op=sub, lhs=v121, rhs=v119 }             -> x3
+    v122 Binop { op=sub, lhs=v121, rhs=v119 }             -> x12
     v123 BinopI { op=eq, lhs=v122, rhs_imm=0 }            -> x3
-    v124 Imm(0)                                           -> x12
-    terminator Bnz { cond=v123, target=b23, fall=b18 }   (exit_acc=v123)
+    v124 Imm(0)                                           -> x13
+    terminator Bz { cond=v122, target=b23, fall=b18 }   (exit_acc=v123)
   block 18  start_pc=0
     v130 Extend { value=v115, kind=I32 }                  -> x3
     v131 BinopI { op=gt, lhs=v116, rhs_imm=50 }           -> x3

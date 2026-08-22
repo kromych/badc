@@ -151,18 +151,12 @@ Disassembly of section .text:
                	leaq	-<rip>, %rax      # <addr>
                	movq	%rax, (%rbx)
                	cmpq	%rax, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movq	(%rbx), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	cmpq	%rcx, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

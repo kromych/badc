@@ -45,8 +45,7 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x30]
@@ -61,8 +60,7 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp, #0x30]

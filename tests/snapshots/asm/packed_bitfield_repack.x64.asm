@@ -71,10 +71,7 @@ Disassembly of section .text:
                	shlq	$0x2f, %rax
                	sarq	$0x2f, %rax
                	cmpq	$0xfde8, %rax           # imm = 0xFDE8
-               	setne	%dl
-               	movzbq	%dl, %rdx
                	movl	$0x1, %eax
-               	testq	%rdx, %rdx
                	jne	<addr>
                	movq	%rcx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
@@ -83,9 +80,6 @@ Disassembly of section .text:
                	shlq	$0x36, %rax
                	sarq	$0x36, %rax
                	cmpq	$0x1f4, %rax            # imm = 0x1F4
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -116,10 +110,7 @@ Disassembly of section .text:
                	shlq	$0x3d, %rax
                	sarq	$0x3d, %rax
                	cmpq	$0x3, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
                	movl	$0x1, %eax
-               	testq	%rdx, %rdx
                	jne	<addr>
                	movq	%rcx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
@@ -128,9 +119,6 @@ Disassembly of section .text:
                	shlq	$0x39, %rax
                	sarq	$0x39, %rax
                	cmpq	$0x3c, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

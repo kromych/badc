@@ -96,8 +96,8 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v70  BinopI { op=lt, lhs=v67, rhs_imm=0 }             -> x0
     v71  BinopI { op=shl, lhs=v70, rhs_imm=32 }           -> x1
     v72  Extend { value=v70, kind=I32 }                   -> x0
-    v73  BinopI { op=eq, lhs=v72, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v73, target=b12, fall=b11 }   (exit_acc=v73)
+    v73  BinopI { op=eq, lhs=v72, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v72, target=b12, fall=b11 }   (exit_acc=v73)
   block 11  start_pc=0
     v74  Imm(6)                                           -> x0
     terminator Return(v74)   (exit_acc=v74)

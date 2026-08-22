@@ -81,8 +81,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v44  LoadLocal { off=-1, kind=F64 }                   -> d1
     v45  Imm(0)                                           -> x1
     v46  Binop { op=fne, lhs=v1, rhs=v45 }                -> x1
-    v47  BinopI { op=eq, lhs=v46, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v47, target=b21, fall=b11 }   (exit_acc=v47)
+    v47  BinopI { op=eq, lhs=v46, rhs_imm=0 }             -> x2
+    terminator Bnz { cond=v46, target=b21, fall=b11 }   (exit_acc=v47)
   block 11  start_pc=0
     v48  Extend { value=v43, kind=I32 }                   -> x1
     v49  BinopI { op=or, lhs=v43, rhs_imm=32 }            -> x0

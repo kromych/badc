@@ -201,8 +201,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fadd	d1, d1, d17
                	fcmp	d0, d1
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
@@ -229,8 +228,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fadd	d1, d1, d17
                	fcmp	d0, d1
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10

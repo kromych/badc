@@ -86,15 +86,9 @@ Disassembly of section .text:
                	imulq	$0x64, %rax, %rax
                	movslq	%eax, %rcx
                	cmpq	$0xa, %rdx
-               	setne	%dl
-               	movzbq	%dl, %rdx
                	movl	$0x1, %eax
-               	testq	%rdx, %rdx
                	jne	<addr>
                	cmpq	$0xc8, %rcx
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

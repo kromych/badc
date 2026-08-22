@@ -83,8 +83,8 @@ Disassembly of section .text:
                	testq	%r13, %r13
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	testq	%r13, %r13
+               	je	<addr>
                	testq	%r14, %r14
                	sete	%al
                	movzbq	%al, %rax
@@ -383,16 +383,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x3, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
                	movl	$0x1, %eax
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movq	-0x28(%rbp), %rax
                	cmpq	$0x10, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

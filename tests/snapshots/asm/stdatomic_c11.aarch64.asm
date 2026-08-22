@@ -80,8 +80,7 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x9, x10, [sp], #0x20
                	mov	x0, x16
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -109,8 +108,7 @@ Disassembly of section .text:
                	ldp	x9, x10, [sp], #0x20
                	mov	x0, x16
                	sxtb	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

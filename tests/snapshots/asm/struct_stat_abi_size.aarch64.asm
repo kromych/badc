@@ -73,8 +73,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x80
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	sub	x0, x29, #0x98
                	bl	<addr>
                	sxtw	x0, w0

@@ -105,19 +105,13 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	cmpq	$0x2a, %rsi
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%cl
+               	sete	%cl
                	movzbq	%cl, %rcx
                	xorq	%rax, %rax
                	testq	%rcx, %rcx
                	je	<addr>
                	cmpq	$0x2a, %rdi
                	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>

@@ -70,22 +70,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x5, %eax
                	retq
-               	cmpq	%rcx, %rax
-               	setbe	%dl
-               	movzbq	%dl, %rdx
-               	movslq	%edx, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
-               	movl	$0x6, %eax
-               	retq
-               	cmpq	%rcx, %rax
-               	setbe	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
-               	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	testq	%rax, %rax

@@ -60,8 +60,7 @@ Disassembly of section .text:
                	str	x2, [x0, #0x18]
                	str	x0, [x1]
                	ldur	x0, [x29, #-0x88]
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10

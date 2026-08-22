@@ -121,7 +121,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Jmp(b12)   (exit_acc=v81)
   block 19  start_pc=0
     v100 BinopI { op=eq, lhs=v47, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v100, target=b11, fall=b20 }   (exit_acc=v100)
+    terminator Bnz { cond=v47, target=b11, fall=b20 }   (exit_acc=v100)
   block 20  start_pc=0
     v74  Imm(0)                                           -> x2
     v75  Imm(0)                                           -> x2

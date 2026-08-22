@@ -864,17 +864,24 @@ fn apply_edge(
     if let Some(r) = cond_range {
         facts.narrow(key, r);
     }
-    // A condition that is itself a comparison narrows what it compares.
+    // A condition that is itself a comparison narrows what it
+    // compares. Any other condition is the zero test the branch
+    // performs, so it narrows as `cond != 0` and peels from there --
+    // the shape a branch-cond fold leaves after rewriting
+    // `Bz(x != 0)` to `Bz(x)`.
     let (op, lhs, rhs_range) = match insts.get(cond as usize) {
-        Some(Inst::BinopI { op, lhs, rhs_imm }) => (*op, *lhs, Range::exact(*rhs_imm)),
-        Some(Inst::Binop { op, lhs, rhs }) => {
+        Some(Inst::BinopI { op, lhs, rhs_imm }) if comparison(*op).is_some() => {
+            (*op, *lhs, Range::exact(*rhs_imm))
+        }
+        Some(Inst::Binop { op, lhs, rhs }) if comparison(*op).is_some() => {
             let r = held(facts, def, key_of(insts, canon, *rhs), *rhs);
             if r.lo != r.hi {
                 return;
             }
             (*op, *lhs, r)
         }
-        _ => return,
+        Some(_) => (BinOp::Ne, cond, Range::exact(0)),
+        None => return,
     };
     let Ok(mut k) = i64::try_from(rhs_range.lo) else {
         return;
@@ -944,6 +951,10 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
     }
     let mut facts = Facts::default();
     let mut folded: Vec<(u32, i64)> = Vec::new();
+    // Zero-test terminators the walk's facts settle: (block, cond is
+    // non-zero). Applied after the walk so the CFG the tables describe
+    // stays fixed while facts flow.
+    let mut branch_folds: Vec<(BlockId, bool)> = Vec::new();
     // Walk-position memory epoch: bumped at every potential write. A
     // load's recorded epoch says whether its value still equals what a
     // load of the same expression would produce here.
@@ -1051,6 +1062,21 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
                 facts.set(ek, r);
             }
         }
+        // The facts at the block's end also settle its own zero-test
+        // terminator when they pin the condition's value. The pin is
+        // path-local, so no instruction rewrite can carry it; folding
+        // the branch here is the terminator's form of the comparison
+        // rewrite above.
+        if let Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } =
+            func.blocks[b as usize].terminator
+            && cond != crate::c5::ir::NO_VALUE
+        {
+            let insts = func.insts.as_slice();
+            let r = held(&facts, &def, key_of(insts, &canon, cond), cond);
+            if let Some(nz) = decide(BinOp::Ne, r, Range::exact(0)) {
+                branch_folds.push((b as BlockId, nz));
+            }
+        }
         for &c in &children[b as usize] {
             stack.push(Step::Enter(c));
         }
@@ -1058,7 +1084,51 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
     for &(pc, v) in &folded {
         func.insts[pc as usize] = Inst::Imm(v);
     }
-    !folded.is_empty()
+    // Apply the deferred terminator folds and drop each removed edge's
+    // phi incomings so the successor reflects its real predecessors.
+    let mut removed: Vec<(BlockId, BlockId)> = Vec::new();
+    for &(b, nonzero) in &branch_folds {
+        let (taken, not_taken) = match func.blocks[b as usize].terminator {
+            Terminator::Bz {
+                target,
+                fall_through,
+                ..
+            } => {
+                if nonzero {
+                    (fall_through, target)
+                } else {
+                    (target, fall_through)
+                }
+            }
+            Terminator::Bnz {
+                target,
+                fall_through,
+                ..
+            } => {
+                if nonzero {
+                    (target, fall_through)
+                } else {
+                    (fall_through, target)
+                }
+            }
+            _ => continue,
+        };
+        func.blocks[b as usize].terminator = Terminator::Jmp(taken);
+        if not_taken != taken {
+            removed.push((b, not_taken));
+        }
+    }
+    for (from, to) in removed {
+        let Some(block) = func.blocks.get(to as usize) else {
+            continue;
+        };
+        for i in block.inst_range.clone() {
+            if let Inst::Phi { incoming, .. } = &mut func.insts[i as usize] {
+                incoming.retain(|&(pred, _)| pred != from);
+            }
+        }
+    }
+    !folded.is_empty() || !branch_folds.is_empty()
 }
 
 #[cfg(test)]

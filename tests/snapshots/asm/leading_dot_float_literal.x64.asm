@@ -45,47 +45,27 @@ Disassembly of section .text:
                	movss	-0x20(%rbp,%riz), %xmm1
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm1
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	jp	<addr>
                	je	<addr>
                	xorq	%rax, %rax
                	movsd	-0x18(%rbp,%riz), %xmm1
                	movabsq	$0x3fd0000000000000, %rcx # imm = 0x3FD0000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm1
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	jp	<addr>
                	je	<addr>
                	xorq	%rax, %rax
                	movsd	-0x10(%rbp,%riz), %xmm1
                	movabsq	$0x4039000000000000, %rcx # imm = 0x4039000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm1
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	jp	<addr>
                	je	<addr>
                	xorq	%rax, %rax
                	movl	$0x3f000000, %ecx       # imm = 0x3F000000
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	jp	<addr>
                	je	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

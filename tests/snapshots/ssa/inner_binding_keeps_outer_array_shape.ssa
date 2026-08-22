@@ -71,9 +71,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v55  Imm(0)                                           -> x1
     terminator Jmp(b10)   (exit_acc=v54)
   block 8  start_pc=0
-    v62  Extend { value=v56, kind=I32 }                   -> x1
-    v63  Imm(0)                                           -> x1
-    terminator Jmp(b9)   (exit_acc=v63)
+    v62  Extend { value=v56, kind=I32 }                   -> x2
+    v63  Imm(0)                                           -> x2
+    terminator Jmp(b9)   (exit_acc=v57)
   block 9  start_pc=0
     v59  Extend { value=v56, kind=I32 }                   -> x0
     v60  Imm(1)                                           -> x0
@@ -82,7 +82,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
   block 10  start_pc=0
     v56  Phi { incoming=[b7:v54, b9:v60], kind=I64 }      -> x0
     v57  Extend { value=v56, kind=I32 }                   -> x1
-    v58  BinopI { op=lt, lhs=v57, rhs_imm=1 }             -> x1
+    v58  BinopI { op=lt, lhs=v57, rhs_imm=1 }             -> x2
     terminator Bnz { cond=v58, target=b8, fall=b11 }   (exit_acc=v58)
   block 11  start_pc=0
     v64  Imm(0)                                           -> x0

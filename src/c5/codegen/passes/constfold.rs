@@ -50,10 +50,146 @@ const MAX_ROUNDS: usize = 4;
 
 pub(crate) fn run_one(func: &mut FunctionSsa) {
     for _ in 0..MAX_ROUNDS {
-        if !fold_round(func) {
+        let folded = fold_round(func);
+        let stripped = strip_bool_renormalize(func);
+        if !folded && !stripped {
             return;
         }
     }
+}
+
+/// Producer depth `is_bool_value` chases through phis and extends.
+const BOOL_DEPTH: u32 = 8;
+
+/// Whether `v` is provably 0 or 1: a comparison result, a 0/1
+/// constant, or a phi / integer-extend chain of such. Phi cycles
+/// terminate on the depth bound.
+fn is_bool_value(func: &FunctionSsa, v: ValueId, depth: u32) -> bool {
+    if depth == 0 || v == NO_VALUE {
+        return false;
+    }
+    if matches!(func.f32_values.get(v as usize), Some(true)) {
+        return false;
+    }
+    match func.insts.get(v as usize) {
+        Some(Inst::Imm(k)) => *k == 0 || *k == 1,
+        Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => is_compare_op(*op),
+        Some(Inst::Extend { value, kind }) => {
+            !matches!(kind, LoadKind::F32 | LoadKind::F64)
+                && is_bool_value(func, *value, depth - 1)
+        }
+        Some(Inst::Phi { incoming, kind }) => {
+            !matches!(kind, LoadKind::F32 | LoadKind::F64)
+                && !incoming.is_empty()
+                && incoming
+                    .iter()
+                    .all(|&(_, s)| is_bool_value(func, s, depth - 1))
+        }
+        _ => false,
+    }
+}
+
+/// Integer and FP comparisons; both produce an integer 0/1.
+fn is_compare_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Eq
+            | BinOp::Ne
+            | BinOp::Lt
+            | BinOp::Gt
+            | BinOp::Le
+            | BinOp::Ge
+            | BinOp::Ult
+            | BinOp::Ugt
+            | BinOp::Ule
+            | BinOp::Uge
+            | BinOp::Feq
+            | BinOp::Fne
+            | BinOp::Flt
+            | BinOp::Fgt
+            | BinOp::Fle
+            | BinOp::Fge
+    )
+}
+
+/// Redirect every consumer of `x != 0` to `x` when `x` is provably
+/// 0/1 (`is_bool_value`). The short-circuit lowering re-normalizes an
+/// `&&` / `||` operand a comparison or `!` already normalized; the
+/// redirect leaves the renormalizing compare dead. `x` is an operand
+/// of the compare, so it dominates every redirected use. Returns
+/// whether any operand actually changed.
+fn strip_bool_renormalize(func: &mut FunctionSsa) -> bool {
+    let n = func.insts.len();
+    let mut redirect: Vec<Option<ValueId>> = vec![None; n];
+    let mut any = false;
+    for (idx, slot) in redirect.iter_mut().enumerate() {
+        if matches!(func.f32_values.get(idx), Some(true)) {
+            continue;
+        }
+        let lhs = match &func.insts[idx] {
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs,
+                rhs_imm: 0,
+            } => *lhs,
+            Inst::Binop {
+                op: BinOp::Ne,
+                lhs,
+                rhs,
+            } if matches!(func.insts.get(*rhs as usize), Some(Inst::Imm(0))) => *lhs,
+            _ => continue,
+        };
+        if is_bool_value(func, lhs, BOOL_DEPTH) {
+            *slot = Some(lhs);
+            any = true;
+        }
+    }
+    if !any {
+        return false;
+    }
+    let resolve = |mut v: ValueId| -> ValueId {
+        let mut guard = 0usize;
+        while v != NO_VALUE && (v as usize) < n {
+            match redirect[v as usize] {
+                Some(t) if t != v => {
+                    v = t;
+                    guard += 1;
+                    if guard > n {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+        v
+    };
+    let mut changed = false;
+    for inst in func.insts.iter_mut() {
+        inst.for_each_operand_mut(|op| {
+            let t = resolve(*op);
+            if t != *op {
+                *op = t;
+                changed = true;
+            }
+        });
+    }
+    for block in func.blocks.iter_mut() {
+        if block.exit_acc != NO_VALUE {
+            let t = resolve(block.exit_acc);
+            if t != block.exit_acc {
+                block.exit_acc = t;
+                changed = true;
+            }
+        }
+        block.terminator.for_each_operand_mut(|v| {
+            let t = resolve(*v);
+            if t != *v {
+                *v = t;
+                changed = true;
+            }
+        });
+    }
+    changed
 }
 
 /// Node budget for one per-incoming evaluation. A shared operand is
@@ -1395,5 +1531,108 @@ mod tests {
         h.extern_imm_code_refs.push((1, 3));
         assert!(fold_addr_compares(&mut h, &facts(&[])));
         assert!(matches!(h.insts[2], Inst::Imm(1)));
+    }
+
+    /// `x != 0` over a comparison result redirects its consumers to
+    /// the comparison; the renormalize goes dead.
+    #[test]
+    fn bool_renormalize_redirects_to_the_source() {
+        let mut f = fresh(vec![
+            Inst::LoadLocal {
+                off: 2,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::BinopI {
+                op: BinOp::Lt,
+                lhs: 0,
+                rhs_imm: 3,
+            },
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: 1,
+                rhs_imm: 0,
+            },
+            Inst::StoreLocal {
+                off: -1,
+                value: 2,
+                kind: crate::c5::ir::StoreKind::I64,
+                volatile: false,
+            },
+        ]);
+        run_one(&mut f);
+        assert!(
+            matches!(f.insts[3], Inst::StoreLocal { value: 1, .. }),
+            "store must read the comparison, got {:?}",
+            f.insts[3]
+        );
+    }
+
+    /// `x != 0` over a value that is not provably 0/1 keeps its
+    /// consumers.
+    #[test]
+    fn renormalize_of_a_non_bool_value_stays() {
+        let mut f = fresh(vec![
+            Inst::LoadLocal {
+                off: 2,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 0,
+                rhs_imm: 3,
+            },
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: 1,
+                rhs_imm: 0,
+            },
+            Inst::StoreLocal {
+                off: -1,
+                value: 2,
+                kind: crate::c5::ir::StoreKind::I64,
+                volatile: false,
+            },
+        ]);
+        run_one(&mut f);
+        assert!(matches!(f.insts[3], Inst::StoreLocal { value: 2, .. }));
+    }
+
+    /// A phi merging a comparison with a 0/1 constant is 0/1, so a
+    /// renormalize over it also redirects (the short-circuit merge
+    /// shape).
+    #[test]
+    fn bool_renormalize_sees_through_a_bool_phi() {
+        let mut f = fresh(vec![
+            Inst::LoadLocal {
+                off: 2,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::BinopI {
+                op: BinOp::Ugt,
+                lhs: 0,
+                rhs_imm: 9,
+            },
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 1), (1, 2)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Ne,
+                lhs: 3,
+                rhs_imm: 0,
+            },
+            Inst::StoreLocal {
+                off: -1,
+                value: 4,
+                kind: crate::c5::ir::StoreKind::I64,
+                volatile: false,
+            },
+        ]);
+        run_one(&mut f);
+        assert!(matches!(f.insts[5], Inst::StoreLocal { value: 3, .. }));
     }
 }

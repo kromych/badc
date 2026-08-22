@@ -53,9 +53,7 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	mov	x17, #0x4000            // =16384
                	cmp	x0, x17
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0xa0]
                	ldr	x19, [sp], #0xb0

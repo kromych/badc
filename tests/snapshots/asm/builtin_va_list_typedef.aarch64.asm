@@ -265,7 +265,7 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
-               	ldr	x1, [x0]
+               	ldr	x3, [x0]
                	sub	x0, x29, #0x20
                	mov	x17, x0
                	str	x9, [sp, #-0x10]!
@@ -307,37 +307,29 @@ Disassembly of section .text:
                	mov	x0, x16
                	ldrsw	x2, [x0]
                	sub	x0, x29, #0x20
-               	ldur	x3, [x29, #0x10]
+               	ldur	x1, [x29, #0x10]
                	mov	x0, #0x0                // =0
-               	ldrb	w3, [x3]
+               	ldrb	w1, [x1]
                	mov	x17, #0x74              // =116
-               	eor	x3, x3, x17
-               	mov	w3, w3
-               	cmp	x3, #0x0
-               	cset	x3, eq
-               	cbz	x3, <addr>
-               	ldrb	w0, [x1]
+               	eor	x1, x1, x17
+               	mov	w1, w1
+               	cbnz	x1, <addr>
+               	ldrb	w0, [x3]
                	mov	x17, #0x78              // =120
                	eor	x0, x0, x17
                	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	mov	x1, #0x0                // =0
                	cbz	x0, <addr>
                	mov	x0, #0x4004000000000000 // =4612811918334230528
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x1, ne
+               	cset	x1, eq
                	mov	x0, #0x0                // =0
                	cbz	x1, <addr>
                	cmp	x2, #0x7
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	sxtw	x0, w0
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50
@@ -531,8 +523,7 @@ Disassembly of section .text:
                	fmov	d0, x2
                	mov	x2, x3
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -65,8 +65,7 @@ Disassembly of section .text:
                	mov	x17, #0x1               // =1
                	and	x4, x4, x17
                	sub	x3, x4, x3
-               	cmp	x3, #0x0
-               	b.ne	<addr>
+               	cbnz	x3, <addr>
                	sub	x3, x29, #0x20
                	mov	x17, x3
                	str	x9, [sp, #-0x10]!
@@ -261,8 +260,7 @@ Disassembly of section .text:
                	movk	x0, #0x4046, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -543,8 +543,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x1, x0
                	sxtw	x0, w1
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x30

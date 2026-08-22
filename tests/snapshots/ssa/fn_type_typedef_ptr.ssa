@@ -183,11 +183,11 @@ fn ent_pc=8 n_params=0 variadic=false locals=5
     v27  ImmData(40)                                      -> x0
     v28  Load { addr=v27, disp=0, kind=I64 }              -> x0
     v29  BinopI { op=ne, lhs=v28, rhs_imm=42 }            -> x0
-    v30  BinopI { op=ne, lhs=v29, rhs_imm=0 }             -> x0
+    v30  BinopI { op=ne, lhs=v29, rhs_imm=0 }             -> x2
     v31  Imm(0)                                           -> x2
-    terminator Jmp(b2)   (exit_acc=v30)
+    terminator Jmp(b2)   (exit_acc=v29)
   block 2  start_pc=0
-    v32  Phi { incoming=[b1:v30], kind=I64 }              -> x0
+    v32  Phi { incoming=[b1:v29], kind=I64 }              -> x0
     v33  LoadLocal { off=-5, kind=I64 }                   -> x2
     v34  Imm(0)                                           -> x2
     terminator Bnz { cond=v32, target=b19, fall=b3 }   (exit_acc=v32)

@@ -77,8 +77,7 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	ldr	s1, [x1]
                	fcmp	s0, s1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	add	x20, x0, #0x1
                	sxtw	x0, w20
                	cmp	x0, #0x4
@@ -252,8 +251,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	fmov	s17, w0
                	fcmp	s0, s17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x20, #0x2               // =2
                	mov	x0, x20
                	bl	<addr>

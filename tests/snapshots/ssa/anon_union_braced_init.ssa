@@ -103,12 +103,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=17
     v31  BinopI { op=add, lhs=v24, rhs_imm=8 }            -> x1
     v32  Load { addr=v24, disp=8, kind=I64 }              -> x1
     v33  ImmData(40)                                      -> x2
-    v34  Binop { op=ne, lhs=v32, rhs=v3 }                 -> x1
-    v35  BinopI { op=ne, lhs=v34, rhs_imm=0 }             -> x3
+    v34  Binop { op=ne, lhs=v32, rhs=v3 }                 -> x3
+    v35  BinopI { op=ne, lhs=v34, rhs_imm=0 }             -> x1
     v36  Imm(0)                                           -> x1
-    terminator Jmp(b10)   (exit_acc=v35)
+    terminator Jmp(b10)   (exit_acc=v34)
   block 10  start_pc=0
-    v37  Phi { incoming=[b26:v13, b9:v35], kind=I64 }     -> x3
+    v37  Phi { incoming=[b26:v13, b9:v34], kind=I64 }     -> x3
     v38  LoadLocal { off=-17, kind=I64 }                  -> x1
     v39  Imm(0)                                           -> x1
     terminator Bnz { cond=v37, target=b25, fall=b11 }   (exit_acc=v37)

@@ -22,7 +22,7 @@ fn ent_pc=5 n_params=2 variadic=true locals=6
     v16  LocalAddr(-2)                                    -> x2
     v17  LoadLocal { off=-6, kind=I64 }                   -> x6
     v18  BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> x6
-    terminator Bz { cond=v18, target=b3, fall=b1 }   (exit_acc=v18)
+    terminator Bz { cond=v7, target=b3, fall=b1 }   (exit_acc=v18)
   block 1  start_pc=0
     v19  LoadLocal { off=-6, kind=I64 }                   -> x6
     v20  Imm(0)                                           -> x6

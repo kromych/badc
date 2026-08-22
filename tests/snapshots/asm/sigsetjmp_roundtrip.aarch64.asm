@@ -25,9 +25,9 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	sxtw	x1, w0
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	mov	x1, x0
+               	sxtw	x0, w1
+               	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x10]
                	mov	x1, #0x7                // =7
@@ -35,7 +35,7 @@ Disassembly of section .text:
                	bl	<addr>
                	uxtb	w0, w0
                	brk	#0x1
-               	cmp	x1, #0x7
+               	cmp	x0, #0x7
                	cset	x0, ne
                	cbnz	x0, <addr>
                	ldursw	x0, [x29, #-0x10]

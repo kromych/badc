@@ -25,8 +25,7 @@ Disassembly of section .text:
                	mov	x0, #0x45f0000000000000 // =5039527983027585024
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
@@ -39,8 +38,7 @@ Disassembly of section .text:
                	mov	x0, #0x43f0000000000000 // =4895412794951729152
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20
@@ -53,8 +51,7 @@ Disassembly of section .text:
                	mov	x0, #0x4340000000000000 // =4845873199050653696
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x19, [sp], #0x20

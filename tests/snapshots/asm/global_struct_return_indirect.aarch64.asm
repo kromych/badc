@@ -68,16 +68,12 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x1               // =1
                	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
-               	cset	x1, ne
+               	mov	w1, w0
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	sub	x0, x29, #0x90
                	ldrsw	x0, [x0, #0x4]
                	cmp	x0, #0x2
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x90

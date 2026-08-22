@@ -31,10 +31,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setae	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jb	<addr>
                	movl	$0x1, %eax
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -47,10 +44,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setae	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jb	<addr>
                	movl	$0x1, %eax
                	movslq	%eax, %rax
                	testq	%rax, %rax

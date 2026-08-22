@@ -21,14 +21,11 @@ Disassembly of section .text:
                	mov	x1, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldr	d0, [x0, #0x18]
                	mov	x1, #0x4010000000000000 // =4616189618054758400
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x1, ne
-               	cmp	x1, #0x0
                	cset	x2, ne
                	mov	x1, #0x1                // =1
                	cbnz	x2, <addr>
@@ -36,8 +33,6 @@ Disassembly of section .text:
                	mov	x1, #0x4014000000000000 // =4617315517961601024
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x1, ne
-               	cmp	x1, #0x0
                	cset	x1, ne
                	cbnz	x1, <addr>
                	ldr	d0, [x0, #0x38]
@@ -55,16 +50,13 @@ Disassembly of section .text:
                	mov	x1, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0, #0x78]
                	mov	x0, #0x4020000000000000 // =4620693217682128896
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>
@@ -83,17 +75,14 @@ Disassembly of section .text:
                	mov	x0, #0x4022000000000000 // =4621256167635550208
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, ne
                	mov	x0, #0x1                // =1
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	d0, [x0, #0x38]
                	mov	x0, #0x4030000000000000 // =4625196817309499392
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>

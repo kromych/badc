@@ -65,10 +65,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
   block 12  start_pc=0
     v36  LocalAddr(-5)                                    -> x0
     v37  Imm(5)                                           -> x1
-    v38  AtomicRmw { op=Or, addr=v36, value=v37, width=8 } -> x0
+    v38  AtomicRmw { op=Or, addr=v36, value=v37, width=8 } -> x1
     v39  BinopI { op=ne, lhs=v38, rhs_imm=0 }             -> x0
-    v40  Imm(0)                                           -> x1
-    terminator Bnz { cond=v39, target=b62, fall=b13 }   (exit_acc=v39)
+    v40  Imm(0)                                           -> x2
+    terminator Bnz { cond=v38, target=b62, fall=b13 }   (exit_acc=v39)
   block 13  start_pc=0
     v41  LoadLocal { off=-5, kind=I64 }                   -> x0
     v42  BinopI { op=ne, lhs=v41, rhs_imm=5 }             -> x0
@@ -126,8 +126,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v72  LocalAddr(-4)                                    -> x1
     v73  Imm(7)                                           -> x2
     v74  AtomicCas { addr=v71, expected_addr=v72, desired=v73, width=8 } -> x0
-    v75  BinopI { op=eq, lhs=v74, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v75, target=b26, fall=b25 }   (exit_acc=v75)
+    v75  BinopI { op=eq, lhs=v74, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v74, target=b26, fall=b25 }   (exit_acc=v75)
   block 25  start_pc=0
     v76  Imm(7)                                           -> x0
     terminator Return(v76)   (exit_acc=v76)
@@ -196,8 +196,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v114 LocalAddr(-2)                                    -> x1
     v115 Imm(-1)                                          -> x2
     v116 AtomicCas { addr=v113, expected_addr=v114, desired=v115, width=4 } -> x0
-    v117 BinopI { op=eq, lhs=v116, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v117, target=b40, fall=b39 }   (exit_acc=v117)
+    v117 BinopI { op=eq, lhs=v116, rhs_imm=0 }            -> x1
+    terminator Bnz { cond=v116, target=b40, fall=b39 }   (exit_acc=v117)
   block 39  start_pc=0
     v118 Imm(12)                                          -> x0
     terminator Return(v118)   (exit_acc=v118)
@@ -236,10 +236,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v138 Imm(5)                                           -> x1
     v139 AtomicRmw { op=Or, addr=v137, value=v138, width=4 } -> x0
     v140 BinopI { op=shl, lhs=v139, rhs_imm=32 }          -> x1
-    v141 Extend { value=v139, kind=I32 }                  -> x0
+    v141 Extend { value=v139, kind=I32 }                  -> x1
     v142 BinopI { op=ne, lhs=v141, rhs_imm=0 }            -> x0
-    v143 Imm(0)                                           -> x1
-    terminator Bnz { cond=v142, target=b56, fall=b47 }   (exit_acc=v142)
+    v143 Imm(0)                                           -> x2
+    terminator Bnz { cond=v141, target=b56, fall=b47 }   (exit_acc=v142)
   block 47  start_pc=0
     v144 LoadLocal { off=-1, kind=I32 }                   -> x0
     v145 BinopI { op=ne, lhs=v144, rhs_imm=5 }            -> x0

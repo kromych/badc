@@ -49,8 +49,7 @@ Disassembly of section .text:
                	str	x0, [x16]
                	ldr	x0, [sp, #0x8]
                	ldur	x0, [x29, #-0x10]
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	ldur	x0, [x29, #-0x8]
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
@@ -96,8 +95,7 @@ Disassembly of section .text:
                	str	x0, [x16]
                	ldr	x0, [sp, #0x8]
                	ldur	x0, [x29, #-0x8]
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	ldur	x0, [x29, #-0x10]
                	sxtw	x0, w0
                	add	sp, sp, #0x50

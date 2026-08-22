@@ -52,8 +52,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0xc0
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x20, #0x2               // =2
                	sxtw	x0, w21
                	bl	<addr>

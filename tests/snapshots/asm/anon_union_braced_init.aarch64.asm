@@ -93,12 +93,9 @@ Disassembly of section .text:
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	x1, #0x1
-               	cset	x1, ne
-               	cbnz	x1, <addr>
+               	b.ne	<addr>
                	ldr	x1, [x0, #0x8]
                	cmp	x1, x21
-               	cset	x1, ne
-               	cmp	x1, #0x0
                	cset	x20, ne
                	cbnz	x20, <addr>
                	ldr	x0, [x0, #0x8]

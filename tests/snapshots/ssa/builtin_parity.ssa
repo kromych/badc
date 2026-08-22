@@ -249,8 +249,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v229 Binop { op=add, lhs=v227, rhs=v228 }             -> x0
     v230 BinopI { op=and, lhs=v229, rhs_imm=127 }         -> x1
     v231 BinopI { op=and, lhs=v229, rhs_imm=1 }           -> x0
-    v232 BinopI { op=ne, lhs=v231, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v232, target=b14, fall=b13 }   (exit_acc=v232)
+    v232 BinopI { op=ne, lhs=v231, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v231, target=b14, fall=b13 }   (exit_acc=v232)
   block 13  start_pc=0
     v233 Imm(12)                                          -> x0
     terminator Return(v233)   (exit_acc=v233)

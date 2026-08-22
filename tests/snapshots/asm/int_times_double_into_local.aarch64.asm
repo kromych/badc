@@ -46,8 +46,7 @@ Disassembly of section .text:
                	bl	<addr>
                	fmov	d17, x20
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
@@ -65,8 +64,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fmul	d1, d1, d17
                	fcmp	d0, d1
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
@@ -84,8 +82,7 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fmul	d1, d1, d17
                	fcmp	d0, d1
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

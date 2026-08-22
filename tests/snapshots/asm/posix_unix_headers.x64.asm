@@ -52,12 +52,13 @@ Disassembly of section .text:
                	leaq	-0x208(%rbp), %rax
                	addq	$0x0, %rax
                	movzbq	(%rax), %rax
-               	andq	$0x8, %rax
-               	testq	%rax, %rax
+               	movq	%rax, %rcx
+               	andq	$0x8, %rcx
+               	testq	%rcx, %rcx
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	testq	%rcx, %rcx
+               	je	<addr>
                	leaq	-0x208(%rbp), %rax
                	movzbq	0x5(%rax), %rax
                	andq	$0x1, %rax

@@ -42,8 +42,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x2, #0x62               // =98
                	b	<addr>
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x2, #0x61               // =97
                	b	<addr>
                	add	x1, x0, #0x1

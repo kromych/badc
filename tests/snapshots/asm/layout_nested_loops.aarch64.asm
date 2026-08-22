@@ -24,8 +24,7 @@ Disassembly of section .text:
                	mov	x6, #0x3                // =3
                	sdiv	x17, x4, x6
                	msub	x4, x17, x6, x4
-               	cmp	x4, #0x0
-               	b.ne	<addr>
+               	cbnz	x4, <addr>
                	b	<addr>
                	cmp	x3, #0x4
                	b.ne	<addr>

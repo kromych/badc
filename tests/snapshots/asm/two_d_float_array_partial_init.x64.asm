@@ -86,12 +86,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movss	(%rcx,%riz), %xmm1
                	ucomiss	%xmm1, %xmm0
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rcx
-               	testq	%rcx, %rcx
+               	jp	<addr>
                	jne	<addr>
                	leaq	0x1(%rax), %rbx
                	movslq	%ebx, %rax
@@ -228,12 +223,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0x2, %ebx
                	movq	%rbx, %rdi

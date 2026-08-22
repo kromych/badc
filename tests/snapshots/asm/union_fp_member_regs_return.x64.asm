@@ -49,12 +49,7 @@ Disassembly of section .text:
                	movsd	(%rcx,%riz), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x90, %rsp
@@ -82,12 +77,7 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rax
                	movsd	(%rax,%riz), %xmm1
                	ucomisd	%xmm0, %xmm1
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
+               	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x90, %rsp

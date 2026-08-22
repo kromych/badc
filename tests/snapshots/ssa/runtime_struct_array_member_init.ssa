@@ -182,8 +182,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=22
     v156 BinopI { op=add, lhs=v152, rhs_imm=72 }          -> x1
     v157 Imm(0)                                           -> x1
     v158 Load { addr=v152, disp=72, kind=I32 }            -> x0
-    v159 BinopI { op=ne, lhs=v158, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v159, target=b14, fall=b13 }   (exit_acc=v159)
+    v159 BinopI { op=ne, lhs=v158, rhs_imm=0 }            -> x1
+    terminator Bz { cond=v158, target=b14, fall=b13 }   (exit_acc=v159)
   block 13  start_pc=0
     v160 Imm(8)                                           -> x0
     terminator Return(v160)   (exit_acc=v160)

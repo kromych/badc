@@ -178,10 +178,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v138 Extend { value=v130, kind=I32 }                  -> x6
     v139 BinopI { op=shl, lhs=v131, rhs_imm=3 }           -> x6
     v140 Binop { op=add, lhs=v136, rhs=v139 }             -> x2
-    v141 Load { addr=v140, disp=0, kind=I32 }             -> x2
+    v141 Load { addr=v140, disp=0, kind=I32 }             -> x6
     v142 BinopI { op=ne, lhs=v141, rhs_imm=0 }            -> x2
-    v143 Imm(0)                                           -> x6
-    terminator Bnz { cond=v142, target=b26, fall=b24 }   (exit_acc=v142)
+    v143 Imm(0)                                           -> x7
+    terminator Bnz { cond=v141, target=b26, fall=b24 }   (exit_acc=v142)
   block 24  start_pc=0
     v145 ImmData(8)                                       -> x2
     v146 Imm(0)                                           -> x6

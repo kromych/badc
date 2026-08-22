@@ -98,8 +98,7 @@ Disassembly of section .text:
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	sub	x0, x29, #0x38
                	bl	<addr>
                	sxtw	x0, w0
@@ -160,8 +159,7 @@ Disassembly of section .text:
                	mov	x2, #0x8                // =8
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	sub	x0, x29, #0x38
                	bl	<addr>
                	sxtw	x0, w0

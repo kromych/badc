@@ -68,7 +68,7 @@ Disassembly of section .text:
                	testq	%r12, %r12
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%r12, %r12
                	jne	<addr>
                	cmpq	$0x1, %r13
                	setne	%al
@@ -177,7 +177,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	cmpq	$0x1, %rdx
                	setne	%al
@@ -212,7 +212,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
                	movq	%rdx, %rax
@@ -281,16 +281,7 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	je	<addr>
                	movl	$0x5, %edi
                	callq	<addr>
                	movq	%rax, %rbx
@@ -300,19 +291,7 @@ Disassembly of section .text:
                	setb	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%bl
+               	sete	%bl
                	movzbq	%bl, %rbx
                	testq	%rbx, %rbx
                	jne	<addr>
@@ -322,16 +301,7 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	callq	<addr>
                	cmpq	%rax, %rbx
-               	setb	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%bl
+               	setb	%bl
                	movzbq	%bl, %rbx
                	testq	%rbx, %rbx
                	je	<addr>

@@ -49,9 +49,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
-               	cset	x1, ls
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	b.ls	<addr>
                	mov	x0, #0x28               // =40
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

@@ -58,13 +58,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v2   ImmData(24)                                      -> x3
     v3   InlineAsm { template="lea     LJMPRET%=(%%rip), %%rcx\n\txor     %%rax, %%rax\n\tmov     %%rbx, (%%rdx)\n\tmov     %%rbp, 8(%%rdx)\n\tmov     %%r12, 16(%%rdx)\n\tmov     %%rsp, 24(%%rdx)\n\tmov     %%r13, 32(%%rdx)\n\tmov     %%r14, 40(%%rdx)\n\tmov     %%r15, 48(%%rdx)\n\tmov     %%rcx, 56(%%rdx)\n\tLJMPRET%=:\n\t", ops=2, args=[v1, v2] } -> -
     v4   LoadLocal { off=-1, kind=I32 }                   -> x0
-    v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v5, target=b6, fall=b1 }   (exit_acc=v5)
+    v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x1
+    terminator Bnz { cond=v4, target=b6, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   ImmData(104)                                     -> x0
     v7   Load { addr=v6, disp=0, kind=I32 }               -> x0
-    v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v8, target=b3, fall=b2 }   (exit_acc=v8)
+    v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> x1
+    terminator Bz { cond=v7, target=b3, fall=b2 }   (exit_acc=v8)
   block 2  start_pc=0
     v12  Imm(1)                                           -> x0
     terminator Return(v12)   (exit_acc=v12)

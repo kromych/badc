@@ -98,8 +98,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0xa8
                	ldrsw	x0, [x0, #0x48]
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10

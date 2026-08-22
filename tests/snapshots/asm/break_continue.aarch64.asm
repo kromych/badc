@@ -25,8 +25,7 @@ Disassembly of section .text:
                	mov	x17, #0x1               // =1
                	and	x4, x4, x17
                	sub	x3, x4, x3
-               	cmp	x3, #0x0
-               	b.ne	<addr>
+               	cbnz	x3, <addr>
                	b	<addr>
                	add	x0, x0, x1
                	sxtw	x0, w0

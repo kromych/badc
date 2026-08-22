@@ -47,12 +47,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	0x18(%rax), %rcx
-               	testq	%rcx, %rcx
+               	movq	0x18(%rax), %rdx
+               	testq	%rdx, %rdx
                	sete	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	testq	%rdx, %rdx
+               	je	<addr>
                	movq	0x20(%rax), %rcx
                	testq	%rcx, %rcx
                	setne	%cl
@@ -91,11 +91,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movslq	0x68(%rax), %rcx
-               	testq	%rcx, %rcx
+               	movslq	0x68(%rax), %rdx
+               	testq	%rdx, %rdx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movq	0x70(%rax), %rax
                	testq	%rax, %rax

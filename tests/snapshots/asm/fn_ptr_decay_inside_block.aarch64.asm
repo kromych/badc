@@ -33,8 +33,7 @@ Disassembly of section .text:
                	blr	x9
                	add	x20, x20, x0
                	mov	x0, #0x0                // =0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x8]

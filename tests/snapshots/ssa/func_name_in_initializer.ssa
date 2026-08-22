@@ -43,8 +43,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v33  Extend { value=v31, kind=I32 }                   -> x0
     terminator Jmp(b8)   (exit_acc=v33)
   block 8  start_pc=0
-    v3   BinopI { op=eq, lhs=v33, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v3, target=b10, fall=b9 }   (exit_acc=v3)
+    v3   BinopI { op=eq, lhs=v33, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v33, target=b10, fall=b9 }   (exit_acc=v3)
   block 9  start_pc=0
     v4   Imm(1)                                           -> x0
     terminator Return(v4)   (exit_acc=v4)
@@ -94,8 +94,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v54  Extend { value=v52, kind=I32 }                   -> x0
     terminator Jmp(b18)   (exit_acc=v54)
   block 18  start_pc=0
-    v13  BinopI { op=eq, lhs=v54, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v13, target=b20, fall=b19 }   (exit_acc=v13)
+    v13  BinopI { op=eq, lhs=v54, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v54, target=b20, fall=b19 }   (exit_acc=v13)
   block 19  start_pc=0
     v14  Imm(2)                                           -> x0
     terminator Return(v14)   (exit_acc=v14)
@@ -145,8 +145,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v80  Extend { value=v78, kind=I32 }                   -> x0
     terminator Jmp(b29)   (exit_acc=v80)
   block 29  start_pc=0
-    v16  BinopI { op=eq, lhs=v80, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v16, target=b31, fall=b30 }   (exit_acc=v16)
+    v16  BinopI { op=eq, lhs=v80, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v80, target=b31, fall=b30 }   (exit_acc=v16)
   block 30  start_pc=0
     v17  Imm(3)                                           -> x0
     terminator Return(v17)   (exit_acc=v17)

@@ -40,8 +40,7 @@ Disassembly of section .text:
                	mov	x17, #0x55              // =85
                	eor	x2, x2, x17
                	mov	w2, w2
-               	cmp	x2, #0x0
-               	b.ne	<addr>
+               	cbnz	x2, <addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x20
@@ -150,10 +149,10 @@ Disassembly of section .text:
                	ldrb	w0, [x20]
                	mov	x17, #0x41              // =65
                	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
+               	mov	w1, w0
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	ldrb	w0, [x20, #0xf]
                	mov	x17, #0x41              // =65
                	eor	x0, x0, x17
@@ -171,10 +170,10 @@ Disassembly of section .text:
                	ldrb	w0, [x21]
                	mov	x17, #0x42              // =66
                	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
+               	mov	w1, w0
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	ldrb	w0, [x21, #0xf]
                	mov	x17, #0x42              // =66
                	eor	x0, x0, x17
@@ -299,8 +298,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -328,8 +326,7 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x30
                	ret
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -358,8 +355,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x33               // =51
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

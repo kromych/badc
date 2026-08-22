@@ -121,12 +121,12 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	callq	<addr>
                	leaq	-0x20(%rbp), %rax
-               	movq	(%rax), %rax
-               	testq	%rax, %rax
+               	movq	(%rax), %rcx
+               	testq	%rcx, %rcx
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	testq	%rcx, %rcx
+               	je	<addr>
                	leaq	-0x20(%rbp), %rax
                	movq	0x10(%rax), %rax
                	testq	%rax, %rax

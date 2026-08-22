@@ -211,8 +211,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x200
                	ldr	x0, [x0]
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ldr	x20, [sp]
                	add	sp, sp, #0x220

@@ -62,11 +62,11 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movzbq	0x3(%rax), %rax
                	xorq	$0x63, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movl	%eax, %ecx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movzbq	0xa(%rax), %rax

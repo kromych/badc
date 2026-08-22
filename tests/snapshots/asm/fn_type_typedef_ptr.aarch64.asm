@@ -114,8 +114,6 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	cmp	x0, #0x2a
                	cset	x0, ne
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cbnz	x0, <addr>
                	ldrsw	x0, [x1]
                	cmp	x0, #0x5

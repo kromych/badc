@@ -65,7 +65,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v29  Extend { value=v23, kind=I32 }                   -> x0
     v30  BinopI { op=eq, lhs=v21, rhs_imm=0 }             -> x0
     v31  Imm(0)                                           -> x1
-    terminator Bz { cond=v30, target=b6, fall=b1 }   (exit_acc=v30)
+    terminator Bnz { cond=v21, target=b6, fall=b1 }   (exit_acc=v30)
   block 1  start_pc=0
     v32  LoadLocal { off=-2, kind=I32 }                   -> x0
     v33  BinopI { op=eq, lhs=v32, rhs_imm=65600 }         -> x0

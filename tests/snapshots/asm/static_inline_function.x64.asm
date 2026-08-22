@@ -39,14 +39,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	xorq	%rax, %rax
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	movq	%rax, %rdx
-               	andq	$0x1, %rdx
-               	addq	%rdx, %rcx
-               	shrq	%rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	xorq	%rax, %rax
                	xorq	%rax, %rax
                	retq

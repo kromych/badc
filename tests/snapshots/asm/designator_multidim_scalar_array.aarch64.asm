@@ -51,10 +51,10 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	lsl	x3, x1, #3
                	add	x2, x2, x3
-               	ldrsw	x2, [x2]
-               	cmp	x2, #0x0
+               	ldrsw	x3, [x2]
+               	cmp	x3, #0x0
                	cset	x2, ne
-               	cbnz	x2, <addr>
+               	cbnz	x3, <addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	lsl	x3, x1, #3

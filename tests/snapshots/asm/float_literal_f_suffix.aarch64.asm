@@ -103,8 +103,7 @@ Disassembly of section .text:
                	fmov	s16, w0
                	fmov	s17, w0
                	fcmp	s16, s17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -114,8 +113,7 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fmov	d17, x1
                	fcmp	d16, d17
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -129,8 +127,7 @@ Disassembly of section .text:
                	fcvt	d0, s16
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	b.ne	<addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -143,8 +140,7 @@ Disassembly of section .text:
                	fcvt	d0, s16
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -159,8 +155,7 @@ Disassembly of section .text:
                	fneg	d1, d16
                	fcvt	d0, s0
                	fcmp	d0, d1
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -175,8 +170,7 @@ Disassembly of section .text:
                	mov	x0, #0x3ffc000000000000 // =4610560118520545280
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -191,8 +185,7 @@ Disassembly of section .text:
                	movk	x0, #0x3fb9, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -201,8 +194,7 @@ Disassembly of section .text:
                	fmov	s16, w0
                	fmov	s17, w0
                	fcmp	s16, s17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	ldp	x29, x30, [sp], #0x10
                	ret

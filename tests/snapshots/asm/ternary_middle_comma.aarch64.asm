@@ -169,20 +169,15 @@ Disassembly of section .text:
                	mov	x1, #0x6                // =6
                	sxtw	x0, w1
                	cmp	x0, #0x6
-               	cset	x0, ne
                	mov	x3, #0x1                // =1
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	sxtw	x0, w22
                	cmp	x0, #0x1
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x3, ne
                	mov	x0, #0x1                // =1
                	cbnz	x3, <addr>
                	sxtw	x0, w21
                	cmp	x0, #0x2
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	sxtw	x0, w2

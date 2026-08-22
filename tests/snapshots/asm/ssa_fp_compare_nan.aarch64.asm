@@ -36,53 +36,44 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, mi
-               	cbz	x1, <addr>
+               	b.pl	<addr>
                	mov	x0, #0x1                // =1
                	mov	x1, #0x0                // =0
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x1, gt
-               	cbz	x1, <addr>
+               	b.le	<addr>
                	mov	x17, #0x2               // =2
                	orr	x0, x0, x17
                	mov	x1, #0x0                // =0
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x1, ls
-               	cbz	x1, <addr>
+               	b.hi	<addr>
                	mov	x17, #0x4               // =4
                	orr	x0, x0, x17
                	mov	x1, #0x0                // =0
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x1, ge
-               	cbz	x1, <addr>
+               	b.lt	<addr>
                	mov	x17, #0x8               // =8
                	orr	x0, x0, x17
                	mov	x1, #0x0                // =0
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	b.ne	<addr>
                	mov	x17, #0x10              // =16
                	orr	x0, x0, x17
                	mov	x1, #0x0                // =0
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x1, ne
-               	cmp	x1, #0x0
                	b.ne	<addr>
                	mov	x17, #0x20              // =32
                	orr	x0, x0, x17
                	fcmp	d0, d0
-               	cset	x1, mi
-               	cbz	x1, <addr>
+               	b.pl	<addr>
                	mov	x17, #0x40              // =64
                	orr	x0, x0, x17
                	fcmp	d0, d0
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	b.ne	<addr>
                	mov	x17, #0x80              // =128
                	orr	x0, x0, x17
                	sxtw	x1, w0

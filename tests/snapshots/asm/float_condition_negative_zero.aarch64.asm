@@ -25,15 +25,12 @@ Disassembly of section .text:
                	str	d16, [x17]
                	fmov	d17, x1
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x1, #0x1                // =1
                	sub	x16, x29, #0x10
                	ldr	d1, [x16]
                	fcmp	d1, d0
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	b.eq	<addr>
                	mov	x17, #0x2               // =2
                	orr	x1, x1, x17
                	mov	x0, #0x0                // =0
@@ -45,29 +42,24 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	fmov	d17, x2
                	fcmp	d0, d17
-               	cset	x2, ne
-               	cbnz	x2, <addr>
+               	b.ne	<addr>
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x17, #0x4               // =4
                	orr	x1, x1, x17
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x17, #0x8               // =8
                	orr	x1, x1, x17
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x17, #0x10              // =16
                	orr	x1, x1, x17
                	mov	x0, #0x0                // =0

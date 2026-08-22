@@ -158,9 +158,8 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	cmp	x0, x1
-               	cset	x1, eq
                	mov	x0, #0x1                // =1
-               	cbnz	x1, <addr>
+               	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
@@ -169,8 +168,6 @@ Disassembly of section .text:
                	ldr	x1, [x1]
                	cmp	x0, x1
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

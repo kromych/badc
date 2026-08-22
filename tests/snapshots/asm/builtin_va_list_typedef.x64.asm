@@ -235,16 +235,10 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movsbq	(%rsi), %rsi
                	cmpq	$0x74, %rsi
-               	sete	%sil
-               	movzbq	%sil, %rsi
-               	testq	%rsi, %rsi
-               	je	<addr>
+               	jne	<addr>
                	movsbq	(%rcx), %rax
                	cmpq	$0x78, %rax
                	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	xorq	%rcx, %rcx
                	testq	%rax, %rax
@@ -252,22 +246,16 @@ Disassembly of section .text:
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	sete	%al
-               	movzbq	%al, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	andq	%r10, %rcx
                	xorq	%rax, %rax
                	testq	%rcx, %rcx
                	je	<addr>
                	cmpq	$0x7, %rdx
                	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	addq	$0xd0, %rsp

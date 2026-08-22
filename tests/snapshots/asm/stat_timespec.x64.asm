@@ -62,10 +62,7 @@ Disassembly of section .text:
                	movslq	0x18(%rax), %rax
                	andq	$0xf000, %rax           # imm = 0xF000
                	cmpq	$0x4000, %rax           # imm = 0x4000
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	je	<addr>
                	movl	$0x4, %eax
                	addq	$0xa0, %rsp
                	popq	%rbp

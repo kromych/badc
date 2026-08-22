@@ -68,18 +68,12 @@ Disassembly of section .text:
                	leaq	0x5(%rax), %rdx
                	movslq	%edx, %r8
                	cmpq	%rcx, %rcx
-               	setne	%dil
-               	movzbq	%dil, %rdi
                	movl	$0x1, %edx
-               	testq	%rdi, %rdi
                	jne	<addr>
                	movq	%rax, %rdx
                	shlq	%rdx
                	movslq	%edx, %rdx
                	cmpq	%rdx, %rsi
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
@@ -96,17 +90,11 @@ Disassembly of section .text:
                	leaq	0x2(%rax), %rdx
                	movslq	%edx, %rdi
                	cmpq	%rcx, %rcx
-               	setne	%r8b
-               	movzbq	%r8b, %r8
                	movl	$0x1, %edx
-               	testq	%r8, %r8
                	jne	<addr>
                	leaq	0x1(%rax), %rdx
                	movslq	%edx, %rdx
                	cmpq	%rdx, %rsi
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx

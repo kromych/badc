@@ -60,14 +60,11 @@ Disassembly of section .text:
                	sub	x0, x29, #0x460
                	ldr	x0, [x0]
                	cmp	x0, x21
-               	cset	x0, ne
                	mov	x1, #0x1                // =1
-               	cbnz	x0, <addr>
+               	b.ne	<addr>
                	sub	x0, x29, #0x460
                	ldr	x1, [x0, #0x8]
                	cmp	x1, x22
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x1, ne
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
@@ -76,8 +73,6 @@ Disassembly of section .text:
                	mov	x17, #0xbeef            // =48879
                	movk	x17, #0xdead, lsl #16
                	cmp	x0, x17
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x460
@@ -245,8 +240,7 @@ Disassembly of section .text:
                	mov	x17, #0x5a              // =90
                	eor	x2, x2, x17
                	mov	w2, w2
-               	cmp	x2, #0x0
-               	b.ne	<addr>
+               	cbnz	x2, <addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x10
@@ -356,8 +350,7 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	eor	x1, x1, x0
                	mov	w1, w1
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	add	x20, x0, #0x1
                	sxtw	x0, w20
                	cmp	x0, #0x10
@@ -389,8 +382,7 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	eor	x1, x2, x1
                	mov	w1, w1
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	add	x20, x0, #0x1
                	sxtw	x0, w20
                	cmp	x0, #0x10
@@ -437,8 +429,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x400
                	add	x0, x0, x20
                	ldrb	w0, [x0]
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	add	x20, x20, #0x1
                	cmp	x20, #0x18
                	b.lo	<addr>

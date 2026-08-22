@@ -113,15 +113,9 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	(%rax), %rcx
                	cmpq	$0x1, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	jne	<addr>
                	movq	0x8(%rax), %rcx
                	cmpq	%r12, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
                	setne	%bl
                	movzbq	%bl, %rbx
                	testq	%rbx, %rbx

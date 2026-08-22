@@ -43,12 +43,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	0x48(%rax), %rcx
-               	testq	%rcx, %rcx
+               	movq	0x48(%rax), %rdx
+               	testq	%rdx, %rdx
                	sete	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	testq	%rdx, %rdx
+               	je	<addr>
                	movq	0x48(%rax), %rcx
                	movsbq	(%rcx), %rcx
                	cmpq	$0x6d, %rcx

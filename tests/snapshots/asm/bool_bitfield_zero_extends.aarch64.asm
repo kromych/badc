@@ -83,8 +83,7 @@ Disassembly of section .text:
                	asr	x0, x0, #1
                	mov	x17, #0x1               // =1
                	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

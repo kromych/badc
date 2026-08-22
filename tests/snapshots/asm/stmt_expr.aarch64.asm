@@ -81,12 +81,9 @@ Disassembly of section .text:
                	mul	x0, x0, x17
                	sxtw	x1, w0
                	cmp	x2, #0xa
-               	cset	x2, ne
                	mov	x0, #0x1                // =1
-               	cbnz	x2, <addr>
+               	b.ne	<addr>
                	cmp	x1, #0xc8
-               	cset	x0, ne
-               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>

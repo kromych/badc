@@ -39,10 +39,10 @@ Disassembly of section .text:
                	add	x8, x3, x7
                	mov	x17, #0x1               // =1
                	and	x8, x8, x17
-               	sub	x7, x8, x7
-               	cmp	x7, #0x0
+               	sub	x8, x8, x7
+               	cmp	x8, #0x0
                	cset	x7, eq
-               	cbnz	x7, <addr>
+               	cbz	x8, <addr>
                	cmp	x3, #0x32
                	cset	x7, gt
                	cbz	x7, <addr>
@@ -72,10 +72,10 @@ Disassembly of section .text:
                	add	x8, x3, x7
                	mov	x17, #0x1               // =1
                	and	x8, x8, x17
-               	sub	x7, x8, x7
-               	cmp	x7, #0x0
+               	sub	x8, x8, x7
+               	cmp	x8, #0x0
                	cset	x7, eq
-               	cbnz	x7, <addr>
+               	cbz	x8, <addr>
                	cmp	x3, #0x32
                	cset	x7, gt
                	cbz	x7, <addr>

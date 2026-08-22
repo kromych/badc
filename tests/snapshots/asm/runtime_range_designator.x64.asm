@@ -235,13 +235,8 @@ Disassembly of section .text:
                	movsd	-0x60(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
                	movl	$0x1, %edx
-               	testq	%rax, %rax
+               	jp	<addr>
                	jne	<addr>
                	movsd	-0x58(%rbp,%riz), %xmm0
                	xorps	%xmm1, %xmm1
@@ -250,14 +245,11 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	divsd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r10b
-               	movzbq	%r10b, %r10
-               	orq	%r10, %rax
-               	testq	%rax, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
+               	setp	%r10b
+               	movzbq	%r10b, %r10
+               	orq	%r10, %rdx
                	movl	$0x1, %eax
                	testq	%rdx, %rdx
                	jne	<addr>
@@ -273,9 +265,6 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movsd	-0x48(%rbp,%riz), %xmm0

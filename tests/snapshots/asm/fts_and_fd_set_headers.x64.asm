@@ -80,12 +80,12 @@ Disassembly of section .text:
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
-               	movq	0x30(%rax), %rcx
-               	testq	%rcx, %rcx
+               	movq	0x30(%rax), %rdx
+               	testq	%rdx, %rdx
                	sete	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	jne	<addr>
+               	testq	%rdx, %rdx
+               	je	<addr>
                	movq	0x30(%rax), %rcx
                	movsbq	(%rcx), %rcx
                	cmpq	$0x2e, %rcx

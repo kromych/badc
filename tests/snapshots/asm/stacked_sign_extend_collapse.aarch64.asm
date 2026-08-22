@@ -78,8 +78,7 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x0, lt
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x6                // =6
                	ret
                	adrp	x0, <page>

@@ -49,8 +49,7 @@ Disassembly of section .text:
                	lsl	x4, x2, #4
                	add	x3, x3, x4
                	ldr	x3, [x3]
-               	cmp	x3, #0x0
-               	b.ne	<addr>
+               	cbnz	x3, <addr>
                	sxtw	x0, w1
                	cmp	x0, #0x3
                	b.eq	<addr>

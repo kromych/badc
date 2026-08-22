@@ -295,9 +295,6 @@ Disassembly of section .text:
                	cmpq	$0x12345520, %rax       # imm = 0x12345520
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	movslq	%eax, %rax
                	xorq	%rcx, %rcx
                	testq	%rax, %rax
@@ -345,19 +342,13 @@ Disassembly of section .text:
                	cmpq	$0x579e, %rax           # imm = 0x579E
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	xorq	%rcx, %rcx
                	testq	%rax, %rax
                	je	<addr>
                	leaq	-0x100(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	$0x7b, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%cl
+               	sete	%cl
                	movzbq	%cl, %rcx
                	xorq	%rbx, %rbx
                	testq	%rcx, %rcx
@@ -365,10 +356,7 @@ Disassembly of section .text:
                	leaq	-0x100(%rbp), %rax
                	movq	0x18(%rax), %rax
                	cmpq	$0x171, %rax            # imm = 0x171
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%bl
+               	sete	%bl
                	movzbq	%bl, %rbx
                	leaq	-0x40(%rbp), %rdi
                	movl	$0xa, %esi
@@ -421,9 +409,6 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	cmpq	$0x65, %rax
                	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax

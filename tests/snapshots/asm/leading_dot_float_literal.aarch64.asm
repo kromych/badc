@@ -37,30 +37,26 @@ Disassembly of section .text:
                	ldr	s1, [x16]
                	fmov	s17, w1
                	fcmp	s1, s17
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x0                // =0
                	sub	x16, x29, #0x18
                	ldr	d1, [x16]
                	mov	x1, #0x3fd0000000000000 // =4598175219545276416
                	fmov	d17, x1
                	fcmp	d1, d17
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x0                // =0
                	sub	x16, x29, #0x10
                	ldr	d1, [x16]
                	mov	x1, #0x4039000000000000 // =4627730092099895296
                	fmov	d17, x1
                	fcmp	d1, d17
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, #0x3f000000         // =1056964608
                	fmov	s17, w1
                	fcmp	s0, s17
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
                	cbz	x0, <addr>

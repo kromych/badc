@@ -27,13 +27,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x0, #0x0                // =0
                	mov	x1, #0x0                // =0
-               	b	<addr>
-               	mov	x17, #0x1               // =1
-               	and	x2, x0, x17
-               	add	x1, x1, x2
-               	lsr	x0, x0, #1
-               	cbnz	x0, <addr>
+               	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	ret

@@ -28,16 +28,13 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	b.ne	<addr>
                	sub	x0, x29, #0x20
                	ldr	d0, [x0, #0x8]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	mov	x1, #0x0                // =0
                	cbz	x0, <addr>
                	sub	x0, x29, #0x20
@@ -46,9 +43,7 @@ Disassembly of section .text:
                	movk	x0, #0x408a, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x1, ne
+               	cset	x1, eq
                	mov	x0, #0x0                // =0
                	cbz	x1, <addr>
                	sub	x0, x29, #0x20
@@ -58,8 +53,6 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	sxtw	x0, w0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
@@ -237,8 +230,7 @@ Disassembly of section .text:
                	ldr	d2, [x0, #0x10]
                	ldr	d3, [x0, #0x18]
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0xa0]
                	ldp	x20, x21, [sp], #0xb0
@@ -267,8 +259,7 @@ Disassembly of section .text:
                	ldr	d2, [x0, #0x10]
                	ldr	d3, [x0, #0x18]
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0xa0]
                	ldp	x20, x21, [sp], #0xb0

@@ -43,13 +43,8 @@ Disassembly of section .text:
                	movl	$0x42280000, %eax       # imm = 0x42280000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
-               	sete	%al
-               	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jp	<addr>
+               	jne	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax
                	addq	$0x20, %rsp

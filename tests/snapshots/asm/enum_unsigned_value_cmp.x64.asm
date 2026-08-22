@@ -52,10 +52,7 @@ Disassembly of section .text:
                	xorq	%r11, %rax
                	movl	%eax, %eax
                	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -73,10 +70,7 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpq	%r11, %rax
-               	seta	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	ja	<addr>
                	movl	$0x5, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -85,10 +79,7 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpq	%r11, %rax
-               	setae	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jae	<addr>
                	movl	$0x8, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -97,10 +88,7 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpq	%r11, %rax
-               	setbe	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	jbe	<addr>
                	movl	$0x9, %eax
                	addq	$0x10, %rsp
                	popq	%rbp

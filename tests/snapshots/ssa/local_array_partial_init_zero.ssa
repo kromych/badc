@@ -199,15 +199,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=22
   block 22  start_pc=0
     v4   Imm(0)                                           -> x0
     v5   BinopI { op=and, lhs=v84, rhs_imm=4294967295 }   -> x0
-    v6   BinopI { op=ne, lhs=v5, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v6, target=b24, fall=b23 }   (exit_acc=v6)
+    v6   BinopI { op=ne, lhs=v5, rhs_imm=0 }              -> x2
+    terminator Bz { cond=v5, target=b24, fall=b23 }   (exit_acc=v6)
   block 23  start_pc=0
     v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
   block 24  start_pc=0
     v8   BinopI { op=and, lhs=v157, rhs_imm=4294967295 }  -> x0
-    v9   BinopI { op=ne, lhs=v8, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v9, target=b26, fall=b25 }   (exit_acc=v9)
+    v9   BinopI { op=ne, lhs=v8, rhs_imm=0 }              -> x1
+    terminator Bz { cond=v8, target=b26, fall=b25 }   (exit_acc=v9)
   block 25  start_pc=0
     v10  Imm(2)                                           -> x0
     terminator Return(v10)   (exit_acc=v10)

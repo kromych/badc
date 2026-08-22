@@ -44,8 +44,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0xc8               // =200
                	b	<addr>
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x64               // =100
                	b	<addr>
 

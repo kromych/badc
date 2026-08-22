@@ -187,8 +187,7 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x1a0
                	ret
-               	cmp	x1, #0x0
-               	b.eq	<addr>
+               	cbz	x1, <addr>
                	mov	x20, #0x0               // =0
                	stur	w20, [x29, #-0xb0]
                	sxtw	x0, w0

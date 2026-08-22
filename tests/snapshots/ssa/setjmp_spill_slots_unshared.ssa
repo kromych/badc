@@ -109,8 +109,8 @@ fn ent_pc=7 n_params=0 variadic=false locals=29
     v95  Imm(0)                                           -> x0
     v96  ImmData(56)                                      -> x7
     v97  CallExt { binding_idx=0, args=[v96], fp_arg_mask=0x0 } -> x0
-    v98  BinopI { op=ne, lhs=v97, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v98, target=b32, fall=b5 }   (exit_acc=v98)
+    v98  BinopI { op=ne, lhs=v97, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v97, target=b32, fall=b5 }   (exit_acc=v98)
   block 5  start_pc=0
     v99  Imm(0)                                           -> x0
     v100 Imm(0)                                           -> x1

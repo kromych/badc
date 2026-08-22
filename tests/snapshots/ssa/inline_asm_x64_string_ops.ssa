@@ -257,10 +257,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=11
     v181 LocalAddr(-2)                                    -> x0
     v182 Load { addr=v181, disp=0, kind=U16 }             -> x0
     v183 BinopI { op=xor, lhs=v182, rhs_imm=48879 }       -> x0
-    v184 BinopI { op=and, lhs=v183, rhs_imm=4294967295 }  -> x0
+    v184 BinopI { op=and, lhs=v183, rhs_imm=4294967295 }  -> x1
     v185 BinopI { op=ne, lhs=v184, rhs_imm=0 }            -> x0
-    v186 Imm(0)                                           -> x1
-    terminator Bnz { cond=v185, target=b25, fall=b21 }   (exit_acc=v185)
+    v186 Imm(0)                                           -> x2
+    terminator Bnz { cond=v184, target=b25, fall=b21 }   (exit_acc=v185)
   block 21  start_pc=0
     v187 LocalAddr(-2)                                    -> x0
     v188 Imm(2)                                           -> x1

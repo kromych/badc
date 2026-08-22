@@ -83,7 +83,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v41  Phi { incoming=[b2:v37, b4:v52], kind=I64 }      -> x3
     v42  LoadLocal { off=-2, kind=I64 }                   -> x1
     v43  BinopI { op=ne, lhs=v40, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v43, target=b3, fall=b6 }   (exit_acc=v43)
+    terminator Bnz { cond=v40, target=b3, fall=b6 }   (exit_acc=v43)
   block 6  start_pc=0
     v55  ImmCode(ent_pc=0)                                -> x0
     v56  StoreLocal { off=-1, value=v55, kind=I64 }       -> -

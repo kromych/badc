@@ -64,8 +64,6 @@ Disassembly of section .text:
                	orr	x0, x1, x0
                	cmp	x0, #0x0
                	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x130
@@ -103,7 +101,7 @@ Disassembly of section .text:
                	sub	x3, x0, x4
                	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	mov	x17, #0xfff000000000    // =281406257233920
                	movk	x17, #0xffff, lsl #48
                	cmp	x3, x17
@@ -131,8 +129,7 @@ Disassembly of section .text:
                	eor	x1, x1, x0
                	eor	x0, x3, x0
                	orr	x0, x1, x0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10
@@ -143,8 +140,6 @@ Disassembly of section .text:
                	orr	x0, x1, x0
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x120
                	ldr	x1, [x0]
@@ -176,9 +171,7 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
                	cmp	x0, #0x0
-               	cset	x0, eq
-               	cmp	x0, #0x0
-               	cset	x1, ne
+               	cset	x1, eq
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	sub	x0, x29, #0x130
@@ -188,8 +181,6 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
                	mov	x0, #0x0                // =0
-               	cmp	x0, #0x0
-               	cset	x0, ne
                	cbnz	x0, <addr>
                	sub	x0, x29, #0x120
                	ldr	x1, [x0]
@@ -221,7 +212,7 @@ Disassembly of section .text:
                	ldr	x3, [x0, #0x8]
                	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	mov	x17, #0x1000000000      // =68719476736
                	cmp	x3, x17
                	cset	x0, ne
@@ -270,8 +261,7 @@ Disassembly of section .text:
                	cset	x1, lo
                	and	x0, x0, x1
                	orr	x0, x4, x0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10

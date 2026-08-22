@@ -158,8 +158,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v191 LoadLocal { off=-3, kind=U32 }                   -> x2
     v192 BinopI { op=add, lhs=v191, rhs_imm=-1 }          -> x6
     v193 StoreLocal { off=-3, value=v192, kind=I32 }      -> -
-    v194 BinopI { op=ne, lhs=v191, rhs_imm=0 }            -> x2
-    terminator Bnz { cond=v194, target=b5, fall=b7 }   (exit_acc=v194)
+    v194 BinopI { op=ne, lhs=v191, rhs_imm=0 }            -> x6
+    terminator Bnz { cond=v191, target=b5, fall=b7 }   (exit_acc=v194)
   block 7  start_pc=0
     v183 Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v183)
@@ -226,8 +226,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v247 LoadLocal { off=-3, kind=U32 }                   -> x6
     v248 BinopI { op=add, lhs=v247, rhs_imm=-1 }          -> x7
     v249 StoreLocal { off=-3, value=v248, kind=I32 }      -> -
-    v250 BinopI { op=ne, lhs=v247, rhs_imm=0 }            -> x6
-    terminator Bnz { cond=v250, target=b16, fall=b18 }   (exit_acc=v250)
+    v250 BinopI { op=ne, lhs=v247, rhs_imm=0 }            -> x7
+    terminator Bnz { cond=v247, target=b16, fall=b18 }   (exit_acc=v250)
   block 18  start_pc=0
     v257 Imm(0)                                           -> x1
     terminator Jmp(b19)   (exit_acc=v257)

@@ -19,8 +19,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	add	x1, x0, #0x64
                	add	x4, x0, #0x1
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32

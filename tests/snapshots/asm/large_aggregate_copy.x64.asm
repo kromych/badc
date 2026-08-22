@@ -6619,19 +6619,13 @@ Disassembly of section .text:
                	movb	%dl, 0x232b(%rax)
                	popq	%rdx
                	leaq	-0x2328(%rbp), %rax
-               	movsbq	(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	movsbq	(%rax), %rcx
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x2328(%rbp), %rax
                	addq	$0x1000, %rax           # imm = 0x1000
                	movsbq	(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -6652,17 +6646,11 @@ Disassembly of section .text:
                	leaq	-0x4330(%rbp), %rax
                	movsbq	(%rax), %rax
                	cmpq	$0x68, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	movl	$0x1, %ecx
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x4330(%rbp), %rax
                	movsbq	0x4(%rax), %rax
                	cmpq	$0x6f, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
                	movl	$0x1, %eax
@@ -6670,9 +6658,6 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	-0x4330(%rbp), %rax
                	movsbq	0x5(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -6691,11 +6676,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x8990(%rbp), %rax
-               	movsbq	(%rax), %rax
-               	testq	%rax, %rax
+               	movsbq	(%rax), %rcx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x8990(%rbp), %rax
                	addq	$0x2000, %rax           # imm = 0x2000

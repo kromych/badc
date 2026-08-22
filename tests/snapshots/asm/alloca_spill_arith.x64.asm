@@ -178,15 +178,9 @@ Disassembly of section .text:
                	movzbq	0x3(%rax), %rax
                	addq	%rdi, %rax
                	cmpq	$0xe0, %rdx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
-               	je	<addr>
+               	jne	<addr>
                	cmpq	$0x8, %rsi
                	sete	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>

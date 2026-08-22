@@ -71,8 +71,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v4   Load { addr=v1, disp=0, kind=I64 }               -> x7
     v5   ImmData(36)                                      -> x6
     v6   CallExt { binding_idx=77, args=[v4, v5], fp_arg_mask=0x0 } -> x0
-    v7   BinopI { op=ne, lhs=v6, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
+    v7   BinopI { op=ne, lhs=v6, rhs_imm=0 }              -> x1
+    terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
     v8   Imm(2)                                           -> x7
     v9   Call { target_pc=0, args=[v8], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x7
@@ -90,7 +90,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v19  LoadLocal { off=-1, kind=I64 }                   -> x0
     v20  Imm(0)                                           -> x0
     v21  BinopI { op=eq, lhs=v17, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v21, target=b9, fall=b3 }   (exit_acc=v21)
+    terminator Bnz { cond=v17, target=b9, fall=b3 }   (exit_acc=v21)
   block 3  start_pc=0
     v22  Imm(6)                                           -> x7
     v23  ImmData(84)                                      -> x6
@@ -102,7 +102,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v27  LoadLocal { off=-1, kind=I64 }                   -> x0
     v28  Imm(0)                                           -> x0
     v29  BinopI { op=eq, lhs=v26, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v29, target=b6, fall=b5 }   (exit_acc=v29)
+    terminator Bnz { cond=v26, target=b6, fall=b5 }   (exit_acc=v29)
   block 5  start_pc=0
     v30  ImmData(96)                                      -> x7
     v31  CallExt { binding_idx=0, args=[v30], fp_arg_mask=0x0 } -> x0
@@ -115,8 +115,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v36  Load { addr=v33, disp=0, kind=I64 }              -> x7
     v37  ImmData(102)                                     -> x6
     v38  CallExt { binding_idx=77, args=[v36, v37], fp_arg_mask=0x0 } -> x0
-    v39  BinopI { op=ne, lhs=v38, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v39, target=b8, fall=b7 }   (exit_acc=v39)
+    v39  BinopI { op=ne, lhs=v38, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v38, target=b8, fall=b7 }   (exit_acc=v39)
   block 7  start_pc=0
     v40  Imm(2)                                           -> x7
     v41  Call { target_pc=0, args=[v40], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x7

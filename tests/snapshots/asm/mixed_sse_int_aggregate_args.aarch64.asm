@@ -76,8 +76,7 @@ Disassembly of section .text:
                	mov	x0, #0x3ff4000000000000 // =4608308318706860032
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

@@ -60,8 +60,8 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	sete	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	testq	%rbx, %rbx
+               	jne	<addr>
                	movslq	-0x10(%rbp), %rax
                	cmpq	$0x10040, %rax          # imm = 0x10040
                	sete	%al

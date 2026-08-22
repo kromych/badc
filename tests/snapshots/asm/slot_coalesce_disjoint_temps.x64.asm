@@ -60,14 +60,12 @@ Disassembly of section .text:
                	shrq	$0x3f, %rbx
                	leaq	(%rsi,%rbx), %r12
                	andq	$0x1, %r12
-               	movq	%rbx, %r10
-               	movq	%r12, %rbx
-               	subq	%r10, %rbx
-               	testq	%rbx, %rbx
+               	subq	%rbx, %r12
+               	testq	%r12, %r12
                	sete	%bl
                	movzbq	%bl, %rbx
-               	testq	%rbx, %rbx
-               	jne	<addr>
+               	testq	%r12, %r12
+               	je	<addr>
                	cmpq	$0x32, %rsi
                	setg	%bl
                	movzbq	%bl, %rbx
@@ -104,14 +102,12 @@ Disassembly of section .text:
                	shrq	$0x3f, %rbx
                	leaq	(%rsi,%rbx), %r12
                	andq	$0x1, %r12
-               	movq	%rbx, %r10
-               	movq	%r12, %rbx
-               	subq	%r10, %rbx
-               	testq	%rbx, %rbx
+               	subq	%rbx, %r12
+               	testq	%r12, %r12
                	sete	%bl
                	movzbq	%bl, %rbx
-               	testq	%rbx, %rbx
-               	jne	<addr>
+               	testq	%r12, %r12
+               	je	<addr>
                	cmpq	$0x32, %rsi
                	setg	%bl
                	movzbq	%bl, %rbx

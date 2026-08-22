@@ -78,8 +78,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v56  LoadLocal { off=-3, kind=I64, volatile }         -> x0
     v57  Imm(0)                                           -> x1
     v58  BinopI { op=xor, lhs=v56, rhs_imm=-1 }           -> x0
-    v59  BinopI { op=ne, lhs=v58, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v59, target=b10, fall=b9 }   (exit_acc=v59)
+    v59  BinopI { op=ne, lhs=v58, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v58, target=b10, fall=b9 }   (exit_acc=v59)
   block 9  start_pc=0
     v60  Imm(5)                                           -> x0
     terminator Return(v60)   (exit_acc=v60)

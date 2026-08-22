@@ -28,10 +28,10 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	x1, [x0, #0x48]
-               	cmp	x1, #0x0
+               	ldr	x2, [x0, #0x48]
+               	cmp	x2, #0x0
                	cset	x1, eq
-               	cbnz	x1, <addr>
+               	cbz	x2, <addr>
                	ldr	x1, [x0, #0x48]
                	ldrb	w1, [x1]
                	mov	x17, #0x6d              // =109

@@ -23,7 +23,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v14  Phi { incoming=[b0:v1, b1:v12], kind=I32 }       -> x7
     v15  Imm(0)                                           -> x0
     v16  BinopI { op=eq, lhs=v14, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v16, target=b1, fall=b3 }   (exit_acc=v16)
+    terminator Bnz { cond=v14, target=b1, fall=b3 }   (exit_acc=v16)
   block 3  start_pc=0
     v3   Imm(0)                                           -> x0
     terminator Return(v3)   (exit_acc=v3)

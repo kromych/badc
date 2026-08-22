@@ -32,8 +32,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v10  Load { addr=v9, disp=0, kind=U32 }               -> x0
     v11  BinopI { op=xor, lhs=v10, rhs_imm=1 }            -> x0
     v12  BinopI { op=and, lhs=v11, rhs_imm=4294967295 }   -> x0
-    v13  BinopI { op=ne, lhs=v12, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v13, target=b6, fall=b5 }   (exit_acc=v13)
+    v13  BinopI { op=ne, lhs=v12, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v12, target=b6, fall=b5 }   (exit_acc=v13)
   block 5  start_pc=0
     v14  Imm(3)                                           -> x0
     terminator Return(v14)   (exit_acc=v14)

@@ -47,8 +47,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v26  ImmData(56)                                      -> x0
     v27  Load { addr=v26, disp=0, kind=I32 }              -> x0
-    v28  BinopI { op=ne, lhs=v27, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v28, target=b10, fall=b9 }   (exit_acc=v28)
+    v28  BinopI { op=ne, lhs=v27, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v27, target=b10, fall=b9 }   (exit_acc=v28)
   block 9  start_pc=0
     v29  Imm(5)                                           -> x0
     terminator Return(v29)   (exit_acc=v29)

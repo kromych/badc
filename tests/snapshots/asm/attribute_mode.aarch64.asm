@@ -26,8 +26,7 @@ Disassembly of section .text:
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, ne
-               	cbz	x0, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x1d               // =29
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10

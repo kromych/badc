@@ -59,11 +59,11 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movsbq	0x7(%rsi), %rax
-               	testq	%rax, %rax
+               	movsbq	0x7(%rsi), %rcx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movsbq	0xb(%rsi), %rax
                	testq	%rax, %rax
@@ -151,11 +151,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rax
-               	movsbq	0x8(%rax), %rax
-               	testq	%rax, %rax
+               	movsbq	0x8(%rax), %rcx
+               	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movsbq	0xb(%rax), %rax

@@ -219,7 +219,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=45
     v151 Imm(0)                                           -> x0
     v152 LoadLocal { off=-16, kind=I64 }                  -> x0
     v153 BinopI { op=eq, lhs=v196, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v153, target=b14, fall=b13 }   (exit_acc=v153)
+    terminator Bnz { cond=v196, target=b14, fall=b13 }   (exit_acc=v153)
   block 13  start_pc=0
     v154 Imm(2)                                           -> x0
     terminator Return(v154)   (exit_acc=v154)

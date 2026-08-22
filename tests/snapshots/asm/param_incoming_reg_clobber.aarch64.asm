@@ -60,8 +60,7 @@ Disassembly of section .text:
                	ldur	w2, [x29, #-0x18]
                	sub	x3, x2, #0x1
                	stur	w3, [x29, #-0x18]
-               	cmp	x2, #0x0
-               	b.ne	<addr>
+               	cbnz	x2, <addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sub	x2, x29, #0x10
@@ -95,8 +94,7 @@ Disassembly of section .text:
                	ldur	w3, [x29, #-0x18]
                	sub	x4, x3, #0x1
                	stur	w4, [x29, #-0x18]
-               	cmp	x3, #0x0
-               	b.ne	<addr>
+               	cbnz	x3, <addr>
                	b	<addr>
                	sub	x2, x29, #0x10
                	add	x2, x2, x1

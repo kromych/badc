@@ -78,11 +78,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=18
     v55  BinopI { op=add, lhs=v54, rhs_imm=4 }            -> x0
     v56  Imm(2)                                           -> x0
     v57  Imm(0)                                           -> x0
-    v58  Imm(0)                                           -> x0
+    v58  Imm(0)                                           -> x1
     v59  Imm(0)                                           -> x1
-    terminator Jmp(b11)   (exit_acc=v58)
+    terminator Jmp(b11)   (exit_acc=v57)
   block 11  start_pc=0
-    v60  Phi { incoming=[b10:v58], kind=I64 }             -> x0
+    v60  Phi { incoming=[b10:v57], kind=I64 }             -> x0
     v61  LoadLocal { off=-18, kind=I64 }                  -> x1
     v62  Imm(0)                                           -> x1
     terminator Jmp(b12)   (exit_acc=v60)

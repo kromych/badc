@@ -24,8 +24,8 @@ fn ent_pc=0 n_params=2 variadic=true locals=4
     v23  Binop { op=add, lhs=v14, rhs=v22 }               -> x7
     v24  BinopI { op=and, lhs=v23, rhs_imm=1 }            -> x7
     v25  Binop { op=sub, lhs=v24, rhs=v22 }               -> x6
-    v26  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x6
-    terminator Bz { cond=v26, target=b4, fall=b2 }   (exit_acc=v26)
+    v26  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x7
+    terminator Bnz { cond=v25, target=b4, fall=b2 }   (exit_acc=v26)
   block 2  start_pc=0
     v30  LoadLocal { off=-4, kind=I64 }                   -> x6
     v31  LocalAddr(-3)                                    -> x6

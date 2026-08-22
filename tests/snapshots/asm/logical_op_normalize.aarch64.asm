@@ -60,8 +60,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, #0x5                // =5
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
@@ -87,8 +86,7 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30

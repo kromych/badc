@@ -23,16 +23,14 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	sub	x1, x29, #0x38
                	bl	<addr>
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x19, [sp], #0x60
                	ret
                	sub	x0, x29, #0x38
                	ldr	x0, [x0, #0x30]
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x50]
                	ldr	x19, [sp], #0x60

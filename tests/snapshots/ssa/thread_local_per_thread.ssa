@@ -8,8 +8,8 @@ fn ent_pc=11 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   TlsAddr(0)                                       -> x0
     v4   Load { addr=v3, disp=0, kind=I32 }               -> x1
-    v5   BinopI { op=ne, lhs=v4, rhs_imm=0 }              -> x1
-    terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
+    v5   BinopI { op=ne, lhs=v4, rhs_imm=0 }              -> x2
+    terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(47825)                                       -> x0
     terminator Return(v6)   (exit_acc=v6)

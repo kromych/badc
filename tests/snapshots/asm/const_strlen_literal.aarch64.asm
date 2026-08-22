@@ -107,8 +107,7 @@ Disassembly of section .text:
                	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x15               // =21
                	sub	sp, x29, #0xc0
                	ldp	x29, x30, [sp, #0xc0]
@@ -133,10 +132,10 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x1               // =1
                	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
+               	mov	w1, w0
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x1c]
@@ -173,8 +172,7 @@ Disassembly of section .text:
                	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x20               // =32
                	sub	sp, x29, #0xc0
                	ldp	x29, x30, [sp, #0xc0]
@@ -186,10 +184,10 @@ Disassembly of section .text:
                	ldr	w0, [x0, #0x20]
                	mov	x17, #0x2               // =2
                	eor	x0, x0, x17
-               	mov	w0, w0
-               	cmp	x0, #0x0
+               	mov	w1, w0
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x3c]
@@ -226,8 +224,7 @@ Disassembly of section .text:
                	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	mov	x0, #0x22               // =34
                	sub	sp, x29, #0xc0
                	ldp	x29, x30, [sp, #0xc0]

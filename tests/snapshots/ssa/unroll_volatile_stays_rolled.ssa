@@ -32,12 +32,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     terminator Bz { cond=v15, target=b7, fall=b5 }   (exit_acc=v15)
   block 5  start_pc=0
     v18  LoadLocal { off=-1, kind=I64 }                   -> x1
-    v19  BinopI { op=eq, lhs=v3, rhs_imm=4 }              -> x0
-    v20  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x1
+    v19  BinopI { op=eq, lhs=v3, rhs_imm=4 }              -> x1
+    v20  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x0
     v21  Imm(0)                                           -> x0
-    terminator Jmp(b6)   (exit_acc=v20)
+    terminator Jmp(b6)   (exit_acc=v19)
   block 6  start_pc=0
-    v22  Phi { incoming=[b7:v16, b5:v20], kind=I64 }      -> x1
+    v22  Phi { incoming=[b7:v16, b5:v19], kind=I64 }      -> x1
     v23  LoadLocal { off=-1, kind=I64 }                   -> x0
     v24  BinopI { op=eq, lhs=v22, rhs_imm=0 }             -> x0
     v25  BinopI { op=shl, lhs=v24, rhs_imm=32 }           -> x1

@@ -34,7 +34,7 @@ Disassembly of section .text:
                	add	x1, x29, #0x0
                	cmp	x20, #0x0
                	cset	x0, eq
-               	cbnz	x0, <addr>
+               	cbz	x20, <addr>
                	cmp	x1, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>

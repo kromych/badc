@@ -78,19 +78,13 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x19, %edx
                	movq	%rdx, 0x10(%rax)
-               	movq	(%rax), %rax
-               	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	movq	(%rax), %rdx
                	movl	$0x1, %eax
                	testq	%rdx, %rdx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movq	0x10(%rax), %rax
                	cmpq	$0x19, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

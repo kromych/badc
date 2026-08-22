@@ -117,10 +117,10 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	str	x1, [x20]
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	sxtw	x1, w0
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0xf
                	cset	x0, ne
@@ -142,10 +142,10 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	str	x1, [x20]
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	sxtw	x1, w0
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0xf
                	cset	x0, ne
@@ -190,10 +190,10 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	str	x1, [x20]
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	sxtw	x1, w0
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x12
                	cset	x0, ne
@@ -211,9 +211,10 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	sub	x2, x29, #0x8
                	bl	<addr>
-               	cmp	x0, #0x0
+               	mov	x1, x0
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x6
                	cset	x0, ne
@@ -244,9 +245,10 @@ Disassembly of section .text:
                	sub	x2, x29, #0x8
                	mov	x1, x0
                	bl	<addr>
-               	cmp	x0, #0x0
+               	mov	x1, x0
+               	cmp	x1, #0x0
                	cset	x0, ne
-               	cbnz	x0, <addr>
+               	cbnz	x1, <addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x9
                	cset	x0, ne

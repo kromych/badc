@@ -25,8 +25,7 @@ Disassembly of section .text:
                	ldur	x1, [x29, #-0x8]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10

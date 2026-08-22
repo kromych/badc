@@ -8,8 +8,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v2   StoreLocal { off=-2, value=v1, kind=I32, volatile } -> -
     v3   ImmData(24)                                      -> x3
     v4   CallExt { binding_idx=0, args=[v3], fp_arg_mask=0x0 } -> x0
-    v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x0
-    terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
+    v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x1
+    terminator Bnz { cond=v4, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(2)                                           -> x0
     v7   StoreLocal { off=-2, value=v6, kind=I32, volatile } -> -

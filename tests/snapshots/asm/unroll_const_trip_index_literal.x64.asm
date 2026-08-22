@@ -184,11 +184,11 @@ Disassembly of section .text:
                	addq	%rbx, %rdx
                	movl	(%rdx), %edx
                	xorq	$0x1, %rdx
-               	movl	%edx, %edx
-               	testq	%rdx, %rdx
+               	movl	%edx, %esi
+               	testq	%rsi, %rsi
                	setne	%dl
                	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	testq	%rsi, %rsi
                	jne	<addr>
                	imulq	$0x30, %rcx, %rdx
                	addq	%rbx, %rdx
@@ -229,11 +229,11 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	movl	(%rdx), %edx
                	xorq	$0x2, %rdx
-               	movl	%edx, %edx
-               	testq	%rdx, %rdx
+               	movl	%edx, %esi
+               	testq	%rsi, %rsi
                	setne	%dl
                	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	testq	%rsi, %rsi
                	jne	<addr>
                	leaq	0x180(%rbx), %rdx
                	imulq	$0x30, %rax, %rsi

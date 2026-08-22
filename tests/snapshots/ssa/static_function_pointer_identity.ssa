@@ -150,11 +150,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v86  ImmData(16)                                      -> x1
     v87  Load { addr=v86, disp=0, kind=I64 }              -> x1
     v88  Binop { op=ne, lhs=v85, rhs=v87 }                -> x0
-    v89  BinopI { op=ne, lhs=v88, rhs_imm=0 }             -> x0
+    v89  BinopI { op=ne, lhs=v88, rhs_imm=0 }             -> x1
     v90  Imm(0)                                           -> x1
-    terminator Jmp(b22)   (exit_acc=v89)
+    terminator Jmp(b22)   (exit_acc=v88)
   block 22  start_pc=0
-    v91  Phi { incoming=[b32:v82, b21:v89], kind=I64 }    -> x0
+    v91  Phi { incoming=[b32:v82, b21:v88], kind=I64 }    -> x0
     v92  LoadLocal { off=-1, kind=I64 }                   -> x1
     v93  Imm(0)                                           -> x1
     terminator Bnz { cond=v91, target=b31, fall=b23 }   (exit_acc=v91)

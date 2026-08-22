@@ -71,11 +71,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	movq	0x20(%rax), %rcx
-               	testq	%rcx, %rcx
+               	movq	0x20(%rax), %rdx
+               	testq	%rdx, %rdx
                	setne	%cl
                	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movq	0x28(%rax), %rax
                	movsbq	(%rax), %rax

@@ -20,8 +20,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	stur	w0, [x29, #0x10]
                	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	b.ne	<addr>
+               	cbnz	x0, <addr>
                	adr	x0, <addr>
                	stur	x0, [x29, #-0x8]
                	b	<addr>

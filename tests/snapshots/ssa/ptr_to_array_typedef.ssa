@@ -118,8 +118,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=18
     v24  Store { addr=v17, disp=0, value=v19, kind=I64 }  -> -
     v25  Imm(0)                                           -> x0
     v26  LoadLocal { off=-17, kind=I64 }                  -> x0
-    v27  BinopI { op=eq, lhs=v26, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v27, target=b7, fall=b6 }   (exit_acc=v27)
+    v27  BinopI { op=eq, lhs=v26, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v26, target=b7, fall=b6 }   (exit_acc=v27)
   block 6  start_pc=0
     v106 Imm(1)                                           -> x0
     terminator Return(v106)   (exit_acc=v106)

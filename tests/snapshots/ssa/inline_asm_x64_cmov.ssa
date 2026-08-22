@@ -56,12 +56,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     terminator Bz { cond=v11, target=b19, fall=b9 }   (exit_acc=v11)
   block 9  start_pc=0
     v14  LoadLocal { off=-2, kind=I64 }                   -> x0
-    v15  BinopI { op=eq, lhs=v45, rhs_imm=42 }            -> x0
-    v16  BinopI { op=ne, lhs=v15, rhs_imm=0 }             -> x1
+    v15  BinopI { op=eq, lhs=v45, rhs_imm=42 }            -> x1
+    v16  BinopI { op=ne, lhs=v15, rhs_imm=0 }             -> x0
     v17  Imm(0)                                           -> x0
-    terminator Jmp(b10)   (exit_acc=v16)
+    terminator Jmp(b10)   (exit_acc=v15)
   block 10  start_pc=0
-    v18  Phi { incoming=[b19:v12, b9:v16], kind=I64 }     -> x1
+    v18  Phi { incoming=[b19:v12, b9:v15], kind=I64 }     -> x1
     v19  LoadLocal { off=-2, kind=I64 }                   -> x0
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x2
@@ -69,11 +69,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
   block 11  start_pc=0
     v22  LoadLocal { off=-2, kind=I64 }                   -> x0
     v23  BinopI { op=eq, lhs=v50, rhs_imm=42 }            -> x0
-    v24  BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> x0
+    v24  BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> x1
     v25  Imm(0)                                           -> x1
-    terminator Jmp(b12)   (exit_acc=v24)
+    terminator Jmp(b12)   (exit_acc=v23)
   block 12  start_pc=0
-    v26  Phi { incoming=[b18:v20, b11:v24], kind=I64 }    -> x0
+    v26  Phi { incoming=[b18:v20, b11:v23], kind=I64 }    -> x0
     v27  LoadLocal { off=-2, kind=I64 }                   -> x1
     v28  Imm(0)                                           -> x1
     terminator Bz { cond=v26, target=b17, fall=b13 }   (exit_acc=v26)

@@ -170,8 +170,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x50
                	mov	x17, #0xf               // =15
                	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0xff9c             // =65436
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
@@ -192,8 +191,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x50
                	mov	x17, #0xf               // =15
                	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0xff9c             // =65436
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32

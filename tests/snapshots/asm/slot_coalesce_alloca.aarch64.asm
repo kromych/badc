@@ -73,8 +73,7 @@ Disassembly of section .text:
                	sxtw	x2, w0
                	cmp	x2, #0x18
                	b.lt	<addr>
-               	cmp	x1, #0x0
-               	b.ne	<addr>
+               	cbnz	x1, <addr>
                	mov	x0, #0x2                // =2
                	sub	sp, x29, #0x180
                	ldr	x19, [sp]

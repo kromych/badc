@@ -82,8 +82,7 @@ Disassembly of section .text:
                	asr	x1, x1, #1
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.eq	<addr>
+               	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -113,8 +112,7 @@ Disassembly of section .text:
                	movk	x17, #0x1234, lsl #16
                	eor	x1, x1, x17
                	mov	w1, w1
-               	cmp	x1, #0x0
-               	b.eq	<addr>
+               	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -132,8 +130,7 @@ Disassembly of section .text:
                	mov	w1, w0
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.eq	<addr>
+               	cbz	x1, <addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -142,8 +139,7 @@ Disassembly of section .text:
                	asr	x1, x1, #1
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.eq	<addr>
+               	cbz	x1, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -201,8 +197,7 @@ Disassembly of section .text:
                	mov	w0, w0
                	mov	x17, #0x1               // =1
                	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cbz	x0, <addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -290,8 +285,7 @@ Disassembly of section .text:
                	asr	x1, x1, #2
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	x1, #0x0
-               	b.eq	<addr>
+               	cbz	x1, <addr>
                	mov	x0, #0x12               // =18
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

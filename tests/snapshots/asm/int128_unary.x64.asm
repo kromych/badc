@@ -81,9 +81,6 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x130, %rsp            # imm = 0x130
@@ -129,7 +126,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movabsq	$-0x1000000000, %r11    # imm = 0xFFFFFFF000000000
                	movq	%rsi, %rax
@@ -176,9 +173,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x120(%rbp), %rax
                	movq	(%rax), %rcx
@@ -216,10 +210,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	setne	%cl
+               	sete	%cl
                	movzbq	%cl, %rcx
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
@@ -232,9 +223,6 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x120(%rbp), %rax
@@ -272,7 +260,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	setne	%al
                	movzbq	%al, %rax
-               	testq	%rax, %rax
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
                	movq	%rsi, %rax

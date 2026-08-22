@@ -830,6 +830,25 @@ pub(crate) enum BinOp {
     Fge,
 }
 
+/// The divide sharing a modulo's quotient, and its inverse. The two
+/// halves of `n = (n / d) * d + n % d` (C99 6.5.5p6) pair by
+/// signedness.
+pub(crate) fn quotient_op(op: BinOp) -> Option<BinOp> {
+    match op {
+        BinOp::Mod => Some(BinOp::Div),
+        BinOp::Modu => Some(BinOp::Divu),
+        _ => None,
+    }
+}
+
+pub(crate) fn remainder_op(op: BinOp) -> Option<BinOp> {
+    match op {
+        BinOp::Div => Some(BinOp::Mod),
+        BinOp::Divu => Some(BinOp::Modu),
+        _ => None,
+    }
+}
+
 /// Operator for an atomic read-modify-write (C11 7.17.7.2-7.17.7.5).
 /// `Xchg` discards the prior contents in the new value; the others
 /// combine the prior contents with the operand.

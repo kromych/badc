@@ -116,6 +116,9 @@ pub(crate) fn walk_function(
     let (return_ty, alloca_top_slot) = (*return_ty, *alloca_top_slot);
     let mut b = super::super::codegen::ssa::build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     b.set_end_pc(end_pc);
+    // Only at -O, where `passes::divmod_pair` folds the split back when
+    // the quotient stays unshared.
+    b.set_split_modulo(optimize);
     // C11 6.7.5: automatic objects whose alignment exceeds the 8-byte frame
     // slot live in the over-aligned region. Pack them (widest alignment
     // first); every backend addresses these slots as `region_base +

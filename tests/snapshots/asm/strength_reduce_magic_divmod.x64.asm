@@ -125,16 +125,16 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	leaq	(%r9,%r9,2), %rdx
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movslq	-0x1a8(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x1a8(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -167,16 +167,16 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	leaq	(%r9,%r9,4), %rdx
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movslq	-0x1a0(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x1a0(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -209,16 +209,16 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0x6, %r9, %rdx
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movslq	-0x198(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x198(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -252,16 +252,16 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0x7, %r9, %rdx
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movslq	-0x190(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x190(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -294,16 +294,16 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0xa, %r9, %rdx
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movslq	-0x188(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x188(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -336,16 +336,16 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0x64, %r9, %rdx
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movslq	-0x180(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x180(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -378,16 +378,16 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0x3e8, %r9, %rdx       # imm = 0x3E8
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movslq	-0x178(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x178(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -421,16 +421,16 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0xffff, %r9, %rdx      # imm = 0xFFFF
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movslq	-0x170(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x170(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -463,16 +463,16 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0x10001, %r9, %rdx     # imm = 0x10001
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movslq	-0x168(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x168(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -505,16 +505,16 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0x7fffffff, %r9, %rdx  # imm = 0x7FFFFFFF
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movslq	-0x160(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x160(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -552,16 +552,16 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	subq	%rbx, %rdx
                	imulq	$-0x3, %rdx, %rdx
+               	movq	%rax, %r8
+               	subq	%rdx, %r8
+               	movslq	-0x158(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x158(%rbp), %r8
                	pushq	%rdx
                	cqto
-               	idivq	%r8
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %r8
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -600,16 +600,16 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	subq	%rbx, %rdx
                	imulq	$-0x7, %rdx, %rdx
+               	movq	%rax, %r8
+               	subq	%rdx, %r8
+               	movslq	-0x150(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x150(%rbp), %r8
                	pushq	%rdx
                	cqto
-               	idivq	%r8
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %r8
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -647,16 +647,16 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	subq	%rbx, %rdx
                	imulq	$-0x64, %rdx, %rdx
+               	movq	%rax, %r8
+               	subq	%rdx, %r8
+               	movslq	-0x148(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movslq	-0x148(%rbp), %r8
                	pushq	%rdx
                	cqto
-               	idivq	%r8
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %r8
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -695,16 +695,14 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%r9, %r8
                	andq	$0x7fffffff, %r8        # imm = 0x7FFFFFFF
-               	movq	%rsi, %r10
-               	movq	%r8, %rsi
-               	subq	%r10, %rsi
-               	movslq	-0x140(%rbp), %r8
+               	subq	%rsi, %r8
+               	movslq	-0x140(%rbp), %rsi
                	pushq	%rdx
                	cqto
-               	idivq	%r8
+               	idivq	%rsi
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rsi
+               	cmpq	%rax, %r8
                	jne	<addr>
                	leaq	0x1(%rdx), %rcx
                	cmpl	$0x14, %ecx
@@ -775,16 +773,14 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%r8, %rdi
                	andq	$0x7, %rdi
-               	movq	%rsi, %r10
-               	movq	%rdi, %rsi
-               	subq	%r10, %rsi
-               	movslq	-0x130(%rbp), %rdi
+               	subq	%rsi, %rdi
+               	movslq	-0x130(%rbp), %rsi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%rsi
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rsi
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rcx
                	cmpl	$0x14, %ecx
@@ -823,16 +819,14 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%r9, %r8
                	andq	$0x7, %r8
-               	movq	%rsi, %r10
-               	movq	%r8, %rsi
-               	subq	%r10, %rsi
-               	movslq	-0x128(%rbp), %r8
+               	subq	%rsi, %r8
+               	movslq	-0x128(%rbp), %rsi
                	pushq	%rdx
                	cqto
-               	idivq	%r8
+               	idivq	%rsi
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rsi
+               	cmpq	%rax, %r8
                	jne	<addr>
                	leaq	0x1(%rdx), %rcx
                	cmpl	$0x14, %ecx
@@ -867,16 +861,14 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%r8, %rdi
                	andq	$0x3fffffff, %rdi       # imm = 0x3FFFFFFF
-               	movq	%rsi, %r10
-               	movq	%rdi, %rsi
-               	subq	%r10, %rsi
-               	movslq	-0x120(%rbp), %rdi
+               	subq	%rsi, %rdi
+               	movslq	-0x120(%rbp), %rsi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%rsi
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rsi
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rcx
                	cmpl	$0x14, %ecx
@@ -909,19 +901,18 @@ Disassembly of section .text:
                	cmpq	%r9, %r8
                	jne	<addr>
                	leaq	(%r8,%r8,2), %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movl	-0x118(%rbp), %edi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movl	-0x118(%rbp), %esi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -962,16 +953,16 @@ Disassembly of section .text:
                	addq	%rdi, %rdx
                	shrq	$0x2, %rdx
                	imulq	$0x7, %rdx, %rdx
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movl	-0x110(%rbp), %edx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movl	-0x110(%rbp), %edi
                	pushq	%rdx
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -1005,19 +996,18 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0xa, %r9, %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movl	-0x108(%rbp), %edi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movl	-0x108(%rbp), %esi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -1052,19 +1042,18 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0xe, %r9, %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movl	-0x100(%rbp), %edi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movl	-0x100(%rbp), %esi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -1098,19 +1087,18 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0x64, %r9, %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movl	-0xf8(%rbp), %edi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movl	-0xf8(%rbp), %esi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -1144,19 +1132,18 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0x3e8, %r9, %rsi       # imm = 0x3E8
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movl	-0xf0(%rbp), %edi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movl	-0xf0(%rbp), %esi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -1197,16 +1184,16 @@ Disassembly of section .text:
                	addq	%rdi, %rdx
                	shrq	$0x1e, %rdx
                	imulq	$0x7fffffff, %rdx, %rdx # imm = 0x7FFFFFFF
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movl	-0xe8(%rbp), %edx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movl	-0xe8(%rbp), %edi
                	pushq	%rdx
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -1241,19 +1228,18 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x80000001, %esi       # imm = 0x80000001
                	imulq	%rdi, %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movl	-0xe0(%rbp), %edi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movl	-0xe0(%rbp), %esi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -1288,19 +1274,18 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0xfffffffb, %esi       # imm = 0xFFFFFFFB
                	imulq	%rdi, %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movl	-0xd8(%rbp), %edi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movl	-0xd8(%rbp), %esi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -1313,30 +1298,33 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movl	%ecx, -0xd0(%rbp)
-               	leaq	<rip>, %rdx
-               	movslq	%eax, %rcx
-               	movl	(%rdx,%rcx,4), %esi
-               	movl	%esi, %edx
+               	leaq	<rip>, %rcx
+               	movslq	%eax, %rdx
+               	movl	(%rcx,%rdx,4), %esi
+               	movl	%esi, %ecx
                	movl	-0xd0(%rbp), %edi
                	pushq	%rax
                	pushq	%rdx
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	xorq	%rdx, %rdx
                	divq	%rdi
                	movq	%rax, %rdi
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rdi, %rdx
+               	cmpq	%rdi, %rcx
                	jne	<addr>
                	movl	-0xd0(%rbp), %esi
                	pushq	%rax
-               	movq	%rdx, %rax
+               	pushq	%rdx
+               	movq	%rcx, %rax
                	xorq	%rdx, %rdx
                	divq	%rsi
+               	movq	%rdx, %rcx
+               	popq	%rdx
                	popq	%rax
-               	testq	%rdx, %rdx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
                	jl	<addr>
                	leaq	<rip>, %rax
@@ -1364,18 +1352,18 @@ Disassembly of section .text:
                	popq	%rax
                	cmpq	%r8, %rdi
                	jne	<addr>
-               	movq	%rcx, %rsi
-               	andq	$0xf, %rsi
-               	movl	-0xc8(%rbp), %edi
+               	movq	%rcx, %rdi
+               	andq	$0xf, %rdi
+               	movl	-0xc8(%rbp), %esi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -1411,19 +1399,19 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	leaq	(%r9,%r9,2), %rdx
+               	movq	%rcx, %rdi
+               	subq	%rdx, %rdi
+               	movq	-0xc0(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rcx, %rdx
-               	subq	%r10, %rdx
-               	movq	-0xc0(%rbp), %rdi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rdx
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rax
                	cmpl	$0x14, %eax
@@ -1464,19 +1452,19 @@ Disassembly of section .text:
                	cmpq	%r12, %rbx
                	jne	<addr>
                	imulq	$0x7, %rbx, %rdx
+               	movq	%rcx, %rdi
+               	subq	%rdx, %rdi
+               	movq	-0xb8(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rcx, %rdx
-               	subq	%r10, %rdx
-               	movq	-0xb8(%rbp), %rdi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rdx
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rax
                	cmpl	$0x14, %eax
@@ -1517,19 +1505,19 @@ Disassembly of section .text:
                	cmpq	%r12, %rbx
                	jne	<addr>
                	imulq	$0xa, %rbx, %rdx
+               	movq	%rcx, %rdi
+               	subq	%rdx, %rdi
+               	movq	-0xb0(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rcx, %rdx
-               	subq	%r10, %rdx
-               	movq	-0xb0(%rbp), %rdi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rdx
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rax
                	cmpl	$0x14, %eax
@@ -1570,19 +1558,19 @@ Disassembly of section .text:
                	cmpq	%r12, %rbx
                	jne	<addr>
                	imulq	$0x3e8, %rbx, %rdx      # imm = 0x3E8
+               	movq	%rcx, %rdi
+               	subq	%rdx, %rdi
+               	movq	-0xa8(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rcx, %rdx
-               	subq	%r10, %rdx
-               	movq	-0xa8(%rbp), %rdi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rdx
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rax
                	cmpl	$0x14, %eax
@@ -1623,16 +1611,16 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	%rbx, %rdx
                	imulq	$0x3b9aca07, %rdx, %rdx # imm = 0x3B9ACA07
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movq	-0xa0(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movq	-0xa0(%rbp), %rdi
                	pushq	%rdx
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -1674,19 +1662,19 @@ Disassembly of section .text:
                	jne	<addr>
                	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
                	imulq	%rbx, %rdx
+               	movq	%rcx, %rdi
+               	subq	%rdx, %rdi
+               	movq	-0x98(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rcx, %rdx
-               	subq	%r10, %rdx
-               	movq	-0x98(%rbp), %rdi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	cqto
-               	idivq	%rdi
+               	idivq	%r10
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rdx
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rax
                	cmpl	$0x14, %eax
@@ -1696,16 +1684,15 @@ Disassembly of section .text:
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorq	%rdi, %rdi
-               	movq	%rdi, %rax
+               	movq	%rdi, %rcx
                	jmp	<addr>
-               	movabsq	$-0x3, %rcx
-               	movq	%rcx, -0x90(%rbp)
-               	leaq	<rip>, %rcx
-               	movslq	%eax, %rsi
-               	movq	(%rcx,%rsi,8), %rcx
+               	movabsq	$-0x3, %rax
+               	movq	%rax, -0x90(%rbp)
+               	leaq	<rip>, %rax
+               	movslq	%ecx, %rsi
+               	movq	(%rax,%rsi,8), %rax
                	movabsq	$0x5555555555555556, %r8 # imm = 0x5555555555555556
                	pushq	%rax
-               	movq	%rcx, %rax
                	imulq	%r8
                	popq	%rax
                	movq	%rdx, %r9
@@ -1716,7 +1703,6 @@ Disassembly of section .text:
                	movq	-0x90(%rbp), %r13
                	pushq	%rax
                	pushq	%rdx
-               	movq	%rcx, %rax
                	cqto
                	idivq	%r13
                	movq	%rax, %r13
@@ -1727,39 +1713,35 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	subq	%rbx, %rdx
                	imulq	$-0x3, %rdx, %rdx
+               	movq	%rax, %r8
+               	subq	%rdx, %r8
+               	movq	-0x90(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rcx, %rdx
-               	subq	%r10, %rdx
-               	movq	-0x90(%rbp), %r8
-               	pushq	%rax
                	pushq	%rdx
-               	movq	%rcx, %rax
                	cqto
-               	idivq	%r8
-               	movq	%rdx, %rcx
+               	idivq	%r10
+               	movq	%rdx, %rax
                	popq	%rdx
-               	popq	%rax
-               	cmpq	%rcx, %rdx
+               	cmpq	%rax, %r8
                	jne	<addr>
-               	leaq	0x1(%rsi), %rax
-               	cmpl	$0x14, %eax
+               	leaq	0x1(%rsi), %rcx
+               	cmpl	$0x14, %ecx
                	jl	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorq	%rdi, %rdi
-               	movq	%rdi, %rax
+               	movq	%rdi, %rcx
                	jmp	<addr>
-               	movabsq	$-0x7, %rcx
-               	movq	%rcx, -0x88(%rbp)
-               	leaq	<rip>, %rcx
-               	movslq	%eax, %rsi
-               	movq	(%rcx,%rsi,8), %rcx
+               	movabsq	$-0x7, %rax
+               	movq	%rax, -0x88(%rbp)
+               	leaq	<rip>, %rax
+               	movslq	%ecx, %rsi
+               	movq	(%rax,%rsi,8), %rax
                	movabsq	$0x4924924924924925, %r8 # imm = 0x4924924924924925
                	pushq	%rax
                	pushq	%rdx
-               	movq	%rcx, %rax
                	imulq	%r8
                	movq	%rdx, %r9
                	popq	%rdx
@@ -1775,7 +1757,6 @@ Disassembly of section .text:
                	movq	-0x88(%rbp), %r13
                	pushq	%rax
                	pushq	%rdx
-               	movq	%rcx, %rax
                	cqto
                	idivq	%r13
                	movq	%rax, %r13
@@ -1789,22 +1770,19 @@ Disassembly of section .text:
                	movq	%r8, %rdx
                	subq	%r10, %rdx
                	imulq	$-0x7, %rdx, %rdx
+               	movq	%rax, %r8
+               	subq	%rdx, %r8
+               	movq	-0x88(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rcx, %rdx
-               	subq	%r10, %rdx
-               	movq	-0x88(%rbp), %r8
-               	pushq	%rax
                	pushq	%rdx
-               	movq	%rcx, %rax
                	cqto
-               	idivq	%r8
-               	movq	%rdx, %rcx
+               	idivq	%r10
+               	movq	%rdx, %rax
                	popq	%rdx
-               	popq	%rax
-               	cmpq	%rcx, %rdx
+               	cmpq	%rax, %r8
                	jne	<addr>
-               	leaq	0x1(%rsi), %rax
-               	cmpl	$0x14, %eax
+               	leaq	0x1(%rsi), %rcx
+               	cmpl	$0x14, %ecx
                	jl	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
@@ -1852,16 +1830,16 @@ Disassembly of section .text:
                	movq	%r8, %rdx
                	subq	%r10, %rdx
                	imulq	$-0x3b9aca07, %rdx, %rdx # imm = 0xC46535F9
+               	movq	%rax, %r8
+               	subq	%rdx, %r8
+               	movq	-0x80(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movq	-0x80(%rbp), %r8
                	pushq	%rdx
                	cqto
-               	idivq	%r8
+               	idivq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %r8
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -1900,16 +1878,14 @@ Disassembly of section .text:
                	jne	<addr>
                	movabsq	$0x7fffffffffffffff, %r8 # imm = 0x7FFFFFFFFFFFFFFF
                	andq	%r9, %r8
-               	movq	%rsi, %r10
-               	movq	%r8, %rsi
-               	subq	%r10, %rsi
-               	movq	-0x78(%rbp), %r8
+               	subq	%rsi, %r8
+               	movq	-0x78(%rbp), %rsi
                	pushq	%rdx
                	cqto
-               	idivq	%r8
+               	idivq	%rsi
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rsi
+               	cmpq	%rax, %r8
                	jne	<addr>
                	leaq	0x1(%rdx), %rcx
                	cmpl	$0x14, %ecx
@@ -1922,53 +1898,55 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, -0x70(%rbp)
-               	leaq	<rip>, %rdx
-               	movslq	%eax, %rcx
-               	movq	(%rdx,%rcx,8), %rdx
+               	leaq	<rip>, %rcx
+               	movslq	%eax, %rdx
+               	movq	(%rcx,%rdx,8), %rcx
                	movq	-0x70(%rbp), %rsi
                	pushq	%rax
                	pushq	%rdx
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	cqto
                	idivq	%rsi
                	movq	%rax, %rsi
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rsi, %rdx
+               	cmpq	%rsi, %rcx
                	jne	<addr>
                	movq	-0x70(%rbp), %rsi
                	pushq	%rax
-               	movq	%rdx, %rax
+               	pushq	%rdx
+               	movq	%rcx, %rax
                	cqto
                	idivq	%rsi
+               	movq	%rdx, %rcx
+               	popq	%rdx
                	popq	%rax
-               	testq	%rdx, %rdx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
                	jl	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
+               	xorq	%rcx, %rcx
                	jmp	<addr>
-               	movl	$0x400, %ecx            # imm = 0x400
-               	movq	%rcx, -0x68(%rbp)
-               	leaq	<rip>, %rcx
-               	movslq	%eax, %rdx
-               	movq	(%rcx,%rdx,8), %rcx
-               	movq	%rcx, %rdi
+               	movl	$0x400, %eax            # imm = 0x400
+               	movq	%rax, -0x68(%rbp)
+               	leaq	<rip>, %rax
+               	movslq	%ecx, %rdx
+               	movq	(%rax,%rdx,8), %rax
+               	movq	%rax, %rdi
                	sarq	$0x3f, %rdi
                	movq	%rdi, %rsi
                	shrq	$0x36, %rsi
-               	leaq	(%rcx,%rsi), %r8
+               	leaq	(%rax,%rsi), %r8
                	movq	%r8, %r9
                	sarq	$0xa, %r9
                	movq	-0x68(%rbp), %rbx
                	pushq	%rax
                	pushq	%rdx
-               	movq	%rcx, %rax
                	cqto
                	idivq	%rbx
                	movq	%rax, %rbx
@@ -1978,22 +1956,17 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%r8, %rdi
                	andq	$0x3ff, %rdi            # imm = 0x3FF
-               	movq	%rsi, %r10
-               	movq	%rdi, %rsi
-               	subq	%r10, %rsi
-               	movq	-0x68(%rbp), %rdi
-               	pushq	%rax
+               	subq	%rsi, %rdi
+               	movq	-0x68(%rbp), %rsi
                	pushq	%rdx
-               	movq	%rcx, %rax
                	cqto
-               	idivq	%rdi
-               	movq	%rdx, %rcx
+               	idivq	%rsi
+               	movq	%rdx, %rax
                	popq	%rdx
-               	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rax, %rdi
                	jne	<addr>
-               	leaq	0x1(%rdx), %rax
-               	cmpl	$0x14, %eax
+               	leaq	0x1(%rdx), %rcx
+               	cmpl	$0x14, %ecx
                	jl	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
@@ -2029,16 +2002,14 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%r9, %r8
                	andq	$0x3ff, %r8             # imm = 0x3FF
-               	movq	%rsi, %r10
-               	movq	%r8, %rsi
-               	subq	%r10, %rsi
-               	movq	-0x60(%rbp), %r8
+               	subq	%rsi, %r8
+               	movq	-0x60(%rbp), %rsi
                	pushq	%rdx
                	cqto
-               	idivq	%r8
+               	idivq	%rsi
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rsi
+               	cmpq	%rax, %r8
                	jne	<addr>
                	leaq	0x1(%rdx), %rcx
                	cmpl	$0x14, %ecx
@@ -2076,19 +2047,18 @@ Disassembly of section .text:
                	cmpq	%r9, %r8
                	jne	<addr>
                	leaq	(%r8,%r8,2), %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movq	-0x58(%rbp), %rdi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movq	-0x58(%rbp), %rsi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -2128,16 +2098,16 @@ Disassembly of section .text:
                	movq	%rbx, %rdx
                	shrq	$0x2, %rdx
                	imulq	$0x7, %rdx, %rdx
+               	movq	%rax, %rdi
+               	subq	%rdx, %rdi
+               	movq	-0x50(%rbp), %rdx
                	movq	%rdx, %r10
-               	movq	%rax, %rdx
-               	subq	%r10, %rdx
-               	movq	-0x50(%rbp), %rdi
                	pushq	%rdx
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%r10
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	%rax, %rdx
+               	cmpq	%rax, %rdi
                	jne	<addr>
                	leaq	0x1(%rsi), %rcx
                	cmpl	$0x14, %ecx
@@ -2177,19 +2147,18 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0xa, %r9, %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movq	-0x48(%rbp), %rdi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movq	-0x48(%rbp), %rsi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -2229,19 +2198,18 @@ Disassembly of section .text:
                	cmpq	%rbx, %r9
                	jne	<addr>
                	imulq	$0xe, %r9, %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movq	-0x40(%rbp), %rdi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movq	-0x40(%rbp), %rsi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -2279,19 +2247,18 @@ Disassembly of section .text:
                	cmpq	%r9, %r8
                	jne	<addr>
                	imulq	$0x3b9aca07, %r8, %rsi  # imm = 0x3B9ACA07
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movq	-0x38(%rbp), %rdi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movq	-0x38(%rbp), %rsi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -2325,19 +2292,18 @@ Disassembly of section .text:
                	jne	<addr>
                	movabsq	$-0x7fffffffffffffff, %r11 # imm = 0x8000000000000001
                	imulq	%r11, %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movq	-0x30(%rbp), %rdi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movq	-0x30(%rbp), %rsi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -2368,19 +2334,18 @@ Disassembly of section .text:
                	cmpq	%rdi, %rsi
                	jne	<addr>
                	imulq	$-0x5, %rsi, %rsi
-               	movq	%rsi, %r10
-               	movq	%rcx, %rsi
-               	subq	%r10, %rsi
-               	movq	-0x28(%rbp), %rdi
+               	movq	%rcx, %rdi
+               	subq	%rsi, %rdi
+               	movq	-0x28(%rbp), %rsi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
@@ -2393,29 +2358,32 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x1, %ecx
                	movq	%rcx, -0x20(%rbp)
-               	leaq	<rip>, %rdx
-               	movslq	%eax, %rcx
-               	movq	(%rdx,%rcx,8), %rdx
+               	leaq	<rip>, %rcx
+               	movslq	%eax, %rdx
+               	movq	(%rcx,%rdx,8), %rcx
                	movq	-0x20(%rbp), %rsi
                	pushq	%rax
                	pushq	%rdx
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	xorq	%rdx, %rdx
                	divq	%rsi
                	movq	%rax, %rsi
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rsi, %rdx
+               	cmpq	%rsi, %rcx
                	jne	<addr>
                	movq	-0x20(%rbp), %rsi
                	pushq	%rax
-               	movq	%rdx, %rax
+               	pushq	%rdx
+               	movq	%rcx, %rax
                	xorq	%rdx, %rdx
                	divq	%rsi
+               	movq	%rdx, %rcx
+               	popq	%rdx
                	popq	%rax
-               	testq	%rdx, %rdx
+               	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	0x1(%rcx), %rax
+               	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax
                	jl	<addr>
                	leaq	<rip>, %rax
@@ -2442,18 +2410,18 @@ Disassembly of section .text:
                	popq	%rax
                	cmpq	%rdi, %rsi
                	jne	<addr>
-               	movq	%rcx, %rsi
-               	andq	$0x3ff, %rsi            # imm = 0x3FF
-               	movq	-0x18(%rbp), %rdi
+               	movq	%rcx, %rdi
+               	andq	$0x3ff, %rdi            # imm = 0x3FF
+               	movq	-0x18(%rbp), %rsi
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
                	xorq	%rdx, %rdx
-               	divq	%rdi
+               	divq	%rsi
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	%rcx, %rsi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x14, %eax

@@ -4119,13 +4119,13 @@ Disassembly of section .text:
                	b	<addr>
                	cmp	x21, #0x1d
                	b.ne	<addr>
-               	add	x0, x20, #0x8
+               	add	x2, x20, #0x8
                	ldr	x1, [x20]
-               	ldur	x2, [x29, #-0x10]
-               	sdiv	x17, x1, x2
-               	msub	x1, x17, x2, x1
-               	stur	x1, [x29, #-0x10]
-               	mov	x20, x0
+               	ldur	x0, [x29, #-0x10]
+               	sdiv	x17, x1, x0
+               	msub	x0, x17, x0, x1
+               	stur	x0, [x29, #-0x10]
+               	mov	x20, x2
                	b	<addr>
                	cmp	x21, #0x1e
                	b.ne	<addr>

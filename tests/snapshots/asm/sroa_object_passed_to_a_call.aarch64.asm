@@ -28,14 +28,12 @@ Disassembly of section .text:
                	sub	x0, x29, #0x28
                	mov	x1, #0x4                // =4
                	str	x1, [x0, #0x8]
-               	sub	x0, x29, #0x28
                	bl	<addr>
                	add	x0, x0, #0x6
                	add	x20, x0, #0x5
                	sub	x0, x29, #0x10
                	mov	x1, #0x2                // =2
                	str	x1, [x0, #0x8]
-               	sub	x0, x29, #0x10
                	bl	<addr>
                	add	x0, x0, #0x2
                	add	x0, x0, #0x2

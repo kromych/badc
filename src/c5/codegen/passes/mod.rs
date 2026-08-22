@@ -8,6 +8,7 @@ pub(crate) mod constfold;
 pub(crate) mod constfold_branch;
 pub(crate) mod cse;
 pub(crate) mod dedup_imm;
+pub(crate) mod divmod_pair;
 pub(crate) mod drop_redundant_extend;
 pub(crate) mod fma;
 pub(crate) mod index_fold;

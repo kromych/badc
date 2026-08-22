@@ -73,13 +73,10 @@ Disassembly of section .text:
                	idivq	%rcx
                	movq	%rax, %rdx
                	popq	%rax
-               	pushq	%rax
-               	pushq	%rdx
-               	cqto
-               	idivq	%rcx
-               	movq	%rdx, %rcx
-               	popq	%rdx
-               	popq	%rax
+               	imulq	%rdx, %rcx
+               	movq	%rcx, %r10
+               	movq	%rax, %rcx
+               	subq	%r10, %rcx
                	cmpl	$0x3, %edx
                	setne	%al
                	movzbq	%al, %rax
@@ -108,15 +105,8 @@ Disassembly of section .text:
                	cqto
                	idivq	%r10
                	popq	%rdx
-               	movq	%rdx, %r10
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rcx, %rax
-               	cqto
-               	idivq	%r10
-               	movq	%rdx, %rcx
-               	popq	%rdx
-               	popq	%rax
+               	imulq	%rax, %rdx
+               	subq	%rdx, %rcx
                	cmpl	$-0x3, %eax
                	setne	%dl
                	movzbq	%dl, %rdx
@@ -155,12 +145,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	popq	%rdx
                	popq	%rax
-               	movq	%rax, %r10
-               	pushq	%rax
-               	movq	%rbx, %rax
-               	cqto
-               	idivq	%r10
-               	popq	%rax
+               	imulq	%rcx, %rax
+               	movq	%rbx, %rdx
+               	subq	%rax, %rdx
                	cmpq	$0xe, %rcx
                	setne	%al
                	movzbq	%al, %rax
@@ -190,12 +177,9 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	popq	%rdx
                	popq	%rax
-               	movq	%rax, %r10
-               	pushq	%rax
-               	movq	%rbx, %rax
-               	cqto
-               	idivq	%r10
-               	popq	%rax
+               	imulq	%rcx, %rax
+               	movq	%rbx, %rdx
+               	subq	%rax, %rdx
                	cmpq	$0x14d, %rcx            # imm = 0x14D
                	setne	%al
                	movzbq	%al, %rax

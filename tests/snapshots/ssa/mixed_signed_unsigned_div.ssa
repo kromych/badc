@@ -22,16 +22,18 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v15  LoadLocal { off=-1, kind=I32 }                   -> x0
     v16  LoadLocal { off=-1, kind=U32 }                   -> x0
     v17  Imm(4294967295)                                  -> x0
-    v18  Imm(3)                                           -> x0
-    v19  Imm(0)                                           -> x0
+    v18  Imm(613566756)                                   -> x0
+    v19  Imm(4294967292)                                  -> x0
     v20  Imm(3)                                           -> x0
     v21  Imm(0)                                           -> x0
-    v22  Imm(0)                                           -> x0
+    v22  Imm(3)                                           -> x0
     v23  Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v23)
-  block 2  start_pc=0
+    v24  Imm(0)                                           -> x0
     v25  Imm(0)                                           -> x0
-    terminator Return(v25)   (exit_acc=v25)
+    terminator Jmp(b2)   (exit_acc=v25)
+  block 2  start_pc=0
+    v27  Imm(0)                                           -> x0
+    terminator Return(v27)   (exit_acc=v27)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

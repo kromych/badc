@@ -33,7 +33,7 @@ use alloc::vec::Vec;
 
 use super::super::ir::{
     AsmSeg, AtomicRmwOp, BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE,
-    StoreKind, Terminator, ValueId,
+    StoreKind, Terminator, ValueId, quotient_op,
 };
 
 /// Cached `(off, kind, value)` for a previously-pushed
@@ -143,6 +143,10 @@ pub(crate) struct SsaBuilder {
     /// Last value defined in the current block. Used as the default
     /// `exit_acc` if the block's terminator doesn't specify one.
     last_def: ValueId,
+    /// When set, a modulo with a register divisor is built as a
+    /// divide plus `n - q*d` so a division over the same operands
+    /// shares the quotient. See [`Self::binop`].
+    split_modulo: bool,
     /// Current `(line, file_idx)` source position. Stamped onto
     /// every inst pushed into the function so the DWARF emitter
     /// can recover a per-statement line table for walker-produced
@@ -211,6 +215,7 @@ impl SsaBuilder {
             block_exit_accs: Vec::new(),
             last_def: NO_VALUE,
             cur_src: (0, 0),
+            split_modulo: false,
         };
         let entry = b.new_block();
         b.switch_to(entry);
@@ -233,6 +238,11 @@ impl SsaBuilder {
     /// counter post-walk.
     pub(crate) fn set_end_pc(&mut self, end_pc: usize) {
         self.func.end_pc = end_pc;
+    }
+
+    /// Enable the register-divisor modulo split. See [`Self::binop`].
+    pub(crate) fn set_split_modulo(&mut self, on: bool) {
+        self.split_modulo = on;
     }
 
     /// Record the over-aligned frame region for over-aligned automatic
@@ -815,10 +825,30 @@ impl SsaBuilder {
     /// already SSA values whose definitions dominate this site, so
     /// the cached result is bit-identical (including IEEE-754 NaN
     /// payloads: same inputs to same FP op produce the same NaN).
+    ///
+    /// With [`Self::set_split_modulo`], `n % d` over a register
+    /// divisor is built as `q = n / d; n - q*d` instead of one `Mod`,
+    /// so a division over the same operands reaches the same quotient
+    /// through the cache above (in either source order) and the value
+    /// numbering sees it across blocks. The quotient traps exactly
+    /// where the modulo did; `passes::divmod_pair` rebuilds the single
+    /// `Mod` when nothing else consumes it. An immediate divisor stays
+    /// whole: `divmod_const` strength-reduces it, and a zero one is
+    /// left to the hardware divide.
     pub(crate) fn binop(&mut self, op: BinOp, lhs: ValueId, rhs: ValueId) -> ValueId {
         let key = PureKey::Binop { op, lhs, rhs };
         if let Some(cached) = self.lookup_pure(key) {
             return cached;
+        }
+        if self.split_modulo
+            && let Some(quot) = quotient_op(op)
+            && self.peek_imm(rhs).is_none()
+        {
+            let q = self.binop(quot, lhs, rhs);
+            let qd = self.binop(BinOp::Mul, q, rhs);
+            let rem = self.binop(BinOp::Sub, lhs, qd);
+            self.pure_cache.insert(key, rem);
+            return rem;
         }
         let id = self.push(Inst::Binop { op, lhs, rhs });
         self.pure_cache.insert(key, id);

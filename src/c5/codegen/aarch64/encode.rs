@@ -2065,6 +2065,12 @@ pub(crate) fn lower(
             let caps = super::ssa::reg_alloc::bank_capacity(target);
             crate::c5::codegen::passes::cse::run(&mut ssa_funcs, caps);
         });
+        // Rebuild the single modulo where the builder's split quotient
+        // found no division to share with. After the value numbering,
+        // which is what can still supply that second consumer.
+        super::ssa::emit_common::time_pass("passes::divmod_pair::run (aarch64)", || {
+            crate::c5::codegen::passes::divmod_pair::run(&mut ssa_funcs);
+        });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
         // are both normalised to the same `(base, disp)`. Bounded by

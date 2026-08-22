@@ -3821,20 +3821,18 @@ Disassembly of section .text:
                	jmp	<addr>
                	cmpq	$0x1d, %r12
                	jne	<addr>
-               	leaq	0x8(%rbx), %rax
+               	leaq	0x8(%rbx), %rdx
                	movq	(%rbx), %rcx
-               	movq	-0x10(%rbp), %rdx
-               	movq	%rdx, %r10
-               	pushq	%rax
+               	movq	-0x10(%rbp), %rax
+               	movq	%rax, %r10
                	pushq	%rdx
                	movq	%rcx, %rax
                	cqto
                	idivq	%r10
-               	movq	%rdx, %rcx
+               	movq	%rdx, %rax
                	popq	%rdx
-               	popq	%rax
-               	movq	%rcx, -0x10(%rbp)
-               	movq	%rax, %rbx
+               	movq	%rax, -0x10(%rbp)
+               	movq	%rdx, %rbx
                	jmp	<addr>
                	cmpq	$0x1e, %r12
                	jne	<addr>

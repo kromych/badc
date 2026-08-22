@@ -1437,15 +1437,9 @@ Disassembly of section .text:
                	movq	%rax, %r9
                	popq	%rdx
                	popq	%rax
-               	movq	%rdx, %r10
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rdi, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	movq	%rdx, %rdi
-               	popq	%rdx
-               	popq	%rax
+               	movq	%r9, %rax
+               	imulq	%rdx, %rax
+               	subq	%rax, %rdi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	jmp	<addr>
@@ -1457,14 +1451,9 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	popq	%rdx
                	popq	%rax
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%rbx
-               	movq	%rdx, %rcx
-               	popq	%rdx
-               	popq	%rax
+               	movq	%rdi, %rax
+               	imulq	%rbx, %rax
+               	subq	%rax, %rcx
                	xorq	%r8, %r8
                	movq	%r8, %rax
                	jmp	<addr>
@@ -1476,14 +1465,10 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	popq	%rdx
                	popq	%rax
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r13
-               	movq	%rdx, %r9
-               	popq	%rdx
-               	popq	%rax
+               	movq	%rbx, %rdi
+               	imulq	%r13, %rdi
+               	movq	%rcx, %r9
+               	subq	%rdi, %r9
                	xorq	%rdi, %rdi
                	movq	%rdi, %r12
                	jmp	<addr>
@@ -1495,14 +1480,10 @@ Disassembly of section .text:
                	movq	%rax, %r9
                	popq	%rdx
                	popq	%rax
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r13
-               	movq	%rdx, %rbx
-               	popq	%rdx
-               	popq	%rax
+               	movq	%r9, %rdi
+               	imulq	%r13, %rdi
+               	movq	%rcx, %rbx
+               	subq	%rdi, %rbx
                	xorq	%rdi, %rdi
                	movq	%rdi, %r12
                	jmp	<addr>
@@ -1542,15 +1523,10 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	popq	%rdx
                	popq	%rax
-               	movq	%rdx, %r10
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	movq	%rdx, %r9
-               	popq	%rdx
-               	popq	%rax
+               	movq	%rbx, %rdi
+               	imulq	%rdx, %rdi
+               	movq	%rcx, %r9
+               	subq	%rdi, %r9
                	xorq	%rdi, %rdi
                	movq	%rdi, %r12
                	jmp	<addr>
@@ -1566,15 +1542,10 @@ Disassembly of section .text:
                	movq	%rax, %r9
                	popq	%rdx
                	popq	%rax
-               	movq	%rdx, %r10
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	movq	%rdx, %rbx
-               	popq	%rdx
-               	popq	%rax
+               	movq	%r9, %rdi
+               	imulq	%rdx, %rdi
+               	movq	%rcx, %rbx
+               	subq	%rdi, %rbx
                	xorq	%rdi, %rdi
                	movq	%rdi, %r12
                	jmp	<addr>

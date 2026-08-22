@@ -5069,6 +5069,14 @@ fn cross_block_cse() {
 }
 
 #[test]
+fn divmod_pair_shared_quotient() {
+    // One quotient serves a division and a modulo over the same
+    // operands, in either source order and across blocks; the
+    // remaining lone divides keep their own.
+    assert_eq!(run_fixture("divmod_pair_shared_quotient.c"), 0);
+}
+
+#[test]
 fn tailcall_return_extension() {
     // int-returning tail callee under an unsigned-returning caller:
     // the widened value must zero-extend (bit 31 set).

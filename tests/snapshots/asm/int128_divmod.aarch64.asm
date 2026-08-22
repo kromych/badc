@@ -1091,25 +1091,25 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	udiv	x5, x4, x2
-               	udiv	x17, x4, x2
-               	msub	x4, x17, x2, x4
+               	mul	x0, x5, x2
+               	sub	x4, x4, x0
                	mov	x7, #0x0                // =0
                	mov	x0, x7
                	b	<addr>
                	udiv	x4, x1, x8
-               	udiv	x17, x1, x8
-               	msub	x1, x17, x8, x1
+               	mul	x0, x4, x8
+               	sub	x1, x1, x0
                	mov	x7, #0x0                // =0
                	mov	x0, x7
                	b	<addr>
                	udiv	x7, x1, x11
-               	udiv	x17, x1, x11
-               	msub	x5, x17, x11, x1
+               	mul	x4, x7, x11
+               	sub	x5, x1, x4
                	mov	x9, x6
                	b	<addr>
                	udiv	x5, x1, x11
-               	udiv	x17, x1, x11
-               	msub	x6, x17, x11, x1
+               	mul	x4, x5, x11
+               	sub	x6, x1, x4
                	mov	x10, #0x0               // =0
                	mov	x7, x10
                	b	<addr>
@@ -1141,8 +1141,8 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	udiv	x6, x1, x2
-               	udiv	x17, x1, x2
-               	msub	x5, x17, x2, x1
+               	mul	x4, x6, x2
+               	sub	x5, x1, x4
                	mov	x9, #0x0                // =0
                	mov	x7, x9
                	b	<addr>
@@ -1150,8 +1150,8 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	udiv	x5, x1, x2
-               	udiv	x17, x1, x2
-               	msub	x6, x17, x2, x1
+               	mul	x4, x5, x2
+               	sub	x6, x1, x4
                	mov	x9, #0x0                // =0
                	mov	x7, x9
                	b	<addr>

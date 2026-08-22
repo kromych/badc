@@ -3506,12 +3506,11 @@ fn outline_atomics_run_correct() {
 // A program using the glibc entry points that live only in the static
 // libc_nonshared.a: atexit, at_quick_exit, pthread_atfork. The atexit handler
 // prints a marker so a run confirms it was registered and invoked.
-#[cfg(target_os = "linux")]
 const GLIBC_NONSHARED_SRC: &str = "\
+#include <stdio.h>\n\
 extern int atexit(void (*)(void));\n\
 extern int at_quick_exit(void (*)(void));\n\
 extern int pthread_atfork(void (*)(void), void (*)(void), void (*)(void));\n\
-extern int puts(const char *);\n\
 static void bye(void) { puts(\"ATEXIT_RAN\"); }\n\
 static void nop(void) {}\n\
 int main(void) {\n\
@@ -3525,8 +3524,9 @@ int main(void) {\n\
 // badc supplies these from compiler-rt (wrapping the shared-library entry
 // points), so a glibc program links against libc.so alone -- no host
 // libc_nonshared.a. Cross-linking both arches exercises the resolution
-// without needing to run.
-#[cfg(target_os = "linux")]
+// without needing to run, on any host: the wrappers come from the
+// embedded sources and the `<stdio.h>` call from the header's binding,
+// so no library of the host's takes part.
 #[test]
 fn glibc_nonshared_wrappers_resolve() {
     for (tag, target) in [

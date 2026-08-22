@@ -96,6 +96,77 @@ fn u32le(bytes: &[u8], off: usize) -> Option<u32> {
     Some(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
 }
 
+const FAT_MAGIC: u32 = 0xCAFE_BABE;
+const FAT_MAGIC_64: u32 = 0xCAFE_BABF;
+const CPU_SUBTYPE_ARM64E: u32 = 2;
+/// The high byte of `cpusubtype` carries capability bits, not the
+/// subtype.
+const CPU_SUBTYPE_MASK: u32 = 0x00FF_FFFF;
+
+/// The fat header and its arch table are big-endian regardless of the
+/// slices' byte order.
+fn u32be(bytes: &[u8], off: usize) -> Option<u32> {
+    let b = bytes.get(off..off + 4)?;
+    Some(u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+}
+
+fn u64be(bytes: &[u8], off: usize) -> Option<u64> {
+    let b = bytes.get(off..off + 8)?;
+    Some(u64::from_be_bytes([
+        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+    ]))
+}
+
+/// True when `bytes` is a universal (fat) Mach-O container.
+pub fn is_mach_o_fat(bytes: &[u8]) -> bool {
+    matches!(u32be(bytes, 0), Some(FAT_MAGIC | FAT_MAGIC_64))
+}
+
+/// Select the slice of a universal (fat) container that matches
+/// `machine`. `cputype` must match; on arm64 a plain-arm64 slice is
+/// preferred over an arm64e one when the container carries both, since
+/// arm64e code is not ABI-compatible with an arm64 link. Returns `None`
+/// when `bytes` is not a fat container, no slice matches, or the
+/// matching slice's extent runs past the end of the container.
+pub fn mach_o_fat_slice(bytes: &[u8], machine: NativeMachine) -> Option<&[u8]> {
+    let wide = match u32be(bytes, 0)? {
+        FAT_MAGIC => false,
+        FAT_MAGIC_64 => true,
+        _ => return None,
+    };
+    let want = match machine {
+        NativeMachine::Aarch64 => CPU_TYPE_ARM64,
+        NativeMachine::X86_64 => CPU_TYPE_X86_64,
+    };
+    let count = u32be(bytes, 4)? as usize;
+    let entry_size = if wide { 32 } else { 20 };
+    let extent = |off: u64, size: u64| -> Option<&[u8]> {
+        let end = off.checked_add(size)?;
+        bytes.get(off as usize..usize::try_from(end).ok()?)
+    };
+    let mut arm64e: Option<(u64, u64)> = None;
+    for i in 0..count {
+        let at = 8 + i * entry_size;
+        let cputype = u32be(bytes, at)?;
+        let cpusubtype = u32be(bytes, at + 4)? & CPU_SUBTYPE_MASK;
+        let (off, size) = if wide {
+            (u64be(bytes, at + 8)?, u64be(bytes, at + 16)?)
+        } else {
+            (u32be(bytes, at + 8)? as u64, u32be(bytes, at + 12)? as u64)
+        };
+        if cputype != want {
+            continue;
+        }
+        if want == CPU_TYPE_ARM64 && cpusubtype == CPU_SUBTYPE_ARM64E {
+            arm64e.get_or_insert((off, size));
+            continue;
+        }
+        return extent(off, size);
+    }
+    let (off, size) = arm64e?;
+    extent(off, size)
+}
+
 fn u64le(bytes: &[u8], off: usize) -> Option<u64> {
     let b = bytes.get(off..off + 8)?;
     Some(u64::from_le_bytes([
@@ -1421,5 +1492,97 @@ mod tests {
             .expect_err("section-relative branch");
         let m = alloc::format!("{e}");
         assert!(m.contains("section-relative"), "{m}");
+    }
+
+    /// Wrap per-arch slices into a fat container, 32- or 64-bit form.
+    /// Slices are 8-aligned as `lipo` aligns them.
+    fn fat(entries: &[(u32, u32, &[u8])], wide: bool) -> Vec<u8> {
+        let entry_size = if wide { 32 } else { 20 };
+        let mut out = Vec::new();
+        out.extend_from_slice(&if wide { FAT_MAGIC_64 } else { FAT_MAGIC }.to_be_bytes());
+        out.extend_from_slice(&(entries.len() as u32).to_be_bytes());
+        let mut off = (8 + entries.len() * entry_size).next_multiple_of(8);
+        let mut offs = Vec::new();
+        for (cputype, cpusubtype, body) in entries {
+            offs.push(off);
+            out.extend_from_slice(&cputype.to_be_bytes());
+            out.extend_from_slice(&cpusubtype.to_be_bytes());
+            if wide {
+                out.extend_from_slice(&(off as u64).to_be_bytes());
+                out.extend_from_slice(&(body.len() as u64).to_be_bytes());
+                out.extend_from_slice(&3u32.to_be_bytes());
+                out.extend_from_slice(&0u32.to_be_bytes());
+            } else {
+                out.extend_from_slice(&(off as u32).to_be_bytes());
+                out.extend_from_slice(&(body.len() as u32).to_be_bytes());
+                out.extend_from_slice(&3u32.to_be_bytes());
+            }
+            off = (off + body.len()).next_multiple_of(8);
+        }
+        for (i, (_, _, body)) in entries.iter().enumerate() {
+            out.resize(offs[i], 0);
+            out.extend_from_slice(body);
+        }
+        out
+    }
+
+    #[test]
+    fn fat_slice_selects_the_matching_cputype() {
+        let obj = build(CPU_TYPE_ARM64, MH_OBJECT, &[], &[]);
+        let blob = fat(
+            &[(CPU_TYPE_X86_64, 3, b"X86BYTES"), (CPU_TYPE_ARM64, 0, &obj)],
+            false,
+        );
+        assert!(is_mach_o_fat(&blob));
+        assert!(!is_mach_o_fat(&obj));
+        let arm = mach_o_fat_slice(&blob, NativeMachine::Aarch64).expect("arm64 slice");
+        assert_eq!(arm, &obj[..]);
+        parse_native_mach_o(arm).expect("the slice parses as MH_OBJECT");
+        let x86 = mach_o_fat_slice(&blob, NativeMachine::X86_64).expect("x86_64 slice");
+        assert_eq!(x86, b"X86BYTES");
+        // No matching cputype, not a fat container, truncated extent.
+        let ppc = fat(&[(0x12, 0, b"PPC")], false);
+        assert!(mach_o_fat_slice(&ppc, NativeMachine::Aarch64).is_none());
+        assert!(mach_o_fat_slice(&obj, NativeMachine::Aarch64).is_none());
+        let mut short = fat(&[(CPU_TYPE_ARM64, 0, &obj)], false);
+        short.truncate(short.len() - 4);
+        assert!(mach_o_fat_slice(&short, NativeMachine::Aarch64).is_none());
+    }
+
+    /// The 64-bit fat form (`FAT_MAGIC_64`) carries 8-byte offsets.
+    #[test]
+    fn fat64_container_resolves_slices() {
+        let obj = build(CPU_TYPE_ARM64, MH_OBJECT, &[], &[]);
+        let blob = fat(&[(CPU_TYPE_ARM64, 0, &obj)], true);
+        let arm = mach_o_fat_slice(&blob, NativeMachine::Aarch64).expect("arm64 slice");
+        assert_eq!(arm, &obj[..]);
+    }
+
+    /// arm64 and arm64e are not ABI-compatible; a plain arm64 slice
+    /// wins over arm64e whichever order the container lists them, and
+    /// arm64e alone still resolves (its symbol surface is usable even
+    /// where its code is not linked).
+    #[test]
+    fn fat_slice_prefers_arm64_over_arm64e() {
+        let with_both = fat(
+            &[
+                (CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64E, b"ARM64E"),
+                (CPU_TYPE_ARM64, 0, b"ARM64"),
+            ],
+            false,
+        );
+        assert_eq!(
+            mach_o_fat_slice(&with_both, NativeMachine::Aarch64).expect("slice"),
+            b"ARM64",
+        );
+        // Capability bits in the high byte do not hide the subtype.
+        let flagged = fat(
+            &[(CPU_TYPE_ARM64, 0x8000_0000 | CPU_SUBTYPE_ARM64E, b"E")],
+            false,
+        );
+        assert_eq!(
+            mach_o_fat_slice(&flagged, NativeMachine::Aarch64).expect("slice"),
+            b"E",
+        );
     }
 }

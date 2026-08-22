@@ -2549,6 +2549,7 @@ fn run() {
                     std::process::exit(1);
                 }
             };
+            let bytes = fat_slice_for_target(bytes, target);
             if !badc::is_native_object(&bytes) {
                 eprint_diagnostic(format!(
                     "badc: error: `{obj_path}`: {}",
@@ -2584,6 +2585,18 @@ fn run() {
                     std::process::exit(1);
                 }
             };
+            // A universal (fat) archive wraps one archive per
+            // architecture; read the slice matching the target.
+            if badc::is_mach_o_fat(&bytes)
+                && badc::mach_o_fat_slice(&bytes, target_machine(target)).is_none()
+            {
+                eprint_diagnostic(format!(
+                    "badc: error: `{a_path}` is a universal (fat) container with no {} slice",
+                    machine_label(target_machine(target)),
+                ));
+                std::process::exit(1);
+            }
+            let bytes = fat_slice_for_target(bytes, target);
             // A GNU thin archive stores only member paths; resolve them
             // against the archive's own directory.
             let base_dir = std::path::Path::new(a_path).parent();
@@ -2595,15 +2608,18 @@ fn run() {
                 }
             };
             for m in members {
-                if !badc::is_native_object(&m.bytes) {
+                // A member may itself be a fat object (`lipo` output
+                // archived as-is).
+                let member_bytes = fat_slice_for_target(m.bytes, target);
+                if !badc::is_native_object(&member_bytes) {
                     eprint_diagnostic(format!(
                         "badc: error: archive `{a_path}` member `{}`: {}",
                         m.name,
-                        unreadable_object_reason(&m.bytes, target)
+                        unreadable_object_reason(&member_bytes, target)
                     ));
                     std::process::exit(1);
                 }
-                match badc::parse_native_object(&m.bytes) {
+                match badc::parse_native_object(&member_bytes) {
                     Ok(mut o) => {
                         o.source = format!("{a_path}({})", m.name);
                         pending.push(Some(o));
@@ -3259,6 +3275,33 @@ fn default_system_include_paths(target: badc::Target, freestanding: bool) -> Vec
     .collect()
 }
 
+/// The relocation machine `target`'s objects use, for selecting a
+/// universal (fat) Mach-O container's slice.
+fn target_machine(target: Target) -> badc::NativeMachine {
+    match target {
+        badc::Target::LinuxX64 | badc::Target::WindowsX64 => badc::NativeMachine::X86_64,
+        _ => badc::NativeMachine::Aarch64,
+    }
+}
+
+fn machine_label(machine: badc::NativeMachine) -> &'static str {
+    match machine {
+        badc::NativeMachine::X86_64 => "x86_64",
+        badc::NativeMachine::Aarch64 => "arm64",
+    }
+}
+
+/// Substitute a universal (fat) Mach-O container by its slice for
+/// `target`; anything else passes through unchanged. The caller's
+/// format checks then see the slice, so a wrapped archive, object or
+/// dylib is handled as if it had been thin.
+fn fat_slice_for_target(bytes: Vec<u8>, target: Target) -> Vec<u8> {
+    match badc::mach_o_fat_slice(&bytes, target_machine(target)) {
+        Some(s) => s.to_vec(),
+        None => bytes,
+    }
+}
+
 /// Why the linker cannot read `bytes` as an input object, phrased in
 /// the detected format's own terms. badc's relocatable format is ELF
 /// on every target -- the target's container appears only in the final
@@ -3266,6 +3309,14 @@ fn default_system_include_paths(target: badc::Target, freestanding: bool) -> Vec
 fn unreadable_object_reason(bytes: &[u8], target: Target) -> String {
     let reads = "badc links ELF relocatable objects on every target, \
                  and arm64 Mach-O relocatable objects";
+    // The call sites substitute a fat container by its slice first, so
+    // a fat container reaching this point has no slice for the target.
+    if badc::is_mach_o_fat(bytes) {
+        return format!(
+            "is a universal (fat) Mach-O with no {} slice; {reads}",
+            machine_label(target_machine(target)),
+        );
+    }
     match badc::detect_binary_format(bytes) {
         Some(badc::BinaryFormat::Elf) => format!("malformed ELF object; {reads}"),
         Some(badc::BinaryFormat::MachO) => format!("is a Mach-O file but not MH_OBJECT; {reads}"),
@@ -3391,10 +3442,17 @@ fn ingest_linker_input(
         return Err(format!("linker-script nesting too deep at `{path}`"));
     }
     let bytes = std::fs::read(path).map_err(|e| format!("cannot read `{path}`: {e}"))?;
+    // A universal (fat) container is classified by its slice for the
+    // target. Only the path is recorded for an archive, so the archive
+    // reader re-selects the slice when it reads the path.
+    let bytes: &[u8] = match badc::mach_o_fat_slice(&bytes, target_machine(target)) {
+        Some(s) => s,
+        None => &bytes,
+    };
     if bytes.starts_with(b"!<arch>\n") || bytes.starts_with(b"!<thin>\n") {
         archives.push(path.to_string());
     } else if bytes.starts_with(b"\x7fELF") {
-        let mut lib = badc::parse_shared_library(&bytes)
+        let mut lib = badc::parse_shared_library(bytes)
             .map_err(|e| format!("reading `{path}` as a shared library: {e}"))?;
         if lib.soname.is_empty() {
             lib.soname = std::path::Path::new(path)
@@ -3403,14 +3461,14 @@ fn ingest_linker_input(
                 .unwrap_or_else(|| path.to_string());
         }
         shared_libs.push(lib);
-    } else if let Some(f) = badc::detect_binary_format(&bytes) {
+    } else if let Some(f) = badc::detect_binary_format(bytes) {
         return Err(format!(
             "`{path}` is a {} binary; badc links ELF objects and ELF shared objects, \
              and static archives",
             f.name()
         ));
     } else {
-        for entry in parse_ld_script_inputs(&bytes) {
+        for entry in parse_ld_script_inputs(bytes) {
             let resolved = match entry.strip_prefix("-l") {
                 Some(n) => find_library(n, search_paths, target)
                     .ok_or_else(|| format!("linker script `{path}`: cannot find `-l{n}`"))?,

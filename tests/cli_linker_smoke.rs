@@ -2840,6 +2840,91 @@ fn macos_native_link_two_sources_with_libc() {
     assert!(stdout.contains("answer=42"), "unexpected stdout: {stdout}");
 }
 
+/// A universal (fat) static library and a fat `.o` archive member both
+/// resolve to their arm64 slice on the macos target. The fixtures come
+/// from the platform toolchain (`cc -arch` + `lipo` + `ar`), which is
+/// what produces such archives in the wild; hosts without it skip.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn macos_universal_archive_and_fat_member_link() {
+    let dir = tempdir("macos-fat-archive");
+    write_source(&dir, "forty.c", "int forty(void) { return 40; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int forty(void);\nint main(void) { return forty() + 2; }\n",
+    );
+    for (arch, obj) in [("arm64", "forty_arm64.o"), ("x86_64", "forty_x86.o")] {
+        let ok = Command::new("cc")
+            .args(["-c", "-arch", arch, "forty.c", "-o", obj])
+            .current_dir(&dir)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !ok {
+            return; // no multi-arch platform toolchain on this host
+        }
+    }
+    // A fat archive: one thin archive per arch, joined by lipo.
+    for (ar_name, obj) in [
+        ("thin_arm64.a", "forty_arm64.o"),
+        ("thin_x86.a", "forty_x86.o"),
+    ] {
+        run(
+            Command::new("ar")
+                .args(["rc", ar_name, obj])
+                .current_dir(&dir),
+            "ar per-arch archive",
+        );
+    }
+    let ok = Command::new("lipo")
+        .args([
+            "-create",
+            "thin_arm64.a",
+            "thin_x86.a",
+            "-output",
+            "libuniv.a",
+        ])
+        .current_dir(&dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        return; // lipo refuses archives on some toolchain versions
+    }
+    // An archive whose member is itself a fat object.
+    run(
+        Command::new("lipo")
+            .args([
+                "-create",
+                "forty_arm64.o",
+                "forty_x86.o",
+                "-output",
+                "forty_fat.o",
+            ])
+            .current_dir(&dir),
+        "lipo fat member",
+    );
+    run(
+        Command::new("ar")
+            .args(["rc", "libfatmem.a", "forty_fat.o"])
+            .current_dir(&dir),
+        "ar fat-member archive",
+    );
+    for lib in ["univ", "fatmem"] {
+        let exe = dir.join(format!("prog_{lib}"));
+        run(
+            Command::new(badc())
+                .arg("-o")
+                .arg(&exe)
+                .args(["-L.", &format!("-l{lib}")])
+                .arg(dir.join("main.c"))
+                .current_dir(&dir),
+            "link against the fat archive",
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(out.status.code(), Some(42), "-l{lib} exit status");
+    }
+}
+
 // Windows arm64 PE .o link path through the synthesizer. Compiles
 // two sources with `-c --target=windows-aarch64`, links into a PE
 // executable, and execs (natively on Windows arm64, via wine on

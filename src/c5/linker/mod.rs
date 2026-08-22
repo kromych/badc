@@ -89,7 +89,7 @@ pub use link::{
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use mach_o_object::{is_mach_o_object, parse_native_mach_o};
+pub use mach_o_object::{is_mach_o_fat, is_mach_o_object, mach_o_fat_slice, parse_native_mach_o};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use map::{ArchiveInclusion, render_link_map};

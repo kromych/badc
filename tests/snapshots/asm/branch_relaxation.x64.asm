@@ -30,28 +30,28 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movl	$0x3, %esi
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rdx, %rax
-               	cqto
-               	idivq	%rsi
+               	imulq	$0x55555556, %rdx, %rsi # imm = 0x55555556
+               	sarq	$0x20, %rsi
+               	movq	%rsi, %r8
+               	shrq	$0x3f, %r8
+               	addq	%r8, %rsi
+               	leaq	(%rsi,%rsi,2), %rsi
+               	movq	%rsi, %r10
                	movq	%rdx, %rsi
-               	popq	%rdx
-               	popq	%rax
+               	subq	%r10, %rsi
                	testq	%rsi, %rsi
                	jne	<addr>
                	addq	%rcx, %rax
                	jmp	<addr>
-               	movl	$0x3, %esi
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rdx, %rax
-               	cqto
-               	idivq	%rsi
+               	imulq	$0x55555556, %rdx, %rsi # imm = 0x55555556
+               	sarq	$0x20, %rsi
+               	movq	%rsi, %r8
+               	shrq	$0x3f, %r8
+               	addq	%r8, %rsi
+               	leaq	(%rsi,%rsi,2), %rsi
+               	movq	%rsi, %r10
                	movq	%rdx, %rsi
-               	popq	%rdx
-               	popq	%rax
+               	subq	%r10, %rsi
                	cmpq	$0x1, %rsi
                	jne	<addr>
                	decq	%rax
@@ -69,28 +69,28 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	jmp	<addr>
-               	movl	$0x3, %esi
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rdx, %rax
-               	cqto
-               	idivq	%rsi
+               	imulq	$0x55555556, %rdx, %rsi # imm = 0x55555556
+               	sarq	$0x20, %rsi
+               	movq	%rsi, %rdi
+               	shrq	$0x3f, %rdi
+               	addq	%rdi, %rsi
+               	leaq	(%rsi,%rsi,2), %rsi
+               	movq	%rsi, %r10
                	movq	%rdx, %rsi
-               	popq	%rdx
-               	popq	%rax
+               	subq	%r10, %rsi
                	testq	%rsi, %rsi
                	jne	<addr>
                	addq	%rcx, %rax
                	jmp	<addr>
-               	movl	$0x3, %esi
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rdx, %rax
-               	cqto
-               	idivq	%rsi
+               	imulq	$0x55555556, %rdx, %rsi # imm = 0x55555556
+               	sarq	$0x20, %rsi
+               	movq	%rsi, %rdi
+               	shrq	$0x3f, %rdi
+               	addq	%rdi, %rsi
+               	leaq	(%rsi,%rsi,2), %rsi
+               	movq	%rsi, %r10
                	movq	%rdx, %rsi
-               	popq	%rdx
-               	popq	%rax
+               	subq	%r10, %rsi
                	cmpq	$0x1, %rsi
                	jne	<addr>
                	decq	%rax

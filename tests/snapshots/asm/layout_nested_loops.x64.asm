@@ -26,6 +26,10 @@ Disassembly of section .text:
                	int3
 
 <main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
                	xorq	%rdx, %rdx
                	movq	%rdx, %rcx
                	jmp	<addr>
@@ -33,15 +37,13 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	(%rdx,%rax), %rdi
                	movslq	%edi, %rdi
-               	movl	$0x3, %r9d
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rdi, %rax
-               	cqto
-               	idivq	%r9
-               	movq	%rdx, %rdi
-               	popq	%rdx
-               	popq	%rax
+               	imulq	$0x55555556, %rdi, %r8  # imm = 0x55555556
+               	sarq	$0x20, %r8
+               	movq	%r8, %rbx
+               	shrq	$0x3f, %rbx
+               	addq	%rbx, %r8
+               	leaq	(%r8,%r8,2), %r8
+               	subq	%r8, %rdi
                	testq	%rdi, %rdi
                	jne	<addr>
                	jmp	<addr>
@@ -51,12 +53,15 @@ Disassembly of section .text:
                	addq	%rax, %rcx
                	leaq	0x1(%rsi), %rax
                	movslq	%eax, %rsi
-               	cmpq	%r8, %rsi
+               	cmpq	%r9, %rsi
                	jl	<addr>
                	addq	%rdx, %rcx
-               	leaq	0x1(%r8), %rdx
-               	movslq	%edx, %r8
-               	cmpq	$0x6, %r8
+               	leaq	0x1(%r9), %rdx
+               	movslq	%edx, %r9
+               	cmpq	$0x6, %r9
                	jl	<addr>
                	movslq	%ecx, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq

@@ -495,6 +495,18 @@ pub(crate) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9B00_7C00, rd, rn, rm)
 }
 
+/// `SMULH <Xd>, <Xn>, <Xm>` -- high 64 bits of the signed 64x64
+/// product.
+pub(crate) fn enc_smulh(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9B40_7C00, rd, rn, rm)
+}
+
+/// `UMULH <Xd>, <Xn>, <Xm>` -- high 64 bits of the unsigned 64x64
+/// product.
+pub(crate) fn enc_umulh(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x9BC0_7C00, rd, rn, rm)
+}
+
 /// `SDIV <Xd>, <Xn>, <Xm>` -- signed integer division. Pairs with
 /// [`enc_msub`] when computing modulo.
 pub(crate) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
@@ -2917,6 +2929,8 @@ mod tests {
         assert_eq!(enc_eor_reg(r(0), r(1), r(2)), 0xCA02_0020);
         assert_eq!(enc_mul(r(0), r(1), r(2)), 0x9B02_7C20);
         assert_eq!(enc_sdiv(r(0), r(1), r(2)), 0x9AC2_0C20);
+        assert_eq!(enc_smulh(r(0), r(1), r(2)), 0x9B42_7C20);
+        assert_eq!(enc_umulh(r(0), r(1), r(2)), 0x9BC2_7C20);
         assert_eq!(enc_msub(r(0), r(1), r(2), r(3)), 0x9B02_8C20);
         assert_eq!(enc_lslv(r(0), r(1), r(2)), 0x9AC2_2020);
         assert_eq!(enc_asrv(r(0), r(1), r(2)), 0x9AC2_2820);

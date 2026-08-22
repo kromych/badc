@@ -219,17 +219,17 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%rdi, %rbx
                	movslq	%ebx, %rbx
-               	leaq	-0x18(%rbp), %rax
-               	movl	$0x3, %ecx
-               	pushq	%rax
-               	pushq	%rdx
+               	leaq	-0x18(%rbp), %rcx
+               	imulq	$0x55555556, %rbx, %rax # imm = 0x55555556
+               	sarq	$0x20, %rax
+               	movq	%rax, %rdx
+               	shrq	$0x3f, %rdx
+               	addq	%rdx, %rax
+               	leaq	(%rax,%rax,2), %rax
+               	movq	%rax, %r10
                	movq	%rbx, %rax
-               	cqto
-               	idivq	%rcx
-               	movq	%rdx, %rcx
-               	popq	%rdx
-               	popq	%rax
-               	shlq	$0x3, %rcx
+               	subq	%r10, %rax
+               	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	movq	%rbx, (%rax)
                	movq	%rbx, %rdi
@@ -240,17 +240,17 @@ Disassembly of section .text:
                	jle	<addr>
                	leaq	-0x1(%rbx), %rdi
                	callq	<addr>
-               	leaq	-0x18(%rbp), %rax
-               	movl	$0x3, %ecx
-               	pushq	%rax
-               	pushq	%rdx
+               	leaq	-0x18(%rbp), %rcx
+               	imulq	$0x55555556, %rbx, %rax # imm = 0x55555556
+               	sarq	$0x20, %rax
+               	movq	%rax, %rdx
+               	shrq	$0x3f, %rdx
+               	addq	%rdx, %rax
+               	leaq	(%rax,%rax,2), %rax
+               	movq	%rax, %r10
                	movq	%rbx, %rax
-               	cqto
-               	idivq	%rcx
-               	movq	%rdx, %rcx
-               	popq	%rdx
-               	popq	%rax
-               	shlq	$0x3, %rcx
+               	subq	%r10, %rax
+               	shlq	$0x3, %rax
                	addq	%rcx, %rax
                	movq	(%rax), %rax
                	xorq	%rax, %rax

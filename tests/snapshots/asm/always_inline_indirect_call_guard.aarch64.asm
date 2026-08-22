@@ -44,9 +44,15 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sxtw	x0, w0
-               	mov	x2, #0x3                // =3
-               	sdiv	x17, x0, x2
-               	msub	x0, x17, x2, x0
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x2, x0, x17
+               	asr	x2, x2, #32
+               	lsr	x3, x2, #63
+               	add	x2, x2, x3
+               	mov	x17, #0x3               // =3
+               	mul	x2, x2, x17
+               	sub	x0, x0, x2
                	ldr	x0, [x1, x0, lsl #3]
                	br	x0
                	ldur	w0, [x29, #0x20]

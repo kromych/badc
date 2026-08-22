@@ -54,6 +54,8 @@ pub(crate) fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, EvalTrap
         BinOp::Add => lhs.wrapping_add(rhs),
         BinOp::Sub => lhs.wrapping_sub(rhs),
         BinOp::Mul => lhs.wrapping_mul(rhs),
+        BinOp::Mulh => (((lhs as i128) * (rhs as i128)) >> 64) as i64,
+        BinOp::Mulhu => (((lhs as u64 as u128) * (rhs as u64 as u128)) >> 64) as i64,
         BinOp::And => lhs & rhs,
         BinOp::Or => lhs | rhs,
         BinOp::Xor => lhs ^ rhs,

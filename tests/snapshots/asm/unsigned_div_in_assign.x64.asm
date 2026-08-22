@@ -26,25 +26,31 @@ Disassembly of section .text:
                	int3
 
 <outer>:
-               	movq	(%rdi), %rcx
-               	movl	$0x18, %eax
-               	movq	%rax, %r10
-               	pushq	%rdx
-               	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
-               	popq	%rdx
-               	movl	$0x7, %edx
+               	movq	(%rdi), %rax
+               	movq	%rax, %rcx
+               	shrq	$0x3, %rcx
+               	movabsq	$0x5555555555555556, %rdx # imm = 0x5555555555555556
                	movq	%rdx, %r10
                	pushq	%rax
                	pushq	%rdx
                	movq	%rcx, %rax
-               	xorq	%rdx, %rdx
-               	divq	%r10
+               	mulq	%r10
                	movq	%rdx, %rcx
                	popq	%rdx
                	popq	%rax
-               	imulq	$0x64, %rax, %rax
+               	movabsq	$0x2492492492492493, %rdx # imm = 0x2492492492492493
+               	movq	%rdx, %r10
+               	pushq	%rax
+               	mulq	%r10
+               	popq	%rax
+               	movq	%rax, %rsi
+               	subq	%rdx, %rsi
+               	shrq	%rsi
+               	addq	%rsi, %rdx
+               	shrq	$0x2, %rdx
+               	imulq	$0x7, %rdx, %rdx
+               	subq	%rdx, %rax
+               	imulq	$0x64, %rcx, %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq

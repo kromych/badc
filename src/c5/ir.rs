@@ -796,6 +796,13 @@ pub(crate) enum BinOp {
     Add,
     Sub,
     Mul,
+    /// High half of the signed 64x64 -> 128 product (x86_64 one-operand
+    /// `imul`, aarch64 `smulh`). Emitted by the constant-divide
+    /// lowering; no C operator produces it directly.
+    Mulh,
+    /// High half of the unsigned 64x64 -> 128 product (x86_64
+    /// one-operand `mul`, aarch64 `umulh`).
+    Mulhu,
     Div,
     Mod,
     Divu,

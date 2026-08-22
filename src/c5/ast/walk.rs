@@ -4035,12 +4035,15 @@ impl<'a> Walker<'a> {
                     lv = b.binop_imm(BinOp::And, lv, m);
                     rv = b.binop_imm(BinOp::And, rv, m);
                 }
-                // Strength-reduce divide / modulo by a constant power of
-                // two to shifts / masks. This is the only constant-
-                // divisor fast path: the per-arch `BinopI` emit does not
-                // lower Div / Mod, so they are otherwise excluded from
-                // `imm_safe_op` and divide through the register path.
-                if let Some(reduced) = b.divmod_pow2(*op, lv, rv) {
+                // Strength-reduce divide / modulo by a constant divisor
+                // to shifts, masks and reciprocal multiplies. This is
+                // the only constant-divisor fast path: the per-arch
+                // `BinopI` emit does not lower Div / Mod, so they are
+                // otherwise excluded from `imm_safe_op` and divide
+                // through the register path.
+                if let Some(w) = self.divmod_operand_width(*op, *ty, *lhs, *rhs)
+                    && let Some(reduced) = b.divmod_const(*op, lv, rv, w)
+                {
                     return Ok(reduced);
                 }
                 // The parser's `maybe_mask_to_unsigned_width`
@@ -6576,6 +6579,24 @@ impl<'a> Walker<'a> {
         // `-0.0` (sign bit set) as true.
         let v = self.walk_expr_rvalue(b, cond)?;
         Ok(self.cond_truthy(b, v, cond))
+    }
+
+    /// Operand width in bits for the constant-divisor lowering of
+    /// `op`: the widest of the common type and the two operand types,
+    /// so a sequence specialised to 32 bits is only chosen when no
+    /// operand can carry a wider value. `None` for a non-divide op or
+    /// a type wider than a register, both of which keep the divide.
+    fn divmod_operand_width(&self, op: BinOp, ty: i64, lhs: ExprId, rhs: ExprId) -> Option<u32> {
+        if !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu) {
+            return None;
+        }
+        let sz =
+            |id: ExprId| expr_ty(self.ast.expr(id)).map_or(8, |t| type_size_bytes(t, self.target));
+        match type_size_bytes(ty, self.target).max(sz(lhs)).max(sz(rhs)) {
+            0..=4 => Some(32),
+            5..=8 => Some(64),
+            _ => None,
+        }
     }
 
     /// Neg / BitNot / LogNot lower to a binop against an

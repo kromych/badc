@@ -43,6 +43,7 @@ pub(crate) mod aarch64;
 #[allow(dead_code)]
 pub(crate) mod abi_classify;
 mod jit;
+pub(crate) mod magic;
 pub(crate) mod map_syms;
 pub(crate) mod passes;
 pub(crate) mod ssa;

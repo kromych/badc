@@ -57,16 +57,13 @@ Disassembly of section .text:
                	movl	%eax, -0x10(%rbp)
                	leaq	<rip>, %rax
                	movslq	%edi, %rcx
-               	movl	$0x3, %edx
-               	movq	%rdx, %r10
-               	pushq	%rax
-               	pushq	%rdx
-               	movq	%rcx, %rax
-               	cqto
-               	idivq	%r10
-               	movq	%rdx, %rcx
-               	popq	%rdx
-               	popq	%rax
+               	imulq	$0x55555556, %rcx, %rdx # imm = 0x55555556
+               	sarq	$0x20, %rdx
+               	movq	%rdx, %rsi
+               	shrq	$0x3f, %rsi
+               	addq	%rsi, %rdx
+               	leaq	(%rdx,%rdx,2), %rdx
+               	subq	%rdx, %rcx
                	movq	(%rax,%rcx,8), %rax
                	jmpq	*%rax
                	movl	0x20(%rbp), %eax

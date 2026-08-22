@@ -288,6 +288,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("switch_label_after_terminator.c", 0),
     ("unsigned_div_in_assign.c", 0),
     ("strength_reduce_pow2_divmod.c", 0),
+    ("strength_reduce_magic_divmod.c", 0),
     ("return_callee_saved_value.c", 0),
     ("spill_slot_reuse_disjoint_calls.c", 0),
     ("rotate_variable_count.c", 0),
@@ -1143,6 +1144,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("ioctl_fionread_pipe.c", 0),
     ("shm_open_mode_arg.c", 0),
     ("strength_reduce_pow2_divmod.c", 0),
+    ("strength_reduce_magic_divmod.c", 0),
     ("return_callee_saved_value.c", 0),
     ("spill_slot_reuse_disjoint_calls.c", 0),
     ("rotate_variable_count.c", 0),
@@ -1819,6 +1821,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("anon_bitfield_reserves_bits.c", 0),
+    ("strength_reduce_magic_divmod.c", 0),
     ("attribute_mode.c", 0),
     ("flex_array_only_member.c", 0),
     ("post_inline_dead_data_repack.c", 0),
@@ -3579,6 +3582,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("strtof_parses_float.c", 0),
     ("snprintf_truncation_c99.c", 0),
     ("strength_reduce_pow2_divmod.c", 0),
+    ("strength_reduce_magic_divmod.c", 0),
     ("return_callee_saved_value.c", 0),
     ("spill_slot_reuse_disjoint_calls.c", 0),
     ("rotate_variable_count.c", 0),

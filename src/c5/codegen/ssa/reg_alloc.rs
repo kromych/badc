@@ -538,12 +538,16 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             Inst::BinopI { op, .. } => {
                 !matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
             }
+            // Mulh / Mulhu join the divides: on x86_64 all six hijack
+            // rdx:rax and push / pop around the sequence.
             Inst::Binop { op, .. } => !matches!(
                 op,
                 BinOp::Div
                     | BinOp::Divu
                     | BinOp::Mod
                     | BinOp::Modu
+                    | BinOp::Mulh
+                    | BinOp::Mulhu
                     | BinOp::Shl
                     | BinOp::Shr
                     | BinOp::Shru

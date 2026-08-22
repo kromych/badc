@@ -5274,22 +5274,26 @@ fn emit_binop(
     let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
         return fail("Binop: lhs not int reg / spill");
     };
-    // Div / Mod hijack rax + rdx (SDM: IDIV's implicit operand
-    // is rdx:rax and the result is rax (quot), rdx (rem)). They
+    // Div / Mod / Mulh / Mulhu hijack rax + rdx (SDM: IDIV's implicit
+    // operand is rdx:rax and the result is rax (quot), rdx (rem);
+    // one-operand IMUL / MUL multiply rax and write rdx:rax). They
     // need their own marshalling separate from the two-operand
     // path below.
-    if matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu) {
-        // When the divisor aliased rd and was saved into the scratch
-        // above (because the spilled lhs load just overwrote rd), the
-        // divisor now lives in that scratch register, not its original
+    if matches!(
+        op,
+        BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu | BinOp::Mulh | BinOp::Mulhu
+    ) {
+        // When the rhs aliased rd and was saved into the scratch
+        // above (because the spilled lhs load just overwrote rd), it
+        // now lives in that scratch register, not its original
         // place; reading the original place would take the lhs as the
-        // divisor.
-        let divisor_place = if rhs_preserved_in_scratch {
+        // second operand.
+        let rhs_place = if rhs_preserved_in_scratch {
             Place::IntReg(rhs_scratch.0)
         } else {
             rhs_place
         };
-        return emit_binop_divmod(code, op, dst, rd, rn, divisor_place, frame);
+        return emit_binop_rdx_rax(code, op, dst, rd, rn, rhs_place, frame);
     }
     // x86_64's two-operand op `OP rd, rm` mutates rd. The standard
     // sequence below stages LHS into rd then emits `OP rd, rm`.
@@ -5432,20 +5436,22 @@ fn emit_binop(
     true
 }
 
-/// Lower `BinOp::{Div,Mod,Divu,Modu}` on x86_64. IDIV / DIV
-/// require the dividend in rdx:rax (low half in rax) and write
-/// the quotient back to rax and remainder to rdx, so the
-/// surrounding allocator-chosen value in rax (if any) must be
-/// preserved across the divide. The 8-byte preserve uses
-/// `push %rax` / `pop %rax`; the temporary 8-byte misalignment
-/// is fine -- IDIV doesn't read/write the stack, and SysV /
-/// Win64 only require 16-byte alignment at `call` sites.
+/// Lower `BinOp::{Div,Mod,Divu,Modu,Mulh,Mulhu}` on x86_64. All six
+/// use the implicit rdx:rax pair: IDIV / DIV take the dividend there
+/// (low half in rax) and write the quotient to rax and the remainder
+/// to rdx; one-operand IMUL / MUL multiply rax by the operand and
+/// write the 128-bit product to rdx:rax. The surrounding
+/// allocator-chosen values in rax / rdx must be preserved across the
+/// sequence. The 8-byte preserve uses `push %rax` / `pop %rax`; the
+/// temporary 8-byte misalignment is fine -- none of these read or
+/// write the stack, and SysV / Win64 only require 16-byte alignment
+/// at `call` sites.
 ///
-/// `rn` is the already-materialised dividend; `rhs_place` is the
-/// divisor's place so we can route it directly into r10 (which
-/// IDIV's reg/mem operand can name, and which is never in any
+/// `rn` is the already-materialised lhs; `rhs_place` is the second
+/// operand's place so we can route it directly into r10 (which the
+/// one-operand reg/mem field can name, and which is never in any
 /// allocator pool).
-fn emit_binop_divmod(
+fn emit_binop_rdx_rax(
     code: &mut Vec<u8>,
     op: BinOp,
     dst: Place,
@@ -5454,57 +5460,58 @@ fn emit_binop_divmod(
     rhs_place: Place,
     frame: Frame,
 ) -> bool {
-    let want_remainder = matches!(op, BinOp::Mod | BinOp::Modu);
-    let is_unsigned = matches!(op, BinOp::Divu | BinOp::Modu);
+    let is_mulh = matches!(op, BinOp::Mulh | BinOp::Mulhu);
+    // The high half of the product lands in rdx, as the remainder does.
+    let want_rdx = is_mulh || matches!(op, BinOp::Mod | BinOp::Modu);
+    let is_unsigned = matches!(op, BinOp::Divu | BinOp::Modu | BinOp::Mulhu);
 
     // Preserve rax / rdx: the allocator can park a live value in
-    // either register and the divmod must not destroy it. rax
-    // receives the dividend low half and the quotient; rdx
+    // either register and the sequence must not destroy it. rax
+    // receives the lhs and the quotient / low product half; rdx
     // receives the dividend high half (cqo / xor edx,edx) and the
-    // remainder. Skip the save when rd will overwrite the register
-    // anyway, since the value living there is dead the moment rd
-    // commits its result.
+    // remainder / high product half. Skip the save when rd will
+    // overwrite the register anyway, since the value living there is
+    // dead the moment rd commits its result.
     let preserve_rax = rd.0 != Reg::RAX.0;
     let preserve_rdx = rd.0 != Reg::RDX.0;
     let pushed_bytes = (preserve_rax as i32 + preserve_rdx as i32) * 8;
 
-    // Resolve the divisor operand. IDIV / DIV accept r/m64, so a
-    // spilled divisor is named directly through its stack slot (its
-    // rsp offset shifted by the rax/rdx preservation pushes below) and
-    // a register divisor outside the implicit rdx:rax pair is used in
-    // place -- neither needs a scratch register, which the surrounding
-    // high-pressure allocation may not have free. A divisor that
-    // aliases rax or rdx is copied into the dedicated scratch before
-    // the dividend setup overwrites those registers; the scratch is
-    // free unless it already holds the dividend (a spilled lhs).
-    enum DivOperand {
+    // Resolve the second operand. All four one-operand forms accept
+    // r/m64, so a spilled operand is named directly through its stack
+    // slot (its rsp offset shifted by the rax/rdx preservation pushes
+    // below) and a register operand outside the implicit rdx:rax pair
+    // is used in place -- neither needs a scratch register, which the
+    // surrounding high-pressure allocation may not have free. An
+    // operand that aliases rax or rdx is copied into the dedicated
+    // scratch before the rax setup overwrites those registers; the
+    // scratch is free unless it already holds the lhs (a spilled lhs).
+    enum RmOperand {
         Reg(Reg),
         Mem(Reg, i32),
     }
-    let div_operand = match rhs_place {
-        Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => DivOperand::Reg(Reg(r)),
+    let rm_operand = match rhs_place {
+        Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => RmOperand::Reg(Reg(r)),
         Place::Spill(slot) => {
             let (sb, off) = spill_slot_addr_shifted(frame, slot, pushed_bytes as u32);
-            DivOperand::Mem(sb, off)
+            RmOperand::Mem(sb, off)
         }
         Place::IntReg(r) => {
-            // A divisor in rax / rdx must be copied out before the
-            // dividend setup overwrites those registers. The copy
-            // target must not collide with the staged dividend: a
-            // spilled lhs is materialised into rd, which for a
-            // spilled dst is SCRATCH_R10, so SCRATCH_R10 is not
-            // always free here. SCRATCH_R11 is reserved outside both
-            // allocator pools and never holds the dividend, so it is
-            // always available for the divisor copy.
-            let div_scratch = if rn.0 == SCRATCH_R10.0 {
+            // An operand in rax / rdx must be copied out before the
+            // rax setup overwrites those registers. The copy target
+            // must not collide with the staged lhs: a spilled lhs is
+            // materialised into rd, which for a spilled dst is
+            // SCRATCH_R10, so SCRATCH_R10 is not always free here.
+            // SCRATCH_R11 is reserved outside both allocator pools
+            // and never holds the lhs, so it is always available.
+            let rhs_scratch = if rn.0 == SCRATCH_R10.0 {
                 SCRATCH_R11
             } else {
                 SCRATCH_R10
             };
-            emit_mov_rr(code, div_scratch, Reg(r));
-            DivOperand::Reg(div_scratch)
+            emit_mov_rr(code, rhs_scratch, Reg(r));
+            RmOperand::Reg(rhs_scratch)
         }
-        _ => return fail("Binop divmod: rhs not int reg / spill"),
+        _ => return fail("Binop rdx:rax: rhs not int reg / spill"),
     };
 
     if preserve_rax {
@@ -5513,27 +5520,32 @@ fn emit_binop_divmod(
     if preserve_rdx {
         emit_push_r(code, Reg::RDX);
     }
-    // rax := dividend low half.
+    // rax := lhs (dividend low half, or multiplicand).
     if rn.0 != Reg::RAX.0 {
         emit_mov_rr(code, Reg::RAX, rn);
     }
-    // rdx := dividend high half. Signed uses CQO to sign-extend
-    // rax; unsigned zero-extends with `xor edx, edx`.
-    if is_unsigned {
-        emit_rr(code, Mnem::Xor, 8, Reg::RDX, Reg::RDX);
-        match div_operand {
-            DivOperand::Reg(r) => super::encode::emit_unary_r(code, Mnem::Div, 8, r),
-            DivOperand::Mem(sb, off) => super::encode::emit_unary_m(code, Mnem::Div, 8, sb, off),
-        }
-    } else {
-        super::encode::emit_cqo(code);
-        match div_operand {
-            DivOperand::Reg(r) => super::encode::emit_unary_r(code, Mnem::Idiv, 8, r),
-            DivOperand::Mem(sb, off) => super::encode::emit_unary_m(code, Mnem::Idiv, 8, sb, off),
+    // A divide needs rdx seeded with the dividend's high half: signed
+    // uses CQO to sign-extend rax, unsigned zero-extends with
+    // `xor edx, edx`. A multiply reads only rax and overwrites rdx.
+    if !is_mulh {
+        if is_unsigned {
+            emit_rr(code, Mnem::Xor, 8, Reg::RDX, Reg::RDX);
+        } else {
+            super::encode::emit_cqo(code);
         }
     }
+    let mnem = match (is_mulh, is_unsigned) {
+        (true, true) => Mnem::Mul,
+        (true, false) => Mnem::Imul,
+        (false, true) => Mnem::Div,
+        (false, false) => Mnem::Idiv,
+    };
+    match rm_operand {
+        RmOperand::Reg(r) => super::encode::emit_unary_r(code, mnem, 8, r),
+        RmOperand::Mem(sb, off) => super::encode::emit_unary_m(code, mnem, 8, sb, off),
+    }
     // Capture result into rd before restoring rdx / rax.
-    let result_src = if want_remainder { Reg::RDX } else { Reg::RAX };
+    let result_src = if want_rdx { Reg::RDX } else { Reg::RAX };
     if rd.0 != result_src.0 {
         emit_mov_rr(code, rd, result_src);
     }

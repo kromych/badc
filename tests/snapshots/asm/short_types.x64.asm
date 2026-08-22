@@ -75,13 +75,12 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x7, %eax
-               	movq	%rax, %r10
-               	pushq	%rdx
-               	movq	%rcx, %rax
-               	cqto
-               	idivq	%r10
-               	popq	%rdx
+               	movl	$0x92492493, %eax       # imm = 0x92492493
+               	imulq	%rcx, %rax
+               	sarq	$0x22, %rax
+               	movq	%rax, %rdx
+               	shrq	$0x3f, %rdx
+               	addq	%rdx, %rax
                	movswq	%ax, %rax
                	cmpq	$0xb0, %rax
                	je	<addr>
@@ -91,14 +90,16 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x7, %eax
+               	movl	$0x92492493, %eax       # imm = 0x92492493
+               	imulq	%rcx, %rax
+               	sarq	$0x22, %rax
+               	movq	%rax, %rdx
+               	shrq	$0x3f, %rdx
+               	addq	%rdx, %rax
+               	imulq	$0x7, %rax, %rax
                	movq	%rax, %r10
-               	pushq	%rdx
                	movq	%rcx, %rax
-               	cqto
-               	idivq	%r10
-               	movq	%rdx, %rax
-               	popq	%rdx
+               	subq	%r10, %rax
                	movswq	%ax, %rax
                	cmpq	$0x2, %rax
                	je	<addr>

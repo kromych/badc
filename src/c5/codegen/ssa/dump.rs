@@ -409,6 +409,8 @@ fn fmt_binop(op: BinOp) -> &'static str {
         BinOp::Add => "add",
         BinOp::Sub => "sub",
         BinOp::Mul => "mul",
+        BinOp::Mulh => "mulh",
+        BinOp::Mulhu => "mulhu",
         BinOp::Div => "div",
         BinOp::Mod => "mod",
         BinOp::Divu => "divu",

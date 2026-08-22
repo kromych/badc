@@ -19,15 +19,27 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	b	<addr>
-               	mov	x3, #0x3                // =3
-               	sdiv	x17, x2, x3
-               	msub	x3, x17, x3, x2
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x3, x2, x17
+               	asr	x3, x3, #32
+               	lsr	x5, x3, #63
+               	add	x3, x3, x5
+               	mov	x17, #0x3               // =3
+               	mul	x3, x3, x17
+               	sub	x3, x2, x3
                	cbnz	x3, <addr>
                	add	x0, x0, x1
                	b	<addr>
-               	mov	x3, #0x3                // =3
-               	sdiv	x17, x2, x3
-               	msub	x3, x17, x3, x2
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x3, x2, x17
+               	asr	x3, x3, #32
+               	lsr	x5, x3, #63
+               	add	x3, x3, x5
+               	mov	x17, #0x3               // =3
+               	mul	x3, x3, x17
+               	sub	x3, x2, x3
                	cmp	x3, #0x1
                	b.ne	<addr>
                	sub	x0, x0, #0x1
@@ -45,15 +57,27 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	b	<addr>
-               	mov	x3, #0x3                // =3
-               	sdiv	x17, x2, x3
-               	msub	x3, x17, x3, x2
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x3, x2, x17
+               	asr	x3, x3, #32
+               	lsr	x4, x3, #63
+               	add	x3, x3, x4
+               	mov	x17, #0x3               // =3
+               	mul	x3, x3, x17
+               	sub	x3, x2, x3
                	cbnz	x3, <addr>
                	add	x0, x0, x1
                	b	<addr>
-               	mov	x3, #0x3                // =3
-               	sdiv	x17, x2, x3
-               	msub	x3, x17, x3, x2
+               	mov	x17, #0x5556            // =21846
+               	movk	x17, #0x5555, lsl #16
+               	mul	x3, x2, x17
+               	asr	x3, x3, #32
+               	lsr	x4, x3, #63
+               	add	x3, x3, x4
+               	mov	x17, #0x3               // =3
+               	mul	x3, x3, x17
+               	sub	x3, x2, x3
                	cmp	x3, #0x1
                	b.ne	<addr>
                	sub	x0, x0, #0x1

@@ -3573,6 +3573,61 @@ fn glibc_nonshared_atexit_runs() {
     );
 }
 
+// `--dump-ssa` reports the compilation of the inputs and the runtime.
+// The on-demand pool is compiled only when symbol selection stalls,
+// which turns on the libraries the host has installed and on how much
+// of the target's C library the link reads, so its members must not
+// reach the dump: the same source would otherwise dump a different set
+// of functions on each host. This source references the entry points
+// the pool defines, so the pool is offered on any host and target.
+#[test]
+fn dump_ssa_names_the_same_functions_on_every_target() {
+    let dir = tempdir("dump-ssa-pool");
+    let src = write_source(&dir, "m.c", GLIBC_NONSHARED_SRC);
+    let mut first: Option<Vec<String>> = None;
+    for (tag, target) in [
+        ("x64", "--target=linux-x64"),
+        ("arm", "--target=linux-aarch64"),
+    ] {
+        let out = run(
+            Command::new(badc())
+                .arg(target)
+                .arg("--dump-ssa")
+                .arg("-o")
+                .arg(dir.join(format!("m-{tag}")))
+                .arg(&src)
+                .current_dir(&dir),
+            "dump SSA for a hosted link",
+        );
+        let names: Vec<String> = String::from_utf8_lossy(&out.stderr)
+            .lines()
+            .filter_map(|l| l.strip_prefix("; name=").map(str::to_string))
+            .collect();
+        assert!(
+            names.iter().any(|n| n == "main"),
+            "{tag}: the input's own functions are dumped: {names:?}"
+        );
+        for pool in [
+            "atexit",
+            "at_quick_exit",
+            "pthread_atfork",
+            "__stack_chk_fail_local",
+        ] {
+            assert!(
+                !names.iter().any(|n| n == pool),
+                "{tag}: on-demand pool member `{pool}` reached the dump: {names:?}"
+            );
+        }
+        match &first {
+            None => first = Some(names),
+            Some(prev) => assert_eq!(
+                prev, &names,
+                "{tag}: the dump names the same functions for every target"
+            ),
+        }
+    }
+}
+
 // A load through an extern data symbol must not fold against this unit's
 // own const image. The address instruction badc emits for an extern
 // object is an `ImmData` whose payload is a link-time placeholder, so a

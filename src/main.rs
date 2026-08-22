@@ -2380,7 +2380,8 @@ fn run() {
         };
         // In-memory variant for the embedded runtime sources
         // below: same compile + emit chain, no filesystem read.
-        let compile_in_memory = |label: &str, src: String, extra: &[(&str, &str)]| -> Vec<u8> {
+        // `dump` clears `--dump-ssa` for a speculative compile.
+        let compile_in_memory = |label: &str, src: String, extra: &[(&str, &str)], dump: bool| {
             // The embedded runtime gates its sections on macros the
             // driver sets per image: `__BADC_C5_CRT__` (the image may
             // import the user-mode C library), `__BADC_C5_START__`
@@ -2416,7 +2417,9 @@ fn run() {
                     std::process::exit(1);
                 }
             };
-            match badc::emit_native_with_options(&program, target, reloc_opts) {
+            let mut opts = reloc_opts;
+            opts.dump_ssa &= dump;
+            match badc::emit_native_with_options(&program, target, opts) {
                 Ok(b) => b,
                 Err(e) => {
                     eprint_diagnostic(e);
@@ -2560,7 +2563,7 @@ fn run() {
                 },
                 _ => (format!("<runtime/{name}>"), body.to_string()),
             };
-            let bytes = compile_in_memory(&label, src, &runtime_defines);
+            let bytes = compile_in_memory(&label, src, &runtime_defines, true);
             match badc::parse_native_elf(&bytes) {
                 Ok(mut o) => {
                     o.source = label.clone();
@@ -2672,7 +2675,9 @@ fn run() {
         // compiled only when the selection over the real archives stalls
         // with symbols still undefined (or when the rebinding scan below
         // needs the pool's definitions), so a link that resolves
-        // everything compiles none of them.
+        // everything compiles none of them. Whether it stalls turns on
+        // the link's inputs, the host's C library among them, so this
+        // compile stays out of the `--dump-ssa` output.
         let mut on_demand_loaded = false;
         let load_on_demand = |pending: &mut Vec<Option<badc::NativeObject>>,
                               stats: &mut LinkStats| {
@@ -2682,7 +2687,7 @@ fn run() {
                 .chain(badc::embedded_libc().iter().map(|e| ("libc", e)));
             for (dir, (name, body)) in on_demand {
                 let label = format!("<{dir}/{name}>");
-                let bytes = compile_in_memory(&label, body.to_string(), &[]);
+                let bytes = compile_in_memory(&label, body.to_string(), &[], false);
                 match badc::parse_native_elf(&bytes) {
                     Ok(mut o) => {
                         o.source = label;

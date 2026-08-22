@@ -253,11 +253,14 @@ def build_reference_hostcc(target: str, sources: list[str], workdir: Path) -> Pa
     host cc (no make), for the byte-parity check."""
     workdir.mkdir(parents=True, exist_ok=True)
     cc = host_cc()
+    # Pin the dialect: yasm 1.3.0 declares `enum boolean { false, true }`
+    # (libyasm/bitvect.h), which C23 rejects as keywords, and gcc >= 15
+    # defaults to C23. gnu17 is the last default the source builds under.
     inc = [f"-I{SRC / d}" for d in INC]
     objs = []
     for rel in sources:
         out = workdir / (rel.replace("/", "_")[:-2] + ".o")
-        r = subprocess.run([cc, "-c", "-w", *inc, *DEFS, str(SRC / rel),
+        r = subprocess.run([cc, "-c", "-w", "-std=gnu17", *inc, *DEFS, str(SRC / rel),
                             "-o", str(out)], capture_output=True, text=True)
         if r.returncode != 0 or not out.is_file():
             fail(f"host cc failed to compile {rel} (reference):\n{r.stderr.strip()[-600:]}")

@@ -61,10 +61,11 @@ fn ext32(func: &FunctionSsa, v: ValueId) -> Ext32 {
             sign: *k == *k as i32 as i64,
             zero: (0..=u32::MAX as i64).contains(k),
         },
-        Inst::Extend { kind, .. } => match kind {
-            LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => SIGN,
-            _ => NONE,
-        },
+        Inst::Extend {
+            kind: LoadKind::I8 | LoadKind::I16 | LoadKind::I32,
+            ..
+        } => SIGN,
+        Inst::Extend { .. } => NONE,
         Inst::Load { kind, .. }
         | Inst::LoadLocal { kind, .. }
         | Inst::LoadIndexed { kind, .. }
@@ -73,10 +74,11 @@ fn ext32(func: &FunctionSsa, v: ValueId) -> Ext32 {
         // skipping the I32 case when nothing reads bits 32..63; the low
         // word holds the argument either way (System V AMD64 3.2.3 /
         // AAPCS64 6.4.1).
-        Inst::ParamRef { kind, .. } => match kind {
-            LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => SIGN,
-            _ => NONE,
-        },
+        Inst::ParamRef {
+            kind: LoadKind::I8 | LoadKind::I16 | LoadKind::I32,
+            ..
+        } => SIGN,
+        Inst::ParamRef { .. } => NONE,
         // The reversed bytes are zero-extended to 64 bits.
         Inst::Bswap { width, .. } => match width {
             2 => BOTH,
@@ -142,8 +144,8 @@ fn imm_ext32(imm: i64) -> Ext32 {
 /// adds, removes or rewrites instructions.
 pub(crate) fn mark_compares(func: &mut FunctionSsa) {
     let mut out: Vec<bool> = alloc::vec![false; func.insts.len()];
-    for i in 0..func.insts.len() {
-        out[i] = match &func.insts[i] {
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = match &func.insts[i] {
             Inst::Binop { op, lhs, rhs } => narrow_ok(*op, ext32(func, *lhs), ext32(func, *rhs)),
             Inst::BinopI { op, lhs, rhs_imm } => {
                 narrow_ok(*op, ext32(func, *lhs), imm_ext32(*rhs_imm))

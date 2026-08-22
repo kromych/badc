@@ -149,6 +149,7 @@ const IMAGE_SYMBOL_SIZE: u32 = 18;
 
 const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
 const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
+const IMAGE_SCN_CNT_UNINITIALIZED_DATA: u32 = 0x0000_0080;
 /// `IMAGE_SCN_MEM_DISCARDABLE` -- the loader may unmap the
 /// section after consuming its contents. Used for `.reloc`,
 /// which the loader walks once at load time and never reads
@@ -190,7 +191,8 @@ const NUM_DATA_DIRS: u32 = 16;
 /// sliding: the three `IMAGE_TLS_DIRECTORY64` pointer fields
 /// (when the program declares a `_Thread_local` global) and any
 /// absolute pointer baked by an address-of-static data or code
-/// relocation.
+/// relocation. Each merged C-identifier-named section adds one more,
+/// between `.data` and `.reloc`.
 ///
 /// `.pdata` is the Exception Directory, mandatory under the
 /// 64-bit Windows ABI: the loader looks up `RUNTIME_FUNCTION`
@@ -213,6 +215,8 @@ struct SectionPlan {
     reloc: bool,
     edata: bool,
     dwarf: usize,
+    /// Named sections carrying their own header.
+    named: usize,
 }
 
 impl SectionPlan {
@@ -224,7 +228,33 @@ impl SectionPlan {
             + self.reloc as usize
             + self.edata as usize
             + self.dwarf
+            + self.named
     }
+}
+
+/// Family whose region held a named section's bytes, hence the
+/// characteristics it takes and the offset space its extent is in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NamedFamily {
+    RoData,
+    RelRo,
+    Data,
+    Bss,
+}
+
+/// A named section given a header of its own: it leaves its family's
+/// region and takes a SectionAlignment-aligned slot past `.data`.
+struct NamedOut<'a> {
+    name: &'a str,
+    family: NamedFamily,
+    /// First byte's offset in the merged data stream, or in the
+    /// zero-fill region when the family is `Bss`.
+    start: u32,
+    size: u32,
+    rva: u32,
+    /// Zero for a zero-fill section, which has no file bytes.
+    file_off: u32,
+    raw_size: u32,
 }
 
 const DOS_HEADER_AND_STUB: usize = 128; // 64 byte DOS header + 64 byte stub
@@ -384,10 +414,41 @@ pub(super) fn write(
         .data_relro_len
         .clamp(build.data_ro_len, build.data.len()) as u32;
     let relro_size: u32 = relro_total - ro_len;
+    let file_data_len: u32 = build.data.len() as u32;
+    // A PE section RVA is SectionAlignment-aligned, so a named section
+    // cannot sit inside its family's range: each takes a slot past
+    // `.data` and the family sections close the gap.
+    let named: Vec<&crate::c5::codegen::NamedSection> = build.named_sections.iter().collect();
+    let named_family = |n: &crate::c5::codegen::NamedSection| {
+        if n.bss {
+            NamedFamily::Bss
+        } else if n.offset < ro_len as u64 {
+            NamedFamily::RoData
+        } else if n.offset < relro_total as u64 {
+            NamedFamily::RelRo
+        } else {
+            NamedFamily::Data
+        }
+    };
+    let head_of = |f: NamedFamily, full: u32| -> u32 {
+        named
+            .iter()
+            .filter(|n| named_family(n) == f)
+            .map(|n| n.offset as u32)
+            .min()
+            .unwrap_or(full)
+    };
+    let ro_head: u32 = head_of(NamedFamily::RoData, ro_len);
+    let relro_head_len: u32 = head_of(NamedFamily::RelRo, relro_total) - ro_len;
+    let data_head_len: u32 = head_of(NamedFamily::Data, file_data_len) - relro_total;
+    let bss_head: u32 = head_of(NamedFamily::Bss, build.bss_size as u32);
+    // What `.rdata` keeps of the two read-only families once their
+    // named runs move out.
+    let rdata_prefix_len: u32 = ro_head + relro_head_len;
     let jt_base_in_rdata: u32 = if build.rodata.bytes.is_empty() {
-        relro_total
+        rdata_prefix_len
     } else {
-        round_up(relro_total, 8)
+        round_up(rdata_prefix_len, 8)
     };
     let provenance = super::provenance_comment();
     let marker_base_in_rdata: u32 = round_up(jt_base_in_rdata + build.rodata.bytes.len() as u32, 8);
@@ -403,8 +464,7 @@ pub(super) fn write(
     // VAs the writer emits (inside `IMAGE_TLS_DIRECTORY64`), and
     // the ASLR-aware loader uses `.reloc` to fix them up after
     // sliding the image.
-    let data_section_present =
-        build.data.len() > relro_total as usize || !build.tls_data.is_empty() || build.bss_size > 0;
+    let data_section_present = data_head_len > 0 || !build.tls_data.is_empty() || bss_head > 0;
     // `.reloc` is needed when the image carries any absolute
     // pointer the loader has to fix up after sliding -- today
     // that's the three TLS-directory VAs (when TLS is
@@ -514,6 +574,7 @@ pub(super) fn write(
         reloc: reloc_section_present,
         edata: edata_section_present,
         dwarf: dwarf_section_count,
+        named: named.len(),
     };
     let headers_size = headers_raw_size(&plan) as u32;
 
@@ -584,30 +645,95 @@ pub(super) fn write(
         0
     };
     // `.data` carries the writable remainder past the `.rdata` prefix.
-    let writable_data_size: u32 = build.data.len() as u32 - relro_total;
-    let tls_layout = compute_tls_layout(build, writable_data_size);
+    let tls_layout = compute_tls_layout(build, data_head_len);
     // File-backed content of `.data` (writable program data + the TLS
     // blob); `data_vsize` adds the no-file zero-init `.bss` tail past it.
-    let data_size: u32 = writable_data_size + tls_layout.tls_blob_size;
-    let data_vsize: u32 = data_size + build.bss_size as u32;
+    let data_size: u32 = data_head_len + tls_layout.tls_blob_size;
+    let data_vsize: u32 = data_size + bss_head;
     let data_rva: u32 = if rdata_section_present {
         round_up(rdata_rva + rdata_size, SECTION_ALIGNMENT)
     } else {
         rdata_rva
     };
-    // A data offset below `relro_total` names a byte of `.rdata` (the
-    // read-only prefix or the relro region); one past the program data
-    // (`build.data`) names a byte in the zero-fill `.bss` region, which
-    // sits at the `.data` section tail past both the writable data and
-    // the TLS blob.
-    let data_off_to_rva = |off: u32| -> u32 {
-        let file_len = build.data.len() as u32;
-        if off < relro_total {
-            rdata_rva + off
-        } else if off < file_len {
-            data_rva + (off - relro_total)
+    let data_file_off: u32 = rdata_file_off + rdata_raw_size;
+    let data_raw_size: u32 = if data_section_present {
+        round_up(data_size, FILE_ALIGNMENT)
+    } else {
+        0
+    };
+    // Each named section follows `.data` on its own RVA page; a
+    // zero-fill one carries no file bytes.
+    let named_out: Vec<NamedOut> = {
+        let mut rva = if data_section_present {
+            round_up(data_rva + data_vsize, SECTION_ALIGNMENT)
         } else {
-            data_rva + data_size + (off - file_len)
+            data_rva
+        };
+        let mut file_off = data_file_off + data_raw_size;
+        named
+            .iter()
+            .map(|n| {
+                let family = named_family(n);
+                let size = n.size as u32;
+                let raw_size = if family == NamedFamily::Bss {
+                    0
+                } else {
+                    round_up(size, FILE_ALIGNMENT)
+                };
+                let out = NamedOut {
+                    name: &n.name,
+                    family,
+                    start: n.offset as u32,
+                    size,
+                    rva,
+                    file_off: if raw_size > 0 { file_off } else { 0 },
+                    raw_size,
+                };
+                rva = round_up(rva + size.max(1), SECTION_ALIGNMENT);
+                file_off += raw_size;
+                out
+            })
+            .collect()
+    };
+    // A data offset inside a named section resolves against it; the
+    // rest name a byte of `.rdata` (the read-only prefix, then the
+    // relro region) or of `.data` (the writable head, then the TLS
+    // blob, then the zero-fill `.bss` tail).
+    // A group's extent is closed at both ends: the merge leaves slack
+    // behind each, so an offset at one group's end names that group
+    // rather than the next one's first byte. Padding a moved run left
+    // behind is addressed by nothing; it resolves to the family's end.
+    let named_base = |n: &NamedOut| -> u32 {
+        n.start
+            + if n.family == NamedFamily::Bss {
+                file_data_len
+            } else {
+                0
+            }
+    };
+    let data_off_to_rva = |off: u32| -> u32 {
+        if let Some(n) = named_out
+            .iter()
+            .find(|n| off >= named_base(n) && off <= named_base(n) + n.size)
+        {
+            return n.rva + (off - named_base(n));
+        }
+        if off < ro_head {
+            rdata_rva + off
+        } else if off < ro_len {
+            rdata_rva + ro_head
+        } else if off < ro_len + relro_head_len {
+            rdata_rva + ro_head + (off - ro_len)
+        } else if off < relro_total {
+            rdata_rva + rdata_prefix_len
+        } else if off < relro_total + data_head_len {
+            data_rva + (off - relro_total)
+        } else if off < file_data_len {
+            data_rva + data_head_len
+        } else if off < file_data_len + bss_head {
+            data_rva + data_size + (off - file_data_len)
+        } else {
+            data_rva + data_size + bss_head
         }
     };
     // Data-targeting DWARF placeholders resolve here rather than with
@@ -619,11 +745,12 @@ pub(super) fn write(
             super::apply_merged_dwarf_data_reloc(&mut dwarf_blobs[0].1, r, &to_vmaddr)?;
         }
     }
-    let data_file_off: u32 = rdata_file_off + rdata_raw_size;
-    let data_raw_size: u32 = if data_section_present {
-        round_up(data_size, FILE_ALIGNMENT)
-    } else {
-        0
+    // Where the sections past the data families start.
+    let named_file_end: u32 =
+        data_file_off + data_raw_size + named_out.iter().map(|n| n.raw_size).sum::<u32>();
+    let named_rva_end: u32 = match named_out.last() {
+        Some(n) => round_up(n.rva + n.size.max(1), SECTION_ALIGNMENT),
+        None => data_rva + data_vsize,
     };
 
     // Absolute fields inside the code section, resolved once so the
@@ -665,12 +792,12 @@ pub(super) fn write(
     // here so we can size the file image; the actual on-disk
     // emission happens after `.data`.
     let reloc_rva: u32 = if reloc_section_present {
-        round_up(data_rva + data_vsize, SECTION_ALIGNMENT)
+        round_up(named_rva_end, SECTION_ALIGNMENT)
     } else {
         0
     };
     let reloc_file_off: u32 = if reloc_section_present {
-        data_file_off + data_raw_size
+        named_file_end
     } else {
         0
     };
@@ -707,8 +834,8 @@ pub(super) fn write(
         round_up(
             if reloc_section_present {
                 reloc_rva + reloc_size
-            } else if data_section_present {
-                data_rva + data_vsize
+            } else if data_section_present || !named_out.is_empty() {
+                named_rva_end
             } else if rdata_section_present {
                 rdata_rva + rdata_size
             } else {
@@ -722,8 +849,8 @@ pub(super) fn write(
     let edata_file_off: u32 = if edata_section_present {
         if reloc_section_present {
             reloc_file_off + reloc_raw_size
-        } else if data_section_present {
-            data_file_off + data_raw_size
+        } else if data_section_present || !named_out.is_empty() {
+            named_file_end
         } else {
             rdata_file_off + rdata_raw_size
         }
@@ -794,8 +921,8 @@ pub(super) fn write(
         edata_file_off + edata_raw_size
     } else if reloc_section_present {
         reloc_file_off + reloc_raw_size
-    } else if data_section_present {
-        data_file_off + data_raw_size
+    } else if data_section_present || !named_out.is_empty() {
+        named_file_end
     } else {
         rdata_file_off + rdata_raw_size
     };
@@ -803,8 +930,8 @@ pub(super) fn write(
         edata_rva + edata_size
     } else if reloc_section_present {
         reloc_rva + reloc_size
-    } else if data_section_present {
-        data_rva + data_vsize
+    } else if data_section_present || !named_out.is_empty() {
+        named_rva_end
     } else if rdata_section_present {
         rdata_rva + rdata_size
     } else {
@@ -984,8 +1111,8 @@ pub(super) fn write(
         round_up(edata_rva + edata_size, SECTION_ALIGNMENT)
     } else if reloc_section_present {
         round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT)
-    } else if data_section_present {
-        round_up(data_rva + data_vsize, SECTION_ALIGNMENT)
+    } else if data_section_present || !named_out.is_empty() {
+        round_up(named_rva_end, SECTION_ALIGNMENT)
     } else if rdata_section_present {
         round_up(rdata_rva + rdata_size, SECTION_ALIGNMENT)
     } else {
@@ -1325,6 +1452,30 @@ pub(super) fn write(
                 | IMAGE_SCN_MEM_WRITE,
         });
     }
+    // Read-only families keep `.rdata`'s protection, the writable ones
+    // `.data`'s. A base relocation into a read-only section is what
+    // link.exe emits for the same content: the loader applies fixups
+    // before it drops write permission.
+    for n in &named_out {
+        let mut name = [0u8; 8];
+        let bytes = n.name.as_bytes();
+        name[..bytes.len().min(8)].copy_from_slice(&bytes[..bytes.len().min(8)]);
+        let writable = matches!(n.family, NamedFamily::Data | NamedFamily::Bss);
+        let zerofill = n.family == NamedFamily::Bss;
+        sections.push(SectionHeader {
+            name,
+            virtual_size: n.size,
+            virtual_address: n.rva,
+            size_of_raw_data: n.raw_size,
+            pointer_to_raw_data: n.file_off,
+            characteristics: if zerofill {
+                IMAGE_SCN_CNT_UNINITIALIZED_DATA
+            } else {
+                IMAGE_SCN_CNT_INITIALIZED_DATA
+            } | IMAGE_SCN_MEM_READ
+                | if writable { IMAGE_SCN_MEM_WRITE } else { 0 },
+        });
+    }
     if reloc_section_present {
         sections.push(SectionHeader {
             name: *b".reloc\0\0",
@@ -1500,8 +1651,8 @@ pub(super) fn write(
         // (patched above, rewritten by the loader through `.reloc`),
         // then the switch-table blob at its 8-aligned tail, then the
         // fingerprint.
-        out.extend_from_slice(&build.data[..ro_len as usize]);
-        out.extend_from_slice(&data_with_relocs[..relro_size as usize]);
+        out.extend_from_slice(&build.data[..ro_head as usize]);
+        out.extend_from_slice(&data_with_relocs[..relro_head_len as usize]);
         pad_to(&mut out, (rdata_file_off + jt_base_in_rdata) as usize)?;
         out.extend_from_slice(&jt_bytes);
         pad_to(&mut out, (rdata_file_off + marker_base_in_rdata) as usize)?;
@@ -1509,7 +1660,8 @@ pub(super) fn write(
         pad_to(&mut out, (rdata_file_off + rdata_raw_size) as usize)?;
     }
     if data_section_present {
-        out.extend_from_slice(&data_with_relocs[relro_size as usize..]);
+        let head = (relro_size + data_head_len) as usize;
+        out.extend_from_slice(&data_with_relocs[relro_size as usize..head]);
         if !build.tls_data.is_empty() {
             // Pad to where the `_tls_index` slot starts (4-byte
             // alignment).
@@ -1587,6 +1739,22 @@ pub(super) fn write(
             }
             out.extend_from_slice(&tls_with_relocs);
         }
+    }
+    // A read-only family's bytes come straight from `build.data`; the
+    // relro and writable ones from the relocated span.
+    for n in &named_out {
+        if n.raw_size == 0 {
+            continue;
+        }
+        pad_to(&mut out, n.file_off as usize)?;
+        let (start, end) = (n.start as usize, (n.start + n.size) as usize);
+        if n.family == NamedFamily::RoData {
+            out.extend_from_slice(&build.data[start..end]);
+        } else {
+            let base = ro_len as usize;
+            out.extend_from_slice(&data_with_relocs[start - base..end - base]);
+        }
+        pad_to(&mut out, (n.file_off + n.raw_size) as usize)?;
     }
     if reloc_section_present {
         pad_to(&mut out, reloc_file_off as usize)?;

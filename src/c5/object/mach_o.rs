@@ -17,8 +17,8 @@
 //!   ------------------------------------------------------------------------
 //!   0x0000   mach_header_64                                \
 //!            LC_SEGMENT_64 __PAGEZERO                      |
-//!            LC_SEGMENT_64 __TEXT (__text, __const)        |
-//!            [LC_SEGMENT_64 __DATA_CONST (__const)]        |
+//!            LC_SEGMENT_64 __TEXT (__text, __const, [..]) |
+//!            [LC_SEGMENT_64 __DATA_CONST (__const, [..])]  |
 //!            LC_SEGMENT_64 __DATA (__got, __data, [__bss]) | __TEXT
 //!            LC_SEGMENT_64 __LINKEDIT                      |
 //!            LC_DYLD_INFO_ONLY                             |
@@ -56,7 +56,9 @@
 //! writable remainder `data[data_relro_len..]`, copied into the file by
 //! the writer and patched into the code via the `DataFixup` adrp+add
 //! pairs). __LINKEDIT also holds the symbol + string tables so tools
-//! like `otool -bind` can name what's being bound.
+//! like `otool -bind` can name what's being bound. A merged
+//! C-identifier-named section takes a section of its own past the
+//! family it was grouped into, inside the same segment.
 //!
 //! Apple Silicon mandates 16 KiB pages for arm64 (`vm_page_size`).
 //!
@@ -230,24 +232,59 @@ const DYNAMIC_LOOKUP_ORDINAL: u8 = 0xFE;
 /// section we emit, hence index 1.
 const SECT_INDEX_TEXT: u8 = 1;
 /// 1-based index of `__TEXT,__const`: the read-only data prefix
-/// (`Build::data[..data_ro_len]`) with the producer fingerprint at
-/// its tail. Always emitted.
+/// (`Build::data[..data_ro_len]`, less any named run at its end) with
+/// the producer fingerprint and the switch tables past it. Always
+/// emitted.
 const SECT_INDEX_CONST: u8 = 2;
-/// 1-based index of `__DATA_CONST,__const`, present only when the
-/// relro region is non-empty. It precedes `__DATA`, so every index
-/// below shifts by one when it is emitted.
-const SECT_INDEX_DATA_CONST: u8 = 3;
-/// 1-based index of `__DATA,__data`. `__DATA` always declares
-/// `__got` first (even when empty) followed by `__data`; the
-/// `__thread_*` sections, when present, come after. Used as
-/// `n_sect` for an exported data symbol.
-fn sect_index_data(data_const: bool) -> u8 {
-    if data_const { 5 } else { 4 }
+/// Family whose region held a named section's bytes, hence the segment
+/// it is declared in: `__TEXT` past `__const`, `__DATA_CONST` past its
+/// `__const`, `__DATA` past `__data` or past `__bss`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NamedFamily {
+    Const,
+    DataConst,
+    Data,
+    Bss,
 }
-/// 1-based index of `__DATA,__bss`, which follows `__data` and the two
-/// `__thread_*` sections when TLS is present.
-fn sect_index_bss(tls_present: bool, data_const: bool) -> u8 {
-    sect_index_data(data_const) + if tls_present { 3 } else { 1 }
+
+/// A named section given a section of its own inside its family's
+/// segment. `start` is the merged data-stream offset of its first
+/// byte, or the zero-fill region offset when the family is `Bss`.
+struct NamedOut<'a> {
+    name: &'a str,
+    family: NamedFamily,
+    start: u64,
+    size: u64,
+    addr: u64,
+    fileoff: u32,
+    align_log2: u32,
+}
+
+/// Named-section counts per family, which shift every global section
+/// index past the family they ride in.
+#[derive(Clone, Copy)]
+struct NamedCounts {
+    konst: u8,
+    data_const: u8,
+    data: u8,
+}
+
+/// `Section64` for one named section, declared inside `segname`.
+fn named_section64(n: &NamedOut<'_>, segname: &str, zerofill: bool) -> Section64 {
+    Section64 {
+        sectname: pack_name16(&n.name[..n.name.len().min(16)]),
+        segname: pack_name16(segname),
+        addr: n.addr,
+        size: n.size,
+        offset: if zerofill { 0 } else { n.fileoff },
+        align: n.align_log2,
+        reloff: 0,
+        nreloc: 0,
+        flags: if zerofill { S_ZEROFILL } else { 0 },
+        reserved1: 0,
+        reserved2: 0,
+        reserved3: 0,
+    }
 }
 
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
@@ -697,8 +734,9 @@ fn segment_text(
     text_size: u64,
     text_offset: u32,
     const_section: (u64, u64, u32, u32),
+    named: &[&NamedOut<'_>],
 ) -> Vec<u8> {
-    let total = SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE;
+    let total = SEGMENT_COMMAND_64_SIZE + (2 + named.len()) * SECTION_64_SIZE;
     let mut out = Vec::with_capacity(total);
     write_struct(
         &mut out,
@@ -712,7 +750,7 @@ fn segment_text(
             filesize,
             maxprot: VM_PROT_READ | VM_PROT_EXECUTE,
             initprot: VM_PROT_READ | VM_PROT_EXECUTE,
-            nsects: 2,
+            nsects: 2 + named.len() as u32,
             flags: 0,
         },
     );
@@ -752,6 +790,9 @@ fn segment_text(
             reserved3: 0,
         },
     );
+    for n in named {
+        write_struct(&mut out, &named_section64(n, "__TEXT", false));
+    }
     debug_assert_eq!(out.len(), total);
     out
 }
@@ -768,8 +809,9 @@ fn segment_data_const(
     filesize: u64,
     const_size: u64,
     align: u32,
+    named: &[&NamedOut<'_>],
 ) -> Vec<u8> {
-    let total = SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE;
+    let total = SEGMENT_COMMAND_64_SIZE + (1 + named.len()) * SECTION_64_SIZE;
     let mut out = Vec::with_capacity(total);
     write_struct(
         &mut out,
@@ -783,7 +825,7 @@ fn segment_data_const(
             filesize,
             maxprot: VM_PROT_READ | VM_PROT_WRITE,
             initprot: VM_PROT_READ | VM_PROT_WRITE,
-            nsects: 1,
+            nsects: 1 + named.len() as u32,
             flags: SG_READ_ONLY,
         },
     );
@@ -804,6 +846,9 @@ fn segment_data_const(
             reserved3: 0,
         },
     );
+    for n in named {
+        write_struct(&mut out, &named_section64(n, "__DATA_CONST", false));
+    }
     debug_assert_eq!(out.len(), total);
     out
 }
@@ -844,8 +889,12 @@ fn segment_data_with_tlv(
     thread_storage_initialised: bool,
     bss_addr: u64,
     bss_size: u64,
+    bss_present: bool,
+    named_data: &[&NamedOut<'_>],
+    named_bss: &[&NamedOut<'_>],
 ) -> Vec<u8> {
-    let nsects: u32 = if bss_size > 0 { 5 } else { 4 };
+    let nsects: u32 =
+        if bss_present { 5 } else { 4 } + named_data.len() as u32 + named_bss.len() as u32;
     let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
     let mut out = Vec::with_capacity(total);
     write_struct(
@@ -900,6 +949,9 @@ fn segment_data_with_tlv(
             reserved3: 0,
         },
     );
+    for n in named_data {
+        write_struct(&mut out, &named_section64(n, "__DATA", false));
+    }
     // __thread_vars -- 24-byte descriptor per TLS variable.
     // Section type S_THREAD_LOCAL_VARIABLES (0x13) tells dyld
     // these are descriptor records.
@@ -965,7 +1017,7 @@ fn segment_data_with_tlv(
     );
     // __bss -- regular zero-init storage at the segment tail, past the
     // thread storage. Present only when segregation produced it.
-    if bss_size > 0 {
+    if bss_present {
         write_struct(
             &mut out,
             &Section64 {
@@ -983,6 +1035,9 @@ fn segment_data_with_tlv(
                 reserved3: 0,
             },
         );
+    }
+    for n in named_bss {
+        write_struct(&mut out, &named_section64(n, "__DATA", true));
     }
     debug_assert_eq!(out.len(), total);
     out
@@ -1009,8 +1064,12 @@ fn segment_data(
     data_align_log2: u32,
     bss_addr: u64,
     bss_size: u64,
+    bss_present: bool,
+    named_data: &[&NamedOut<'_>],
+    named_bss: &[&NamedOut<'_>],
 ) -> Vec<u8> {
-    let nsects: u32 = if bss_size > 0 { 3 } else { 2 };
+    let nsects: u32 =
+        if bss_present { 3 } else { 2 } + named_data.len() as u32 + named_bss.len() as u32;
     let total = SEGMENT_COMMAND_64_SIZE + nsects as usize * SECTION_64_SIZE;
     let mut out = Vec::with_capacity(total);
     write_struct(
@@ -1071,9 +1130,12 @@ fn segment_data(
             reserved3: 0,
         },
     );
+    for n in named_data {
+        write_struct(&mut out, &named_section64(n, "__DATA", false));
+    }
     // __bss section (zero-fill, no file backing). Present only when
     // segregation produced zero-init storage; sizers read its size.
-    if bss_size > 0 {
+    if bss_present {
         write_struct(
             &mut out,
             &Section64 {
@@ -1091,6 +1153,9 @@ fn segment_data(
                 reserved3: 0,
             },
         );
+    }
+    for n in named_bss {
+        write_struct(&mut out, &named_section64(n, "__DATA", true));
     }
     debug_assert_eq!(out.len(), total);
     out
@@ -1998,7 +2063,37 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let relro_size = relro_total - ro_len;
     let data_const_present = relro_size > 0;
     let provenance = super::provenance_comment();
-    let const_marker_off = round_up(ro_len, 8);
+    // Named sections the merge grouped at the end of a family's
+    // region, each given a section of its own inside that family's
+    // segment. A section name is a 16-byte field, so a longer one is
+    // truncated the way ld64 and link.exe truncate theirs.
+    let named: Vec<&crate::c5::codegen::NamedSection> = build.named_sections.iter().collect();
+    let named_family = |n: &crate::c5::codegen::NamedSection| {
+        if n.bss {
+            NamedFamily::Bss
+        } else if n.offset < ro_len {
+            NamedFamily::Const
+        } else if n.offset < relro_total {
+            NamedFamily::DataConst
+        } else {
+            NamedFamily::Data
+        }
+    };
+    // Family head: the region a family's own section covers, stopping
+    // where its first named section begins.
+    let head_of = |f: NamedFamily, full: u64| -> u64 {
+        named
+            .iter()
+            .filter(|n| named_family(n) == f)
+            .map(|n| n.offset)
+            .min()
+            .unwrap_or(full)
+    };
+    let ro_head = head_of(NamedFamily::Const, ro_len);
+    let relro_head_len = head_of(NamedFamily::DataConst, relro_total) - ro_len;
+    let data_head_len = head_of(NamedFamily::Data, build.data.len() as u64) - relro_total;
+    let bss_head_len = head_of(NamedFamily::Bss, build.bss_size as u64);
+    let const_marker_off = round_up(ro_head, 8);
     // The switch-table blob rides the same read-only section, 8-aligned
     // past the fingerprint, so no table byte lands in `__text`.
     let jt_len = build.rodata.bytes.len() as u64;
@@ -2009,9 +2104,38 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     } else {
         const_tail
     };
-    let text_seg_size = (SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE) as u64;
+    // The `__TEXT` named run follows `__const`'s tail as one block, so
+    // each name keeps its alignment residue and the bounds keep naming
+    // the same relative extents.
+    let named_ro_align = named
+        .iter()
+        .filter(|n| named_family(n) == NamedFamily::Const)
+        .map(|n| n.align.max(1))
+        .max()
+        .unwrap_or(1);
+    let named_ro_shift = round_up(const_size - ro_head, named_ro_align);
+    let named_ro_size = ro_len - ro_head;
+    let const_region_size = if named_ro_size > 0 {
+        ro_head + named_ro_shift + named_ro_size
+    } else {
+        const_size
+    };
+    let counts = {
+        let n = |f: NamedFamily| named.iter().filter(|x| named_family(x) == f).count() as u8;
+        NamedCounts {
+            konst: n(NamedFamily::Const),
+            data_const: n(NamedFamily::DataConst),
+            data: n(NamedFamily::Data),
+        }
+    };
+    let named_bss_count = named
+        .iter()
+        .filter(|n| named_family(n) == NamedFamily::Bss)
+        .count() as u64;
+    let text_seg_size =
+        (SEGMENT_COMMAND_64_SIZE + (2 + counts.konst as usize) * SECTION_64_SIZE) as u64;
     let data_const_seg_size: u64 = if data_const_present {
-        (SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE) as u64
+        (SEGMENT_COMMAND_64_SIZE + (1 + counts.data_const as usize) * SECTION_64_SIZE) as u64
     } else {
         0
     };
@@ -2019,8 +2143,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // program has `_Thread_local` globals (+__thread_vars, __thread_bss),
     // and one more (__bss) when segregation produced zero-init storage.
     let has_bss_section = build.bss_size > 0;
-    let data_seg_section_count: u64 =
-        (if tls_present { 4 } else { 2 }) + if has_bss_section { 1 } else { 0 };
+    let data_seg_section_count: u64 = (if tls_present { 4 } else { 2 })
+        + if has_bss_section { 1 } else { 0 }
+        + counts.data as u64
+        + named_bss_count;
     let data_seg_size: u64 =
         SEGMENT_COMMAND_64_SIZE as u64 + data_seg_section_count * SECTION_64_SIZE as u64;
     let linkedit_seg_size = SEGMENT_COMMAND_64_SIZE as u64;
@@ -2119,10 +2245,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // `__TEXT,__const` sits past the code, at the data image's base
     // alignment so the prefix's packed residues hold absolutely
     // (fileoff == vmaddr offset within __TEXT).
-    let ro_align = crate::c5::layout::data_image_align(build.data_align) as u64;
+    let ro_align =
+        (crate::c5::layout::data_image_align(build.data_align) as u64).max(named_ro_align);
     let const_fileoff = round_up(entry_file_offset + code_size, ro_align);
     let const_vmaddr = TEXT_VMADDR_BASE + const_fileoff;
-    let text_filesize = round_up(const_fileoff + const_size, PAGE_SIZE);
+    let text_filesize = round_up(const_fileoff + const_region_size, PAGE_SIZE);
     let text_vmsize = text_filesize;
 
     // __DATA layout:
@@ -2218,15 +2345,99 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     } else {
         data_section_vmaddr + writable_data_size
     };
+    // Only the read-only family's run moves; the others keep the
+    // placement their region already gives.
     let data_off_to_vaddr = |off: u64| -> u64 {
-        if off < ro_len {
+        if off < ro_head {
             const_vmaddr + off
+        } else if off < ro_len {
+            const_vmaddr + off + named_ro_shift
         } else if off < relro_total {
             data_const_vmaddr + (off - ro_len)
         } else if off < program_data_size {
             data_section_vmaddr + (off - relro_total)
         } else {
             bss_base_vmaddr + (off - program_data_size)
+        }
+    };
+    let named_out: Vec<NamedOut> = named
+        .iter()
+        .map(|n| {
+            let family = named_family(n);
+            let (addr, fileoff) = match family {
+                NamedFamily::Bss => (bss_base_vmaddr + n.offset, 0),
+                _ => {
+                    let a = data_off_to_vaddr(n.offset);
+                    let f = match family {
+                        NamedFamily::Const => const_fileoff + (a - const_vmaddr),
+                        NamedFamily::DataConst => data_const_fileoff + (a - data_const_vmaddr),
+                        _ => data_fileoff + (a - data_vmaddr),
+                    };
+                    (a, f as u32)
+                }
+            };
+            NamedOut {
+                name: &n.name,
+                family,
+                start: n.offset,
+                size: n.size,
+                addr,
+                fileoff,
+                align_log2: n.align.max(1).trailing_zeros(),
+            }
+        })
+        .collect();
+    let named_in = |f: NamedFamily| -> Vec<&NamedOut> {
+        let mut v: Vec<&NamedOut> = named_out.iter().filter(|n| n.family == f).collect();
+        v.sort_by_key(|n| n.addr);
+        v
+    };
+    let named_const_out = named_in(NamedFamily::Const);
+    let named_data_const_out = named_in(NamedFamily::DataConst);
+    let named_data_out = named_in(NamedFamily::Data);
+    let named_bss_out = named_in(NamedFamily::Bss);
+    // 1-based section indices run globally across segments in
+    // declaration order, so each family's named run shifts every index
+    // past it.
+    let idx_named_const = SECT_INDEX_CONST + 1;
+    let idx_data_const = idx_named_const + counts.konst;
+    let idx_named_data_const = idx_data_const + 1;
+    let idx_got = if data_const_present {
+        idx_named_data_const + counts.data_const
+    } else {
+        idx_data_const
+    };
+    let idx_data = idx_got + 1;
+    let idx_named_data = idx_data + 1;
+    let idx_bss = idx_named_data + counts.data + if tls_present { 2 } else { 0 };
+    let idx_named_bss = idx_bss + u8::from(has_bss_section);
+    // Section holding a data-stream offset: the named section covering
+    // it, else its family's own.
+    let data_off_sect_index = |off: u64| -> u8 {
+        let runs: [(&[&NamedOut], u8, u64); 4] = [
+            (&named_const_out, idx_named_const, 0),
+            (&named_data_const_out, idx_named_data_const, 0),
+            (&named_data_out, idx_named_data, 0),
+            (&named_bss_out, idx_named_bss, program_data_size),
+        ];
+        for (list, base, origin) in runs {
+            let rel = off.wrapping_sub(origin);
+            if off >= origin
+                && let Some(k) = list
+                    .iter()
+                    .position(|n| rel >= n.start && rel < n.start + n.size)
+            {
+                return base + k as u8;
+            }
+        }
+        if off < ro_len {
+            SECT_INDEX_CONST
+        } else if off < relro_total {
+            idx_data_const
+        } else if off < program_data_size {
+            idx_data
+        } else {
+            idx_bss
         }
     };
 
@@ -2411,18 +2622,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             crate::c5::codegen::DynamicExportSection::Text => {
                 (code_vmaddr_base + d.offset, SECT_INDEX_TEXT)
             }
-            crate::c5::codegen::DynamicExportSection::Data => (
-                data_off_to_vaddr(d.offset),
-                if d.offset < ro_len {
-                    SECT_INDEX_CONST
-                } else if d.offset < relro_total {
-                    SECT_INDEX_DATA_CONST
-                } else if d.offset < program_data_size {
-                    sect_index_data(data_const_present)
-                } else {
-                    sect_index_bss(tls_present, data_const_present)
-                },
-            ),
+            crate::c5::codegen::DynamicExportSection::Data => {
+                (data_off_to_vaddr(d.offset), data_off_sect_index(d.offset))
+            }
         };
         symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect, d.weak));
         export_trie_entries.push((
@@ -2613,6 +2815,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             const_fileoff as u32,
             ro_align.trailing_zeros(),
         ),
+        &named_const_out,
     );
     let data_const_segment = if data_const_present {
         segment_data_const(
@@ -2620,8 +2823,9 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             data_const_size,
             data_const_fileoff,
             data_const_size,
-            relro_size,
+            relro_head_len,
             data_align.trailing_zeros(),
+            &named_data_const_out,
         )
     } else {
         Vec::new()
@@ -2636,7 +2840,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             got_size,
             (data_fileoff + got_section_offset_in_segment) as u32,
             data_section_vmaddr,
-            writable_data_size,
+            data_head_len,
             data_section_fileoff as u32,
             data_align.trailing_zeros(),
             thread_vars_vmaddr,
@@ -2647,7 +2851,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             thread_storage_fileoff as u32,
             thread_storage_initialised,
             bss_base_vmaddr,
-            build.bss_size as u64,
+            bss_head_len,
+            has_bss_section,
+            &named_data_out,
+            &named_bss_out,
         )
     } else {
         segment_data(
@@ -2659,11 +2866,14 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             got_size,
             (data_fileoff + got_section_offset_in_segment) as u32,
             data_section_vmaddr,
-            writable_data_size,
+            data_head_len,
             data_section_fileoff as u32,
             data_align.trailing_zeros(),
             bss_base_vmaddr,
-            build.bss_size as u64,
+            bss_head_len,
+            has_bss_section,
+            &named_data_out,
+            &named_bss_out,
         )
     };
     let linkedit = segment_no_sections(
@@ -2871,7 +3081,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // it is relocated, so the bytes are final at emission), then the
     // producer fingerprint at the 8-aligned tail.
     out.resize(const_fileoff as usize, 0);
-    out.extend_from_slice(&build.data[..ro_len as usize]);
+    out.extend_from_slice(&build.data[..ro_head as usize]);
     out.resize((const_fileoff + const_marker_off) as usize, 0);
     out.extend_from_slice(&provenance);
     // The switch-table blob, then each entry as the `target -
@@ -2894,6 +3104,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             let at = (const_fileoff + jt_off + r.slot_offset) as usize;
             out[at..at + 4].copy_from_slice(&v.to_le_bytes());
         }
+    }
+    // The read-only family's named run, past `__const`'s tail.
+    if named_ro_size > 0 {
+        out.resize((const_fileoff + ro_head + named_ro_shift) as usize, 0);
+        out.extend_from_slice(&build.data[ro_head as usize..ro_len as usize]);
     }
     while (out.len() as u64) < text_filesize {
         out.push(0);
@@ -3613,7 +3828,10 @@ mod tests {
             .expect("_myglobal export");
         assert_eq!(data.1 & N_EXT, N_EXT, "data export must be external");
         assert_eq!(data.1 & N_SECT, N_SECT, "data export must be N_SECT");
-        assert_eq!(data.2, sect_index_data(false), "data export n_sect");
+        // Independent restatement of the numbering for an image with
+        // no relro region, no TLS and no named section: 1 __text,
+        // 2 __TEXT,__const, 3 __got, 4 __data, 5 __bss.
+        assert_eq!(data.2, 4, "data export n_sect");
 
         let zero = found
             .iter()
@@ -3621,8 +3839,7 @@ mod tests {
             .expect("_myzero export");
         assert_eq!(zero.1 & N_EXT, N_EXT, "bss export must be external");
         assert_eq!(
-            zero.2,
-            sect_index_bss(false, false),
+            zero.2, 5,
             "a data offset past build.data must resolve to __DATA,__bss"
         );
     }

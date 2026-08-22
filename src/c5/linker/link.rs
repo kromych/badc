@@ -604,7 +604,15 @@ fn group_named_bytes(
     let order = named_group_order(objs, fam);
     let any = !order.is_empty();
     let write = fam != SectionFamily::RoData;
+    let mut prev: Option<&str> = None;
     for (i, s) in order {
+        // A writer that gives each name a section of its own places
+        // them apart, so an offset at one group's end must not name the
+        // next group's first byte.
+        if prev.is_some_and(|p| p != s.name) {
+            data.push(0);
+        }
+        prev = Some(&s.name);
         align_up(data, s.align.max(1) as usize);
         let at = data.len() as u64;
         let src = blob(&objs[i]);
@@ -639,7 +647,12 @@ fn group_named_zerofill(
 ) {
     let order = named_group_order(objs, SectionFamily::Bss);
     let any = !order.is_empty();
+    let mut prev: Option<&str> = None;
     for (i, s) in order {
+        if prev.is_some_and(|p| p != s.name) {
+            *bss_size += 1;
+        }
+        prev = Some(&s.name);
         *bss_size = align_usize(*bss_size, s.align.max(1) as usize);
         let at = *bss_size as u64;
         *bss_size += s.size as usize;

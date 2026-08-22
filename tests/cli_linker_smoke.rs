@@ -5211,6 +5211,216 @@ fn named_sections_get_their_own_elf_section_header() {
     }
 }
 
+/// `(segment, section)` pairs of a Mach-O image, in declaration order.
+fn macho_section_names(bytes: &[u8]) -> Vec<(String, String)> {
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let name = |at: usize| {
+        let end = at
+            + bytes[at..at + 16]
+                .iter()
+                .position(|&b| b == 0)
+                .unwrap_or(16);
+        String::from_utf8_lossy(&bytes[at..end]).into_owned()
+    };
+    let mut out = Vec::new();
+    let mut lc = 32;
+    for _ in 0..u32at(16) {
+        if u32at(lc) == 0x19 {
+            for s in 0..u32at(lc + 64) {
+                let sh = lc + 72 + s * 80;
+                out.push((name(sh + 16), name(sh)));
+            }
+        }
+        lc += u32at(lc + 4);
+    }
+    out
+}
+
+/// Section names of a PE image, in section-table order, each with its
+/// characteristics word.
+fn pe_section_names(bytes: &[u8]) -> Vec<(String, u32)> {
+    let u16at = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let pe = u32at(0x3C) as usize;
+    let table = pe + 24 + u16at(pe + 20);
+    (0..u16at(pe + 6))
+        .map(|i| {
+            let at = table + i * 40;
+            let end = at + bytes[at..at + 8].iter().position(|&b| b == 0).unwrap_or(8);
+            (
+                String::from_utf8_lossy(&bytes[at..end]).into_owned(),
+                u32at(at + 36),
+            )
+        })
+        .collect()
+}
+
+/// Sources exercising one named section per storage class, plus a name
+/// over the 16-byte Mach-O section-name limit.
+fn write_named_section_sources(dir: &std::path::Path) {
+    write_source(
+        dir,
+        "a.c",
+        "static const long ro __attribute__((section(\"myro\"), used)) = 1;\n\
+         static long rw __attribute__((section(\"myrw\"), used)) = 2;\n\
+         static long over __attribute__((section(\"a_name_past_the_macho_limit\"), used)) = 3;\n",
+    );
+    write_source(
+        dir,
+        "main.c",
+        "extern const long __start_myro[], __stop_myro[];\n\
+         extern const long __start_a_name_past_the_macho_limit[];\n\
+         extern const long __stop_a_name_past_the_macho_limit[];\n\
+         int main(void) {\n\
+         if (__stop_myro - __start_myro != 1) return 1;\n\
+         return __stop_a_name_past_the_macho_limit\n\
+         - __start_a_name_past_the_macho_limit == 1 ? 0 : 2; }\n",
+    );
+}
+
+/// The merged path gives a grouped named section its own Mach-O
+/// section inside the segment its family maps, and the family sections
+/// stay for what was not grouped out. A name past the 16-byte section
+/// name field keeps the folded placement its bounds already describe.
+#[test]
+fn named_sections_get_their_own_macho_section() {
+    let dir = tempdir("named-section-macho");
+    write_named_section_sources(&dir);
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("--target=macos-aarch64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link named sections for Mach-O",
+    );
+    let image = std::fs::read(&exe).expect("read image");
+    let names = macho_section_names(&image);
+    let find = |s: &str| names.iter().find(|(_, n)| n == s).map(|(g, _)| g.clone());
+    assert_eq!(
+        find("myro").as_deref(),
+        Some("__TEXT"),
+        "a read-only name maps in __TEXT: {names:?}"
+    );
+    assert_eq!(
+        find("myrw").as_deref(),
+        Some("__DATA"),
+        "a writable name maps in __DATA: {names:?}"
+    );
+    assert!(
+        find("a_name_past_the_macho_limit").is_none(),
+        "a name past 16 bytes has no section of its own: {names:?}"
+    );
+    for (seg, sect) in [
+        ("__TEXT", "__text"),
+        ("__TEXT", "__const"),
+        ("__DATA", "__data"),
+    ] {
+        assert!(
+            names.iter().any(|(g, n)| g == seg && n == sect),
+            "`{seg},{sect}` in {names:?}"
+        );
+    }
+    // Sections are declared in address order within each segment.
+    for (seg, _) in &names {
+        let addrs: Vec<u64> = section_addrs(&image, seg);
+        assert!(
+            addrs.windows(2).all(|w| w[0] <= w[1]),
+            "`{seg}` sections out of address order: {addrs:?}"
+        );
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let out = Command::new(&exe).output().expect("run the image");
+        assert_eq!(out.status.code(), Some(0), "named-section bounds hold");
+    }
+}
+
+/// Section `addr` fields of one Mach-O segment, in declaration order.
+fn section_addrs(bytes: &[u8], seg: &str) -> Vec<u64> {
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let mut out = Vec::new();
+    let mut lc = 32;
+    for _ in 0..u32at(16) {
+        if u32at(lc) == 0x19 && bytes[lc + 8..lc + 8 + seg.len()] == *seg.as_bytes() {
+            for s in 0..u32at(lc + 64) {
+                let sh = lc + 72 + s * 80;
+                out.push(u64::from_le_bytes(
+                    bytes[sh + 32..sh + 40].try_into().unwrap(),
+                ));
+            }
+        }
+        lc += u32at(lc + 4);
+    }
+    out
+}
+
+/// The PE writer gives a grouped named section a section header of
+/// its own. A PE section RVA is SectionAlignment-aligned, so each
+/// takes a slot past `.data`; the read-only families keep `.rdata`'s
+/// characteristics and the writable ones `.data`'s, and the table
+/// stays in ascending RVA order.
+#[test]
+fn named_sections_get_their_own_pe_section() {
+    const CNT_INITIALIZED: u32 = 0x40;
+    const MEM_READ: u32 = 0x4000_0000;
+    const MEM_WRITE: u32 = 0x8000_0000;
+    let dir = tempdir("named-section-pe");
+    write_named_section_sources(&dir);
+    let exe = dir.join("prog.exe");
+    run(
+        Command::new(badc())
+            .arg("--target=windows-x64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link named sections for PE",
+    );
+    let image = std::fs::read(&exe).expect("read image");
+    let names = pe_section_names(&image);
+    let chars = |s: &str| names.iter().find(|(n, _)| n == s).map(|(_, c)| *c);
+    assert_eq!(
+        chars("myro"),
+        Some(CNT_INITIALIZED | MEM_READ),
+        "a read-only name maps without write permission: {names:?}"
+    );
+    assert_eq!(
+        chars("myrw"),
+        Some(CNT_INITIALIZED | MEM_READ | MEM_WRITE),
+        "a writable name keeps .data's characteristics: {names:?}"
+    );
+    // A name past the 8-byte header field is truncated, as link.exe
+    // truncates its own; the bytes still get a section.
+    assert!(
+        chars("a_name_p").is_some(),
+        "a truncated name still gets a section: {names:?}"
+    );
+    for n in [".text", ".rdata", ".data"] {
+        assert!(names.iter().any(|(s, _)| s == n), "`{n}` in {names:?}");
+    }
+    let rvas = pe_section_rvas(&image);
+    assert!(
+        rvas.windows(2).all(|w| w[0] < w[1]),
+        "the section table must ascend by RVA: {rvas:?}"
+    );
+}
+
+/// Section `VirtualAddress` fields of a PE image, in table order.
+fn pe_section_rvas(bytes: &[u8]) -> Vec<u32> {
+    let u16at = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let pe = u32at(0x3C) as usize;
+    let table = pe + 24 + u16at(pe + 20);
+    (0..u16at(pe + 6))
+        .map(|i| u32at(table + i * 40 + 12))
+        .collect()
+}
+
 /// A unit defining `__start_<name>` itself keeps that definition: bfd
 /// synthesizes the pair only where nothing else does, and
 /// `__start_tty` is an ordinary function in at least one real tree.

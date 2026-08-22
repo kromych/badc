@@ -150,13 +150,18 @@ struct CallerRegions {
 /// to execute stack-pointer asm (`sp_asm_reachers`): a stack switch lets a
 /// spliced activation stay live -- suspended mid-body on another stack --
 /// while the caller proceeds to further sites, so no two sites may share.
-/// A body holding an indirect call appends for the same stack-pointer
-/// reason, not for cycle membership: `sp_asm_reachers` propagates along
-/// `Inst::Call` edges only, so it cannot rule a target outside the static
-/// call graph out of executing stack-pointer asm. Nesting is not at issue
-/// -- a splice site is always an `Inst::Call`, so an indirect call
-/// re-activates no region. Read by the splice and by the frame budget,
-/// which charges an appending callee once per site.
+/// An indirect call constrains neither set. The stack-pointer guard
+/// covers asm the caller can come to execute on its own frame -- asm
+/// acquired by inlining, which moves bodies along `Inst::Call` edges --
+/// and an indirect call site is never spliced, so its target's asm can
+/// never run on the caller's frame; at run time the target executes in a
+/// frame of its own, as a `CallExt` target does. Nesting is not at issue
+/// either: a splice site is always an `Inst::Call`, and re-entering the
+/// caller through the pointer activates a fresh frame with fresh
+/// regions. (A returns-twice target would fork one frame's control, but
+/// accessing the setjmp family other than through its macro name is
+/// undefined, C99 7.13.1.1p5.) Read by the splice and by the frame
+/// budget, which charges an appending callee once per site.
 fn region_key(
     caller_pc: usize,
     callee: &FunctionSsa,
@@ -164,11 +169,7 @@ fn region_key(
     sp_tainted: &BTreeSet<usize>,
 ) -> Option<RegionKey> {
     let sp = sp_tainted.contains(&caller_pc) || sp_tainted.contains(&callee.ent_pc);
-    let indirect = callee
-        .insts
-        .iter()
-        .any(|i| matches!(i, Inst::CallIndirect { .. }));
-    if sp || indirect || cyclic.contains(&callee.ent_pc) {
+    if sp || cyclic.contains(&callee.ent_pc) {
         None
     } else if callee.over_aligned.is_empty()
         && !callee.insts.iter().any(|i| matches!(i, Inst::Call { .. }))
@@ -950,9 +951,9 @@ fn is_inline_candidate(
             Inst::Call { ret_agg, .. } if ret_agg.is_none() => {}
             // A call through a function pointer in the same shape. The
             // target is one more value operand for the splice to remap;
-            // because it is outside the static call graph it cannot be
-            // ruled out of reaching stack-pointer asm, so the frame-region
-            // choice below gives such a body a fresh region per site.
+            // the call is opaque -- the target is never spliced and runs
+            // in a frame of its own -- so it constrains neither the
+            // frame-region choice nor cycle membership (`region_key`).
             Inst::CallIndirect { ret_agg, .. } if ret_agg.is_none() => {}
             // A phi merging values across the callee's own blocks. The
             // multi-block splice translates its incoming values through
@@ -3777,6 +3778,75 @@ mod tests {
         assert_eq!(
             funcs[0].locals, 5,
             "2 splices of a 3-slot off-cycle callee must share one region"
+        );
+    }
+
+    /// A callee whose only call is indirect shares a region across its
+    /// sites: the target is never spliced and runs in a frame of its
+    /// own, so the call is opaque like an external one -- neither a
+    /// cycle member nor a stack-pointer taint source.
+    #[test]
+    fn indirect_call_callee_shares_region_across_sites() {
+        let abi = Target::LinuxX64.abi();
+        let insts = alloc::vec![
+            Inst::Imm(5),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I64,
+                volatile: false,
+            },
+            Inst::Imm(0x4000),
+            Inst::CallIndirect {
+                target: 2,
+                args: alloc::vec![],
+                callee_variadic: false,
+                fixed_args: 0,
+                fp_return: false,
+                fp_arg_mask: 0,
+                arg_aggs: alloc::vec![],
+                ret_agg: None,
+                ret_slot_local: 0,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+        ];
+        let callee = FunctionSsa {
+            ent_pc: 200,
+            locals: 3,
+            inst_src: alloc::vec![(0, 0); 5],
+            f32_values: alloc::vec![false; 5],
+            blocks: alloc::vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..4,
+                    terminator: Terminator::Jmp(1),
+                    exit_acc: NO_VALUE,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 4..5,
+                    terminator: Terminator::Return(4),
+                    exit_acc: 4,
+                },
+            ],
+            insts,
+            ..Default::default()
+        };
+        let mut funcs = alloc::vec![multi_call_caller(1, 2, 200, 2), callee];
+        run(&mut funcs, 32, abi);
+        let indirect = funcs[0]
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::CallIndirect { .. }))
+            .count();
+        assert_eq!(indirect, 2, "both spliced bodies keep the indirect call");
+        assert_eq!(
+            funcs[0].locals, 5,
+            "2 splices of a 3-slot indirect-calling callee must share one region"
         );
     }
 

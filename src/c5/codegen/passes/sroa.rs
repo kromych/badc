@@ -96,11 +96,15 @@ const FOOTPRINT_ROUNDS: usize = 32;
 /// that keeps a parameter in a frame cell (where the value reaches its
 /// uses through memory this walk does not follow) leave the parameter
 /// out of the map.
+/// A caller parameter inheriting a callee parameter's footprint,
+/// shifted by the offset the argument carries.
+type InheritEdge = ((usize, usize), (usize, usize), i64);
+
 pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
     let mut local: BTreeMap<(usize, usize), Option<ParamFootprint>> = BTreeMap::new();
     // `(caller parameter) inherits (callee parameter) shifted by the
     // offset the argument carries`.
-    let mut edges: Vec<((usize, usize), (usize, usize), i64)> = Vec::new();
+    let mut edges: Vec<InheritEdge> = Vec::new();
     for func in funcs {
         if func.n_params == 0 {
             continue;
@@ -171,7 +175,12 @@ pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
                     addr, disp, kind, ..
                 } => {
                     if let Some((p, off)) = at(*addr) {
-                        add_range(&mut fps[p as usize], false, off + *disp as i64, load_width(*kind));
+                        add_range(
+                            &mut fps[p as usize],
+                            false,
+                            off + *disp as i64,
+                            load_width(*kind),
+                        );
                     }
                 }
                 Inst::Store {
@@ -182,7 +191,12 @@ pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
                     ..
                 } => {
                     if let Some((p, off)) = at(*addr) {
-                        add_range(&mut fps[p as usize], true, off + *disp as i64, store_width(*kind));
+                        add_range(
+                            &mut fps[p as usize],
+                            true,
+                            off + *disp as i64,
+                            store_width(*kind),
+                        );
                     }
                     if let Some((p, _)) = at(*value) {
                         fps[p as usize] = None;
@@ -1381,7 +1395,10 @@ mod tests {
         let mut f = two_elem_array();
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1);
-        assert_eq!((split[0].base, split[0].slots.clone()), (-2, alloc::vec![-2, -1]));
+        assert_eq!(
+            (split[0].base, split[0].slots.clone()),
+            (-2, alloc::vec![-2, -1])
+        );
         // Store/Load rewritten to per-element slots (-2 for a[0], -1 for a[1]).
         assert!(matches!(f.insts[2], Inst::StoreLocal { off: -2, .. }));
         assert!(matches!(f.insts[6], Inst::StoreLocal { off: -1, .. }));
@@ -1424,7 +1441,10 @@ mod tests {
         let mut f = func(insts, Terminator::Return(12), alloc::vec![(-2, 2), (-3, 1)]);
         let split = split_objects(&mut f, 2);
         assert_eq!(
-            split.iter().map(|s| (s.base, s.slots.clone())).collect::<Vec<_>>(),
+            split
+                .iter()
+                .map(|s| (s.base, s.slots.clone()))
+                .collect::<Vec<_>>(),
             alloc::vec![(-2, alloc::vec![-2, -1])],
             "only the two-field array fits the budget"
         );
@@ -1443,7 +1463,10 @@ mod tests {
         f.blocks[0].exit_acc = 9; // LocalAddr(-2)
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1);
-        assert_eq!((split[0].base, split[0].slots.clone()), (-2, alloc::vec![-2, -1]));
+        assert_eq!(
+            (split[0].base, split[0].slots.clone()),
+            (-2, alloc::vec![-2, -1])
+        );
         assert!(matches!(f.insts[9], Inst::Imm(0)));
     }
 
@@ -1994,7 +2017,7 @@ mod tests {
         let leaf = callee(
             100,
             alloc::vec![
-                param(),                              // v0
+                param(), // v0
                 Inst::Load {
                     addr: 0,
                     disp: 8,
@@ -2002,16 +2025,16 @@ mod tests {
                     volatile: false,
                     align: 0,
                 }, // v1  reads [8, 16)
-                Inst::Imm(5),                         // v2
-                store(0, 2),                          // v3  writes [0, 8)
+                Inst::Imm(5), // v2
+                store(0, 2), // v3  writes [0, 8)
             ],
             Terminator::Return(1),
         );
         let mid = callee(
             200,
             alloc::vec![
-                param(),          // v0
-                add_imm(0, 16),   // v1
+                param(),                      // v0
+                add_imm(0, 16),               // v1
                 call_to(100, alloc::vec![1]), // v2
             ],
             Terminator::Return(2),
@@ -2041,8 +2064,8 @@ mod tests {
             ..callee(200, alloc::vec![param()], Terminator::Return(0))
         };
         let fps = param_footprints(&[escaping, variadic]);
-        assert!(fps.get(&(100, 0)).is_none(), "a stored pointer is opaque");
-        assert!(fps.get(&(200, 0)).is_none(), "a variadic body is opaque");
+        assert!(!fps.contains_key(&(100, 0)), "a stored pointer is opaque");
+        assert!(!fps.contains_key(&(200, 0)), "a variadic body is opaque");
     }
 
     /// Caller holding a two-cell object at -2: field 0 written then
@@ -2050,28 +2073,28 @@ mod tests {
     /// to `target`.
     fn caller_passing_object(target: usize) -> FunctionSsa {
         let insts = alloc::vec![
-            Inst::Imm(1),        // v0
-            Inst::LocalAddr(-2), // v1
-            store(1, 0),         // v2  o.a = 1
-            Inst::Imm(2),        // v3
-            Inst::LocalAddr(-2), // v4
-            add_imm(4, 8),       // v5
-            store(5, 3),         // v6  o.b = 2
-            Inst::LocalAddr(-2), // v7
+            Inst::Imm(1),                    // v0
+            Inst::LocalAddr(-2),             // v1
+            store(1, 0),                     // v2  o.a = 1
+            Inst::Imm(2),                    // v3
+            Inst::LocalAddr(-2),             // v4
+            add_imm(4, 8),                   // v5
+            store(5, 3),                     // v6  o.b = 2
+            Inst::LocalAddr(-2),             // v7
             call_to(target, alloc::vec![7]), // v8
-            Inst::LocalAddr(-2), // v9
-            load(9),             // v10 o.a
-            Inst::LocalAddr(-2), // v11
-            add_imm(11, 8),      // v12
-            load(12),            // v13 o.b
+            Inst::LocalAddr(-2),             // v9
+            load(9),                         // v10 o.a
+            Inst::LocalAddr(-2),             // v11
+            add_imm(11, 8),                  // v12
+            load(12),                        // v13 o.b
             Inst::Binop {
                 op: BinOp::Add,
                 lhs: 10,
                 rhs: 13,
             }, // v14
-            Inst::LocalAddr(-2), // v15
-            add_imm(15, 8),      // v16
-            load(16),            // v17 o.b again: two reads, one write
+            Inst::LocalAddr(-2),             // v15
+            add_imm(15, 8),                  // v16
+            load(16),                        // v17 o.b again: two reads, one write
             Inst::Binop {
                 op: BinOp::Add,
                 lhs: 14,

@@ -3751,9 +3751,7 @@ fn encode_bespoke(
                     ));
                 }
                 _ => {
-                    return Err(String::from(
-                        "inline asm: this mnemonic takes no operands",
-                    ));
+                    return Err(String::from("inline asm: this mnemonic takes no operands"));
                 }
             };
             match opw.unwrap_or(dflt) {

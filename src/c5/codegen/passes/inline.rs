@@ -836,7 +836,9 @@ fn is_inline_candidate(
                 // slot (redirected to the caller's object) is admissible.
                 if reloc {
                     if *s >= 0 && !relocated_cells.contains(s) && !param_agg_slots.contains(s) {
-                        say(format_args!("LocalAddr of non-relocated parameter cell {s}"));
+                        say(format_args!(
+                            "LocalAddr of non-relocated parameter cell {s}"
+                        ));
                         return false;
                     }
                 } else if !param_agg_slots.contains(s) && Some(*s) != redirect_slot {
@@ -4360,7 +4362,10 @@ mod tests {
             ..Default::default()
         };
         assert!(is_inline_candidate(&input_only, 32, abi, None));
-        assert!(needs_reloc_splice(&input_only, &value_use_mask(&input_only)));
+        assert!(needs_reloc_splice(
+            &input_only,
+            &value_use_mask(&input_only)
+        ));
     }
 
     /// Both segment-access variants are inline candidates, and the operand
@@ -4763,7 +4768,10 @@ mod tests {
             ..Default::default()
         };
         let used = value_use_mask(&callee);
-        assert_eq!(materialized_param_cells(&callee, &used), BTreeSet::from([2]));
+        assert_eq!(
+            materialized_param_cells(&callee, &used),
+            BTreeSet::from([2])
+        );
         assert!(needs_reloc_splice(&callee, &used));
         assert!(is_inline_candidate(&callee, 32, abi, None));
         let call = |arg: ValueId| Inst::Call {

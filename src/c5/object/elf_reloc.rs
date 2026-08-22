@@ -2938,9 +2938,7 @@ pub(super) fn write_relocatable(
             Machine::X86_64 => (R_X86_64_PLT32, site.instr_offset as u64 + 1, base - 4),
             // GNU as types the field by the instruction: `bl` takes CALL26,
             // a plain `b` JUMP26. Both patch the same imm26.
-            Machine::Aarch64 if site.is_tail => {
-                (R_AARCH64_JUMP26, site.instr_offset as u64, base)
-            }
+            Machine::Aarch64 if site.is_tail => (R_AARCH64_JUMP26, site.instr_offset as u64, base),
             Machine::Aarch64 => (R_AARCH64_CALL26, site.instr_offset as u64, base),
         };
         let r_info = (sym_idx << 32) | (rtype as u64);
@@ -3273,8 +3271,7 @@ pub(super) fn write_relocatable(
                 Machine::Aarch64 => R_AARCH64_PREL32,
             },
             // An aarch64 branch / `adr` field into the pushed section.
-            kind => a64_insn_reloc_type(kind)
-                .expect("every instruction-field kind maps to a type"),
+            kind => a64_insn_reloc_type(kind).expect("every instruction-field kind maps to a type"),
         };
         write_struct(
             &mut rela_bytes,

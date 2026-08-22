@@ -1515,7 +1515,10 @@ int main(void) { return 0; }
     // The section reads as `RelRo`: read-only payload whose own field the
     // loader relocates.
     assert!(
-        matches!(sym.section, crate::c5::linker::object::NativeSymSection::RelRo),
+        matches!(
+            sym.section,
+            crate::c5::linker::object::NativeSymSection::RelRo
+        ),
         "`locptr` must be defined in its read-only section: {:?}",
         sym.section
     );

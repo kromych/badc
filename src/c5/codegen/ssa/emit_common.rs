@@ -8291,20 +8291,18 @@ pub(crate) fn materialize_asm_sections(
     // A `.set` whose value reduced to a location defines the name as a
     // label of the owning section, as GNU as does, so a field referencing
     // it relocates against a definition.
-    for name in blocks.iter().flat_map(|b| &b.items).filter_map(|it| {
-        match it {
+    for name in blocks
+        .iter()
+        .flat_map(|b| &b.items)
+        .filter_map(|it| match it {
             AsmSectionItem::SetExpr { name, .. } => Some(name.as_str()),
             _ => None,
-        }
-    }) {
+        })
+    {
         let (Some(sk), Some(off)) = (measured.section(name), measured.offset(name)) else {
             continue;
         };
-        let Some(s) = sink
-            .sections
-            .iter_mut()
-            .find(|s| section_key_of(s) == *sk)
-        else {
+        let Some(s) = sink.sections.iter_mut().find(|s| section_key_of(s) == *sk) else {
             continue;
         };
         if !s.labels.iter().any(|l| l.name == name) {

@@ -7166,7 +7166,10 @@ fn encode_one_x86_section_insn(
             AsmOpnd::ImmSym { expr } => {
                 // An expression that is already a constant encodes as the
                 // literal, taking the operand's narrowest form.
-                if let Some(v) = insn.sym_exprs.get(expr as usize).and_then(|e| (refs.fold)(e))
+                if let Some(v) = insn
+                    .sym_exprs
+                    .get(expr as usize)
+                    .and_then(|e| (refs.fold)(e))
                 {
                     concrete.push(Concrete::Imm(v));
                     continue;

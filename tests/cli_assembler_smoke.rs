@@ -1008,13 +1008,22 @@ fn a_folded_operand_expression_takes_every_short_form() {
         "\t.text\na:\n\tnop\nb:\n\taddl $(b - a), (a - b)(%rdx)\n",
     );
     assert_eq!(t, [0x90, 0x83, 0x42, 0xff, 0x01], "disp8 and imm8 together");
-    let t = text_of("fold-disp0", "\t.text\na:\nb:\n\tmovl (a - b)(%rbx), %eax\n");
+    let t = text_of(
+        "fold-disp0",
+        "\t.text\na:\nb:\n\tmovl (a - b)(%rbx), %eax\n",
+    );
     assert_eq!(t, [0x8b, 0x03], "a zero displacement drops its byte");
-    let t = text_of("fold-shift1", "\t.text\na:\n\tnop\nb:\n\tshll $(b - a), %ecx\n");
+    let t = text_of(
+        "fold-shift1",
+        "\t.text\na:\n\tnop\nb:\n\tshll $(b - a), %ecx\n",
+    );
     assert_eq!(t, [0x90, 0xd1, 0xe1], "shift by one takes the D1 form");
     let t = text_of("fold-dot-imm", "\t.text\na:\n\tnop\n\tpushq $(. - a)\n");
     assert_eq!(t, [0x90, 0x6a, 0x01], "`.` is the instruction's own start");
-    let t = text_of("fold-dot-disp", "\t.text\na:\n\tnop\n\tmovl (a - .)(%rbx), %eax\n");
+    let t = text_of(
+        "fold-dot-disp",
+        "\t.text\na:\n\tnop\n\tmovl (a - .)(%rbx), %eax\n",
+    );
     assert_eq!(t, [0x90, 0x8b, 0x43, 0xff]);
 }
 
@@ -1062,7 +1071,11 @@ fn an_operand_difference_narrows_only_over_a_parse_fixed_span() {
         "fold-fixed-insns-span",
         "\t.text\na:\n\tnop\n\tcall x\n\taddl $x, %eax\nb:\n\tpushq $(b - a)\n",
     );
-    assert_eq!(&t[11..], [0x6a, 0x0b], "calls and relocated fields are fixed");
+    assert_eq!(
+        &t[11..],
+        [0x6a, 0x0b],
+        "calls and relocated fields are fixed"
+    );
     let t = text_of(
         "fold-mul-expr",
         "\t.text\na:\n\tnop\n\tnop\nb:\n\tpushq $((b - a) * 8 - 6)\n",
@@ -1079,7 +1092,10 @@ fn an_operand_difference_narrows_only_over_a_parse_fixed_span() {
 /// encoding of the same source.
 #[test]
 fn an_operand_difference_resolves_names_as_the_parse_defined_them() {
-    let t = text_of("fold-numeric", "\t.text\n1:\n\tnop\n2:\n\tpushq $(2b - 1b)\n");
+    let t = text_of(
+        "fold-numeric",
+        "\t.text\n1:\n\tnop\n2:\n\tpushq $(2b - 1b)\n",
+    );
     assert_eq!(t, [0x90, 0x6a, 0x01]);
     let t = text_of(
         "fold-set-alias",

@@ -1616,7 +1616,13 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
 /// return true; otherwise (a plain GP move) return false. The forms: GP64<->xmm
 /// (66 REX.W 0F 6E/7E), xmm<->xmm and mem->xmm load (F3 0F 7E), xmm->mem store
 /// (66 0F D6). The xmm is always ModRM.reg; the other operand is r/m.
-fn movq_xmm(code: &mut Vec<u8>, addr: u8, src: Concrete, dst: Concrete) -> Result<bool, String> {
+fn movq_xmm(
+    code: &mut Vec<u8>,
+    mode: super::table::Mode,
+    addr: u8,
+    src: Concrete,
+    dst: Concrete,
+) -> Result<bool, String> {
     let xmm = |c: &Concrete| match c {
         Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
             Some(*reg - XMM_BASE)
@@ -1658,7 +1664,7 @@ fn movq_xmm(code: &mut Vec<u8>, addr: u8, src: Concrete, dst: Concrete) -> Resul
                 code.push(rex(false, d >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x7E]);
-            mr.emit(code, addr, d & 7)?;
+            mr.emit(code, mode, addr, d & 7)?;
         }
         // xmm -> mem (store).
         (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
@@ -1670,7 +1676,7 @@ fn movq_xmm(code: &mut Vec<u8>, addr: u8, src: Concrete, dst: Concrete) -> Resul
                 code.push(rex(false, s >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0xD6]);
-            mr.emit(code, addr, s & 7)?;
+            mr.emit(code, mode, addr, s & 7)?;
         }
         // No xmm operand: a plain GP move.
         _ => return Ok(false),
@@ -1682,7 +1688,13 @@ fn movq_xmm(code: &mut Vec<u8>, addr: u8, src: Concrete, dst: Concrete) -> Resul
 /// and return true. The forms: mm<->mm and mem->mm load (0F 6F), mm->mem
 /// store (0F 7F), GP64<->mm (REX.W 0F 6E/7E). The mm register is always
 /// ModRM.reg; the other operand is r/m.
-fn movq_mmx(code: &mut Vec<u8>, addr: u8, src: Concrete, dst: Concrete) -> Result<bool, String> {
+fn movq_mmx(
+    code: &mut Vec<u8>,
+    mode: super::table::Mode,
+    addr: u8,
+    src: Concrete,
+    dst: Concrete,
+) -> Result<bool, String> {
     let mm = |c: &Concrete| match c {
         Concrete::Reg { reg, .. } if (MMX_BASE..MMX_BASE + 8).contains(reg) => {
             Some(*reg - MMX_BASE)
@@ -1703,7 +1715,7 @@ fn movq_mmx(code: &mut Vec<u8>, addr: u8, src: Concrete, dst: Concrete) -> Resul
                 code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x6F]);
-            mr.emit(code, addr, d)?;
+            mr.emit(code, mode, addr, d)?;
         }
         (Some(s), None, _, ref m) if MemRm::of(m).is_some() => {
             let Some(mr) = MemRm::of(m) else {
@@ -1713,7 +1725,7 @@ fn movq_mmx(code: &mut Vec<u8>, addr: u8, src: Concrete, dst: Concrete) -> Resul
                 code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x7F]);
-            mr.emit(code, addr, s)?;
+            mr.emit(code, mode, addr, s)?;
         }
         (None, Some(d), Concrete::Reg { reg: g, .. }, _) if g < MMX_BASE => {
             code.push(rex(true, false, false, g >= 8));
@@ -2943,16 +2955,17 @@ fn modrm_mem(code: &mut Vec<u8>, reg: u8, base: u8, disp: i32, n: i32) {
 }
 
 /// The r/m addressing of a memory operand for the arms below: `disp(%base)`,
-/// the scaled-index forms, and the RIP-relative one.
+/// the scaled-index forms, the RIP-relative one, and the absolute address.
 #[derive(Clone, Copy)]
 pub(super) struct MemRm {
-    /// Base register, or `None` for a RIP-relative or base-less reference.
+    /// Base register, or `None` for a RIP-relative, absolute, or base-less
+    /// scaled-index reference.
     base: Option<u8>,
     /// Scaled index register and its scale.
     index: Option<(u8, u8)>,
     disp: i32,
-    /// A base-less reference is RIP-relative without an index and an absolute
-    /// SIB (base=101, mod=00) with one.
+    /// A reference with no base and no index is RIP-relative when set and an
+    /// absolute address otherwise.
     riprel: bool,
 }
 
@@ -2985,6 +2998,12 @@ impl MemRm {
                 disp,
                 riprel: true,
             }),
+            Concrete::AbsMem { disp, .. } => Some(MemRm {
+                base: None,
+                index: None,
+                disp,
+                riprel: false,
+            }),
             _ => None,
         }
     }
@@ -3001,8 +3020,17 @@ impl MemRm {
 
     /// Emit the ModR/M (plus SIB / displacement) with ModRM.reg = `reg` at
     /// address size `addr`, routing a 16-bit address through the fixed
-    /// base / index pairs. RIP-relative is mod=00, r/m=101 with a disp32.
-    fn emit(self, code: &mut Vec<u8>, addr: u8, reg: u8) -> Result<(), String> {
+    /// base / index pairs. RIP-relative is mod=00, r/m=101 with a disp32; an
+    /// absolute address is mod=00, r/m=110 with a disp16 at the 16-bit
+    /// address size and mod=00, r/m=101 with a disp32 outside long mode,
+    /// where that encoding is not RIP-relative.
+    fn emit(
+        self,
+        code: &mut Vec<u8>,
+        mode: super::table::Mode,
+        addr: u8,
+        reg: u8,
+    ) -> Result<(), String> {
         if addr == 2 {
             if self.riprel {
                 return Err(String::from(
@@ -3011,6 +3039,11 @@ impl MemRm {
             }
             let (bytes, n) = super::table::modrm_mem16(reg, self.base, self.index, self.disp)?;
             code.extend_from_slice(&bytes[..n]);
+        } else if (self.base, self.index, self.riprel) == (None, None, false)
+            && mode != super::table::Mode::Bits64
+        {
+            code.push(((reg & 7) << 3) | 5);
+            code.extend_from_slice(&self.disp.to_le_bytes());
         } else {
             self.emit_scaled(code, reg, 1);
         }
@@ -3018,15 +3051,20 @@ impl MemRm {
     }
 
     /// As [`MemRm::emit`], with `n` the EVEX disp8 scale (see [`disp8_of`]).
-    /// RIP-relative takes a disp32 whatever the tuple type, so `n` does not
-    /// reach it.
+    /// RIP-relative and the long-mode absolute form (mod=00, r/m=100, SIB
+    /// base=101 index=100) take a disp32 whatever the tuple type, so `n` does
+    /// not reach them.
     pub(super) fn emit_scaled(self, code: &mut Vec<u8>, reg: u8, n: i32) {
         match (self.base, self.index) {
             (Some(base), None) => modrm_mem(code, reg, base, self.disp, n),
             (base, Some((index, scale))) => modrm_sib(code, reg, base, index, scale, self.disp, n),
             (None, None) => {
-                debug_assert!(self.riprel);
-                code.push(((reg & 7) << 3) | 5);
+                if self.riprel {
+                    code.push(((reg & 7) << 3) | 5);
+                } else {
+                    code.push(((reg & 7) << 3) | 4);
+                    code.push(0x25);
+                }
                 code.extend_from_slice(&self.disp.to_le_bytes());
             }
         }
@@ -3557,7 +3595,7 @@ fn encode_bespoke(
             code.extend_from_slice(&[0x0F, 0x38, opcode]);
             match rm {
                 Ok(reg) => code.push(modrm_reg(acc, reg)),
-                Err(mr) => mr.emit(code, addr, acc)?,
+                Err(mr) => mr.emit(code, mode, addr, acc)?,
             }
             Ok(())
         }
@@ -3608,7 +3646,7 @@ fn encode_bespoke(
                 code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
             }
             code.push(opcode);
-            mr.emit(code, addr, ext)?;
+            mr.emit(code, mode, addr, ext)?;
             Ok(())
         }
         Mnemonic::FarBranch { ext, far, opw } => {
@@ -3655,7 +3693,7 @@ fn encode_bespoke(
                 code.push(rex(rex_w, false, mr.rex_x(), mr.rex_b()));
             }
             code.push(0xFF);
-            mr.emit(code, addr, ext)?;
+            mr.emit(code, mode, addr, ext)?;
             Ok(())
         }
         Mnemonic::MemExt0F { opcode, ext, rex_w } => {
@@ -3669,7 +3707,7 @@ fn encode_bespoke(
             }
             code.push(0x0F);
             code.push(opcode);
-            mr.emit(code, addr, ext)?;
+            mr.emit(code, mode, addr, ext)?;
             Ok(())
         }
         Mnemonic::InvMem { opcode } => {
@@ -3693,7 +3731,7 @@ fn encode_bespoke(
                 code.push(rex(false, gpr >= 8, mr.rex_x(), mr.rex_b()));
             }
             code.extend_from_slice(&[0x0F, 0x38, opcode]);
-            mr.emit(code, addr, gpr & 7)?;
+            mr.emit(code, mode, addr, gpr & 7)?;
             Ok(())
         }
         Mnemonic::SizedNullary { opcode, opw, stack } => {
@@ -3702,12 +3740,39 @@ fn encode_bespoke(
             } else {
                 mode.opsize()
             };
+            // `lret $imm` is the far return's CA iw form; the other members
+            // take no operands.
+            let imm = match (opcode, ops) {
+                (_, []) => None,
+                (0xCB, [Concrete::Imm(v)]) => Some(*v),
+                (0xCB, _) => {
+                    return Err(String::from(
+                        "inline asm: `lret` takes an immediate or no operand",
+                    ));
+                }
+                _ => {
+                    return Err(String::from(
+                        "inline asm: this mnemonic takes no operands",
+                    ));
+                }
+            };
             match opw.unwrap_or(dflt) {
                 w if w == dflt => {}
                 8 => code.push(rex(true, false, false, false)),
                 _ => code.push(0x66),
             }
-            code.push(opcode);
+            match imm {
+                None => code.push(opcode),
+                Some(v) => {
+                    if !(-0x8000..=0xffff).contains(&v) {
+                        return Err(format!(
+                            "inline asm: far return immediate `{v}` does not fit 16 bits"
+                        ));
+                    }
+                    code.push(0xCA);
+                    code.extend_from_slice(&(v as u16).to_le_bytes());
+                }
+            }
             Ok(())
         }
         Mnemonic::Int => {
@@ -3765,7 +3830,7 @@ fn encode_bespoke(
                         code.push(rex(false, v_field >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     code.extend_from_slice(&[0x0F, opcode]);
-                    mr.emit(code, addr, v_field & 7)?;
+                    mr.emit(code, mode, addr, v_field & 7)?;
                 }
             }
             Ok(())
@@ -3818,7 +3883,7 @@ fn encode_bespoke(
                     }
                     escape(code);
                     code.push(opcode);
-                    mr.emit(code, addr, d & 7)?;
+                    mr.emit(code, mode, addr, d & 7)?;
                 }
                 (None, None) => {
                     return Err(String::from(
@@ -3872,7 +3937,7 @@ fn encode_bespoke(
                         code.push(rex(false, dn >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     opcode(code, op);
-                    mr.emit(code, addr, dn & 7)?;
+                    mr.emit(code, mode, addr, dn & 7)?;
                 }
                 (Some(sn), _, None, Some(mr)) => {
                     let op = dir(store_op, "store")?;
@@ -3880,7 +3945,7 @@ fn encode_bespoke(
                         code.push(rex(false, sn >= 8, mr.rex_x(), mr.rex_b()));
                     }
                     opcode(code, op);
-                    mr.emit(code, addr, sn & 7)?;
+                    mr.emit(code, mode, addr, sn & 7)?;
                 }
                 _ => {
                     return Err(String::from(
@@ -3957,7 +4022,7 @@ fn encode_bespoke(
                     }
                     escape(code);
                     code.push(opcode);
-                    mr.emit(code, addr, v & 7)?;
+                    mr.emit(code, mode, addr, v & 7)?;
                 }
                 (None, None) => {
                     return Err(String::from(
@@ -4010,7 +4075,7 @@ fn encode_bespoke(
                 code.extend_from_slice(&[0x0F, var]);
                 match (reg_count, mem_count) {
                     (Some(c), _) => code.push(modrm_reg(r & 7, c & 7)),
-                    (None, Some(mr)) => mr.emit(code, addr, r & 7)?,
+                    (None, Some(mr)) => mr.emit(code, mode, addr, r & 7)?,
                     (None, None) => unreachable!("checked above"),
                 }
                 return Ok(());
@@ -4052,7 +4117,7 @@ fn encode_bespoke(
                     let l = u8::from(dy || s1y);
                     emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, w, s1, l, pp);
                     code.push(opcode);
-                    mr.emit(code, addr, d & 7)?;
+                    mr.emit(code, mode, addr, d & 7)?;
                 }
             }
             Ok(())
@@ -4103,7 +4168,7 @@ fn encode_bespoke(
                         let pp = if w { 2 } else { 1 };
                         vex(code, d >= 8, mr.rex_x(), mr.rex_b(), pp, false);
                         code.push(if w { 0x7E } else { 0x6E });
-                        mr.emit(code, addr, d & 7)?;
+                        mr.emit(code, mode, addr, d & 7)?;
                     }
                 },
                 (Some(s), None) => match gpr(&dst) {
@@ -4116,7 +4181,7 @@ fn encode_bespoke(
                         let mr = MemRm::of(&dst).ok_or(BAD_VMOV_OPND)?;
                         vex(code, s >= 8, mr.rex_x(), mr.rex_b(), 1, false);
                         code.push(if w { 0xD6 } else { 0x7E });
-                        mr.emit(code, addr, s & 7)?;
+                        mr.emit(code, mode, addr, s & 7)?;
                     }
                 },
                 _ => {
@@ -4180,7 +4245,7 @@ fn encode_bespoke(
                             pp,
                         );
                         code.push(load_op);
-                        mr.emit(code, addr, d & 7)?;
+                        mr.emit(code, mode, addr, d & 7)?;
                     }
                 }
             } else if let (Some((s, sy)), Some(mr)) = (vec_reg(&src), MemRm::of(&dst)) {
@@ -4197,7 +4262,7 @@ fn encode_bespoke(
                     pp,
                 );
                 code.push(store_op);
-                mr.emit(code, addr, s & 7)?;
+                mr.emit(code, mode, addr, s & 7)?;
             } else {
                 return Err(String::from("inline asm: unsupported VEX move operands"));
             }
@@ -4254,7 +4319,7 @@ fn encode_bespoke(
                         pp,
                     );
                     code.push(opcode);
-                    mr.emit(code, addr, d & 7)?;
+                    mr.emit(code, mode, addr, d & 7)?;
                 }
             }
             Ok(())
@@ -4309,7 +4374,7 @@ fn encode_bespoke(
                     let l = u8::from(dy || s1y || leady);
                     emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, false, s1, l, pp);
                     code.push(opcode);
-                    mr.emit(code, addr, d & 7)?;
+                    mr.emit(code, mode, addr, d & 7)?;
                 }
             }
             code.push(tail);
@@ -4366,7 +4431,7 @@ fn encode_bespoke(
                         pp,
                     );
                     code.push(opcode);
-                    mr.emit(code, addr, r & 7)?;
+                    mr.emit(code, mode, addr, r & 7)?;
                 }
             }
             code.push(*ib as u8);
@@ -4418,7 +4483,7 @@ fn encode_bespoke(
                         };
                         emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), 1, false, s, l, 1);
                         code.push(var);
-                        mr.emit(code, addr, d & 7)?;
+                        mr.emit(code, mode, addr, d & 7)?;
                     }
                 }
                 return Ok(());
@@ -4477,7 +4542,7 @@ fn encode_bespoke(
                     };
                     emit_vex(code, s >= 8, mr.rex_x(), mr.rex_b(), map, w, 0, 0, 1);
                     code.push(opcode);
-                    mr.emit(code, addr, s & 7)?;
+                    mr.emit(code, mode, addr, s & 7)?;
                 }
             }
             code.push(*ib as u8);
@@ -4509,7 +4574,7 @@ fn encode_bespoke(
                     };
                     emit_vex(code, d >= 8, mr.rex_x(), mr.rex_b(), map, w, s1, 0, 1);
                     code.push(opcode);
-                    mr.emit(code, addr, d & 7)?;
+                    mr.emit(code, mode, addr, d & 7)?;
                 }
             }
             code.push(*ib as u8);
@@ -4578,7 +4643,7 @@ fn encode_bespoke(
                     };
                     emit_vex(code, dn >= 8, mr.rex_x(), mr.rex_b(), map, w, vvvv, 0, pp);
                     code.push(opcode);
-                    mr.emit(code, addr, dn & 7)?;
+                    mr.emit(code, mode, addr, dn & 7)?;
                 }
             }
             if let Some(Concrete::Imm(v)) = ib {
@@ -4678,7 +4743,7 @@ fn encode_bespoke(
             let [src, dst] = two(ops)?;
             // `movq` with an XMM operand is the SSE quadword move, with an
             // MMX operand the MMX quadword move; neither is a GP mov.
-            if movq_xmm(code, addr, src, dst)? || movq_mmx(code, addr, src, dst)? {
+            if movq_xmm(code, mode, addr, src, dst)? || movq_mmx(code, mode, addr, src, dst)? {
                 return Ok(());
             }
             {
@@ -4718,7 +4783,7 @@ fn encode_bespoke(
                             code.push(rex(false, false, mr.rex_x(), mr.rex_b()));
                         }
                         code.push(if spec_is_src { 0x8C } else { 0x8E });
-                        mr.emit(code, addr, spec_idx)?;
+                        mr.emit(code, mode, addr, spec_idx)?;
                         return Ok(());
                     }
                     let (gp, gp_size) = as_reg(other)?;
@@ -4887,6 +4952,11 @@ mod tests {
     /// else a GP register operand, else quad), and encode. For templates
     /// whose expected bytes are byte-verified against clang.
     pub(super) fn asm_bytes(tmpl: &[u8]) -> Vec<u8> {
+        mode_asm_bytes(super::super::table::Mode::Bits64, tmpl).unwrap()
+    }
+
+    /// As [`asm_bytes`], encoded in `mode`, returning the encode error.
+    fn mode_asm_bytes(mode: super::super::table::Mode, tmpl: &[u8]) -> Result<Vec<u8>, String> {
         let mut out = Vec::new();
         for insn in parse_template(tmpl).unwrap() {
             let mem_size = insn.suffix.or_else(|| {
@@ -4929,19 +4999,19 @@ mod tests {
             if let Some(seg) = insn.seg {
                 out.push(seg);
             }
-            encode(
+            encode_in(
                 &mut out,
-                addr_size(&insn, crate::c5::codegen::x86_64::table::Mode::Bits64),
+                mode,
+                addr_size(&insn, mode),
                 insn.mnemonic,
                 insn.suffix,
                 &ops,
-            )
-            .unwrap();
+            )?;
             if let Some(rex) = insn.rex {
                 splice_rex(&mut out, at, rex).unwrap();
             }
         }
-        out
+        Ok(out)
     }
 
     /// One operandless template encoded in `mode`, for the forms whose width
@@ -5059,6 +5129,75 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    /// The stack-adjusting returns (`ret $imm` C2 iw, `lret` / `retf` `$imm`
+    /// CA iw) and the bespoke single-memory-operand forms over an absolute
+    /// address. Bytes measured with GNU as 2.46 under each `.code` directive.
+    #[test]
+    fn ret_imm_and_absolute_memory_forms_match_gnu_as() {
+        use super::super::table::Mode::{Bits16, Bits32, Bits64};
+        #[rustfmt::skip]
+        let cases: &[(super::super::table::Mode, &[u8], &[u8])] = &[
+            (Bits64, b"ret $8",            &[0xC2, 0x08, 0x00]),
+            (Bits64, b"retw $8",           &[0x66, 0xC2, 0x08, 0x00]),
+            (Bits64, b"retq $8",           &[0xC2, 0x08, 0x00]),
+            (Bits64, b"ret $-2",           &[0xC2, 0xFE, 0xFF]),
+            (Bits64, b"ret $65535",        &[0xC2, 0xFF, 0xFF]),
+            (Bits64, b"lret $8",           &[0xCA, 0x08, 0x00]),
+            (Bits64, b"lretw $8",          &[0x66, 0xCA, 0x08, 0x00]),
+            (Bits64, b"lretl $8",          &[0xCA, 0x08, 0x00]),
+            (Bits64, b"lretq $8",          &[0x48, 0xCA, 0x08, 0x00]),
+            (Bits64, b"retf $8",           &[0xCA, 0x08, 0x00]),
+            (Bits16, b"ret $2",            &[0xC2, 0x02, 0x00]),
+            (Bits16, b"retl $2",           &[0x66, 0xC2, 0x02, 0x00]),
+            (Bits16, b"lret $2",           &[0xCA, 0x02, 0x00]),
+            (Bits16, b"lretw $2",          &[0xCA, 0x02, 0x00]),
+            (Bits16, b"lretl $2",          &[0x66, 0xCA, 0x02, 0x00]),
+            (Bits32, b"ret $2",            &[0xC2, 0x02, 0x00]),
+            (Bits32, b"retw $2",           &[0x66, 0xC2, 0x02, 0x00]),
+            (Bits32, b"lret $2",           &[0xCA, 0x02, 0x00]),
+            (Bits32, b"lretw $2",          &[0x66, 0xCA, 0x02, 0x00]),
+            (Bits16, b"ljmp *0x1234",      &[0xFF, 0x2E, 0x34, 0x12]),
+            (Bits16, b"ljmpw *0x1234",     &[0xFF, 0x2E, 0x34, 0x12]),
+            (Bits16, b"ljmpl *0x1234",     &[0x66, 0xFF, 0x2E, 0x34, 0x12]),
+            (Bits16, b"lcall *0x1234",     &[0xFF, 0x1E, 0x34, 0x12]),
+            (Bits32, b"ljmp *0x1234",      &[0xFF, 0x2D, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"ljmp *0x1234",      &[0xFF, 0x2C, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"lcall *0x1234",     &[0xFF, 0x1C, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits16, b"fnstcw 0x469",      &[0xD9, 0x3E, 0x69, 0x04]),
+            (Bits16, b"fnstsw 0x469",      &[0xDD, 0x3E, 0x69, 0x04]),
+            (Bits16, b"fldl 0x1234",       &[0xDD, 0x06, 0x34, 0x12]),
+            (Bits32, b"fnstcw 0x469",      &[0xD9, 0x3D, 0x69, 0x04, 0x00, 0x00]),
+            (Bits32, b"ldmxcsr 0x1234",    &[0x0F, 0xAE, 0x15, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"fnstcw 0x469",      &[0xD9, 0x3C, 0x25, 0x69, 0x04, 0x00, 0x00]),
+            (Bits64, b"fldl 0x1234",       &[0xDD, 0x04, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"fstpl 0x1234",      &[0xDD, 0x1C, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"ldmxcsr 0x1234",    &[0x0F, 0xAE, 0x14, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"stmxcsr 0x1234",    &[0x0F, 0xAE, 0x1C, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"cmpxchg16b 0x1234", &[0x48, 0x0F, 0xC7, 0x0C, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (Bits64, b"invpcid 0x1234, %%rax",
+                     &[0x66, 0x0F, 0x38, 0x82, 0x04, 0x25, 0x34, 0x12, 0x00, 0x00]),
+        ];
+        for (mode, tmpl, want) in cases {
+            let got = mode_asm_bytes(*mode, tmpl).unwrap();
+            assert_eq!(
+                got.as_slice(),
+                *want,
+                "{mode:?} {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        // The 16-bit immediate field bounds the value, as GNU as enforces;
+        // the other sized-nullary forms take no operands at all.
+        for (mode, tmpl) in [
+            (Bits64, b"ret $65536".as_slice()),
+            (Bits64, b"lret $65536"),
+            (Bits64, b"iret $8"),
+            (Bits64, b"pushf $8"),
+        ] {
+            assert!(mode_asm_bytes(mode, tmpl).is_err(), "{tmpl:?}");
+        }
     }
 
     #[test]

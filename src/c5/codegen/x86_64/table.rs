@@ -742,8 +742,38 @@ fn encode_best(
 /// takes a prefixless `MemAny` form beside the register ones. The three that
 /// store into a register (`sldt`, `str`, `smsw`) also write a 32-bit
 /// destination, which is the same encoding without the 0x66 the generated
-/// 16-bit form carries.
+/// 16-bit form carries. The stack-adjusting returns `ret imm16` (C2) and
+/// `retf imm16` (CA) are absent from the generated catalogue; the immediate
+/// is 16-bit at every operand size, so each is one form.
 static FORMS_SUPPLEMENT: &[Form] = &[
+    Form {
+        mnem: Mnem::Ret,
+        mnemonic: "ret",
+        ops: &[OpPat::Imm(ImmC::Iw)],
+        pp: &[],
+        map: Map::Legacy,
+        opcode: &[0xC2],
+        plus_r: false,
+        rexw: RexW::Default64,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: Some(ImmC::Iw),
+        imm_op: 0,
+    },
+    Form {
+        mnem: Mnem::Retf,
+        mnemonic: "retf",
+        ops: &[OpPat::Imm(ImmC::Iw)],
+        pp: &[],
+        map: Map::Legacy,
+        opcode: &[0xCA],
+        plus_r: false,
+        rexw: RexW::Default64,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: Some(ImmC::Iw),
+        imm_op: 0,
+    },
     Form {
         mnem: Mnem::Inc,
         mnemonic: "inc",

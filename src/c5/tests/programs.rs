@@ -3278,15 +3278,6 @@ fn byte_store_wide_merge() {
 }
 
 #[test]
-fn inline_byte_access_leaf() {
-    // A pointer-parameter byte-access leaf called in a tight loop: the
-    // merge collapses each body to a wide access and the inliner takes
-    // the collapsed body, so the loop pays no call per byte group. The
-    // asm snapshots hold that shape; this holds the values.
-    assert_eq!(run_fixture("inline_byte_access_leaf.c"), 0);
-}
-
-#[test]
 fn sysexits_codes() {
     // <sysexits.h>: the BSD exit-status codes, same on every target.
     assert_eq!(run_fixture("sysexits_codes.c"), 0);

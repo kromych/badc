@@ -33,24 +33,24 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rdx
                	xorq	%rsi, %rsi
-               	movl	$0x1, %eax
-               	movl	$0x5, %ecx
-               	jmp	<addr>
-               	movl	%ecx, %edi
-               	addq	%rdi, %rsi
-               	movl	%eax, %eax
-               	cmpq	$0x2, %rax
-               	jb	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rdi
-               	jmp	<addr>
-               	movl	%ecx, %eax
-               	movl	%edx, %ecx
-               	addq	%rax, %rcx
-               	movl	$0x2, %eax
-               	xorq	%rdi, %rdi
+               	movl	$0x1, %ecx
+               	movl	$0x5, %eax
                	jmp	<addr>
                	movl	%eax, %edi
+               	addq	%rdi, %rsi
+               	movl	%ecx, %ecx
+               	cmpq	$0x2, %rcx
+               	jb	<addr>
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %rdi
+               	jmp	<addr>
+               	movl	%eax, %eax
+               	movl	%edx, %ecx
+               	addq	%rcx, %rax
+               	movl	$0x2, %ecx
+               	xorq	%rdi, %rdi
+               	jmp	<addr>
+               	movl	%ecx, %edi
                	testq	%rdi, %rdi
                	jne	<addr>
                	leaq	0x7(%rdx), %rax
@@ -58,9 +58,9 @@ Disassembly of section .text:
                	movsbq	%dl, %r9
                	movq	%r9, %rcx
                	xorq	$0x61, %rcx
-               	movsbq	%cl, %rcx
-               	movq	%rax, %rdi
-               	shlq	%rdi
+               	movsbq	%cl, %rdi
+               	movq	%rax, %rcx
+               	shlq	%rcx
                	addq	%rdi, %rcx
                	addq	$0x3, %rcx
                	movslq	%ecx, %rcx
@@ -84,24 +84,24 @@ Disassembly of section .text:
                	leaq	(%rax,%rax,2), %rax
                	addq	%rax, %rbx
                	xorq	%rsi, %rsi
-               	movl	$0x1, %eax
-               	movl	$0x5, %ecx
-               	jmp	<addr>
-               	movl	%ecx, %edi
-               	addq	%rdi, %rsi
-               	movl	%eax, %eax
-               	cmpq	$0x2, %rax
-               	jb	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rdi
-               	jmp	<addr>
-               	movl	%ecx, %eax
-               	movl	%edx, %ecx
-               	addq	%rax, %rcx
-               	movl	$0x2, %eax
-               	xorq	%rdi, %rdi
+               	movl	$0x1, %ecx
+               	movl	$0x5, %eax
                	jmp	<addr>
                	movl	%eax, %edi
+               	addq	%rdi, %rsi
+               	movl	%ecx, %ecx
+               	cmpq	$0x2, %rcx
+               	jb	<addr>
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %rdi
+               	jmp	<addr>
+               	movl	%eax, %eax
+               	movl	%edx, %ecx
+               	addq	%rcx, %rax
+               	movl	$0x2, %ecx
+               	xorq	%rdi, %rdi
+               	jmp	<addr>
+               	movl	%ecx, %edi
                	testq	%rdi, %rdi
                	jne	<addr>
                	cmpq	$0xd, %rsi
@@ -115,9 +115,9 @@ Disassembly of section .text:
                	movswq	%ax, %rax
                	movq	%r9, %rcx
                	xorq	$0x61, %rcx
-               	movsbq	%cl, %rcx
-               	movq	%rax, %rsi
-               	shlq	%rsi
+               	movsbq	%cl, %rsi
+               	movq	%rax, %rcx
+               	shlq	%rcx
                	addq	%rsi, %rcx
                	addq	$0x3, %rcx
                	movslq	%ecx, %rcx
@@ -135,12 +135,12 @@ Disassembly of section .text:
                	shlq	%rax
                	movswq	%ax, %rsi
                	leaq	-0x3(%rdx), %rax
-               	movswq	%ax, %rdx
+               	movswq	%ax, %rdi
                	shlq	%rcx
                	addq	%r8, %rcx
-               	leaq	(%rsi,%rsi,2), %rsi
-               	addq	%rsi, %rcx
-               	leaq	(%rcx,%rdx), %rax
+               	leaq	(%rsi,%rsi,2), %rdx
+               	addq	%rdx, %rcx
+               	leaq	(%rcx,%rdi), %rax
                	movslq	%eax, %rax
                	cmpq	$0x1d, %rax
                	je	<addr>

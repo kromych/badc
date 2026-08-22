@@ -366,18 +366,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movl	$0xd, %edi
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movslq	%eax, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
+<check_member_range>:
                	leaq	<rip>, %rax
                	xorq	%rcx, %rcx
                	movl	%ecx, (%rax)
@@ -389,12 +378,17 @@ Disassembly of section .text:
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x69, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movslq	%eax, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
                	retq
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	retq
+
+<check_row_range>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x30, %rsp
                	leaq	<rip>, %rdx
                	xorq	%rcx, %rcx
                	movl	%ecx, (%rdx)
@@ -423,13 +417,6 @@ Disassembly of section .text:
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x6a, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movslq	%eax, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	xorq	%rax, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
@@ -476,14 +463,43 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xc, %eax
-               	jmp	<addr>
+               	addq	$0x30, %rsp
+               	popq	%rbp
+               	retq
                	xorq	%rax, %rax
-               	jmp	<addr>
+               	addq	$0x30, %rsp
+               	popq	%rbp
+               	retq
                	jmp	<addr>
                	movl	$0xb, %eax
-               	jmp	<addr>
+               	addq	$0x30, %rsp
+               	popq	%rbp
+               	retq
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	movl	$0xd, %edi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movslq	%eax, %rax
+               	popq	%rbp
+               	retq
+               	movl	$0x11, %edi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movslq	%eax, %rax
+               	popq	%rbp
+               	retq
+               	movl	$0x1d, %edi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movslq	%eax, %rax
+               	popq	%rbp
+               	retq
                	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	jmp	<addr>
+               	popq	%rbp
+               	retq

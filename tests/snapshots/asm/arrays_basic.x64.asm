@@ -46,17 +46,17 @@ Disassembly of section .text:
                	movl	$0x5, %ecx
                	movl	%ecx, 0x10(%rax)
                	leaq	-0x18(%rbp), %rsi
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %rax
                	jmp	<addr>
-               	movslq	(%rsi,%rdx,4), %rax
-               	addq	%rax, %rcx
-               	leaq	0x1(%rdx), %rax
-               	movslq	%eax, %rax
-               	movslq	%eax, %rdx
+               	movslq	(%rsi,%rdx,4), %rcx
+               	addq	%rcx, %rax
+               	leaq	0x1(%rdx), %rcx
+               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rdx
                	cmpq	$0x5, %rdx
                	jl	<addr>
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0xf, %rax
                	je	<addr>
                	movl	$0x1, %eax

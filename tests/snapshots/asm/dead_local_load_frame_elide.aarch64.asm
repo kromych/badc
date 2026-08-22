@@ -60,8 +60,7 @@ Disassembly of section .text:
                	mov	x1, #0x8                // =8
                	strb	w1, [x0, #0x7]
                	sub	x0, x29, #0x8
-               	ldr	x0, [x0]
-               	rev	x0, x0
+               	bl	<addr>
                	mov	x17, #0x708             // =1800
                	movk	x17, #0x506, lsl #16
                	movk	x17, #0x304, lsl #32

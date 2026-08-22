@@ -44,8 +44,8 @@ Disassembly of section .text:
                	movslq	-0x18(%rbp), %rax
                	addq	$0x2, %rax
                	addq	$0x3, %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x6, %rcx
+               	movslq	%eax, %rax
+               	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x20, %rsp

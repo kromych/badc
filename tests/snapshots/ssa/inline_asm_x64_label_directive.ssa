@@ -9,7 +9,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v8   LocalAddr(-1)                                    -> x0
     v9   InlineAsm { template="1:  .irp num,0,1,2,3\n    .equ .L__xld\\num, (\\num * 3 + 1)\n    .endr\n    movl $(.L__xld0 + .L__xld1 + .L__xld2 + .L__xld3), %0\n", ops=1, args=[v8] } -> -
     v10  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v11  Extend { value=v10, kind=I32 }                   -> x1
+    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x1
+    v12  Extend { value=v10, kind=I32 }                   -> x1
     terminator Jmp(b2)   (exit_acc=v10)
   block 2  start_pc=0
     v1   BinopI { op=ne, lhs=v10, rhs_imm=22 }            -> x0
@@ -18,25 +19,27 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v2   Imm(1)                                           -> x0
     terminator Return(v2)   (exit_acc=v2)
   block 4  start_pc=0
-    v12  LocalAddr(-1)                                    -> x0
-    v13  InlineAsm { template="2: 3:  .macro xld_set dst, val\n    movl $\\val, \\dst\n    .endm\n    xld_set %0, 77\n    .purgem xld_set\n", ops=1, args=[v12] } -> -
-    v14  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v15  Extend { value=v14, kind=I32 }                   -> x1
-    terminator Jmp(b5)   (exit_acc=v14)
+    v13  LocalAddr(-1)                                    -> x0
+    v14  InlineAsm { template="2: 3:  .macro xld_set dst, val\n    movl $\\val, \\dst\n    .endm\n    xld_set %0, 77\n    .purgem xld_set\n", ops=1, args=[v13] } -> -
+    v15  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x1
+    v17  Extend { value=v15, kind=I32 }                   -> x1
+    terminator Jmp(b5)   (exit_acc=v15)
   block 5  start_pc=0
-    v3   BinopI { op=ne, lhs=v14, rhs_imm=77 }            -> x0
+    v3   BinopI { op=ne, lhs=v15, rhs_imm=77 }            -> x0
     terminator Bz { cond=v3, target=b7, fall=b6 }   (exit_acc=v3)
   block 6  start_pc=0
     v4   Imm(2)                                           -> x0
     terminator Return(v4)   (exit_acc=v4)
   block 7  start_pc=0
-    v16  LocalAddr(-1)                                    -> x0
-    v17  InlineAsm { template="4:  .equ .L__xlde, 5\n    movl $(.L__xlde * 3), %0\n    jmp 5f\n    movl $0, %0\n5:\n", ops=1, args=[v16] } -> -
-    v18  LoadLocal { off=-1, kind=I32 }                   -> x0
-    v19  Extend { value=v18, kind=I32 }                   -> x1
-    terminator Jmp(b8)   (exit_acc=v18)
+    v18  LocalAddr(-1)                                    -> x0
+    v19  InlineAsm { template="4:  .equ .L__xlde, 5\n    movl $(.L__xlde * 3), %0\n    jmp 5f\n    movl $0, %0\n5:\n", ops=1, args=[v18] } -> -
+    v20  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
+    v22  Extend { value=v20, kind=I32 }                   -> x1
+    terminator Jmp(b8)   (exit_acc=v20)
   block 8  start_pc=0
-    v5   BinopI { op=ne, lhs=v18, rhs_imm=15 }            -> x0
+    v5   BinopI { op=ne, lhs=v20, rhs_imm=15 }            -> x0
     terminator Bz { cond=v5, target=b10, fall=b9 }   (exit_acc=v5)
   block 9  start_pc=0
     v6   Imm(3)                                           -> x0
@@ -69,21 +72,26 @@ fn ent_pc=2 n_params=1 variadic=false locals=2
     terminator Jmp(b1)
   block 1  start_pc=0
     v6   ImmData(0)                                       -> x3
+    v7   Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v6)
   block 2  start_pc=0
-    v10  BinopI { op=add, lhs=v7, rhs_imm=-8 }            -> x3
-    v11  Load { addr=v10, disp=0, kind=I64 }              -> x0
-    v12  CallIndirect { target=v11, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v13  BinopI { op=and, lhs=v12, rhs_imm=255 }          -> x0
-    terminator Jmp(b3)   (exit_acc=v13)
-  block 3  start_pc=0
-    v7   Phi { incoming=[b1:v6, b2:v10], kind=I64 }       -> x3
-    v8   ImmData(0)                                       -> x0
-    v9   Binop { op=ne, lhs=v7, rhs=v8 }                  -> x0
-    terminator Bnz { cond=v9, target=b2, fall=b4 }   (exit_acc=v9)
-  block 4  start_pc=0
+    v12  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v13  BinopI { op=add, lhs=v8, rhs_imm=-8 }            -> x3
     v14  Imm(0)                                           -> x0
-    terminator Jmp(b5)   (exit_acc=v14)
+    v15  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v16  Load { addr=v13, disp=0, kind=I64 }              -> x0
+    v17  CallIndirect { target=v16, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v18  BinopI { op=and, lhs=v17, rhs_imm=255 }          -> x0
+    terminator Jmp(b3)   (exit_acc=v18)
+  block 3  start_pc=0
+    v8   Phi { incoming=[b1:v6, b2:v13], kind=I64 }       -> x3
+    v9   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v10  ImmData(0)                                       -> x0
+    v11  Binop { op=ne, lhs=v8, rhs=v10 }                 -> x0
+    terminator Bnz { cond=v11, target=b2, fall=b4 }   (exit_acc=v11)
+  block 4  start_pc=0
+    v19  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v19)
   block 5  start_pc=0
     v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
@@ -175,23 +183,28 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     terminator Jmp(b3)   (exit_acc=v34)
   block 3  start_pc=0
     v35  ImmData(0)                                       -> x3
+    v36  Imm(0)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v35)
   block 4  start_pc=0
-    v40  Load { addr=v36, disp=0, kind=I64 }              -> x0
-    v41  CallIndirect { target=v40, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v42  BinopI { op=and, lhs=v41, rhs_imm=255 }          -> x0
-    terminator Jmp(b5)   (exit_acc=v42)
+    v44  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v45  Load { addr=v37, disp=0, kind=I64 }              -> x0
+    v46  CallIndirect { target=v45, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v47  BinopI { op=and, lhs=v46, rhs_imm=255 }          -> x0
+    terminator Jmp(b5)   (exit_acc=v47)
   block 5  start_pc=0
-    v39  BinopI { op=add, lhs=v36, rhs_imm=8 }            -> x3
-    terminator Jmp(b6)   (exit_acc=v39)
-  block 6  start_pc=0
-    v36  Phi { incoming=[b3:v35, b5:v39], kind=I64 }      -> x3
-    v37  ImmData(0)                                       -> x0
-    v38  Binop { op=ne, lhs=v36, rhs=v37 }                -> x0
-    terminator Bnz { cond=v38, target=b4, fall=b7 }   (exit_acc=v38)
-  block 7  start_pc=0
+    v41  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v42  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x3
     v43  Imm(0)                                           -> x0
-    terminator Jmp(b8)   (exit_acc=v43)
+    terminator Jmp(b6)   (exit_acc=v42)
+  block 6  start_pc=0
+    v37  Phi { incoming=[b3:v35, b5:v42], kind=I64 }      -> x3
+    v38  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v39  ImmData(0)                                       -> x0
+    v40  Binop { op=ne, lhs=v37, rhs=v39 }                -> x0
+    terminator Bnz { cond=v40, target=b4, fall=b7 }   (exit_acc=v40)
+  block 7  start_pc=0
+    v48  Imm(0)                                           -> x0
+    terminator Jmp(b8)   (exit_acc=v48)
   block 8  start_pc=0
     v25  LoadLocal { off=-1, kind=I32 }                   -> x0
     v26  LoadLocal { off=-1, kind=I64 }                   -> x0

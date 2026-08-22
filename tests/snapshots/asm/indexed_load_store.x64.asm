@@ -80,29 +80,29 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movl	$0x50, %ecx
                	movl	%ecx, 0x1c(%rax)
-               	leaq	-0x40(%rbp), %rdi
+               	leaq	-0x40(%rbp), %r9
                	leaq	-0x20(%rbp), %rsi
                	xorq	%rdx, %rdx
                	movq	%rdx, %rax
                	jmp	<addr>
                	movq	%rcx, %r8
                	shlq	$0x2, %r8
-               	leaq	(%rdi,%r8), %r9
-               	movslq	(%r9), %rbx
-               	addq	$0x3, %rbx
+               	leaq	(%r9,%r8), %rbx
+               	movslq	(%rbx), %rdi
+               	addq	$0x3, %rdi
                	addq	%rsi, %r8
                	movslq	(%r8), %r8
                	subq	$0x3, %r8
-               	movl	%r8d, (%r9)
-               	movl	%ebx, (%rsi,%rcx,4)
-               	movq	%rcx, %r8
-               	shlq	$0x2, %r8
-               	leaq	(%rdi,%r8), %r9
-               	movslq	(%r9), %r9
-               	addq	%rsi, %r8
+               	movl	%r8d, (%rbx)
+               	movl	%edi, (%rsi,%rcx,4)
+               	movq	%rcx, %rdi
+               	shlq	$0x2, %rdi
+               	leaq	(%r9,%rdi), %r8
                	movslq	(%r8), %r8
-               	imulq	%r9, %r8
-               	addq	%r8, %rdx
+               	addq	%rsi, %rdi
+               	movslq	(%rdi), %rdi
+               	imulq	%r8, %rdi
+               	addq	%rdi, %rdx
                	movslq	%edx, %rdx
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx

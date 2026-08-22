@@ -271,14 +271,14 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-<rip>, %rax      # <addr>
-               	movl	$0x3, %ebx
-               	movq	%rbx, %rdi
+               	movl	$0x3, %r12d
+               	movq	%r12, %rdi
                	callq	*%rax
-               	movq	%rax, %r12
+               	movq	%rax, %rbx
                	leaq	-<rip>, %rax      # <addr>
-               	movq	%rbx, %rdi
+               	movq	%r12, %rdi
                	callq	*%rax
-               	addq	%r12, %rax
+               	addq	%rbx, %rax
                	movslq	%eax, %rax
                	cmpq	$0x132, %rax            # imm = 0x132
                	je	<addr>

@@ -33,19 +33,19 @@ Disassembly of section .text:
                	ldrb	w3, [x0, #0x8]
                	cmp	x2, x3
                	cset	x3, eq
-               	mov	x2, #0x0                // =0
+               	mov	x4, #0x0                // =0
                	cbz	x3, <addr>
                	ldrsw	x2, [x1, #0xc]
                	ldrsw	x3, [x0, #0xc]
                	cmp	x2, x3
-               	cset	x2, eq
-               	mov	x3, #0x0                // =0
-               	cbz	x2, <addr>
+               	cset	x4, eq
+               	mov	x2, #0x0                // =0
+               	cbz	x4, <addr>
                	ldrb	w2, [x1, #0x10]
                	ldrb	w3, [x0, #0x10]
                	cmp	x2, x3
-               	cset	x3, eq
-               	sxtw	x2, w3
+               	cset	x2, eq
+               	sxtw	x2, w2
                	cbnz	x2, <addr>
                	mov	x0, #0x1                // =1
                	ret
@@ -66,19 +66,19 @@ Disassembly of section .text:
                	ldrb	w4, [x0, #0x8]
                	cmp	x3, x4
                	cset	x4, eq
-               	mov	x3, #0x0                // =0
+               	mov	x5, #0x0                // =0
                	cbz	x4, <addr>
                	ldrsw	x3, [x2, #0xc]
                	ldrsw	x4, [x0, #0xc]
                	cmp	x3, x4
-               	cset	x3, eq
-               	mov	x4, #0x0                // =0
-               	cbz	x3, <addr>
+               	cset	x5, eq
+               	mov	x3, #0x0                // =0
+               	cbz	x5, <addr>
                	ldrb	w2, [x2, #0x10]
                	ldrb	w3, [x0, #0x10]
                	cmp	x2, x3
-               	cset	x4, eq
-               	sxtw	x2, w4
+               	cset	x3, eq
+               	sxtw	x2, w3
                	cbnz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ret
@@ -99,19 +99,19 @@ Disassembly of section .text:
                	ldrb	w4, [x0, #0x8]
                	cmp	x3, x4
                	cset	x4, eq
-               	mov	x3, #0x0                // =0
+               	mov	x5, #0x0                // =0
                	cbz	x4, <addr>
                	ldrsw	x3, [x2, #0xc]
                	ldrsw	x4, [x0, #0xc]
                	cmp	x3, x4
-               	cset	x3, eq
-               	mov	x4, #0x0                // =0
-               	cbz	x3, <addr>
+               	cset	x5, eq
+               	mov	x3, #0x0                // =0
+               	cbz	x5, <addr>
                	ldrb	w2, [x2, #0x10]
                	ldrb	w0, [x0, #0x10]
                	cmp	x2, x0
-               	cset	x4, eq
-               	sxtw	x0, w4
+               	cset	x3, eq
+               	sxtw	x0, w3
                	cbnz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ret

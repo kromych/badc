@@ -35,14 +35,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0xb40
+               	mov	x4, x0
                	mov	x0, #0x0                // =0
                	b	<addr>
                	sub	x2, x29, #0xb40
                	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x1
-               	sxtw	x3, w3
-               	str	x3, [x2]
+               	add	x3, x2, x3
+               	add	x2, x1, #0x1
+               	sxtw	x2, w2
+               	str	x2, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x5a
@@ -61,10 +62,10 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x2, x29, #0x870
                	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x2
-               	sxtw	x3, w3
-               	str	x3, [x2]
+               	add	x3, x2, x3
+               	add	x2, x1, #0x2
+               	sxtw	x2, w2
+               	str	x2, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x5a
@@ -83,10 +84,10 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x2, x29, #0x5a0
                	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x3
-               	sxtw	x3, w3
-               	str	x3, [x2]
+               	add	x3, x2, x3
+               	add	x2, x1, #0x3
+               	sxtw	x2, w2
+               	str	x2, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x5a
@@ -105,10 +106,10 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x2, x29, #0x2d0
                	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x4
-               	sxtw	x3, w3
-               	str	x3, [x2]
+               	add	x3, x2, x3
+               	add	x2, x1, #0x4
+               	sxtw	x2, w2
+               	str	x2, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x5a
@@ -138,10 +139,10 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x2, x29, #0xb40
                	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x1
-               	sxtw	x3, w3
-               	str	x3, [x2]
+               	add	x3, x2, x3
+               	add	x2, x1, #0x1
+               	sxtw	x2, w2
+               	str	x2, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x5a
@@ -160,10 +161,10 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x2, x29, #0x870
                	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x2
-               	sxtw	x3, w3
-               	str	x3, [x2]
+               	add	x3, x2, x3
+               	add	x2, x1, #0x2
+               	sxtw	x2, w2
+               	str	x2, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x5a
@@ -182,10 +183,10 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x2, x29, #0x5a0
                	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x3
-               	sxtw	x3, w3
-               	str	x3, [x2]
+               	add	x3, x2, x3
+               	add	x2, x1, #0x3
+               	sxtw	x2, w2
+               	str	x2, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x5a
@@ -204,10 +205,10 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x2, x29, #0x2d0
                	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	add	x3, x1, #0x4
-               	sxtw	x3, w3
-               	str	x3, [x2]
+               	add	x3, x2, x3
+               	add	x2, x1, #0x4
+               	sxtw	x2, w2
+               	str	x2, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x5a

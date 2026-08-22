@@ -99,8 +99,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rax
+               	addq	$0x4, %rax
                	movl	$0x11223344, %ecx       # imm = 0x11223344
-               	movl	%ecx, 0x4(%rax)
+               	movl	%ecx, (%rax)
                	leaq	-0x10(%rbp), %rax
                	leaq	0x4(%rax), %rdx
                	leaq	<rip>, %rsi
@@ -154,9 +155,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rax
-               	incq	%rax
-               	movabsq	$0x807060504030201, %rcx # imm = 0x807060504030201
-               	movq	%rcx, (%rax)
+               	leaq	0x1(%rax), %rdi
+               	movabsq	$0x102030405060708, %rsi # imm = 0x102030405060708
+               	callq	<addr>
                	leaq	-0x10(%rbp), %rax
                	leaq	0x1(%rax), %rdx
                	leaq	<rip>, %rsi

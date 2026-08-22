@@ -14,28 +14,30 @@ Disassembly of section .text:
                	brk	#0x1
 
 <core>:
-               	mov	x7, x0
+               	mov	x8, x0
                	add	x0, x3, #0x0
                	ldr	w0, [x0]
-               	mov	w0, w0
-               	ldr	w4, [x3, #0x4]
-               	mov	w4, w4
-               	ldr	w5, [x3, #0x8]
-               	mov	w5, w5
-               	ldr	w3, [x3, #0xc]
-               	mov	w3, w3
-               	mov	x1, #0x0                // =0
-               	mov	w0, w0
-               	mov	w2, w4
-               	eor	x0, x0, x2
+               	mov	w4, w0
+               	add	x0, x3, #0x4
+               	ldr	w0, [x0]
+               	mov	w5, w0
+               	add	x0, x3, #0x8
+               	ldr	w0, [x0]
+               	mov	w6, w0
+               	add	x0, x3, #0xc
+               	ldr	w0, [x0]
+               	mov	w3, w0
+               	mov	x0, #0x0                // =0
+               	mov	w1, w4
                	mov	w2, w5
-               	eor	x0, x0, x2
+               	eor	x1, x1, x2
+               	mov	w2, w6
+               	eor	x1, x1, x2
                	mov	w2, w3
-               	eor	x0, x0, x2
+               	eor	x1, x1, x2
                	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	strb	w0, [x7]
-               	mov	x0, x1
+               	and	x1, x1, x17
+               	strb	w1, [x8]
                	ret
 
 <stream_xor>:

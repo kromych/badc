@@ -8,10 +8,8 @@
 //!
 //! * caller and callee bodies remain in the same translation unit;
 //! * callee has a single basic block terminating in `Return`;
-//! * callee's body emits at most `cap` instructions (the
-//!   `--inline-cap=N` knob; default 64) -- counted over the values the
-//!   emit issues, not the arena, which still holds whatever the passes
-//!   ahead of this one superseded (`live_inst_mask`);
+//! * callee's body is at most `cap` instructions (the
+//!   `--inline-cap=N` knob; default 32);
 //! * callee is non-variadic;
 //! * callee's body contains no `TailExt` and no aggregate-returning
 //!   nested call -- otherwise the straight-line shapes whose
@@ -835,15 +833,14 @@ fn is_inline_candidate(
     }
     // `inline` / `__attribute__((always_inline))`-marked functions
     // bypass the body-size cap (gcc / clang -O2 policy). The other
-    // shape constraints still apply. The cap is measured on the emitted
-    // body, not the arena (`live_inst_mask`); the arena length is the
-    // cheap upper bound that keeps the count off the fitting path.
+    // shape constraints still apply.
     if !func.is_inline && func.insts.len() > cap as usize {
-        let n = emitted_inst_count(func);
-        if n > cap as usize {
-            say(format_args!("{n} insts > cap {c}", c = cap));
-            return false;
-        }
+        say(format_args!(
+            "{n} insts > cap {c}",
+            n = func.insts.len(),
+            c = cap
+        ));
+        return false;
     }
     // Walker emits dead `LoadLocal { off >= 2 }` cells alongside the
     // matching `ParamRef`; the cells carry no live value into the
@@ -1416,9 +1413,6 @@ struct CalleeFacts {
     frame_cost: i64,
     /// Routed to the relocating splice (`needs_reloc_splice`).
     needs_reloc: bool,
-    /// Values the splice reproduces ([`live_inst_mask`]); the rest are
-    /// superseded arena entries no emit issues.
-    live: Vec<bool>,
 }
 
 /// Facts keyed by callee entry pc.
@@ -1529,7 +1523,6 @@ fn callee_facts(callee: &FunctionSsa) -> CalleeFacts {
         forwarded,
         frame_cost,
         needs_reloc,
-        live: live_inst_mask(callee),
     }
 }
 
@@ -1563,69 +1556,6 @@ fn value_use_mask(func: &FunctionSsa) -> Vec<bool> {
         }
     }
     used
-}
-
-/// Per-value mask of the instructions of `func` that produce code:
-/// those inside a block, less the dead pure ones. A rewriting pass
-/// supersedes a value tree by repointing its consumers and leaves the
-/// old nodes in the arena for the per-arch emit to skip
-/// (`is_dead_pure`) -- byte-access merging replaces a shift / or tree
-/// with one wide load, unrolling leaves the folded-away induction
-/// arithmetic -- so the arena length is not the body. The size gates
-/// measure this instead, and the splice reproduces this set: a
-/// superseded tree copied at every call site costs the caller's arena,
-/// and every pass behind this one, for code no emit issues.
-///
-/// Worklist-iterated so a superseded tree drops whole; linear in values
-/// plus operand edges.
-fn live_inst_mask(func: &FunctionSsa) -> Vec<bool> {
-    let in_block = in_block_mask(func);
-    let mut uses = vec![0u32; func.insts.len()];
-    let bump = |uses: &mut [u32], v: ValueId| {
-        if let Some(c) = uses.get_mut(v as usize) {
-            *c += 1;
-        }
-    };
-    for (i, inst) in func.insts.iter().enumerate() {
-        if in_block[i] {
-            inst.for_each_operand(|v| bump(&mut uses, v));
-        }
-    }
-    for blk in &func.blocks {
-        // `Terminator` is `Copy`; the walk over a copy keeps the
-        // exhaustive operand listing rather than a hand-kept match.
-        let mut term = blk.terminator;
-        term.for_each_operand_mut(|v| bump(&mut uses, *v));
-        bump(&mut uses, blk.exit_acc);
-    }
-    let mut live = in_block;
-    let dead =
-        |live: &[bool], uses: &[u32], i: usize| live[i] && func.insts[i].is_pure() && uses[i] == 0;
-    let mut work: Vec<usize> = (0..func.insts.len())
-        .filter(|&i| dead(&live, &uses, i))
-        .collect();
-    while let Some(v) = work.pop() {
-        if !dead(&live, &uses, v) {
-            continue;
-        }
-        live[v] = false;
-        func.insts[v].for_each_operand(|o| {
-            if let Some(c) = uses.get_mut(o as usize)
-                && *c > 0
-            {
-                *c -= 1;
-                if *c == 0 {
-                    work.push(o as usize);
-                }
-            }
-        });
-    }
-    live
-}
-
-/// Count of [`live_inst_mask`].
-fn emitted_inst_count(func: &FunctionSsa) -> usize {
-    live_inst_mask(func).iter().filter(|b| **b).count()
 }
 
 /// Map a single operand `v` through `remap`. `NO_VALUE` stays.
@@ -2260,11 +2190,6 @@ fn splice_multi_block(
         let counted_args: Vec<ValueId> = call_args.iter().map(|&a| map_v(a, &remap)).collect();
         for cblock in &callee.blocks {
             for ce_pc in cblock.inst_range.clone() {
-                // Dropped by the emission below; reserve no id.
-                if !facts.live[ce_pc as usize] {
-                    callee_remap[ce_pc as usize] = NO_VALUE;
-                    continue;
-                }
                 match &callee.insts[ce_pc as usize] {
                     Inst::ParamRef { idx, kind } => {
                         let arg = counted_args.get(*idx as usize).copied().unwrap_or(NO_VALUE);
@@ -2567,13 +2492,6 @@ fn splice_multi_block(
         for (ci, cblock) in callee.blocks.iter().enumerate() {
             let block_start = new_insts.len() as u32;
             for ce_pc in cblock.inst_range.start..cblock.inst_range.end {
-                // A superseded arena entry: no live value in the callee
-                // reads it and the emit issues nothing for it, so the
-                // splice does not reproduce it.
-                if !facts.live[ce_pc as usize] {
-                    callee_remap[ce_pc as usize] = NO_VALUE;
-                    continue;
-                }
                 let cinst = &callee.insts[ce_pc as usize];
                 match cinst {
                     Inst::Phi { incoming, kind } => {
@@ -3271,13 +3189,7 @@ fn inline_caller(
                     // argument rather than being dropped with the rest of
                     // the cell traffic.
                     let forwarded = &facts[&callee.ent_pc].forwarded;
-                    let live = &facts[&callee.ent_pc].live;
                     for ce_pc in callee_block.inst_range.start..callee_block.inst_range.end {
-                        // Superseded arena entry; see the multi-block splice.
-                        if !live[ce_pc as usize] {
-                            callee_remap[ce_pc as usize] = NO_VALUE;
-                            continue;
-                        }
                         let cinst = &callee.insts[ce_pc as usize];
                         match cinst {
                             Inst::LocalAddr(s) => {
@@ -3744,8 +3656,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
                 .iter()
                 .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == caller.ent_pc));
             let only_marked = (recursive && caller.locals > RECURSIVE_FRAME_SLOTS)
-                || (caller.insts.len() > CALLER_INST_BUDGET
-                    && emitted_inst_count(caller) > CALLER_INST_BUDGET);
+                || caller.insts.len() > CALLER_INST_BUDGET;
             // Once a caller's frame has grown past CALLER_FRAME_SLOTS and
             // multiplied its pre-inline size, keep a mandatory request and
             // any candidate whose splice relocates no frame slots -- the
@@ -4349,211 +4260,6 @@ mod tests {
         let mut reason = alloc::string::String::new();
         assert!(!is_inline_candidate(&f, 32, abi, Some(&mut reason)));
         assert_eq!(reason, "self-recursive");
-    }
-
-    /// A byte-access helper the way the byte-merge pass leaves it: one
-    /// wide load plus a byte-order reversal carrying the result, and the
-    /// superseded per-byte load / shift / or tree still in the arena with
-    /// nothing reading it. `extra` byte groups past the cap.
-    fn superseded_byte_helper(ent_pc: usize, groups: usize, merged: bool) -> FunctionSsa {
-        let mut insts = alloc::vec![Inst::ParamRef {
-            idx: 0,
-            kind: LoadKind::I64,
-        }];
-        if merged {
-            insts.push(Inst::Load {
-                addr: 0,
-                disp: 0,
-                kind: LoadKind::I64,
-                volatile: false,
-                align: 0,
-            });
-            insts.push(Inst::Bswap { value: 1, width: 8 });
-        }
-        let mut acc = NO_VALUE;
-        for g in 0..groups {
-            insts.push(Inst::Load {
-                addr: 0,
-                disp: g as i32,
-                kind: LoadKind::U8,
-                volatile: false,
-                align: 0,
-            });
-            let byte = insts.len() as ValueId - 1;
-            insts.push(Inst::BinopI {
-                op: BinOp::Shl,
-                lhs: byte,
-                rhs_imm: (8 * g) as i64,
-            });
-            let shifted = insts.len() as ValueId - 1;
-            acc = if acc == NO_VALUE {
-                shifted
-            } else {
-                insts.push(Inst::Binop {
-                    op: BinOp::Or,
-                    lhs: acc,
-                    rhs: shifted,
-                });
-                insts.len() as ValueId - 1
-            };
-        }
-        // The merge repoints the Return at the wide load and leaves the
-        // tree unread; without it the tree is the body.
-        let result = if merged { 2 } else { acc };
-        let n = insts.len() as u32;
-        FunctionSsa {
-            ent_pc,
-            inst_src: alloc::vec![(0, 0); insts.len()],
-            f32_values: alloc::vec![false; insts.len()],
-            blocks: alloc::vec![Block {
-                start_pc: 0,
-                inst_range: 0..n,
-                terminator: Terminator::Return(result),
-                exit_acc: result,
-            }],
-            insts,
-            ..Default::default()
-        }
-    }
-
-    /// The body cap is a code-growth bound, so it measures the
-    /// instructions the emit issues. A rewriting pass leaves the value
-    /// tree it superseded in the arena for the emit to skip, so the arena
-    /// length is not that measure: a helper whose arena is four times the
-    /// cap still inlines when what survives is three instructions.
-    #[test]
-    fn superseded_values_do_not_count_against_the_body_cap() {
-        let abi = Target::LinuxX64.abi();
-        let f = superseded_byte_helper(5, 40, true);
-        assert!(f.insts.len() > 3 * 32, "the arena must exceed the cap");
-        assert_eq!(emitted_inst_count(&f), 3, "ParamRef + Load + Bswap");
-        assert!(is_inline_candidate(&f, 32, abi, None));
-    }
-
-    /// The same arena with the tree still feeding the Return: nothing is
-    /// superseded, the emit issues all of it, and the cap holds.
-    #[test]
-    fn live_body_over_the_cap_stays_out_of_line() {
-        let abi = Target::LinuxX64.abi();
-        let f = superseded_byte_helper(5, 40, false);
-        assert_eq!(emitted_inst_count(&f), f.insts.len());
-        let mut reason = alloc::string::String::new();
-        assert!(!is_inline_candidate(&f, 32, abi, Some(&mut reason)));
-        assert_eq!(reason, "120 insts > cap 32");
-    }
-
-    /// The splice reproduces the emitted body, not the arena: a
-    /// superseded tree copied at every call site would cost the caller's
-    /// arena, and every pass behind this one, for code no emit issues.
-    #[test]
-    fn splice_drops_the_superseded_tree() {
-        let callee = superseded_byte_helper(5, 40, true);
-        let arg = Inst::Imm(0);
-        let mut call = call_to(5);
-        if let Inst::Call { args, .. } = &mut call {
-            args.push(0);
-        }
-        let caller = FunctionSsa {
-            ent_pc: 1,
-            insts: alloc::vec![arg, call],
-            inst_src: alloc::vec![(0, 0); 2],
-            f32_values: alloc::vec![false; 2],
-            blocks: alloc::vec![Block {
-                start_pc: 0,
-                inst_range: 0..2,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
-            }],
-            ..Default::default()
-        };
-        let mut funcs = alloc::vec![callee, caller];
-        run(&mut funcs, 32, Target::LinuxX64.abi(), &BTreeMap::new());
-        let out = &funcs[1];
-        assert!(
-            !out.insts.iter().any(|i| matches!(i, Inst::Call { .. })),
-            "the call must have been spliced"
-        );
-        assert!(
-            out.insts.len() < 8,
-            "the splice carried {} insts into the caller; only the wide \
-             load and its reversal are emitted",
-            out.insts.len()
-        );
-    }
-
-    /// The multi-block splice assigns every new value id in a counting
-    /// pass and re-derives it while emitting, so the two must drop the
-    /// same values. A drop applied to one side only leaves the caller
-    /// referencing ids past the arena.
-    #[test]
-    fn multi_block_splice_ids_stay_within_the_arena() {
-        // Two blocks joining through a phi that reads the wide load; the
-        // superseded tree sits in the second block with nothing reading it.
-        let mut callee = superseded_byte_helper(5, 20, true);
-        let split = 3;
-        let n = callee.insts.len() as u32;
-        callee.insts.push(Inst::Phi {
-            incoming: alloc::vec![(0, 2)],
-            kind: LoadKind::I64,
-        });
-        callee.inst_src.push((0, 0));
-        callee.f32_values.push(false);
-        callee.blocks = alloc::vec![
-            Block {
-                start_pc: 0,
-                inst_range: 0..split,
-                terminator: Terminator::Bz {
-                    cond: 2,
-                    target: 1,
-                    fall_through: 1,
-                },
-                exit_acc: 2,
-            },
-            Block {
-                start_pc: 0,
-                inst_range: split..n + 1,
-                terminator: Terminator::Return(n),
-                exit_acc: n,
-            },
-        ];
-        let mut call = call_to(5);
-        if let Inst::Call { args, .. } = &mut call {
-            args.push(0);
-        }
-        let caller = FunctionSsa {
-            ent_pc: 1,
-            insts: alloc::vec![Inst::Imm(0), call],
-            inst_src: alloc::vec![(0, 0); 2],
-            f32_values: alloc::vec![false; 2],
-            blocks: alloc::vec![Block {
-                start_pc: 0,
-                inst_range: 0..2,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
-            }],
-            ..Default::default()
-        };
-        let mut funcs = alloc::vec![callee, caller];
-        run(&mut funcs, 32, Target::LinuxX64.abi(), &BTreeMap::new());
-        let out = &funcs[1];
-        assert!(
-            !out.insts.iter().any(|i| matches!(i, Inst::Call { .. })),
-            "the call must have been spliced"
-        );
-        let arena = out.insts.len() as ValueId;
-        for (i, inst) in out.insts.iter().enumerate() {
-            inst.for_each_operand(|v| {
-                assert!(v < arena, "v{i} operands value {v} past {arena}");
-            });
-        }
-        for blk in &out.blocks {
-            let mut term = blk.terminator;
-            term.for_each_operand_mut(|v| {
-                assert!(*v < arena, "terminator names value {v} past {arena}");
-            });
-            assert!(blk.exit_acc == NO_VALUE || blk.exit_acc < arena);
-            assert!(blk.inst_range.end <= arena);
-        }
     }
 
     /// A two-Return callee is a candidate on the no-aggregate integer

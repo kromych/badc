@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <compute>:
                	leaq	0x1(%rdi), %rax
-               	movslq	%eax, %rcx
+               	movslq	%eax, %rdx
                	testq	%rdi, %rdi
                	je	<addr>
                	leaq	0x64(%rdi), %rax
@@ -36,12 +36,13 @@ Disassembly of section .text:
                	jne	<addr>
                	movabsq	$-0x1, %rax
                	retq
-               	shlq	%rax
+               	movq	%rax, %rcx
+               	shlq	%rcx
                	leaq	<rip>, %r8
-               	leaq	0x1(%rax), %rdx
-               	movl	%edx, (%r8)
-               	addq	%rdi, %rax
-               	addq	%rcx, %rax
+               	leaq	0x1(%rcx), %rax
+               	movl	%eax, (%r8)
+               	leaq	(%rcx,%rdi), %rax
+               	addq	%rdx, %rax
                	retq
                	movabsq	$-0x2, %rax
                	retq

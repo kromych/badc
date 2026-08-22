@@ -67,27 +67,27 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	mov	x1, #0x50               // =80
                	str	w1, [x0, #0x1c]
-               	sub	x4, x29, #0x40
+               	sub	x6, x29, #0x40
                	sub	x3, x29, #0x20
                	mov	x2, #0x0                // =0
                	mov	x0, x2
                	b	<addr>
                	lsl	x5, x1, #2
-               	add	x6, x4, x5
-               	ldrsw	x7, [x6]
-               	add	x7, x7, #0x3
+               	add	x7, x6, x5
+               	ldrsw	x4, [x7]
+               	add	x4, x4, #0x3
                	add	x5, x3, x5
                	ldrsw	x5, [x5]
                	sub	x5, x5, #0x3
-               	str	w5, [x6]
-               	str	w7, [x3, x1, lsl #2]
-               	lsl	x5, x1, #2
-               	add	x6, x4, x5
-               	ldrsw	x6, [x6]
-               	add	x5, x3, x5
+               	str	w5, [x7]
+               	str	w4, [x3, x1, lsl #2]
+               	lsl	x4, x1, #2
+               	add	x5, x6, x4
                	ldrsw	x5, [x5]
-               	mul	x5, x6, x5
-               	add	x2, x2, x5
+               	add	x4, x3, x4
+               	ldrsw	x4, [x4]
+               	mul	x4, x5, x4
+               	add	x2, x2, x4
                	sxtw	x2, w2
                	add	x0, x1, #0x1
                	sxtw	x1, w0

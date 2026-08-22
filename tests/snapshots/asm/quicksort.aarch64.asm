@@ -60,14 +60,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x20, x0
-               	mov	x21, x2
+               	mov	x22, x2
                	mov	x8, x1
                	sxtw	x8, w8
-               	sxtw	x21, w21
-               	cmp	x8, x21
+               	sxtw	x22, w22
+               	cmp	x8, x22
                	b.ge	<addr>
                	sxtw	x2, w8
-               	sxtw	x6, w21
+               	sxtw	x6, w22
                	ldrsw	x4, [x20, x6, lsl #2]
                	sub	x0, x2, #0x1
                	b	<addr>
@@ -93,14 +93,14 @@ Disassembly of section .text:
                	str	w3, [x20, x1, lsl #2]
                	str	w2, [x20, x6, lsl #2]
                	add	x0, x0, #0x1
-               	sxtw	x22, w0
-               	sub	x2, x22, #0x1
+               	sxtw	x21, w0
+               	sub	x2, x21, #0x1
                	mov	x0, x20
                	mov	x1, x8
                	bl	<addr>
-               	add	x1, x22, #0x1
+               	add	x1, x21, #0x1
                	mov	x0, x20
-               	mov	x2, x21
+               	mov	x2, x22
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]

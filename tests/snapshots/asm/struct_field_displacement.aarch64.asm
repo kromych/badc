@@ -37,7 +37,8 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	add	x1, x1, #0x1
                	str	w1, [x0, #0x4]
-               	add	x1, x2, #0xa
+               	ldr	x1, [x0, #0x8]
+               	add	x1, x1, #0xa
                	str	x1, [x0, #0x8]
                	ldrb	w1, [x0, #0x12]
                	add	x1, x1, #0x1

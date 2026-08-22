@@ -50,16 +50,16 @@ Disassembly of section .text:
                	movl	%eax, (%r10)
                	movq	-0x30(%rbp), %rax
                	movq	-0x28(%rbp), %rbx
-               	movslq	-0x8(%rbp), %rcx
-               	leaq	<rip>, %rax
+               	movslq	-0x8(%rbp), %rax
+               	leaq	<rip>, %rcx
                	leaq	-<rip>, %rdx       # <addr>
-               	movq	%rdx, 0x8(%rax)
-               	leaq	-0x8(%rbp), %rax
+               	movq	%rdx, 0x8(%rcx)
+               	leaq	-0x8(%rbp), %rcx
                	leaq	<rip>, %rdx
                	addq	$0x8, %rdx
                	movq	%rax, -0x30(%rbp)
                	movq	%rbx, -0x28(%rbp)
-               	movq	%rax, -0x20(%rbp)
+               	movq	%rcx, -0x20(%rbp)
                	movq	%rdx, -0x18(%rbp)
                	movq	-0x18(%rbp), %rbx
                	callq	*<rip>
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	movl	%eax, (%r10)
                	movq	-0x30(%rbp), %rax
                	movq	-0x28(%rbp), %rbx
-               	movslq	-0x8(%rbp), %rax
+               	movslq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	addq	$0x30, %rsp

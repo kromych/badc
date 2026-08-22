@@ -45,13 +45,13 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	movslq	%ecx, %rcx
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rdx
+               	movslq	%ecx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rdx
                	incq	%rdx
-               	movl	%edx, (%rax)
-               	movslq	%edx, %rax
-               	shlq	%rax
+               	movl	%edx, (%rcx)
+               	movslq	%edx, %rcx
+               	shlq	%rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	cmpq	$0x8, %rax

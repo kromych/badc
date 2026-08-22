@@ -51,10 +51,10 @@ Disassembly of section .text:
                	leaq	-0xb40(%rbp), %rdx
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
-               	addq	%rsi, %rdx
-               	leaq	0x1(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
+               	addq	%rdx, %rsi
+               	leaq	0x1(%rcx), %rdx
+               	movslq	%edx, %rdx
+               	movq	%rdx, (%rsi)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x5a, %rcx
@@ -73,10 +73,10 @@ Disassembly of section .text:
                	leaq	-0x870(%rbp), %rdx
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
-               	addq	%rsi, %rdx
-               	leaq	0x2(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
+               	addq	%rdx, %rsi
+               	leaq	0x2(%rcx), %rdx
+               	movslq	%edx, %rdx
+               	movq	%rdx, (%rsi)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x5a, %rcx
@@ -95,10 +95,10 @@ Disassembly of section .text:
                	leaq	-0x5a0(%rbp), %rdx
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
-               	addq	%rsi, %rdx
-               	leaq	0x3(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
+               	addq	%rdx, %rsi
+               	leaq	0x3(%rcx), %rdx
+               	movslq	%edx, %rdx
+               	movq	%rdx, (%rsi)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x5a, %rcx
@@ -117,10 +117,10 @@ Disassembly of section .text:
                	leaq	-0x2d0(%rbp), %rdx
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
-               	addq	%rsi, %rdx
-               	leaq	0x4(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
+               	addq	%rdx, %rsi
+               	leaq	0x4(%rcx), %rdx
+               	movslq	%edx, %rdx
+               	movq	%rdx, (%rsi)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x5a, %rcx
@@ -149,10 +149,10 @@ Disassembly of section .text:
                	leaq	-0xb40(%rbp), %rdx
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
-               	addq	%rsi, %rdx
-               	leaq	0x1(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
+               	addq	%rdx, %rsi
+               	leaq	0x1(%rcx), %rdx
+               	movslq	%edx, %rdx
+               	movq	%rdx, (%rsi)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x5a, %rcx
@@ -171,10 +171,10 @@ Disassembly of section .text:
                	leaq	-0x870(%rbp), %rdx
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
-               	addq	%rsi, %rdx
-               	leaq	0x2(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
+               	addq	%rdx, %rsi
+               	leaq	0x2(%rcx), %rdx
+               	movslq	%edx, %rdx
+               	movq	%rdx, (%rsi)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x5a, %rcx
@@ -193,10 +193,10 @@ Disassembly of section .text:
                	leaq	-0x5a0(%rbp), %rdx
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
-               	addq	%rsi, %rdx
-               	leaq	0x3(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
+               	addq	%rdx, %rsi
+               	leaq	0x3(%rcx), %rdx
+               	movslq	%edx, %rdx
+               	movq	%rdx, (%rsi)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x5a, %rcx
@@ -215,10 +215,10 @@ Disassembly of section .text:
                	leaq	-0x2d0(%rbp), %rdx
                	movq	%rcx, %rsi
                	shlq	$0x3, %rsi
-               	addq	%rsi, %rdx
-               	leaq	0x4(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	movq	%rsi, (%rdx)
+               	addq	%rdx, %rsi
+               	leaq	0x4(%rcx), %rdx
+               	movslq	%edx, %rdx
+               	movq	%rdx, (%rsi)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x5a, %rcx

@@ -221,12 +221,13 @@ Disassembly of section .text:
                	movq	%rax, %r13
                	movl	$0x4, %edi
                	callq	<addr>
-               	leaq	(%rbx,%r13), %rcx
-               	addq	%r12, %rax
-               	movl	%ecx, %ecx
+               	movq	%rax, %rcx
+               	leaq	(%rbx,%r13), %rax
+               	addq	%r12, %rcx
                	movl	%eax, %eax
-               	movslq	%ecx, %rcx
-               	cmpq	$0x4, %rcx
+               	movl	%ecx, %ecx
+               	movslq	%eax, %rax
+               	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	movq	(%rsp), %rbx
@@ -235,7 +236,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movslq	%eax, %rax
+               	movslq	%ecx, %rax
                	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0xa, %eax

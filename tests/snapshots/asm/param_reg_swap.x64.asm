@@ -29,29 +29,31 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%rdi, %rbx
+               	movq	%r12, (%rsp)
+               	movq	%rdi, %r12
                	leaq	(%rcx), %rax
                	movl	(%rax), %eax
-               	movl	%eax, %eax
-               	movl	0x4(%rcx), %edi
-               	movl	%edi, %edi
-               	movl	0x8(%rcx), %r8d
-               	movl	%r8d, %r8d
-               	movl	0xc(%rcx), %ecx
-               	movl	%ecx, %ecx
-               	xorq	%rdx, %rdx
-               	movl	%eax, %eax
-               	movl	%edi, %esi
-               	xorq	%rsi, %rax
+               	movl	%eax, %edi
+               	leaq	0x4(%rcx), %rax
+               	movl	(%rax), %eax
+               	movl	%eax, %r8d
+               	leaq	0x8(%rcx), %rax
+               	movl	(%rax), %eax
+               	movl	%eax, %r9d
+               	leaq	0xc(%rcx), %rax
+               	movl	(%rax), %eax
+               	movl	%eax, %ecx
+               	xorq	%rax, %rax
+               	movl	%edi, %edx
                	movl	%r8d, %esi
-               	xorq	%rsi, %rax
+               	xorq	%rsi, %rdx
+               	movl	%r9d, %esi
+               	xorq	%rsi, %rdx
                	movl	%ecx, %ecx
-               	xorq	%rcx, %rax
-               	andq	$0xff, %rax
-               	movb	%al, (%rbx)
-               	movq	(%rsp), %rbx
-               	movq	%rdx, %rax
+               	xorq	%rdx, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, (%r12)
+               	movq	(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

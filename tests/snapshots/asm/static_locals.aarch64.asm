@@ -40,39 +40,39 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x0, [x1]
+               	add	x0, x0, #0x1
+               	str	w0, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldrsw	x3, [x2]
-               	sxtw	x1, w1
-               	add	x1, x3, x1
-               	str	w1, [x2]
-               	ldrsw	x0, [x0]
-               	sxtw	x1, w1
-               	add	x0, x0, x1
+               	sxtw	x0, w0
+               	add	x0, x3, x0
+               	str	w0, [x2]
+               	ldrsw	x1, [x1]
+               	sxtw	x0, w0
+               	add	x0, x1, x0
                	sxtw	x0, w0
                	cmp	x0, #0xca
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x0, [x1]
+               	add	x0, x0, #0x1
+               	str	w0, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldrsw	x3, [x2]
-               	sxtw	x1, w1
-               	add	x1, x3, x1
-               	str	w1, [x2]
-               	ldrsw	x0, [x0]
-               	sxtw	x1, w1
-               	add	x0, x0, x1
+               	sxtw	x0, w0
+               	add	x0, x3, x0
+               	str	w0, [x2]
+               	ldrsw	x1, [x1]
+               	sxtw	x0, w0
+               	add	x0, x1, x0
                	sxtw	x0, w0
                	cmp	x0, #0x131
                	b.eq	<addr>
@@ -86,20 +86,20 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	str	w1, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x0, [x1]
+               	add	x0, x0, #0x1
+               	str	w0, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldrsw	x3, [x2]
-               	sxtw	x1, w1
-               	add	x1, x3, x1
-               	str	w1, [x2]
-               	ldrsw	x0, [x0]
-               	sxtw	x1, w1
-               	add	x0, x0, x1
+               	sxtw	x0, w0
+               	add	x0, x3, x0
+               	str	w0, [x2]
+               	ldrsw	x1, [x1]
+               	sxtw	x0, w0
+               	add	x0, x1, x0
                	sxtw	x0, w0
                	cmp	x0, #0xca
                	b.eq	<addr>

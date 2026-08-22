@@ -51,12 +51,12 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x4, x29, #0xc0
                	lsl	x5, x2, #3
-               	add	x4, x4, x5
-               	add	x5, x2, #0x1
-               	sxtw	x5, w5
+               	add	x5, x4, x5
+               	add	x4, x2, #0x1
+               	sxtw	x4, w4
                	mov	x17, #0x74              // =116
-               	mul	x5, x5, x17
-               	str	x5, [x4]
+               	mul	x4, x4, x17
+               	str	x4, [x5]
                	add	x0, x2, #0x1
                	sxtw	x2, w0
                	cmp	x2, #0x18

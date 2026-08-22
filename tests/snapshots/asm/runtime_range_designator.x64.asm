@@ -123,6 +123,17 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
+<check_resume_and_gap>:
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rcx
+               	incq	%rcx
+               	movl	%ecx, (%rax)
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
+               	retq
+
 <check_override>:
                	leaq	<rip>, %rax
                	xorq	%rcx, %rcx
@@ -429,14 +440,13 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
+               	movl	$0x17, %edi
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movslq	%eax, %rax
+               	popq	%rbp
+               	retq
                	movl	$0x1f, %edi
                	callq	<addr>
                	testq	%rax, %rax

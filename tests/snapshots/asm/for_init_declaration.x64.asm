@@ -25,9 +25,68 @@ Disassembly of section .text:
                	int3
                	int3
 
+<simple_sum>:
+               	movl	$0x2d, %eax
+               	retq
+
+<multi_decl>:
+               	movl	$0x32, %eax
+               	retq
+
+<adjacent_fors>:
+               	movl	$0x2b, %eax
+               	retq
+
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
+               	callq	<addr>
+               	cmpq	$0x2d, %rax
+               	je	<addr>
+               	leaq	<rip>, %rbx
+               	callq	<addr>
+               	movq	%rax, %rsi
+               	movq	%rbx, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	movl	$0x1, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	callq	<addr>
+               	cmpq	$0x32, %rax
+               	je	<addr>
+               	leaq	<rip>, %rbx
+               	callq	<addr>
+               	movq	%rax, %rsi
+               	movq	%rbx, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	movl	$0x2, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	callq	<addr>
+               	cmpq	$0x2b, %rax
+               	je	<addr>
+               	leaq	<rip>, %rbx
+               	callq	<addr>
+               	movq	%rax, %rsi
+               	movq	%rbx, %rdi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	movl	$0x4, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
                	leaq	<rip>, %rax
                	xorq	%rcx, %rcx
                	movl	$0x1, %edx
@@ -71,8 +130,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x5, %eax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq

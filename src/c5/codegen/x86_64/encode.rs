@@ -2254,11 +2254,20 @@ pub(crate) fn lower(
     for f in ssa_funcs.iter_mut() {
         crate::c5::codegen::passes::constfold_branch::strip_zero_test_conds(f);
     }
+    // At -O each function is allocated, then reallocated with the
+    // spilled values' call-free reuse runs split out; the split is kept
+    // only when it lowers the function's loop-weighted spill traffic.
     let ssa_allocs: alloc::vec::Vec<super::ssa::reg_alloc::Allocation> =
         super::ssa::emit_common::time_pass("ssa::reg_alloc::allocate (x86_64)", || {
             ssa_funcs
-                .iter()
-                .map(|f| super::ssa::reg_alloc::allocate(f, target))
+                .iter_mut()
+                .map(|f| {
+                    if native.optimize {
+                        super::ssa::split_ranges::allocate_split(f, target)
+                    } else {
+                        super::ssa::reg_alloc::allocate(f, target)
+                    }
+                })
                 .collect()
         });
     #[cfg(feature = "std")]

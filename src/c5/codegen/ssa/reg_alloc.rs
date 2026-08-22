@@ -524,6 +524,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             | Inst::LocalAddr(_)
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
+            | Inst::Copy { .. }
             | Inst::FpCast { .. }
             | Inst::Fneg(_)
             | Inst::Fma { .. }
@@ -669,6 +670,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             | Inst::StoreLocal { .. }
             | Inst::StoreIndexed { .. }
             | Inst::Extend { .. }
+            | Inst::Copy { .. }
             | Inst::Fneg(_)
             | Inst::Fma { .. } => true,
             Inst::FpCast { kind, .. } => {
@@ -1413,6 +1415,17 @@ const LOOP_WEIGHT: u64 = 10;
 /// weight; the relative order of hot vs cold values is unaffected.
 const LOOP_DEPTH_CAP: u32 = 6;
 
+/// Per-block execution-frequency estimate: `LOOP_WEIGHT` raised to the
+/// block's natural-loop nesting depth, capped at `LOOP_DEPTH_CAP`.
+/// Shared by the spill-cost ordering and the split's traffic metric so
+/// both rank blocks the same way.
+pub(crate) fn block_weights(func: &FunctionSsa) -> Vec<u64> {
+    crate::c5::codegen::passes::layout::loop_depths(func)
+        .iter()
+        .map(|&d| LOOP_WEIGHT.saturating_pow(d.min(LOOP_DEPTH_CAP)))
+        .collect()
+}
+
 /// Loop-depth-weighted use count per interference node, keyed by node
 /// id (the phi-congruence-class root). Each use site of any class
 /// member contributes `LOOP_WEIGHT^min(depth, cap)` for the depth of
@@ -1422,11 +1435,7 @@ const LOOP_DEPTH_CAP: u32 = 6;
 /// the order degrades to raw use count.
 fn compute_spill_weights(func: &FunctionSsa, node_of: &[ValueId]) -> Vec<u64> {
     let n = func.insts.len();
-    let depths = crate::c5::codegen::passes::layout::loop_depths(func);
-    let block_weight: Vec<u64> = depths
-        .iter()
-        .map(|&d| LOOP_WEIGHT.saturating_pow(d.min(LOOP_DEPTH_CAP)))
-        .collect();
+    let block_weight = block_weights(func);
     let mut w: Vec<u64> = vec![0u64; n];
     for (b, block) in func.blocks.iter().enumerate() {
         let wb = block_weight[b];
@@ -1600,6 +1609,13 @@ fn result_kind(inst: &Inst) -> ResultKind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
+        Copy { is_fp, .. } => {
+            if *is_fp {
+                ResultKind::Fp
+            } else {
+                ResultKind::Int
+            }
+        }
         Load { kind, .. } | LoadLocal { kind, .. } | SegLoad { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
             _ => ResultKind::Int,

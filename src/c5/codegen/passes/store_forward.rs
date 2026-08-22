@@ -463,6 +463,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::Fma { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
+                | Inst::Copy { .. }
                 | Inst::FpCast { .. }
                 | Inst::ParamRef { .. }
                 | Inst::Phi { .. } => {}

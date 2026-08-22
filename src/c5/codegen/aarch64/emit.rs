@@ -5132,6 +5132,9 @@ fn emit_inst(
         Inst::Bswap { value, width } => {
             emit_bswap(code, dst, *value, *width, alloc, frame, scratch)
         }
+        Inst::Copy { value, is_fp } => {
+            emit_copy(code, dst, *value, *is_fp, alloc, frame, scratch)
+        }
         Inst::FpCast { kind, value } => {
             use super::super::ir::FpCastKind;
             let src_place = alloc
@@ -8174,6 +8177,71 @@ fn emit_extend(
         }
     };
     emit(code, enc);
+    spill_local_addr_to_dst(code, dst, rd, frame);
+    true
+}
+
+/// `Inst::Copy { value, is_fp }` -- move `value` into this
+/// instruction's own place. Bit-exact in both banks, so a
+/// single-precision operand keeps its pattern.
+fn emit_copy(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    is_fp: bool,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    let src_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    // The destination doubles as the staging register, so a reload
+    // lands where the value belongs and needs no follow-up move.
+    if is_fp {
+        let dd = match dst {
+            Place::FpReg(r) => r,
+            Place::Spill(_) => SCRATCH_FP0,
+            _ => {
+                bail_msg("Copy: dst not fp reg / spill");
+                return false;
+            }
+        };
+        let dn = match materialize_fp(code, src_place, dd, frame) {
+            Some(r) => r,
+            None => {
+                bail_msg("Copy: value not fp reg / spill");
+                return false;
+            }
+        };
+        if dd != dn {
+            emit(code, super::encode::enc_fmov_d_d(dd, dn));
+        }
+        if let Place::Spill(slot) = dst {
+            let sp_off = spill_off(frame, slot);
+            emit_spill_str_d_auto(code, frame, dd, sp_off);
+        }
+        return true;
+    }
+    let rd = match int_or_spill_scratch(dst, scratch) {
+        Some(r) => r,
+        None => {
+            bail_msg("Copy: dst not int reg / spill");
+            return false;
+        }
+    };
+    let rn = match materialize_int(code, src_place, rd, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("Copy: value not int reg / spill");
+            return false;
+        }
+    };
+    if rd != rn {
+        emit(code, super::encode::enc_mov_reg(rd, rn));
+    }
     spill_local_addr_to_dst(code, dst, rd, frame);
     true
 }

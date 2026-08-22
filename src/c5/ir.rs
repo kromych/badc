@@ -233,6 +233,13 @@ pub(crate) enum Inst {
     /// the byte-reversal instruction (`bswap` / `rev`); the 16-bit form
     /// needs one extra instruction to zero the upper bits.
     Bswap { value: ValueId, width: u8 },
+    /// Register-to-register copy of `value`, with `is_fp` naming the
+    /// bank the copy runs in (the operand's own bank, which the
+    /// instruction cannot otherwise be asked for). Emitted by the
+    /// live-range split to give a value a second, shorter range the
+    /// allocator can place independently; the copy is bit-exact, so a
+    /// single-precision operand keeps its pattern.
+    Copy { value: ValueId, is_fp: bool },
     /// Floating-point <-> integer cast.
     FpCast { kind: FpCastKind, value: ValueId },
     /// Direct call to a c5 user function at ent_pc `target_pc`.
@@ -481,6 +488,7 @@ impl Inst {
                 | Inst::FpCast { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
+                | Inst::Copy { .. }
         )
     }
 
@@ -509,6 +517,7 @@ impl Inst {
             Inst::Fma { .. } => "Fma",
             Inst::Extend { .. } => "Extend",
             Inst::Bswap { .. } => "Bswap",
+            Inst::Copy { .. } => "Copy",
             Inst::FpCast { .. } => "FpCast",
             Inst::Call { .. } => "Call",
             Inst::CallIndirect { .. } => "CallIndirect",
@@ -580,6 +589,7 @@ impl Inst {
             }
             Inst::Extend { value, .. } => f(*value),
             Inst::Bswap { value, .. } => f(*value),
+            Inst::Copy { value, .. } => f(*value),
             Inst::FpCast { value, .. } => f(*value),
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
@@ -672,6 +682,7 @@ impl Inst {
             }
             Inst::Extend { value, .. } => f(value),
             Inst::Bswap { value, .. } => f(value),
+            Inst::Copy { value, .. } => f(value),
             Inst::FpCast { value, .. } => f(value),
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
@@ -1093,6 +1104,26 @@ impl Terminator {
     ///
     /// `Return` may carry `NO_VALUE` for a void return, which is passed
     /// through unchanged.
+    pub(crate) fn for_each_operand(&self, mut f: impl FnMut(ValueId)) {
+        match self {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => f(*cond),
+            Terminator::GotoIndirect { target } => f(*target),
+            Terminator::JumpTable { idx, .. } => f(*idx),
+            Terminator::Return(v) => {
+                if *v != NO_VALUE {
+                    f(*v);
+                }
+            }
+            Terminator::Jmp(_)
+            | Terminator::FallThrough(_)
+            | Terminator::TailExt(_)
+            | Terminator::AsmGoto { .. }
+            | Terminator::Unreachable => {}
+        }
+    }
+
+    /// Mutable counterpart of [`Self::for_each_operand`], for the passes
+    /// that renumber values.
     pub(crate) fn for_each_operand_mut(&mut self, mut f: impl FnMut(&mut ValueId)) {
         match self {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => f(cond),
@@ -1512,6 +1543,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Fma { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
+            | Inst::Copy { .. }
             | Inst::FpCast { .. }
             | Inst::Call { .. }
             | Inst::CallIndirect { .. }

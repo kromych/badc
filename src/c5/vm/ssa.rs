@@ -1189,6 +1189,10 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = eval::eval_extend(raw, *kind);
             return Ok(());
         }
+        Inst::Copy { value, .. } => {
+            frame.regs[v as usize] = frame.regs[*value as usize];
+            return Ok(());
+        }
         Inst::FpCast { kind, value } => {
             let raw = frame.regs[*value as usize];
             let result_f32 = matches!(frame.func.f32_values.get(v as usize), Some(true));

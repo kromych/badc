@@ -1724,6 +1724,8 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
     c.insts.iter().any(|i| match i {
         Inst::Store { addr, .. } | Inst::SegStore { addr, .. } => !own(*addr),
         Inst::Mcpy { dst, .. } => !own(*dst),
+        // A copy re-names an address without writing through it.
+        Inst::Copy { .. } => false,
         // A scaled index can leave the base object.
         Inst::StoreIndexed { .. } => true,
         Inst::StoreLocal { off, .. } => agg_slots.contains(off),

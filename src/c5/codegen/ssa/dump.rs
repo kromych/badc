@@ -203,6 +203,7 @@ fn fmt_inst(inst: &Inst) -> String {
             format!("Extend {{ value=v{value}, kind={} }}", fmt_load_kind(*kind))
         }
         Bswap { value, width } => format!("Bswap {{ value=v{value}, width={width} }}"),
+        Copy { value, is_fp } => format!("Copy {{ value=v{value}, fp={is_fp} }}"),
         FpCast { kind, value } => {
             format!("FpCast {{ kind={}, value=v{value} }}", fmt_fp_cast(*kind),)
         }

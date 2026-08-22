@@ -5463,6 +5463,13 @@ fn loop_iv_spill_priority() {
 }
 
 #[test]
+fn split_spilled_reload_run() {
+    // Live-range splitting of the values one cold call forces out of
+    // the caller-saved bank; the result is unchanged.
+    assert_eq!(run_fixture("split_spilled_reload_run.c"), 229);
+}
+
+#[test]
 fn linked_list() {
     assert_eq!(run_fixture("linked_list.c"), 10);
 }

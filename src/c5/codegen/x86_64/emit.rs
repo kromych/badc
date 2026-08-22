@@ -3767,6 +3767,7 @@ fn emit_inst(
         ),
         Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
         Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
+        Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(
             code,
@@ -4673,6 +4674,44 @@ fn emit_extend(
         _ => return fail("Extend: unsupported kind"),
     }
     spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
+
+/// `Inst::Copy { value, is_fp }` -- move `value` into this
+/// instruction's own place. Bit-exact in both banks, so a
+/// single-precision operand keeps its pattern.
+fn emit_copy(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    is_fp: bool,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let src_place = place_of(alloc, value);
+    if is_fp {
+        let Some(dd) = fp_or_spill_dst(dst) else {
+            return fail("Copy: dst not fp reg / spill");
+        };
+        let Some(dn) = materialize_fp(code, src_place, dd, frame) else {
+            return fail("Copy: value not fp reg / spill / int reg");
+        };
+        if dn.0 != dd.0 {
+            emit_movapd_xmm_xmm(code, dd, dn);
+        }
+        fp_spill_dst_to_slot(code, dst, dd, frame);
+    } else {
+        let Some(rd) = int_or_spill_dst(dst) else {
+            return fail("Copy: dst not int reg / spill");
+        };
+        let Some(rn) = materialize_int(code, src_place, rd, frame) else {
+            return fail("Copy: value not int reg / spill");
+        };
+        if rd != rn {
+            emit_mov_rr(code, rd, rn);
+        }
+        spill_dst_to_slot(code, dst, rd, frame);
+    }
     true
 }
 

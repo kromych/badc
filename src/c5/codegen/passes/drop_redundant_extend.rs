@@ -106,6 +106,7 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             | Inst::AllocaInit(_)
             | Inst::ParamRef { .. }
             | Inst::Extend { .. } => {}
+            Inst::Copy { value, .. } => observe(&mut hi, &mut work, *value),
             Inst::Load { addr, .. } => observe(&mut hi, &mut work, *addr),
             Inst::LoadIndexed { base, index, .. } => {
                 observe(&mut hi, &mut work, *base);

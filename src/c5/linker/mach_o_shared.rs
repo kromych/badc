@@ -31,7 +31,8 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 
-use super::object::SharedLibrary;
+use super::mach_o_object::mach_o_machine;
+use super::object::{NativeMachine, SharedLibrary};
 
 const MH_MAGIC_64: u32 = 0xFEED_FACF;
 const MH_DYLIB: u32 = 0x6;
@@ -75,6 +76,9 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     let need = |off: usize, what: &str| -> Result<u32, C5Error> {
         u32le(bytes, off).ok_or_else(|| err(&format!("{what} runs past end of file")))
     };
+    let cputype = need(4, "header")?;
+    let machine = mach_o_machine(cputype)
+        .ok_or_else(|| err(&format!("dylib has unhandled cputype {cputype:#x}")))?;
     let ncmds = need(16, "header")? as usize;
     let sizeofcmds = need(20, "header")? as usize;
     let cmds_end = MACH_HEADER_64_SIZE
@@ -131,6 +135,7 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     }
     Ok(SharedLibrary {
         soname,
+        machine,
         exports,
         data_exports: BTreeSet::new(),
     })
@@ -230,6 +235,15 @@ struct TbdDoc {
 /// umbrella document declares only `arm64e-macos`, and the export
 /// surface is what matters here, not the slice's code.
 pub fn parse_tbd(text: &str, arch: &str, platform: &str) -> Result<SharedLibrary, C5Error> {
+    let machine = match arch {
+        "arm64" => NativeMachine::Aarch64,
+        "x86_64" => NativeMachine::X86_64,
+        other => {
+            return Err(err(&format!(
+                "tbd arch `{other}` is not one of arm64 / x86_64"
+            )));
+        }
+    };
     let docs = scan_tbd_documents(text)?;
     let Some(primary) = docs.first() else {
         return Err(err("tbd holds no document"));
@@ -286,6 +300,7 @@ pub fn parse_tbd(text: &str, arch: &str, platform: &str) -> Result<SharedLibrary
     }
     Ok(SharedLibrary {
         soname: primary.install_name.clone(),
+        machine,
         exports,
         data_exports: BTreeSet::new(),
     })

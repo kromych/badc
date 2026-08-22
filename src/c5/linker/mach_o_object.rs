@@ -122,6 +122,15 @@ pub fn is_mach_o_fat(bytes: &[u8]) -> bool {
     matches!(u32be(bytes, 0), Some(FAT_MAGIC | FAT_MAGIC_64))
 }
 
+/// The architecture a Mach-O `cputype` names.
+pub(crate) fn mach_o_machine(cputype: u32) -> Option<NativeMachine> {
+    match cputype {
+        CPU_TYPE_ARM64 => Some(NativeMachine::Aarch64),
+        CPU_TYPE_X86_64 => Some(NativeMachine::X86_64),
+        _ => None,
+    }
+}
+
 /// Select the slice of a universal (fat) container that matches
 /// `machine`. `cputype` must match; on arm64 a plain-arm64 slice is
 /// preferred over an arm64e one when the container carries both, since
@@ -421,14 +430,14 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         )));
     }
     let cputype = need_u32(bytes, 4, "header")?;
-    let machine = match cputype {
-        CPU_TYPE_ARM64 => NativeMachine::Aarch64,
-        CPU_TYPE_X86_64 => {
+    let machine = match mach_o_machine(cputype) {
+        Some(NativeMachine::Aarch64) => NativeMachine::Aarch64,
+        Some(NativeMachine::X86_64) => {
             return Err(err(
                 "Mach-O object is x86_64; the Mach-O reader translates arm64 relocations only",
             ));
         }
-        _ => {
+        None => {
             return Err(err(&format!(
                 "Mach-O object has unhandled cputype {cputype:#x}",
             )));

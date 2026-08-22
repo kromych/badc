@@ -3544,16 +3544,38 @@ fn ingest_linker_input(
         }
         lib
     };
+    // A shared library resolves a reference into a load-time import of
+    // the library the image names as a dependency, which the loader can
+    // only satisfy when the library is the target's own container and
+    // architecture. Admitting a foreign one would bind the reference to
+    // a library the image never loads.
+    let compatible = |lib: badc::SharedLibrary, fmt: badc::BinaryFormat| -> Result<_, String> {
+        if fmt != target.binary_format() {
+            return Err(format!(
+                "`{path}` is a shared library in the {} container; a {} link cannot import from it",
+                fmt.name(),
+                target.binary_format().name(),
+            ));
+        }
+        if lib.machine != target_machine(target) {
+            return Err(format!(
+                "`{path}` is a shared library for {}; the link targets {}",
+                machine_label(lib.machine),
+                machine_label(target_machine(target)),
+            ));
+        }
+        Ok(named(lib))
+    };
     if bytes.starts_with(b"!<arch>\n") || bytes.starts_with(b"!<thin>\n") {
         archives.push(path.to_string());
     } else if bytes.starts_with(b"\x7fELF") {
         let lib = badc::parse_shared_library(bytes)
             .map_err(|e| format!("reading `{path}` as a shared library: {e}"))?;
-        shared_libs.push(named(lib));
+        shared_libs.push(compatible(lib, badc::BinaryFormat::Elf)?);
     } else if badc::is_mach_o_dylib(bytes) {
         let lib = badc::parse_mach_o_dylib(bytes)
             .map_err(|e| format!("reading `{path}` as a dylib: {e}"))?;
-        shared_libs.push(named(lib));
+        shared_libs.push(compatible(lib, badc::BinaryFormat::MachO)?);
     } else if badc::is_tbd(bytes) {
         let text =
             core::str::from_utf8(bytes).map_err(|_| format!("`{path}` is not UTF-8 text"))?;
@@ -3563,7 +3585,7 @@ fn ingest_linker_input(
             target_platform(target),
         )
         .map_err(|e| format!("reading `{path}` as a text stub: {e}"))?;
-        shared_libs.push(named(lib));
+        shared_libs.push(compatible(lib, badc::BinaryFormat::MachO)?);
     } else if let Some(f) = badc::detect_binary_format(bytes) {
         return Err(format!(
             "`{path}` is a {} binary badc cannot link against; the shared-library inputs \

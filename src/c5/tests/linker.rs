@@ -5501,6 +5501,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
     );
     let lib = SharedLibrary {
         soname: "libhook.so.1".to_string(),
+        machine: NativeMachine::X86_64,
         exports: core::iter::once("hook".to_string()).collect(),
         data_exports: Default::default(),
     };

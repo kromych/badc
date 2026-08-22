@@ -336,6 +336,57 @@ fn a_cross_link_does_not_import_host_libc_names() {
     );
 }
 
+// A shared library resolves a reference into a load-time import of the
+// library the image depends on, so one in another container or for
+// another architecture cannot supply it: the reference would bind to a
+// library the image never loads (on PE, to the C library its bindings
+// name). Both mismatches are a diagnostic, not an image.
+#[test]
+fn a_shared_library_for_another_target_is_refused() {
+    let dir = tempdir("foreign-shared-lib");
+    let lib_src = write_source(&dir, "ext.c", "int ext_fn(void) { return 3; }\n");
+    let main_src = write_source(
+        &dir,
+        "main.c",
+        "int ext_fn(void);\nint main(void) { return ext_fn(); }\n",
+    );
+    // An ELF shared object under each spelling a `-l` search accepts.
+    for name in ["libext.dll", "libext.so"] {
+        run(
+            Command::new(badc())
+                .arg("--target=linux-x64")
+                .arg("--shared")
+                .arg("-o")
+                .arg(dir.join(name))
+                .arg(&lib_src)
+                .current_dir(&dir),
+            "build the ELF shared library",
+        );
+    }
+    let refused = |target: &str, want: &str| {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .arg("-o")
+            .arg(dir.join("out"))
+            .arg(&main_src)
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lext")
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(
+            !out.status.success() && err.contains(want),
+            "{target}: expected a diagnostic naming {want}, got status={} stderr={err}",
+            out.status
+        );
+    };
+    // Container mismatch: an ELF library cannot back a PE import.
+    refused("windows-x64", "PE/COFF");
+    // Architecture mismatch, both sides ELF.
+    refused("linux-aarch64", "arm64");
+}
+
 // An archive-only invocation is a valid link: the members supply the
 // objects and `main` is pulled by the runtime's reference to it. The
 // input-emptiness check must count archives, not just sources/objects.

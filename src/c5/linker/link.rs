@@ -3715,6 +3715,7 @@ mod tests {
         let names = |n: &str| core::iter::once(alloc::string::String::from(n)).collect();
         let lib = SharedLibrary {
             soname: alloc::string::String::from("libext.so.1"),
+            machine: NativeMachine::Aarch64,
             exports: names("tbl"),
             data_exports: names("tbl"),
         };
@@ -3824,6 +3825,7 @@ mod tests {
         // load-time import and records the library as DT_NEEDED.
         let lib = SharedLibrary {
             soname: alloc::string::String::from("libext.so.1"),
+            machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
         };
@@ -3857,6 +3859,7 @@ mod tests {
         let obj = compile_native_with(src, target, opts, copts);
         let lib = SharedLibrary {
             soname: alloc::string::String::from("libext.so.1"),
+            machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
         };

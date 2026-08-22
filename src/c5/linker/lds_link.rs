@@ -7181,6 +7181,7 @@ mod tests {
     use super::*;
     use crate::c5::linker::default_script::default_script;
     use crate::c5::linker::lds::parse_linker_script;
+    use crate::c5::linker::object::NativeMachine;
 
     /// `(name, sh_type, flags, addralign, bytes, relocs)` of a test section.
     type TestSec = (String, u32, u64, u64, Vec<u8>, Vec<RawReloc>);
@@ -9515,6 +9516,7 @@ SECTIONS {
         SharedInput {
             lib: SharedLibrary {
                 soname: soname.to_string(),
+                machine: NativeMachine::X86_64,
                 exports: funcs.iter().chain(data).map(|s| s.to_string()).collect(),
                 data_exports: data.iter().map(|s| s.to_string()).collect(),
             },

@@ -197,6 +197,9 @@ pub(crate) fn read_dynamic_symbol_names(bytes: &[u8]) -> Result<Vec<String>, C5E
 #[derive(Debug, Clone)]
 pub struct SharedLibrary {
     pub soname: String,
+    /// The architecture the library's code is built for. A link binds
+    /// references to it only for a matching target.
+    pub machine: NativeMachine,
     pub exports: alloc::collections::BTreeSet<String>,
     /// The subset of `exports` that are data objects (`STT_OBJECT`)
     /// rather than functions. A reference to one must resolve to the
@@ -213,6 +216,7 @@ pub struct SharedLibrary {
 /// `SHN_UNDEF`) and externally bound (`STB_GLOBAL` / `STB_WEAK`).
 pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
+    let machine = elf_machine(ehdr.e_machine)?;
     let read_cstr = |off: usize| -> String {
         let start = off.min(bytes.len());
         let mut end = start;
@@ -275,9 +279,21 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     }
     Ok(SharedLibrary {
         soname,
+        machine,
         exports,
         data_exports,
     })
+}
+
+/// The architecture an ELF `e_machine` names.
+fn elf_machine(e_machine: u16) -> Result<NativeMachine, C5Error> {
+    match e_machine {
+        EM_X86_64 => Ok(NativeMachine::X86_64),
+        EM_AARCH64 => Ok(NativeMachine::Aarch64),
+        other => Err(err(&format!(
+            "ELF e_machine {other} is not one of EM_X86_64 ({EM_X86_64}) / EM_AARCH64 ({EM_AARCH64})",
+        ))),
+    }
 }
 
 /// Which architecture's relocations the object uses. Drives the
@@ -928,15 +944,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             ehdr.e_type,
         )));
     }
-    let machine = match ehdr.e_machine {
-        EM_X86_64 => NativeMachine::X86_64,
-        EM_AARCH64 => NativeMachine::Aarch64,
-        other => {
-            return Err(err(&format!(
-                "ELF object's e_machine {other} is not one of EM_X86_64 ({EM_X86_64}) / EM_AARCH64 ({EM_AARCH64})",
-            )));
-        }
-    };
+    let machine = elf_machine(ehdr.e_machine)?;
     let e_shoff = ehdr.e_shoff as usize;
     let e_shentsize = ehdr.e_shentsize as usize;
     let e_shnum = ehdr.e_shnum as usize;

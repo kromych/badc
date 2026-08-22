@@ -631,6 +631,19 @@ int f(unsigned *p)
     }
 }
 
+/// `.set name, .` assigns the location counter's value, not an alias to a
+/// symbol spelled `.`: the name reads back as a label at that spot. GNU as
+/// 2.46.1 fills the same values.
+#[test]
+fn a_set_to_the_location_counter_defines_a_label() {
+    let b = object_of(
+        "set-dot-label",
+        "\t.text\na:\n\tnop\n\t.set here, .\n\tnop\nb:\n\tnop\n\
+         \t.data\n\t.byte here - a\n\t.byte b - here\n\t.long here - a\n",
+    );
+    assert_eq!(section64(&b, ".data"), [1, 1, 1, 0, 0, 0]);
+}
+
 #[test]
 fn assembler_options_are_checked_rather_than_passed_on() {
     let d = dir("wa");

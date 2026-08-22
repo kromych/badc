@@ -4654,7 +4654,8 @@ fn parse_section_item(
                 .filter(|(n, t)| is_asm_symbol_name(n) && !t.is_empty())
                 .ok_or_else(|| alloc::format!("inline asm: `{tok} {rest}` is not `name, value`"))?;
             let name = alloc::string::String::from(name);
-            if is_asm_symbol_name(value) {
+            // `.set name, .` values the location counter, not an alias.
+            if is_asm_symbol_name(value) && value != "." {
                 return Ok(AsmSectionItem::SymSet {
                     name,
                     target: alloc::string::String::from(value),
@@ -4691,7 +4692,7 @@ fn parse_section_item(
                 return Err(alloc::format!("inline asm: bad assignment `{tok} {rest}`"));
             }
             let expr = alloc::string::String::from(expr.trim());
-            if is_asm_symbol_name(&expr) {
+            if is_asm_symbol_name(&expr) && expr != "." {
                 return Ok(AsmSectionItem::SymSet {
                     name: alloc::string::String::from(name),
                     target: expr,
@@ -5802,7 +5803,7 @@ fn eval_section_set_expr(
     aliases: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     sections: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     const_of: &dyn Fn(u8) -> Option<i64>,
-) -> Result<i64, alloc::string::String> {
+) -> Result<SectionSetValue, alloc::string::String> {
     let resolve = |t: &str| -> Option<AsmExprLeaf> {
         if t == "." {
             return Some(AsmExprLeaf::Loc(AsmExprTerm {
@@ -5837,12 +5838,32 @@ fn eval_section_set_expr(
         const_of,
         lax_div: false,
     };
-    eval_asm_value(expr, &ctx)
-        .map_err(|e| alloc::format!("inline asm: `.set {name}, {expr}`: {e}"))?
-        .to_abs()
-        .ok_or_else(|| {
-            alloc::format!("inline asm: `.set {name}, {expr}` is a location, not an absolute value")
-        })
+    let v = eval_asm_value(expr, &ctx)
+        .map_err(|e| alloc::format!("inline asm: `.set {name}, {expr}`: {e}"))?;
+    if let Some(c) = v.to_abs() {
+        return Ok(SectionSetValue::Abs(c));
+    }
+    // `.set x, .` and `.set x, label + k`: the name takes the location, and
+    // reads of it resolve like a label's.
+    match (&v.pos, &v.neg) {
+        (
+            Some(AsmExprTerm {
+                space: Some((AsmSpace::Section(sk), off)),
+                ..
+            }),
+            None,
+        ) => Ok(SectionSetValue::Loc(sk.clone(), off + v.add)),
+        _ => Err(alloc::format!(
+            "inline asm: `.set {name}, {expr}` is not an absolute value or a location"
+        )),
+    }
+}
+
+/// A `.set` assignment's value: an absolute constant, or a location of a
+/// section of this unit.
+enum SectionSetValue {
+    Abs(i64),
+    Loc(alloc::string::String, i64),
 }
 
 /// The `(name, flags, sh_type)` identity key of a section block, as the
@@ -6962,8 +6983,11 @@ fn measure_round_inner(
         match eval_section_set_expr(
             name, expr, key, *at, &map, &syms, &aliases, &sections, const_of,
         ) {
-            Ok(v) => {
+            Ok(SectionSetValue::Abs(v)) => {
                 syms.insert(name.clone(), v);
+            }
+            Ok(SectionSetValue::Loc(sk, off)) => {
+                map.insert(name.clone(), (sk, off));
             }
             Err(e) => set_err = set_err.or(Some(e)),
         }

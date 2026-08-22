@@ -945,7 +945,10 @@ fn long_double_layout_follows_the_target_abi() {
         (Target::WindowsX64, 8),
         (Target::WindowsAarch64, 8),
     ] {
-        let want = width + 100 * width + 10000 * width + 1000000 * width
+        let want = width
+            + 100 * width
+            + 10000 * width
+            + 1000000 * width
             + 100000000
             + 1000000000 * (if width == 16 { 2 } else { 1 });
         assert_eq!(run(probe, t), want, "{t:?}: long double layout");

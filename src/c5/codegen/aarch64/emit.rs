@@ -8639,7 +8639,9 @@ fn emit_store_local(
                 StoreKind::I32 => super::encode::enc_stur32(rv, Reg(29), disp),
                 StoreKind::I16 => super::encode::enc_sturh(rv, Reg(29), disp),
                 StoreKind::I8 => super::encode::enc_sturb(rv, Reg(29), disp),
-                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => unreachable!(),
+                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => {
+                    unreachable!()
+                }
             };
             emit(code, enc);
         } else if !emit_store_local_large_disp(code, off, rv, kind, func, scratch, frame) {

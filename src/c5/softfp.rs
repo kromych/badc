@@ -185,7 +185,7 @@ mod tests {
             (-0.0f64).to_bits(),
             1.0f64.to_bits(),
             1.5f64.to_bits(),
-            (-2.7182818284590459f64).to_bits(),
+            (-core::f64::consts::E).to_bits(),
             f64::MAX.to_bits(),
             f64::MIN_POSITIVE.to_bits(),
             5e-324f64.to_bits(), // smallest subnormal
@@ -313,10 +313,9 @@ mod tests {
             let back = |img: &[u8; 16]| -> u64 {
                 let w = |a: usize| u64::from_le_bytes(img[a..a + 8].try_into().unwrap());
                 match kind {
-                    crate::c5::codegen::LongDoubleKind::X87 => f80_to_f64(
-                        w(0),
-                        u16::from_le_bytes(img[8..10].try_into().unwrap()),
-                    ),
+                    crate::c5::codegen::LongDoubleKind::X87 => {
+                        f80_to_f64(w(0), u16::from_le_bytes(img[8..10].try_into().unwrap()))
+                    }
                     _ => f128_to_f64(w(0), w(8)),
                 }
             };

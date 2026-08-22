@@ -165,6 +165,19 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
 const SMOKE_TARGETS: &[&str] = &["linux-aarch64", "linux-x64"];
 
 /// Absolute path of `tests/fixtures/c`.
+/// The flags a fixture pins for itself in a leading
+/// `// snapshot-flags: ...` line, the same directive
+/// `scripts/snapshots.py` reads. Empty when the fixture pins none.
+fn snapshot_flags(fixture: &std::path::Path) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(fixture) else {
+        return Vec::new();
+    };
+    text.lines()
+        .find_map(|l| l.trim_start().strip_prefix("// snapshot-flags:"))
+        .map(|rest| rest.split_whitespace().map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -328,6 +341,15 @@ fn every_fixture_compiles_standalone_for_linux() {
         if COMPILE_SKIPLIST.contains(&name) || DEAD_BRANCH_NEEDS_OPTIMIZE.contains(&name) {
             continue;
         }
+        // A fixture states the flags it is compiled under in the same
+        // `snapshot-flags:` directive the snapshot generator reads, so
+        // one declaration drives both and neither can drift. `-c` names
+        // a unit that has no `main` to link, which this sweep cannot
+        // build; those stay on the skiplist.
+        let flags = snapshot_flags(fixture);
+        if flags.iter().any(|f| f == "-c") {
+            continue;
+        }
         for target in SMOKE_TARGETS.iter().copied() {
             if TARGET_SPECIFIC_ASM.contains(&(name, target)) {
                 continue;
@@ -337,6 +359,7 @@ fn every_fixture_compiles_standalone_for_linux() {
             let out = tmp_root.join(format!("{stem}-{target}"));
             let status = Command::new(badc)
                 .arg(format!("--target={target}"))
+                .args(&flags)
                 .arg("-o")
                 .arg(&out)
                 .arg(fixture)

@@ -559,7 +559,19 @@ fn install_float_characteristics(macros: &mut HashMap<String, String>, target: T
     // (MANT_DIG, DIG, MIN_EXP, MIN_10_EXP, MAX_EXP, MAX_10_EXP,
     //  DECIMAL_DIG, EPSILON, MIN, MAX, DENORM_MIN); MAX doubles as
     //  NORM_MAX and DECIMAL_DIG as the C99 5.2.4.2.2 __DECIMAL_DIG__.
-    const LDBL_F64: (&str, &str, &str, &str, &str, &str, &str, &str, &str, &str, &str) = (
+    const LDBL_F64: (
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+    ) = (
         "53",
         "15",
         "(-1021)",
@@ -572,7 +584,19 @@ fn install_float_characteristics(macros: &mut HashMap<String, String>, target: T
         "1.7976931348623157e+308L",
         "4.9406564584124654e-324L",
     );
-    const LDBL_X87: (&str, &str, &str, &str, &str, &str, &str, &str, &str, &str, &str) = (
+    const LDBL_X87: (
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+    ) = (
         "64",
         "18",
         "(-16381)",
@@ -585,7 +609,19 @@ fn install_float_characteristics(macros: &mut HashMap<String, String>, target: T
         "1.18973149535723176502126385303097021e+4932L",
         "3.64519953188247460252840593361941982e-4951L",
     );
-    const LDBL_BIN128: (&str, &str, &str, &str, &str, &str, &str, &str, &str, &str, &str) = (
+    const LDBL_BIN128: (
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+        &str,
+    ) = (
         "113",
         "33",
         "(-16381)",

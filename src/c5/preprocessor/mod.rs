@@ -1418,21 +1418,16 @@ impl Preprocessor {
         // A UTF-8 byte-order mark opening the file is accepted and
         // skipped, following gcc and clang.
         let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-        // c99 sec 5.1.1.2 phase 2: every `\\\n` joins lines. We do this
-        // up-front so the line-by-line preprocessor never sees a
-        // continuation. Line counts are preserved by emitting blank
-        // lines for each continuation consumed, so error messages
-        // (and `__LINE__`) stay grounded in the original source.
-        let unfolded = unfold_line_continuations(source);
-        // c99 sec 5.1.1.2 phase 3: remove comments. Done before macro
+        // c99 sec 5.1.1.2 phases 2 and 3, fused into one scan: every
+        // `\\\n` joins lines so the line-by-line preprocessor never
+        // sees a continuation, and comments are removed before macro
         // substitution so a `#define X 0 /* note */` body doesn't
         // emit a stray `*/` into a surrounding source comment when
-        // X is referenced from inside that comment. Inline-commented
-        // numeric `#define`s referenced from doc-comment blocks are
-        // a common pattern; without this pass the macro expansion's
-        // `*/` closes the surrounding `/* ... */` early and the
-        // lexer sees comment tail text as code.
-        let stripped = strip_c_comments(&unfolded);
+        // X is referenced from inside that comment. Line counts are
+        // preserved by emitting blank lines for each continuation
+        // consumed, so error messages (and `__LINE__`) stay grounded
+        // in the original source.
+        let stripped = unfold_and_strip(source);
         let source = stripped.as_str();
         out.reserve(source.len());
 
@@ -2046,4 +2041,4 @@ use directive::{
 use expand::JoinScan;
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
 use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack, pragma_is_visibility};
-use text::{is_ident, strip_c_comments, unfold_line_continuations};
+use text::{is_ident, unfold_and_strip};

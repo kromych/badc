@@ -82,12 +82,297 @@ enum ScanMode {
     Line,
 }
 
+/// Fused phases 2 and 3: one pass over `source` producing the bytes
+/// `strip_c_comments(&unfold_line_continuations(source))` produces,
+/// with one scan and one output buffer. The scanner below carries the
+/// [`ScanMode`] state across the splices phase 2 would perform, so the
+/// join decision (a logical line ending inside an open block comment)
+/// and the comment removal come from the same walk.
+struct Fuse<'a> {
+    src: &'a str,
+    out: String,
+    mode: ScanMode,
+    /// Pending backslash escape inside a string or char literal.
+    esc: bool,
+    /// Half-seen top-level `/` at `slash_pos`. It stays pending across
+    /// a splice, so `/` and `*` split over a continuation still open a
+    /// comment; a logical line end discards it.
+    slash: bool,
+    slash_pos: usize,
+    /// Half-seen `*` inside a block comment.
+    star: bool,
+    /// Start of the retained span not yet flushed to `out`. Splices,
+    /// comment bounds and padding emission interrupt the span; plain
+    /// line ends let it run on through the newline.
+    copied: usize,
+}
+
+impl<'a> Fuse<'a> {
+    fn flush_to(&mut self, end: usize) {
+        if end > self.copied {
+            self.out.push_str(&self.src[self.copied..end]);
+        }
+    }
+
+    /// Advance the state over one content byte at `pos`, emitting the
+    /// comment-boundary output. Retained bytes are not emitted here;
+    /// they stay in the open span.
+    fn step(&mut self, c: u8, pos: usize) {
+        match self.mode {
+            ScanMode::Normal => {
+                if self.slash {
+                    self.slash = false;
+                    match c {
+                        b'*' => {
+                            self.flush_to(self.slash_pos);
+                            self.copied = pos + 1;
+                            self.mode = ScanMode::Block;
+                            self.star = false;
+                            return;
+                        }
+                        b'/' => {
+                            self.flush_to(self.slash_pos);
+                            self.copied = pos + 1;
+                            self.mode = ScanMode::Line;
+                            return;
+                        }
+                        // A pending `/` whose span was already flushed
+                        // (it sat before a splice) is retained text.
+                        _ if self.slash_pos < self.copied => self.out.push('/'),
+                        _ => {}
+                    }
+                }
+                match c {
+                    b'/' => {
+                        self.slash = true;
+                        self.slash_pos = pos;
+                    }
+                    b'"' => {
+                        self.mode = ScanMode::Str;
+                        self.esc = false;
+                    }
+                    b'\'' => {
+                        self.mode = ScanMode::Char;
+                        self.esc = false;
+                    }
+                    _ => {}
+                }
+            }
+            ScanMode::Str | ScanMode::Char => {
+                let close = if self.mode == ScanMode::Str {
+                    b'"'
+                } else {
+                    b'\''
+                };
+                if self.esc {
+                    self.esc = false;
+                } else if c == b'\\' {
+                    self.esc = true;
+                } else if c == close {
+                    self.mode = ScanMode::Normal;
+                }
+            }
+            ScanMode::Block => {
+                if self.star {
+                    self.star = false;
+                    if c == b'/' {
+                        self.mode = ScanMode::Normal;
+                        self.out.push(' ');
+                        self.copied = pos + 1;
+                        return;
+                    }
+                }
+                if c == b'*' {
+                    self.star = true;
+                }
+            }
+            ScanMode::Line => {}
+        }
+    }
+
+    /// Scan the line content `bytes[from..to]` (no newline inside).
+    fn scan(&mut self, bytes: &[u8], from: usize, to: usize) {
+        let mut p = from;
+        while p < to {
+            let c = bytes[p];
+            match self.mode {
+                // Outside a literal or comment with no `/` pending,
+                // only `/`, `"` and `'` change state; skip to the next
+                // one. Skipped bytes stay in the open span.
+                ScanMode::Normal if !self.slash && !matches!(c, b'/' | b'"' | b'\'') => {
+                    let rest = &bytes[p + 1..to];
+                    p += 1 + rest
+                        .iter()
+                        .position(|&b| matches!(b, b'/' | b'"' | b'\''))
+                        .unwrap_or(rest.len());
+                }
+                // A `//` comment drops everything to the logical line
+                // end.
+                ScanMode::Line => break,
+                _ => {
+                    self.step(c, p);
+                    p += 1;
+                }
+            }
+        }
+    }
+
+    /// Feed backslashes that survived the splice pops back in as
+    /// content. All-identical bytes, so no source position is needed;
+    /// retained modes emit them, comment modes drop them.
+    fn feed_backslashes(&mut self, count: usize) {
+        for _ in 0..count {
+            self.step(b'\\', 0);
+            if matches!(self.mode, ScanMode::Normal | ScanMode::Str | ScanMode::Char) {
+                self.out.push('\\');
+            }
+        }
+    }
+}
+
+/// Fused phase-2 / phase-3 pass; see [`Fuse`]. Byte-identical to
+/// `strip_c_comments(&unfold_line_continuations(source))`, which the
+/// differential tests verify over the header corpus and fuzzed input.
+pub(super) fn unfold_and_strip(source: &str) -> String {
+    let bytes = source.as_bytes();
+    let n = bytes.len();
+    let mut f = Fuse {
+        src: source,
+        out: String::with_capacity(n),
+        mode: ScanMode::Normal,
+        esc: false,
+        slash: false,
+        slash_pos: 0,
+        star: false,
+        copied: 0,
+    };
+    // Blank lines owed after the current logical line, one per spliced
+    // or comment-joined physical line, preserving the line count.
+    let mut padding = 0usize;
+    // Trailing backslashes deferred at a line end. Phase 2 pops one per
+    // join; the survivors become content once a non-empty line follows,
+    // so they are neither scanned nor emitted until then.
+    let mut pend = 0usize;
+    let mut open = false;
+    let mut i = 0usize;
+    while i < n {
+        open = true;
+        let (content_end, next_start, has_nl, has_cr) = match source[i..].find('\n') {
+            Some(k) => {
+                let nl = i + k;
+                let cr = nl > i && bytes[nl - 1] == b'\r';
+                (if cr { nl - 1 } else { nl }, nl + 1, true, cr)
+            }
+            None => (n, n, false, false),
+        };
+        let mut run_start = content_end;
+        while run_start > i && bytes[run_start - 1] == b'\\' {
+            run_start -= 1;
+        }
+        if run_start > i {
+            // The line has content before its backslash run, so
+            // deferred survivors can no longer be popped: they are
+            // ordinary bytes preceding it. A line of backslashes only
+            // instead merges into the deferred run.
+            f.feed_backslashes(pend);
+            pend = 0;
+        }
+        pend += content_end - run_start;
+        f.scan(bytes, i, run_start);
+        if pend > 0 {
+            // Splice: drop one trailing backslash with the newline.
+            match f.mode {
+                ScanMode::Normal => {
+                    let end = if f.slash {
+                        f.slash_pos.max(f.copied)
+                    } else {
+                        run_start
+                    };
+                    f.flush_to(end);
+                }
+                ScanMode::Str | ScanMode::Char => f.flush_to(run_start),
+                ScanMode::Block | ScanMode::Line => {}
+            }
+            pend -= 1;
+            padding += 1;
+            f.copied = next_start;
+            i = next_start;
+            continue;
+        }
+        if f.mode == ScanMode::Block {
+            // An open block comment joins the next line; the newline
+            // moves to the padding after the logical line.
+            padding += 1;
+            i = next_start;
+            continue;
+        }
+        // The logical line ends here.
+        match f.mode {
+            ScanMode::Line => {
+                f.out.push(' ');
+                f.copied = content_end;
+            }
+            ScanMode::Normal if f.slash && f.slash_pos < f.copied => f.out.push('/'),
+            _ => {}
+        }
+        if padding > 0 || has_cr || !has_nl {
+            f.flush_to(content_end);
+            f.out.push('\n');
+            for _ in 0..padding {
+                f.out.push('\n');
+            }
+            f.copied = next_start;
+            padding = 0;
+        }
+        // Otherwise the span runs on through the newline byte.
+        f.mode = ScanMode::Normal;
+        f.esc = false;
+        f.slash = false;
+        f.star = false;
+        open = false;
+        i = next_start;
+    }
+    if open {
+        // Input ended while joining. The pop that found no next line
+        // already counted its padding; emit the terminator, the owed
+        // blanks and, for an unterminated block comment, the space
+        // phase 3 closes every comment with.
+        match f.mode {
+            ScanMode::Block => {
+                for _ in 0..=padding {
+                    f.out.push('\n');
+                }
+                f.out.push(' ');
+            }
+            ScanMode::Line => {
+                f.out.push(' ');
+                for _ in 0..=padding {
+                    f.out.push('\n');
+                }
+            }
+            ScanMode::Normal | ScanMode::Str | ScanMode::Char => {
+                f.feed_backslashes(pend);
+                if f.mode == ScanMode::Normal && f.slash && f.slash_pos < f.copied {
+                    f.out.push('/');
+                }
+                for _ in 0..=padding {
+                    f.out.push('\n');
+                }
+            }
+        }
+    } else {
+        f.flush_to(n);
+    }
+    f.out
+}
+
 /// Incremental scan state for `unfold_line_continuations`. It advances
 /// byte by byte with no 2-byte lookahead, so the state carries cleanly
 /// across a physical-line join and the assembled buffer is scanned only
 /// once overall. `esc` is a pending backslash escape inside a literal;
 /// `slash` a half-seen top-level `/`; `star` a half-seen `*` inside a
 /// block comment. `scanned` is the buffer length already consumed.
+#[cfg(test)]
 #[derive(Clone, Copy, Default)]
 struct LineScan {
     mode: ScanMode,
@@ -97,6 +382,7 @@ struct LineScan {
     scanned: usize,
 }
 
+#[cfg(test)]
 impl LineScan {
     /// Consume `joined[self.scanned..]`, advance the state, and report
     /// whether the assembled line now ends inside an open block
@@ -191,6 +477,10 @@ impl LineScan {
 /// `\\`: a newline inside a block comment is comment white space, not a
 /// directive terminator (C99 5.1.1.2), so a multi-line comment embedded
 /// in a `\\`-continued macro definition must not split the definition.
+///
+/// Production uses the fused [`unfold_and_strip`]; this stays as the
+/// phase-2 half of its differential reference.
+#[cfg(test)]
 pub(super) fn unfold_line_continuations(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let mut iter = source.lines();

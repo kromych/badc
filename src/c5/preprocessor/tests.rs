@@ -1,7 +1,7 @@
 use super::include::include_parent_dir;
 use super::text::{
     ends_in_open_block_comment_once, scan_steps_taken, strip_c_comments, strip_c_comments_ref,
-    unfold_line_continuations, unfold_ref,
+    unfold_and_strip, unfold_line_continuations, unfold_ref,
 };
 use super::*;
 
@@ -2491,6 +2491,12 @@ fn unfold_80k_line_block_comment_is_fast() {
     // the comment survives.
     assert_eq!(out.matches('\n').count(), s.lines().count());
     assert!(out.contains("code;"));
+    // The fused pass walks the same comment once as well.
+    let start = std::time::Instant::now();
+    let fused = unfold_and_strip(&s);
+    let elapsed = start.elapsed();
+    assert!(elapsed.as_secs() < 20, "fused pass too slow: {elapsed:?}");
+    assert_eq!(fused, strip_c_comments(&out));
 }
 
 /// Deterministic pseudo-random source generator for the phase-2 /
@@ -2554,6 +2560,100 @@ fn unfold_matches_reference_over_corpus_and_fuzz() {
             unfold_line_continuations(&src),
             unfold_ref(&src),
             "unfold diverged on seed {seed}: {src:?}"
+        );
+    }
+}
+
+/// The fused phase-2 / phase-3 pass must agree byte for byte with the
+/// two-pass composition over the header corpus, the fuzz generator, and
+/// CR-bearing variants (the generator's alphabet has no `\r`, so CRLF
+/// terminators and lone CRs are grafted onto every fuzzed source).
+#[test]
+fn unfold_and_strip_matches_composition_over_corpus_and_fuzz() {
+    let reference = |s: &str| strip_c_comments(&unfold_line_continuations(s));
+    for (name, body) in crate::c5::headers::embedded_headers() {
+        assert_eq!(
+            unfold_and_strip(body),
+            reference(body),
+            "fused pass diverged on embedded header `{name}`"
+        );
+    }
+    for seed in 0..6000u64 {
+        let src = fuzz_source(seed, 200);
+        assert_eq!(
+            unfold_and_strip(&src),
+            reference(&src),
+            "fused pass diverged on seed {seed}: {src:?}"
+        );
+        let crlf = src.replace('\n', "\r\n");
+        assert_eq!(
+            unfold_and_strip(&crlf),
+            reference(&crlf),
+            "fused pass diverged on CRLF seed {seed}: {crlf:?}"
+        );
+        let lone_cr = src.replace('*', "\r");
+        assert_eq!(
+            unfold_and_strip(&lone_cr),
+            reference(&lone_cr),
+            "fused pass diverged on lone-CR seed {seed}: {lone_cr:?}"
+        );
+    }
+}
+
+/// Edges the fusion has to get right, locked against literal expected
+/// bytes rather than only the reference composition.
+#[test]
+fn unfold_and_strip_edge_cases() {
+    let cases: &[(&str, &str)] = &[
+        // A `\`-run followed by empty lines: phase 2 pops one trailing
+        // backslash per joined line, reaching back through the run.
+        ("x\\\\\n\ny\n", "xy\n\n\n"),
+        ("\"ab\\\\\n\nz\n", "\"abz\n\n\n"),
+        ("a;\\\\\\\\\n\n\n\nb\n", "a;b\n\n\n\n\n"),
+        // A line of backslashes only merges into the deferred run.
+        ("x\\\\\n\\\n\ny\n", "xy\n\n\n\n"),
+        // Comment openers and closers split across a splice.
+        ("a /\\\n* c *\\\n/ b\n", "a   b\n\n\n"),
+        ("a /\\\n/ c\nb\n", "a  \n\nb\n"),
+        ("/*x*\\\n/y\n", " y\n\n"),
+        // A pending `/` whose splice pops the following backslash but
+        // no comment forms.
+        ("x/\\\nay\n", "x/ay\n\n"),
+        ("x/\\\n\nz\n", "x/\n\nz\n"),
+        ("x/\\\\\ny\n", "x/\\y\n\n"),
+        // Escapes rebuilt across a splice inside a literal.
+        ("\"a\\\n\\\"b\"c\n", "\"a\\\"b\"c\n\n"),
+        // Unterminated literal ends at its line; the next line's
+        // comment is stripped.
+        (
+            "char *s = \"abc\nint x; /* c */ int y;\n",
+            "char *s = \"abc\nint x;   int y;\n",
+        ),
+        // EOF while joining.
+        ("xyz\\", "xyz\n\n"),
+        ("x/\\\\", "x/\\\n\n"),
+        ("a /* x", "a \n\n "),
+        ("a /* x\n", "a \n\n "),
+        ("a // x\\", "a  \n\n"),
+        ("int a; // t", "int a;  \n"),
+        // CRLF: the CR joins the newline in the splice and the line
+        // terminator, and survives when no LF follows.
+        ("#define M \\\r\n 1\r\nM\r\n", "#define M  1\n\nM\n"),
+        ("a\rb\n", "a\rb\n"),
+        ("abc\r", "abc\r\n"),
+        ("x\\\r", "x\\\r\n"),
+        // Degenerate inputs.
+        ("", ""),
+        ("\n", "\n"),
+        ("\\\n", "\n\n"),
+        ("\\", "\n\n"),
+    ];
+    for (src, expect) in cases {
+        assert_eq!(unfold_and_strip(src), *expect, "fused output for {src:?}");
+        assert_eq!(
+            strip_c_comments(&unfold_line_continuations(src)),
+            *expect,
+            "reference composition disagrees with the expectation for {src:?}"
         );
     }
 }

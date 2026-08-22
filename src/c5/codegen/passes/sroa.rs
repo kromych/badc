@@ -20,13 +20,23 @@
 //!
 //! and the accessed ranges partition the object: two accesses are the
 //! same `(offset, width)` field or disjoint, so no field's storage is
-//! observed at a second width. Every other use -- a call argument, a
-//! stored pointer, a comparison, a runtime index, a terminator operand,
-//! an `Mcpy` source, an atomic or segment-relative access -- can reach
-//! the object through a pointer this pass does not track, and declines
-//! it. `Block::exit_acc` is not such a use: it names the block's last
+//! observed at a second width. Every other use -- a stored pointer, a
+//! comparison, a runtime index, a terminator operand, an `Mcpy` source,
+//! an atomic or segment-relative access -- can reach the object through
+//! a pointer this pass does not track, and declines it.
+//! `Block::exit_acc` is not such a use: it names the block's last
 //! defined value for liveness, and every rewrite here leaves that id
 //! defining something.
+//!
+//! A fixed argument of a same-unit call is admitted on what the callee
+//! does with it ([`param_footprints`]): the object stays where it is,
+//! keeping its storage and its base address for the callee to read, and
+//! gives up the fields no callee writes. A field some callee reads keeps
+//! its stored bytes up to date -- its store writes both the object and
+//! the field's slot -- so the promoted value and the memory the call
+//! sees never disagree; that costs a store per store, so such a field
+//! moves only where its reads outnumber its writes. A parameter with no
+//! footprint declines the object as any untracked use does.
 //!
 //! The object's storage must also be named by nothing but those address
 //! expressions. A slot the emit or the callee ABI writes without an
@@ -50,11 +60,261 @@ use alloc::vec::Vec;
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
 use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
 
+/// Byte ranges, relative to the object a pointer parameter points at,
+/// that a body reads and writes through it. A parameter absent from
+/// [`FootprintMap`] is opaque: its pointer reaches a use this analysis
+/// does not model, so the callee may read, write, or retain the object
+/// anywhere.
+#[derive(Default, Clone)]
+pub(crate) struct ParamFootprint {
+    reads: Vec<(i64, i64)>,
+    writes: Vec<(i64, i64)>,
+}
+
+/// Footprints by `(callee entry pc, parameter index)`.
+pub(crate) type FootprintMap = BTreeMap<(usize, usize), ParamFootprint>;
+
+/// Ranges one parameter's footprint may carry before it is treated as
+/// opaque. Bounds both the analysis's memory and the intersection tests
+/// the split admission runs per field.
+const MAX_FOOTPRINT_RANGES: usize = 32;
+
+/// Rounds the forwarding fixpoint may take. The lattice only grows
+/// (ranges are added, then the footprint goes opaque), so this bounds a
+/// call chain's depth rather than the iteration; a module that has not
+/// converged by then is treated as opaque throughout.
+const FOOTPRINT_ROUNDS: usize = 32;
+
+/// What every function does with the pointer value of each of its
+/// parameters, for [`run`]'s split admission: an object whose address a
+/// call takes can still give up the fields that call cannot reach.
+///
+/// A parameter is listed only when every use of its value is an access
+/// at a constant offset -- the address expressions [`resolve_base`]
+/// tracks -- or a fixed argument of another same-unit call, whose
+/// footprint it inherits. Any other use, a variadic body, and a body
+/// that keeps a parameter in a frame cell (where the value reaches its
+/// uses through memory this walk does not follow) leave the parameter
+/// out of the map.
+pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
+    let mut local: BTreeMap<(usize, usize), Option<ParamFootprint>> = BTreeMap::new();
+    // `(caller parameter) inherits (callee parameter) shifted by the
+    // offset the argument carries`.
+    let mut edges: Vec<((usize, usize), (usize, usize), i64)> = Vec::new();
+    for func in funcs {
+        if func.n_params == 0 {
+            continue;
+        }
+        // The va machinery reads a variadic body's arguments off the
+        // stack rather than through a `ParamRef`.
+        if func.is_variadic {
+            continue;
+        }
+        let n = func.insts.len();
+        let mut state: Vec<u8> = alloc::vec![0u8; n];
+        let mut resolved: Vec<Option<(i64, i64)>> = alloc::vec![None; n];
+        for v in 0..n {
+            resolve_base(&func.insts, v as ValueId, &mut state, &mut resolved, true);
+        }
+        let np = func.n_params;
+        let mut fps: Vec<Option<ParamFootprint>> = alloc::vec![Some(ParamFootprint::default()); np];
+        // A parameter whose value reaches a use through its frame cell
+        // (slot 2 + index) rather than the `ParamRef` this walk follows
+        // is not tracked. The walker emits a dead cell read beside every
+        // promoted parameter, so only a live one counts.
+        let mut used: Vec<bool> = alloc::vec![false; n];
+        let mark = |v: ValueId, used: &mut Vec<bool>| {
+            if let Some(u) = used.get_mut(v as usize) {
+                *u = true;
+            }
+        };
+        for inst in &func.insts {
+            for_each_operand(inst, |v| mark(v, &mut used));
+        }
+        for block in &func.blocks {
+            let mut term = block.terminator;
+            term.for_each_operand_mut(|v| mark(*v, &mut used));
+            mark(block.exit_acc, &mut used);
+        }
+        for (i, inst) in func.insts.iter().enumerate() {
+            let cell = match inst {
+                Inst::LocalAddr(s) => *s,
+                Inst::LoadLocal { off, volatile, .. } if used[i] || *volatile => *off,
+                _ => continue,
+            };
+            if cell >= 2
+                && let Some(slot) = fps.get_mut((cell - 2) as usize)
+            {
+                *slot = None;
+            }
+        }
+        let at = |v: ValueId| -> Option<(i64, i64)> {
+            resolved
+                .get(v as usize)
+                .copied()
+                .flatten()
+                .filter(|&(p, _)| (p as usize) < np)
+        };
+        for (i, inst) in func.insts.iter().enumerate() {
+            match inst {
+                // An address expression is validated through its own uses.
+                Inst::BinopI {
+                    op: BinOp::Add | BinOp::Sub,
+                    ..
+                }
+                | Inst::Binop {
+                    op: BinOp::Add | BinOp::Sub,
+                    ..
+                } if resolved[i].is_some() => {}
+                Inst::ParamRef { .. } => {}
+                Inst::Load {
+                    addr, disp, kind, ..
+                } => {
+                    if let Some((p, off)) = at(*addr) {
+                        add_range(&mut fps[p as usize], false, off + *disp as i64, load_width(*kind));
+                    }
+                }
+                Inst::Store {
+                    addr,
+                    disp,
+                    value,
+                    kind,
+                    ..
+                } => {
+                    if let Some((p, off)) = at(*addr) {
+                        add_range(&mut fps[p as usize], true, off + *disp as i64, store_width(*kind));
+                    }
+                    if let Some((p, _)) = at(*value) {
+                        fps[p as usize] = None;
+                    }
+                }
+                Inst::Mcpy { dst, src, size, .. } => {
+                    if let Some((p, off)) = at(*dst) {
+                        add_range(&mut fps[p as usize], true, off, *size);
+                    }
+                    if let Some((p, off)) = at(*src) {
+                        add_range(&mut fps[p as usize], false, off, *size);
+                    }
+                }
+                Inst::Call {
+                    target_pc,
+                    args,
+                    fixed_args,
+                    arg_aggs,
+                    ..
+                } => {
+                    for (j, &a) in args.iter().enumerate() {
+                        if let Some((p, off)) = at(a) {
+                            // A variadic argument is read off the stack,
+                            // and an aggregate one is marshalled from the
+                            // whole pointee rather than the parameter's
+                            // own accesses.
+                            if j < *fixed_args && !matches!(arg_aggs.get(j), Some(Some(_))) {
+                                edges.push(((func.ent_pc, p as usize), (*target_pc, j), off));
+                            } else {
+                                fps[p as usize] = None;
+                            }
+                        }
+                    }
+                }
+                other => for_each_operand(other, |v| {
+                    if let Some((p, _)) = at(v) {
+                        fps[p as usize] = None;
+                    }
+                }),
+            }
+        }
+        // Returning the pointer hands the object to the caller; a
+        // terminator reading it is not modelled either.
+        for block in &func.blocks {
+            let mut term = block.terminator;
+            term.for_each_operand_mut(|v| {
+                if let Some((p, _)) = at(*v) {
+                    fps[p as usize] = None;
+                }
+            });
+        }
+        for (i, fp) in fps.into_iter().enumerate() {
+            local.insert((func.ent_pc, i), fp);
+        }
+    }
+    // Propagate along the forwarding edges. Monotone: a footprint only
+    // gains ranges or goes opaque, so the iteration settles.
+    let mut converged = false;
+    for _ in 0..FOOTPRINT_ROUNDS {
+        let mut changed = false;
+        for (from, to, off) in &edges {
+            let src = local.get(to).cloned();
+            let Some(dst) = local.get_mut(from) else {
+                continue;
+            };
+            changed |= inherit(dst, src, *off);
+        }
+        if !changed {
+            converged = true;
+            break;
+        }
+    }
+    if !converged {
+        return FootprintMap::new();
+    }
+    local
+        .into_iter()
+        .filter_map(|(k, v)| v.map(|fp| (k, fp)))
+        .collect()
+}
+
+/// Record one access range on a footprint, or make it opaque once it
+/// carries more ranges than the cap.
+fn add_range(fp: &mut Option<ParamFootprint>, write: bool, off: i64, width: i64) {
+    let Some(f) = fp else { return };
+    let side = if write { &mut f.writes } else { &mut f.reads };
+    if !side.contains(&(off, width)) {
+        side.push((off, width));
+    }
+    if f.reads.len() + f.writes.len() > MAX_FOOTPRINT_RANGES {
+        *fp = None;
+    }
+}
+
+/// Fold a callee parameter's footprint into the caller parameter handed
+/// to it, shifted by the argument's offset. Reports whether `dst` grew.
+fn inherit(
+    dst: &mut Option<ParamFootprint>,
+    src: Option<Option<ParamFootprint>>,
+    off: i64,
+) -> bool {
+    if dst.is_none() {
+        return false;
+    }
+    let Some(Some(src)) = src else {
+        *dst = None;
+        return true;
+    };
+    let before = dst.as_ref().map(|f| f.reads.len() + f.writes.len());
+    for &(o, w) in &src.reads {
+        add_range(dst, false, o + off, w);
+    }
+    for &(o, w) in &src.writes {
+        add_range(dst, true, o + off, w);
+    }
+    dst.as_ref().map(|f| f.reads.len() + f.writes.len()) != before
+}
+
+/// Whether two byte ranges overlap.
+fn overlaps(a: (i64, i64), b: (i64, i64)) -> bool {
+    a.0 < b.0 + b.1 && b.0 < a.0 + a.1
+}
+
 /// Split local aggregates into per-field scalar slots and re-run mem2reg
 /// to promote them. Returns the base slots of objects that were fully
 /// promoted (every field lifted to a register), for the debug-info
 /// emitter to drop their now-stale frame location.
-pub(crate) fn run(func: &mut FunctionSsa, usable_gpr: usize) -> Vec<i64> {
+pub(crate) fn run(
+    func: &mut FunctionSsa,
+    usable_gpr: usize,
+    footprints: &FootprintMap,
+) -> Vec<i64> {
     // mem2reg leaves computed-goto functions unpromoted; keep this pass
     // consistent so its split can never strand a slot the re-run refuses
     // to lift.
@@ -64,17 +324,18 @@ pub(crate) fn run(func: &mut FunctionSsa, usable_gpr: usize) -> Vec<i64> {
     // Splitting is iterated: expanding one object's block initializer
     // consumes the copy that made its source object ineligible (a copy
     // reads the source through a pointer this pass does not model), so
-    // the source becomes splittable on the next round. A round that
-    // splits no object this run has not already split adds nothing, and
-    // the function's object count is finite, so the iteration terminates.
+    // the source becomes splittable on the next round. An object already
+    // split is out of the next round's view -- its fields have their
+    // slots -- so each round splits an object no earlier one did and the
+    // finite object count ends the iteration.
     let mut fully: Vec<i64> = Vec::new();
     let mut seen: BTreeSet<i64> = BTreeSet::new();
     loop {
-        let split = split_objects(func, usable_gpr);
-        if split.is_empty() || split.iter().all(|(base, _)| seen.contains(base)) {
+        let split = split_objects(func, usable_gpr, footprints, &seen);
+        if split.is_empty() {
             return fully;
         }
-        seen.extend(split.iter().map(|(base, _)| *base));
+        seen.extend(split.iter().map(|s| s.base));
         // The split produced address-free field slots; the mem2reg re-run
         // promotes them (a full pruned-SSA rebuild, confined to this
         // function by the gate at the call site).
@@ -83,13 +344,22 @@ pub(crate) fn run(func: &mut FunctionSsa, usable_gpr: usize) -> Vec<i64> {
             .collect();
         // Report an object as promoted only when every field slot was
         // lifted; a partially promoted object keeps a live frame location
-        // the debug info must still point at.
-        for (base, slots) in split {
-            if slots.iter().all(|s| promoted.contains(s)) {
-                fully.push(base);
+        // the debug info must still point at, and so does one whose
+        // storage a call still reaches.
+        for s in split {
+            if !s.address_live && s.slots.iter().all(|f| promoted.contains(f)) {
+                fully.push(s.base);
             }
         }
     }
+}
+
+/// One object the round split: the field slots it now uses, and whether
+/// its own storage and base address survive because a call reaches them.
+struct Split {
+    base: i64,
+    slots: Vec<i64>,
+    address_live: bool,
 }
 
 /// A constant-offset scalar access to an object, resolved to the byte
@@ -135,28 +405,38 @@ struct CopyField {
 }
 
 /// How a candidate object's field is accessed: `fp` when it moves
-/// through an FP register, `load` when some load reads it.
+/// through an FP register, and the count of reads and writes the
+/// function makes of it.
 #[derive(Default)]
 struct FieldUse {
     fp: bool,
-    load: bool,
+    loads: usize,
+    stores: usize,
 }
 
 /// Rewrite every splittable object's accesses to per-field slots,
 /// decompose its block initializer, and neutralise the dead
-/// base-address instructions. Returns `(base_slot, field_slots)` for
-/// each object actually split. `budget` is the target's usable GPR
-/// file: a round admits objects greedily under it, largest register
-/// demand first, so the object paying for the most memory traffic is
-/// never displaced by a smaller one. An object that does not fit stays
-/// memory-resident this round -- the mem2reg re-run would spill the
-/// loop-carried phis back to the frame at a net loss -- and is
-/// reconsidered next round, once this round's promotions have
-/// collapsed into their consumers.
-fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> {
-    let Some(cells_of) = candidate_objects(func) else {
+/// base-address instructions. Returns one [`Split`] per object actually
+/// split. `budget` is the target's usable GPR file: a round admits
+/// objects greedily under it, largest register demand first, so the
+/// object paying for the most memory traffic is never displaced by a
+/// smaller one. An object that does not fit stays memory-resident this
+/// round -- the mem2reg re-run would spill the loop-carried phis back to
+/// the frame at a net loss -- and is reconsidered next round, once this
+/// round's promotions have collapsed into their consumers.
+fn split_objects(
+    func: &mut FunctionSsa,
+    budget: usize,
+    footprints: &FootprintMap,
+    split_already: &BTreeSet<i64>,
+) -> Vec<Split> {
+    let Some(mut cells_of) = candidate_objects(func) else {
         return Vec::new();
     };
+    cells_of.retain(|base, _| !split_already.contains(base));
+    if cells_of.is_empty() {
+        return Vec::new();
+    }
 
     // Resolve every value to its (base_slot, byte_offset) when it is an
     // address expression rooted at a `LocalAddr` through constant Add /
@@ -181,6 +461,14 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
     let mut declined: BTreeSet<i64> = BTreeSet::new();
     let mut accesses: Vec<Access> = Vec::new();
     let mut inits: Vec<BlockInit> = Vec::new();
+    // Objects a same-unit call reaches through an argument that is their
+    // address, with the byte ranges its callee reads and writes there.
+    // Such an object keeps its storage and its base address; only the
+    // fields no callee writes leave it, and one a callee reads keeps its
+    // stored bytes up to date (`Expansion::mirror`).
+    let mut address_live: BTreeSet<i64> = BTreeSet::new();
+    let mut call_reads: BTreeMap<i64, Vec<(i64, i64)>> = BTreeMap::new();
+    let mut call_writes: BTreeMap<i64, Vec<(i64, i64)>> = BTreeMap::new();
 
     for (i, inst) in func.insts.iter().enumerate() {
         match inst {
@@ -284,6 +572,45 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
                     }
                 }
             }
+            // A same-unit call reaches only what its callee's footprint
+            // says; an opaque parameter, a variadic argument, and every
+            // other call form decline the object as any other use does.
+            Inst::Call {
+                target_pc,
+                args,
+                fixed_args,
+                arg_aggs,
+                ..
+            } => {
+                for (j, &a) in args.iter().enumerate() {
+                    let Some((base, off)) = resolved.get(a as usize).copied().flatten() else {
+                        continue;
+                    };
+                    if !cells_of.contains_key(&base) {
+                        continue;
+                    }
+                    // An aggregate passed by value is marshalled from
+                    // every byte of the object, not just the bytes the
+                    // callee's own accesses name.
+                    let by_value = matches!(arg_aggs.get(j), Some(Some(_)));
+                    match footprints.get(&(*target_pc, j)) {
+                        Some(fp) if j < *fixed_args && !by_value => {
+                            address_live.insert(base);
+                            call_reads
+                                .entry(base)
+                                .or_default()
+                                .extend(fp.reads.iter().map(|&(o, w)| (o + off, w)));
+                            call_writes
+                                .entry(base)
+                                .or_default()
+                                .extend(fp.writes.iter().map(|&(o, w)| (o + off, w)));
+                        }
+                        _ => {
+                            declined.insert(base);
+                        }
+                    }
+                }
+            }
             other => {
                 for_each_operand(other, |v| {
                     if let Some(base) = base_of(v) {
@@ -383,7 +710,11 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
             .entry((a.off, a.width))
             .or_default();
         use_.fp |= fp;
-        use_.load |= load;
+        if load {
+            use_.loads += 1;
+        } else {
+            use_.stores += 1;
+        }
     }
     for (base, fields) in &fields_of {
         let mut end = 0i64;
@@ -393,6 +724,31 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
                 break;
             }
             end = off + width;
+        }
+    }
+    // A field a call can write stays in the object's storage: the callee
+    // writes those bytes and a promoted copy would go stale. The rest
+    // leave, and the object keeps its storage for the callee to read.
+    // An object with nothing left to give up is no different from a
+    // declined one.
+    for base in &address_live {
+        let Some(fields) = fields_of.get_mut(base) else {
+            continue;
+        };
+        let writes = call_writes.get(base).map(Vec::as_slice).unwrap_or(&[]);
+        let reads = call_reads.get(base).map(Vec::as_slice).unwrap_or(&[]);
+        fields.retain(|&(off, width), u| {
+            if writes.iter().any(|&w| overlaps((off, width), w)) {
+                return false;
+            }
+            // A field the call reads keeps its memory write beside the
+            // slot's, so promoting it trades one store per store for one
+            // load per load. Worth it only where the reads outnumber the
+            // writes that pay for them.
+            !reads.iter().any(|&r| overlaps((off, width), r)) || u.loads > u.stores
+        });
+        if fields.is_empty() {
+            declined.insert(*base);
         }
     }
     // A block initializer must decompose exactly: every field is either
@@ -430,7 +786,7 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
     let mut ranked: Vec<(usize, i64)> = fields_of
         .iter()
         .filter(|(b, _)| !declined.contains(b))
-        .map(|(&b, fields)| (fields.values().filter(|u| u.load).count(), b))
+        .map(|(&b, fields)| (fields.values().filter(|u| u.loads > 0).count(), b))
         .collect();
     ranked.sort_by_key(|&(demand, base)| (core::cmp::Reverse(demand), base));
     let mut remaining = budget;
@@ -448,8 +804,11 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
     for &base in &order {
         let fields = &fields_of[&base];
         // Reuse the object's own cells when every field starts on a
-        // distinct 8-byte boundary; the frame already reserved them.
-        let cellwise = fields.keys().all(|&(off, _)| off % 8 == 0)
+        // distinct 8-byte boundary; the frame already reserved them. An
+        // object a call still reaches keeps its cells as storage, so its
+        // fields take slots of their own.
+        let cellwise = !address_live.contains(&base)
+            && fields.keys().all(|&(off, _)| off % 8 == 0)
             && fields
                 .keys()
                 .map(|&(off, _)| off / 8)
@@ -469,7 +828,7 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
         slots_of.insert(base, assigned);
     }
 
-    let mut splits: BTreeMap<u32, Vec<CopyField>> = BTreeMap::new();
+    let mut expand: BTreeMap<u32, Expansion> = BTreeMap::new();
     for init in &inits {
         let Some(assigned) = slots_of.get(&init.base) else {
             continue;
@@ -496,11 +855,20 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
                 }
             })
             .collect();
-        splits.insert(init.id, copies);
+        expand.insert(
+            init.id,
+            Expansion {
+                keep: address_live.contains(&init.base),
+                mirror: None,
+                copies,
+            },
+        );
     }
 
     // Commit: rewrite each surviving access to its field slot. A demoted
-    // store names no field; the expansion below replaces it.
+    // store names no field; the expansion below replaces it. A field the
+    // split left in the object keeps its access, and a store to a field
+    // a call reads keeps its memory write beside the slot's.
     for a in &accesses {
         let Some(assigned) = slots_of.get(&a.base) else {
             continue;
@@ -508,16 +876,32 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
         if demoted.contains(&a.id) {
             continue;
         }
-        let slot = assigned[&(a.off, a.width)];
+        let Some(&slot) = assigned.get(&(a.off, a.width)) else {
+            continue;
+        };
+        let read_by_call = call_reads
+            .get(&a.base)
+            .is_some_and(|r| r.iter().any(|&x| overlaps((a.off, a.width), x)));
         let inst = &mut func.insts[a.id as usize];
         if a.store {
             if let Inst::Store { value, kind, .. } = *inst {
-                *inst = Inst::StoreLocal {
-                    off: slot,
-                    value,
-                    kind,
-                    volatile: false,
-                };
+                if read_by_call {
+                    expand.insert(
+                        a.id,
+                        Expansion {
+                            keep: true,
+                            mirror: Some((slot, kind)),
+                            copies: Vec::new(),
+                        },
+                    );
+                } else {
+                    *inst = Inst::StoreLocal {
+                        off: slot,
+                        value,
+                        kind,
+                        volatile: false,
+                    };
+                }
             }
         } else if let Inst::Load { kind, .. } = *inst {
             *inst = Inst::LoadLocal {
@@ -527,23 +911,29 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
             };
         }
     }
-    // Neutralise the now-dead base-address expressions of every split
-    // object: every consumer was a rewritten access or another address
-    // expression, so the value has no live use. Before the expansion
-    // below, which renumbers the tape `resolved` is indexed by.
+    // Neutralise the now-dead base-address expressions of every fully
+    // split object: every consumer was a rewritten access or another
+    // address expression, so the value has no live use. An object a call
+    // still reaches keeps them. Before the expansion below, which
+    // renumbers the tape `resolved` is indexed by.
     for (v, r) in resolved.iter().enumerate() {
         if let Some((base, _)) = r
             && slots_of.contains_key(base)
+            && !address_live.contains(base)
         {
             func.insts[v] = Inst::Imm(0);
         }
     }
-    if !splits.is_empty() {
-        expand_block_inits(func, &splits);
+    if !expand.is_empty() {
+        expand_writes(func, &expand);
     }
     slots_of
         .into_iter()
-        .map(|(base, assigned)| (base, assigned.into_values().collect()))
+        .map(|(base, assigned)| Split {
+            address_live: address_live.contains(&base),
+            base,
+            slots: assigned.into_values().collect(),
+        })
         .collect()
 }
 
@@ -630,9 +1020,22 @@ fn sub_word(k: i64, off: i64, width: i64) -> i64 {
     }
 }
 
-/// Replace each write named in `splits` with the per-field writes it
-/// decomposes into, renumbering the tape around the insertions.
-fn expand_block_inits(func: &mut FunctionSsa, splits: &BTreeMap<u32, Vec<CopyField>>) {
+/// What one old instruction expands to: the original write when `keep`
+/// -- an object a call still reads needs its storage written -- then the
+/// slot store `mirror` names, taking the kept store's value, then the
+/// per-field writes in `copies`. All three empty replaces the write with
+/// a no-op, which is what decomposing a write to a fully split object
+/// leaves.
+#[derive(Default)]
+struct Expansion {
+    keep: bool,
+    mirror: Option<(i64, StoreKind)>,
+    copies: Vec<CopyField>,
+}
+
+/// Replace each write named in `expand` with what it expands to,
+/// renumbering the tape around the insertions.
+fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
     let n = func.insts.len();
     let old_ranges: Vec<core::ops::Range<u32>> =
         func.blocks.iter().map(|b| b.inst_range.clone()).collect();
@@ -663,12 +1066,33 @@ fn expand_block_inits(func: &mut FunctionSsa, splits: &BTreeMap<u32, Vec<CopyFie
         for old in range.start..range.end {
             let loc = func.inst_src.get(old as usize).copied().unwrap_or((0, 0));
             match splits.get(&old) {
-                Some(copies) if !copies.is_empty() => {
+                Some(e) => {
                     let src = match func.insts[old as usize] {
                         Inst::Mcpy { src, .. } => remap(src),
                         _ => NO_VALUE,
                     };
-                    for c in copies {
+                    let mut kept_value = NO_VALUE;
+                    if e.keep {
+                        let mut inst = func.insts[old as usize].clone();
+                        inst.for_each_operand_mut(|v| *v = remap(*v));
+                        if let Inst::Store { value, .. } = inst {
+                            kept_value = value;
+                        }
+                        new_insts.push(inst);
+                        new_src.push(loc);
+                        new_f32.push(func.f32_values.get(old as usize).copied().unwrap_or(false));
+                    }
+                    if let Some((slot, kind)) = e.mirror {
+                        new_insts.push(Inst::StoreLocal {
+                            off: slot,
+                            value: kept_value,
+                            kind,
+                            volatile: false,
+                        });
+                        new_src.push(loc);
+                        new_f32.push(false);
+                    }
+                    for c in &e.copies {
                         let loaded = new_insts.len() as ValueId;
                         new_insts.push(match c.imm {
                             Some(k) => Inst::Imm(k),
@@ -691,11 +1115,11 @@ fn expand_block_inits(func: &mut FunctionSsa, splits: &BTreeMap<u32, Vec<CopyFie
                         new_f32.push(false);
                         new_f32.push(false);
                     }
-                }
-                Some(_) => {
-                    new_insts.push(Inst::Imm(0));
-                    new_src.push(loc);
-                    new_f32.push(false);
+                    if !e.keep && e.mirror.is_none() && e.copies.is_empty() {
+                        new_insts.push(Inst::Imm(0));
+                        new_src.push(loc);
+                        new_f32.push(false);
+                    }
                 }
                 None => {
                     let mut inst = func.insts[old as usize].clone();
@@ -730,9 +1154,11 @@ fn expand_block_inits(func: &mut FunctionSsa, splits: &BTreeMap<u32, Vec<CopyFie
 }
 
 /// Instruction count an old tape position expands to.
-fn group_len(splits: &BTreeMap<u32, Vec<CopyField>>, old: u32) -> u32 {
+fn group_len(splits: &BTreeMap<u32, Expansion>, old: u32) -> u32 {
     match splits.get(&old) {
-        Some(copies) => (2 * copies.len() as u32).max(1),
+        Some(e) => {
+            (u32::from(e.keep) + u32::from(e.mirror.is_some()) + 2 * e.copies.len() as u32).max(1)
+        }
         None => 1,
     }
 }
@@ -777,6 +1203,20 @@ fn resolve_addr(
     state: &mut [u8],
     resolved: &mut [Option<(i64, i64)>],
 ) -> Option<(i64, i64)> {
+    resolve_base(insts, v, state, resolved, false)
+}
+
+/// Resolve `v` to `(root, byte offset)` when it is an address expression
+/// built from a root through constant `Add` / `Sub`. The root is a
+/// `LocalAddr`'s slot, or -- under `param_root` -- a `ParamRef`'s
+/// parameter index.
+fn resolve_base(
+    insts: &[Inst],
+    v: ValueId,
+    state: &mut [u8],
+    resolved: &mut [Option<(i64, i64)>],
+    param_root: bool,
+) -> Option<(i64, i64)> {
     let vi = v as usize;
     if vi >= insts.len() {
         return None;
@@ -794,26 +1234,27 @@ fn resolve_addr(
         }
     };
     let r = match &insts[vi] {
-        Inst::LocalAddr(s) => Some((*s, 0)),
+        Inst::LocalAddr(s) if !param_root => Some((*s, 0)),
+        Inst::ParamRef { idx, .. } if param_root => Some((*idx as i64, 0)),
         Inst::BinopI {
             op: BinOp::Add,
             lhs,
             rhs_imm,
-        } => resolve_addr(insts, *lhs, state, resolved).map(|(s, o)| (s, o + *rhs_imm)),
+        } => resolve_base(insts, *lhs, state, resolved, param_root).map(|(s, o)| (s, o + *rhs_imm)),
         Inst::BinopI {
             op: BinOp::Sub,
             lhs,
             rhs_imm,
-        } => resolve_addr(insts, *lhs, state, resolved).map(|(s, o)| (s, o - *rhs_imm)),
+        } => resolve_base(insts, *lhs, state, resolved, param_root).map(|(s, o)| (s, o - *rhs_imm)),
         Inst::Binop {
             op: BinOp::Add,
             lhs,
             rhs,
         } => {
             if let Some(c) = imm(*rhs) {
-                resolve_addr(insts, *lhs, state, resolved).map(|(s, o)| (s, o + c))
+                resolve_base(insts, *lhs, state, resolved, param_root).map(|(s, o)| (s, o + c))
             } else if let Some(c) = imm(*lhs) {
-                resolve_addr(insts, *rhs, state, resolved).map(|(s, o)| (s, o + c))
+                resolve_base(insts, *rhs, state, resolved, param_root).map(|(s, o)| (s, o + c))
             } else {
                 None
             }
@@ -824,7 +1265,7 @@ fn resolve_addr(
             rhs,
         } => {
             if let Some(c) = imm(*rhs) {
-                resolve_addr(insts, *lhs, state, resolved).map(|(s, o)| (s, o - c))
+                resolve_base(insts, *lhs, state, resolved, param_root).map(|(s, o)| (s, o - c))
             } else {
                 None
             }
@@ -840,6 +1281,17 @@ fn resolve_addr(
 mod tests {
     use super::*;
     use crate::c5::ir::{Block, Terminator};
+
+    /// The pass over one function with no other function in view: every
+    /// call parameter is opaque, which is what the pre-footprint
+    /// admission did.
+    fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<Split> {
+        super::split_objects(func, budget, &FootprintMap::new(), &BTreeSet::new())
+    }
+
+    fn run(func: &mut FunctionSsa, budget: usize) -> Vec<i64> {
+        super::run(func, budget, &FootprintMap::new())
+    }
 
     fn func(insts: Vec<Inst>, term: Terminator, multi_cell: Vec<(i64, i64)>) -> FunctionSsa {
         let n = insts.len() as u32;
@@ -928,7 +1380,8 @@ mod tests {
     fn dead_local_addr_neutralised() {
         let mut f = two_elem_array();
         let split = split_objects(&mut f, 64);
-        assert_eq!(split, alloc::vec![(-2, alloc::vec![-2, -1])]);
+        assert_eq!(split.len(), 1);
+        assert_eq!((split[0].base, split[0].slots.clone()), (-2, alloc::vec![-2, -1]));
         // Store/Load rewritten to per-element slots (-2 for a[0], -1 for a[1]).
         assert!(matches!(f.insts[2], Inst::StoreLocal { off: -2, .. }));
         assert!(matches!(f.insts[6], Inst::StoreLocal { off: -1, .. }));
@@ -971,7 +1424,7 @@ mod tests {
         let mut f = func(insts, Terminator::Return(12), alloc::vec![(-2, 2), (-3, 1)]);
         let split = split_objects(&mut f, 2);
         assert_eq!(
-            split,
+            split.iter().map(|s| (s.base, s.slots.clone())).collect::<Vec<_>>(),
             alloc::vec![(-2, alloc::vec![-2, -1])],
             "only the two-field array fits the budget"
         );
@@ -989,7 +1442,8 @@ mod tests {
         let mut f = two_elem_array();
         f.blocks[0].exit_acc = 9; // LocalAddr(-2)
         let split = split_objects(&mut f, 64);
-        assert_eq!(split, alloc::vec![(-2, alloc::vec![-2, -1])]);
+        assert_eq!(split.len(), 1);
+        assert_eq!((split[0].base, split[0].slots.clone()), (-2, alloc::vec![-2, -1]));
         assert!(matches!(f.insts[9], Inst::Imm(0)));
     }
 
@@ -1210,7 +1664,7 @@ mod tests {
         let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1);
-        let slots = &split[0].1;
+        let slots = &split[0].slots;
         assert!(
             slots.iter().all(|&s| s < -4),
             "fields sharing a cell take fresh slots, got {slots:?}"
@@ -1490,6 +1944,263 @@ mod tests {
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "volatile access must not split");
+        assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
+    }
+
+    /// One-parameter callee with the given body, entered at `ent_pc`.
+    fn callee(ent_pc: usize, insts: Vec<Inst>, term: Terminator) -> FunctionSsa {
+        let n = insts.len() as u32;
+        FunctionSsa {
+            ent_pc,
+            n_params: 1,
+            inst_src: alloc::vec![(0, 0); insts.len()],
+            f32_values: alloc::vec![false; insts.len()],
+            insts,
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..n,
+                terminator: term,
+                exit_acc: NO_VALUE,
+            }],
+            ..FunctionSsa::default()
+        }
+    }
+
+    fn param() -> Inst {
+        Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64,
+        }
+    }
+
+    fn call_to(target_pc: usize, args: Vec<ValueId>) -> Inst {
+        Inst::Call {
+            target_pc,
+            fixed_args: args.len(),
+            args,
+            fp_return: false,
+            fp_arg_mask: 0,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        }
+    }
+
+    /// A body reaching its pointer parameter only through constant
+    /// offsets reports those ranges; the caller handing the pointer on
+    /// inherits them, shifted by the argument's own offset.
+    #[test]
+    fn param_footprint_records_ranges_and_forwards() {
+        let leaf = callee(
+            100,
+            alloc::vec![
+                param(),                              // v0
+                Inst::Load {
+                    addr: 0,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                    align: 0,
+                }, // v1  reads [8, 16)
+                Inst::Imm(5),                         // v2
+                store(0, 2),                          // v3  writes [0, 8)
+            ],
+            Terminator::Return(1),
+        );
+        let mid = callee(
+            200,
+            alloc::vec![
+                param(),          // v0
+                add_imm(0, 16),   // v1
+                call_to(100, alloc::vec![1]), // v2
+            ],
+            Terminator::Return(2),
+        );
+        let fps = param_footprints(&[leaf, mid]);
+        assert_eq!(fps[&(100, 0)].reads, alloc::vec![(8, 8)]);
+        assert_eq!(fps[&(100, 0)].writes, alloc::vec![(0, 8)]);
+        assert_eq!(fps[&(200, 0)].reads, alloc::vec![(24, 8)]);
+        assert_eq!(fps[&(200, 0)].writes, alloc::vec![(16, 8)]);
+    }
+
+    /// A body that lets the pointer reach anything else keeps no
+    /// footprint, so an object handed to it is declined as before.
+    #[test]
+    fn param_footprint_absent_when_the_pointer_escapes() {
+        let escaping = callee(
+            100,
+            alloc::vec![
+                param(),             // v0
+                Inst::LocalAddr(-1), // v1
+                store(1, 0),         // v2  the pointer itself is stored
+            ],
+            Terminator::Return(2),
+        );
+        let variadic = FunctionSsa {
+            is_variadic: true,
+            ..callee(200, alloc::vec![param()], Terminator::Return(0))
+        };
+        let fps = param_footprints(&[escaping, variadic]);
+        assert!(fps.get(&(100, 0)).is_none(), "a stored pointer is opaque");
+        assert!(fps.get(&(200, 0)).is_none(), "a variadic body is opaque");
+    }
+
+    /// Caller holding a two-cell object at -2: field 0 written then
+    /// read, field 8 written then read, and the object's address handed
+    /// to `target`.
+    fn caller_passing_object(target: usize) -> FunctionSsa {
+        let insts = alloc::vec![
+            Inst::Imm(1),        // v0
+            Inst::LocalAddr(-2), // v1
+            store(1, 0),         // v2  o.a = 1
+            Inst::Imm(2),        // v3
+            Inst::LocalAddr(-2), // v4
+            add_imm(4, 8),       // v5
+            store(5, 3),         // v6  o.b = 2
+            Inst::LocalAddr(-2), // v7
+            call_to(target, alloc::vec![7]), // v8
+            Inst::LocalAddr(-2), // v9
+            load(9),             // v10 o.a
+            Inst::LocalAddr(-2), // v11
+            add_imm(11, 8),      // v12
+            load(12),            // v13 o.b
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 10,
+                rhs: 13,
+            }, // v14
+            Inst::LocalAddr(-2), // v15
+            add_imm(15, 8),      // v16
+            load(16),            // v17 o.b again: two reads, one write
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 14,
+                rhs: 17,
+            }, // v18
+        ];
+        func(insts, Terminator::Return(18), alloc::vec![(-2, 2)])
+    }
+
+    /// An object a call reaches gives up the fields that call cannot
+    /// write: the written field keeps its storage and its accesses, the
+    /// other moves to a slot, and the base address survives for the
+    /// callee to read.
+    #[test]
+    fn call_argument_object_splits_the_fields_the_callee_cannot_write() {
+        let writer = callee(
+            100,
+            alloc::vec![param(), Inst::Imm(9), store(0, 1)],
+            Terminator::Return(2),
+        );
+        let fps = param_footprints(&[writer]);
+        let mut f = caller_passing_object(100);
+        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new());
+        assert_eq!(split.len(), 1, "the object splits partially");
+        assert!(split[0].address_live, "its storage stays for the callee");
+        assert!(
+            matches!(f.insts[1], Inst::LocalAddr(-2)),
+            "the base address must survive"
+        );
+        assert!(
+            matches!(f.insts[10], Inst::Load { .. }),
+            "the written field keeps its memory read"
+        );
+        assert!(
+            matches!(f.insts[13], Inst::LoadLocal { .. }),
+            "the untouched field reads its slot"
+        );
+        assert!(
+            matches!(f.insts[6], Inst::StoreLocal { .. }),
+            "and writes it, with no memory write left"
+        );
+    }
+
+    /// A field the callee only reads still moves to a slot, and its
+    /// store writes both, so the bytes the call sees stay current.
+    #[test]
+    fn a_field_the_callee_reads_keeps_its_memory_write() {
+        let reader = callee(
+            100,
+            alloc::vec![
+                param(),
+                Inst::Load {
+                    addr: 0,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                    align: 0,
+                },
+            ],
+            Terminator::Return(1),
+        );
+        let fps = param_footprints(&[reader]);
+        let mut f = caller_passing_object(100);
+        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new());
+        assert_eq!(split.len(), 1);
+        assert!(split[0].address_live);
+        let stores = f
+            .insts
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| matches!(i, Inst::Store { .. } | Inst::StoreLocal { .. }))
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            stores.len(),
+            3,
+            "the read field's store is mirrored into its slot: {:?}",
+            f.insts
+        );
+        assert!(
+            matches!(f.insts[stores[1]], Inst::Store { .. })
+                && matches!(f.insts[stores[2]], Inst::StoreLocal { .. }),
+            "the memory write comes first, then the slot's"
+        );
+    }
+
+    /// The mirror is not free: a field the call reads whose writes match
+    /// its reads pays a store for every load it saves, so it stays in
+    /// the object.
+    #[test]
+    fn a_read_field_with_no_reuse_stays_in_the_object() {
+        let reader = callee(
+            100,
+            alloc::vec![
+                param(),
+                Inst::Load {
+                    addr: 0,
+                    disp: 8,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                    align: 0,
+                },
+            ],
+            Terminator::Return(1),
+        );
+        let fps = param_footprints(&[reader]);
+        let mut f = caller_passing_object(100);
+        // Drop the second read of the field, leaving one of each.
+        f.insts[17] = Inst::Imm(0);
+        let split = super::split_objects(&mut f, 64, &fps, &BTreeSet::new());
+        assert_eq!(split.len(), 1);
+        assert!(
+            matches!(f.insts[13], Inst::Load { .. }),
+            "the mirrored field must not pay for itself"
+        );
+        assert!(
+            matches!(f.insts[10], Inst::LoadLocal { .. }),
+            "the untouched field still promotes"
+        );
+    }
+
+    /// An opaque parameter declines the object, as every other use this
+    /// pass does not model does.
+    #[test]
+    fn call_with_an_opaque_parameter_declines_the_object() {
+        let mut f = caller_passing_object(100);
+        let before = alloc::format!("{:?}", f.insts);
+        let split = super::split_objects(&mut f, 64, &FootprintMap::new(), &BTreeSet::new());
+        assert!(split.is_empty(), "an unsummarised callee declines");
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
 }

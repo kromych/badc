@@ -2070,9 +2070,19 @@ pub(crate) fn lower(
         // drop as the initial mem2reg.
         super::ssa::emit_common::time_pass("passes::sroa::run (x86_64)", || {
             let usable_gpr = super::ssa::reg_alloc::usable_gpr_count(target);
+            // What each function does with its pointer parameters, so a
+            // call taking an object's address gives up only the fields
+            // it can reach. Derived once over the whole unit, and only
+            // where the gate below admits some function.
+            let footprints = if ssa_funcs.iter().any(|f| f.did_unroll || f.did_inline) {
+                crate::c5::codegen::passes::sroa::param_footprints(&ssa_funcs)
+            } else {
+                Default::default()
+            };
             for f in &mut ssa_funcs {
                 if f.did_unroll || f.did_inline {
-                    let promoted = crate::c5::codegen::passes::sroa::run(f, usable_gpr);
+                    let promoted =
+                        crate::c5::codegen::passes::sroa::run(f, usable_gpr, &footprints);
                     if !promoted.is_empty() {
                         promoted_local_slots
                             .entry(f.ent_pc)

@@ -1407,9 +1407,8 @@ struct CalleeFacts {
     /// Parameter cells whose reads resolve to the call-site argument.
     forwarded: BTreeSet<i64>,
     /// Frame slots one splice relocates into the caller: the callee's
-    /// own locals plus the parameter cells it keeps in the frame. A
-    /// body that reads its parameters out of the argument values and
-    /// holds nothing in the frame costs nothing.
+    /// own locals plus the parameter cells it keeps in the frame, and
+    /// zero on the flat path, which allocates no caller slot.
     frame_cost: i64,
     /// Routed to the relocating splice (`needs_reloc_splice`).
     needs_reloc: bool,
@@ -1516,7 +1515,16 @@ fn callee_facts(callee: &FunctionSsa) -> CalleeFacts {
     let relocated = relocated_param_cells(callee, &used, &materialized);
     let forwarded = forwarded_param_cells(callee, &used);
     let needs_reloc = needs_reloc_splice(callee, &used);
-    let frame_cost = callee.locals + relocated.len() as i64;
+    // Only the relocating splice moves slots into the caller's frame. A
+    // single-block callee the flat path takes allocates no caller slot:
+    // the candidate filter rejects a body whose own slots the splice
+    // would have to reproduce, and its parameter cells resolve to the
+    // call-site arguments.
+    let frame_cost = if callee.blocks.len() == 1 && !needs_reloc {
+        0
+    } else {
+        callee.locals + relocated.len() as i64
+    };
     CalleeFacts {
         relocated,
         materialized,
@@ -3018,13 +3026,15 @@ fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
 }
 
 /// Splice eligible call sites in `caller` with the bodies named by
-/// `callees`. Modifies `caller` in place.
+/// `callees`. Modifies `caller` in place. Reports whether any site was
+/// spliced: a body the same size as the call it replaces leaves the
+/// instruction count alone, so the count does not answer it.
 fn inline_caller(
     caller: &mut FunctionSsa,
     callees: &CandidateSet<'_, '_>,
     facts: &FactsMap,
     placement: &mut SlotPlacement<'_>,
-) {
+) -> bool {
     // No live call names a candidate, so neither splice path can fire.
     // Both walks below rebuild the whole body before reaching that
     // conclusion; the scan reaches it in one pass over the tape.
@@ -3034,7 +3044,7 @@ fn inline_caller(
                 Inst::Call { target_pc, .. } if callees.get(target_pc).is_some())
         })
     }) {
-        return;
+        return false;
     }
     // A spliced call's `arg_aggs` names its own function's layouts, so
     // each candidate's table merges into the caller's once -- before the
@@ -3367,7 +3377,7 @@ fn inline_caller(
         })
     });
     if !any_change && !has_multiblock_call {
-        return;
+        return false;
     }
 
     // Commit the flat single-block splice only when it inlined something.
@@ -3527,6 +3537,7 @@ fn inline_caller(
         );
         steps += 1;
     }
+    any_change || steps > 0
 }
 
 /// Inline eligible callees across every function in `funcs`. A
@@ -3685,8 +3696,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
             // block id, `Inst::BlockAddr`, and `computed_goto_targets`
             // entry valid. Multi-block splicing shifts block ids and
             // carries each of those reference sets across the shift.
-            let before = caller.insts.len();
-            inline_caller(
+            let spliced = inline_caller(
                 caller,
                 &local,
                 &facts,
@@ -3696,7 +3706,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTr
                     sp_tainted: &sp_tainted,
                 },
             );
-            if caller.insts.len() != before {
+            if spliced {
                 changed = true;
                 // The splice relocated the callee's own local slots into
                 // this caller's frame; mark it so the post-inline mem2reg
@@ -4051,54 +4061,118 @@ mod tests {
         );
     }
 
+    /// Single-block leaf returning a constant, with `locals` frame slots
+    /// its body never names. The flat splice reproduces none of them, so
+    /// it relocates nothing into the caller.
+    fn flat_leaf(ent_pc: usize, locals: i64) -> FunctionSsa {
+        FunctionSsa {
+            ent_pc,
+            locals,
+            insts: alloc::vec![Inst::Imm(7)],
+            inst_src: alloc::vec![(0, 0)],
+            f32_values: alloc::vec![false],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Return(0),
+                exit_acc: 0,
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// The caller frame gate bounds frame growth, so a callee that causes
+    /// none passes it. A leaf's own declared slots are not that growth:
+    /// the flat path allocates no caller slot for them. The shape is the
+    /// one a fixpoint produces -- iteration 1 splices the 400-slot callee
+    /// (gate not yet hit) and materializes its call to the leaf,
+    /// iteration 2 re-checks the gate at 402 slots and splices the leaf.
+    #[test]
+    fn flat_leaf_inlines_past_the_caller_frame_gate() {
+        let abi = Target::LinuxX64.abi();
+        for marked in [false, true] {
+            let mut leaf = flat_leaf(600, 4);
+            leaf.is_inline = marked;
+            let mut funcs = alloc::vec![
+                multi_call_caller(1, 2, 500, 1),
+                calling_callee(500, 400, 600),
+                leaf,
+            ];
+            run(&mut funcs, 32, abi, &BTreeMap::new());
+            assert!(
+                funcs[0].locals > CALLER_FRAME_SLOTS,
+                "the caller must be past the gate for this to mean anything"
+            );
+            assert!(
+                !funcs[0]
+                    .insts
+                    .iter()
+                    .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 600)),
+                "marked={marked}: a leaf relocating no slot must still splice"
+            );
+        }
+    }
+
     /// The caller frame gate: once a caller's locals exceed both bounds,
     /// an optional callee that relocates frame slots is no longer
-    /// spliced. A mandatory request is honoured, and so is a callee that
-    /// relocates no slots -- the gate bounds frame growth, which such a
-    /// callee does not cause.
+    /// spliced; a mandatory request still is. The per-site regions of an
+    /// sp-asm callee carry the caller past the bounds inside one round,
+    /// and the round's splice cap leaves the remaining sites for the next
+    /// one, where the gate is read.
     #[test]
     fn caller_frame_gate_blocks_optional_inlining() {
         let abi = Target::LinuxX64.abi();
+        let over = 8;
         for always in [false, true] {
-            for leaf_locals in [0, 4] {
-                let leaf = FunctionSsa {
-                    ent_pc: 600,
-                    is_inline: always,
-                    is_always_inline: always,
-                    locals: leaf_locals,
-                    insts: alloc::vec![Inst::Imm(7)],
-                    inst_src: alloc::vec![(0, 0)],
-                    f32_values: alloc::vec![false],
-                    blocks: alloc::vec![Block {
-                        start_pc: 0,
-                        inst_range: 0..1,
-                        terminator: Terminator::Return(0),
-                        exit_acc: 0,
-                    }],
-                    ..Default::default()
-                };
-                // Iteration 1 splices the 400-slot callee (gate not yet
-                // hit), materializing its inner call; iteration 2
-                // re-checks the gate at 402 slots.
-                let mut funcs = alloc::vec![
-                    multi_call_caller(1, 2, 500, 1),
-                    calling_callee(500, 400, 600),
-                    leaf,
-                ];
-                run(&mut funcs, 32, abi, &BTreeMap::new());
-                let leaf_calls = funcs[0]
-                    .insts
-                    .iter()
-                    .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 600))
-                    .count();
-                assert_eq!(
-                    leaf_calls,
-                    usize::from(!always && leaf_locals > 0),
-                    "always={always} leaf_locals={leaf_locals}: \
-                     gate must block exactly the optional frame-growing case"
-                );
-            }
+            let mut callee = asm_callee_with_template(100, 4, b"mov %%rsp, (%0)");
+            callee.is_inline = always;
+            callee.is_always_inline = always;
+            let mut funcs = alloc::vec![
+                multi_call_caller(1, 2, 100, MAX_MULTI_BLOCK_SPLICE_STEPS + over),
+                callee,
+            ];
+            run(&mut funcs, 32, abi, &BTreeMap::new());
+            let calls = funcs[0]
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 100))
+                .count();
+            assert_eq!(
+                calls,
+                if always { 0 } else { over },
+                "always={always}: gate must block exactly the optional frame-growing case"
+            );
         }
+    }
+
+    /// A body the size of the call it replaces leaves the caller's
+    /// instruction count alone. The caller is still marked as spliced,
+    /// which is what routes it to the post-inline promotions.
+    #[test]
+    fn a_size_neutral_splice_marks_the_caller() {
+        let abi = Target::LinuxX64.abi();
+        let mut funcs = alloc::vec![multi_call_caller(1, 2, 600, 1), flat_leaf(600, 0)];
+        let before = funcs[0].insts.len();
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        assert_eq!(funcs[0].insts.len(), before, "one call for one value");
+        assert!(
+            !funcs[0]
+                .insts
+                .iter()
+                .any(|i| matches!(i, Inst::Call { .. })),
+            "the call is gone"
+        );
+        assert!(funcs[0].did_inline, "and the caller is marked spliced");
+    }
+
+    /// The frame cost is the slots a splice relocates, so it follows the
+    /// path the splice takes: zero for a flat single-block callee whatever
+    /// it declares, the relocated slot count for one the reloc path takes.
+    #[test]
+    fn frame_cost_follows_the_splice_path() {
+        assert_eq!(callee_facts(&flat_leaf(600, 4)).frame_cost, 0);
+        assert_eq!(callee_facts(&asm_callee(600, 4)).frame_cost, 4);
+        assert_eq!(callee_facts(&calling_callee(500, 6, 600)).frame_cost, 6);
     }
 
     /// The absolute frame bound: a callee whose relocated slots would

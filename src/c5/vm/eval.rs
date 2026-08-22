@@ -153,6 +153,16 @@ pub(crate) fn eval_extend(raw: i64, kind: LoadKind) -> i64 {
     }
 }
 
+/// `Inst::Bswap`: reverse the low `width` bytes (2, 4, or 8) and
+/// zero-extend. Operand bits above the width are ignored.
+pub(crate) fn eval_bswap(raw: i64, width: u8) -> i64 {
+    match width {
+        2 => (raw as u16).swap_bytes() as i64,
+        4 => (raw as u32).swap_bytes() as i64,
+        _ => (raw as u64).swap_bytes() as i64,
+    }
+}
+
 /// `Inst::FpCast`. A register carrying a single-precision value
 /// already holds the f64 bit pattern of that f32 (the F32 load widens
 /// on read). Widening to double is therefore a no-op; narrowing

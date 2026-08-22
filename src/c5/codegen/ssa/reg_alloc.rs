@@ -555,6 +555,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             | Inst::BlockAddr(_)
             | Inst::LocalAddr(_)
             | Inst::Extend { .. }
+            | Inst::Bswap { .. }
             | Inst::FpCast { .. }
             | Inst::Fneg(_)
             | Inst::Fma { .. }
@@ -1500,6 +1501,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Fneg(_) => ResultKind::Fp,
         Fma { .. } => ResultKind::Fp,
         Extend { .. } => ResultKind::Int,
+        Bswap { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
             FpCastKind::FpToInt | FpCastKind::UFpToInt => ResultKind::Int,
             FpCastKind::IntToFp

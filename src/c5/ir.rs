@@ -226,6 +226,13 @@ pub(crate) enum Inst {
     ///     width after a 64-bit computation (C99 6.5p5) -- equivalent
     ///     to the `Shl K; Shr K` pair the builder folds here.
     Extend { value: ValueId, kind: LoadKind },
+    /// Reverse the low `width` bytes of `value` (`__builtin_bswap16/32/64`,
+    /// C99 has no operator; the builtin is the existing practice). `width`
+    /// is 2, 4, or 8. Operand bits above `width * 8` do not affect the
+    /// result; the reversed bytes are zero-extended to 64 bits. Lowers to
+    /// the byte-reversal instruction (`bswap` / `rev`); the 16-bit form
+    /// needs one extra instruction to zero the upper bits.
+    Bswap { value: ValueId, width: u8 },
     /// Floating-point <-> integer cast.
     FpCast { kind: FpCastKind, value: ValueId },
     /// Direct call to a c5 user function at ent_pc `target_pc`.
@@ -473,6 +480,7 @@ impl Inst {
                 | Inst::Fma { .. }
                 | Inst::FpCast { .. }
                 | Inst::Extend { .. }
+                | Inst::Bswap { .. }
         )
     }
 
@@ -500,6 +508,7 @@ impl Inst {
             Inst::Fneg(_) => "Fneg",
             Inst::Fma { .. } => "Fma",
             Inst::Extend { .. } => "Extend",
+            Inst::Bswap { .. } => "Bswap",
             Inst::FpCast { .. } => "FpCast",
             Inst::Call { .. } => "Call",
             Inst::CallIndirect { .. } => "CallIndirect",
@@ -570,6 +579,7 @@ impl Inst {
                 f(*c);
             }
             Inst::Extend { value, .. } => f(*value),
+            Inst::Bswap { value, .. } => f(*value),
             Inst::FpCast { value, .. } => f(*value),
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
@@ -661,6 +671,7 @@ impl Inst {
                 f(c);
             }
             Inst::Extend { value, .. } => f(value),
+            Inst::Bswap { value, .. } => f(value),
             Inst::FpCast { value, .. } => f(value),
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
@@ -1479,6 +1490,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Fneg { .. }
             | Inst::Fma { .. }
             | Inst::Extend { .. }
+            | Inst::Bswap { .. }
             | Inst::FpCast { .. }
             | Inst::Call { .. }
             | Inst::CallIndirect { .. }

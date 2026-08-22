@@ -1161,6 +1161,10 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = round_if_f32(neg, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
+        Inst::Bswap { value, width } => {
+            frame.regs[v as usize] = eval::eval_bswap(frame.regs[*value as usize], *width);
+            return Ok(());
+        }
         Inst::Fma {
             a,
             b,

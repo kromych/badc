@@ -32,22 +32,7 @@ Disassembly of section .text:
                	movl	$0xaabbccdd, %eax       # imm = 0xAABBCCDD
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
-               	movq	%rax, %rcx
-               	andq	$0xff, %rcx
-               	shlq	$0x18, %rcx
-               	movq	%rax, %rdx
-               	shrq	$0x8, %rdx
-               	andq	$0xff, %rdx
-               	shlq	$0x10, %rdx
-               	orq	%rdx, %rcx
-               	movq	%rax, %rdx
-               	shrq	$0x10, %rdx
-               	andq	$0xff, %rdx
-               	shlq	$0x8, %rdx
-               	orq	%rdx, %rcx
-               	shrq	$0x18, %rax
-               	andq	$0xff, %rax
-               	orq	%rcx, %rax
+               	bswapl	%eax
                	movl	$0xddccbbaa, %r11d      # imm = 0xDDCCBBAA
                	cmpq	%r11, %rax
                	je	<addr>

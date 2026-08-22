@@ -620,6 +620,15 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
                 None => src,
             }
         }
+        // The reversed bytes are zero-extended from the operation width.
+        Inst::Bswap { width, .. } => match width {
+            2 => Range { lo: 0, hi: 0xffff },
+            4 => Range {
+                lo: 0,
+                hi: 0xffff_ffff,
+            },
+            _ => UNIVERSE,
+        },
         Inst::BinopI { op, lhs, rhs_imm } => match op {
             _ if comparison(*op).is_some() => Range { lo: 0, hi: 1 },
             // A mask by a non-negative immediate bounds the result by

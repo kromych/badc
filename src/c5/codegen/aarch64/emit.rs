@@ -5136,6 +5136,9 @@ fn emit_inst(
         Inst::Extend { value, kind } => {
             emit_extend(code, dst, *value, *kind, alloc, frame, scratch)
         }
+        Inst::Bswap { value, width } => {
+            emit_bswap(code, dst, *value, *width, alloc, frame, scratch)
+        }
         Inst::FpCast { kind, value } => {
             use super::super::ir::FpCastKind;
             let src_place = alloc
@@ -8178,6 +8181,48 @@ fn emit_extend(
         }
     };
     emit(code, enc);
+    spill_local_addr_to_dst(code, dst, rd, frame);
+    true
+}
+
+/// `Inst::Bswap { value, width }` -- reverse the low `width` bytes,
+/// zero-extended. 64-bit: `rev Xd`. 32-bit: `rev Wd` (the 32-bit write
+/// zero-extends). 16-bit: `rev Wd` then `lsr Wd, #16`, which drops the
+/// reversed upper halfword so operand bits above the width cannot
+/// reach the result.
+fn emit_bswap(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    let src_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let rn = match materialize_int(code, src_place, scratch.primary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    let rd = match int_or_spill_scratch(dst, scratch) {
+        Some(r) => r,
+        None => {
+            bail_msg("Bswap: dst not int reg / spill");
+            return false;
+        }
+    };
+    match width {
+        2 => {
+            emit(code, super::encode::enc_rev32(rd, rn));
+            emit(code, super::encode::enc_lsr32_imm(rd, rd, 16));
+        }
+        4 => emit(code, super::encode::enc_rev32(rd, rn)),
+        _ => emit(code, super::encode::enc_rev64(rd, rn)),
+    }
     spill_local_addr_to_dst(code, dst, rd, frame);
     true
 }

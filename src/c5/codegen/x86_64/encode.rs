@@ -1455,6 +1455,18 @@ pub(crate) fn emit_movsx_r_r16(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     super::table::encode_into(code, Mnem::Movsx, None, &[rw(dst, 8), rw(src, 2)]);
 }
 
+/// `MOVZX r32, r/m16` (register form) -- zero-extend low 16 bits;
+/// the 32-bit write clears the upper half of the 64-bit register.
+pub(crate) fn emit_movzx_r_r16(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    super::table::encode_into(code, Mnem::Movzx, None, &[rw(dst, 4), rw(src, 2)]);
+}
+
+/// `BSWAP r32/r64` -- reverse the register's bytes. The 32-bit form
+/// zero-extends into the full 64-bit register.
+pub(crate) fn emit_bswap_r(code: &mut Vec<u8>, dst: Reg, width: u8) {
+    super::table::encode_into(code, Mnem::Bswap, Some(width), &[rw(dst, width)]);
+}
+
 /// `MOVSX r64, r/m8` (register form) -- sign-extend low 8 bits.
 /// REX is always emitted to access the new-encoding 8-bit subregs
 /// (`sil` / `dil` / `bpl` / `spl`) instead of the legacy AH/CH/etc.
@@ -2834,6 +2846,25 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_mov_rr(c, Reg::RDI, Reg::RAX)),
             vec![0x48, 0x89, 0xC7]
+        );
+    }
+
+    #[test]
+    fn bswap_and_16bit_swap_forms() {
+        // bswap rax -> 48 0F C8; bswap ecx -> 0F C9
+        assert_eq!(
+            assemble(|c| emit_bswap_r(c, Reg::RAX, 8)),
+            vec![0x48, 0x0F, 0xC8]
+        );
+        assert_eq!(assemble(|c| emit_bswap_r(c, Reg::RCX, 4)), vec![0x0F, 0xC9]);
+        // movzx eax, di -> 0F B7 C7; rol ax, 8 -> 66 C1 C0 08
+        assert_eq!(
+            assemble(|c| emit_movzx_r_r16(c, Reg::RAX, Reg::RDI)),
+            vec![0x0F, 0xB7, 0xC7]
+        );
+        assert_eq!(
+            assemble(|c| emit_shift_ri(c, Mnem::Rol, 2, Reg::RAX, 8)),
+            vec![0x66, 0xC1, 0xC0, 0x08]
         );
     }
 

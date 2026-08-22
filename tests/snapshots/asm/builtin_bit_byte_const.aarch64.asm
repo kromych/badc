@@ -43,23 +43,7 @@ Disassembly of section .text:
                	movk	x0, #0x1234, lsl #16
                	stur	w0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x8]
-               	mov	x17, #0xff              // =255
-               	and	x1, x0, x17
-               	lsl	x1, x1, #24
-               	lsr	x2, x0, #8
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	lsl	x2, x2, #16
-               	orr	x1, x1, x2
-               	lsr	x2, x0, #16
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	lsl	x2, x2, #8
-               	orr	x1, x1, x2
-               	lsr	x0, x0, #24
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	orr	x0, x1, x0
+               	rev	w0, w0
                	mov	x17, #0x3412            // =13330
                	movk	x17, #0x7856, lsl #16
                	cmp	x0, x17
@@ -71,13 +55,8 @@ Disassembly of section .text:
                	mov	x0, #0x1234             // =4660
                	sturh	w0, [x29, #-0x10]
                	ldurh	w0, [x29, #-0x10]
-               	mov	x17, #0xff              // =255
-               	and	x1, x0, x17
-               	lsl	x1, x1, #8
-               	lsr	x0, x0, #8
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	orr	x0, x1, x0
+               	rev	w0, w0
+               	lsr	w0, w0, #16
                	mov	x17, #0x3412            // =13330
                	eor	x0, x0, x17
                	mov	w0, w0

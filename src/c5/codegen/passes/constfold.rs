@@ -62,7 +62,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) {
 const SELECT_EVAL_BUDGET: u32 = 96;
 
 /// Evaluate `v` with `pivot` bound to `bind`, over the same integer
-/// `Extend` / `BinopI` / `Binop` set [`fold_round`] folds. Any other
+/// `Extend` / `Bswap` / `BinopI` / `Binop` set [`fold_round`] folds. Any other
 /// def, and any operand the shared resolver cannot pin to an integer
 /// immediate, makes the value unknown.
 fn eval_with(
@@ -86,6 +86,10 @@ fn eval_with(
         Inst::Extend { value, kind } => Some(eval::eval_extend(
             eval_with(func, value, pivot, bind, budget)?,
             kind,
+        )),
+        Inst::Bswap { value, width } => Some(eval::eval_bswap(
+            eval_with(func, value, pivot, bind, budget)?,
+            width,
         )),
         Inst::BinopI { op, lhs, rhs_imm } => {
             eval::fold_binop(op, eval_with(func, lhs, pivot, bind, budget)?, rhs_imm)
@@ -192,7 +196,7 @@ pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
             }
             if !matches!(
                 func.insts[u as usize],
-                Inst::Extend { .. } | Inst::BinopI { .. } | Inst::Binop { .. }
+                Inst::Extend { .. } | Inst::Bswap { .. } | Inst::BinopI { .. } | Inst::Binop { .. }
             ) {
                 continue;
             }
@@ -608,6 +612,16 @@ fn count_uses(func: &FunctionSsa) -> Vec<u32> {
     counts
 }
 
+/// Whether an `And` by `mask` leaves every bit a `width`-byte reversal
+/// reads (the low `width * 8`) unchanged.
+fn bswap_low_mask_transparent(mask: i64, width: u8) -> bool {
+    match width {
+        2 => mask & 0xffff == 0xffff,
+        4 => mask & 0xffff_ffff == 0xffff_ffff,
+        _ => mask == -1,
+    }
+}
+
 fn fold_round(func: &mut FunctionSsa) -> bool {
     let uses = count_uses(func);
     // A shared immediate operand only moves into the instruction when
@@ -626,6 +640,24 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             Inst::Extend { value, kind } => {
                 imm_of(func, *value).map(|k| Inst::Imm(eval::eval_extend(k, *kind)))
             }
+            Inst::Bswap { value, width } => match imm_of(func, *value) {
+                Some(k) => Some(Inst::Imm(eval::eval_bswap(k, *width))),
+                // The reversal reads only the low `width` bytes, so a
+                // mask that keeps those bytes intact (the walker's
+                // conversion to the operation's unsigned width) is
+                // transparent to it.
+                None => match func.insts.get(*value as usize) {
+                    Some(Inst::BinopI {
+                        op: BinOp::And,
+                        lhs,
+                        rhs_imm,
+                    }) if bswap_low_mask_transparent(*rhs_imm, *width) => Some(Inst::Bswap {
+                        value: *lhs,
+                        width: *width,
+                    }),
+                    _ => None,
+                },
+            },
             Inst::BinopI { op, lhs, rhs_imm } => imm_of(func, *lhs)
                 .and_then(|l| eval::fold_binop(*op, l, *rhs_imm))
                 .map(Inst::Imm),

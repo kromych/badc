@@ -3202,6 +3202,13 @@ fn byteswap_glibc() {
 }
 
 #[test]
+fn builtin_bswap_reversal() {
+    // The Inst::Bswap lowering: runtime operands at each width, the
+    // truncation of a wider operand, and the zero-extended result.
+    assert_eq!(run_fixture("builtin_bswap_reversal.c"), 0);
+}
+
+#[test]
 fn sysexits_codes() {
     // <sysexits.h>: the BSD exit-status codes, same on every target.
     assert_eq!(run_fixture("sysexits_codes.c"), 0);

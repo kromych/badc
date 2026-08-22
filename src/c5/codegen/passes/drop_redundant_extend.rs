@@ -164,6 +164,13 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 | BinOp::Shl => {}
                 _ => observe(&mut hi, &mut work, *lhs),
             },
+            // The 2- and 4-byte reversals read only the low bytes they
+            // reverse; the 8-byte form reads the full register.
+            Inst::Bswap { value, width } => {
+                if *width == 8 {
+                    observe(&mut hi, &mut work, *value);
+                }
+            }
             Inst::FpCast { value, .. } => observe(&mut hi, &mut work, *value),
             Inst::Fneg(v) => observe(&mut hi, &mut work, *v),
             Inst::Fma { a, b, c, .. } => {

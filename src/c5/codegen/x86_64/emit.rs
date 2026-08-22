@@ -3636,6 +3636,7 @@ fn emit_inst(
             frame,
         ),
         Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
+        Inst::Bswap { value, width } => emit_bswap(code, dst, *value, *width, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(
             code,
@@ -4489,6 +4490,45 @@ fn emit_extend(
         LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, rn),
         LoadKind::I32 => super::encode::emit_movsxd_r_r(code, rd, rn),
         _ => return fail("Extend: unsupported kind"),
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
+
+/// `Inst::Bswap { value, width }` -- reverse the low `width` bytes,
+/// zero-extended. 64-bit: `bswap r64`. 32-bit: `bswap r32` (reads the
+/// low dword, zero-extends). 16-bit: `movzx` clears the upper bits the
+/// rotate would keep, then `rol dst16, 8` swaps the two low bytes.
+fn emit_bswap(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    width: u8,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let src_place = place_of(alloc, value);
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("Bswap: dst not int reg / spill");
+    };
+    let Some(rn) = materialize_int(code, src_place, rd, frame) else {
+        return fail("Bswap: value not int reg / spill");
+    };
+    match width {
+        2 => {
+            super::encode::emit_movzx_r_r16(code, rd, rn);
+            emit_shift_ri(code, Mnem::Rol, 2, rd, 8);
+        }
+        4 => {
+            if rd != rn {
+                super::encode::emit_mov_r32_r32(code, rd, rn);
+            }
+            super::encode::emit_bswap_r(code, rd, 4);
+        }
+        _ => {
+            emit_mov_rr(code, rd, rn);
+            super::encode::emit_bswap_r(code, rd, 8);
+        }
     }
     spill_dst_to_slot(code, dst, rd, frame);
     true

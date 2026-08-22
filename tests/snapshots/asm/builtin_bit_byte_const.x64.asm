@@ -51,22 +51,7 @@ Disassembly of section .text:
                	movl	$0x12345678, %eax       # imm = 0x12345678
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
-               	movq	%rax, %rcx
-               	andq	$0xff, %rcx
-               	shlq	$0x18, %rcx
-               	movq	%rax, %rdx
-               	shrq	$0x8, %rdx
-               	andq	$0xff, %rdx
-               	shlq	$0x10, %rdx
-               	orq	%rdx, %rcx
-               	movq	%rax, %rdx
-               	shrq	$0x10, %rdx
-               	andq	$0xff, %rdx
-               	shlq	$0x8, %rdx
-               	orq	%rdx, %rcx
-               	shrq	$0x18, %rax
-               	andq	$0xff, %rax
-               	orq	%rcx, %rax
+               	bswapl	%eax
                	cmpq	$0x78563412, %rax       # imm = 0x78563412
                	je	<addr>
                	movl	$0x8, %eax
@@ -76,12 +61,8 @@ Disassembly of section .text:
                	movl	$0x1234, %eax           # imm = 0x1234
                	movw	%ax, -0x10(%rbp)
                	movzwq	-0x10(%rbp), %rax
-               	movq	%rax, %rcx
-               	andq	$0xff, %rcx
-               	shlq	$0x8, %rcx
-               	shrq	$0x8, %rax
-               	andq	$0xff, %rax
-               	orq	%rcx, %rax
+               	movzwl	%ax, %eax
+               	rolw	$0x8, %ax
                	xorq	$0x3412, %rax           # imm = 0x3412
                	movl	%eax, %eax
                	testq	%rax, %rax

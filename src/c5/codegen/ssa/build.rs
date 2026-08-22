@@ -96,6 +96,10 @@ enum PureKey {
         value: ValueId,
         kind: LoadKind,
     },
+    Bswap {
+        value: ValueId,
+        width: u8,
+    },
 }
 
 /// Builder over a [`FunctionSsa`]. Each method that defines a value
@@ -1099,6 +1103,21 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Extend { value, kind });
+        self.pure_cache.insert(key, id);
+        id
+    }
+
+    /// `Inst::Bswap` -- reverse the low `width` bytes of `value`,
+    /// zero-extended. A constant operand folds. CSE-eligible.
+    pub(crate) fn bswap(&mut self, value: ValueId, width: u8) -> ValueId {
+        if let Some(k) = self.peek_imm(value) {
+            return self.imm(crate::c5::vm::eval::eval_bswap(k, width));
+        }
+        let key = PureKey::Bswap { value, width };
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::Bswap { value, width });
         self.pure_cache.insert(key, id);
         id
     }

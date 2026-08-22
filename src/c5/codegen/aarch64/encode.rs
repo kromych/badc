@@ -1481,6 +1481,26 @@ pub(crate) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     0x9340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `REV <Xd>, <Xn>` -- reverse the 8 bytes.
+pub(crate) fn enc_rev64(rd: Reg, rn: Reg) -> u32 {
+    0xDAC0_0C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `REV <Wd>, <Wn>` -- reverse the low 4 bytes; the 32-bit write
+/// zero-extends into `Xd`.
+pub(crate) fn enc_rev32(rd: Reg, rn: Reg) -> u32 {
+    0x5AC0_0800 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `LSR <Wd>, <Wn>, #shift` -- 32-bit logical shift right by
+/// immediate. Encoded as `UBFM Wd, Wn, #shift, #31`; the 32-bit
+/// write zero-extends into `Xd`.
+pub(crate) fn enc_lsr32_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    debug_assert!(shift < 32, "lsr32 imm: {shift} >= 32");
+    let immr = ((shift as u32) & 31) << 16;
+    0x5300_7C00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `SXTW <Xd>, <Wn>` -- sign-extend low 32 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #31`. Used by the sxtw peephole that
 /// folds c5's `Shl 32; Shr 32` sign-narrow shape into one inst.
@@ -2706,6 +2726,15 @@ mod tests {
     fn movz_x0_42() {
         // movz x0, #42  ->  0xD2800540
         assert_eq!(enc_movz(Reg::X0, 42, 0), 0xD280_0540);
+    }
+
+    #[test]
+    fn rev_and_lsr32_forms() {
+        // rev x0, x1 -> 0xDAC00C20; rev w2, w3 -> 0x5AC00862;
+        // lsr w0, w0, #16 -> 0x53107C00
+        assert_eq!(enc_rev64(Reg::X0, Reg(1)), 0xDAC0_0C20);
+        assert_eq!(enc_rev32(Reg(2), Reg(3)), 0x5AC0_0862);
+        assert_eq!(enc_lsr32_imm(Reg::X0, Reg::X0, 16), 0x5310_7C00);
     }
 
     #[test]

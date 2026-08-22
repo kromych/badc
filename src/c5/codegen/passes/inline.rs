@@ -818,6 +818,7 @@ fn is_inline_candidate(
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
             | Inst::Extend { .. }
+            | Inst::Bswap { .. }
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::FpCast { .. }
@@ -1363,66 +1364,13 @@ fn value_use_mask(func: &FunctionSsa) -> Vec<bool> {
         }
     };
     let in_block = in_block_mask(func);
+    // Routed through the exhaustive walker so a new variant cannot
+    // leave its operands out of the mask.
     for (i, inst) in func.insts.iter().enumerate() {
         if !in_block[i] {
             continue;
         }
-        match inst {
-            Inst::Load { addr, .. } => mark(*addr, &mut used),
-            Inst::Store { addr, value, .. } => {
-                mark(*addr, &mut used);
-                mark(*value, &mut used);
-            }
-            Inst::StoreLocal { value, .. } => mark(*value, &mut used),
-            Inst::LoadIndexed { base, index, .. } => {
-                mark(*base, &mut used);
-                mark(*index, &mut used);
-            }
-            Inst::StoreIndexed {
-                base, index, value, ..
-            } => {
-                mark(*base, &mut used);
-                mark(*index, &mut used);
-                mark(*value, &mut used);
-            }
-            Inst::Binop { lhs, rhs, .. } => {
-                mark(*lhs, &mut used);
-                mark(*rhs, &mut used);
-            }
-            Inst::BinopI { lhs, .. } => mark(*lhs, &mut used),
-            Inst::Fneg(v) => mark(*v, &mut used),
-            Inst::Fma { a, b, c, .. } => {
-                mark(*a, &mut used);
-                mark(*b, &mut used);
-                mark(*c, &mut used);
-            }
-            Inst::Extend { value, .. } => mark(*value, &mut used),
-            Inst::FpCast { value, .. } => mark(*value, &mut used),
-            Inst::Mcpy { dst, src, .. } => {
-                mark(*dst, &mut used);
-                mark(*src, &mut used);
-            }
-            Inst::Call { args, .. }
-            | Inst::CallExt { args, .. }
-            | Inst::Intrinsic { args, .. }
-            | Inst::InlineAsm { args, .. } => {
-                for &a in args {
-                    mark(a, &mut used);
-                }
-            }
-            Inst::CallIndirect { target, args, .. } => {
-                mark(*target, &mut used);
-                for &a in args {
-                    mark(a, &mut used);
-                }
-            }
-            Inst::Phi { incoming, .. } => {
-                for &(_, v) in incoming {
-                    mark(v, &mut used);
-                }
-            }
-            _ => {}
-        }
+        inst.for_each_operand(|v| mark(v, &mut used));
     }
     for blk in &func.blocks {
         match blk.terminator {
@@ -1569,6 +1517,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::Fneg(_)
         | Inst::Fma { .. }
         | Inst::Extend { .. }
+        | Inst::Bswap { .. }
         | Inst::FpCast { .. }
         | Inst::AllocaInit(_)
         | Inst::ParamRef { .. }

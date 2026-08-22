@@ -104,8 +104,8 @@ fn u64le(b: &[u8], off: usize) -> u64 {
 }
 
 /// The named section's runtime address, file offset and size in a
-/// little-endian ELF64 object.
-fn section_header(elf: &[u8], want: &str) -> (u64, usize, usize) {
+/// little-endian ELF64 object, or `None` when it has no such section.
+fn find_section(elf: &[u8], want: &str) -> Option<(u64, usize, usize)> {
     assert_eq!(&elf[..4], b"\x7fELF", "not an ELF object");
     let shoff = u64le(elf, 0x28) as usize;
     let shentsize = u16le(elf, 0x3a) as usize;
@@ -122,20 +122,33 @@ fn section_header(elf: &[u8], want: &str) -> (u64, usize, usize) {
         let name_off = u32le(elf, sh) as usize;
         let end = strtab[name_off..].iter().position(|&c| c == 0).unwrap();
         if &strtab[name_off..name_off + end] == want.as_bytes() {
-            return (
+            return Some((
                 u64le(elf, sh + 0x10),
                 u64le(elf, sh + 0x18) as usize,
                 u64le(elf, sh + 0x20) as usize,
-            );
+            ));
         }
     }
-    panic!("section {want} not found");
+    None
+}
+
+fn section_header(elf: &[u8], want: &str) -> (u64, usize, usize) {
+    find_section(elf, want).unwrap_or_else(|| panic!("section {want} not found"))
 }
 
 /// The named section's bytes.
 fn section(elf: &[u8], want: &str) -> Vec<u8> {
     let (_, off, size) = section_header(elf, want);
     elf[off..off + size].to_vec()
+}
+
+/// The named section's bytes, empty when the object has no such
+/// section. A linked image carries no relocation tables.
+fn section_or_empty(elf: &[u8], want: &str) -> Vec<u8> {
+    match find_section(elf, want) {
+        Some((_, off, size)) => elf[off..off + size].to_vec(),
+        None => Vec::new(),
+    }
 }
 
 struct Reader<'a> {
@@ -379,6 +392,24 @@ fn parse_object(path: &Path) -> Unit {
     let elf = std::fs::read(path).expect("read object");
     let info = section(&elf, ".debug_info");
     let abbrev_section = section(&elf, ".debug_abbrev");
+    let strs = section_or_empty(&elf, ".debug_str");
+    // In an ET_REL object a `DW_FORM_strp` slot is zero and its
+    // `.debug_str` offset is the relocation's addend; in a linked
+    // image the slot carries the offset and no table is left.
+    let mut strp_addend: BTreeMap<u64, u64> = BTreeMap::new();
+    for e in section_or_empty(&elf, ".rela.debug_info")
+        .as_chunks::<24>()
+        .0
+    {
+        strp_addend.insert(u64le(e, 0), u64le(e, 16));
+    }
+    let string_at = |off: usize| -> String {
+        let end = strs[off..]
+            .iter()
+            .position(|&c| c == 0)
+            .map_or(strs.len(), |i| off + i);
+        String::from_utf8_lossy(&strs[off..end]).into_owned()
+    };
     let mut dies = Vec::new();
     let mut cu_base = 0usize;
     while cu_base + 11 <= info.len() {
@@ -413,6 +444,11 @@ fn parse_object(path: &Path) -> Unit {
                     0x07 => Val::Uint(u64le(r.take(8), 0)),         // data8
                     0x08 => Val::Str(r.cstr()),                     // string
                     0x0b => Val::Uint(r.u8() as u64),               // data1
+                    0x0e => {
+                        let at = r.p as u64;
+                        let slot = u32le(r.take(4), 0) as u64;
+                        Val::Str(string_at(*strp_addend.get(&at).unwrap_or(&slot) as usize))
+                    } // strp
                     0x0d => Val::Int(r.sleb()),                     // sdata
                     0x0f => Val::Uint(r.uleb()),                    // udata
                     0x13 => Val::Ref(u32le(r.take(4), 0)),          // ref4

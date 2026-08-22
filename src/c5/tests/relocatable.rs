@@ -763,6 +763,92 @@ fn build_id_note_is_emitted_and_stable() {
     assert!(note.bytes[16..36].iter().any(|&b| b != 0));
 }
 
+/// `.debug_str` is `SHF_MERGE | SHF_STRINGS`, so the link folds it:
+/// two units naming the same type, member or base type share one copy,
+/// and every `DW_FORM_strp` reference is rewritten onto that copy.
+#[test]
+fn a_native_link_folds_debug_str_across_units() {
+    use crate::c5::linker::link::link_native_objects;
+    use crate::c5::linker::object::{NativeSymSection, parse_native_elf};
+
+    let compile = |src: &str| {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.to_string(), Target::LinuxX64, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            debug_info: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse")
+    };
+    const SHARED: &str = "struct Shape { int width; int height; };\n";
+    let a = compile(&alloc::format!(
+        "{SHARED}int area(struct Shape *s) {{ return s->width * s->height; }}\n"
+    ));
+    let b = compile(&alloc::format!(
+        "{SHARED}int perim(struct Shape *s) {{ return 2 * (s->width + s->height); }}\n"
+    ));
+    let unit_pools = [a.debug_str.clone(), b.debug_str.clone()];
+    let objs = [a, b];
+    let merged = link_native_objects(&objs).expect("link");
+
+    let count = |blob: &[u8], want: &[u8]| blob.split(|&c| c == 0).filter(|s| *s == want).count();
+    let apart: usize = unit_pools.iter().map(|p| count(p, b"Shape")).sum();
+    assert_eq!(apart, 2, "each unit names the shared type on its own");
+    for name in [&b"Shape"[..], b"width", b"height", b"int"] {
+        assert_eq!(
+            count(&merged.debug_str, name),
+            1,
+            "the merged pool holds `{}` more than once",
+            core::str::from_utf8(name).unwrap()
+        );
+    }
+    let apart_bytes: usize = unit_pools.iter().map(|p| p.len()).sum();
+    assert!(
+        merged.debug_str.len() < apart_bytes,
+        "folding {apart_bytes} bytes of pools produced {} bytes",
+        merged.debug_str.len()
+    );
+
+    // Every rewritten reference names the same string it named before.
+    fn string_at(blob: &[u8], off: usize) -> &[u8] {
+        let end = blob[off..]
+            .iter()
+            .position(|&c| c == 0)
+            .map_or(blob.len(), |i| off + i);
+        &blob[off..end]
+    }
+    let mut checked = 0;
+    for (unit, obj) in objs.iter().enumerate() {
+        for r in &obj.debug_info_relocs {
+            let sym = &obj.symbols[r.sym_idx];
+            if sym.section != NativeSymSection::DebugStr {
+                continue;
+            }
+            let local = (sym.value as i64 + r.addend) as usize;
+            let slot = merged.debug_info_bases[unit] + r.offset as usize;
+            let folded = u32::from_le_bytes(
+                merged.debug_info[slot..slot + 4]
+                    .try_into()
+                    .expect("strp slot"),
+            ) as usize;
+            assert_eq!(
+                string_at(&merged.debug_str, folded),
+                string_at(&unit_pools[unit], local),
+                "a folded reference in unit {unit} names a different string"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "the units carry no `.debug_str` references");
+}
+
 #[test]
 fn emit_relocs_survive_into_final_elf() {
     use crate::c5::linker::link::link_native_objects;

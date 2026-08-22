@@ -202,11 +202,12 @@ pub struct MergedNative {
     pub debug_info: Vec<u8>,
     pub debug_abbrev: Vec<u8>,
     pub debug_line: Vec<u8>,
+    /// The exception: `.debug_str` is `SHF_MERGE | SHF_STRINGS` and is
+    /// folded rather than concatenated.
     pub debug_str: Vec<u8>,
     pub debug_info_bases: Vec<usize>,
     pub debug_abbrev_bases: Vec<usize>,
     pub debug_line_bases: Vec<usize>,
-    pub debug_str_bases: Vec<usize>,
     /// DWARF reloc lists (rebased). `sym_idx` is the per-unit
     /// symtab index of the target section symbol; the parallel
     /// `unit_for_*_reloc` records which unit each reloc came
@@ -2269,11 +2270,10 @@ pub fn link_native_objects_with_shared_libs<'a>(
     let mut debug_info: Vec<u8> = Vec::new();
     let mut debug_abbrev: Vec<u8> = Vec::new();
     let mut debug_line: Vec<u8> = Vec::new();
-    let mut debug_str: Vec<u8> = Vec::new();
+    let debug_str_fold = DebugStrFold::build(objs);
     let mut debug_info_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut debug_abbrev_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut debug_line_bases: Vec<usize> = Vec::with_capacity(objs.len());
-    let mut debug_str_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut debug_info_relocs: Vec<super::object::NativeReloc> = Vec::new();
     let mut debug_line_relocs: Vec<super::object::NativeReloc> = Vec::new();
     let mut unit_for_debug_info_reloc: Vec<usize> = Vec::new();
@@ -2282,13 +2282,11 @@ pub fn link_native_objects_with_shared_libs<'a>(
         debug_info_bases.push(debug_info.len());
         debug_abbrev_bases.push(debug_abbrev.len());
         debug_line_bases.push(debug_line.len());
-        debug_str_bases.push(debug_str.len());
         let info_base = debug_info.len() as u64;
         let line_base = debug_line.len() as u64;
         debug_info.extend_from_slice(&obj.debug_info);
         debug_abbrev.extend_from_slice(&obj.debug_abbrev);
         debug_line.extend_from_slice(&obj.debug_line);
-        debug_str.extend_from_slice(&obj.debug_str);
         for r in &obj.debug_info_relocs {
             let mut shifted = *r;
             shifted.offset = r.offset.wrapping_add(info_base);
@@ -2348,7 +2346,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             merged_data_len,
             &debug_abbrev_bases,
             &debug_line_bases,
-            &debug_str_bases,
+            &debug_str_fold,
             &tls_bases,
             &defined,
         )?;
@@ -2379,7 +2377,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
             merged_data_len,
             &debug_abbrev_bases,
             &debug_line_bases,
-            &debug_str_bases,
+            &debug_str_fold,
             &tls_bases,
             &defined,
         )?;
@@ -2421,11 +2419,10 @@ pub fn link_native_objects_with_shared_libs<'a>(
         debug_info,
         debug_abbrev,
         debug_line,
-        debug_str,
+        debug_str: debug_str_fold.into_bytes(),
         debug_info_bases,
         debug_abbrev_bases,
         debug_line_bases,
-        debug_str_bases,
         debug_info_relocs,
         debug_line_relocs,
         unit_for_debug_info_reloc,
@@ -2488,6 +2485,81 @@ fn record_plt_contribution(merged: &mut MergedNative, pool_start: usize) {
     }
 }
 
+/// Every unit's `.debug_str` folded into one table with a single copy
+/// of each distinct string, plus the map that rewrites a unit's
+/// `DW_FORM_strp` offsets onto it. `SHF_MERGE | SHF_STRINGS` is what
+/// makes that sound: an offset names a string, not a position.
+struct DebugStrFold {
+    bytes: Vec<u8>,
+    /// Per unit, ascending by local offset: the offset of each string
+    /// in that unit's blob paired with its offset in `bytes`.
+    starts: Vec<Vec<(u64, u64)>>,
+    /// Per unit, its blob's length, which bounds a reference.
+    lens: Vec<u64>,
+}
+
+impl DebugStrFold {
+    fn build(objs: &[super::object::NativeObject]) -> DebugStrFold {
+        DebugStrFold::from_blobs(objs.iter().map(|o| &o.debug_str[..]))
+    }
+
+    fn from_blobs<'a>(blobs: impl Iterator<Item = &'a [u8]>) -> DebugStrFold {
+        let mut bytes: Vec<u8> = Vec::new();
+        let mut interned: HashMap<&'a [u8], u64> = HashMap::new();
+        let mut starts: Vec<Vec<(u64, u64)>> = Vec::new();
+        let mut lens: Vec<u64> = Vec::new();
+        for blob in blobs {
+            let mut unit: Vec<(u64, u64)> = Vec::new();
+            let mut at = 0usize;
+            while at < blob.len() {
+                let end = blob[at..]
+                    .iter()
+                    .position(|&b| b == 0)
+                    .map_or(blob.len(), |i| at + i);
+                let s = &blob[at..end];
+                let off = *interned.entry(s).or_insert_with(|| {
+                    let o = bytes.len() as u64;
+                    bytes.extend_from_slice(s);
+                    bytes.push(0);
+                    o
+                });
+                unit.push((at as u64, off));
+                at = end + 1;
+            }
+            starts.push(unit);
+            lens.push(blob.len() as u64);
+        }
+        DebugStrFold {
+            bytes,
+            starts,
+            lens,
+        }
+    }
+
+    /// Where a unit-local offset lands in the folded table. An offset
+    /// inside a string names its tail, which the same copy provides.
+    fn at(&self, unit: usize, local: u64) -> u64 {
+        let Some(starts) = self.starts.get(unit) else {
+            return 0;
+        };
+        if local >= self.lens[unit] {
+            return 0;
+        }
+        let i = starts.partition_point(|&(l, _)| l <= local);
+        match i.checked_sub(1) {
+            Some(prev) => {
+                let (l, merged) = starts[prev];
+                merged + (local - l)
+            }
+            None => 0,
+        }
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn resolve_debug_reloc(
     machine: NativeMachine,
@@ -2506,7 +2578,7 @@ fn resolve_debug_reloc(
     data_len: usize,
     debug_abbrev_bases: &[usize],
     debug_line_bases: &[usize],
-    debug_str_bases: &[usize],
+    debug_str_fold: &DebugStrFold,
     tls_bases: &[usize],
     defined: &HashMap<&str, MergedSymbol>,
 ) -> Result<(), C5Error> {
@@ -2568,7 +2640,13 @@ fn resolve_debug_reloc(
             (debug_abbrev_bases[unit_idx] as u64 + sym.value, false, true)
         }
         NativeSymSection::DebugLine => (debug_line_bases[unit_idx] as u64 + sym.value, false, true),
-        NativeSymSection::DebugStr => (debug_str_bases[unit_idx] as u64 + sym.value, false, true),
+        // The addend selects the string, so it is part of the lookup
+        // into the folded table, not an offset from a per-unit base.
+        NativeSymSection::DebugStr => (
+            debug_str_fold.at(unit_idx, sym.value.wrapping_add(reloc.addend as u64)),
+            false,
+            true,
+        ),
         NativeSymSection::Undef => match defined.get(sym.name.as_str()) {
             Some(m) if m.section == NativeSymSection::Text => (m.value, true, true),
             _ => (0, false, false),
@@ -2578,7 +2656,12 @@ fn resolve_debug_reloc(
         // than aborting the link on another toolchain's debug info.
         _ => (0, false, false),
     };
-    let resolved = merged_value.wrapping_add(reloc.addend as u64);
+    // The `.debug_str` lookup above consumed the addend.
+    let resolved = if sym.section == NativeSymSection::DebugStr {
+        merged_value
+    } else {
+        merged_value.wrapping_add(reloc.addend as u64)
+    };
     let width = match (machine, reloc.rtype) {
         (NativeMachine::X86_64, R_X86_64_64) | (NativeMachine::Aarch64, R_AARCH64_ABS64) => 8u8,
         (NativeMachine::X86_64, R_X86_64_32) | (NativeMachine::Aarch64, R_AARCH64_ABS32) => 4u8,
@@ -3400,6 +3483,27 @@ mod tests {
     /// patcher directly.
     fn site(machine: NativeMachine, rtype: u32, offset: u64) -> RelocSite<'static> {
         RelocOrigin::merged(".text").at(machine, rtype, "gfar", offset)
+    }
+
+    /// The fold keeps one copy of each distinct string and maps every
+    /// unit-local offset onto it, interior and out-of-range included.
+    #[test]
+    fn debug_str_fold_shares_one_copy_of_each_string() {
+        let a: &[u8] = b"\0int\0Shape\0";
+        let b: &[u8] = b"\0Shape\0width\0";
+        let empty: &[u8] = b"";
+        let fold = DebugStrFold::from_blobs([a, b, empty].into_iter());
+        assert_eq!(fold.at(0, 0), 0, "the empty string sits at 0");
+        assert_eq!(fold.at(1, 0), 0);
+        assert_eq!(fold.at(0, 1), 1, "`int` follows it");
+        assert_eq!(fold.at(0, 5), 5, "`Shape` follows `int`");
+        assert_eq!(fold.at(1, 1), 5, "the second unit shares that copy");
+        assert_eq!(fold.at(1, 7), 11, "`width` is the only new string");
+        assert_eq!(fold.at(0, 6), 6, "an interior offset names the tail");
+        assert_eq!(fold.at(0, 11), 0, "past the blob names nothing");
+        assert_eq!(fold.at(2, 0), 0, "a unit with no pool names nothing");
+        assert_eq!(fold.at(9, 0), 0, "nor does an out-of-range unit");
+        assert_eq!(fold.into_bytes(), b"\0int\0Shape\0width\0");
     }
 
     /// Reference words GNU ld 2.46.1 wrote for

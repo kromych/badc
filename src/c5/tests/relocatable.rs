@@ -378,6 +378,75 @@ fn debug_reference_to_a_discarded_object_resolves_to_null() {
     }
 }
 
+/// Names in `.debug_info` are `DW_FORM_strp` slots relocated against
+/// the unit's `.debug_str`. The pool stores each distinct name once,
+/// its section is marked mergeable so the link can fold what units
+/// share, and every reference lands on a string start.
+#[test]
+fn debug_info_names_reach_a_deduplicated_debug_str() {
+    const SHF_MERGE: u64 = 0x10;
+    const SHF_STRINGS: u64 = 0x20;
+    let obj = compile_obj_with_debug_info(
+        "struct P { int x; int y; };\n\
+         int first(struct P *p) { int x = p->x; return x; }\n\
+         int second(struct P *p) { int x = p->y; return x; }\n",
+        "a.o",
+    );
+    let str_idx = obj
+        .sections
+        .iter()
+        .position(|s| s.name == ".debug_str")
+        .expect(".debug_str");
+    let pool = &obj.sections[str_idx];
+    assert_eq!(
+        pool.flags & (SHF_MERGE | SHF_STRINGS),
+        SHF_MERGE | SHF_STRINGS
+    );
+    assert_eq!(pool.entsize, 1);
+    assert_eq!(pool.bytes.last(), Some(&0), "the pool ends on a terminator");
+
+    let strings: Vec<&[u8]> = pool.bytes[..pool.bytes.len() - 1]
+        .split(|&b| b == 0)
+        .collect();
+    let mut sorted = strings.clone();
+    sorted.sort_unstable();
+    let before = sorted.len();
+    sorted.dedup();
+    assert_eq!(sorted.len(), before, "the pool holds a name twice");
+    for want in [&b"first"[..], b"second", b"P", b"x", b"y", b"int"] {
+        assert!(strings.contains(&want), "the pool lost a name");
+    }
+
+    // Offsets a name can start at: 0 plus one past every terminator.
+    let mut starts = alloc::vec![0u64];
+    starts.extend(
+        pool.bytes
+            .iter()
+            .enumerate()
+            .filter(|&(i, &b)| b == 0 && i + 1 < pool.bytes.len())
+            .map(|(i, _)| i as u64 + 1),
+    );
+    let info = obj
+        .sections
+        .iter()
+        .find(|s| s.name == ".debug_info")
+        .expect(".debug_info");
+    let into_pool = info.relocs.iter().filter(|r| {
+        obj.symbols
+            .get(r.sym as usize)
+            .is_some_and(|s| s.sec == EtSymRef::Section(str_idx))
+    });
+    let mut seen = 0;
+    for r in into_pool {
+        assert!(
+            starts.contains(&(r.addend as u64)),
+            "a name reference points into the middle of a string"
+        );
+        seen += 1;
+    }
+    assert!(seen >= strings.len(), "every pooled name is referenced");
+}
+
 #[test]
 fn glob_match_shapes() {
     assert!(glob_match(".discard.*", ".discard.retpoline"));

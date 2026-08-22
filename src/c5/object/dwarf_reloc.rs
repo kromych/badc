@@ -1,6 +1,6 @@
 //! Relocatable DWARF emitter for `OutputKind::Relocatable` output.
 //!
-//! Produces a DWARF 4 triple suitable for placement in an ELF
+//! Produces the DWARF 4 sections suitable for placement in an ELF
 //! ET_REL object:
 //!
 //!   * `.debug_info`   -- one compilation-unit DIE per `.o` with
@@ -9,6 +9,10 @@
 //!   * `.debug_abbrev` -- the matching abbreviation table.
 //!   * `.debug_line`   -- one line-number program covering the unit's
 //!                        `.text`.
+//!   * `.debug_str`    -- the unit's names, each stored once and
+//!                        named by a relocated `DW_FORM_strp` slot.
+//!                        The DWARF 4 line-program header has no such
+//!                        indirection and keeps its names inline.
 //!
 //! Every address slot is emitted as a placeholder paired with an
 //! [`DwarfReloc`] record so the linker can rebase the section once
@@ -73,6 +77,9 @@ pub(crate) enum DwarfRelocTarget {
     Text,
     DebugLine,
     DebugAbbrev,
+    /// The unit's `.debug_str`. The addend is the string's offset in
+    /// it, which a `DW_FORM_strp` slot names.
+    DebugStr,
     /// A defined object with static storage duration, by its index in
     /// [`DwarfRelocatable::reloc_symbols`]. The object writer resolves
     /// the name to its own symbol-table entry.
@@ -138,6 +145,9 @@ pub(crate) struct DwarfRelocatable {
     pub debug_info: Vec<u8>,
     pub debug_abbrev: Vec<u8>,
     pub debug_line: Vec<u8>,
+    /// The unit's name pool, one copy of each distinct string. The
+    /// writer marks it mergeable so the link folds across units.
+    pub debug_str: Vec<u8>,
     pub info_relocs: Vec<DwarfReloc>,
     pub line_relocs: Vec<DwarfReloc>,
     /// Link names named by [`DwarfRelocTarget::Symbol`] relocs, in the
@@ -193,7 +203,7 @@ const DW_AT_DECLARATION: u8 = 0x3c;
 
 const DW_FORM_ADDR: u8 = 0x01;
 const DW_FORM_DATA8: u8 = 0x07;
-const DW_FORM_STRING: u8 = 0x08;
+const DW_FORM_STRP: u8 = 0x0e;
 const DW_FORM_DATA1: u8 = 0x0b;
 const DW_FORM_SEC_OFFSET: u8 = 0x17;
 const DW_FORM_EXPRLOC: u8 = 0x18;
@@ -346,12 +356,13 @@ pub(crate) fn emit(
 ) -> DwarfRelocatable {
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_relocs) = build_debug_line(program, build);
-    let (debug_info, info_relocs, reloc_symbols) =
+    let (debug_info, debug_str, info_relocs, reloc_symbols) =
         build_debug_info(source_path, program, build, machine, target);
     DwarfRelocatable {
         debug_info,
         debug_abbrev,
         debug_line,
+        debug_str,
         info_relocs,
         line_relocs,
         reloc_symbols,
@@ -380,10 +391,10 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_COMPILE_UNIT,
         has_children: true,
         attrs: &[
-            (DW_AT_PRODUCER, DW_FORM_STRING),
+            (DW_AT_PRODUCER, DW_FORM_STRP),
             (DW_AT_LANGUAGE, DW_FORM_DATA1),
-            (DW_AT_NAME, DW_FORM_STRING),
-            (DW_AT_COMP_DIR, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_COMP_DIR, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_STMT_LIST, DW_FORM_SEC_OFFSET),
@@ -405,7 +416,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_SUBPROGRAM,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
@@ -421,7 +432,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_SUBPROGRAM,
         has_children: true,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
@@ -436,7 +447,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_SUBPROGRAM,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
@@ -449,7 +460,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_SUBPROGRAM,
         has_children: true,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
@@ -466,7 +477,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_FORMAL_PARAMETER,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOCATION, DW_FORM_EXPRLOC),
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_DECL_FILE, DW_FORM_UDATA),
@@ -480,7 +491,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_VARIABLE,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOCATION, DW_FORM_EXPRLOC),
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_DECL_FILE, DW_FORM_UDATA),
@@ -494,7 +505,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_BASE_TYPE,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_BYTE_SIZE, DW_FORM_DATA1),
             (DW_AT_ENCODING, DW_FORM_DATA1),
         ],
@@ -514,20 +525,14 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         code: ABBREV_STRUCTURE_TYPE,
         tag: DW_TAG_STRUCTURE_TYPE,
         has_children: true,
-        attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
-            (DW_AT_BYTE_SIZE, DW_FORM_UDATA),
-        ],
+        attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_BYTE_SIZE, DW_FORM_UDATA)],
     },
     // union_type -- structure_type's payload with members at offset 0.
     AbbrevDecl {
         code: ABBREV_UNION_TYPE,
         tag: DW_TAG_UNION_TYPE,
         has_children: true,
-        attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
-            (DW_AT_BYTE_SIZE, DW_FORM_UDATA),
-        ],
+        attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_BYTE_SIZE, DW_FORM_UDATA)],
     },
     // structure / union member -- name + type ref4 + byte offset from
     // the start of the aggregate.
@@ -536,7 +541,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_MEMBER,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_UDATA),
         ],
@@ -561,7 +566,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_MEMBER,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_DATA_BIT_OFFSET, DW_FORM_UDATA),
             (DW_AT_BIT_SIZE, DW_FORM_UDATA),
@@ -597,10 +602,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         code: ABBREV_ENUMERATION_TYPE,
         tag: DW_TAG_ENUMERATION_TYPE,
         has_children: true,
-        attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
-            (DW_AT_BYTE_SIZE, DW_FORM_DATA1),
-        ],
+        attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_BYTE_SIZE, DW_FORM_DATA1)],
     },
     // enumerator -- one (name, value) pair. DW_AT_const_value is
     // signed since C99 enum constants can be negative.
@@ -609,7 +611,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_ENUMERATOR,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_CONST_VALUE, DW_FORM_SDATA),
         ],
     },
@@ -638,7 +640,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_STRUCTURE_TYPE,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_DECLARATION, DW_FORM_FLAG_PRESENT),
         ],
     },
@@ -647,7 +649,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_UNION_TYPE,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_DECLARATION, DW_FORM_FLAG_PRESENT),
         ],
     },
@@ -713,7 +715,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_VARIABLE,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
             (DW_AT_LOCATION, DW_FORM_EXPRLOC),
@@ -726,7 +728,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_VARIABLE,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_LOCATION, DW_FORM_EXPRLOC),
             (DW_AT_DECL_FILE, DW_FORM_UDATA),
@@ -742,7 +744,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_VARIABLE,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
             (DW_AT_DECL_FILE, DW_FORM_UDATA),
@@ -754,7 +756,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_VARIABLE,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_TYPE, DW_FORM_REF4),
             (DW_AT_DECL_FILE, DW_FORM_UDATA),
             (DW_AT_DECL_LINE, DW_FORM_UDATA),
@@ -767,7 +769,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_SUBPROGRAM,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
@@ -780,7 +782,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_SUBPROGRAM,
         has_children: true,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
@@ -794,7 +796,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_SUBPROGRAM,
         has_children: false,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
@@ -806,7 +808,7 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_SUBPROGRAM,
         has_children: true,
         attrs: &[
-            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_NAME, DW_FORM_STRP),
             (DW_AT_LOW_PC, DW_FORM_ADDR),
             (DW_AT_HIGH_PC, DW_FORM_DATA8),
             (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
@@ -820,13 +822,13 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         code: ABBREV_TYPEDEF,
         tag: DW_TAG_TYPEDEF,
         has_children: false,
-        attrs: &[(DW_AT_NAME, DW_FORM_STRING), (DW_AT_TYPE, DW_FORM_REF4)],
+        attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_TYPE, DW_FORM_REF4)],
     },
     AbbrevDecl {
         code: ABBREV_TYPEDEF_VOID,
         tag: DW_TAG_TYPEDEF,
         has_children: false,
-        attrs: &[(DW_AT_NAME, DW_FORM_STRING)],
+        attrs: &[(DW_AT_NAME, DW_FORM_STRP)],
     },
     // Qualified types (DWARF 4 5.2). Each wraps the type it
     // qualifies and carries no size of its own.
@@ -933,19 +935,25 @@ fn build_debug_info(
     build: &Build,
     machine: super::Machine,
     target: super::Target,
-) -> (Vec<u8>, Vec<DwarfReloc>, Vec<String>) {
+) -> (Vec<u8>, Vec<u8>, Vec<DwarfReloc>, Vec<String>) {
     let mut body: Vec<u8> = Vec::new();
     let mut relocs: Vec<DwarfReloc> = Vec::new();
+    let mut strs = StrPool::new();
     let addr_width = DwarfRelocWidth::addr(build.elf_class);
 
     // Body content first; the unit header's `unit_length` field
     // covers everything after itself, which the prefix below
     // backfills once the body is sized.
     write_uleb128(&mut body, ABBREV_CU);
-    push_string(&mut body, &format!("badc {}", env!("CARGO_PKG_VERSION")));
+    push_strp(
+        &mut body,
+        &mut relocs,
+        &mut strs,
+        &format!("badc {}", env!("CARGO_PKG_VERSION")),
+    );
     body.push(DW_LANG_C99);
-    push_string(&mut body, source_path);
-    push_string(&mut body, ""); // DW_AT_comp_dir
+    push_strp(&mut body, &mut relocs, &mut strs, source_path);
+    push_strp(&mut body, &mut relocs, &mut strs, ""); // DW_AT_comp_dir
     let low_pc_off_in_body = body.len() as u64;
     push_addr_slot(&mut body, addr_width);
     relocs.push(DwarfReloc {
@@ -1033,7 +1041,7 @@ fn build_debug_info(
     let mut next = 0usize;
     while next < catalog.len() {
         let node = catalog.node(next).clone();
-        dies.push(build_type_die(&mut catalog, &node));
+        dies.push(build_type_die(&mut catalog, &node, &mut strs));
         next += 1;
     }
     let type_offsets: Vec<u32> = {
@@ -1045,10 +1053,19 @@ fn build_debug_info(
         }
         offs
     };
-    for die in &mut dies {
-        let DieBuf { bytes, refs } = die;
+    for (i, die) in dies.iter_mut().enumerate() {
+        let DieBuf { bytes, refs, strs } = die;
         for &(at, id) in refs.iter() {
             bytes[at..at + 4].copy_from_slice(&type_offsets[id].to_le_bytes());
+        }
+        for &(at, str_off) in strs.iter() {
+            relocs.push(DwarfReloc {
+                section: DwarfSectionKind::Info,
+                offset: type_offsets[i] as u64 + at as u64,
+                width: DwarfRelocWidth::W4,
+                target: DwarfRelocTarget::DebugStr,
+                addend: str_off as i64,
+            });
         }
         body.extend_from_slice(bytes);
     }
@@ -1063,11 +1080,11 @@ fn build_debug_info(
             continue;
         }
         write_uleb128(&mut body, ABBREV_ENUMERATION_TYPE);
-        push_string(&mut body, &ed.name);
+        push_strp(&mut body, &mut relocs, &mut strs, &ed.name);
         body.push(ed.byte_size());
         for (cname, cval) in &ed.constants {
             write_uleb128(&mut body, ABBREV_ENUMERATOR);
-            push_string(&mut body, cname);
+            push_strp(&mut body, &mut relocs, &mut strs, cname);
             write_sleb128(&mut body, *cval);
         }
         // End-of-children marker for the enumeration_type DIE.
@@ -1099,7 +1116,7 @@ fn build_debug_info(
                 (false, false) => ABBREV_TLS_VARIABLE_INTERNAL,
             },
         );
-        push_string(&mut body, &sym.name);
+        push_strp(&mut body, &mut relocs, &mut strs, &sym.name);
         body.extend_from_slice(&type_offsets[type_id].to_le_bytes());
         if located {
             // DW_AT_location: exprloc holding the address form plus the
@@ -1193,7 +1210,7 @@ fn build_debug_info(
                 (false, false, false) => ABBREV_SUBPROGRAM_LEAF_INTERNAL_VOID,
             },
         );
-        push_string(&mut body, name);
+        push_strp(&mut body, &mut relocs, &mut strs, name);
         let low_pc_off = body.len() as u64;
         push_addr_slot(&mut body, addr_width);
         relocs.push(DwarfReloc {
@@ -1237,7 +1254,7 @@ fn build_debug_info(
                     ABBREV_VARIABLE
                 };
                 write_uleb128(&mut body, abbrev);
-                push_string(&mut body, &v.name);
+                push_strp(&mut body, &mut relocs, &mut strs, &v.name);
                 // DW_AT_location: exprloc carrying DW_OP_fbreg
                 // <SLEB128 offset>. Length prefix is the byte
                 // count of the expression. A slot mem2reg promoted to
@@ -1310,7 +1327,7 @@ fn build_debug_info(
     });
     out.extend_from_slice(&body);
 
-    (out, relocs, reloc_symbols)
+    (out, strs.into_bytes(), relocs, reloc_symbols)
 }
 
 /// Indices in `program.symbols` of the objects with static storage
@@ -1583,9 +1600,52 @@ fn write_extended(buf: &mut Vec<u8>, opcode: u8, operand: &[u8]) {
     buf.extend_from_slice(operand);
 }
 
-fn push_string(out: &mut Vec<u8>, s: &str) {
-    out.extend_from_slice(s.as_bytes());
-    out.push(0);
+/// The unit's `.debug_str`: each distinct string stored once. Offset 0
+/// is the empty string, so a zero slot reads as a name rather than as
+/// another string's bytes.
+pub(crate) struct StrPool {
+    bytes: Vec<u8>,
+    offsets: BTreeMap<String, u32>,
+}
+
+impl StrPool {
+    pub(crate) fn new() -> Self {
+        let mut pool = StrPool {
+            bytes: Vec::new(),
+            offsets: BTreeMap::new(),
+        };
+        pool.intern("");
+        pool
+    }
+
+    /// Offset of `s` in the pool, appending it when it is new.
+    pub(crate) fn intern(&mut self, s: &str) -> u32 {
+        if let Some(&off) = self.offsets.get(s) {
+            return off;
+        }
+        let off = self.bytes.len() as u32;
+        self.bytes.extend_from_slice(s.as_bytes());
+        self.bytes.push(0);
+        self.offsets.insert(String::from(s), off);
+        off
+    }
+
+    pub(crate) fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+}
+
+/// Append a `DW_FORM_strp` slot naming `s`. The slot stays zero; the
+/// string's pool offset rides in the reloc's addend.
+fn push_strp(out: &mut Vec<u8>, relocs: &mut Vec<DwarfReloc>, strs: &mut StrPool, s: &str) {
+    relocs.push(DwarfReloc {
+        section: DwarfSectionKind::Info,
+        offset: DEBUG_INFO_UNIT_HEADER_SIZE + out.len() as u64,
+        width: DwarfRelocWidth::W4,
+        target: DwarfRelocTarget::DebugStr,
+        addend: strs.intern(s) as i64,
+    });
+    out.extend_from_slice(&[0u8; 4]);
 }
 
 /// Index of a type DIE within the per-unit catalog.
@@ -1689,6 +1749,9 @@ impl<'a> Spelled<'a> {
 struct DieBuf {
     bytes: Vec<u8>,
     refs: Vec<(usize, TypeId)>,
+    /// `DW_FORM_strp` slots: DIE-relative offset paired with the pool
+    /// offset. Held until the layout pass fixes the DIE's position.
+    strs: Vec<(usize, u32)>,
 }
 
 impl DieBuf {
@@ -1696,12 +1759,19 @@ impl DieBuf {
         DieBuf {
             bytes: Vec::new(),
             refs: Vec::new(),
+            strs: Vec::new(),
         }
     }
 
     /// Reserve a `DW_FORM_ref4` slot naming `id`.
     fn push_ref(&mut self, id: TypeId) {
         self.refs.push((self.bytes.len(), id));
+        self.bytes.extend_from_slice(&[0u8; 4]);
+    }
+
+    /// Reserve a `DW_FORM_strp` slot naming `s`.
+    fn push_str(&mut self, strs: &mut StrPool, s: &str) {
+        self.strs.push((self.bytes.len(), strs.intern(s)));
         self.bytes.extend_from_slice(&[0u8; 4]);
     }
 }
@@ -2146,7 +2216,7 @@ fn array_dims(count: i64, dims: &[i64]) -> Vec<i64> {
 }
 
 /// Write one type DIE, with its children, into a fresh buffer.
-fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
+fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool) -> DieBuf {
     let mut die = DieBuf::new();
     match node {
         TypeNode::Base(leaf) => {
@@ -2156,7 +2226,7 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
                 return die;
             };
             write_uleb128(&mut die.bytes, ABBREV_BASE_TYPE);
-            push_string(&mut die.bytes, base.name);
+            die.push_str(strs, base.name);
             die.bytes.push(base.byte_size);
             die.bytes.push(base.encoding);
         }
@@ -2178,7 +2248,7 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
                 ABBREV_STRUCTURE_TYPE_DECL
             };
             write_uleb128(&mut die.bytes, abbrev);
-            push_string(&mut die.bytes, structs.get(*id).map_or("", |s| &s.name));
+            die.push_str(strs, structs.get(*id).map_or("", |s| &s.name));
         }
         TypeNode::Aggregate(id) => {
             let structs = catalog.structs;
@@ -2194,7 +2264,7 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
             };
             write_uleb128(&mut die.bytes, abbrev);
             if !sd.is_anonymous {
-                push_string(&mut die.bytes, &sd.name);
+                die.push_str(strs, &sd.name);
             }
             write_uleb128(&mut die.bytes, sd.size as u64);
             for m in member_plan(structs, sd) {
@@ -2218,13 +2288,13 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
                     // offset within it.
                     let data_bit_offset = (f.offset as u64) * 8 + f.bit_offset as u64;
                     write_uleb128(&mut die.bytes, ABBREV_BITFIELD_MEMBER);
-                    push_string(&mut die.bytes, &f.name);
+                    die.push_str(strs, &f.name);
                     die.push_ref(field_type);
                     write_uleb128(&mut die.bytes, data_bit_offset);
                     write_uleb128(&mut die.bytes, f.bit_width as u64);
                 } else {
                     write_uleb128(&mut die.bytes, ABBREV_MEMBER);
-                    push_string(&mut die.bytes, &f.name);
+                    die.push_str(strs, &f.name);
                     die.push_ref(field_type);
                     write_uleb128(&mut die.bytes, f.offset as u64);
                 }
@@ -2271,7 +2341,7 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode) -> DieBuf {
                 None => ABBREV_TYPEDEF_VOID,
             };
             write_uleb128(&mut die.bytes, abbrev);
-            push_string(&mut die.bytes, name);
+            die.push_str(strs, name);
             if let Some(id) = inner {
                 die.push_ref(*id);
             }
@@ -2541,22 +2611,81 @@ mod abbrev_golden {
             .collect();
         assert_eq!(
             hex,
-            "0111012508130b03081b081101120710170000022e000308110112073f192719360b\
-             49130000032e010308110112073f192719360b4913401800001e2e00030811011207\
-             2719360b491300001f2e010308110112072719360b49134018000004050003080218\
-             49133a0f3b0f00000534000308021849133a0f3b0f000006240003080b0b3e0b0000\
-             070f000b0b4913000008130103080b0f000009170103080b0f00000a0d0003084913\
-             380f00001d0d004913380f00000b0d00030849136b0f0d0f00000c180000000d0101\
-             491300000e21002f0f00000f040103080b0b000010280003081c0d00001113010b0f\
-             00001217010b0f000013130003083c19000014170003083c19000015150127194913\
+            "011101250e130b030e1b0e1101120710170000022e00030e110112073f192719360b\
+             49130000032e01030e110112073f192719360b4913401800001e2e00030e11011207\
+             2719360b491300001f2e01030e110112072719360b491340180000040500030e0218\
+             49133a0f3b0f0000053400030e021849133a0f3b0f0000062400030e0b0b3e0b0000\
+             070f000b0b49130000081301030e0b0f0000091701030e0b0f00000a0d00030e4913\
+             380f00001d0d004913380f00000b0d00030e49136b0f0d0f00000c180000000d0101\
+             491300000e21002f0f00000f0401030e0b0b0000102800030e1c0d00001113010b0f\
+             00001217010b0f0000131300030e3c190000141700030e3c19000015150127194913\
              000016150127190000170500491300001821000000190f000b0b00001a3b0000001b\
-             3400030849133f1902183a0f3b0f00001c34000308491302183a0f3b0f0000203400\
-             030849133f193a0f3b0f0000213400030849133a0f3b0f0000222e00030811011207\
-             3f192719360b0000232e010308110112073f192719360b40180000242e0003081101\
-             12072719360b0000252e010308110112072719360b40180000261600030849130000\
-             271600030800002826004913000029260000002a3500491300002b350000002c3700\
+             3400030e49133f1902183a0f3b0f00001c3400030e491302183a0f3b0f0000203400\
+             030e49133f193a0f3b0f0000213400030e49133a0f3b0f0000222e00030e11011207\
+             3f192719360b0000232e01030e110112073f192719360b40180000242e00030e1101\
+             12072719360b0000252e01030e110112072719360b40180000261600030e49130000\
+             271600030e00002826004913000029260000002a3500491300002b350000002c3700\
              491300002d3700000000"
         );
+    }
+}
+
+#[cfg(test)]
+mod str_pool {
+    use super::*;
+
+    /// A fresh pool holds the empty string at offset 0, so a consumer
+    /// reading a zeroed `DW_FORM_strp` slot gets a name.
+    #[test]
+    fn empty_string_sits_at_offset_zero() {
+        let mut pool = StrPool::new();
+        assert_eq!(pool.intern(""), 0);
+        assert_eq!(pool.into_bytes(), alloc::vec![0u8]);
+    }
+
+    /// Offsets run past each string's terminator, and a repeat of a
+    /// string already in the pool returns the first copy's offset.
+    #[test]
+    fn offsets_advance_and_repeats_share_one_copy() {
+        let mut pool = StrPool::new();
+        let a = pool.intern("int");
+        let b = pool.intern("main");
+        assert_eq!((a, b), (1, 5));
+        assert_eq!(pool.intern("int"), a);
+        assert_eq!(pool.intern("main"), b);
+        assert_eq!(pool.intern(""), 0);
+        let bytes = pool.into_bytes();
+        assert_eq!(bytes, b"\0int\0main\0");
+        assert_eq!(bytes.len(), 10);
+    }
+
+    /// A string that is another's suffix keeps its own copy: the pool
+    /// dedupes on content, and suffix sharing is the linker's to do.
+    #[test]
+    fn suffix_of_another_string_gets_its_own_entry() {
+        let mut pool = StrPool::new();
+        let long = pool.intern("counter");
+        let short = pool.intern("counter"[3..].as_ref());
+        assert_ne!(long, short);
+        assert_eq!(pool.into_bytes(), b"\0counter\0nter\0");
+    }
+
+    /// Every name in a unit's `.debug_info` is a 4-byte slot bound to
+    /// the pool by a reloc whose addend is the string's offset.
+    #[test]
+    fn strp_slot_is_four_zero_bytes_plus_a_reloc() {
+        let mut out: Vec<u8> = alloc::vec![0xaa];
+        let mut relocs: Vec<DwarfReloc> = Vec::new();
+        let mut pool = StrPool::new();
+        push_strp(&mut out, &mut relocs, &mut pool, "argv");
+        push_strp(&mut out, &mut relocs, &mut pool, "argv");
+        assert_eq!(out, alloc::vec![0xaa, 0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(relocs.len(), 2);
+        assert_eq!(relocs[0].addend, relocs[1].addend);
+        assert_eq!(relocs[0].width, DwarfRelocWidth::W4);
+        assert!(matches!(relocs[0].target, DwarfRelocTarget::DebugStr));
+        assert_eq!(relocs[0].offset, DEBUG_INFO_UNIT_HEADER_SIZE + 1);
+        assert_eq!(relocs[1].offset, DEBUG_INFO_UNIT_HEADER_SIZE + 5);
     }
 }
 
@@ -2577,7 +2706,7 @@ mod address_width {
         });
         let node = catalog.node(int_ptr).clone();
         assert!(matches!(node, TypeNode::Pointer(Some(_))));
-        let die = build_type_die(&mut catalog, &node);
+        let die = build_type_die(&mut catalog, &node, &mut StrPool::new());
         // ABBREV_POINTER_TYPE is a one-byte code, then DW_AT_byte_size.
         let long = base_type_for_leaf(Ty::Long as i64, target, addr_bytes).expect("long base type");
         (die.bytes[1], long.byte_size)

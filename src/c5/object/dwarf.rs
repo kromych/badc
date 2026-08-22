@@ -2833,15 +2833,14 @@ mod tests {
     /// is listed below with the reason it cannot.
     #[test]
     fn abbrev_attribute_forms_match_the_et_rel_producer() {
-        // DW_FORM_string. The ET_REL producer inlines strings because
-        // a .debug_str offset would need a relocation to survive the
-        // merge; this one has the final .debug_str and uses strp.
-        const DW_FORM_STRING: u32 = 0x08;
         // `die_size` lays out CU-relative DIE offsets before emission,
         // so these carry a fixed-width form here where the ET_REL
         // producer, which patches refs after the fact, uses udata.
         const FIXED_WIDTH_HERE: &[u32] = &[DW_AT_BYTE_SIZE, DW_AT_DATA_MEMBER_LOCATION];
 
+        // The enum DIEs here are written after the string table is
+        // sealed, so their names stay inline where every other name in
+        // both producers is a `.debug_str` reference.
         let norm = |form: u32| {
             if form == DW_FORM_STRING {
                 DW_FORM_STRP
@@ -2857,10 +2856,7 @@ mod tests {
         }
         let mut there: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
         for (at, form) in super::super::dwarf_reloc::abbrev_attr_forms() {
-            there
-                .entry(at as u32)
-                .or_default()
-                .insert(norm(form as u32));
+            there.entry(at as u32).or_default().insert(form as u32);
         }
         for (at, forms) in &here {
             if FIXED_WIDTH_HERE.contains(at) {

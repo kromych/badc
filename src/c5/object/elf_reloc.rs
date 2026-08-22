@@ -986,15 +986,16 @@ pub(super) fn write_relocatable(
     const SHIDX_DEBUG_ABBREV: u16 = 12;
     const SHIDX_DEBUG_LINE: u16 = 13;
     const SHIDX_RELA_DEBUG_LINE: u16 = 14;
+    const SHIDX_DEBUG_STR: u16 = 15;
     // TLS sections are emitted only when the unit carries
     // `_Thread_local` storage; `has_tls` gates both the section
     // headers and the `.shstrtab` name entries.
     let has_tls = !program.tls_data.is_empty();
-    const SHIDX_TDATA: u16 = 15;
-    const SHIDX_TBSS: u16 = 16;
-    //  17 = .rela.tdata (present only when the template carries an
+    const SHIDX_TDATA: u16 = 16;
+    const SHIDX_TBSS: u16 = 17;
+    //  18 = .rela.tdata (present only when the template carries an
     //       address-constant initializer)
-    const SHIDX_RELA_TDATA: u16 = 17;
+    const SHIDX_RELA_TDATA: u16 = 18;
     let has_tls_relocs = !build.tls_data_relocs.is_empty()
         || !build.tls_extern_data_relocs.is_empty()
         || !build.tls_code_relocs.is_empty();
@@ -1002,7 +1003,7 @@ pub(super) fn write_relocatable(
     // sections when present and their relocation table when the template
     // carries one). Each `.init_array` / `.fini_array` group adds two more
     // (the array + its `.rela`), counted once the groups are known below.
-    let base_sections: usize = 15 + if has_tls { 2 } else { 0 } + usize::from(has_tls_relocs);
+    let base_sections: usize = 16 + if has_tls { 2 } else { 0 } + usize::from(has_tls_relocs);
 
     // ---- `__attribute__((section("name")))` placement plan ----
     //
@@ -1449,10 +1450,12 @@ pub(super) fn write_relocatable(
     let data_sym_idx = text_sym_idx + 1;
     let bss_sym_idx = text_sym_idx + 2;
     let (debug_line_sym_idx, debug_abbrev_sym_idx) = (text_sym_idx + 3, text_sym_idx + 4);
+    let debug_str_sym_idx = text_sym_idx + 5;
     let mut fixed_section_shndx = alloc::vec![SHIDX_TEXT, SHIDX_DATA, SHIDX_BSS];
     if build.debug_info {
         fixed_section_shndx.push(SHIDX_DEBUG_LINE);
         fixed_section_shndx.push(SHIDX_DEBUG_ABBREV);
+        fixed_section_shndx.push(SHIDX_DEBUG_STR);
     }
     let fixed_section_syms: Range<u64> =
         text_sym_idx..text_sym_idx + fixed_section_shndx.len() as u64;
@@ -3820,15 +3823,19 @@ pub(super) fn write_relocatable(
             .or_else(|| asm_label_symidx.get(name).map(|&i| i as u64))
             .or_else(|| defined_tls_symidx.get(name).copied())
     };
+    let dwarf_section_syms = DwarfSectionSyms {
+        text: text_sym_idx,
+        line: debug_line_sym_idx,
+        abbrev: debug_abbrev_sym_idx,
+        strs: debug_str_sym_idx,
+    };
     let mut rela_debug_info_bytes: Vec<u8> =
         Vec::with_capacity(dwarf.info_relocs.len() * ELF64_RELA_SIZE);
     for r in &dwarf.info_relocs {
         if let Some(rela) = dwarf_reloc_to_elf_rela(
             r,
             abi,
-            debug_line_sym_idx,
-            debug_abbrev_sym_idx,
-            text_sym_idx,
+            dwarf_section_syms,
             &dwarf.reloc_symbols,
             &dwarf_obj_sym_idx,
         )? {
@@ -3841,9 +3848,7 @@ pub(super) fn write_relocatable(
         if let Some(rela) = dwarf_reloc_to_elf_rela(
             r,
             abi,
-            debug_line_sym_idx,
-            debug_abbrev_sym_idx,
-            text_sym_idx,
+            dwarf_section_syms,
             &dwarf.reloc_symbols,
             &dwarf_obj_sym_idx,
         )? {
@@ -3968,6 +3973,7 @@ pub(super) fn write_relocatable(
         (SHIDX_DEBUG_ABBREV, no_dwarf),
         (SHIDX_DEBUG_LINE, no_dwarf),
         (SHIDX_RELA_DEBUG_LINE, rela_debug_line_bytes.is_empty()),
+        (SHIDX_DEBUG_STR, no_dwarf),
         (SHIDX_RELA_TDATA, rela_tdata_bytes.is_empty()),
     ];
     let dropped_below = |n: u16| -> u16 {
@@ -4031,7 +4037,7 @@ pub(super) fn write_relocatable(
     // Section name table. One entry per non-null section, in section
     // order, so the name of section `n` sits at `shndx_map(n) - 1`.
     let rp = reloc_prefix(class);
-    let fixed_names: [String; 14] = [
+    let fixed_names: [String; 15] = [
         ".text".to_string(),
         format!("{rp}.text"),
         ".data".to_string(),
@@ -4046,6 +4052,7 @@ pub(super) fn write_relocatable(
         ".debug_abbrev".to_string(),
         ".debug_line".to_string(),
         format!("{rp}.debug_line"),
+        ".debug_str".to_string(),
     ];
     let mut shstrtab_names: Vec<String> = Vec::with_capacity(num_sections);
     for (i, name) in fixed_names.iter().enumerate() {
@@ -4506,6 +4513,27 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
+
+    // .debug_str -- the unit's name pool, reached from `.debug_info`
+    // through relocated `DW_FORM_strp` slots. SHF_MERGE|SHF_STRINGS
+    // with sh_entsize 1 is what lets a linker fold across units.
+    if !no_dwarf {
+        const SHF_MERGE: u64 = 0x10;
+        const SHF_STRINGS: u64 = 0x20;
+        let debug_str_off = out.len() as u64;
+        out.extend_from_slice(&dwarf.debug_str);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_DEBUG_STR),
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_MERGE | SHF_STRINGS,
+            sh_offset: debug_str_off,
+            sh_size: dwarf.debug_str.len() as u64,
+            sh_addralign: 1,
+            sh_entsize: 1,
+            ..Default::default()
+        });
+    }
+
     // TLS sections (only when the unit carries `_Thread_local`
     // storage). `.tdata` holds the initialised slice
     // `tls_data[..tls_init_size]`; `.tbss` is the zero-fill
@@ -5033,6 +5061,16 @@ fn build_badc_note(
     out
 }
 
+/// Symtab indices of the `STT_SECTION` entries a DWARF relocation
+/// resolves against.
+#[derive(Clone, Copy)]
+struct DwarfSectionSyms {
+    text: u64,
+    line: u64,
+    abbrev: u64,
+    strs: u64,
+}
+
 /// Translate a `DwarfReloc` (target = section kind + width) into
 /// an `Elf64Rela`. The reloc type comes from `(width, machine)`:
 /// 32-bit slots use `R_X86_64_32` / `R_AARCH64_ABS32`, 64-bit
@@ -5047,17 +5085,16 @@ fn build_badc_note(
 fn dwarf_reloc_to_elf_rela(
     r: &DwarfReloc,
     abi: RelocAbi,
-    debug_line_sym_idx: u64,
-    debug_abbrev_sym_idx: u64,
-    text_sym_idx: u64,
+    syms: DwarfSectionSyms,
     reloc_symbols: &[String],
     obj_sym_idx: &dyn Fn(&str) -> Option<u64>,
 ) -> Result<Option<Elf64Rela>, C5Error> {
     let named = |i: u32| obj_sym_idx(reloc_symbols.get(i as usize).map(|s| s.as_str())?);
     let sym_idx = match r.target {
-        DwarfRelocTarget::Text => text_sym_idx,
-        DwarfRelocTarget::DebugLine => debug_line_sym_idx,
-        DwarfRelocTarget::DebugAbbrev => debug_abbrev_sym_idx,
+        DwarfRelocTarget::Text => syms.text,
+        DwarfRelocTarget::DebugLine => syms.line,
+        DwarfRelocTarget::DebugAbbrev => syms.abbrev,
+        DwarfRelocTarget::DebugStr => syms.strs,
         DwarfRelocTarget::Symbol(i) | DwarfRelocTarget::ThreadLocalSymbol(i) => match named(i) {
             Some(idx) => idx,
             None => return Ok(None),

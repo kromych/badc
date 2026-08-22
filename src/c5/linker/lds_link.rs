@@ -34,6 +34,7 @@ use crate::c5::error::C5Error;
 use super::comdat::{self, SecId};
 use super::dynamic::{self, DynSym, DynTables, HashStyle, VerDef};
 use super::eh_frame;
+use super::erratum;
 use super::gnu_property;
 use super::lds::{
     AssignOp, Assignment, BinOp, Command, DataWidth, Expr, InputSpec, LinkerScript, OutputSection,
@@ -702,6 +703,9 @@ pub struct LdsOptions {
     pub rpath: Vec<String>,
     /// `--enable-new-dtags`: record the search path as `DT_RUNPATH`.
     pub new_dtags: bool,
+    /// `--fix-cortex-a53-843419`: rewrite the erratum sequences, as
+    /// ADR where the page is in range and through a veneer otherwise.
+    pub fix_cortex_a53_843419: bool,
 }
 
 impl Default for LdsOptions {
@@ -732,6 +736,7 @@ impl Default for LdsOptions {
             shared_libs: Vec::new(),
             rpath: Vec::new(),
             new_dtags: false,
+            fix_cortex_a53_843419: false,
         }
     }
 }
@@ -802,6 +807,9 @@ enum ChunkSrc {
     Bytes(Vec<u8>),
     /// Fill pattern applied over the range.
     Pad(Vec<u8>),
+    /// Zero-initialized area reserved for erratum workaround veneers,
+    /// written after relocations settle the instruction bytes.
+    Veneers,
 }
 
 /// Attachment of an expression value / symbol. A plain number and an
@@ -1097,6 +1105,16 @@ pub struct LdsLinker<'a> {
     /// Merged `.note.gnu.property` body, empty when no input carries a
     /// property that survives the merge.
     gnu_property: Vec<u8>,
+    /// Per output section, bytes reserved after its last input piece
+    /// for erratum veneers; multiples of the page size so the insertion
+    /// preserves every following page offset and the site set with it.
+    veneer_reserve: BTreeMap<usize, u64>,
+    /// Veneer symbols the fix pass placed: (name, output section,
+    /// address).
+    veneer_syms: Vec<(String, usize, u64)>,
+    /// Per input section, its code ranges from `$x`/`$d` mapping
+    /// symbols; a section absent here is scanned whole.
+    code_spans: HashMap<usize, Vec<(u64, u64)>>,
 }
 
 /// Where each symbol landed in `build_symtab`'s output, for resolving
@@ -1312,6 +1330,9 @@ impl<'a> LdsLinker<'a> {
             emitted: Vec::new(),
             sym_index: SymIndex::default(),
             gnu_property,
+            veneer_reserve: BTreeMap::new(),
+            veneer_syms: Vec::new(),
+            code_spans: HashMap::new(),
         };
         linker.dedup_groups();
         linker.resolve_globals()?;
@@ -1324,6 +1345,7 @@ impl<'a> LdsLinker<'a> {
         linker.build_merge_pools();
         linker.build_eh_frame_dedup();
         linker.build_imports();
+        linker.build_code_spans();
         Ok(linker)
     }
 
@@ -2758,6 +2780,7 @@ impl<'a> LdsLinker<'a> {
             converged = false;
             for _pass in 0..48 {
                 self.layout_pass(false)?;
+                self.a53_size_reserve();
                 let fp = self.fingerprint();
                 if prev_fingerprint.as_ref() == Some(&fp) {
                     converged = true;
@@ -2822,7 +2845,214 @@ impl<'a> LdsLinker<'a> {
         fp.push(self.dyn_relas.len() as u64);
         fp.push(self.relr_addrs.len() as u64);
         fp.push(self.got_slots.len() as u64);
+        for (&oi, &v) in &self.veneer_reserve {
+            fp.push(oi as u64);
+            fp.push(v);
+        }
         fp
+    }
+
+    // -------------------------------------- erratum 843419 workaround
+
+    fn a53_active(&self) -> bool {
+        self.machine == EM_AARCH64 && self.opts.fix_cortex_a53_843419
+    }
+
+    /// Code ranges from `$x`/`$d` mapping symbols. Bytes before the
+    /// first mapping symbol count as code, as does a section carrying
+    /// none (LLD's reading; ld skips unmapped sections entirely).
+    fn build_code_spans(&mut self) {
+        if !self.a53_active() {
+            return;
+        }
+        let mapping = |name: &str, tag: &str| {
+            name == tag || (name.starts_with(tag) && name[tag.len()..].starts_with('.'))
+        };
+        for obj_i in 0..self.objects.len() {
+            let o = &self.objects[obj_i];
+            let mut per_sec: HashMap<usize, Vec<(u64, bool)>> = HashMap::new();
+            for sym in &o.symbols {
+                if sym.binding() != STB_LOCAL {
+                    continue;
+                }
+                let code = mapping(&sym.name, "$x");
+                if !code && !mapping(&sym.name, "$d") {
+                    continue;
+                }
+                if let Some(&sec) = o.shndx_map.get(&sym.shndx) {
+                    per_sec.entry(sec).or_default().push((sym.value, code));
+                }
+            }
+            for (sec, mut marks) in per_sec {
+                let size = o.sections[sec].size;
+                marks.sort_unstable();
+                let mut spans: Vec<(u64, u64)> = Vec::new();
+                let (mut code, mut start) = (true, 0u64);
+                for (off, c) in marks {
+                    if c == code {
+                        continue;
+                    }
+                    if code && off > start {
+                        spans.push((start, off));
+                    }
+                    (code, start) = (c, off);
+                }
+                if code && size > start {
+                    spans.push((start, size));
+                }
+                let i = self.insec_index(obj_i, sec);
+                self.code_spans.insert(i, spans);
+            }
+        }
+    }
+
+    /// Erratum sites of one placed input chunk, as offsets into the
+    /// input section. The scan reads the input bytes: relocations only
+    /// rewrite immediate fields, so sizing and the fix pass, before
+    /// and after they apply, see one site set.
+    fn a53_sites(&self, i: usize, vaddr: u64, len: u64) -> Vec<erratum::Site> {
+        let id = self.insecs[i];
+        if id.obj == self.synth_obj {
+            return Vec::new();
+        }
+        let s = &self.objects[id.obj].sections[id.sec];
+        if s.shtype != SHT_PROGBITS || s.flags & SHF_EXECINSTR == 0 {
+            return Vec::new();
+        }
+        let bytes = self.chunk_input_bytes(i);
+        let limit = (len as usize).min(bytes.len()) as u64;
+        let whole = [(0u64, limit)];
+        let spans = match self.code_spans.get(&i) {
+            Some(v) => &v[..],
+            None => &whole[..],
+        };
+        let mut sites = Vec::new();
+        for &(s, e) in spans {
+            let (s, e) = (s.min(limit), e.min(limit));
+            if e <= s {
+                continue;
+            }
+            for site in erratum::scan(&bytes[s as usize..e as usize], vaddr + s) {
+                sites.push(erratum::Site {
+                    adrp_off: site.adrp_off + s,
+                    ldst_off: site.ldst_off + s,
+                });
+            }
+        }
+        sites
+    }
+
+    /// Between passes: size each executable output section's veneer
+    /// area from the sites its current addresses expose. Every site
+    /// takes a slot, as under ld, since whether ADR reach spares the
+    /// veneer is known only once relocations are applied.
+    fn a53_size_reserve(&mut self) {
+        if !self.a53_active() {
+            return;
+        }
+        let mut reserve: BTreeMap<usize, u64> = BTreeMap::new();
+        for oi in 0..self.outs.len() {
+            let o = &self.outs[oi];
+            if !o.alloc || o.flags & SHF_EXECINSTR == 0 || o.shtype == SHT_NOBITS {
+                continue;
+            }
+            let mut n = 0u64;
+            for (off, len, src) in &o.chunks {
+                if let ChunkSrc::Input(i) = src {
+                    n += self.a53_sites(*i, o.addr + off, *len).len() as u64;
+                }
+            }
+            if n > 0 {
+                reserve.insert(oi, align_up(8 * n, 0x1000));
+            }
+        }
+        self.veneer_reserve = reserve;
+    }
+
+    /// Final pass over the relocated bytes: rewrite each site's ADRP as
+    /// ADR when its page is in ADR range, otherwise move the dependent
+    /// load/store into a veneer slot ending in a branch back and put a
+    /// branch to the slot in its place, as ld's workaround does.
+    fn a53_apply_fix(&mut self, contents: &mut HashMap<usize, Vec<u8>>) {
+        if !self.a53_active() {
+            return;
+        }
+        let rd32 = |b: &[u8], o: usize| u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]);
+        let wr32 = |b: &mut [u8], o: usize, v: u32| b[o..o + 4].copy_from_slice(&v.to_le_bytes());
+        let branch = |from: u64, to: u64| {
+            let d = to.wrapping_sub(from) as i64;
+            (-(1i64 << 27)..(1i64 << 27))
+                .contains(&d)
+                .then_some(0x1400_0000u32 | (((d >> 2) as u32) & 0x03ff_ffff))
+        };
+        for oi in 0..self.outs.len() {
+            let area = self.outs[oi]
+                .chunks
+                .iter()
+                .find_map(|(o, l, s)| matches!(s, ChunkSrc::Veneers).then_some((*o, *l)));
+            let Some((area_off, area_len)) = area else {
+                continue;
+            };
+            let sec_addr = self.outs[oi].addr;
+            let mut fixes: Vec<(u64, u64, String)> = Vec::new();
+            for (off, len, src) in &self.outs[oi].chunks {
+                let ChunkSrc::Input(i) = src else { continue };
+                let id = self.insecs[*i];
+                for s in self.a53_sites(*i, sec_addr + off, *len) {
+                    // ld names each veneer after the input section
+                    // identity and the dependent load/store's offset.
+                    let name = format!("e843419@{:04x}_{:08x}_{:x}", id.obj, id.sec, s.ldst_off);
+                    fixes.push((off + s.adrp_off, off + s.ldst_off, name));
+                }
+            }
+            let Some(buf) = contents.get_mut(&oi) else {
+                continue;
+            };
+            let mut slot = 0u64;
+            for (adrp_off, ldst_off, name) in fixes {
+                let insn = rd32(buf, adrp_off as usize);
+                if !erratum::is_adrp(insn) {
+                    self.errors.push(format!(
+                        "erratum 843419 site at {:#x} lost its ADRP",
+                        sec_addr + adrp_off
+                    ));
+                    continue;
+                }
+                let place = sec_addr + adrp_off;
+                let imm = erratum::adrp_page_delta(insn) - (place & 0xfff) as i64;
+                if (erratum::ADR_MIN..=erratum::ADR_MAX).contains(&imm) {
+                    wr32(
+                        buf,
+                        adrp_off as usize,
+                        erratum::encode_adr(insn & 0x1f, imm),
+                    );
+                    continue;
+                }
+                if (slot + 1) * 8 > area_len {
+                    self.errors
+                        .push("erratum 843419 veneer area smaller than its site count".to_string());
+                    break;
+                }
+                let slot_off = area_off + 8 * slot;
+                slot += 1;
+                let ldst_addr = sec_addr + ldst_off;
+                let slot_addr = sec_addr + slot_off;
+                let (Some(to), Some(back)) = (
+                    branch(ldst_addr, slot_addr),
+                    branch(slot_addr + 4, ldst_addr + 4),
+                ) else {
+                    self.errors.push(format!(
+                        "erratum 843419 veneer out of branch range at {ldst_addr:#x}"
+                    ));
+                    continue;
+                };
+                let ldst = rd32(buf, ldst_off as usize);
+                wr32(buf, slot_off as usize, ldst);
+                wr32(buf, slot_off as usize + 4, back);
+                wr32(buf, ldst_off as usize, to);
+                self.veneer_syms.push((name, oi, slot_addr));
+            }
+        }
     }
 
     fn layout_pass(&mut self, final_pass: bool) -> Result<(), C5Error> {
@@ -2987,6 +3217,13 @@ impl<'a> LdsLinker<'a> {
         let code = self.section_input_flags(oi) & SHF_EXECINSTR != 0;
         let machine = self.machine;
         let mut file_bytes = false;
+        // The veneer area sits after the section's last input piece, as
+        // ld attaches its stub section, so closing statements still
+        // bound it.
+        let veneer_len = self.veneer_reserve.get(&oi).copied().unwrap_or(0);
+        let last_inputs_pi = (0..pieces_len)
+            .rev()
+            .find(|&pi| matches!(self.outs[oi].pieces[pi], Piece::Inputs(_)));
         for pi in 0..pieces_len {
             match self.outs[oi].pieces[pi].clone() {
                 Piece::Inputs(v) => {
@@ -3032,6 +3269,21 @@ impl<'a> LdsLinker<'a> {
                             file_bytes = true;
                         }
                         off += sz;
+                        end = end.max(off);
+                        if alloc {
+                            self.dot = start + off;
+                        }
+                    }
+                    if veneer_len > 0 && Some(pi) == last_inputs_pi {
+                        let aligned = align_up(off, 4);
+                        if aligned > off && !all_nobits {
+                            let len = aligned - off;
+                            let pad = pad_bytes(&fill_bytes, machine, code, len);
+                            chunks.push((off, len, ChunkSrc::Pad(pad)));
+                        }
+                        chunks.push((aligned, veneer_len, ChunkSrc::Veneers));
+                        file_bytes = true;
+                        off = aligned + veneer_len;
                         end = end.max(off);
                         if alloc {
                             self.dot = start + off;
@@ -4678,6 +4930,7 @@ impl<'a> LdsLinker<'a> {
                             }
                         }
                     }
+                    ChunkSrc::Veneers => {}
                 }
             }
             contents.insert(oi, buf);
@@ -4688,6 +4941,7 @@ impl<'a> LdsLinker<'a> {
         let relr_set: HashSet<u64> = self.relr_addrs.iter().copied().collect();
         self.apply_relocations(&mut contents, &relr_set)?;
         self.fill_synth_contents(&mut contents, &relr_set, &out_shndx);
+        self.a53_apply_fix(&mut contents);
 
         // Entry point.
         let entry_name: Option<String> = self
@@ -5998,6 +6252,16 @@ impl<'a> LdsLinker<'a> {
                     syms.push(fs);
                 }
             }
+        }
+        for (name, oi, addr) in &self.veneer_syms {
+            syms.push(FinalSym {
+                name: name.clone(),
+                info: (STB_LOCAL << 4) | STT_FUNC,
+                other: 0,
+                shndx: out_shndx(*oi),
+                value: *addr,
+                size: 8,
+            });
         }
         // A symbol's visibility aggregates over every reference and
         // definition; hidden or internal globals cannot be preempted
@@ -7975,6 +8239,220 @@ SECTIONS {
         let e = format!("{e}");
         assert!(e.contains("R_AARCH64_MOVW_SABS_G2"), "{e}");
         assert!(e.contains("overflow against `tgt'"), "{e}");
+    }
+
+    // ---- Cortex-A53 erratum 843419 (`--fix-cortex-a53-843419`) ----
+    // The expectations mirror GNU ld's workaround: the ADRP becomes an
+    // ADR where the addressed page is within a megabyte, otherwise the
+    // dependent load/store is replaced by a branch to an 8-byte veneer
+    // holding that load/store and a branch back, the veneer area is
+    // padded to a page so following page offsets do not move, and each
+    // veneer takes an `e843419@...` local symbol.
+
+    const A53_ADRP_FAR: u32 = 0x9000_1000; // adrp x0, +0x200 pages
+    const A53_ADRP_NEAR: u32 = 0xb000_0000; // adrp x0, +1 page
+    const A53_LDR: u32 = 0xf940_0041; // ldr x1, [x2]
+    const A53_DEP_LDR: u32 = 0xf940_0403; // ldr x3, [x0, #8]
+    const A53_RET: u32 = 0xd65f_03c0;
+
+    fn a53_object(insns: &[u32]) -> Vec<LdsObject> {
+        let body: Vec<u8> = insns.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &body)
+            .sec(
+                ".after",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &A53_RET.to_le_bytes(),
+            )
+            .sym("f", STB_GLOBAL, STT_FUNC, 0, 0, body.len() as u64);
+        alloc::vec![parse_lds_object("a.o", o.build(EM_AARCH64)).expect("a.o parses")]
+    }
+
+    fn a53_link(base: u64, insns: &[u32], fix: bool) -> LdsResult {
+        let script = parse_linker_script(&format!(
+            "SECTIONS {{ . = {base:#x}; .text : {{ *(.text) }} .after : {{ *(.after) }} }}"
+        ))
+        .expect("script parses");
+        let opts = LdsOptions {
+            emit: LdsEmit::Exec,
+            max_page_size: 0x1000,
+            fix_cortex_a53_843419: fix,
+            ..Default::default()
+        };
+        link_with_script(&script, a53_object(insns), &opts).expect("link succeeds")
+    }
+
+    /// `n` words at `sec_addr + delta`, `sec_addr` naming the section.
+    fn a53_words(image: &[u8], sec_addr: u64, delta: usize, n: usize) -> Vec<u32> {
+        let off = section_file_off(image, sec_addr) + delta;
+        (0..n)
+            .map(|i| {
+                u32::from_le_bytes(
+                    image[off + i * 4..off + i * 4 + 4]
+                        .try_into()
+                        .expect("word"),
+                )
+            })
+            .collect()
+    }
+
+    fn a53_sec(image: &[u8], name: &str) -> (u64, u64) {
+        readelf_sections(image)
+            .into_iter()
+            .find(|s| s.0 == name)
+            .map(|s| (s.2, s.3))
+            .expect("section present")
+    }
+
+    /// The dependent load/store is routed through a veneer when the
+    /// ADRP page is beyond ADR reach; `ld --fix-cortex-a53-843419`
+    /// leaves the ADRP in place and branches the load/store out.
+    #[test]
+    fn a53_veneer_redirects_the_dependent_load() {
+        let insns = [A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET];
+        let res = a53_link(0xff8, &insns, true);
+        assert_eq!(a53_sec(&res.image, ".text"), (0xff8, 0x1010));
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0, 4),
+            alloc::vec![A53_ADRP_FAR, A53_LDR, 0x1400_0002, A53_RET],
+        );
+        // Veneer at the reserved area: the load/store, then a branch
+        // back to the instruction after its original slot.
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0x10, 2),
+            alloc::vec![A53_DEP_LDR, 0x17ff_fffe],
+        );
+        let syms = image_symbols(&res.image);
+        assert!(
+            syms.iter()
+                .any(|s| s.0.starts_with("e843419@") && s.0.ends_with("_8") && s.1 == 0x1008),
+            "veneer symbol missing: {syms:?}"
+        );
+        // The insertion is a whole page: the following section moves by
+        // exactly 0x1000 and keeps its page offset.
+        let plain = a53_link(0xff8, &insns, false);
+        let (fixed, moved) = (
+            a53_sec(&res.image, ".after").0,
+            a53_sec(&plain.image, ".after").0,
+        );
+        assert_eq!(fixed - moved, 0x1000);
+        assert_eq!(fixed & 0xfff, moved & 0xfff);
+    }
+
+    /// With one non-branch instruction between the two accesses the
+    /// sequence still matches and the fourth instruction is veneered.
+    #[test]
+    fn a53_intervening_instruction_form_is_veneered() {
+        let insns = [A53_ADRP_FAR, A53_LDR, 0xd503_201f, A53_DEP_LDR];
+        let res = a53_link(0xff8, &insns, true);
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0, 4),
+            alloc::vec![A53_ADRP_FAR, A53_LDR, 0xd503_201f, 0x1400_0001],
+        );
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0x10, 2),
+            alloc::vec![A53_DEP_LDR, 0x17ff_ffff],
+        );
+        let syms = image_symbols(&res.image);
+        assert!(
+            syms.iter()
+                .any(|s| s.0.starts_with("e843419@") && s.0.ends_with("_c"))
+        );
+    }
+
+    /// A page within ADR range rewrites the ADRP in place, as ld's
+    /// default (`full`) mode does; the reserved slot stays empty the
+    /// way ld leaves its unused stub.
+    #[test]
+    fn a53_adr_rewrite_when_the_page_is_reachable() {
+        let insns = [A53_ADRP_NEAR, A53_LDR, A53_DEP_LDR, A53_RET];
+        let res = a53_link(0xff8, &insns, true);
+        // adr x0, #8: 0x1000 (the page) - 0xff8 (the site).
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0, 4),
+            alloc::vec![0x1000_0040, A53_LDR, A53_DEP_LDR, A53_RET],
+        );
+        assert_eq!(a53_sec(&res.image, ".text"), (0xff8, 0x1010));
+        assert_eq!(a53_words(&res.image, 0xff8, 0x10, 2), alloc::vec![0, 0]);
+        let syms = image_symbols(&res.image);
+        assert!(!syms.iter().any(|s| s.0.starts_with("e843419@")));
+    }
+
+    /// Sequences the erratum conditions exclude stay untouched: an
+    /// ADRP off the last two word slots of a page, a branch in the
+    /// intervening slot, a first load/store writing the ADRP register,
+    /// and a dependent access based elsewhere. `ld` patches none of
+    /// these.
+    #[test]
+    fn a53_non_matching_sequences_are_left_alone() {
+        let cases: [(u64, [u32; 4]); 4] = [
+            (0xff4, [A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET]),
+            (0xff8, [A53_ADRP_FAR, A53_LDR, 0x1400_0001, A53_DEP_LDR]),
+            (0xff8, [A53_ADRP_FAR, 0xf940_0040, A53_DEP_LDR, A53_RET]),
+            (0xff8, [A53_ADRP_FAR, A53_LDR, 0xf940_0443, A53_RET]),
+        ];
+        for (base, insns) in cases {
+            let res = a53_link(base, &insns, true);
+            assert_eq!(a53_sec(&res.image, ".text"), (base, 0x10), "at {base:#x}");
+            assert_eq!(a53_words(&res.image, base, 0, 4), insns.to_vec());
+            assert!(
+                !image_symbols(&res.image)
+                    .iter()
+                    .any(|s| s.0.starts_with("e843419@"))
+            );
+        }
+    }
+
+    /// Sites on consecutive pages take consecutive 8-byte slots in one
+    /// page-sized area, so the area still moves nothing off its page
+    /// offset.
+    #[test]
+    fn a53_multiple_sites_pack_into_one_area() {
+        let mut insns = alloc::vec![A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET];
+        insns.extend(core::iter::repeat_n(0xd503_201fu32, 1020));
+        insns.extend([A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET]);
+        let res = a53_link(0xff8, &insns, true);
+        assert_eq!(a53_sec(&res.image, ".text"), (0xff8, 0x2010));
+        let mut veneers: Vec<(String, u64)> = image_symbols(&res.image)
+            .into_iter()
+            .filter(|s| s.0.starts_with("e843419@"))
+            .map(|s| (s.0, s.1))
+            .collect();
+        veneers.sort_by_key(|v| v.1);
+        assert_eq!(veneers.len(), 2, "{veneers:?}");
+        assert!(veneers[0].0.ends_with("_8") && veneers[0].1 == 0x2008);
+        assert!(veneers[1].0.ends_with("_1008") && veneers[1].1 == 0x2010);
+        // Both dependent loads branch forward into their slots.
+        assert_eq!(a53_words(&res.image, 0xff8, 8, 1), alloc::vec![0x1400_0402]);
+        assert_eq!(
+            a53_words(&res.image, 0xff8, 0x1008, 1),
+            alloc::vec![0x1400_0004]
+        );
+    }
+
+    /// A `$d` mapping symbol marks the sequence as data, which the
+    /// scan skips as ld and LLD skip their data spans.
+    #[test]
+    fn a53_data_spans_are_not_scanned() {
+        let insns = [A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET];
+        let body: Vec<u8> = insns.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &body)
+            .sym("$d", STB_LOCAL, STT_NOTYPE, 0, 0, 0);
+        let objs = alloc::vec![parse_lds_object("a.o", o.build(EM_AARCH64)).expect("parses")];
+        let script =
+            parse_linker_script("SECTIONS { . = 0xff8; .text : { *(.text) } }").expect("parses");
+        let opts = LdsOptions {
+            emit: LdsEmit::Exec,
+            max_page_size: 0x1000,
+            fix_cortex_a53_843419: true,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("link succeeds");
+        assert_eq!(a53_sec(&res.image, ".text"), (0xff8, 0x10));
+        assert_eq!(a53_words(&res.image, 0xff8, 0, 4), insns.to_vec());
     }
 
     #[test]

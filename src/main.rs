@@ -686,6 +686,7 @@ fn run() {
     let mut ld_strip_debug = false;
     let mut discard_locals = false;
     let mut discard_none = false;
+    let mut fix_cortex_a53_843419 = false;
     // `--whole-archive` spans, as half-open ranges over the positional
     // input indexes (`args` grows one entry per positional).
     let mut wa_ranges: Vec<(usize, usize)> = Vec::new();
@@ -1406,16 +1407,7 @@ fn run() {
             | "--pic-veneer"
             | "-Bsymbolic"
             | "--no-ld-generated-unwind-info" => {}
-            "--fix-cortex-a53-843419" => {
-                // Erratum veneer generation is not implemented; the
-                // sequences the workaround rewrites must be absent.
-                // TODO: scan for adrp-at-0xff8/0xffc patterns and
-                // materialise veneers.
-                eprintln!(
-                    "badc: note: --fix-cortex-a53-843419 accepted; erratum veneers are not \
-                     generated"
-                );
-            }
+            "--fix-cortex-a53-843419" => fix_cortex_a53_843419 = true,
             // ld accepts the emulation joined (`-maarch64linux`) or
             // separate (`-m aarch64linux`).
             s @ ("-melf_x86_64" | "-maarch64linux" | "-maarch64elf") => {
@@ -1764,9 +1756,18 @@ fn run() {
             discard_none,
             emit_relocs,
             quiet,
+            fix_cortex_a53_843419,
         };
         run_script_link(opts);
         return;
+    }
+    if fix_cortex_a53_843419 {
+        // Implemented by the script-driven engine only.
+        // TODO: scan for the erratum sequences on the scriptless path.
+        eprintln!(
+            "badc: note: --fix-cortex-a53-843419 accepted; erratum veneers are not \
+             generated without -T/--script"
+        );
     }
 
     // Resolve `-l<name>` against the `-L<dir>` paths, then the standard
@@ -4111,6 +4112,7 @@ struct ScriptLinkCli {
     discard_none: bool,
     emit_relocs: bool,
     quiet: bool,
+    fix_cortex_a53_843419: bool,
 }
 
 /// Script-driven link: parse the script, read every object (pulling
@@ -4283,6 +4285,7 @@ fn run_script_link(cli: ScriptLinkCli) {
         apply_dynamic_relocs: cli.apply_dynamic_relocs,
         emit_relocs: cli.emit_relocs,
         emit_warnings: !cli.quiet,
+        fix_cortex_a53_843419: cli.fix_cortex_a53_843419,
         ..Default::default()
     };
     let res = match badc::link_with_script(&script, inputs, &opts) {

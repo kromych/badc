@@ -42,6 +42,7 @@ pub(crate) mod default_script;
 pub(crate) mod dynamic;
 #[cfg(feature = "std")]
 pub(crate) mod eh_frame;
+pub(crate) mod erratum;
 #[cfg(feature = "std")]
 pub(crate) mod gnu_property;
 #[cfg(feature = "std")]

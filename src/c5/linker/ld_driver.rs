@@ -118,6 +118,8 @@ struct LdArgs {
     /// `-Bstatic` / `-Bdynamic`: whether `-l` may resolve to a shared
     /// library. GNU ld starts dynamic and `-static` turns it off.
     search_shared: bool,
+    /// `--fix-cortex-a53-843419`: erratum workaround on final links.
+    fix_cortex_a53_843419: bool,
 }
 
 fn ld_err(msg: impl core::fmt::Display) -> i32 {
@@ -267,6 +269,7 @@ pub fn run_ld(args: &[String]) -> i32 {
         rpath: Vec::new(),
         new_dtags: true,
         search_shared: true,
+        fix_cortex_a53_843419: false,
     };
     let mut it = args.iter().map(String::as_str);
     let next_of = |it: &mut dyn Iterator<Item = &str>, flag: &str| -> Result<String, i32> {
@@ -412,14 +415,7 @@ pub fn run_ld(args: &[String]) -> i32 {
                 let _ = next_of(&mut it, arg);
             }
             s if s.starts_with("-plugin-opt") => {}
-            "--fix-cortex-a53-843419" => {
-                // TODO: scan for the affected adrp page offsets and
-                // materialise veneers.
-                eprintln!(
-                    "badc-ld: note: --fix-cortex-a53-843419 accepted; erratum veneers are \
-                     not generated"
-                );
-            }
+            "--fix-cortex-a53-843419" => a.fix_cortex_a53_843419 = true,
             // Accepted with GNU semantics for ET_REL output: these
             // keywords shape final images only and change nothing
             // about a relocatable link.
@@ -1087,6 +1083,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         shared_libs: libs,
         rpath: a.rpath.clone(),
         new_dtags: a.new_dtags,
+        fix_cortex_a53_843419: a.fix_cortex_a53_843419,
     };
     let res = match super::lds_link::link_with_script(&script, objs, &opts) {
         Ok(r) => r,

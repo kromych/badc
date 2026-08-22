@@ -1695,10 +1695,12 @@ impl Compiler {
                 self.next()?;
                 if d.is_lvalue {
                     // Array element `a[N]` at `&a + N*sizeof(elem)`. A field's
-                    // `ty` is its element type, so scale by that.
+                    // `ty` is its element type, so scale by that; an
+                    // array-aggregate tag peels one dimension per subscript.
+                    let (next_ty, stride) = self.const_subscript_step(d.ty);
                     d = ConstDesig {
-                        value: d.value + n * self.size_of_type(d.ty) as i64,
-                        ty: d.ty,
+                        value: d.value + n * stride,
+                        ty: next_ty,
                         is_lvalue: true,
                         root: d.root,
                     };
@@ -1738,6 +1740,28 @@ impl Compiler {
             ));
         }
         Ok(())
+    }
+
+    /// One subscript applied to a designated object: an array-aggregate
+    /// tag peels a dimension -- the designated object becomes the row of
+    /// the remaining ones (or the element) and the stride is its size.
+    /// Any other type designates by element convention and strides by
+    /// itself.
+    fn const_subscript_step(&mut self, ty: i64) -> (i64, i64) {
+        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            let id = struct_id_of(ty);
+            if id < self.structs.len() && self.structs[id].is_array {
+                let f = &self.structs[id].fields[0];
+                let (elem, fdims) = (f.ty, f.array_dims.clone());
+                let next = if fdims.len() >= 2 {
+                    self.array_agg_type(elem, &fdims[1..])
+                } else {
+                    elem
+                };
+                return (next, (self.size_of_type(next) as i64).max(1));
+            }
+        }
+        (ty, (self.size_of_type(ty) as i64).max(1))
     }
 
     fn reject_automatic_compound_literal_root(&self, root: ConstRoot) -> Result<(), C5Error> {
@@ -1791,22 +1815,41 @@ impl Compiler {
             if self.lex_is_type_start() {
                 // Cast `(T ...*) operand` -- a (usually pointer) rvalue.
                 let mut ty = self.parse_decl_base_type()?;
+                let mut cast_ptrs: i64 = 0;
                 while self.lex.tk == Token::MulOp {
                     self.next()?;
                     ty += Ty::Ptr as i64;
+                    cast_ptrs += 1;
                     while self.lex.tk == Token::TypeQual {
                         self.next()?;
                     }
                 }
+                let base_dims = self.take_typedef_literal_dims(cast_ptrs);
                 // C99 6.5.2.5 array-typed compound literal `(T[]){ ... }`: an
                 // anonymous static array. Its name decays to the address of
-                // the first element, so the object is an lvalue of element
-                // type `ty` that a following `[i].member` chain designates.
-                if self.lex.tk == Token::Brak {
-                    let (off, sym) = self.emit_array_compound_literal_body(ty)?;
+                // the first element, so the object is an lvalue that a
+                // following `[i].member` chain designates -- typed by the
+                // element for one dimension, by the array-aggregate tag for
+                // more so each subscript strides by its row.
+                let is_typedef_literal = !base_dims.is_empty() && self.lex.tk == ')' && {
+                    let snap = self.lex.snapshot();
+                    let staged = self.data.len();
+                    self.next()?;
+                    let hit = self.lex.tk == '{';
+                    self.restore_lex(snap);
+                    self.truncate_data(staged);
+                    hit
+                };
+                if self.lex.tk == Token::Brak || is_typedef_literal {
+                    let (off, sym, dims) = self.emit_array_compound_literal_body(ty, &base_dims)?;
+                    let desig_ty = if dims.len() >= 2 {
+                        self.array_agg_type(ty, &dims)
+                    } else {
+                        ty
+                    };
                     return Ok(ConstDesig {
                         value: off,
-                        ty,
+                        ty: desig_ty,
                         is_lvalue: true,
                         root: ConstRoot::Data(sym),
                     });
@@ -2008,9 +2051,11 @@ impl Compiler {
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.typedef_fn_proto = None;
                 self.pending.fn_ptr_param_types = None;
+                let mut cast_ptrs: i64 = 0;
                 while self.lex.tk == Token::MulOp {
                     self.next()?;
                     target_ty += Ty::Ptr as i64;
+                    cast_ptrs += 1;
                     while self.lex.tk == Token::TypeQual {
                         self.next()?;
                     }
@@ -2018,13 +2063,28 @@ impl Compiler {
                 while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
+                let base_dims = self.take_typedef_literal_dims(cast_ptrs);
                 // C99 6.5.2.5 array-typed compound literal `(T[]){...}` in a
                 // value context: the literal decays to the address of its
-                // anonymous static object; a `[i]` subscript reads the staged
+                // anonymous static object. A subscript chain selects a row
+                // per leading index; the final index reads the staged
                 // element back as the constant value.
-                if self.lex.tk == Token::Brak {
-                    let (off, sym) = self.emit_array_compound_literal_body(target_ty)?;
-                    if self.lex.tk == Token::Brak {
+                let is_typedef_literal = !base_dims.is_empty() && self.lex.tk == ')' && {
+                    let snap = self.lex.snapshot();
+                    let staged = self.data.len();
+                    self.next()?;
+                    let hit = self.lex.tk == '{';
+                    self.restore_lex(snap);
+                    self.truncate_data(staged);
+                    hit
+                };
+                if self.lex.tk == Token::Brak || is_typedef_literal {
+                    let (off, sym, dims) =
+                        self.emit_array_compound_literal_body(target_ty, &base_dims)?;
+                    let elem_size = (self.size_of_type(target_ty) as i64).max(1);
+                    let mut base = off;
+                    let mut level = 0usize;
+                    while self.lex.tk == Token::Brak && level < dims.len() {
                         self.next()?;
                         let n = self.parse_const_expr_cond_val()?.as_int();
                         if self.lex.tk != ']' {
@@ -2033,14 +2093,22 @@ impl Compiler {
                             );
                         }
                         self.next()?;
-                        return self.read_staged_const_element(target_ty, off, n);
+                        level += 1;
+                        if level == dims.len() {
+                            return self.read_staged_const_element(target_ty, base, n);
+                        }
+                        let span: i64 = dims[level..].iter().product::<i64>().max(1);
+                        base += n * span * elem_size;
                     }
+                    // Fewer subscripts than dimensions: the address of a
+                    // row, whose pointer strides by the remaining span.
                     let root = ConstRoot::Data(sym);
                     self.reject_automatic_compound_literal_root(root)?;
+                    let span: i64 = dims[level + 1..].iter().product::<i64>().max(1);
                     return Ok(ConstVal::Addr(ConstAddr {
-                        value: off,
+                        value: base,
                         root,
-                        elem_size: (self.size_of_type(target_ty) as i64).max(1),
+                        elem_size: span * elem_size,
                     }));
                 }
                 // Parenthesized abstract declarator: `(*)(args)` (function

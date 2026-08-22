@@ -1528,23 +1528,43 @@ impl Compiler {
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.typedef_fn_proto = None;
                 self.pending.fn_ptr_param_types = None;
+                let mut cast_ptrs: i64 = 0;
                 while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
                     if self.lex.tk == Token::MulOp {
                         cast_ty += Ty::Ptr as i64;
+                        cast_ptrs += 1;
                     }
                     self.next()?;
                 }
+                let base_dims = self.take_typedef_literal_dims(cast_ptrs);
                 // C99 6.5.2.5 array-typed compound literal:
                 // `(T[]){...}` / `(T[N]){...}`. The array name decays to a
                 // pointer to its first element, so the literal contributes
                 // an anonymous static array and the element stores its
-                // address. Distinguished from a plain cast by the `[`.
+                // address. Distinguished from a plain cast by the `[`, or
+                // for an array typedef (`(row){...}`) by the `{` past `)`.
                 if self.lex.tk == Token::Brak {
-                    let r = self.parse_array_compound_literal(cast_ty)?;
-                    if let (_, InitElemReloc::Data(Some(sym))) = r {
+                    let (v, reloc, _) = self.parse_array_compound_literal(cast_ty, &base_dims)?;
+                    if let InitElemReloc::Data(Some(sym)) = reloc {
                         self.reject_automatic_compound_literal(sym)?;
                     }
-                    return Ok(r);
+                    return Ok((v, reloc));
+                }
+                if !base_dims.is_empty() && self.lex.tk == ')' {
+                    let paren_snap = self.lex.snapshot();
+                    let paren_data = self.data.len();
+                    self.next()?;
+                    let is_literal = self.lex.tk == '{';
+                    self.restore_lex(paren_snap);
+                    self.truncate_data(paren_data);
+                    if is_literal {
+                        let (v, reloc, _) =
+                            self.parse_array_compound_literal(cast_ty, &base_dims)?;
+                        if let InitElemReloc::Data(Some(sym)) = reloc {
+                            self.reject_automatic_compound_literal(sym)?;
+                        }
+                        return Ok((v, reloc));
+                    }
                 }
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
                 // brace holds a single value; the result is that value
@@ -2050,16 +2070,40 @@ impl Compiler {
         ))
     }
 
+    /// Drain the array-typedef base carriers into the dimension list an
+    /// array compound literal appends innermost (C99 6.7.7: the typedef
+    /// name denotes the array type, so its bounds sit below any bracket
+    /// the literal's type name adds). Empty when a `*` absorbed the
+    /// typedef array into the pointee (`ptr_levels > 0`) or the base is
+    /// not a complete array.
+    pub(super) fn take_typedef_literal_dims(&mut self, ptr_levels: i64) -> alloc::vec::Vec<i64> {
+        let extent = core::mem::take(&mut self.pending.typedef_base_array_size);
+        let dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
+        if extent <= 0 || ptr_levels > 0 {
+            return alloc::vec::Vec::new();
+        }
+        if dims.is_empty() {
+            alloc::vec![extent]
+        } else {
+            dims
+        }
+    }
+
     /// C99 6.5.2.5 array-typed compound literal in a static initializer:
     /// `(T[]){ ... }` / `(T[N]){ ... }`. The array name decays to a
     /// pointer to its first element, so the literal contributes an
     /// anonymous static array and the enclosing element stores its
     /// address. On entry the current token is the leading `[` of the
-    /// array declarator; `elem_ty` is the element type.
+    /// array declarator, or the closing `)` when `base_dims` (an array
+    /// typedef's own dimensions, appended innermost) supplies the whole
+    /// shape; `elem_ty` is the element type. Returns the offset, the
+    /// relocation, and the resolved dimensions (outermost first) for
+    /// the subscript paths.
     fn parse_array_compound_literal(
         &mut self,
         elem_ty: i64,
-    ) -> Result<(i128, InitElemReloc), C5Error> {
+        base_dims: &[i64],
+    ) -> Result<(i128, InitElemReloc, alloc::vec::Vec<i64>), C5Error> {
         // Bracket run, outermost first; only the leading dimension may be
         // omitted (C99 6.7.5.2) and is then completed by the initializer.
         let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
@@ -2081,6 +2125,7 @@ impl Compiler {
             }
             self.next()?; // consume `]`
         }
+        dims.extend_from_slice(base_dims);
         if self.lex.tk != ')' {
             return Err(self.compile_err("`)` expected to close compound-literal type"));
         }
@@ -2098,18 +2143,21 @@ impl Compiler {
         // live `self.data` length. A `[N]` designator can push the count
         // past the positional entry total (C99 6.7.8p22).
         let (scanned, _) = self.scan_array_init()?;
-        let rows = self.designated_array_count(scanned, inner_span)?;
+        // The scan count tallies leaves, not rows, so it is no floor for
+        // a multi-dim literal.
+        let fallback = if inner_span > 1 { 0 } else { scanned };
+        let rows = self.designated_array_count(fallback, inner_span)?;
         let rows = rows.max(dims[0]).max(0);
         let count = (rows * inner_span) as usize;
+        let mut full_dims = alloc::vec::Vec::with_capacity(dims.len());
+        full_dims.push(rows);
+        full_dims.extend_from_slice(&dims[1..]);
         self.align_data_to_8();
         let off = self.data.len() as i64;
         for _ in 0..(count * elem_size) {
             self.data.push(0);
         }
         if elem_is_struct {
-            let mut full_dims = alloc::vec::Vec::with_capacity(dims.len());
-            full_dims.push(rows);
-            full_dims.extend_from_slice(&dims[1..]);
             self.collect_struct_array_data(elem_ty, off, &full_dims)?;
         } else {
             self.pending.init_target_array_size = count as i64;
@@ -2132,18 +2180,20 @@ impl Compiler {
             self.data.push(0);
         }
         let sym_idx = self.intern_compound_literal_symbol(off, elem_ty, (count * elem_size) as i64);
-        Ok((off as i128, InitElemReloc::Data(Some(sym_idx))))
+        Ok((off as i128, InitElemReloc::Data(Some(sym_idx)), full_dims))
     }
 
     /// Stage an array-typed compound literal `(T[]){...}` in the data segment
     /// (cursor on the leading `[` of the array declarator) and return its byte
-    /// offset and interned symbol, for the constant-expression address path.
+    /// offset, interned symbol and resolved dimensions, for the
+    /// constant-expression address path.
     pub(super) fn emit_array_compound_literal_body(
         &mut self,
         elem_ty: i64,
-    ) -> Result<(i64, usize), C5Error> {
-        match self.parse_array_compound_literal(elem_ty)? {
-            (off, InitElemReloc::Data(Some(sym))) => Ok((off as i64, sym)),
+        base_dims: &[i64],
+    ) -> Result<(i64, usize, alloc::vec::Vec<i64>), C5Error> {
+        match self.parse_array_compound_literal(elem_ty, base_dims)? {
+            (off, InitElemReloc::Data(Some(sym)), dims) => Ok((off as i64, sym, dims)),
             _ => Err(self.compile_err("array compound literal did not intern a symbol")),
         }
     }

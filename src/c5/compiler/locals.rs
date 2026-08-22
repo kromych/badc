@@ -2095,8 +2095,11 @@ impl Compiler {
                 let (scan_count, needs_runtime) = self.scan_array_init()?;
                 // C99 6.7.8p22: designators can push the size past the
                 // positional entry count; brace elision folds a flat run
-                // into one row of the inner span.
-                let rows = self.designated_array_count(scan_count, inner_span)?;
+                // into one row of the inner span. The scan count tallies
+                // leaves, not rows, so it is no floor for a multi-dim
+                // literal.
+                let fallback = if inner_span > 1 { 0 } else { scan_count };
+                let rows = self.designated_array_count(fallback, inner_span)?;
                 count = rows * inner_span;
                 slot = self.reserve_slots(self.local_storage_slots(elem_ty, count));
                 if needs_runtime {

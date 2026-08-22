@@ -2446,8 +2446,20 @@ impl Compiler {
                 if self.lex.tk == '{' {
                     // C99 6.5.2.5 compound literal: `(type){ init }`.
                     // The `(type)` parsed above is the literal's
-                    // type, not a cast operator.
-                    self.parse_block_compound_literal(t, &cast_array_dims)?;
+                    // type, not a cast operator. An array typedef's
+                    // dimensions complete the type from the inside:
+                    // `(row[2]){...}` with `typedef int row[3]` is
+                    // `int[2][3]` (C99 6.7.7); a `*` absorbed the
+                    // typedef array into the pointee instead.
+                    let mut literal_dims = cast_array_dims.clone();
+                    if cast_typedef_array > 0 && cast_ptr_levels == 0 && cast_fn_proto.is_none() {
+                        if cast_typedef_dims.is_empty() {
+                            literal_dims.push(cast_typedef_array);
+                        } else {
+                            literal_dims.extend_from_slice(&cast_typedef_dims);
+                        }
+                    }
+                    self.parse_block_compound_literal(t, &literal_dims)?;
                 } else {
                     self.expr(Token::Inc as i64)?;
                     let cast_child_ast = self.ast_acc;

@@ -2511,6 +2511,34 @@ fn address_of_a_block_scope_compound_literal_is_not_constant() {
 }
 
 #[test]
+fn multi_dim_compound_literal_dimension_constraints() {
+    // C99 6.7.5.2: only the outermost dimension of an array type may be
+    // omitted; an inner `[]` leaves the element type incomplete. Both the
+    // block-scope and the static-initializer literal paths reject it.
+    expect_compile_error(
+        "int main(void) { int (*p)[3] = (int[2][]){ { 1, 2, 3 } }; return p[0][0]; }",
+        "array type has an incomplete inner dimension",
+    );
+    expect_compile_error(
+        "static int (*p)[3] = (int[2][]){ { 1, 2, 3 } };\n\
+         int main(void) { return p[0][0]; }",
+        "array type has an incomplete inner dimension",
+    );
+    // A const-qualified object is not an integer constant expression
+    // (C99 6.6p6), so the dimension makes the literal variably sized;
+    // gcc rejects that, and the static-initializer path masks its
+    // const-object fold to match.
+    expect_compile_error(
+        "int main(void) { const int h = 2; int *p = (int[h]){ 1, 2 }; return p[0]; }",
+        "constant integer expected",
+    );
+    expect_compile_error(
+        "int main(void) { const int h = 2; static int *p = (int[h]){ 1, 2 }; return p[0]; }",
+        "constant integer expected",
+    );
+}
+
+#[test]
 fn address_of_a_thread_local_is_not_a_constant_expression() {
     // C11 6.7.9p4: an object with static storage duration is initialized
     // by constant expressions, and a thread-local object's address is not

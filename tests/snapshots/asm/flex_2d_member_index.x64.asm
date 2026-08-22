@@ -30,19 +30,16 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	leaq	-0x20(%rbp), %rdx
-               	xorq	%rax, %rax
-               	jmp	<addr>
-               	leaq	-0x20(%rbp), %rsi
-               	addq	%rcx, %rsi
+               	xorq	%rcx, %rcx
+               	leaq	-0x20(%rbp), %rax
                	xorq	%rdi, %rdi
-               	movb	%dil, (%rsi)
-               	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x1c, %rcx
-               	jl	<addr>
+               	xorq	%rsi, %rsi
+               	movq	%rsi, (%rax)
+               	movq	%rsi, 0x8(%rax)
+               	movq	%rsi, 0x10(%rax)
+               	movl	%edi, 0x18(%rax)
                	movl	$0x4, %eax
                	movl	%eax, (%rdx)
-               	xorq	%rcx, %rcx
                	jmp	<addr>
                	leaq	0x4(%rdx), %rsi
                	imulq	$0x6, %rax, %rdi

@@ -52,39 +52,25 @@ Disassembly of section .text:
                	movl	$0x16, %ecx
                	movq	%rcx, 0x38(%rax)
                	leaq	<rip>, %rax
-               	addq	$0x0, %rax
                	leaq	<rip>, %rcx
-               	addq	$0x0, %rcx
-               	movq	(%rcx), %rcx
-               	movq	%rcx, (%rax)
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x8(%rcx), %rcx
-               	movq	%rcx, 0x8(%rax)
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x10(%rcx), %rcx
-               	movq	%rcx, 0x10(%rax)
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x18(%rcx), %rcx
-               	movq	%rcx, 0x18(%rax)
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x20(%rcx), %rcx
-               	movq	%rcx, 0x20(%rax)
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x28(%rcx), %rcx
-               	movq	%rcx, 0x28(%rax)
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x30(%rcx), %rcx
-               	movq	%rcx, 0x30(%rax)
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	movq	0x38(%rcx), %rcx
-               	movq	%rcx, 0x38(%rax)
+               	pushq	%rdx
+               	movq	(%rcx), %rdx
+               	movq	%rdx, (%rax)
+               	movq	0x8(%rcx), %rdx
+               	movq	%rdx, 0x8(%rax)
+               	movq	0x10(%rcx), %rdx
+               	movq	%rdx, 0x10(%rax)
+               	movq	0x18(%rcx), %rdx
+               	movq	%rdx, 0x18(%rax)
+               	movq	0x20(%rcx), %rdx
+               	movq	%rdx, 0x20(%rax)
+               	movq	0x28(%rcx), %rdx
+               	movq	%rdx, 0x28(%rax)
+               	movq	0x30(%rcx), %rdx
+               	movq	%rdx, 0x30(%rax)
+               	movq	0x38(%rcx), %rdx
+               	movq	%rdx, 0x38(%rax)
+               	popq	%rdx
                	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	shlq	$0x0, %rax

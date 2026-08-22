@@ -37,6 +37,7 @@ mod jit;
 mod lexer;
 #[cfg(feature = "full")]
 mod linker;
+mod loop_idiom;
 #[cfg(feature = "full")]
 mod native;
 #[cfg(feature = "full")]

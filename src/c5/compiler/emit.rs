@@ -1038,6 +1038,7 @@ impl Compiler {
         // without this reservation the linker / DWARF range
         // invariant would fail.
         self.next_ent_pc += 1;
+        self.rewrite_loop_idioms();
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
             ent_pc,

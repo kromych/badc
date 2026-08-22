@@ -71,54 +71,9 @@ Disassembly of section .text:
                	xorq	%rbx, %rbx
                	movl	$0x40, %r13d
                	leaq	-0x50(%rbp), %rax
-               	addq	$0x0, %rax
                	xorq	%rdx, %rdx
-               	movb	%dl, (%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0x1(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0x2(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0x3(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0x4(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0x5(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0x6(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0x7(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0x8(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0x9(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0xa(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0xb(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0xc(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0xd(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0xe(%rax)
-               	leaq	-0x50(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movb	%dl, 0xf(%rax)
+               	movq	%rdx, (%rax)
+               	movq	%rdx, 0x8(%rax)
                	leaq	-0x50(%rbp), %rax
                	addq	$0x0, %rax
                	leaq	(%rcx), %rdx

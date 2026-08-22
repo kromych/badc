@@ -258,30 +258,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x0, %rax
-               	movl	$0x78, %ecx
-               	movb	%cl, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x78, %ecx
-               	movb	%cl, 0x1(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x78, %ecx
-               	movb	%cl, 0x2(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x78, %ecx
-               	movb	%cl, 0x3(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x78, %ecx
-               	movb	%cl, 0x4(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x78, %ecx
-               	movb	%cl, 0x5(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x78, %ecx
-               	movb	%cl, 0x6(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x78, %ecx
-               	movb	%cl, 0x7(%rax)
+               	movabsq	$0x7878787878787878, %rcx # imm = 0x7878787878787878
+               	movq	%rcx, (%rax)
                	leaq	-0x10(%rbp), %rax
                	leaq	0x2(%rax), %rdi
                	movl	$0x4, %esi

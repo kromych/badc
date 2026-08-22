@@ -51,7 +51,38 @@ const MAX_MEM_FILL_ACCESSES: i64 = super::super::ast::MAX_MEM_FILL_ACCESSES;
 const MAX_MEM_MOVE_ACCESSES: i64 = 8;
 /// Alignment ceiling for the derived endpoint alignment: the widest
 /// access `Inst::Mcpy` and the inline expansions use.
-const MAX_MEM_TRANSFER_ALIGN: u32 = 8;
+pub(super) const MAX_MEM_TRANSFER_ALIGN: u32 = 8;
+
+/// Whether a transfer of `size` bytes at `align`-byte endpoint
+/// alignment expands inline, or has to be a library call.
+pub(super) fn mem_transfer_fits(
+    op: super::super::ast::MemTransferOp,
+    size: i64,
+    align: u32,
+) -> bool {
+    use super::super::ast::MemTransferOp;
+    size >= 0
+        && match op {
+            MemTransferOp::Copy => size <= MAX_MEM_TRANSFER_BYTES,
+            MemTransferOp::Move => {
+                super::super::ast::mem_transfer_accesses(size, align) <= MAX_MEM_MOVE_ACCESSES
+            }
+            MemTransferOp::Fill => {
+                super::super::ast::mem_transfer_accesses(size, align) <= MAX_MEM_FILL_ACCESSES
+            }
+        }
+}
+
+/// Library function a declined expansion calls (C99 7.21.2.1,
+/// 7.21.2.2, 7.21.6.1).
+pub(super) fn mem_transfer_lib_name(op: super::super::ast::MemTransferOp) -> &'static str {
+    use super::super::ast::MemTransferOp;
+    match op {
+        MemTransferOp::Copy => "memcpy",
+        MemTransferOp::Move => "memmove",
+        MemTransferOp::Fill => "memset",
+    }
+}
 use super::types::{
     UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits, format_type, fp_result_ty, integer_promote,
     is_bool_ty, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty, is_struct_ty,
@@ -408,24 +439,10 @@ impl Compiler {
             return Err(self.compile_err(format!("`{name}` expects (dst, src, count)")));
         }
         self.next()?;
-        let fits = |n: i64| {
-            n >= 0
-                && match op {
-                    MemTransferOp::Copy => n <= MAX_MEM_TRANSFER_BYTES,
-                    MemTransferOp::Move => {
-                        super::super::ast::mem_transfer_accesses(n, ptr_align)
-                            <= MAX_MEM_MOVE_ACCESSES
-                    }
-                    MemTransferOp::Fill => {
-                        super::super::ast::mem_transfer_accesses(n, ptr_align)
-                            <= MAX_MEM_FILL_ACCESSES
-                    }
-                }
-        };
         // Both forms yield the destination address (C99 7.21.2.1p2).
         let ty = Ty::Char as i64 + UNSIGNED_BIT + Ty::Ptr as i64;
         let size = match self.expr_const_int(args[2]) {
-            Some(n) if fits(n) => n,
+            Some(n) if mem_transfer_fits(op, n, ptr_align) => n,
             _ => return self.emit_mem_transfer_libcall(op, &args, ty),
         };
         self.mark_emit_other();
@@ -444,6 +461,30 @@ impl Compiler {
         self.ty = ty;
         self.ast_acc = Some(id);
         Ok(())
+    }
+
+    /// The symbol-table index of `name` when the unit declared it as
+    /// something callable.
+    pub(super) fn callable_symbol(&self, name: &str) -> Option<usize> {
+        super::super::lexer::find_symbol(&self.symbols, &self.symbol_index, name).filter(|&i| {
+            self.symbols[i].class == Token::Fun as i64 || self.symbols[i].class == Token::Sys as i64
+        })
+    }
+
+    /// Symbol of the library function a synthesized transfer calls.
+    /// `None` where the name may not be assumed to be the library's
+    /// (`-fno-builtin` / `-ffreestanding`), where the unit declared no
+    /// such function, or inside that function's own definition, where
+    /// the call would be recursion.
+    pub(super) fn mem_transfer_lib_symbol(
+        &self,
+        op: super::super::ast::MemTransferOp,
+    ) -> Option<usize> {
+        let name = mem_transfer_lib_name(op);
+        if self.library_name_is_opaque(name) || self.current_function_name == name {
+            return None;
+        }
+        self.callable_symbol(name)
     }
 
     /// The symbol-table index of `name`, creating an unbound entry when
@@ -466,16 +507,8 @@ impl Compiler {
         args: &[super::super::ast::ExprId],
         ty: i64,
     ) -> Result<(), C5Error> {
-        use super::super::ast::MemTransferOp;
-        let name = match op {
-            MemTransferOp::Copy => "memcpy",
-            MemTransferOp::Move => "memmove",
-            MemTransferOp::Fill => "memset",
-        };
-        let idx = super::super::lexer::find_symbol(&self.symbols, &self.symbol_index, name);
-        let callable = idx.filter(|&i| {
-            self.symbols[i].class == Token::Fun as i64 || self.symbols[i].class == Token::Sys as i64
-        });
+        let name = mem_transfer_lib_name(op);
+        let callable = self.callable_symbol(name);
         let retry_unavailable = self.no_builtin || self.nostdinc;
         let idx = match callable {
             Some(i) => i,

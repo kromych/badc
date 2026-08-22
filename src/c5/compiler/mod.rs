@@ -26,6 +26,7 @@ mod function;
 mod global_init;
 mod initializer;
 mod locals;
+mod loop_idiom;
 mod run_compile;
 mod sizeof_expr;
 mod stmt;
@@ -1896,6 +1897,9 @@ pub struct Compiler {
     /// folds, which decline under them.
     no_builtin: bool,
     no_builtin_fns: Vec<String>,
+    /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
+    /// transforms that are optimizations rather than lowerings.
+    optimize: bool,
     /// Mirror of [`CompileOptions::nostdinc`]. With either flag set the
     /// auto-include retry never runs, which is when a builtin's
     /// fallback call must bind without a declaration.
@@ -2500,6 +2504,7 @@ impl Compiler {
             no_builtin: opts.no_builtin,
             nostdinc: opts.nostdinc,
             no_builtin_fns: opts.no_builtin_fns.clone(),
+            optimize: opts.optimize,
             elf_class: opts.elf_class,
             inline_model: if opts.gnu89_inline {
                 crate::c5::symbol::InlineModel::Gnu89

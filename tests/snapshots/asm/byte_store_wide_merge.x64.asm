@@ -69,54 +69,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x0, %rax
                	xorq	%rcx, %rcx
-               	movb	%cl, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0x1(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0x2(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0x3(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0x4(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0x5(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0x6(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0x7(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0x9(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0xa(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0xb(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0xc(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0xd(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0xe(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movb	%cl, 0xf(%rax)
+               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x8(%rax)
                	leaq	-0x10(%rbp), %rax
                	movl	$0x44332211, %ecx       # imm = 0x44332211
                	movl	%ecx, (%rax)

@@ -62,54 +62,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x0
                	mov	x1, #0x0                // =0
-               	strb	w1, [x0]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0x1]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0x2]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0x3]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0x4]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0x5]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0x6]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0x7]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0x8]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0x9]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0xa]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0xb]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0xc]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0xd]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0xe]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	strb	w1, [x0, #0xf]
+               	str	x1, [x0]
+               	str	x1, [x0, #0x8]
                	sub	x0, x29, #0x10
                	mov	x1, #0x2211             // =8721
                	movk	x1, #0x4433, lsl #16

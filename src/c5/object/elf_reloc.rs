@@ -1414,14 +1414,23 @@ pub(super) fn write_relocatable(
     let data_shadowed = shadowed(".data", build.data.is_empty() && plan.data_len == 0);
     let bss_shadowed = shadowed(".bss", plan.bss_len == 0);
 
-    // Strtab + symtab construction. The file symbol leads
+    // Strtab + symtab construction. The file symbols lead
     // (binding LOCAL, type FILE); per-function symbols follow
     // (binding GLOBAL, type FUNC). ELF requires every LOCAL
     // symbol to precede every GLOBAL one, with sh_info pointing
     // at the first GLOBAL entry.
+    //
+    // A compiled unit names its source file; an assembled unit gets
+    // one STT_FILE symbol per `.file` directive and none otherwise,
+    // as GNU as emits them.
     let file_basename = source_path.rsplit('/').next().unwrap_or("<unknown>");
+    let file_names: Vec<&str> = if program.asm_unit {
+        program.asm_file_names.iter().map(|s| s.as_str()).collect()
+    } else {
+        alloc::vec![file_basename]
+    };
 
-    // Section symbols come first after the file symbol; we
+    // Section symbols come first after the file symbols; we
     // emit one for each progbits section so relocations can
     // address them by section index.
     let mut symbols: Vec<Elf64Sym> = Vec::new();
@@ -1429,14 +1438,16 @@ pub(super) fn write_relocatable(
     // entry.
     symbols.push(Elf64Sym::default());
 
-    // File symbol -> shndx = SHN_ABS by convention. Name offset
-    // gets backfilled below once the final strtab is built.
-    symbols.push(Elf64Sym {
-        st_name: 0,
-        st_info: pack_sym_info(STB_LOCAL, STT_FILE),
-        st_shndx: SHN_ABS,
-        ..Default::default()
-    });
+    // File symbols -> shndx = SHN_ABS by convention. Name offsets
+    // get backfilled below once the final strtab is built.
+    for _ in &file_names {
+        symbols.push(Elf64Sym {
+            st_name: 0,
+            st_info: pack_sym_info(STB_LOCAL, STT_FILE),
+            st_shndx: SHN_ABS,
+            ..Default::default()
+        });
+    }
 
     // Section symbols (.text, .data, .bss, and under `-g`
     // .debug_line, .debug_abbrev). Each has empty name and SHN of the
@@ -1990,7 +2001,10 @@ pub(super) fn write_relocatable(
             + defined_data_globals.len()
             + user_extern_data_names.len(),
     );
-    all_names.push(file_basename);
+    for name in &file_names {
+        all_names.push(name);
+    }
+    let func_names_start = all_names.len();
     for s in &func_strs {
         all_names.push(s.as_str());
     }
@@ -2225,9 +2239,11 @@ pub(super) fn write_relocatable(
         all_names.push(MapClass::Data.symbol_name());
     }
     let (strtab_bytes, name_offs) = build_strtab(&all_names);
-    // Patch the file symbol's name offset against the final
-    // strtab.
-    symbols[1].st_name = name_offs[0];
+    // Patch the file symbols' name offsets against the final
+    // strtab; they sit right after the null entry.
+    for i in 0..file_names.len() {
+        symbols[1 + i].st_name = name_offs[i];
+    }
 
     let func_extent = |i: usize| -> Result<(usize, usize), C5Error> {
         let ent_pc = build.func_ent_pcs[i];
@@ -2321,7 +2337,7 @@ pub(super) fn write_relocatable(
         let (shndx, value) = text_place(lo as u64);
         func_symidx_by_name.insert(func_strs[i].clone(), symbols.len() as u32);
         symbols.push(Elf64Sym {
-            st_name: name_offs[1 + i],
+            st_name: name_offs[func_names_start + i],
             st_info: pack_sym_info(STB_LOCAL, STT_FUNC),
             st_shndx: shndx,
             st_value: value,
@@ -2634,7 +2650,7 @@ pub(super) fn write_relocatable(
             i = j;
         }
     }
-    let first_global = symbols.len() as u32;
+    let mut first_global = symbols.len() as u32;
     // Global (`.globl`) and weak (`.weak`) inline-asm section labels.
     for (j, l) in asm_labels.iter().enumerate() {
         if !(l.global || l.weak) {
@@ -2690,7 +2706,7 @@ pub(super) fn write_relocatable(
         let (shndx, value) = text_place(lo as u64);
         func_symidx_by_name.insert(func_strs[i].clone(), symbols.len() as u32);
         symbols.push(Elf64Sym {
-            st_name: name_offs[1 + i],
+            st_name: name_offs[func_names_start + i],
             st_info: pack_sym_info(bind_for(&func_strs[i]), STT_FUNC),
             st_other: vis_for(&func_strs[i]),
             st_shndx: shndx,
@@ -3784,7 +3800,7 @@ pub(super) fn write_relocatable(
     // across units; unprioritized entries land in the bare
     // `.init_array` the script places last. Entries sharing a group
     // keep source order.
-    let init_sections =
+    let mut init_sections =
         build_init_array_sections(&program.init_funcs, &func_symidx_by_name, rtype_abs64)?;
     // Every named section's relocation list is settled; a `.rela`
     // companion exists exactly for the entries that carry relocations.
@@ -3864,6 +3880,69 @@ pub(super) fn write_relocatable(
         )));
     }
 
+    // GNU as on x86 omits a section symbol no relocation references
+    // (its aarch64 backend keeps every one). Match each: every
+    // relocation table is final here, so drop the unreferenced
+    // STT_SECTION entries and re-index the tables.
+    if matches!(abi, RelocAbi::X86_64 | RelocAbi::I386) {
+        let mut used = alloc::vec![false; symbols.len()];
+        let mark = |used: &mut Vec<bool>, table: &[u8]| {
+            for rec in table.chunks_exact(ELF64_RELA_SIZE) {
+                let info = u64::from_le_bytes(rec[8..16].try_into().unwrap());
+                if let Some(u) = used.get_mut((info >> 32) as usize) {
+                    *u = true;
+                }
+            }
+        };
+        mark(&mut used, &rela_bytes);
+        mark(&mut used, &rela_data_bytes);
+        mark(&mut used, &rela_debug_info_bytes);
+        mark(&mut used, &rela_debug_line_bytes);
+        mark(&mut used, &rela_tdata_bytes);
+        for s in &init_sections {
+            mark(&mut used, &s.rela);
+        }
+        for e in &carve.table.entries {
+            for r in &e.relas {
+                if let Some(u) = used.get_mut(r.sym as usize) {
+                    *u = true;
+                }
+            }
+        }
+        let mut remap: Vec<u64> = Vec::with_capacity(symbols.len());
+        let mut kept: Vec<Elf64Sym> = Vec::with_capacity(symbols.len());
+        for (i, s) in symbols.iter().enumerate() {
+            remap.push(kept.len() as u64);
+            if s.st_info & 0xf != STT_SECTION || used[i] {
+                kept.push(*s);
+            }
+        }
+        if kept.len() != symbols.len() {
+            first_global -= (symbols.len() - kept.len()) as u32;
+            symbols = kept;
+            let rewrite = |table: &mut [u8]| {
+                for rec in table.chunks_exact_mut(ELF64_RELA_SIZE) {
+                    let info = u64::from_le_bytes(rec[8..16].try_into().unwrap());
+                    let ns = remap[(info >> 32) as usize];
+                    rec[8..16].copy_from_slice(&((ns << 32) | (info & 0xffff_ffff)).to_le_bytes());
+                }
+            };
+            rewrite(&mut rela_bytes);
+            rewrite(&mut rela_data_bytes);
+            rewrite(&mut rela_debug_info_bytes);
+            rewrite(&mut rela_debug_line_bytes);
+            rewrite(&mut rela_tdata_bytes);
+            for s in &mut init_sections {
+                rewrite(&mut s.rela);
+            }
+            for e in &mut carve.table.entries {
+                for r in &mut e.relas {
+                    r.sym = remap[r.sym as usize];
+                }
+            }
+        }
+    }
+
     // Every relocation table of the fixed set is final here. A
     // relocation section with no entries is dropped: it describes
     // nothing, and a consumer reaching one through its target's
@@ -3879,12 +3958,26 @@ pub(super) fn write_relocatable(
     // fixed set shift by the total. Applied to every recorded index
     // before it is written.
     let no_dwarf = !build.debug_info;
+    // Built ahead of the section-count planning: an empty body drops
+    // the section, which the note parser reads as it does a foreign
+    // object carrying none.
+    let note_bytes = build_badc_note(
+        &build.imports,
+        &program.exports,
+        &build.tls_index_fixups,
+        &build.macho_tlv_descriptors,
+        &build.macho_tlv_fixups,
+        &defined_tls_globals,
+        &build.elf_tpoff_fixups,
+        &prologue_end_pairs,
+    );
     let fixed_dropped = [
         (SHIDX_TEXT, text_shadowed),
         (SHIDX_RELA_TEXT, rela_bytes.is_empty()),
         (SHIDX_DATA, data_shadowed),
         (SHIDX_BSS, bss_shadowed),
         (SHIDX_RELA_DATA, rela_data_bytes.is_empty()),
+        (SHIDX_NOTE_BADC, note_bytes.is_empty()),
         (SHIDX_DEBUG_INFO, no_dwarf),
         (SHIDX_RELA_DEBUG_INFO, rela_debug_info_bytes.is_empty()),
         (SHIDX_DEBUG_ABBREV, no_dwarf),
@@ -3922,14 +4015,33 @@ pub(super) fn write_relocatable(
     let shidx_debug_info = shndx_map(SHIDX_DEBUG_INFO);
     let shidx_debug_line = shndx_map(SHIDX_DEBUG_LINE);
 
-    // `+ 1` is `.comment`: the producer fingerprint rides a non-alloc
-    // section here rather than the `.text` tail final images use, so
-    // the code section stays a pure instruction stream for decoders.
+    // `.comment` pools the unit's `.ident` strings in GNU as shape
+    // (leading NUL, each string NUL-terminated); a compiled unit
+    // contributes the producer fingerprint the way gcc's implicit
+    // `.ident` does. An assembled unit without `.ident` gets no
+    // `.comment`, as GNU as emits none.
+    let comment_body: Option<Vec<u8>> = {
+        let mut strings: Vec<&str> = Vec::new();
+        if !program.asm_unit {
+            strings.push(crate::OUTPUT_MARKER);
+        }
+        strings.extend(program.asm_idents.iter().map(|s| s.as_str()));
+        if strings.is_empty() {
+            None
+        } else {
+            let mut body: Vec<u8> = alloc::vec![0];
+            for s in &strings {
+                body.extend_from_slice(s.as_bytes());
+                body.push(0);
+            }
+            Some(body)
+        }
+    };
     let num_sections: usize = base_sections - dropped_sections as usize
         + named_section_count
         + named_rela_count
         + 2 * init_sections.len()
-        + 1;
+        + usize::from(comment_body.is_some());
 
     // Section name table. One entry per non-null section, in section
     // order, so the name of section `n` sits at `shndx_map(n) - 1`.
@@ -3994,7 +4106,9 @@ pub(super) fn write_relocatable(
         shstrtab_names.push(format!("{rp}{}", s.name));
     }
     let comment_name_idx = shstrtab_names.len();
-    shstrtab_names.push(".comment".to_string());
+    if comment_body.is_some() {
+        shstrtab_names.push(".comment".to_string());
+    }
     let name_refs: Vec<&str> = shstrtab_names.iter().map(|n| n.as_str()).collect();
     let (shstrtab_bytes, shstrtab_offs) = build_strtab(&name_refs);
     // Name offset of a fixed section, addressed by its nominal index.
@@ -4065,7 +4179,13 @@ pub(super) fn write_relocatable(
     }
     fold_rel_addends(class, &rela_bytes, &mut text_body)?;
     if !text_shadowed {
-        let text_align = build.text_align.max(16) as u64;
+        // An empty section constrains nothing; GNU as leaves the
+        // default sections it creates at alignment 1.
+        let text_align = if text_body.is_empty() {
+            1
+        } else {
+            build.text_align.max(16) as u64
+        };
         let text_off = round_up(out.len() as u64, text_align);
         out.resize(text_off as usize, 0);
         out.extend_from_slice(&text_body);
@@ -4191,7 +4311,11 @@ pub(super) fn write_relocatable(
         ent.bytes.extend_from_slice(&build.rodata.bytes);
     }
     if !data_shadowed {
-        let data_align = plan.data_align;
+        let data_align = if data_body.is_empty() {
+            1
+        } else {
+            plan.data_align
+        };
         let data_off = round_up(out.len() as u64, data_align);
         out.resize(data_off as usize, 0);
         out.extend_from_slice(&data_body);
@@ -4217,7 +4341,7 @@ pub(super) fn write_relocatable(
             sh_flags: SHF_ALLOC | SHF_WRITE,
             sh_offset: out.len() as u64,
             sh_size: plan.bss_len,
-            sh_addralign: plan.bss_align,
+            sh_addralign: if plan.bss_len == 0 { 1 } else { plan.bss_align },
             ..Default::default()
         });
     }
@@ -4295,29 +4419,21 @@ pub(super) fn write_relocatable(
     //                           the same PE) places its IAT slot
     //                           under the right loader entry.
     // Standard ELF tooling ignores unknown note types; the badc
-    // reader picks the entries up by name + type.
-    let note_bytes = build_badc_note(
-        &build.imports,
-        &program.exports,
-        &build.tls_index_fixups,
-        &build.macho_tlv_descriptors,
-        &build.macho_tlv_fixups,
-        &defined_tls_globals,
-        &build.elf_tpoff_fixups,
-        &prologue_end_pairs,
-    );
-    let note_off = round_up(out.len() as u64, 4);
-    out.resize(note_off as usize, 0);
-    out.extend_from_slice(&note_bytes);
-    sh.push(Elf64Shdr {
-        sh_name: fixed_name(SHIDX_NOTE_BADC),
-        sh_type: SHT_NOTE,
-        sh_offset: note_off,
-        sh_size: note_bytes.len() as u64,
-        sh_addralign: 4,
-        ..Default::default()
-    });
-    let _ = SHIDX_NOTE_BADC;
+    // reader picks the entries up by name + type. Dropped above when
+    // no record has content.
+    if !note_bytes.is_empty() {
+        let note_off = round_up(out.len() as u64, 4);
+        out.resize(note_off as usize, 0);
+        out.extend_from_slice(&note_bytes);
+        sh.push(Elf64Shdr {
+            sh_name: fixed_name(SHIDX_NOTE_BADC),
+            sh_type: SHT_NOTE,
+            sh_offset: note_off,
+            sh_size: note_bytes.len() as u64,
+            sh_addralign: 4,
+            ..Default::default()
+        });
+    }
 
     // .debug_info -- one CU DIE per `.o`. SHT_PROGBITS without
     // SHF_ALLOC: not loaded at runtime, just consumed by the
@@ -4579,24 +4695,24 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // .comment -- the producer fingerprint (non-alloc, so it never
-    // reaches the loaded image through this object). Flagged
-    // SHF_MERGE | SHF_STRINGS with a byte entsize, as gcc and clang
-    // flag theirs, so a linker merging many badc objects folds the
-    // identical NUL-terminated line into one copy.
-    let comment_off = out.len() as u64;
-    out.extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
-    out.push(0);
-    sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[comment_name_idx],
-        sh_type: SHT_PROGBITS,
-        sh_flags: SHF_MERGE | SHF_STRINGS,
-        sh_offset: comment_off,
-        sh_size: crate::OUTPUT_MARKER.len() as u64 + 1,
-        sh_addralign: 1,
-        sh_entsize: 1,
-        ..Default::default()
-    });
+    // .comment -- non-alloc, so it never reaches the loaded image
+    // through this object. Flagged SHF_MERGE | SHF_STRINGS with a byte
+    // entsize, as gcc and clang flag theirs, so a linker merging many
+    // badc objects folds identical NUL-terminated lines into one copy.
+    if let Some(body) = &comment_body {
+        let comment_off = out.len() as u64;
+        out.extend_from_slice(body);
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[comment_name_idx],
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_MERGE | SHF_STRINGS,
+            sh_offset: comment_off,
+            sh_size: body.len() as u64,
+            sh_addralign: 1,
+            sh_entsize: 1,
+            ..Default::default()
+        });
+    }
 
     debug_assert_eq!(sh.len(), num_sections);
 
@@ -4650,9 +4766,10 @@ fn pack_sym_info(bind: u8, ty: u8) -> u8 {
 ///                            offset pairs.
 /// All records share the namesz="badc\0" namespace; the parser
 /// distinguishes by `type`. Each note is independently padded to
-/// the 4-byte ELF gABI boundary. The binding-map and exports
-/// records are omitted when empty so a TU with neither still
-/// round-trips through the older single-record shape.
+/// the 4-byte ELF gABI boundary. Every record is omitted when it
+/// has no content; the parser reads records by type and tolerates
+/// any subset, and the writer drops the section when the body is
+/// empty.
 /// `NT_GNU_PROPERTY_TYPE_0` (ELF gABI, "Program Property").
 const NT_GNU_PROPERTY_TYPE_0: u32 = 5;
 /// `GNU_PROPERTY_AARCH64_FEATURE_1_AND` and the two feature bits badc
@@ -4709,19 +4826,23 @@ fn build_badc_note(
     let mut out: Vec<u8> = Vec::new();
     let name = b"badc\0";
 
-    // Record 1: dylib paths.
-    let mut dylibs_desc: Vec<u8> = Vec::new();
-    for d in &imports.dylibs {
-        dylibs_desc.extend_from_slice(d.path.as_bytes());
-        dylibs_desc.push(0);
+    // Record 1: dylib paths. Skipped when there are none, like every
+    // other record, so a unit using no note channel builds an empty
+    // body and the writer drops the section.
+    if !imports.dylibs.is_empty() {
+        let mut dylibs_desc: Vec<u8> = Vec::new();
+        for d in &imports.dylibs {
+            dylibs_desc.extend_from_slice(d.path.as_bytes());
+            dylibs_desc.push(0);
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(dylibs_desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_DYLIBS.to_le_bytes());
+        out.extend_from_slice(name);
+        crate::c5::layout::pad_to_align(&mut out, 4);
+        out.extend_from_slice(&dylibs_desc);
+        crate::c5::layout::pad_to_align(&mut out, 4);
     }
-    out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-    out.extend_from_slice(&(dylibs_desc.len() as u32).to_le_bytes());
-    out.extend_from_slice(&NT_BADC_DYLIBS.to_le_bytes());
-    out.extend_from_slice(name);
-    crate::c5::layout::pad_to_align(&mut out, 4);
-    out.extend_from_slice(&dylibs_desc);
-    crate::c5::layout::pad_to_align(&mut out, 4);
 
     // Record 2: per-import dylib map. Skip when there are no
     // imports -- the parser tolerates a missing record so the
@@ -5538,6 +5659,9 @@ mod tests {
             asm_weak_names: Vec::new(),
             asm_global_names: Vec::new(),
             asm_visibility: Vec::new(),
+            asm_unit: false,
+            asm_file_names: Vec::new(),
+            asm_idents: Vec::new(),
             data_ro_len: 0,
             data_relro_len: 0,
             data_object_starts: Vec::new(),

@@ -954,6 +954,12 @@ pub(crate) enum AsmSectionItem {
     /// `.globl name` / `.global name`: give the named label external
     /// binding. May precede or follow the label's definition.
     Global(alloc::string::String),
+    /// `.file "name"`: the unit's STT_FILE symbol name. The numbered
+    /// DWARF form (`.file N "name"`) is line-table input and stays
+    /// ignored, as it sets no symbol in GNU as either.
+    File(alloc::string::String),
+    /// `.ident "text"`: one `.comment` string.
+    Ident(alloc::string::String),
     /// `.local name`: force local binding. A section label is local by
     /// default, so this only cancels a `.globl` on the same name.
     Local(alloc::string::String),
@@ -4577,12 +4583,22 @@ fn parse_section_item(
         ".ltorg" if is_aarch64 => Ok(AsmSectionItem::LiteralPool(alloc::vec::Vec::new())),
         // Assembler-state directives with no effect on the emitted object:
         // `.extern` declares what an unresolved name already is; the arch
-        // selectors admit no more than the encoder's table does. `.file` and
-        // `.loc` name a source location for the debug line table, which badc
+        // selectors admit no more than the encoder's table does. `.loc`
+        // names a source location for the debug line table, which badc
         // does not emit for asm bodies.
-        ".extern" | ".arch" | ".arch_extension" | ".cpu" | ".ltorg" | ".file" | ".loc" => {
+        ".extern" | ".arch" | ".arch_extension" | ".cpu" | ".ltorg" | ".loc" => {
             Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new()))
         }
+        // `.file "name"` names the unit's STT_FILE symbol; the numbered
+        // DWARF form is line-table input like `.loc` and deposits nothing.
+        ".file" => {
+            if rest.trim_start().starts_with('"') {
+                Ok(AsmSectionItem::File(parse_quoted_text(tok, rest)?))
+            } else {
+                Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new()))
+            }
+        }
+        ".ident" => Ok(AsmSectionItem::Ident(parse_quoted_text(tok, rest)?)),
         // `.cfi_*` describes unwind state to a DWARF consumer and deposits no
         // bytes in this section; it is carried to the frame-table builder,
         // which pairs it with the offset the materializer reaches it at.
@@ -4779,6 +4795,19 @@ pub(crate) fn is_fill_directive(tok: &str) -> bool {
 /// `.string` append one NUL per operand, `.ascii` appends none (GNU as).
 /// Escapes are the assembler's: the C parse already consumed one level, so
 /// `\\n` in source arrives here as `\n`.
+/// The text of a directive taking one quoted string (`.file`, `.ident`),
+/// with GNU as escape processing.
+fn parse_quoted_text(
+    tok: &str,
+    rest: &str,
+) -> Result<alloc::string::String, alloc::string::String> {
+    match parse_string_directive(".ascii", rest) {
+        Ok(AsmSectionItem::Bytes(b)) => Ok(alloc::string::String::from_utf8_lossy(&b).into_owned()),
+        Ok(_) => unreachable!(),
+        Err(_) => Err(alloc::format!("inline asm: bad `{tok}` operand `{rest}`")),
+    }
+}
+
 fn parse_string_directive(tok: &str, rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
     let b = rest.as_bytes();
     let mut bytes: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
@@ -6591,6 +6620,8 @@ impl AsmParseFold {
             | AsmSectionItem::Size { .. }
             | AsmSectionItem::CondDiag(_)
             | AsmSectionItem::Cfi(_)
+            | AsmSectionItem::File(_)
+            | AsmSectionItem::Ident(_)
             | AsmSectionItem::Reloc { .. } => {}
             // A branch both of whose widths ride into the layout, an
             // alignment, an `.org`, a deferred repeat, a literal pool, or
@@ -6976,6 +7007,8 @@ fn measure_round_inner(
                 | AsmSectionItem::Visibility { .. }
                 | AsmSectionItem::CondDiag(_)
                 | AsmSectionItem::Cfi(_)
+                | AsmSectionItem::File(_)
+                | AsmSectionItem::Ident(_)
                 | AsmSectionItem::Reloc { .. } => {}
                 AsmSectionItem::SymSet { name, target } => {
                     aliases.insert(name.clone(), target.clone());
@@ -7621,6 +7654,8 @@ pub(crate) fn materialize_asm_sections(
                 // Visibility is carried by name to the object writer, which
                 // sets `st_other` wherever the symbol is emitted.
                 AsmSectionItem::Visibility { .. } => {}
+                // Unit-level records: the file-scope parse collects them.
+                AsmSectionItem::File(_) | AsmSectionItem::Ident(_) => {}
                 // The rule takes effect at the location counter the directive
                 // was written at, which is this section's current length.
                 AsmSectionItem::Cfi(op) => sink_cfi.push(super::cfi::CfiRecord {

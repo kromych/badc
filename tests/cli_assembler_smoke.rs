@@ -2406,3 +2406,204 @@ fn frames_appear_only_for_a_closed_description() {
     assert!(!ok, "an unclosed frame description must fail: {out}");
     assert!(out.contains("cfi_endproc"), "{out}");
 }
+
+/// `(name, st_info, st_shndx)` of every symbol table entry, the unnamed
+/// ones included, in table order.
+fn sym_entries(bytes: &[u8]) -> Vec<(String, u8, u16)> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum) = (u16at(0x3a), u16at(0x3c));
+    let mut out = Vec::new();
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        if u32at(sh + 4) != 2 {
+            continue;
+        }
+        let off = u64at(sh + 0x18) as usize;
+        let size = u64at(sh + 0x20) as usize;
+        let stroff = u64at(shoff + u32at(sh + 0x28) * shentsize + 0x18) as usize;
+        for e in (0..size).step_by(24) {
+            let sym = off + e;
+            let n = stroff + u32at(sym);
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+            let name = String::from_utf8(bytes[n..n + end].to_vec()).unwrap();
+            out.push((name, bytes[sym + 4], u16at(sym + 6) as u16));
+        }
+    }
+    out
+}
+
+/// `(name, sh_type, sh_flags, sh_addralign, sh_entsize)` per section.
+fn section_headers(bytes: &[u8]) -> Vec<(String, u32, u64, u64, u64)> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as u32;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum, shstrndx) = (u16at(0x3a), u16at(0x3c), u16at(0x3e));
+    let names = u64at(shoff + shstrndx * shentsize + 0x18) as usize;
+    (0..shnum)
+        .map(|i| {
+            let sh = shoff + i * shentsize;
+            let n = names + u32at(sh) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+            (
+                String::from_utf8(bytes[n..n + end].to_vec()).unwrap(),
+                u32at(sh + 4),
+                u64at(sh + 8),
+                u64at(sh + 0x30),
+                u64at(sh + 0x38),
+            )
+        })
+        .collect()
+}
+
+const STT_FILE_INFO: u8 = 4; // STB_LOCAL << 4 | STT_FILE
+const STT_SECTION_INFO: u8 = 3; // STB_LOCAL << 4 | STT_SECTION
+
+/// A unit with a call, a data reference, and a data definition, per ISA.
+const SHAPE_A64: &str = "\t.text\n\t.globl f\n\t.type f, @function\nf:\n\
+\tbl ext\n\tadrp x0, v\n\tadd x0, x0, :lo12:v\n\tret\n\
+\t.data\n\t.globl v\nv:\n\t.word 7\n";
+const SHAPE_X64: &str = "\t.text\n\t.globl f\n\t.type f, @function\nf:\n\
+\tcall ext\n\tmovq v(%rip), %rax\n\tret\n\
+\t.data\n\t.globl v\nv:\n\t.quad 7\n";
+
+/// A `.s` object carries the GNU as section roster and nothing else: no
+/// `.note.badc`, no `.comment`, and no `.debug_*` without `-g`. GNU as
+/// 2.46 emits exactly the null section, the three defaults, the used
+/// `.rela.text`, and the three table sections for the same source.
+#[test]
+fn a_dot_s_object_carries_the_gnu_as_section_roster() {
+    for (target, src) in [("linux-aarch64", SHAPE_A64), (X64, SHAPE_X64)] {
+        let name = format!("roster-{target}");
+        let bytes = object_for(&name, src, target);
+        let mut names = section_names(&bytes);
+        names.sort();
+        let mut want: Vec<String> = [
+            "",
+            ".bss",
+            ".data",
+            ".rela.text",
+            ".shstrtab",
+            ".strtab",
+            ".symtab",
+            ".text",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        want.sort();
+        assert_eq!(names, want, "{target}: section roster");
+    }
+}
+
+/// An STT_FILE symbol appears only for a `.file "name"` directive, named
+/// by its operand; GNU as emits none for a unit without one, and the
+/// numbered DWARF form (`.file N "name"`) names no symbol either.
+#[test]
+fn a_file_symbol_appears_only_per_dot_file_directive() {
+    let plain = object_for("file-none", SHAPE_A64, "linux-aarch64");
+    assert!(
+        !sym_entries(&plain).iter().any(|s| s.1 == STT_FILE_INFO),
+        "no `.file`, no STT_FILE symbol"
+    );
+
+    let named = object_for(
+        "file-named",
+        "\t.file \"unit.c\"\n\t.text\nf:\n\tret\n",
+        "linux-aarch64",
+    );
+    let files: Vec<_> = sym_entries(&named)
+        .into_iter()
+        .filter(|s| s.1 == STT_FILE_INFO)
+        .collect();
+    assert_eq!(
+        files,
+        vec![(String::from("unit.c"), STT_FILE_INFO, 0xfff1)],
+        "`.file \"unit.c\"` names one SHN_ABS file symbol"
+    );
+
+    let numbered = object_for(
+        "file-numbered",
+        "\t.file 1 \"unit.c\"\n\t.text\nf:\n\tret\n",
+        "linux-aarch64",
+    );
+    assert!(
+        !sym_entries(&numbered).iter().any(|s| s.1 == STT_FILE_INFO),
+        "the numbered `.file` form is line-table input, not a symbol"
+    );
+}
+
+/// `.ident` strings pool into `.comment` in GNU as shape -- a leading NUL,
+/// each string NUL-terminated, SHF_MERGE | SHF_STRINGS with byte entsize.
+#[test]
+fn ident_strings_pool_into_dot_comment() {
+    let bytes = object_for(
+        "ident",
+        "\t.ident \"one\"\n\t.ident \"two\"\n\t.text\nf:\n\tret\n",
+        "linux-aarch64",
+    );
+    assert_eq!(section_data(&bytes, ".comment"), b"\0one\0two\0");
+    let (_, ty, flags, _, entsize) = section_headers(&bytes)
+        .into_iter()
+        .find(|s| s.0 == ".comment")
+        .expect(".comment present");
+    assert_eq!(
+        (ty, flags, entsize),
+        (1, 0x30, 1),
+        "PROGBITS, MS, entsize 1"
+    );
+}
+
+/// A default section the unit leaves empty claims no alignment: GNU as
+/// keeps `.text` / `.data` / `.bss` at addralign 1 until content raises it.
+#[test]
+fn an_empty_default_section_claims_no_alignment() {
+    let bytes = object_for(
+        "empty-defaults",
+        "\t.data\n\t.globl d\nd:\n\t.word 9\n",
+        "linux-aarch64",
+    );
+    for want in [".text", ".bss"] {
+        let (_, _, _, align, _) = section_headers(&bytes)
+            .into_iter()
+            .find(|s| s.0 == want)
+            .unwrap_or_else(|| panic!("{want} present"));
+        assert_eq!(align, 1, "empty {want} addralign");
+    }
+}
+
+/// Section symbols follow the GNU as target policy: the x86 backend omits
+/// every one no relocation references, the aarch64 backend keeps them all.
+#[test]
+fn unused_section_symbols_follow_the_target_policy() {
+    let count = |bytes: &[u8]| {
+        sym_entries(bytes)
+            .iter()
+            .filter(|s| s.1 == STT_SECTION_INFO)
+            .count()
+    };
+
+    let x = object_for("secsym-x64", "\t.text\n\t.globl f\nf:\n\tret\n", X64);
+    assert_eq!(count(&x), 0, "x86-64: no relocation, no section symbol");
+
+    let x_used = object_for(
+        "secsym-x64-used",
+        "\t.text\nf:\n\tmovq lv(%rip), %rax\n\tret\n\t.data\nlv:\n\t.quad 1\n",
+        X64,
+    );
+    assert_eq!(
+        count(&x_used),
+        1,
+        "x86-64: only the `.data` a relocation names keeps its symbol"
+    );
+
+    let a = object_for(
+        "secsym-a64",
+        "\t.text\n\t.globl f\nf:\n\tret\n",
+        "linux-aarch64",
+    );
+    assert_eq!(count(&a), 3, "aarch64: the three defaults keep theirs");
+}

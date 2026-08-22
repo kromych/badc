@@ -194,6 +194,17 @@ pub struct Program {
     /// file-scope asm. The object writer sets `st_other` wherever the name
     /// surfaces. A later directive on the same name wins, as in GNU as.
     pub asm_visibility: Vec<(String, SymVisibility)>,
+    /// The unit is assembler source (`.s` / `.S`). The object writer then
+    /// takes the GNU as shape: an STT_FILE symbol only per `.file` directive
+    /// and a `.comment` section only from `.ident` strings, where a compiled
+    /// unit names its source file and carries the producer fingerprint.
+    pub asm_unit: bool,
+    /// `.file "name"` operands from file-scope asm, in directive order; one
+    /// STT_FILE symbol each, as GNU as emits them.
+    pub asm_file_names: Vec<String>,
+    /// `.ident` strings from file-scope asm, in directive order; pooled
+    /// NUL-terminated into `.comment`.
+    pub asm_idents: Vec<String>,
     /// Base alignment `data` requires in the image, at least 8;
     /// raised to 16 when a file-scope object carries `_Alignas(16)`
     /// (or the attribute equivalents). The native writers place the
@@ -640,6 +651,9 @@ impl DataOffsets for Program {
             asm_weak_names: _,
             asm_global_names: _,
             asm_visibility: _,
+            asm_unit: _,
+            asm_file_names: _,
+            asm_idents: _,
             data_align: _, // an alignment, not an offset
             data_ro_len,
             data_relro_len,
@@ -771,6 +785,9 @@ mod data_offset_tests {
             asm_weak_names: Vec::new(),
             asm_global_names: Vec::new(),
             asm_visibility: Vec::new(),
+            asm_unit: false,
+            asm_file_names: Vec::new(),
+            asm_idents: Vec::new(),
             data_ro_len: 0,
             data_relro_len: 0,
             data_object_starts: Vec::new(),

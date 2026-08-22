@@ -253,6 +253,12 @@ impl Compiler {
                             None => self.asm_visibility.push((name.clone(), *vis)),
                         }
                     }
+                    engine::AsmSectionItem::File(name) => {
+                        self.asm_file_names.push(name.clone());
+                    }
+                    engine::AsmSectionItem::Ident(s) => {
+                        self.asm_idents.push(s.clone());
+                    }
                     engine::AsmSectionItem::SymSet { name, target } => {
                         // A later assignment to the same name wins, as in
                         // GNU as.

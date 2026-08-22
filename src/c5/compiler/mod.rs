@@ -1681,6 +1681,10 @@ pub struct Compiler {
     /// `.set name, target` symbol aliases from file-scope asm, merged
     /// onto `Program::function_aliases`.
     pub(super) asm_sym_sets: Vec<(String, String)>,
+    /// `.file "name"` operands from file-scope asm, in directive order.
+    pub(super) asm_file_names: Vec<String>,
+    /// `.ident` strings from file-scope asm, in directive order.
+    pub(super) asm_idents: Vec<String>,
     /// Sink the parse-time validation materializes every file-scope asm
     /// template into, in source order. Per unit, as the codegen sink is:
     /// a location expression may reach a label an earlier template
@@ -1926,6 +1930,9 @@ pub struct Compiler {
     /// this TU). Empty when the caller didn't set a label; the
     /// preprocessor's `"<source>"` placeholder then stands in.
     source_label: String,
+    /// The unit is assembler source (`.s` / `.S`), carried to
+    /// `Program::asm_unit` for the object writer's GNU as shape.
+    asm_unit: bool,
     /// Per-function locals + parameters captured at body close,
     /// before the c5 shadow-symbol restore unwinds the binding.
     /// The DWARF emitter walks this list to attach
@@ -2457,6 +2464,8 @@ impl Compiler {
             asm_global_names: Vec::new(),
             asm_visibility: Vec::new(),
             asm_sym_sets: Vec::new(),
+            asm_file_names: Vec::new(),
+            asm_idents: Vec::new(),
             asm_validate_sink: Default::default(),
             include_records: pp_include_records,
             pp_entrypoint,
@@ -2501,6 +2510,7 @@ impl Compiler {
             source_files: Vec::new(),
             source_file_index: hashbrown::HashMap::new(),
             source_label: opts.source_label.clone(),
+            asm_unit: opts.asm_source,
             variables: Vec::new(),
             pending_block_locals: Vec::new(),
             cleanup_scopes: Vec::new(),
@@ -3029,6 +3039,9 @@ impl Compiler {
             asm_weak_names: self.asm_weak_names,
             asm_global_names: self.asm_global_names,
             asm_visibility: self.asm_visibility,
+            asm_unit: self.asm_unit,
+            asm_file_names: self.asm_file_names,
+            asm_idents: self.asm_idents,
             data_align: self.data_align,
             data_ro_len: 0,
             data_relro_len: 0,

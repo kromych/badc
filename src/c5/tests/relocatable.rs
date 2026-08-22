@@ -829,9 +829,13 @@ fn comment_section_is_a_mergeable_single_line_identification() {
         assert_eq!(sh.sh_flags, 0x30, ".comment is SHF_MERGE | SHF_STRINGS");
         assert_eq!(sh.sh_entsize, 1, ".comment merges byte strings");
         let content = &bytes[sh.sh_offset as usize..(sh.sh_offset + sh.sh_size) as usize];
-        let mut want = crate::OUTPUT_MARKER.as_bytes().to_vec();
+        let mut want = alloc::vec![0u8];
+        want.extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
         want.push(0);
-        assert_eq!(content, want, ".comment is the NUL-terminated version line");
+        assert_eq!(
+            content, want,
+            ".comment is the version line in GNU as string-pool shape"
+        );
         assert!(
             !content.contains(&b'\n'),
             ".comment holds a single line, as `readelf -p` renders it"

@@ -1001,7 +1001,6 @@ impl Compiler {
         self.ast = super::super::ast::Ast::new();
         self.ast_acc = None;
         self.ast_vstack.clear();
-        self.ast_labels.clear();
         self.pending_label_relocs.clear();
         self.in_function_body = true;
     }
@@ -1731,20 +1730,32 @@ impl Compiler {
         alloc::string::String::from(name)
     }
 
-    /// Allocate a fresh AST label slot. `self.labels` /
-    /// `self.unresolved_gotos` track names for the goto-vs-label
-    /// diagnostics; the AST mirror keeps a flat per-function id
-    /// space tied back through `Compiler::ast_label_by_name` so
-    /// `goto` resolves to the labelled statement.
+    /// AST label slot for `name`, allocating one on first mention.
     pub(super) fn ast_label_by_name(&mut self, name: &str) -> super::super::ast::LabelId {
-        for (lname, lid) in &self.ast_labels {
-            if lname == name {
-                return *lid;
-            }
+        if let Some(st) = self.labels.get(name) {
+            return st.id;
         }
         let id = self.ast.alloc_label();
-        self.ast_labels
-            .push((alloc::string::String::from(name), id));
+        self.labels.insert(
+            alloc::string::String::from(name),
+            super::LabelState { id, defined: false },
+        );
+        id
+    }
+
+    /// Whether `name`'s labelled statement has been parsed. False for
+    /// a name so far only mentioned by a forward reference.
+    pub(super) fn label_is_defined(&self, name: &str) -> bool {
+        self.labels.get(name).is_some_and(|st| st.defined)
+    }
+
+    /// Bind `name` to its labelled statement, returning the AST slot.
+    /// The caller rejects a redefinition through `label_is_defined`.
+    pub(super) fn define_label(&mut self, name: &str) -> super::super::ast::LabelId {
+        let id = self.ast_label_by_name(name);
+        if let Some(st) = self.labels.get_mut(name) {
+            st.defined = true;
+        }
         id
     }
 
@@ -1761,7 +1772,7 @@ impl Compiler {
         }
         let name = self.resolve_label_name(&self.symbols[self.lex.curr_id_idx].name.clone());
         self.next()?;
-        if !self.labels.iter().any(|n| n == &name) {
+        if !self.label_is_defined(&name) {
             self.unresolved_gotos.push(name.clone());
         }
         Ok(self.ast_label_by_name(&name))

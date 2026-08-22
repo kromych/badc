@@ -1765,7 +1765,7 @@ impl Compiler {
                     self.current_func_returns_void = false;
 
                     for name in &self.unresolved_gotos {
-                        if !self.labels.iter().any(|n| n == name) {
+                        if !self.label_is_defined(name) {
                             return Err(self.compile_err(format!(
                                 "unresolved label: {}",
                                 super::emit::label_display_name(name)

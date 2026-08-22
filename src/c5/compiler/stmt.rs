@@ -1373,7 +1373,7 @@ impl Compiler {
                 // references it as `%l[name]`. Only the binding resolves
                 // through the local-label scopes.
                 let key = self.resolve_label_name(&name);
-                if !self.labels.iter().any(|n| n == &key) {
+                if !self.label_is_defined(&key) {
                     self.unresolved_gotos.push(key.clone());
                 }
                 label_ids.push(self.ast_label_by_name(&key));
@@ -2680,14 +2680,13 @@ impl Compiler {
             // block that declares it. Two labeled statements with the
             // same name would intern one SSA block and re-terminate it
             // in the walker.
-            if self.labels.iter().any(|n| n == &name) {
+            if self.label_is_defined(&name) {
                 return Err(self.compile_err(format!(
                     "redefinition of label `{}`",
                     super::emit::label_display_name(&name)
                 )));
             }
-            self.labels.push(name.clone());
-            let label = self.ast_label_by_name(&name);
+            let label = self.define_label(&name);
             self.next()?; // consume Id
             self.next()?; // consume ':'
             // C23 6.9 / GNU: an attribute-specifier may decorate a label
@@ -2911,7 +2910,7 @@ impl Compiler {
 
                 self.flush_pending_stores();
 
-                if !self.labels.iter().any(|n| n == &target_name) {
+                if !self.label_is_defined(&target_name) {
                     self.unresolved_gotos.push(target_name.clone());
                 }
 

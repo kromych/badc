@@ -716,6 +716,43 @@ fn address_of_undefined_label() {
     );
 }
 
+// The label table is keyed by name, so its size does not change what a
+// label diagnostic names or where it points. The two cases below run
+// wide enough that a table-order dependency would show.
+
+#[test]
+fn duplicate_label_is_reported_at_its_second_definition() {
+    let n = 200;
+    let mut src = alloc::string::String::from("int f(void) {\n");
+    for i in 0..n {
+        src.push_str(&alloc::format!("L{i}: ;\n"));
+    }
+    src.push_str("L37: return 0;\n}\n");
+    // Line 1 is the function head and label `Li` sits on line i + 2, so
+    // the second `L37` is on line n + 2 -- not the first one's line.
+    expect_compile_error(
+        &src,
+        &alloc::format!(":{}: error: redefinition of label `L37`", n + 2),
+    );
+}
+
+#[test]
+fn the_first_undefined_goto_target_is_the_one_reported() {
+    let n = 200;
+    let mut src = alloc::string::String::from("int f(void) {\n");
+    for i in 0..n {
+        src.push_str(&alloc::format!("goto M{i};\ngoto N{i};\nN{i}: ;\n"));
+    }
+    src.push_str("return 0;\n}\n");
+    // Every `M` is undefined and every `N` resolves; the check runs at
+    // the closing brace and names the first undefined target in source
+    // order.
+    expect_compile_error(
+        &src,
+        &alloc::format!(":{}: error: unresolved label: M0", 3 * n + 3),
+    );
+}
+
 #[test]
 fn missing_close_paren_in_if() {
     expect_compile_error("int main() { if (1 return 0; }", "close paren expected");

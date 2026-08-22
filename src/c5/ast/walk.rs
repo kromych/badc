@@ -474,7 +474,7 @@ pub(crate) fn walk_function(
         structs,
         target,
         loop_ctx: alloc::vec::Vec::new(),
-        label_blocks: alloc::vec::Vec::new(),
+        label_blocks: alloc::vec![None; ast.goto_targets.len()],
         switch_dispatch: alloc::vec::Vec::new(),
         returns_struct,
         return_struct_size,
@@ -552,11 +552,11 @@ struct Walker<'a> {
     /// frame per enclosing loop / switch. Break/Continue stmts
     /// jump to the top-of-stack entries.
     loop_ctx: alloc::vec::Vec<(super::super::ir::BlockId, super::super::ir::BlockId)>,
-    /// Interned mapping from AST `LabelId` to the SSA `BlockId`
-    /// reserved for that label's body. Allocated lazily by either
-    /// a Goto's forward reference or the matching Labeled stmt --
-    /// both sides see the same block.
-    label_blocks: alloc::vec::Vec<(super::super::ast::LabelId, super::super::ir::BlockId)>,
+    /// SSA `BlockId` reserved for each AST label's body, indexed by
+    /// `LabelId` (dense over the function's `Ast::goto_targets`).
+    /// Filled lazily by either a Goto's forward reference or the
+    /// matching Labeled stmt -- both sides see the same block.
+    label_blocks: alloc::vec::Vec<Option<super::super::ir::BlockId>>,
     /// Per enclosing `switch` (innermost last): the block reserved for
     /// each `case` value and for `default`. A `case` / `default` marker
     /// reached while walking the switch body jumps to its block, so the
@@ -3165,11 +3165,11 @@ impl<'a> Walker<'a> {
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
         label: super::super::ast::LabelId,
     ) -> super::super::ir::BlockId {
-        if let Some(&(_, blk)) = self.label_blocks.iter().find(|(l, _)| *l == label) {
+        if let Some(blk) = self.label_blocks[label as usize] {
             return blk;
         }
         let blk = b.new_block();
-        self.label_blocks.push((label, blk));
+        self.label_blocks[label as usize] = Some(blk);
         blk
     }
 

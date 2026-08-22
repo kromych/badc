@@ -1353,6 +1353,16 @@ impl Default for Pending {
     }
 }
 
+/// Per-function state of one label name, held in `Compiler::labels`.
+pub(super) struct LabelState {
+    /// AST slot shared by the label's references and its labelled
+    /// statement, allocated on the first mention either way.
+    id: super::ast::LabelId,
+    /// Set once the labelled statement is parsed. A second one for
+    /// the same name violates C99 6.8.1p3.
+    defined: bool,
+}
+
 /// Single-pass C compiler. Holds the lexer, the symbol table, and the
 /// codegen scaffolding. `compile(self)` consumes the compiler and produces
 /// a [`Program`] ready for the VM.
@@ -1560,14 +1570,6 @@ pub struct Compiler {
     /// The codegen reads these directly via `produce_ssa_funcs`.
     pub(super) synthetic_ssa_funcs: Vec<super::ir::FunctionSsa>,
 
-    /// Per-function map from goto label name -> AST `LabelId`.
-    /// Reset at every function entry (alongside `ast_reset`).
-    /// Keeps the AST's flat per-function label-id space in sync
-    /// with the parser's name-keyed `self.labels` /
-    /// `self.unresolved_gotos`, so `goto L; ... L:` resolves on
-    /// the AST side regardless of source order.
-    pub(super) ast_labels: Vec<(String, super::ast::LabelId)>,
-
     /// Cross-helper carry: `emit_local_init_store` stashes the
     /// initializer's ExprId here so the calling `parse_*_local_decl`
     /// can wrap it in `Decl::Local { init: Scalar(_) }`. Always
@@ -1610,15 +1612,13 @@ pub struct Compiler {
     /// `with_nesting` so pathological nesting is diagnosed instead
     /// of exhausting the native stack.
     nest_depth: usize,
-    /// Linear table of `(label_name, text_pc)`. Per-function (cleared
-    /// at every function start), so it stays small -- typically 0-2
-    /// entries even in code that uses `goto`. Linear scan beats
-    /// pulling in `HashMap` (which would force `std`).
-    /// Names of `label:` statements seen in the current function;
-    /// `Compiler::run_compile` validates every `goto` target
-    /// against this list at function end. Cleared at every
-    /// function start.
-    labels: Vec<String>,
+    /// Every label named in the current function, keyed by its
+    /// resolved name (see `resolve_label_name`). Ties the parser's
+    /// name-keyed view to the AST's flat per-function label-id space,
+    /// so a `goto` resolves regardless of source order;
+    /// `Compiler::run_compile` validates every `goto` target against
+    /// it at function end. Cleared at every function start.
+    labels: hashbrown::HashMap<String, LabelState>,
     /// Names of `goto label` statements whose target wasn't yet
     /// defined when the goto was parsed. Each name is rechecked
     /// against `labels` at function end; an unresolved entry is
@@ -2442,14 +2442,13 @@ impl Compiler {
             ast_vstack: Vec::new(),
             finished_functions: Vec::new(),
             synthetic_ssa_funcs: Vec::new(),
-            ast_labels: Vec::new(),
             pending_local_init_ast: None,
             pending_local_aggregate_ast: None,
             pending_local_runtime_elements: Vec::new(),
             loop_break_depth: 0,
             loop_continue_depth: 0,
             nest_depth: 0,
-            labels: Vec::new(),
+            labels: hashbrown::HashMap::new(),
             unresolved_gotos: Vec::new(),
             local_label_scopes: Vec::new(),
             local_label_seq: 0,

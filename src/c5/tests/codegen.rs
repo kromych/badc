@@ -8851,3 +8851,38 @@ fn scoped_fn_declaration_keeps_its_entity_for_the_link() {
         "the call to the scoped variadic declaration must set al = 1"
     );
 }
+
+/// The walker reserves each label's SSA block through a table indexed by
+/// `LabelId`, so a `goto` chain costs exactly one block per label and the
+/// forward `goto` shares the block its labelled statement gets.
+#[test]
+fn a_goto_chain_reserves_one_block_per_label() {
+    use crate::Target;
+    let chain_blocks = |n: usize| -> usize {
+        let mut src = alloc::string::String::from("int f(void) { int acc = 0;\n");
+        for i in 0..n {
+            src.push_str(&alloc::format!("goto L{i};\nL{i}: acc += {i};\n"));
+        }
+        src.push_str("return acc; }\nint main(void) { return f(); }\n");
+        let program = super::compile_str_bare(&src);
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::host(),
+            false,
+            false,
+        )
+        .expect("produce_ssa_funcs");
+        funcs
+            .iter()
+            .find(|f| f.name == "f")
+            .expect("f is walked")
+            .blocks
+            .len()
+    };
+    let (short, long) = (chain_blocks(8), chain_blocks(24));
+    assert_eq!(
+        long - short,
+        16,
+        "16 more labels must reserve 16 more blocks: {short} -> {long}"
+    );
+}

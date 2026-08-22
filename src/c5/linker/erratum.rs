@@ -325,8 +325,8 @@ mod tests {
 
     #[test]
     fn adr_encoding_round_trips_the_page_delta() {
-        // adrp x0, +2 pages.
-        let adrp = ADRP_X0 | (2 >> 2 << 5) | ((2 & 3) << 29);
+        // adrp x0, +2 pages: immlo = 2, immhi = 0.
+        let adrp = ADRP_X0 | (2 << 29);
         assert_eq!(adrp_page_delta(adrp), 0x2000);
         // adrp x0, -1 page.
         let neg = ADRP_X0 | (0x7ffff << 5) | (3 << 29);

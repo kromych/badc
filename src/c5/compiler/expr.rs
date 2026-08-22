@@ -476,28 +476,33 @@ impl Compiler {
         let callable = idx.filter(|&i| {
             self.symbols[i].class == Token::Fun as i64 || self.symbols[i].class == Token::Sys as i64
         });
+        let retry_unavailable = self.no_builtin || self.nostdinc;
         let idx = match callable {
             Some(i) => i,
             // The `__builtin_` spelling stays callable in every mode
-            // (gcc documents the fallback call for freestanding units),
-            // so an undeclared library name binds here as the extern
-            // function the builtin implies; the environment defines it
-            // at link time. A name bound to a non-function keeps the
-            // ordinary error.
-            None => {
+            // (gcc documents the fallback call for freestanding units).
+            // Where the auto-include retry cannot run, an undeclared
+            // library name binds here as the extern function the builtin
+            // implies and the environment defines it at link time; a
+            // hosted unit keeps the error so the retry installs the
+            // header's own library binding.
+            None if retry_unavailable => {
                 let i = self.resolve_symbol_named(name);
                 if self.symbols[i].class != 0 {
-                    let suggestion = match super::super::headers::header_declaring(name) {
-                        Some(h) => format!(" -- try `#include <{h}>`"),
-                        None => String::new(),
-                    };
-                    return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
+                    return Err(self.compile_err(format!("unknown function `{name}`")));
                 }
                 self.symbols[i].class = Token::Fun as i64;
                 self.symbols[i].type_ = ty;
                 self.symbols[i].linkage = crate::c5::symbol::Linkage::External;
                 self.symbols[i].defined_here = false;
                 i
+            }
+            None => {
+                let suggestion = match super::super::headers::header_declaring(name) {
+                    Some(h) => format!(" -- try `#include <{h}>`"),
+                    None => String::new(),
+                };
+                return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
             }
         };
         self.symbols[idx].was_referenced = true;

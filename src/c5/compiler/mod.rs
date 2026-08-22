@@ -1892,6 +1892,10 @@ pub struct Compiler {
     /// folds, which decline under them.
     no_builtin: bool,
     no_builtin_fns: Vec<String>,
+    /// Mirror of [`CompileOptions::nostdinc`]. With either flag set the
+    /// auto-include retry never runs, which is when a builtin's
+    /// fallback call must bind without a declaration.
+    nostdinc: bool,
     /// Mirror of [`CompileOptions::elf_class`]: the assembler's
     /// starting code mode.
     elf_class: crate::c5::ElfClass,
@@ -2486,6 +2490,7 @@ impl Compiler {
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
             no_builtin: opts.no_builtin,
+            nostdinc: opts.nostdinc,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             elf_class: opts.elf_class,
             inline_model: if opts.gnu89_inline {

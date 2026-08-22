@@ -6786,6 +6786,27 @@ fn nostdinc_declines_the_auto_include_retry() {
     );
 }
 
+#[test]
+#[cfg(feature = "full")]
+fn freestanding_builtin_mem_transfer_binds_its_own_fallback() {
+    // gcc keeps the `__builtin_` spelling callable in every mode: a
+    // transfer whose count is no small constant falls back to a call of
+    // the library function, and the builtin supplies that binding
+    // itself, so a freestanding unit compiles with the name left
+    // undefined for the link to resolve (the kernel builds this way).
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "void f(void *d, const void *s, unsigned long n)\n\
+               { __builtin_memcpy(d, s, n); __builtin_memset(d, 0, n); }\n";
+    let opts = CompileOptions::default()
+        .with_no_entry_point(true)
+        .with_no_builtin(true)
+        .with_nostdinc(true);
+    let built = Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+        .compile()
+        .expect("the builtin fallback needs no declaration");
+    assert!(built.auto_includes.is_empty(), "no retry may run");
+}
+
 /// A dense case set lowers to a table dispatch whose table must stay
 /// out of the code section: unwind-metadata generators decode `.text`
 /// as a pure instruction stream and reject embedded data. The

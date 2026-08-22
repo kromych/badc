@@ -12245,6 +12245,43 @@ mod code_mode_tests {
         }
     }
 
+    /// A near `jmp` / `call` through an absolute address: AT&T's `*` marks
+    /// the operand as the memory holding the target, so a bare address after
+    /// it is a displacement-only memory reference rather than the branch
+    /// target itself. Long mode addresses it with a base-less SIB. Bytes
+    /// measured with GNU as 2.46.1 and llvm-mc 21 for the same source:
+    /// `jmp *0x1234` is `ff 24 25 34 12 00 00`, `call *0x1234`
+    /// `ff 14 25 34 12 00 00`, and `jmp *sym` the same with a signed 32-bit
+    /// relocation in the displacement.
+    #[test]
+    fn near_indirect_branch_through_an_absolute_address_matches_gnu_as() {
+        for (src, bytes) in [
+            ("jmp *0x1234\n", &[0xff, 0x24, 0x25, 0x34, 0x12, 0, 0][..]),
+            ("call *0x1234\n", &[0xff, 0x14, 0x25, 0x34, 0x12, 0, 0][..]),
+        ] {
+            assert_eq!(assemble(src), bytes, "{src}");
+        }
+        // Without the marker the same name is the branch target itself.
+        let (bytes, relocs) = assemble_relocs("jmp sym\n");
+        assert_eq!(bytes, [0xe9, 0, 0, 0, 0]);
+        assert_eq!(
+            relocs,
+            [(1, 4, false, alloc::string::String::from("sym"), -4)]
+        );
+        let (bytes, relocs) = assemble_relocs("jmp *sym\ncall *sym\n");
+        assert_eq!(
+            bytes,
+            [0xff, 0x24, 0x25, 0, 0, 0, 0, 0xff, 0x14, 0x25, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            relocs,
+            [
+                (3, 4, true, alloc::string::String::from("sym"), 0),
+                (10, 4, true, alloc::string::String::from("sym"), 0),
+            ]
+        );
+    }
+
     /// A symbol in a direct far branch's offset relocates in that field,
     /// which the trailing selector keeps off the end of the encoding; a
     /// symbol in the selector relocates in its own 16-bit field. Bytes and

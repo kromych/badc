@@ -2824,8 +2824,13 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
                 };
                 // AT&T's indirect-branch marker `*` selects no encoding of
                 // its own -- the operand kind does -- so it is stripped
-                // before the operand forms are matched.
-                let tok = tok.strip_prefix('*').unwrap_or(tok);
+                // before the operand forms are matched. It does decide how
+                // a bare address reads: `jmp 0x1234` branches there,
+                // `jmp *0x1234` through the word stored there.
+                let (tok, indirect) = match tok.strip_prefix('*') {
+                    Some(rest) => (rest, true),
+                    None => (tok, false),
+                };
                 let next = u8::try_from(sym_exprs.len())
                     .map_err(|_| String::from("inline asm: too many symbol operands"))?;
                 // `$expr`: a symbol expression the instruction takes as an
@@ -2851,7 +2856,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
                 // absolute memory reference without the `$` an immediate
                 // carries. The literal form is the whole address; a symbol
                 // form takes a relocation in the displacement field.
-                if !takes_bare_address(mnem_tok) && !tok.starts_with('%') {
+                if (indirect || !takes_bare_address(mnem_tok)) && !tok.starts_with('%') {
                     if let Some(v) = parse_int(tok)
                         && let Ok(disp) = i32::try_from(v)
                     {

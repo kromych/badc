@@ -2449,6 +2449,27 @@ fn a_near_call_is_not_shortened() {
     assert_eq!(&t[..5], [0xe8, 0, 0, 0, 0], "call keeps rel32");
 }
 
+/// A near branch through an absolute address: AT&T's `*` makes the operand
+/// the memory holding the target, which long mode addresses with a base-less
+/// SIB. GNU as 2.46.1 writes `ff 24 25 34 12 00 00` for `jmp *0x1234` and
+/// `ff 14 25 34 12 00 00` for `call *0x1234`; the symbol spelling takes an
+/// `R_X86_64_32S` in the same displacement field.
+#[test]
+fn a_near_indirect_branch_takes_an_absolute_address() {
+    const X86_64_32S: u32 = 11;
+    let t = text_of("jmp-abs", "\t.text\n\tjmp *0x1234\n\tcall *0x1234\n");
+    #[rustfmt::skip]
+    let want = [0xff, 0x24, 0x25, 0x34, 0x12, 0, 0,
+                0xff, 0x14, 0x25, 0x34, 0x12, 0, 0];
+    assert_eq!(t, want);
+    let src = "\t.text\n\tjmp *sym\n";
+    assert_eq!(&text_of("jmp-abs-sym", src)[..3], [0xff, 0x24, 0x25]);
+    assert_eq!(
+        text_relocs("jmp-abs-sym-rel", src),
+        [(3, X86_64_32S, String::from("sym"), 0)],
+    );
+}
+
 const X64: &str = "linux-x64";
 const A64: &str = "linux-aarch64";
 

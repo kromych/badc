@@ -97,10 +97,12 @@ pub(crate) struct Allocation {
     /// pass adds `vstack_slots * 8 + 8 * spill_count` bytes to
     /// the function's `locals_bytes` reservation.
     pub spill_count: u32,
-    /// GPRs the allocator actually used. The emit pass saves
-    /// only this subset's callee-saved entries in the prologue.
+    /// Callee-saved GPRs the emitted code writes: the places of the
+    /// values the emit pass lowers (dead-pure values are skipped and
+    /// write nothing). The prologue saves exactly this list.
     pub gpr_used: Vec<u8>,
-    /// FP regs the allocator actually used.
+    /// FP counterpart of `gpr_used` (plus, on Win64, the fixed xmm
+    /// scratch the body touches).
     pub fp_used: Vec<u8>,
     /// Number of consumers of each value. Used by the emit pass to
     /// skip pure-with-no-uses insts (dead-code elimination). A value
@@ -466,48 +468,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     );
     places = coloring.places;
     let spill_count = coloring.spill_count;
-    let gpr_used = coloring.gpr_used;
-    let fp_used = coloring.fp_used;
-
-    // Only callee-saved registers need prologue / epilogue
-    // save and restore. Caller-saved registers are preserved
-    // by the caller across the function's call sites (via the
-    // `must_be_callee` filter above the allocator only places
-    // live-across-call values into callee-saved registers, so a
-    // caller-saved register's value never needs to survive past
-    // the function's own emit). Filtering here keeps the
-    // prologue's `str xN, [sp, ...]` sequence to exactly the
-    // registers AAPCS64 / SysV / Win64 require the callee to
-    // preserve.
-    let gpr_used_callee: Vec<u8> = gpr_used
-        .into_iter()
-        .filter(|r| banks.callee_gprs.contains(r))
-        .collect();
-    // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
-    // it needs no save: `function_clobbers_scratch` returns empty for
-    // x86_64 and r13 -- now an ordinary callee-saved allocation target --
-    // is already captured by the `callee_gprs` filter above when colored.
-    // The aarch64 writer reserves the callee-saved x19; it consumes
-    // `function_clobbers_scratch` through its own `Frame::uses_x19` path,
-    // not this list, so adding it here would double-count the save.
-    let mut fp_used_callee: Vec<u8> = fp_used
-        .into_iter()
-        .filter(|r| banks.callee_fprs.contains(r))
-        .collect();
-    // The x86_64 writer borrows xmm13/14/15 as fixed FP scratch. They are
-    // volatile under System V but callee-saved under Win64, so a Win64
-    // function that performs FP work must preserve the caller's value.
-    // They sit outside `callee_fprs` (never allocator values), so the
-    // filter above drops them; list the ones the body touches here so the
-    // prologue / epilogue's FP-save loop preserves them, mirroring the
-    // r13 GPR handling above.
-    if matches!(target, Target::WindowsX64) {
-        for r in function_clobbers_xmm_scratch(func) {
-            if !fp_used_callee.contains(&r) {
-                fp_used_callee.push(r);
-            }
-        }
-    }
     let mut use_counts = compute_use_counts(func);
     // Recognise the c5 sign-narrow shape:
     //   Shl(X, K) ; Shr(_, K)   with K in {32, 48, 56}
@@ -692,6 +652,72 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             )
         {
             places[v] = Place::None;
+        }
+    }
+    // The used-register sets are collected per value from the final
+    // places and use counts, skipping the values the emit skips
+    // (`is_dead_pure`): a skipped value writes no register, so its
+    // color alone must not force a prologue save. A node shared by a
+    // live and a dead value still contributes through the live one.
+    // Runs after the folds above, which zero the counts of values they
+    // make dead. Registers written outside a value's place -- the
+    // writer's fixed scratch -- are covered by
+    // `function_clobbers_scratch` / the Win64 xmm listing below, and
+    // phi-predecessor moves write the phi's own place, which is
+    // reached through the phi (never dead-pure).
+    let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
+    let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
+    for (v, inst) in func.insts.iter().enumerate() {
+        if super::emit_common::is_dead_pure_counts(inst, v as ValueId, &use_counts) {
+            continue;
+        }
+        match places[v] {
+            Place::IntReg(r) => {
+                gpr_used.insert(r);
+            }
+            Place::FpReg(r) => {
+                fp_used.insert(r);
+            }
+            _ => {}
+        }
+    }
+    // Only callee-saved registers need prologue / epilogue
+    // save and restore. Caller-saved registers are preserved
+    // by the caller across the function's call sites (via the
+    // `must_be_callee` filter above the allocator only places
+    // live-across-call values into callee-saved registers, so a
+    // caller-saved register's value never needs to survive past
+    // the function's own emit). Filtering here keeps the
+    // prologue's `str xN, [sp, ...]` sequence to exactly the
+    // registers AAPCS64 / SysV / Win64 require the callee to
+    // preserve.
+    let gpr_used_callee: Vec<u8> = gpr_used
+        .into_iter()
+        .filter(|r| banks.callee_gprs.contains(r))
+        .collect();
+    // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
+    // it needs no save: `function_clobbers_scratch` returns empty for
+    // x86_64 and r13 -- now an ordinary callee-saved allocation target --
+    // is already captured by the `callee_gprs` filter above when colored.
+    // The aarch64 writer reserves the callee-saved x19; it consumes
+    // `function_clobbers_scratch` through its own `Frame::uses_x19` path,
+    // not this list, so adding it here would double-count the save.
+    let mut fp_used_callee: Vec<u8> = fp_used
+        .into_iter()
+        .filter(|r| banks.callee_fprs.contains(r))
+        .collect();
+    // The x86_64 writer borrows xmm13/14/15 as fixed FP scratch. They are
+    // volatile under System V but callee-saved under Win64, so a Win64
+    // function that performs FP work must preserve the caller's value.
+    // They sit outside `callee_fprs` (never allocator values), so the
+    // filter above drops them; list the ones the body touches here so the
+    // prologue / epilogue's FP-save loop preserves them, mirroring the
+    // r13 GPR handling above.
+    if matches!(target, Target::WindowsX64) {
+        for r in function_clobbers_xmm_scratch(func) {
+            if !fp_used_callee.contains(&r) {
+                fp_used_callee.push(r);
+            }
         }
     }
     #[cfg(feature = "codegen_test")]
@@ -1012,14 +1038,14 @@ pub(crate) struct NodeConstraints {
     pub forbid: u64,
 }
 
-/// Result of coloring the interference graph.
+/// Result of coloring the interference graph. Which of the colored
+/// registers the emitted code actually writes is decided by `allocate`,
+/// which reads the final use counts the coloring cannot know.
 pub(crate) struct Coloring {
     /// Placement per value. Non-root values inherit their root's
     /// placement; nodes with no constraint stay `Place::None`.
     pub places: Vec<Place>,
     pub spill_count: u32,
-    pub gpr_used: Vec<u8>,
-    pub fp_used: Vec<u8>,
 }
 
 #[cfg(feature = "std")]
@@ -1255,24 +1281,9 @@ pub(crate) fn color_graph(
             places[v] = color[root];
         }
     }
-    let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
-    let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
-    for c in &color {
-        match c {
-            Place::IntReg(r) => {
-                gpr_used.insert(*r);
-            }
-            Place::FpReg(r) => {
-                fp_used.insert(*r);
-            }
-            _ => {}
-        }
-    }
     Coloring {
         places,
         spill_count,
-        gpr_used: gpr_used.into_iter().collect(),
-        fp_used: fp_used.into_iter().collect(),
     }
 }
 
@@ -2851,6 +2862,77 @@ int main(void) { return 0; }
             alloc.use_counts[0], 0,
             "the dead segment read stops counting its address operand"
         );
+    }
+
+    /// A value the emit skips writes no register, so its color must not
+    /// reach the prologue's save list. Ten simultaneously-live
+    /// immediates exhaust the seven-entry x86_64 caller bank; the dead
+    /// shift among them colors last (zero weight) and lands on a
+    /// callee-saved register that nothing ever writes.
+    #[test]
+    fn dead_pure_color_stays_out_of_used_sets() {
+        use crate::c5::ir::Block;
+        let mut insts: Vec<Inst> = (0..10).map(Inst::Imm).collect();
+        let dead = insts.len() as ValueId;
+        insts.push(Inst::BinopI {
+            op: BinOp::Shl,
+            lhs: 0,
+            rhs_imm: 8,
+        });
+        let mut acc: ValueId = 0;
+        for k in 1..10 {
+            insts.push(Inst::Binop {
+                op: BinOp::Add,
+                lhs: acc,
+                rhs: k,
+            });
+            acc = insts.len() as ValueId - 1;
+        }
+        let n = insts.len() as u32;
+        let f = FunctionSsa {
+            insts,
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..n,
+                terminator: Terminator::Return(acc),
+                exit_acc: acc,
+            }],
+            ..Default::default()
+        };
+        // Pin uncapped banks so the pressure-matrix env cannot spill
+        // the dead value instead of coloring it.
+        let alloc = with_pool_size_override(usize::MAX, usize::MAX, || {
+            allocate(&f, Target::LinuxX64)
+        });
+        assert!(
+            super::super::emit_common::is_dead_pure(&f.insts[dead as usize], dead, &alloc),
+            "the unread shift must be dead-pure"
+        );
+        let Place::IntReg(r) = alloc.places[dead as usize] else {
+            panic!(
+                "the dead value must be colored, got {:?}",
+                alloc.places[dead as usize]
+            );
+        };
+        assert!(
+            RegBanks::for_target(Target::LinuxX64)
+                .callee_gprs
+                .contains(&r),
+            "with the caller bank exhausted the dead value takes a callee-saved register, got {r}"
+        );
+        assert!(
+            !alloc.gpr_used.contains(&r),
+            "gpr {r} is written by nothing, so it must not be saved"
+        );
+        for &r in &alloc.gpr_used {
+            assert!(
+                f.insts.iter().enumerate().any(|(v, inst)| {
+                    alloc.places[v] == Place::IntReg(r)
+                        && !super::super::emit_common::is_dead_pure(inst, v as ValueId, &alloc)
+                }),
+                "gpr {r} in the save list with no emitted writer"
+            );
+        }
     }
 
     #[test]

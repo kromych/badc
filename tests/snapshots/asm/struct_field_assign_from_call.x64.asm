@@ -26,10 +26,6 @@ Disassembly of section .text:
                	int3
 
 <wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
                	movq	0x8(%rdi), %rcx
                	movq	0x18(%rdi), %rdx
                	movl	$0x4, %eax
@@ -44,54 +40,33 @@ Disassembly of section .text:
                	cmpq	%rax, %rcx
                	jne	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movq	0x18(%rdi), %rax
                	cmpq	%rax, %rdx
                	jne	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movq	0x8(%rdi), %rax
                	cmpq	$0x1234abcd, %rax       # imm = 0x1234ABCD
                	je	<addr>
                	movl	$0x3, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movq	0x18(%rdi), %rax
                	cmpq	$0x1234abcd, %rax       # imm = 0x1234ABCD
                	je	<addr>
                	movl	$0x4, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movslq	0x14(%rdi), %rax
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	movslq	0x24(%rdi), %rax
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
 
 <main>:

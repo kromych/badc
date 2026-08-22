@@ -14,11 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <forward>:
-               	stp	x20, x21, [sp, #-0x40]!
-               	stp	x22, x23, [sp, #0x10]
-               	str	x24, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
                	add	x3, x0, #0x1
                	add	x1, x0, #0x2
                	add	x4, x0, #0x3
@@ -53,10 +48,6 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x24, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
                	ret
                	lsl	x0, x6, #1
                	add	x0, x1, x0
@@ -66,10 +57,6 @@ Disassembly of section .text:
                	lsl	x1, x13, #2
                	add	x0, x0, x1
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x24, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
                	ret
 
 <main>:

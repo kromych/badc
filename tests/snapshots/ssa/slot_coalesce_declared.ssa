@@ -59,7 +59,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=8
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=build
 fn ent_pc=5 n_params=2 variadic=false locals=9
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LoadLocal { off=3, kind=I64 }                    -> x0

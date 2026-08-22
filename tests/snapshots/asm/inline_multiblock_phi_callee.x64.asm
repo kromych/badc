@@ -26,10 +26,6 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
                	movl	$0x7, %eax
                	movabsq	$-0xc, %rax
                	movl	$0xc, %eax
@@ -113,12 +109,6 @@ Disassembly of section .text:
                	cmpq	$0x620, %rsi            # imm = 0x620
                	je	<addr>
                	movl	$0x6, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq

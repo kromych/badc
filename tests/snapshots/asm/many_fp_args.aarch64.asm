@@ -20,9 +20,8 @@ Disassembly of section .text:
                	ldr	x16, [sp, #0x28]
                	str	x16, [sp, #0x10]
                	sub	sp, sp, #0x80
-               	str	d8, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	fadd	d0, d0, d1
                	fadd	d0, d0, d2
                	fadd	d0, d0, d3
@@ -34,8 +33,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	ldr	d1, [x29, #0xa0]
                	fadd	d0, d0, d1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	d8, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xa0
                	ret
 

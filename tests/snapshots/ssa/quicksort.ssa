@@ -121,7 +121,7 @@ fn ent_pc=7 n_params=3 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=quicksort
 fn ent_pc=8 n_params=3 variadic=false locals=0
-  spill_count=0 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
+  spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x3

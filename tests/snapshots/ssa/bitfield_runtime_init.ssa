@@ -123,7 +123,7 @@ fn ent_pc=0 n_params=4 variadic=false locals=2
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=build_mixed
 fn ent_pc=1 n_params=5 variadic=false locals=3
-  spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
+  spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x7

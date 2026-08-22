@@ -57,6 +57,8 @@ pub(crate) mod link;
 #[cfg(feature = "std")]
 pub(crate) mod mach_o_object;
 #[cfg(feature = "std")]
+pub(crate) mod mach_o_shared;
+#[cfg(feature = "std")]
 pub(crate) mod map;
 #[cfg(feature = "std")]
 pub(crate) mod object;
@@ -90,6 +92,9 @@ pub use link::{
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use mach_o_object::{is_mach_o_fat, is_mach_o_object, mach_o_fat_slice, parse_native_mach_o};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use mach_o_shared::{is_mach_o_dylib, is_tbd, parse_mach_o_dylib, parse_tbd};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use map::{ArchiveInclusion, render_link_map};

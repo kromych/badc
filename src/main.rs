@@ -1771,22 +1771,35 @@ fn run() {
     }
 
     // Resolve `-l<name>` against the `-L<dir>` paths, then the standard
-    // system directories. A shared object (`lib<name>.so`) is preferred
-    // over a static archive (`lib<name>.a`), matching `ld`'s default
-    // search order: the `.so` becomes a DT_NEEDED dependency whose
-    // exports resolve otherwise-undefined references, the `.a` a
-    // positional archive whose members are pulled on demand.
+    // system directories for the target's format. A shared library
+    // (`lib<name>.so` / `.dylib` / `.tbd`) is preferred over a static
+    // archive (`lib<name>.a`), matching `ld`'s default search order:
+    // the shared library becomes a load-time dependency whose exports
+    // resolve otherwise-undefined references, the `.a` a positional
+    // archive whose members are pulled on demand.
     let mut shared_libs: Vec<badc::SharedLibrary> = Vec::new();
     let mut search_paths: Vec<String> = library_paths.clone();
-    for d in [
-        "/usr/lib64",
-        "/lib64",
-        "/usr/lib",
-        "/lib",
-        "/usr/lib/x86_64-linux-gnu",
-        "/usr/lib/aarch64-linux-gnu",
-    ] {
-        search_paths.push(d.to_string());
+    if target.binary_format() == badc::BinaryFormat::MachO {
+        // ld64's defaults. The runtime dylibs live in the dyld shared
+        // cache, not on disk, so the SDK's stub directory is the one
+        // that resolves the system libraries.
+        for d in ["/usr/local/lib", "/usr/lib"] {
+            search_paths.push(d.to_string());
+        }
+        if let Some(sdk_lib) = macos_sdk_lib_dir() {
+            search_paths.push(sdk_lib);
+        }
+    } else {
+        for d in [
+            "/usr/lib64",
+            "/lib64",
+            "/usr/lib",
+            "/lib",
+            "/usr/lib/x86_64-linux-gnu",
+            "/usr/lib/aarch64-linux-gnu",
+        ] {
+            search_paths.push(d.to_string());
+        }
     }
     for name in &lib_names {
         match find_library(name, &search_paths, target) {
@@ -1817,13 +1830,20 @@ fn run() {
 
     // A hosted executable link resolves undefined references against the
     // C library implicitly, the way a compiler driver's implicit `-lc`
-    // does. libc is already a DT_NEEDED dependency; parsing its exports
-    // lets a reference from a foreign object -- or a compiler-emitted
-    // `memset` / `memcpy` -- resolve as a load-time import rather than a
-    // link error. Only the real shared object is read (not the `libc.so`
-    // linker script), so no extra DT_NEEDED entry is introduced.
+    // (or ld64's `-lSystem`) does. libc is already a load-time
+    // dependency; parsing its exports lets a reference from a foreign
+    // object -- or a compiler-emitted `memset` / `memcpy` -- resolve as
+    // a load-time import rather than a link error. On ELF only the real
+    // shared object is read (not the `libc.so` linker script), so no
+    // extra DT_NEEDED entry is introduced; on Mach-O the SDK's
+    // `libSystem.tbd` stands in for the dylib the shared cache holds.
     if mode == Mode::NativeExecutable && !freestanding {
-        for cand in ["libc.so.6", "libc.so"] {
+        let libc_names: &[&str] = if target.binary_format() == badc::BinaryFormat::MachO {
+            &["libSystem.tbd", "libSystem.B.dylib", "libSystem.dylib"]
+        } else {
+            &["libc.so.6", "libc.so"]
+        };
+        for cand in libc_names {
             if let Some(p) = search_paths
                 .iter()
                 .map(|d| std::path::Path::new(d).join(cand))
@@ -2798,8 +2818,17 @@ fn run() {
                     }
                 }
                 // The real archives stalled; offer the on-demand
-                // sources once and resume.
-                if on_demand_loaded || undefined.keys().all(|n| badc::link_synthesized_symbol(n)) {
+                // sources once and resume. A name a `-l` shared
+                // library exports resolves as a load-time import, so
+                // it does not call for the pool -- matching a system
+                // linker, where the implicit C library sits after the
+                // archives on the line.
+                if on_demand_loaded
+                    || undefined.keys().all(|n| {
+                        badc::link_synthesized_symbol(n)
+                            || shared_libs.iter().any(|l| l.exports.contains(n))
+                    })
+                {
                     break;
                 }
                 on_demand_loaded = true;
@@ -3291,6 +3320,41 @@ fn machine_label(machine: badc::NativeMachine) -> &'static str {
     }
 }
 
+/// The `usr/lib` stub directory of the macOS SDK, resolved the way the
+/// platform toolchain resolves the SDK: `SDKROOT` when it names a
+/// directory, then `xcrun --show-sdk-path`, then the Command Line
+/// Tools' fixed location. `None` on hosts without an SDK, where only
+/// explicit `-L` paths can supply Mach-O system libraries.
+fn macos_sdk_lib_dir() -> Option<String> {
+    let lib = |root: &str| {
+        let p = std::path::Path::new(root).join("usr/lib");
+        p.is_dir().then(|| p.to_string_lossy().into_owned())
+    };
+    if let Ok(root) = std::env::var("SDKROOT")
+        && let Some(d) = lib(&root)
+    {
+        return Some(d);
+    }
+    if let Ok(out) = std::process::Command::new("xcrun")
+        .args(["--show-sdk-path"])
+        .output()
+        && out.status.success()
+        && let Some(d) = lib(String::from_utf8_lossy(&out.stdout).trim())
+    {
+        return Some(d);
+    }
+    lib("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
+}
+
+/// The platform half of a `.tbd` `<arch>-<platform>` target.
+fn target_platform(target: Target) -> &'static str {
+    match target {
+        badc::Target::MacOSAarch64 => "macos",
+        badc::Target::LinuxAarch64 | badc::Target::LinuxX64 => "linux",
+        badc::Target::WindowsAarch64 | badc::Target::WindowsX64 => "windows",
+    }
+}
+
 /// Substitute a universal (fat) Mach-O container by its slice for
 /// `target`; anything else passes through unchanged. The caller's
 /// format checks then see the slice, so a wrapped archive, object or
@@ -3349,11 +3413,20 @@ fn library_spellings(name: &str, target: Target) -> [String; 2] {
 /// unversioned shared library, then a versioned one (shortest match --
 /// the bare SONAME version), then the static archive. ELF spells the
 /// version after the extension (`libfoo.so.3`), Mach-O and PE before
-/// it (`libfoo.3.dylib`).
+/// it (`libfoo.3.dylib`). On Mach-O a `.tbd` text stub stands in for
+/// the dylib and is preferred over one, as ld64 prefers it: the SDK
+/// ships only the stub, and where both exist they describe the same
+/// library.
 fn find_library(name: &str, search_paths: &[String], target: Target) -> Option<String> {
     let fmt = target.binary_format();
     let [shared, archive] = library_spellings(name, target);
     for dir in search_paths {
+        if fmt == badc::BinaryFormat::MachO {
+            let tbd = std::path::Path::new(dir).join(format!("lib{name}.tbd"));
+            if tbd.exists() {
+                return Some(tbd.to_string_lossy().into_owned());
+            }
+        }
         let so = std::path::Path::new(dir).join(&shared);
         if so.exists() {
             return Some(so.to_string_lossy().into_owned());
@@ -3425,11 +3498,12 @@ fn parse_ld_script_inputs(bytes: &[u8]) -> Vec<String> {
 
 /// Ingest one resolved `-l` / positional linker input, following GNU
 /// ld scripts. A static archive (`!<arch>` / `!<thin>`) is recorded
-/// positionally; an ELF shared object is parsed for its SONAME +
-/// exports; a binary in another container is rejected by name, since
-/// the fallthrough would read it as a linker script and resolve to no
-/// inputs at all; anything else is treated as a linker script whose
-/// GROUP / INPUT / AS_NEEDED file list is resolved recursively.
+/// positionally; an ELF shared object, a Mach-O dylib, and a `.tbd`
+/// text stub are parsed for their canonical name + exports; a binary
+/// in another container is rejected by name, since the fallthrough
+/// would read it as a linker script and resolve to no inputs at all;
+/// anything else is treated as a linker script whose GROUP / INPUT /
+/// AS_NEEDED file list is resolved recursively.
 fn ingest_linker_input(
     path: &str,
     search_paths: &[String],
@@ -3449,22 +3523,42 @@ fn ingest_linker_input(
         Some(s) => s,
         None => &bytes,
     };
-    if bytes.starts_with(b"!<arch>\n") || bytes.starts_with(b"!<thin>\n") {
-        archives.push(path.to_string());
-    } else if bytes.starts_with(b"\x7fELF") {
-        let mut lib = badc::parse_shared_library(bytes)
-            .map_err(|e| format!("reading `{path}` as a shared library: {e}"))?;
+    // Substitute an empty canonical name by the file's base name, the
+    // way `ld` falls back for a `.so` with no `DT_SONAME`.
+    let named = |mut lib: badc::SharedLibrary| -> badc::SharedLibrary {
         if lib.soname.is_empty() {
             lib.soname = std::path::Path::new(path)
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_else(|| path.to_string());
         }
-        shared_libs.push(lib);
+        lib
+    };
+    if bytes.starts_with(b"!<arch>\n") || bytes.starts_with(b"!<thin>\n") {
+        archives.push(path.to_string());
+    } else if bytes.starts_with(b"\x7fELF") {
+        let lib = badc::parse_shared_library(bytes)
+            .map_err(|e| format!("reading `{path}` as a shared library: {e}"))?;
+        shared_libs.push(named(lib));
+    } else if badc::is_mach_o_dylib(bytes) {
+        let lib = badc::parse_mach_o_dylib(bytes)
+            .map_err(|e| format!("reading `{path}` as a dylib: {e}"))?;
+        shared_libs.push(named(lib));
+    } else if badc::is_tbd(bytes) {
+        let text =
+            core::str::from_utf8(bytes).map_err(|_| format!("`{path}` is not UTF-8 text"))?;
+        let lib = badc::parse_tbd(
+            text,
+            machine_label(target_machine(target)),
+            target_platform(target),
+        )
+        .map_err(|e| format!("reading `{path}` as a text stub: {e}"))?;
+        shared_libs.push(named(lib));
     } else if let Some(f) = badc::detect_binary_format(bytes) {
         return Err(format!(
-            "`{path}` is a {} binary; badc links ELF objects and ELF shared objects, \
-             and static archives",
+            "`{path}` is a {} binary badc cannot link against; the shared-library inputs \
+             badc reads are ELF shared objects, Mach-O dylibs and .tbd text stubs, \
+             plus static archives",
             f.name()
         ));
     } else {

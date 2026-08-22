@@ -541,7 +541,7 @@ fn put_uleb128(out: &mut Vec<u8>, mut v: u64) {
 /// and the address. Child-edge offsets are ULEB128, so node sizes
 /// depend on each other; the layout iterates to a fixed point before
 /// emitting.
-fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
+pub(crate) fn build_export_trie(entries: &[(String, u64, u64)]) -> Vec<u8> {
     if entries.is_empty() {
         return Vec::new();
     }

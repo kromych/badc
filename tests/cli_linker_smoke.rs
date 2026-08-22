@@ -4735,6 +4735,155 @@ fn library_search_spelling_follows_the_target_format() {
     }
 }
 
+/// `-l` against a Mach-O dylib: the export trie resolves the
+/// undefined reference, the dylib's install name becomes a load
+/// command, and the binary runs. The dylib comes from the platform
+/// toolchain; hosts without one skip.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn macos_dylib_resolves_an_undefined_reference() {
+    let dir = tempdir("macos-dylib-link");
+    write_source(&dir, "demo.c", "int forty_one(void) { return 41; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int forty_one(void);\nint main(void) { return forty_one() + 1; }\n",
+    );
+    let dylib_path = dir.join("libdemo.dylib");
+    let ok = Command::new("cc")
+        .args([
+            "-dynamiclib",
+            "demo.c",
+            "-o",
+            "libdemo.dylib",
+            "-install_name",
+        ])
+        .arg(&dylib_path)
+        .current_dir(&dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        return; // no platform toolchain on this host
+    }
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .args(["-L.", "-ldemo"])
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link against the dylib",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(42), "exit status mismatch");
+}
+
+/// A `.tbd` text stub stands in for a dylib the way the SDK's stubs
+/// stand in for the shared cache: the stub is found ahead of any
+/// archive, its exports resolve the reference, and the recorded
+/// install name loads the real dylib from its own location.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn macos_tbd_stub_resolves_via_the_real_dylib_install_name() {
+    let dir = tempdir("macos-tbd-link");
+    let impl_dir = dir.join("impl");
+    std::fs::create_dir_all(&impl_dir).expect("create impl dir");
+    write_source(&impl_dir, "demo.c", "int forty_two(void) { return 42; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int forty_two(void);\nint main(void) { return forty_two(); }\n",
+    );
+    let dylib_path = impl_dir.join("libdemo.dylib");
+    let ok = Command::new("cc")
+        .args([
+            "-dynamiclib",
+            "demo.c",
+            "-o",
+            "libdemo.dylib",
+            "-install_name",
+        ])
+        .arg(&dylib_path)
+        .current_dir(&impl_dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        return; // no platform toolchain on this host
+    }
+    // The link directory holds only the stub; the dylib stays in
+    // `impl/`, reachable through the stub's install-name.
+    let tbd = format!(
+        "--- !tapi-tbd\n\
+         tbd-version:     4\n\
+         targets:         [ arm64-macos ]\n\
+         install-name:    '{}'\n\
+         exports:\n  \
+         - targets:         [ arm64-macos ]\n    \
+         symbols:         [ _forty_two ]\n\
+         ...\n",
+        dylib_path.display()
+    );
+    std::fs::write(dir.join("libdemo.tbd"), tbd).expect("write the stub");
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .args(["-L.", "-ldemo"])
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link against the tbd stub",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(42), "exit status mismatch");
+}
+
+/// A foreign archive member's libc references resolve through the
+/// implicit libSystem the way a compiler driver's implicit `-lc` /
+/// `-lSystem` resolves them, with no binding scaffolding in any input.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn macos_foreign_member_libc_references_resolve_implicitly() {
+    let dir = tempdir("macos-foreign-libc");
+    write_source(
+        &dir,
+        "lenof.c",
+        "#include <string.h>\nint lenof(const char *s) { return (int)strlen(s); }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern int lenof(const char *);\nint main(void) { return lenof(\"forty-two!\"); }\n",
+    );
+    let ok = Command::new("cc")
+        .args(["-c", "lenof.c", "-o", "lenof.o"])
+        .current_dir(&dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        return; // no platform toolchain on this host
+    }
+    run(
+        Command::new("ar")
+            .args(["rc", "libforeign.a", "lenof.o"])
+            .current_dir(&dir),
+        "archive the foreign member",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .args(["-L.", "-lforeign"])
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link the foreign member against the implicit libSystem",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(10), "strlen result mismatch");
+}
+
 /// A shared library in a container the linker cannot read is reported
 /// as such. Without the check the bytes fall through to the linker-
 /// script reader, which finds no GROUP / INPUT entries in them and

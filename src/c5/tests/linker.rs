@@ -5259,6 +5259,59 @@ fn assembler_local_labels_stay_out_of_the_symbol_table() {
     }
 }
 
+/// A hand-built one-unit [`NativeObject`] with only the fields the
+/// resolution tests below exercise populated.
+fn minimal_native_object(
+    machine: crate::c5::linker::NativeMachine,
+    text: Vec<u8>,
+    data: Vec<u8>,
+    symbols: Vec<crate::c5::linker::object::NativeSymbol>,
+    text_relocs: Vec<crate::c5::linker::object::NativeReloc>,
+    data_relocs: Vec<crate::c5::linker::object::NativeReloc>,
+) -> crate::c5::linker::NativeObject {
+    crate::c5::linker::NativeObject {
+        source: alloc::string::String::new(),
+        sections: alloc::vec::Vec::new(),
+        discarded: alloc::vec::Vec::new(),
+        text_align: 16,
+        rodata: Vec::new(),
+        rodata_align: 8,
+        relro: Vec::new(),
+        relro_align: 1,
+        relro_relocs: Vec::new(),
+        machine,
+        text,
+        data,
+        data_align: 8,
+        bss_size: 0,
+        bss_align: 1,
+        tls_data: alloc::vec::Vec::new(),
+        tls_relocs: alloc::vec::Vec::new(),
+        tls_bss_size: 0,
+        symbols,
+        text_relocs,
+        data_relocs,
+        init_funcs: alloc::vec::Vec::new(),
+        dylibs: alloc::vec::Vec::new(),
+        import_dylib_map: alloc::vec::Vec::new(),
+        exports: alloc::vec::Vec::new(),
+        tls_index_fixups: alloc::vec::Vec::new(),
+        macho_tlv_descriptors: alloc::vec::Vec::new(),
+        macho_tlv_fixups: alloc::vec::Vec::new(),
+        tls_symbols: alloc::vec::Vec::new(),
+        macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
+        elf_tpoff_fixups: alloc::vec::Vec::new(),
+        copy_relocs: alloc::vec::Vec::new(),
+        prologue_ends: alloc::vec::Vec::new(),
+        debug_info: alloc::vec::Vec::new(),
+        debug_abbrev: alloc::vec::Vec::new(),
+        debug_line: alloc::vec::Vec::new(),
+        debug_str: alloc::vec::Vec::new(),
+        debug_info_relocs: alloc::vec::Vec::new(),
+        debug_line_relocs: alloc::vec::Vec::new(),
+    }
+}
+
 #[test]
 fn unrouted_weak_undef_resolves_to_zero() {
     // ELF behavior: a weak reference nothing on the link line
@@ -5290,47 +5343,14 @@ fn unrouted_weak_undef_resolves_to_zero() {
               data: alloc::vec::Vec<u8>,
               text_relocs: alloc::vec::Vec<NativeReloc>,
               data_relocs: alloc::vec::Vec<NativeReloc>| {
-        crate::c5::linker::NativeObject {
-            source: alloc::string::String::new(),
-            sections: alloc::vec::Vec::new(),
-            discarded: alloc::vec::Vec::new(),
-            text_align: 16,
-            rodata: Vec::new(),
-            rodata_align: 8,
-            relro: Vec::new(),
-            relro_align: 1,
-            relro_relocs: Vec::new(),
+        minimal_native_object(
             machine,
             text,
             data,
-            data_align: 8,
-            bss_size: 0,
-            bss_align: 1,
-            tls_data: alloc::vec::Vec::new(),
-            tls_relocs: alloc::vec::Vec::new(),
-            tls_bss_size: 0,
-            symbols: alloc::vec![null_sym(), weak_undef()],
+            alloc::vec![null_sym(), weak_undef()],
             text_relocs,
             data_relocs,
-            init_funcs: alloc::vec::Vec::new(),
-            dylibs: alloc::vec::Vec::new(),
-            import_dylib_map: alloc::vec::Vec::new(),
-            exports: alloc::vec::Vec::new(),
-            tls_index_fixups: alloc::vec::Vec::new(),
-            macho_tlv_descriptors: alloc::vec::Vec::new(),
-            macho_tlv_fixups: alloc::vec::Vec::new(),
-            tls_symbols: alloc::vec::Vec::new(),
-            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
-            elf_tpoff_fixups: alloc::vec::Vec::new(),
-            copy_relocs: alloc::vec::Vec::new(),
-            prologue_ends: alloc::vec::Vec::new(),
-            debug_info: alloc::vec::Vec::new(),
-            debug_abbrev: alloc::vec::Vec::new(),
-            debug_line: alloc::vec::Vec::new(),
-            debug_str: alloc::vec::Vec::new(),
-            debug_info_relocs: alloc::vec::Vec::new(),
-            debug_line_relocs: alloc::vec::Vec::new(),
-        }
+        )
     };
 
     // x86_64: `lea rax, [rip+hook]` (R_X86_64_PC32) then `call hook`
@@ -5418,6 +5438,73 @@ fn unrouted_weak_undef_resolves_to_zero() {
     assert_eq!(word(0), 0xd280_0000, "adrp rewritten to movz x0, #0");
     assert_eq!(word(4), 0xd503_201f, "add pair half becomes a nop");
     assert_eq!(word(8), 0xd503_201f, "bl becomes a nop");
+}
+
+#[test]
+fn weak_undef_binds_against_a_shared_library_export() {
+    // The zero resolution above applies only when nothing on the link
+    // line supplies the name. With a `-l` shared library exporting it,
+    // the weak reference binds as a load-time import like a strong one
+    // -- both the call site and a `.data` pointer slot.
+    use crate::c5::linker::object::{NativeReloc, NativeSymbol};
+    use crate::c5::linker::{
+        NativeMachine, NativeSymSection, SharedLibrary, link_native_objects_with_shared_libs,
+    };
+    let sym = |name: &str, binding: u8| NativeSymbol {
+        name: name.to_string(),
+        section: NativeSymSection::Undef,
+        value: 0,
+        size: 0,
+        binding,
+        kind: 0,
+        visibility: 0,
+    };
+    let obj = minimal_native_object(
+        NativeMachine::X86_64,
+        alloc::vec![0xE8, 0, 0, 0, 0], // call rel32
+        alloc::vec![0u8; 8],
+        alloc::vec![sym("", 0), sym("hook", 2)],
+        alloc::vec![NativeReloc {
+            offset: 1,
+            sym_idx: 1,
+            rtype: 4, // R_X86_64_PLT32
+            addend: -4,
+        }],
+        alloc::vec![NativeReloc {
+            offset: 0,
+            sym_idx: 1,
+            rtype: 1, // R_X86_64_64
+            addend: 0,
+        }],
+    );
+    let lib = SharedLibrary {
+        soname: "libhook.so.1".to_string(),
+        exports: core::iter::once("hook".to_string()).collect(),
+        data_exports: Default::default(),
+    };
+    let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
+        .expect("weak ref against a shared library links");
+    assert_eq!(merged.imports, alloc::vec!["hook".to_string()]);
+    assert!(merged.flat_imports.contains("hook"));
+    assert_eq!(merged.dylibs, alloc::vec!["libhook.so.1".to_string()]);
+    assert_eq!(
+        merged.text[0], 0xE8,
+        "the call survives for the PLT pass instead of a nop rewrite"
+    );
+    assert!(
+        merged
+            .pending_imports
+            .iter()
+            .any(|p| p.import_index == 0 && p.text_offset == 1),
+        "the call site is recorded against the import",
+    );
+    assert!(
+        merged
+            .data_import_refs
+            .iter()
+            .any(|&(off, idx)| off == 0 && idx == 0),
+        "the pointer slot is recorded against the import, not zeroed",
+    );
 }
 
 /// `adrp x0, blob` paired with each low-12 addressing form the

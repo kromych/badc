@@ -1580,9 +1580,13 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         // STB_WEAK = 2. An unresolved weak reference with
                         // no dylib routing resolves to address 0 (C
                         // practice; ELF leaves the symbol 0 so the
-                        // `if (fn) fn();` guard idiom skips the call).
+                        // `if (fn) fn();` guard idiom skips the call) --
+                        // unless a `-l` shared library exports the name,
+                        // in which case the reference binds like a strong
+                        // one, as a system linker binds it.
                         let routed = is_routed_import(sym.name.as_str());
-                        if sym.binding == 2 && !is_data_binding && !routed {
+                        let shlib_exported = shlib_exports.contains(sym.name.as_str());
+                        if sym.binding == 2 && !is_data_binding && !routed && !shlib_exported {
                             resolve_weak_undef_to_zero(
                                 machine,
                                 &mut text,
@@ -1611,8 +1615,11 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         }
                         // A global UNDEF admitted here has no dylib
                         // routing; mark it flat so the writer emits a
-                        // load-time flat-namespace import.
-                        if sym.binding == 1 {
+                        // load-time flat-namespace import. A weak one
+                        // admitted through a shared library's export
+                        // needs the same marking; a routed weak carries
+                        // its own dylib assignment.
+                        if sym.binding == 1 || (sym.binding == 2 && shlib_exported && !routed) {
                             flat_imports.insert(sym.name.clone());
                         }
                         let idx = record_import(&sym.name, &mut imports, &mut import_idx_for_name);
@@ -1943,8 +1950,13 @@ pub fn link_native_objects_with_shared_libs<'a>(
                         // An unresolved weak reference in a data
                         // initializer takes the absolute value
                         // 0 + addend (ELF behavior); patch the
-                        // slot now, no reloc survives.
-                        None if sym.binding == 2 && !is_routed_import(sym.name.as_str()) => {
+                        // slot now, no reloc survives. A name a `-l`
+                        // shared library exports binds instead, in the
+                        // arm below.
+                        None if sym.binding == 2
+                            && !is_routed_import(sym.name.as_str())
+                            && !shlib_exports.contains(sym.name.as_str()) =>
+                        {
                             let slot = slot_offset as usize;
                             let seg = if in_tls { &mut tls_data } else { &mut data };
                             if slot + 8 > seg.len() {

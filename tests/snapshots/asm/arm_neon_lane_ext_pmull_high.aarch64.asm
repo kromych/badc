@@ -534,32 +534,32 @@ Disassembly of section .text:
                	movk	x4, #0x89ab, lsl #16
                	movk	x4, #0x4567, lsl #32
                	movk	x4, #0x123, lsl #48
-               	mov	x6, #0xff00             // =65280
-               	movk	x6, #0xddee, lsl #16
-               	movk	x6, #0xbbcc, lsl #32
-               	movk	x6, #0x99aa, lsl #48
+               	mov	x5, #0xff00             // =65280
+               	movk	x5, #0xddee, lsl #16
+               	movk	x5, #0xbbcc, lsl #32
+               	movk	x5, #0x99aa, lsl #48
                	sub	x2, x29, #0x200
                	sub	x3, x29, #0x1d0
                	mov	x0, #0x0                // =0
                	str	x0, [x2]
                	str	x0, [x3]
                	b	<addr>
-               	lsr	x5, x6, x1
+               	lsr	x6, x5, x1
                	mov	x17, #0x1               // =1
-               	and	x5, x5, x17
-               	cbz	x5, <addr>
-               	ldr	x5, [x2]
+               	and	x6, x6, x17
+               	cbz	x6, <addr>
+               	ldr	x6, [x2]
                	lsl	x7, x4, x1
-               	eor	x5, x5, x7
-               	str	x5, [x2]
+               	eor	x6, x6, x7
+               	str	x6, [x2]
                	cbz	x1, <addr>
-               	ldr	x7, [x3]
-               	mov	x5, #0x40               // =64
-               	sub	x5, x5, x0
-               	sxtw	x5, w5
-               	lsr	x5, x4, x5
-               	eor	x5, x7, x5
-               	str	x5, [x3]
+               	ldr	x6, [x3]
+               	mov	x7, #0x40               // =64
+               	sub	x7, x7, x0
+               	sxtw	x7, w7
+               	lsr	x7, x4, x7
+               	eor	x6, x6, x7
+               	str	x6, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x40

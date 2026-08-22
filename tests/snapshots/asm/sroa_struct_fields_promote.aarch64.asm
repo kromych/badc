@@ -31,21 +31,21 @@ Disassembly of section .text:
                	mov	x17, #0xff              // =255
                	and	x5, x0, x17
                	add	x0, x2, #0x1
-               	add	x1, x1, x0
-               	lsl	x6, x0, #1
-               	add	x4, x4, x6
-               	add	x3, x3, x0
-               	sxth	x3, w3
+               	add	x6, x1, x0
+               	lsl	x1, x0, #1
+               	add	x4, x4, x1
+               	add	x1, x3, x0
+               	sxth	x1, w1
                	mov	x17, #0xff              // =255
-               	and	x5, x5, x17
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	eor	x0, x5, x0
+               	and	x3, x5, x17
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	sxtw	x1, w1
-               	add	x1, x1, x4
-               	add	x1, x1, x3
+               	eor	x0, x3, x0
+               	mov	x17, #0xff              // =255
+               	and	x0, x0, x17
+               	sxtw	x3, w6
+               	add	x3, x3, x4
+               	add	x1, x3, x1
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
                	add	x1, x1, x0
@@ -96,21 +96,21 @@ Disassembly of section .text:
                	mov	x17, #0xff              // =255
                	and	x6, x0, x17
                	add	x0, x2, #0x1
-               	add	x1, x1, x0
-               	lsl	x7, x0, #1
-               	add	x4, x4, x7
-               	add	x3, x3, x0
-               	sxth	x3, w3
+               	add	x7, x1, x0
+               	lsl	x1, x0, #1
+               	add	x4, x4, x1
+               	add	x1, x3, x0
+               	sxth	x1, w1
                	mov	x17, #0xff              // =255
-               	and	x6, x6, x17
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
-               	eor	x0, x6, x0
+               	and	x3, x6, x17
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
-               	sxtw	x1, w1
-               	add	x1, x1, x4
-               	add	x1, x1, x3
+               	eor	x0, x3, x0
+               	mov	x17, #0xff              // =255
+               	and	x0, x0, x17
+               	sxtw	x3, w7
+               	add	x3, x3, x4
+               	add	x1, x3, x1
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
                	add	x0, x1, x0

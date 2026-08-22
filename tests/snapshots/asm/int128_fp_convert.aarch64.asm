@@ -115,10 +115,9 @@ Disassembly of section .text:
                	sub	x16, x29, #0x38
                	ldr	d1, [x16]
                	fmul	d0, d0, d1
-               	sub	x0, x29, #0x28
-               	str	d0, [x0]
-               	sub	x0, x29, #0x28
-               	ldr	x0, [x0]
+               	sub	x17, x29, #0x28
+               	str	d0, [x17]
+               	ldur	x0, [x29, #-0x28]
                	cmp	x0, x11
                	b.eq	<addr>
                	sxtw	x0, w6
@@ -323,10 +322,9 @@ Disassembly of section .text:
                	sub	x16, x29, #0x38
                	ldr	d1, [x16]
                	fmul	d0, d0, d1
-               	sub	x0, x29, #0x28
-               	str	d0, [x0]
-               	sub	x0, x29, #0x28
-               	ldr	x0, [x0]
+               	sub	x17, x29, #0x28
+               	str	d0, [x17]
+               	ldur	x0, [x29, #-0x28]
                	cmp	x0, x13
                	b.eq	<addr>
                	add	x0, x6, #0x2

@@ -144,66 +144,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<check_override>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	leaq	<rip>, %rbx
-               	movq	(%rbx), %rax
-               	callq	*%rax
-               	movslq	%eax, %rax
-               	cmpq	$0xb, %rax
-               	movl	$0x1, %eax
-               	jne	<addr>
-               	movq	0x8(%rbx), %rax
-               	callq	*%rax
-               	movslq	%eax, %rax
-               	cmpq	$0x16, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x1e, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	movq	0x18(%rbx), %rax
-               	callq	*%rax
-               	movslq	%eax, %rax
-               	cmpq	$0x16, %rax
-               	movl	$0x1, %eax
-               	jne	<addr>
-               	movq	0x20(%rbx), %rax
-               	callq	*%rax
-               	movslq	%eax, %rax
-               	cmpq	$0x16, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
-               	xorq	%rax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movl	$0x1f, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
-
 <dispatch>:
                	popq	%r10
                	subq	$0x10, %rsp
@@ -249,11 +189,30 @@ Disassembly of section .text:
                	je	<addr>
                	popq	%rbp
                	retq
-               	callq	<addr>
-               	movq	%rax, %rcx
-               	movslq	%ecx, %rax
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
+               	callq	*%rax
+               	movslq	%eax, %rax
+               	cmpq	$0xb, %rax
+               	movl	$0x1, %eax
+               	jne	<addr>
+               	leaq	<rip>, %rax
+               	movq	0x8(%rax), %rax
+               	callq	*%rax
+               	movslq	%eax, %rax
+               	cmpq	$0x16, %rax
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	xorq	%rax, %rax
                	testq	%rax, %rax
                	je	<addr>
+               	movl	$0x1e, %eax
+               	movslq	%eax, %rcx
+               	testq	%rcx, %rcx
+               	je	<addr>
+               	movq	%rcx, %rax
                	popq	%rbp
                	retq
                	xorq	%rdi, %rdi
@@ -294,3 +253,30 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	leaq	<rip>, %rax
+               	movq	0x18(%rax), %rax
+               	callq	*%rax
+               	movslq	%eax, %rax
+               	cmpq	$0x16, %rax
+               	movl	$0x1, %eax
+               	jne	<addr>
+               	leaq	<rip>, %rax
+               	movq	0x20(%rax), %rax
+               	callq	*%rax
+               	movslq	%eax, %rax
+               	cmpq	$0x16, %rax
+               	setne	%al
+               	movzbq	%al, %rax
+               	testq	%rax, %rax
+               	jne	<addr>
+               	xorq	%rax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movl	$0x1f, %eax
+               	jmp	<addr>
+               	xorq	%rax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>

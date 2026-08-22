@@ -80,12 +80,12 @@ Disassembly of section .text:
                	mul	x6, x0, x4
                	mul	x4, x4, x1
                	add	x5, x5, x6
-               	add	x5, x5, x4
+               	add	x4, x5, x4
                	mov	x17, #0x3a3b            // =14907
                	movk	x17, #0x9b83, lsl #16
                	movk	x17, #0x6474, lsl #32
                	movk	x17, #0xddbf, lsl #48
-               	cmp	x5, x17
+               	cmp	x4, x17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret

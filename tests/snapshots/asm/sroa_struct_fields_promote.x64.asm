@@ -44,17 +44,17 @@ Disassembly of section .text:
                	xorq	$0x7a, %rax
                	movsbq	%al, %rdi
                	leaq	0x1(%rdx), %rax
-               	addq	%rax, %rcx
-               	movq	%rax, %rbx
-               	shlq	%rbx
-               	addq	%rbx, %r9
-               	addq	%rax, %rsi
-               	movswq	%si, %rsi
+               	leaq	(%rcx,%rax), %rbx
+               	movq	%rax, %rcx
+               	shlq	%rcx
+               	addq	%rcx, %r9
+               	leaq	(%rsi,%rax), %rcx
+               	movswq	%cx, %rcx
                	movsbq	%al, %rax
                	xorq	%rdi, %rax
                	movsbq	%al, %rax
-               	movslq	%ecx, %rcx
-               	addq	%r9, %rcx
+               	movslq	%ebx, %rsi
+               	addq	%r9, %rsi
                	addq	%rsi, %rcx
                	addq	%rax, %rcx
                	movq	%rdx, %rax
@@ -100,17 +100,17 @@ Disassembly of section .text:
                	xorq	$0x7a, %rax
                	movsbq	%al, %rdi
                	leaq	0x1(%rdx), %rax
-               	addq	%rax, %rcx
-               	movq	%rax, %r8
-               	shlq	%r8
-               	addq	%rbx, %r8
-               	addq	%rax, %rsi
-               	movswq	%si, %rsi
+               	leaq	(%rcx,%rax), %r8
+               	movq	%rax, %rcx
+               	shlq	%rcx
+               	addq	%rcx, %rbx
+               	leaq	(%rsi,%rax), %rcx
+               	movswq	%cx, %rcx
                	movsbq	%al, %rax
                	xorq	%rdi, %rax
                	movsbq	%al, %rax
-               	movslq	%ecx, %rcx
-               	addq	%r8, %rcx
+               	movslq	%r8d, %rsi
+               	addq	%rbx, %rsi
                	addq	%rsi, %rcx
                	addq	%rcx, %rax
                	cmpq	$0xb0, %rax

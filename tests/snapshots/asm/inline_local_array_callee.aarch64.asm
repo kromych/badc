@@ -73,91 +73,91 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	mov	w1, w1
                	add	x4, x2, x1
-               	add	x1, x0, #0x1
-               	sub	x2, x0, #0x1
-               	sub	x2, x1, x2
-               	sxtw	x2, w2
-               	mov	x17, #0x4243            // =16963
-               	movk	x17, #0xf, lsl #16
-               	mul	x4, x4, x17
-               	mov	x17, #0x7               // =7
-               	mul	x2, x2, x17
-               	add	x1, x2, x1
-               	sxtw	x1, w1
-               	mov	w1, w1
-               	add	x4, x4, x1
-               	lsl	x1, x0, #1
-               	sub	x2, x1, x0
-               	sxtw	x2, w2
-               	mov	x17, #0x4243            // =16963
-               	movk	x17, #0xf, lsl #16
-               	mul	x4, x4, x17
-               	mov	x17, #0x7               // =7
-               	mul	x2, x2, x17
-               	add	x1, x2, x1
-               	sxtw	x1, w1
-               	mov	w1, w1
-               	add	x4, x4, x1
                	add	x2, x0, #0x1
                	sub	x1, x0, #0x1
-               	sub	x2, x1, x2
-               	sxtw	x2, w2
+               	sub	x1, x2, x1
+               	sxtw	x1, w1
                	mov	x17, #0x4243            // =16963
                	movk	x17, #0xf, lsl #16
                	mul	x4, x4, x17
                	mov	x17, #0x7               // =7
-               	mul	x2, x2, x17
-               	add	x1, x2, x1
+               	mul	x1, x1, x17
+               	add	x1, x1, x2
                	sxtw	x1, w1
                	mov	w1, w1
                	add	x4, x4, x1
+               	lsl	x2, x0, #1
+               	sub	x1, x2, x0
+               	sxtw	x1, w1
+               	mov	x17, #0x4243            // =16963
+               	movk	x17, #0xf, lsl #16
+               	mul	x4, x4, x17
+               	mov	x17, #0x7               // =7
+               	mul	x1, x1, x17
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	mov	w1, w1
+               	add	x4, x4, x1
+               	add	x1, x0, #0x1
+               	sub	x2, x0, #0x1
+               	sub	x1, x2, x1
+               	sxtw	x1, w1
+               	mov	x17, #0x4243            // =16963
+               	movk	x17, #0xf, lsl #16
+               	mul	x4, x4, x17
+               	mov	x17, #0x7               // =7
+               	mul	x1, x1, x17
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	mov	w1, w1
+               	add	x2, x4, x1
                	add	x1, x0, #0x1
                	add	x1, x0, x1
                	sxtw	x1, w1
                	mov	x17, #0x4243            // =16963
                	movk	x17, #0xf, lsl #16
-               	mul	x2, x4, x17
+               	mul	x2, x2, x17
                	mov	x17, #0x7               // =7
                	mul	x1, x1, x17
                	add	x1, x1, x0
                	sxtw	x1, w1
                	mov	w1, w1
-               	add	x5, x2, x1
-               	add	x1, x0, #0x1
-               	lsl	x2, x0, #1
-               	add	x2, x1, x2
-               	sxtw	x2, w2
-               	mov	x17, #0x4243            // =16963
-               	movk	x17, #0xf, lsl #16
-               	mul	x4, x5, x17
-               	mov	x17, #0x7               // =7
-               	mul	x2, x2, x17
-               	add	x1, x2, x1
-               	sxtw	x1, w1
-               	mov	w1, w1
-               	add	x4, x4, x1
+               	add	x4, x2, x1
+               	add	x2, x0, #0x1
                	lsl	x1, x0, #1
-               	sub	x2, x0, #0x1
-               	add	x2, x1, x2
-               	sxtw	x2, w2
+               	add	x1, x2, x1
+               	sxtw	x1, w1
                	mov	x17, #0x4243            // =16963
                	movk	x17, #0xf, lsl #16
                	mul	x4, x4, x17
                	mov	x17, #0x7               // =7
-               	mul	x2, x2, x17
-               	add	x1, x2, x1
+               	mul	x1, x1, x17
+               	add	x1, x1, x2
                	sxtw	x1, w1
                	mov	w1, w1
                	add	x4, x4, x1
+               	lsl	x2, x0, #1
                	sub	x1, x0, #0x1
-               	add	x2, x1, x0
-               	sxtw	x2, w2
+               	add	x1, x2, x1
+               	sxtw	x1, w1
                	mov	x17, #0x4243            // =16963
                	movk	x17, #0xf, lsl #16
                	mul	x4, x4, x17
                	mov	x17, #0x7               // =7
-               	mul	x2, x2, x17
-               	add	x1, x2, x1
+               	mul	x1, x1, x17
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	mov	w1, w1
+               	add	x4, x4, x1
+               	sub	x2, x0, #0x1
+               	add	x1, x2, x0
+               	sxtw	x1, w1
+               	mov	x17, #0x4243            // =16963
+               	movk	x17, #0xf, lsl #16
+               	mul	x4, x4, x17
+               	mov	x17, #0x7               // =7
+               	mul	x1, x1, x17
+               	add	x1, x1, x2
                	sxtw	x1, w1
                	mov	w1, w1
                	add	x2, x4, x1
@@ -172,39 +172,39 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	mov	w1, w1
                	add	x4, x2, x1
-               	add	x1, x0, #0x1
-               	lsl	x2, x1, #1
-               	sxtw	x2, w2
+               	add	x2, x0, #0x1
+               	lsl	x1, x2, #1
+               	sxtw	x1, w1
                	mov	x17, #0x4243            // =16963
                	movk	x17, #0xf, lsl #16
                	mul	x4, x4, x17
                	mov	x17, #0x7               // =7
-               	mul	x2, x2, x17
-               	add	x1, x2, x1
+               	mul	x1, x1, x17
+               	add	x1, x1, x2
                	sxtw	x1, w1
                	mov	w1, w1
                	add	x4, x4, x1
-               	lsl	x1, x0, #1
-               	lsl	x2, x1, #1
-               	sxtw	x2, w2
+               	lsl	x2, x0, #1
+               	lsl	x1, x2, #1
+               	sxtw	x1, w1
                	mov	x17, #0x4243            // =16963
                	movk	x17, #0xf, lsl #16
                	mul	x4, x4, x17
                	mov	x17, #0x7               // =7
-               	mul	x2, x2, x17
-               	add	x1, x2, x1
+               	mul	x1, x1, x17
+               	add	x1, x1, x2
                	sxtw	x1, w1
                	mov	w1, w1
                	add	x4, x4, x1
-               	sub	x1, x0, #0x1
-               	lsl	x2, x1, #1
-               	sxtw	x2, w2
+               	sub	x2, x0, #0x1
+               	lsl	x1, x2, #1
+               	sxtw	x1, w1
                	mov	x17, #0x4243            // =16963
                	movk	x17, #0xf, lsl #16
                	mul	x4, x4, x17
                	mov	x17, #0x7               // =7
-               	mul	x2, x2, x17
-               	add	x1, x2, x1
+               	mul	x1, x1, x17
+               	add	x1, x1, x2
                	sxtw	x1, w1
                	mov	w1, w1
                	add	x2, x4, x1

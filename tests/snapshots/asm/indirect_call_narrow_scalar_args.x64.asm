@@ -29,19 +29,19 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	movslq	%eax, %rcx
-               	movsbq	%cl, %rsi
-               	movswq	%cx, %rdi
-               	imulq	$0x186a0, %rsi, %rcx    # imm = 0x186A0
-               	imulq	$0xa, %rdi, %rdx
-               	addq	%rdx, %rcx
+               	movsbq	%cl, %rdx
+               	movswq	%cx, %rsi
+               	imulq	$0x186a0, %rdx, %rcx    # imm = 0x186A0
+               	imulq	$0xa, %rsi, %rdi
+               	addq	%rdi, %rcx
                	addq	%rax, %rcx
-               	movslq	%ecx, %rcx
-               	imulq	$0x186a0, %rsi, %rdx    # imm = 0x186A0
-               	imulq	$0xa, %rdi, %rsi
-               	addq	%rsi, %rdx
-               	addq	%rdx, %rax
+               	movslq	%ecx, %rdi
+               	imulq	$0x186a0, %rdx, %rcx    # imm = 0x186A0
+               	imulq	$0xa, %rsi, %rdx
+               	addq	%rdx, %rcx
+               	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	cmpq	%rax, %rcx
+               	cmpq	%rax, %rdi
                	je	<addr>
                	movl	$0x1, %eax
                	retq

@@ -290,17 +290,17 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x21, #0x3               // =3
+               	mov	x20, #0x3               // =3
                	mov	x9, x0
-               	mov	x0, x21
+               	mov	x0, x20
                	blr	x9
-               	mov	x20, x0
+               	mov	x21, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x9, x0
-               	mov	x0, x21
+               	mov	x0, x20
                	blr	x9
-               	add	x0, x20, x0
+               	add	x0, x21, x0
                	sxtw	x0, w0
                	cmp	x0, #0x132
                	b.eq	<addr>

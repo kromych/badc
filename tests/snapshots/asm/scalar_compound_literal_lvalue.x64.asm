@@ -101,6 +101,12 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	leaq	-0x8(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	pushq	%rdx
+               	movq	(%rcx), %rdx
+               	movq	%rdx, (%rax)
+               	popq	%rdx
                	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx

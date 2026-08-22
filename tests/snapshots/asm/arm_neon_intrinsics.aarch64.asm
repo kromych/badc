@@ -596,28 +596,28 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x2, x29, #0x150
                	add	x2, x2, x1
-               	ldrb	w4, [x2]
+               	ldrb	w3, [x2]
                	sub	x2, x29, #0x180
                	add	x2, x2, x1
                	ldrb	w2, [x2]
                	mov	x17, #0xff              // =255
                	and	x2, x2, x17
-               	lsl	x3, x2, #1
-               	sxtw	x3, w3
+               	lsl	x4, x2, #1
+               	sxtw	x4, w4
                	mov	x17, #0x80              // =128
                	and	x2, x2, x17
                	cbz	x2, <addr>
                	mov	x2, #0x1d               // =29
-               	eor	x2, x3, x2
+               	eor	x2, x4, x2
                	mov	x17, #0xff              // =255
-               	and	x3, x2, x17
+               	and	x4, x2, x17
                	sub	x2, x29, #0x170
                	add	x2, x2, x1
                	ldrb	w2, [x2]
-               	eor	x2, x3, x2
+               	eor	x2, x4, x2
                	mov	x17, #0xff              // =255
                	and	x2, x2, x17
-               	cmp	x4, x2
+               	cmp	x3, x2
                	b.eq	<addr>
                	b	<addr>
                	mov	x2, #0x0                // =0

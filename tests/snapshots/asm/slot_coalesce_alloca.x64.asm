@@ -66,11 +66,11 @@ Disassembly of section .text:
                	leaq	-0xc0(%rbp), %rdi
                	movq	%rdx, %r8
                	shlq	$0x3, %r8
-               	addq	%rdi, %r8
-               	leaq	0x1(%rdx), %rdi
-               	movslq	%edi, %rdi
-               	imulq	$0x74, %rdi, %rdi
-               	movq	%rdi, (%r8)
+               	addq	%r8, %rdi
+               	leaq	0x1(%rdx), %r8
+               	movslq	%r8d, %r8
+               	imulq	$0x74, %r8, %r8
+               	movq	%r8, (%rdi)
                	leaq	0x1(%rdx), %rax
                	movslq	%eax, %rdx
                	cmpq	$0x18, %rdx

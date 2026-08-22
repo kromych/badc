@@ -25,19 +25,7 @@ Disassembly of section .text:
                	int3
                	int3
 
-<check_runtime>:
-               	movl	$0x1, %eax
-               	movl	$0x1, %eax
-               	movl	$0x1, %eax
-               	movl	$0x1, %eax
-               	xorq	%rax, %rax
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	cmpq	$0x5, %rcx
@@ -74,41 +62,18 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x2, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
-               	leaq	-0x18(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	movq	0x8(%rcx), %rdx
-               	movq	%rdx, 0x8(%rax)
-               	movzbq	0x10(%rcx), %rdx
-               	movb	%dl, 0x10(%rax)
-               	movzbq	0x11(%rcx), %rdx
-               	movb	%dl, 0x11(%rax)
-               	movzbq	0x12(%rcx), %rdx
-               	movb	%dl, 0x12(%rax)
-               	movzbq	0x13(%rcx), %rdx
-               	movb	%dl, 0x13(%rax)
-               	popq	%rdx
                	movl	$0x1, %eax
                	movl	$0x1, %eax
                	movl	$0x1, %eax
                	movl	$0x1, %eax
-               	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
                	movl	$0x1, %eax
-               	movl	$0x9, %edi
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	movl	$0x1, %eax
+               	movl	$0x1, %eax
+               	movl	$0x1, %eax
+               	movl	$0x1, %eax
+               	xorq	%rax, %rax
+               	xorq	%rax, %rax
                	retq
                	jmp	<addr>
                	jmp	<addr>

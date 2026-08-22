@@ -13,58 +13,10 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<check_runtime>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	mov	x2, #0xb                // =11
-               	mov	x3, #0x16               // =22
-               	sub	x0, x29, #0x18
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
-               	str	x1, [x0, #0x8]
-               	str	w1, [x0, #0x10]
-               	mov	x0, #0x1                // =1
-               	sub	x1, x29, #0x18
-               	str	w0, [x1]
-               	sub	x0, x29, #0x18
-               	str	w3, [x0, #0x8]
-               	sub	x0, x29, #0x18
-               	str	w2, [x0, #0x4]
-               	mov	x1, #0x4                // =4
-               	sub	x0, x29, #0x18
-               	str	w1, [x0, #0x10]
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x1                // =1
-               	mov	x0, #0x0                // =0
-               	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sub	x0, x29, #0x18
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [x1, #0x8]
-               	str	x10, [x0, #0x8]
-               	ldrb	w10, [x1, #0x10]
-               	strb	w10, [x0, #0x10]
-               	ldrb	w10, [x1, #0x11]
-               	strb	w10, [x0, #0x11]
-               	ldrb	w10, [x1, #0x12]
-               	strb	w10, [x0, #0x12]
-               	ldrb	w10, [x1, #0x13]
-               	strb	w10, [x0, #0x13]
-               	ldr	x10, [sp], #0x10
                	mov	x0, #0x1                // =1
                	mov	x0, #0x1                // =1
                	mov	x0, #0x1                // =1
@@ -73,10 +25,12 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	mov	x0, #0x1                // =1
                	mov	x0, #0x1                // =1
-               	mov	x0, #0xb                // =11
-               	mov	x1, #0x16               // =22
-               	bl	<addr>
-               	sxtw	x0, w0
+               	mov	x0, #0x1                // =1
+               	mov	x0, #0x1                // =1
+               	mov	x0, #0x1                // =1
+               	mov	x0, #0x1                // =1
+               	mov	x0, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

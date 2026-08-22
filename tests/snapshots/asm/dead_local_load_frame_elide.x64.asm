@@ -71,8 +71,9 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movl	$0x8, %ecx
                	movb	%cl, 0x7(%rax)
-               	leaq	-0x8(%rbp), %rdi
-               	callq	<addr>
+               	leaq	-0x8(%rbp), %rax
+               	movq	(%rax), %rax
+               	bswapq	%rax
                	movabsq	$0x102030405060708, %r11 # imm = 0x102030405060708
                	cmpq	%r11, %rax
                	je	<addr>

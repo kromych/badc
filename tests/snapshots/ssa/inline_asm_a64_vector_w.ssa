@@ -728,17 +728,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v714 Imm(0)                                           -> x1
     terminator Jmp(b7)   (exit_acc=v713)
   block 5  start_pc=0
-    v721 LocalAddr(-2)                                    -> x8
-    v722 Extend { value=v715, kind=I32 }                  -> x8
-    v723 Binop { op=add, lhs=v694, rhs=v716 }             -> x8
+    v721 LocalAddr(-2)                                    -> x1
+    v722 Extend { value=v715, kind=I32 }                  -> x1
+    v723 Binop { op=add, lhs=v694, rhs=v722 }             -> x8
     v724 Load { addr=v723, disp=0, kind=U8 }              -> x8
     v725 LocalAddr(-6)                                    -> x9
     v726 Extend { value=v715, kind=I32 }                  -> x9
-    v727 Binop { op=add, lhs=v678, rhs=v716 }             -> x9
+    v727 Binop { op=add, lhs=v678, rhs=v722 }             -> x9
     v728 Load { addr=v727, disp=0, kind=U8 }              -> x9
     v729 LocalAddr(-4)                                    -> x3
     v730 Extend { value=v715, kind=I32 }                  -> x3
-    v731 Binop { op=add, lhs=v682, rhs=v716 }             -> x3
+    v731 Binop { op=add, lhs=v682, rhs=v722 }             -> x3
     v732 Load { addr=v731, disp=0, kind=U8 }              -> x3
     v733 Binop { op=xor, lhs=v728, rhs=v732 }             -> x9
     v734 BinopI { op=and, lhs=v733, rhs_imm=255 }         -> x9
@@ -746,13 +746,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     terminator Bnz { cond=v735, target=b9, fall=b6 }   (exit_acc=v735)
   block 6  start_pc=0
     v718 Extend { value=v715, kind=I32 }                  -> x0
-    v719 BinopI { op=add, lhs=v716, rhs_imm=1 }           -> x0
+    v719 BinopI { op=add, lhs=v722, rhs_imm=1 }           -> x0
     v720 Imm(0)                                           -> x1
     terminator Jmp(b7)   (exit_acc=v719)
   block 7  start_pc=0
     v715 Phi { incoming=[b4:v713, b6:v719], kind=I64 }    -> x0
     v716 Extend { value=v715, kind=I32 }                  -> x1
-    v717 BinopI { op=lt, lhs=v716, rhs_imm=16 }           -> x8
+    v717 BinopI { op=lt, lhs=v715, rhs_imm=16 }           -> x1
     terminator Bnz { cond=v717, target=b5, fall=b8 }   (exit_acc=v717)
   block 8  start_pc=0
     v736 Imm(42)                                          -> x0

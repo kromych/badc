@@ -2868,6 +2868,8 @@ fn splice_multi_block(
         extern_imm_data_refs: data_refs,
         extern_tls_refs: tls_refs,
         f32_values: new_f32,
+        // Rebuilt by `passes::narrow` after the pipeline settles.
+        cmp32: Vec::new(),
         param_fp_mask: original.param_fp_mask,
         // The caller's own layouts, plus the callee's (merged above so a
         // spliced call's `arg_aggs` can name them).

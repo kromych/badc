@@ -44,7 +44,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	strb	w1, [x0, #0x12]
                	ldrsw	x1, [x0, #0x4]
-               	cmp	x1, #0x64
+               	cmp	w1, #0x64
                	b.eq	<addr>
                	mov	x0, x2
                	add	sp, sp, #0x30
@@ -58,14 +58,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsh	x1, [x0, #0x10]
-               	cmp	x1, #0x2c
+               	cmp	w1, #0x2c
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [x0, #0x12]
-               	cmp	x0, #0x6
+               	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x30

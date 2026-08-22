@@ -245,7 +245,7 @@ Disassembly of section .text:
                	orr	x4, x4, x5
                	cmp	x4, #0x0
                	cset	x4, eq
-               	cmp	x4, #0x0
+               	cmp	w4, #0x0
                	cset	x4, eq
                	cbz	x4, <addr>
                	mov	x0, #0xb                // =11

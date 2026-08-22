@@ -65,7 +65,7 @@ Disassembly of section .text:
                	movl	%esi, %eax
                	movl	%edi, %esi
                	movl	%esi, %edi
-               	cmpq	%rdx, %rdi
+               	cmpl	%edx, %edi
                	jae	<addr>
                	movl	%eax, %eax
                	incq	%rax
@@ -123,7 +123,7 @@ Disassembly of section .text:
                	movl	%esi, %eax
                	movl	%edi, %esi
                	movl	%esi, %edi
-               	cmpq	%rdx, %rdi
+               	cmpl	%edx, %edi
                	jae	<addr>
                	movl	%eax, %eax
                	incq	%rax

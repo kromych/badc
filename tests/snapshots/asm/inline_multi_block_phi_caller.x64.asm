@@ -44,9 +44,9 @@ Disassembly of section .text:
                	subq	%rsi, %rdi
                	movl	%edx, %esi
                	movl	%edi, %edi
-               	cmpq	$0x1, %rdi
+               	cmpl	$0x1, %edi
                	jb	<addr>
-               	cmpq	$0x1, %rdi
+               	cmpl	$0x1, %edi
                	je	<addr>
                	movl	%eax, %r8d
                	movl	%esi, %ebx
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rcx
                	movl	%ecx, %eax
                	movl	%r9d, %esi
-               	cmpq	%rsi, %rax
+               	cmpl	%esi, %eax
                	jb	<addr>
                	leaq	<rip>, %rax
                	movl	(%rax), %ecx

@@ -26,7 +26,7 @@ Disassembly of section .text:
                	ldr	w1, [x0]
                	mov	x17, #0xcdef            // =52719
                	movk	x17, #0x90ab, lsl #16
-               	cmp	x1, x17
+               	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x40
@@ -35,7 +35,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0x4]
                	mov	x17, #0x5678            // =22136
                	movk	x17, #0x1234, lsl #16
-               	cmp	x1, x17
+               	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x40
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	mov	w0, w0
                	mov	x17, #0x1234            // =4660
                	movk	x17, #0x5678, lsl #16
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x22               // =34
                	add	sp, sp, #0x40

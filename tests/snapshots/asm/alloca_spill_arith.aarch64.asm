@@ -84,18 +84,18 @@ Disassembly of section .text:
                	add	x15, x22, x15
                	add	x15, x15, x20
                	add	x15, x15, x21
-               	cmp	x12, x8
+               	cmp	w12, w8
                	cset	x12, lt
-               	cmp	x8, x9
+               	cmp	w8, w9
                	cset	x8, lt
                	add	x8, x12, x8
-               	cmp	x9, x10
+               	cmp	w9, w10
                	cset	x9, lt
                	add	x8, x8, x9
-               	cmp	x10, x11
+               	cmp	w10, w11
                	cset	x9, lt
                	add	x8, x8, x9
-               	cmp	x11, x13
+               	cmp	w11, w13
                	cset	x9, lt
                	add	x8, x8, x9
                	cmp	x1, x2

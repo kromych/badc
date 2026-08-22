@@ -36,17 +36,16 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
+               	sxtw	x2, w0
                	add	x3, x20, x2
                	ldrb	w3, [x3]
                	add	x1, x1, x3
                	add	x0, x2, #0x1
-               	sxtw	x2, w0
                	mov	x17, #0x1f40            // =8000
-               	cmp	x2, x17
+               	cmp	w0, w17
                	b.lt	<addr>
-               	sxtw	x0, w1
                	mov	x17, #0x5dc0            // =24000
-               	cmp	x0, x17
+               	cmp	w1, w17
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0

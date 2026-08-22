@@ -28,17 +28,17 @@ Disassembly of section .text:
 <main>:
                	leaq	<rip>, %rax
                	movsbq	(%rax), %rcx
-               	cmpq	$0x74, %rcx
+               	cmpl	$0x74, %ecx
                	movl	$0x1, %edx
                	jne	<addr>
                	movsbq	0x1(%rax), %rcx
-               	cmpq	$0x61, %rcx
+               	cmpl	$0x61, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movsbq	0x2(%rax), %rcx
-               	cmpq	$0x67, %rcx
+               	cmpl	$0x67, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rcx
-               	cmpq	$0x63, %rcx
+               	cmpl	$0x63, %ecx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	retq
                	movq	0x8(%rax), %rax
                	movslq	(%rax), %rax
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	retq

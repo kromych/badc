@@ -40,19 +40,19 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
-               	lsl	x3, x2, #2
-               	add	x6, x4, x3
+               	sxtw	x3, w0
+               	lsl	x2, x3, #2
+               	add	x6, x4, x2
                	ldrsw	x6, [x6]
-               	add	x3, x5, x3
-               	ldrsw	x3, [x3]
-               	mul	x3, x6, x3
-               	add	x1, x1, x3
-               	add	x0, x2, #0x1
-               	sxtw	x2, w0
-               	cmp	x2, #0x4
+               	add	x2, x5, x2
+               	ldrsw	x2, [x2]
+               	mul	x2, x6, x2
+               	add	x1, x1, x2
+               	add	x0, x3, #0x1
+               	cmp	w0, #0x4
                	b.lt	<addr>
                	sxtw	x0, w1
-               	cmp	x0, #0x46
+               	cmp	w0, #0x46
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0

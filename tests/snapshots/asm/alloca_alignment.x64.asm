@@ -113,22 +113,22 @@ Disassembly of section .text:
                	movl	$0x2c, %r8d
                	movb	%r8b, 0x63(%rsi)
                	movsbq	(%rdi), %rdi
-               	cmpq	$0xb, %rdi
+               	cmpl	$0xb, %edi
                	jne	<addr>
                	movsbq	0x6(%rax), %rax
-               	cmpq	$0x16, %rax
+               	cmpl	$0x16, %eax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movsbq	0x20(%rdx), %rax
-               	cmpq	$0x21, %rax
+               	cmpl	$0x21, %eax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movsbq	0x63(%rsi), %rax
-               	cmpq	$0x2c, %rax
+               	cmpl	$0x2c, %eax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

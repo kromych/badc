@@ -59,7 +59,7 @@ Disassembly of section .text:
                	add	x3, x3, x1
                	add	x0, x1, #0x1
                	mov	w1, w0
-               	cmp	x1, #0x3e8
+               	cmp	w1, #0x3e8
                	b.lo	<addr>
                	mov	w0, w3
                	mov	w1, w6

@@ -53,8 +53,7 @@ Disassembly of section .text:
                	add	x1, x1, x17
                	ldrb	w1, [x1]
                	add	x0, x0, x1
-               	sxtw	x0, w0
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	sxtw	x0, w0

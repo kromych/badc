@@ -69,11 +69,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	movq	%rbx, (%rsp)
-               	movslq	%edi, %rdi
                	xorq	%rbx, %rbx
                	movl	%ebx, -0x10(%rbp)
                	movl	%ebx, -0x8(%rbp)
-               	cmpq	$0x1869f, %rdi          # imm = 0x1869F
+               	cmpl	$0x1869f, %edi          # imm = 0x1869F
                	jle	<addr>
                	leaq	<rip>, %rdi
                	leaq	-0x10(%rbp), %rsi

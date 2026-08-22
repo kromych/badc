@@ -153,7 +153,7 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	cmpq	$0xf, %rax
+               	cmpl	$0xf, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x70, %rsp

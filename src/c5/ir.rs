@@ -1316,6 +1316,12 @@ pub(crate) struct FunctionSsa {
     /// f32-typed `Imm` constant through a 32-bit `fmov` / `movd`.
     /// Empty (treated as all-false) for SSA built outside the walker.
     pub f32_values: Vec<bool>,
+    /// Per-value table, parallel to `insts`: the instruction is an
+    /// integer comparison whose operands are read at 32 bits
+    /// (`super::codegen::passes::narrow`). Set once, after every pass
+    /// that adds, removes or rewrites instructions; a shorter table is
+    /// read as all-false, which is the 64-bit form.
+    pub cmp32: Vec<bool>,
     /// Per-parameter floating-point mask: bit `i` set when declared
     /// parameter `i` is a floating-point scalar passed in an FP
     /// argument register (C99 6.2.5p10). The callee resolves each
@@ -1586,6 +1592,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             extern_imm_data_refs: _,
             extern_tls_refs: _,
             f32_values: _,
+            cmp32: _,
             param_fp_mask: _,
             agg_descs: _,
             param_aggs: _,

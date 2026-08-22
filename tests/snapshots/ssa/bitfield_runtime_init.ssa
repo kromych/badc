@@ -240,8 +240,8 @@ fn ent_pc=1 n_params=5 variadic=false locals=3
     v98  LocalAddr(-2)                                    -> x0
     v99  BinopI { op=add, lhs=v98, rhs_imm=8 }            -> x0
     v100 Extend { value=v9, kind=I32 }                    -> x0
-    v101 LoadLocal { off=6, kind=I32 }                    -> x1
-    v102 Binop { op=eq, lhs=v100, rhs=v9 }                -> x0
+    v101 LoadLocal { off=6, kind=I32 }                    -> x0
+    v102 Binop { op=eq, lhs=v9, rhs=v9 }                  -> x0
     v103 BinopI { op=ne, lhs=v102, rhs_imm=0 }            -> x1
     v104 Imm(0)                                           -> x1
     terminator Jmp(b8)   (exit_acc=v102)

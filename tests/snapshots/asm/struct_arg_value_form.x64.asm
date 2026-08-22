@@ -116,20 +116,20 @@ Disassembly of section .text:
                	retq
                	movl	(%rcx), %ecx
                	movl	$0xdeadbeef, %r11d      # imm = 0xDEADBEEF
-               	cmpq	%r11, %rcx
+               	cmpl	%r11d, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	movl	(%rax), %ecx
-               	cmpq	$0x11223344, %rcx       # imm = 0x11223344
+               	cmpl	$0x11223344, %ecx       # imm = 0x11223344
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	0x4(%rax), %eax
-               	cmpq	$0x55667788, %rax       # imm = 0x55667788
+               	cmpl	$0x55667788, %eax       # imm = 0x55667788
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

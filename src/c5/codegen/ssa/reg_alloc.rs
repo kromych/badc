@@ -161,6 +161,11 @@ pub(crate) struct Allocation {
     /// consumer reads the parameter's bits above bit 31. Empty or
     /// out-of-range entries default to observed, keeping the extension.
     pub high_observed: Vec<bool>,
+    /// Per-value comparison operand width (see
+    /// `passes::narrow`). True marks an integer comparison the emit
+    /// issues in the 32-bit register form. Empty or out-of-range
+    /// entries default to the 64-bit form.
+    pub cmp32: Vec<bool>,
 }
 
 impl Allocation {
@@ -415,6 +420,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             hints,
             f32_values: Vec::new(),
             high_observed: Vec::new(),
+            cmp32: Vec::new(),
         };
     }
 
@@ -883,6 +889,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
             func,
         ),
+        cmp32: func.cmp32.clone(),
     }
 }
 
@@ -3470,6 +3477,7 @@ int main(void) { return 0; }
             const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
+            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
@@ -3594,6 +3602,7 @@ int main(void) { return 0; }
         FunctionSsa {
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
+            cmp32: Vec::new(),
             insts,
             blocks: alloc::vec![crate::c5::ir::Block {
                 start_pc: 0,
@@ -3699,6 +3708,7 @@ int main(void) { return 0; }
             const_params: 0,
             inst_src: vec![(0, 0); n],
             f32_values: vec![false; n],
+            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),

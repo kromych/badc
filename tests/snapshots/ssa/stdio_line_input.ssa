@@ -288,7 +288,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=11
     v186 CallExt { binding_idx=65, args=[v185], fp_arg_mask=0x0 } -> x0
     v187 LoadLocal { off=-11, kind=I64 }                  -> x0
     v188 CallExt { binding_idx=16, args=[v115], fp_arg_mask=0x0 } -> x0
-    v189 CallExt { binding_idx=28, args=[], fp_arg_mask=0x0 } -> x3
+    v189 CallExt { binding_idx=28, args=[], fp_arg_mask=0x0 } -> x12
     v190 Imm(0)                                           -> x0
     v191 LoadLocal { off=-11, kind=I64 }                  -> x0
     v192 BinopI { op=eq, lhs=v189, rhs_imm=0 }            -> x0
@@ -298,20 +298,20 @@ fn ent_pc=12 n_params=0 variadic=false locals=11
     terminator Return(v193)   (exit_acc=v193)
   block 50  start_pc=0
     v194 LoadLocal { off=-11, kind=I64 }                  -> x0
-    v195 CallExt { binding_idx=52, args=[v189], fp_arg_mask=0x0 } -> x12
+    v195 CallExt { binding_idx=52, args=[v189], fp_arg_mask=0x0 } -> x3
     v196 Imm(0)                                           -> x0
-    v197 Extend { value=v195, kind=I32 }                  -> x7
-    v198 BinopI { op=lt, lhs=v197, rhs_imm=0 }            -> x0
+    v197 Extend { value=v195, kind=I32 }                  -> x0
+    v198 BinopI { op=lt, lhs=v195, rhs_imm=0 }            -> x0
     terminator Bz { cond=v198, target=b52, fall=b51 }   (exit_acc=v198)
   block 51  start_pc=0
     v199 Imm(18)                                          -> x0
     terminator Return(v199)   (exit_acc=v199)
   block 52  start_pc=0
-    v200 Extend { value=v195, kind=I32 }                  -> x0
+    v200 Extend { value=v195, kind=I32 }                  -> x7
     v201 ImmData(63)                                      -> x6
     v202 ImmData(70)                                      -> x2
     v203 Imm(42)                                          -> x1
-    v204 CallExt { binding_idx=60, args=[v197, v201, v202, v203], fp_arg_mask=0x0 } -> x0
+    v204 CallExt { binding_idx=60, args=[v200, v201, v202, v203], fp_arg_mask=0x0 } -> x0
     v205 BinopI { op=ne, lhs=v204, rhs_imm=9 }            -> x0
     terminator Bz { cond=v205, target=b54, fall=b53 }   (exit_acc=v205)
   block 53  start_pc=0

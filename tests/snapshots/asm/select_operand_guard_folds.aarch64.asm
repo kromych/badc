@@ -131,7 +131,7 @@ Disassembly of section .text:
                	mov	x17, #0x3               // =3
                	and	x1, x1, x17
                	sxtw	x1, w1
-               	cmp	x1, #0x1
+               	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret

@@ -50,7 +50,7 @@ Disassembly of section .text:
                	orr	x3, x3, x5
                	cmp	x3, #0x0
                	cset	x3, eq
-               	cmp	x3, #0x1
+               	cmp	w3, #0x1
                	cset	x3, ne
                	cbnz	x3, <addr>
                	ldr	x3, [x2]

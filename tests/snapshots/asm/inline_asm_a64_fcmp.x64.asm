@@ -45,7 +45,7 @@ Disassembly of section .text:
                	jb	<addr>
                	movl	$0x1, %eax
                	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

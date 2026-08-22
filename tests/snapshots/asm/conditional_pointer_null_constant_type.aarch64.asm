@@ -25,7 +25,7 @@ Disassembly of section .text:
                	str	w2, [x0, #0x10]
                	mov	x2, x0
                	ldrsw	x2, [x2, #0x10]
-               	cmp	x2, #0x2a
+               	cmp	w2, #0x2a
                	b.eq	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x20
@@ -33,7 +33,7 @@ Disassembly of section .text:
                	ret
                	mov	x1, x0
                	ldrsw	x1, [x1, #0x10]
-               	cmp	x1, #0x2a
+               	cmp	w1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	ret
                	mov	x1, x0
                	ldrsw	x1, [x1, #0x10]
-               	cmp	x1, #0x2a
+               	cmp	w1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x1, x0
                	ldrsw	x1, [x1, #0x10]
-               	cmp	x1, #0x2a
+               	cmp	w1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	cbz	x0, <addr>
                	ldrsw	x0, [x0, #0x10]
-               	cmp	x0, #0x2a
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20

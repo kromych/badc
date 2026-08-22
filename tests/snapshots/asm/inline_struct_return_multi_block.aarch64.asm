@@ -51,13 +51,13 @@ Disassembly of section .text:
                	mov	w0, w0
                	lsr	x0, x0, #5
                	mov	w2, w0
-               	cmp	x2, #0x9
+               	cmp	w2, #0x9
                	b.ne	<addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	mov	x5, #0x1                // =1
                	str	w5, [x3]
-               	cmp	x2, #0x4
+               	cmp	w2, #0x4
                	b.lo	<addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	b.ge	<addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16

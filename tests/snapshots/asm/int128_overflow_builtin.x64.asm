@@ -39,9 +39,7 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	movq	%r8, %rcx
                	movq	%r9, %r8
-               	movslq	%edi, %rdi
-               	movslq	%edx, %rdx
-               	cmpq	%rdx, %rdi
+               	cmpl	%edx, %edi
                	je	<addr>
                	movslq	0x60(%rbp), %rax
                	addq	$0x20, %rsp

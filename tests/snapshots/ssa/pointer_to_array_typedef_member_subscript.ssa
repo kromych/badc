@@ -59,8 +59,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v53  BinopI { op=shr, lhs=v52, rhs_imm=6 }            -> x1
     v54  BinopI { op=and, lhs=v53, rhs_imm=67108863 }     -> x1
     v55  BinopI { op=shl, lhs=v54, rhs_imm=32 }           -> x2
-    v56  Extend { value=v54, kind=I32 }                   -> x1
-    v57  BinopI { op=ne, lhs=v56, rhs_imm=9 }             -> x1
+    v56  Extend { value=v54, kind=I32 }                   -> x2
+    v57  BinopI { op=ne, lhs=v54, rhs_imm=9 }             -> x1
     terminator Bz { cond=v57, target=b2, fall=b1 }   (exit_acc=v57)
   block 1  start_pc=0
     v58  Imm(1)                                           -> x0

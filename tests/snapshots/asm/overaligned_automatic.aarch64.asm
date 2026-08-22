@@ -57,7 +57,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbnz	x7, <addr>
                	ldrsw	x1, [x1, #0xc]
-               	cmp	x1, #0x16
+               	cmp	w1, #0x16
                	cset	x1, ne
                	cbnz	x1, <addr>
                	add	x16, sp, #0x40
@@ -66,7 +66,7 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbnz	x0, <addr>
                	ldrsw	x0, [x3]
-               	cmp	x0, #0x2c
+               	cmp	w0, #0x2c
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2

@@ -34,7 +34,7 @@ Disassembly of section .text:
                	movl	-0x8(%rbp), %eax
                	bswapl	%eax
                	movl	$0xddccbbaa, %r11d      # imm = 0xDDCCBBAA
-               	cmpq	%r11, %rax
+               	cmpl	%r11d, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x10, %rsp

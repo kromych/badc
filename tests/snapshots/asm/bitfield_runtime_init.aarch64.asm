@@ -24,7 +24,6 @@ Disassembly of section .text:
                	sxtw	x4, w4
                	sxtw	x5, w5
                	sxtw	x6, w6
-               	sxtw	x7, w7
                	sub	x1, x29, #0x8
                	mov	x0, #0x0                // =0
                	str	x0, [x1]
@@ -72,7 +71,7 @@ Disassembly of section .text:
                	and	x3, x3, x17
                	eor	x3, x3, x8
                	mov	w3, w3
-               	cmp	x3, #0x0
+               	cmp	w3, #0x0
                	cset	x3, eq
                	cbz	x3, <addr>
                	asr	x1, x1, #8
@@ -89,7 +88,7 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	eor	x0, x0, x9
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, eq
                	sxtw	x0, w0
                	add	sp, sp, #0x10
@@ -108,11 +107,8 @@ Disassembly of section .text:
                	mov	x5, x0
                	mov	x7, x2
                	mov	x6, x1
-               	sxtw	x5, w5
                	sxtw	x6, w6
                	sxtw	x7, w7
-               	sxtw	x3, w3
-               	sxtw	x4, w4
                	sub	x0, x29, #0x10
                	mov	x1, #0x0                // =0
                	str	x1, [x0]
@@ -150,7 +146,7 @@ Disassembly of section .text:
                	ldrh	w0, [x0]
                	mov	x17, #0xffff            // =65535
                	and	x5, x5, x17
-               	cmp	x0, x5
+               	cmp	w0, w5
                	b.ne	<addr>
                	mov	w0, w2
                	asr	x0, x0, #16
@@ -158,7 +154,7 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	eor	x0, x0, x8
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	w0, w2
@@ -167,7 +163,7 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	eor	x0, x0, x9
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	w0, w11
@@ -176,11 +172,10 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	eor	x0, x0, x10
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>
-               	sxtw	x0, w4
-               	cmp	x0, x4
+               	cmp	w4, w4
                	cset	x1, eq
                	sxtw	x0, w1
                	add	sp, sp, #0x20

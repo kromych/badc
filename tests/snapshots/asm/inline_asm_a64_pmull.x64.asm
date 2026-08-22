@@ -42,8 +42,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	%eax, %eax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movslq	%eax, %rax
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -63,8 +62,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	%eax, %eax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movslq	%eax, %rax
-               	cmpq	$0x12, %rax
+               	cmpl	$0x12, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -83,7 +81,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	movl	%eax, %eax
-               	cmpq	$0x5, %rax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq

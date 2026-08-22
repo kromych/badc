@@ -48,14 +48,14 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	leaq	0x10(%rsi), %rdx
+               	movslq	%eax, %rcx
                	movq	(%rdx,%rcx,8), %rdi
                	leaq	0xa(%rcx), %rdx
                	movslq	%edx, %rdx
                	cmpq	%rdx, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0xb, %rcx
+               	cmpl	$0xb, %eax
                	jl	<addr>
                	leaq	<rip>, %rax
                	cmpq	%rax, %rsi

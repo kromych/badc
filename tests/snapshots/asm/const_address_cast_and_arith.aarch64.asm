@@ -35,13 +35,13 @@ Disassembly of section .text:
                	ret
                	ldr	x2, [x0, #0x18]
                	ldrsw	x2, [x2]
-               	cmp	x2, #0xc8
+               	cmp	w2, #0xc8
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	ldr	x2, [x0, #0x20]
                	ldrsw	x2, [x2]
-               	cmp	x2, #0xc8
+               	cmp	w2, #0xc8
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret

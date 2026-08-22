@@ -20,8 +20,7 @@ Disassembly of section .text:
                	fmov	s17, w2
                	fmul	s0, s16, s17
                	fcvtzs	x0, s0
-               	sxtw	x0, w0
-               	cmp	x0, #0x5
+               	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
@@ -29,16 +28,14 @@ Disassembly of section .text:
                	fmov	s16, w0
                	fcvtzs	x0, s16
                	add	x0, x0, #0x3
-               	sxtw	x0, w0
-               	cmp	x0, #0x7
+               	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	fmov	s16, w1
                	fcvtzs	x0, s16
                	add	x0, x0, #0xa
-               	sxtw	x0, w0
-               	cmp	x0, #0xc
+               	cmp	w0, #0xc
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
@@ -47,8 +44,7 @@ Disassembly of section .text:
                	fmov	s17, w2
                	fmul	s0, s16, s17
                	fcvtzs	x0, s0
-               	sxtw	x0, w0
-               	cmp	x0, #0x7
+               	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret

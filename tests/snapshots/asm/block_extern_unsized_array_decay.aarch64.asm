@@ -17,11 +17,11 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
-               	cmp	x1, #0xa
+               	cmp	w1, #0xa
                	cset	x1, ne
                	cbnz	x1, <addr>
                	ldrsw	x1, [x0, #0x8]
-               	cmp	x1, #0x1e
+               	cmp	w1, #0x1e
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
@@ -32,7 +32,7 @@ Disassembly of section .text:
                	cset	x1, ne
                	cbnz	x1, <addr>
                	ldrsw	x0, [x2]
-               	cmp	x0, #0x14
+               	cmp	w0, #0x14
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2

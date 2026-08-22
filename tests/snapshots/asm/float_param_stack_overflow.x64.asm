@@ -113,8 +113,7 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm7
                	callq	<addr>
                	addq	$0x10, %rsp
-               	movslq	%eax, %rax
-               	cmpq	$0x3ff, %rax            # imm = 0x3FF
+               	cmpl	$0x3ff, %eax            # imm = 0x3FF
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x10, %rsp
@@ -135,8 +134,7 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm7
                	callq	<addr>
                	addq	$0x10, %rsp
-               	movslq	%eax, %rax
-               	cmpq	$0x37f, %rax            # imm = 0x37F
+               	cmpl	$0x37f, %eax            # imm = 0x37F
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x10, %rsp

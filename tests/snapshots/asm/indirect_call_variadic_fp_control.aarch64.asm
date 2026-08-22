@@ -58,6 +58,7 @@ Disassembly of section .text:
                	sub	x17, x29, #0x28
                	str	d16, [x17]
                	b	<addr>
+               	sxtw	x1, w0
                	asr	x3, x1, #63
                	lsr	x3, x3, #63
                	add	x4, x1, x3
@@ -116,9 +117,8 @@ Disassembly of section .text:
                	sub	x17, x29, #0x28
                	str	d0, [x17]
                	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	ldursw	x3, [x29, #0x10]
-               	cmp	x1, x3
+               	ldursw	x1, [x29, #0x10]
+               	cmp	w0, w1
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	sub	x16, x29, #0x28

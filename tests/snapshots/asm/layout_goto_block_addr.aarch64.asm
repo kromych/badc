@@ -43,7 +43,7 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x20]
                	ldursw	x1, [x29, #-0x20]
                	ldursw	x2, [x29, #0x10]
-               	cmp	x1, x2
+               	cmp	w1, w2
                	b.lt	<addr>
                	ldursw	x0, [x29, #-0x18]
                	add	sp, sp, #0x20

@@ -67,7 +67,7 @@ Disassembly of section .text:
                	ldur	w0, [x29, #-0x8]
                	mov	x17, #0x7999            // =31129
                	movk	x17, #0x5a82, lsl #16
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20

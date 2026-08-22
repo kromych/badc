@@ -80,9 +80,8 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	incq	%rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rdx
-               	movslq	-0xe0(%rbp), %rsi
-               	cmpq	%rsi, %rdx
+               	movslq	-0xe0(%rbp), %rdx
+               	cmpl	%edx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	leaq	-0x30(%rbp), %rax

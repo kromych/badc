@@ -27,21 +27,21 @@ Disassembly of section .text:
 
 <pick>:
                	movsbq	(%rdi), %rax
-               	cmpq	$-0x1, %rax
+               	cmpl	$-0x1, %eax
                	jl	<addr>
-               	cmpq	$0x28, %rax
+               	cmpl	$0x28, %eax
                	jl	<addr>
-               	cmpq	$0x28, %rax
+               	cmpl	$0x28, %eax
                	je	<addr>
                	xorq	%rax, %rax
                	retq
                	movl	$0x3, %eax
                	retq
-               	cmpq	$-0x1, %rax
+               	cmpl	$-0x1, %eax
                	jne	<addr>
                	movl	$0x2, %eax
                	retq
-               	cmpq	$-0x80, %rax
+               	cmpl	$-0x80, %eax
                	jne	<addr>
                	movl	$0x1, %eax
                	retq
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	movl	%eax, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rcx
                	movsbq	%cl, %rcx
-               	cmpq	$-0x80, %rcx
+               	cmpl	$-0x80, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x20, %rsp
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movl	%ecx, -0x10(%rbp)
                	movslq	-0x10(%rbp), %rcx
                	movsbq	%cl, %rcx
-               	cmpq	$-0x1, %rcx
+               	cmpl	$-0x1, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp
@@ -77,8 +77,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	callq	*%rax
-               	movslq	%eax, %rax
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp
@@ -92,8 +91,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	callq	*%rax
-               	movslq	%eax, %rax
-               	cmpq	$0x2, %rax
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x20, %rsp

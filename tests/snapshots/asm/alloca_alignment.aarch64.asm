@@ -100,21 +100,21 @@ Disassembly of section .text:
                	mov	x17, #0x16              // =22
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>
                	ldrb	w0, [x2, #0x20]
                	mov	x17, #0x21              // =33
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>
                	ldrb	w0, [x3, #0x63]
                	mov	x17, #0x2c              // =44
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, eq
                	cbz	x0, <addr>
                	sxtw	x0, w1

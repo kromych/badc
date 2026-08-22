@@ -119,7 +119,7 @@ Disassembly of section .text:
                	popq	%rcx
                	movq	%rax, %rcx
                	movslq	(%rax), %rcx
-               	cmpq	$0xaf, %rcx
+               	cmpl	$0xaf, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -153,7 +153,7 @@ Disassembly of section .text:
                	popq	%rcx
                	movq	%rax, %rcx
                	movslq	(%rax), %rcx
-               	cmpq	$0x42, %rcx
+               	cmpl	$0x42, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx

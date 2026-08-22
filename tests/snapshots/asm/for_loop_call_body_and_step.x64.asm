@@ -33,8 +33,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	incq	%rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rdx
-               	cmpq	$0x7, %rdx
+               	cmpl	$0x7, %eax
                	jl	<addr>
                	imulq	$0x6, %rcx, %rax
                	movslq	%eax, %rax
@@ -48,8 +47,7 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	incq	%rax
                	movslq	%eax, %rax
-               	movslq	%eax, %rdx
-               	cmpq	$0x7, %rdx
+               	cmpl	$0x7, %eax
                	jl	<addr>
                	imulq	$0x6, %rcx, %rax
                	movslq	%eax, %rax

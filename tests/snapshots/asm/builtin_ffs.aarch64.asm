@@ -50,64 +50,57 @@ Disassembly of section .text:
                	mov	x17, #0x7f              // =127
                	and	x1, x1, x17
                	add	x1, x1, #0x1
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, ne
                	mul	x0, x1, x0
-               	sxtw	x0, w0
-               	cmp	x0, #0x11
-               	cset	x0, eq
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	cmp	w0, #0x11
+               	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x8]
+               	mov	x2, #0x0                // =0
+               	stur	w2, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
                	mov	w0, w0
-               	sub	x2, x0, #0x1
+               	sub	x1, x0, #0x1
                	mvn	x3, x0
-               	and	x2, x2, x3
-               	mov	w2, w2
-               	lsr	x3, x2, #1
+               	and	x1, x1, x3
+               	mov	w1, w1
+               	lsr	x3, x1, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
                	and	x3, x3, x17
-               	sub	x2, x2, x3
+               	sub	x1, x1, x3
                	mov	x17, #0x3333            // =13107
                	movk	x17, #0x3333, lsl #16
-               	and	x3, x2, x17
-               	lsr	x2, x2, #2
+               	and	x3, x1, x17
+               	lsr	x1, x1, #2
                	mov	x17, #0x3333            // =13107
                	movk	x17, #0x3333, lsl #16
-               	and	x2, x2, x17
-               	add	x2, x3, x2
-               	lsr	x3, x2, #4
-               	add	x2, x2, x3
+               	and	x1, x1, x17
+               	add	x1, x3, x1
+               	lsr	x3, x1, #4
+               	add	x1, x1, x3
                	mov	x17, #0xf0f             // =3855
                	movk	x17, #0xf0f, lsl #16
-               	and	x2, x2, x17
-               	lsr	x3, x2, #8
-               	add	x2, x2, x3
-               	lsr	x3, x2, #16
-               	add	x2, x2, x3
+               	and	x1, x1, x17
+               	lsr	x3, x1, #8
+               	add	x1, x1, x3
+               	lsr	x3, x1, #16
+               	add	x1, x1, x3
                	mov	x17, #0x7f              // =127
-               	and	x2, x2, x17
-               	add	x2, x2, #0x1
-               	cmp	x0, #0x0
+               	and	x1, x1, x17
+               	add	x1, x1, #0x1
+               	cmp	w0, #0x0
                	cset	x0, ne
-               	mul	x0, x2, x0
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	cset	x0, eq
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
+               	mul	x0, x1, x0
+               	cbz	x0, <addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, x1
+               	mov	x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

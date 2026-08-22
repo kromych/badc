@@ -73,14 +73,14 @@ Disassembly of section .text:
                	mov	x17, #0x8               // =8
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	ldrb	w0, [x1, #0xf]
                	mov	x17, #0x10              // =16
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
@@ -88,12 +88,12 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x70
                	ret
                	b	<addr>
+               	sxtw	x0, w20
                	add	x1, x21, x0
                	ldrb	w1, [x1]
                	cbnz	x1, <addr>
                	add	x20, x0, #0x1
-               	sxtw	x0, w20
-               	cmp	x0, #0x10
+               	cmp	w20, #0x10
                	b.lt	<addr>
                	sub	x1, x29, #0x40
                	sub	x0, x29, #0x10
@@ -108,14 +108,14 @@ Disassembly of section .text:
                	mov	x17, #0x1               // =1
                	eor	x1, x1, x17
                	mov	w2, w1
-               	cmp	x2, #0x0
+               	cmp	w2, #0x0
                	cset	x1, ne
                	cbnz	x2, <addr>
                	ldrb	w1, [x0, #0xf]
                	mov	x17, #0x10              // =16
                	eor	x1, x1, x17
                	mov	w1, w1
-               	cmp	x1, #0x0
+               	cmp	w1, #0x0
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x8                // =8
@@ -156,14 +156,14 @@ Disassembly of section .text:
                	mov	x17, #0x9               // =9
                	eor	x2, x2, x17
                	mov	w3, w2
-               	cmp	x3, #0x0
+               	cmp	w3, #0x0
                	cset	x2, ne
                	cbnz	x3, <addr>
                	ldrb	w0, [x0, #0xf]
                	mov	x17, #0xa               // =10
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	x0, #0x0
+               	cmp	w0, #0x0
                	cset	x2, ne
                	cbz	x2, <addr>
                	mov	x0, #0xd                // =13

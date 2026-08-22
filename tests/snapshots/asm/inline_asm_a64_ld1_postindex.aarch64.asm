@@ -64,7 +64,7 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x38]
                	add	x0, x0, x1
                	sxtw	x0, w0
-               	cmp	x0, #0x2a
+               	cmp	w0, #0x2a
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	sxtw	x0, w0

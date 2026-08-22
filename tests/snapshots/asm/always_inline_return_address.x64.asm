@@ -31,11 +31,7 @@ Disassembly of section .text:
                	movq	0x8(%rbp), %rax
                	movq	0x8(%rbp), %rcx
                	cmpq	%rcx, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq

@@ -85,13 +85,13 @@ Disassembly of section .text:
                	popq	%rdx
                	movq	%rcx, %rax
                	movslq	(%rcx), %rax
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movslq	0x4(%rcx), %rax
-               	cmpq	$0x8, %rax
+               	cmpl	$0x8, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -132,14 +132,12 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rax
                	movl	(%rax), %ecx
                	movl	0x4(%rax), %edx
-               	movslq	%ecx, %rax
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %ecx
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movslq	%edx, %rax
-               	cmpq	$0x8, %rax
+               	cmpl	$0x8, %edx
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

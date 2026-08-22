@@ -87,11 +87,11 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x28]
                	add	x1, x1, #0x1
                	stur	w1, [x29, #-0x28]
-               	add	x0, x2, #0x1
-               	sxtw	x2, w0
+               	sxtw	x0, w0
+               	add	x0, x0, #0x1
                	mov	x17, #0x4240            // =16960
                	movk	x17, #0xf, lsl #16
-               	cmp	x2, x17
+               	cmp	w0, w17
                	b.lt	<addr>
                	mov	x0, #0x1                // =1
                	sub	x20, x29, #0x10

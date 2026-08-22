@@ -29,7 +29,7 @@ Disassembly of section .text:
                	mov	x1, #0x63               // =99
                	str	w1, [x0]
                	sxtw	x1, w1
-               	cmp	x1, #0x63
+               	cmp	w1, #0x63
                	b.eq	<addr>
                	mov	x0, #0xbad2             // =47826
                	ldp	x29, x30, [sp, #0x10]
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x70
                	ret
                	ldrsw	x0, [x21]
-               	cmp	x0, #0x1
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x60]

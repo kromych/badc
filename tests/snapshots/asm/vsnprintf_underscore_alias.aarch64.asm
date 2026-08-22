@@ -81,8 +81,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	mov	x4, x21
                	bl	<addr>
-               	sxtw	x0, w0
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x1, <page>

@@ -51,12 +51,12 @@ Disassembly of section .text:
                	mov	x17, #0x68              // =104
                	eor	x2, x2, x17
                	mov	w2, w2
-               	cmp	x2, #0x0
+               	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldr	x2, [x0]
                	ldrb	w2, [x2, #0x2]
-               	cmp	x2, #0x0
+               	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldr	x1, [x0, #0x8]
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	mov	x17, #0x2d              // =45
                	eor	x1, x1, x17
                	mov	w1, w1
-               	cmp	x1, #0x0
+               	cmp	w1, #0x0
                	cset	x1, eq
                	sxtw	x1, w1
                	cbnz	x1, <addr>

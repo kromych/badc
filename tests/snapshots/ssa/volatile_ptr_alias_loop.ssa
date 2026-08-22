@@ -21,7 +21,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v16  BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x0
     v17  Imm(0)                                           -> x1
     v18  Extend { value=v16, kind=I32 }                   -> x1
-    v19  BinopI { op=gt, lhs=v18, rhs_imm=10 }            -> x1
+    v19  BinopI { op=gt, lhs=v16, rhs_imm=10 }            -> x1
     terminator Bnz { cond=v19, target=b8, fall=b2 }   (exit_acc=v19)
   block 2  start_pc=0
     terminator Jmp(b3)
@@ -31,8 +31,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v8   BinopI { op=lt, lhs=v7, rhs_imm=3 }              -> x1
     terminator Bnz { cond=v8, target=b1, fall=b4 }   (exit_acc=v8)
   block 4  start_pc=0
-    v20  Extend { value=v6, kind=I32 }                    -> x0
-    v21  BinopI { op=eq, lhs=v20, rhs_imm=3 }             -> x0
+    v20  Extend { value=v6, kind=I32 }                    -> x1
+    v21  BinopI { op=eq, lhs=v6, rhs_imm=3 }              -> x0
     terminator Bz { cond=v21, target=b7, fall=b5 }   (exit_acc=v21)
   block 5  start_pc=0
     v23  Imm(0)                                           -> x0

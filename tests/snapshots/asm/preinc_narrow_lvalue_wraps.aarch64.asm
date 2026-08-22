@@ -44,12 +44,11 @@ Disassembly of section .text:
                	ldrb	w2, [x2]
                	cbnz	x2, <addr>
                	mov	x2, x0
-               	sxtw	x2, w2
-               	cmp	x2, #0x1
+               	cmp	w2, #0x1
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldurb	w2, [x29, #-0x8]
-               	cmp	x2, #0x0
+               	cmp	w2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	sxtw	x0, w1

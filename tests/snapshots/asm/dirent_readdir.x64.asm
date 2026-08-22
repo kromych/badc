@@ -67,8 +67,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	movslq	%r12d, %rax
-               	cmpq	$0x2, %rax
+               	cmpl	$0x2, %r12d
                	setg	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

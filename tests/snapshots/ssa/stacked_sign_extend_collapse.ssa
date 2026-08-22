@@ -71,10 +71,10 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v49  Imm(0)                                           -> x2
     v50  Binop { op=add, lhs=v43, rhs=v45 }               -> x0
     v51  BinopI { op=shl, lhs=v50, rhs_imm=32 }           -> x1
-    v52  Extend { value=v50, kind=I32 }                   -> x0
+    v52  Extend { value=v50, kind=I32 }                   -> x1
     v53  Imm(0)                                           -> x1
     v54  Imm(0)                                           -> x1
-    v55  BinopI { op=ne, lhs=v52, rhs_imm=-294967296 }    -> x0
+    v55  BinopI { op=ne, lhs=v50, rhs_imm=-294967296 }    -> x0
     terminator Bz { cond=v55, target=b10, fall=b9 }   (exit_acc=v55)
   block 9  start_pc=0
     v56  Imm(5)                                           -> x0
@@ -90,14 +90,14 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v64  Imm(0)                                           -> x2
     v65  Binop { op=add, lhs=v58, rhs=v60 }               -> x0
     v66  BinopI { op=shl, lhs=v65, rhs_imm=32 }           -> x1
-    v67  Extend { value=v65, kind=I32 }                   -> x0
+    v67  Extend { value=v65, kind=I32 }                   -> x1
     v68  Imm(0)                                           -> x1
     v69  Imm(0)                                           -> x1
-    v70  BinopI { op=lt, lhs=v67, rhs_imm=0 }             -> x0
+    v70  BinopI { op=lt, lhs=v65, rhs_imm=0 }             -> x0
     v71  BinopI { op=shl, lhs=v70, rhs_imm=32 }           -> x1
-    v72  Extend { value=v70, kind=I32 }                   -> x0
-    v73  BinopI { op=eq, lhs=v72, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v72, target=b12, fall=b11 }   (exit_acc=v73)
+    v72  Extend { value=v70, kind=I32 }                   -> x1
+    v73  BinopI { op=eq, lhs=v70, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v70, target=b12, fall=b11 }   (exit_acc=v73)
   block 11  start_pc=0
     v74  Imm(6)                                           -> x0
     terminator Return(v74)   (exit_acc=v74)

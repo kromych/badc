@@ -37,8 +37,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
-               	movslq	%ecx, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
@@ -49,13 +47,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movzbq	%al, %rax
                	ud2
-               	cmpq	$0x7, %rax
+               	cmpl	$0x7, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	movslq	-0x10(%rbp), %rax
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

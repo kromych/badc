@@ -37,7 +37,7 @@ Disassembly of section .text:
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	xorq	%r11, %rax
                	movl	%eax, %eax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rax
                	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpq	%r11, %rax
+               	cmpl	%r11d, %eax
                	jae	<addr>
                	movl	$0x4, %eax
                	addq	$0x10, %rsp
@@ -69,7 +69,7 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rax
                	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpq	%r11, %rax
+               	cmpl	%r11d, %eax
                	ja	<addr>
                	movl	$0x5, %eax
                	addq	$0x10, %rsp
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rax
                	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpq	%r11, %rax
+               	cmpl	%r11d, %eax
                	jae	<addr>
                	movl	$0x8, %eax
                	addq	$0x10, %rsp
@@ -87,7 +87,7 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rax
                	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpq	%r11, %rax
+               	cmpl	%r11d, %eax
                	jbe	<addr>
                	movl	$0x9, %eax
                	addq	$0x10, %rsp
@@ -109,7 +109,7 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rax
                	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpq	%r11, %rax
+               	cmpl	%r11d, %eax
                	je	<addr>
                	movl	$0x18, %eax
                	addq	$0x10, %rsp

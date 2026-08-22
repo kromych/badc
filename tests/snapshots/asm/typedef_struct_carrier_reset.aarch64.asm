@@ -100,29 +100,28 @@ Disassembly of section .text:
                	sub	x20, x29, #0xa8
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x0, w0
-               	cmp	x0, #0x64
+               	cmp	w0, #0x64
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0xc0]
                	ldr	x20, [sp], #0xd0
                	ret
                	ldrsw	x0, [x20, #0x14]
-               	cmp	x0, #0x5
+               	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0xc0]
                	ldr	x20, [sp], #0xd0
                	ret
                	ldrsw	x0, [x20, #0x3c]
-               	cmp	x0, #0x6
+               	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0xc0]
                	ldr	x20, [sp], #0xd0
                	ret
                	ldrsw	x0, [x20, #0xa0]
-               	cmp	x0, #0x64
+               	cmp	w0, #0x64
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0xc0]

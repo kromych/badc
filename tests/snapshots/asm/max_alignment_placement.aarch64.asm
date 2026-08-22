@@ -67,7 +67,6 @@ Disassembly of section .text:
                	add	x0, x1, #0x1
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0x14               // =20
                	ret
@@ -75,7 +74,6 @@ Disassembly of section .text:
                	add	x0, x1, x17
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17
-               	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0x15               // =21
                	ret

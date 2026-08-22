@@ -184,6 +184,7 @@ struct Undo {
     insts: Vec<Inst>,
     inst_src: Vec<(u32, u32)>,
     f32_values: Vec<bool>,
+    cmp32: Vec<bool>,
     blocks: Vec<Block>,
     extern_call_refs: Vec<(u32, u32)>,
     extern_imm_code_refs: Vec<(u32, u32)>,
@@ -196,6 +197,7 @@ impl Undo {
         func.insts = self.insts;
         func.inst_src = self.inst_src;
         func.f32_values = self.f32_values;
+        func.cmp32 = self.cmp32;
         func.blocks = self.blocks;
         func.extern_call_refs = self.extern_call_refs;
         func.extern_imm_code_refs = self.extern_imm_code_refs;
@@ -215,6 +217,7 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
         insts: Vec::new(),
         inst_src: Vec::new(),
         f32_values: Vec::new(),
+        cmp32: Vec::new(),
         blocks: func.blocks.clone(),
         extern_call_refs: func.extern_call_refs.clone(),
         extern_imm_code_refs: func.extern_imm_code_refs.clone(),
@@ -311,9 +314,19 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
             });
         }
     }
+    // The narrow-compare marks are keyed by value id, so they move with
+    // the rewrite; an inserted copy is never a comparison and reads
+    // false. A stale table would name the wrong instructions.
+    let mut cmp32: Vec<bool> = vec![false; insts.len()];
+    for (old, &new) in remap.iter().enumerate() {
+        if new != NO_VALUE && func.cmp32.get(old).copied().unwrap_or(false) {
+            cmp32[new as usize] = true;
+        }
+    }
     undo.insts = core::mem::replace(&mut func.insts, insts);
     undo.inst_src = core::mem::replace(&mut func.inst_src, inst_src);
     undo.f32_values = core::mem::replace(&mut func.f32_values, f32_values);
+    undo.cmp32 = core::mem::replace(&mut func.cmp32, cmp32);
     undo
 }
 
@@ -447,6 +460,7 @@ mod tests {
             fp_used: Vec::new(),
             use_counts: vec![1; n],
             last_use: vec![0; n],
+            cmp32: vec![false; n],
             sxtw_source: vec![NO_VALUE; n],
             sxtw_k: vec![0; n],
             branch_fused: vec![false; n],

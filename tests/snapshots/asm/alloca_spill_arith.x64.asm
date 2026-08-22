@@ -127,22 +127,22 @@ Disassembly of section .text:
                	movq	-0x20(%rbp), %r10
                	addq	-0x30(%rbp), %r10
                	movq	%r10, -0x20(%rbp)
-               	cmpq	%rbx, %r15
+               	cmpl	%ebx, %r15d
                	setl	%r15b
                	movzbq	%r15b, %r15
-               	cmpq	%r12, %rbx
+               	cmpl	%r12d, %ebx
                	setl	%bl
                	movzbq	%bl, %rbx
                	addq	%r15, %rbx
-               	cmpq	%r13, %r12
+               	cmpl	%r13d, %r12d
                	setl	%r12b
                	movzbq	%r12b, %r12
                	addq	%r12, %rbx
-               	cmpq	%r14, %r13
+               	cmpl	%r14d, %r13d
                	setl	%r12b
                	movzbq	%r12b, %r12
                	addq	%r12, %rbx
-               	cmpq	-0x18(%rbp), %r14
+               	cmpl	-0x18(%rbp), %r14d
                	setl	%r12b
                	movzbq	%r12b, %r12
                	addq	%r12, %rbx

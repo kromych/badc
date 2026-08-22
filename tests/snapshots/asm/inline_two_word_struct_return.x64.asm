@@ -31,25 +31,25 @@ Disassembly of section .text:
                	subq	$0xb0, %rsp
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	-0x90(%rbp), %rdx
-               	movq	%rcx, %rsi
+               	leaq	-0x90(%rbp), %rcx
+               	movslq	%eax, %rdx
+               	movq	%rdx, %rsi
                	shlq	$0x4, %rsi
-               	leaq	(%rdx,%rsi), %rdi
-               	imulq	$0xa, %rcx, %rsi
-               	leaq	-0xa0(%rbp), %rdx
-               	movl	%esi, (%rdx)
+               	leaq	(%rcx,%rsi), %rdi
+               	imulq	$0xa, %rdx, %rsi
+               	leaq	-0xa0(%rbp), %rcx
+               	movl	%esi, (%rcx)
                	movl	$0x1, %esi
-               	movq	%rsi, 0x8(%rdx)
+               	movq	%rsi, 0x8(%rcx)
                	pushq	%rax
-               	movq	(%rdx), %rax
+               	movq	(%rcx), %rax
                	movq	%rax, (%rdi)
-               	movq	0x8(%rdx), %rax
+               	movq	0x8(%rcx), %rax
                	movq	%rax, 0x8(%rdi)
                	popq	%rax
-               	movq	%rdi, %rdx
-               	leaq	0x1(%rcx), %rax
-               	movslq	%eax, %rcx
-               	cmpq	$0x8, %rcx
+               	movq	%rdi, %rcx
+               	leaq	0x1(%rdx), %rax
+               	cmpl	$0x8, %eax
                	jl	<addr>
                	leaq	-0x90(%rbp), %rax
                	leaq	(%rax), %rcx

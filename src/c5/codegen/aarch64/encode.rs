@@ -957,6 +957,18 @@ pub(crate) fn enc_cmp_reg(rn: Reg, rm: Reg) -> u32 {
     0xEB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32)
 }
 
+/// `CMP <Wn>, <Wm>` -- the 32-bit form of [`enc_cmp_reg`]. The operands
+/// are read as W registers, so bits 32..63 do not reach the flags.
+pub(crate) fn enc_cmp_reg_w(rn: Reg, rm: Reg) -> u32 {
+    0x6B00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32)
+}
+
+/// `SUBS <Wd>, <Wn|WSP>, #imm12` -- the 32-bit form of [`enc_subs_imm`].
+pub(crate) fn enc_subs_imm_w(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "subs imm: {imm12} > 12-bit max");
+    0x7100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// AArch64 condition codes -- the 4-bit field that follows comparisons
 /// and conditional moves. Names match the ARM ARM. The Mi/Ls
 /// variants are the FP-comparison flavour: after `FCMP`, the

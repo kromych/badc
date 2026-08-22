@@ -24,7 +24,7 @@ Disassembly of section .text:
                	rev	w0, w0
                	mov	x17, #0xbbaa            // =48042
                	movk	x17, #0xddcc, lsl #16
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10

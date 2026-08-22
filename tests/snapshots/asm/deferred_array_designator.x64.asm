@@ -28,29 +28,29 @@ Disassembly of section .text:
 <main>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	cmpq	$0x1, %rcx
+               	cmpl	$0x1, %ecx
                	movl	$0x1, %ecx
                	jne	<addr>
                	movslq	0x28(%rax), %rdx
-               	cmpq	$0x3, %rdx
+               	cmpl	$0x3, %edx
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movslq	0xe0(%rax), %rdx
-               	cmpq	$0x5, %rdx
+               	cmpl	$0x5, %edx
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movslq	0xe4(%rax), %rdx
-               	cmpq	$0x6, %rdx
+               	cmpl	$0x6, %edx
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movslq	0x10(%rax), %rdx
-               	cmpq	$0x7, %rdx
+               	cmpl	$0x7, %edx
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
@@ -58,13 +58,13 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	movslq	0x18(%rax), %rsi
-               	testq	%rsi, %rsi
+               	testl	%esi, %esi
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rsi, %rsi
                	jne	<addr>
                	movslq	0xdc(%rax), %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
@@ -73,32 +73,32 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpq	$0xa, %rax
+               	cmpl	$0xa, %eax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x8(%rax), %rax
-               	cmpq	$0x64, %rax
+               	cmpl	$0x64, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x18(%rax), %rax
-               	cmpq	$0x1e, %rax
+               	cmpl	$0x1e, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x20(%rax), %rax
-               	cmpq	$0x28, %rax
+               	cmpl	$0x28, %eax
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	0x10(%rax), %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -107,7 +107,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movsbq	(%rax), %rax
-               	cmpq	$0x61, %rax
+               	cmpl	$0x61, %eax
                	setne	%cl
                	movzbq	%cl, %rcx
                	movl	$0x1, %eax
@@ -115,21 +115,21 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rcx
                	movsbq	0x2(%rcx), %rcx
-               	cmpq	$0x63, %rcx
+               	cmpl	$0x63, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	0x4(%rax), %rax
-               	cmpq	$0x65, %rax
+               	cmpl	$0x65, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	0x1(%rax), %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

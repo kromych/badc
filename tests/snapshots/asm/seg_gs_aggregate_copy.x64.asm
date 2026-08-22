@@ -413,13 +413,13 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	jne	<addr>
                	movl	%gs:(%rsi), %r8d
-               	cmpq	$0x11223344, %r8        # imm = 0x11223344
+               	cmpl	$0x11223344, %r8d       # imm = 0x11223344
                	setne	%r8b
                	movzbq	%r8b, %r8
                	testq	%r8, %r8
                	jne	<addr>
                	movl	%gs:(%rdi), %edx
-               	cmpq	$0x55667788, %rdx       # imm = 0x55667788
+               	cmpl	$0x55667788, %edx       # imm = 0x55667788
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
@@ -463,7 +463,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdx
                	addq	$0x8, %rdx
                	movl	%gs:(%rdx), %edx
-               	cmpq	$0x11223344, %rdx       # imm = 0x11223344
+               	cmpl	$0x11223344, %edx       # imm = 0x11223344
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
@@ -471,7 +471,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	addq	$0x10, %rcx
                	movl	%gs:(%rcx), %ecx
-               	cmpq	$0x55667788, %rcx       # imm = 0x55667788
+               	cmpl	$0x55667788, %ecx       # imm = 0x55667788
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -517,13 +517,13 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	je	<addr>
                	movl	%edx, %edx
-               	cmpq	$0x11223344, %rdx       # imm = 0x11223344
+               	cmpl	$0x11223344, %edx       # imm = 0x11223344
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	%r8d, %edx
-               	cmpq	$0x55667788, %rdx       # imm = 0x55667788
+               	cmpl	$0x55667788, %edx       # imm = 0x55667788
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
@@ -567,13 +567,13 @@ Disassembly of section .text:
                	cmpq	%r11, %rcx
                	jne	<addr>
                	movl	0x8(%rax), %ecx
-               	cmpq	$0x11223344, %rcx       # imm = 0x11223344
+               	cmpl	$0x11223344, %ecx       # imm = 0x11223344
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	0x10(%rax), %ecx
-               	cmpq	$0x55667788, %rcx       # imm = 0x55667788
+               	cmpl	$0x55667788, %ecx       # imm = 0x55667788
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -811,7 +811,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	0xb8(%rsp), %rax
                	movl	%eax, %eax
-               	cmpq	$0x11223344, %rax       # imm = 0x11223344
+               	cmpl	$0x11223344, %eax       # imm = 0x11223344
                	sete	%al
                	movzbq	%al, %rax
                	xorq	%rcx, %rcx
@@ -819,7 +819,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	0xb0(%rsp), %rax
                	movl	%eax, %eax
-               	cmpq	$0x55667788, %rax       # imm = 0x55667788
+               	cmpl	$0x55667788, %eax       # imm = 0x55667788
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorq	%rax, %rax
@@ -852,7 +852,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	0xa8(%rsp), %rax
                	movl	%eax, %eax
-               	cmpq	$0x11223344, %rax       # imm = 0x11223344
+               	cmpl	$0x11223344, %eax       # imm = 0x11223344
                	sete	%al
                	movzbq	%al, %rax
                	xorq	%rcx, %rcx
@@ -860,7 +860,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	0xa0(%rsp), %rax
                	movl	%eax, %eax
-               	cmpq	$0x55667788, %rax       # imm = 0x55667788
+               	cmpl	$0x55667788, %eax       # imm = 0x55667788
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorq	%rax, %rax
@@ -893,14 +893,14 @@ Disassembly of section .text:
                	je	<addr>
                	movq	0x98(%rsp), %rcx
                	movl	%ecx, %ecx
-               	cmpq	$0x11223344, %rcx       # imm = 0x11223344
+               	cmpl	$0x11223344, %ecx       # imm = 0x11223344
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	0x90(%rsp), %rcx
                	movl	%ecx, %ecx
-               	cmpq	$0x55667788, %rcx       # imm = 0x55667788
+               	cmpl	$0x55667788, %ecx       # imm = 0x55667788
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -947,14 +947,14 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	0x8(%rcx), %rdx
                	movl	(%rdx), %edx
-               	cmpq	$0x11223344, %rdx       # imm = 0x11223344
+               	cmpl	$0x11223344, %edx       # imm = 0x11223344
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	leaq	0x10(%rcx), %rdx
                	movl	(%rdx), %edx
-               	cmpq	$0x55667788, %rdx       # imm = 0x55667788
+               	cmpl	$0x55667788, %edx       # imm = 0x55667788
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
@@ -985,14 +985,14 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	0x8(%rcx), %rdx
                	movl	(%rdx), %edx
-               	cmpq	$0x11223344, %rdx       # imm = 0x11223344
+               	cmpl	$0x11223344, %edx       # imm = 0x11223344
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	leaq	0x10(%rcx), %rdx
                	movl	(%rdx), %edx
-               	cmpq	$0x55667788, %rdx       # imm = 0x55667788
+               	cmpl	$0x55667788, %edx       # imm = 0x55667788
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx

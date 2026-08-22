@@ -59,67 +59,57 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	andq	$0x7f, %rcx
                	incq	%rcx
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
                	imulq	%rcx, %rax
-               	movslq	%eax, %rax
-               	cmpq	$0x11, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	cmpl	$0x11, %eax
+               	je	<addr>
                	movl	$0xe, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rcx, %rcx
-               	movl	%ecx, -0x8(%rbp)
+               	xorq	%rdx, %rdx
+               	movl	%edx, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	movl	%eax, %eax
-               	leaq	-0x1(%rax), %rdx
+               	leaq	-0x1(%rax), %rcx
                	movq	%rax, %rsi
                	xorq	$-0x1, %rsi
-               	andq	%rsi, %rdx
-               	movl	%edx, %edx
-               	movq	%rdx, %rsi
+               	andq	%rsi, %rcx
+               	movl	%ecx, %ecx
+               	movq	%rcx, %rsi
                	shrq	%rsi
                	andq	$0x55555555, %rsi       # imm = 0x55555555
-               	subq	%rsi, %rdx
-               	movq	%rdx, %rsi
+               	subq	%rsi, %rcx
+               	movq	%rcx, %rsi
                	andq	$0x33333333, %rsi       # imm = 0x33333333
-               	shrq	$0x2, %rdx
-               	andq	$0x33333333, %rdx       # imm = 0x33333333
-               	addq	%rsi, %rdx
-               	movq	%rdx, %rsi
+               	shrq	$0x2, %rcx
+               	andq	$0x33333333, %rcx       # imm = 0x33333333
+               	addq	%rsi, %rcx
+               	movq	%rcx, %rsi
                	shrq	$0x4, %rsi
-               	addq	%rsi, %rdx
-               	andq	$0xf0f0f0f, %rdx        # imm = 0xF0F0F0F
-               	movq	%rdx, %rsi
+               	addq	%rsi, %rcx
+               	andq	$0xf0f0f0f, %rcx        # imm = 0xF0F0F0F
+               	movq	%rcx, %rsi
                	shrq	$0x8, %rsi
-               	addq	%rsi, %rdx
-               	movq	%rdx, %rsi
+               	addq	%rsi, %rcx
+               	movq	%rcx, %rsi
                	shrq	$0x10, %rsi
-               	addq	%rsi, %rdx
-               	andq	$0x7f, %rdx
-               	incq	%rdx
-               	testq	%rax, %rax
+               	addq	%rsi, %rcx
+               	andq	$0x7f, %rcx
+               	incq	%rcx
+               	testl	%eax, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	imulq	%rdx, %rax
-               	movslq	%eax, %rax
+               	imulq	%rcx, %rax
                	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	je	<addr>
                	movl	$0xf, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	%rcx, %rax
+               	movq	%rdx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

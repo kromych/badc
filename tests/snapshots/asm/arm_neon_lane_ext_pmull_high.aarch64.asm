@@ -516,6 +516,7 @@ Disassembly of section .text:
                	str	x0, [x3]
                	str	x0, [x4]
                	b	<addr>
+               	sxtw	x1, w0
                	lsr	x5, x6, x1
                	mov	x17, #0x1               // =1
                	and	x5, x5, x17
@@ -533,8 +534,7 @@ Disassembly of section .text:
                	eor	x5, x7, x5
                	str	x5, [x4]
                	add	x0, x1, #0x1
-               	sxtw	x1, w0
-               	cmp	x1, #0x40
+               	cmp	w0, #0x40
                	b.lt	<addr>
                	sub	x16, x29, #0x200
                	ldr	x0, [x16]

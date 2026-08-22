@@ -29,9 +29,9 @@ fn ent_pc=2 n_params=11 variadic=false locals=1
     v23  LoadLocal { off=12, kind=I64 }                   -> x14
     terminator Jmp(b1)
   block 1  start_pc=0
-    v38  Extend { value=v1, kind=I32 }                    -> x7
+    v38  Extend { value=v1, kind=I32 }                    -> x15
     v39  Imm(0)                                           -> x15
-    v40  Extend { value=v3, kind=I32 }                    -> x6
+    v40  Extend { value=v3, kind=I32 }                    -> x15
     v41  Imm(0)                                           -> x15
     v42  Imm(0)                                           -> x15
     v43  Imm(0)                                           -> x15
@@ -40,7 +40,7 @@ fn ent_pc=2 n_params=11 variadic=false locals=1
     v46  Imm(0)                                           -> x15
     v47  ImmData(8)                                       -> x15
     v48  Load { addr=v47, disp=0, kind=I32, volatile }    -> x15
-    v49  Binop { op=ne, lhs=v38, rhs=v48 }                -> x7
+    v49  Binop { op=ne, lhs=v1, rhs=v48 }                 -> x7
     terminator Bz { cond=v49, target=b8, fall=b2 }   (exit_acc=v49)
   block 2  start_pc=0
     v50  Imm(1)                                           -> x0
@@ -51,8 +51,8 @@ fn ent_pc=2 n_params=11 variadic=false locals=1
   block 4  start_pc=0
     v24  Imm(0)                                           -> x1
     v25  Extend { value=v98, kind=I32 }                   -> x1
-    v26  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x2
-    terminator Bnz { cond=v25, target=b7, fall=b5 }   (exit_acc=v26)
+    v26  BinopI { op=eq, lhs=v98, rhs_imm=0 }             -> x1
+    terminator Bnz { cond=v98, target=b7, fall=b5 }   (exit_acc=v26)
   block 5  start_pc=0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x1
@@ -73,7 +73,7 @@ fn ent_pc=2 n_params=11 variadic=false locals=1
   block 8  start_pc=0
     v51  ImmData(16)                                      -> x7
     v52  Load { addr=v51, disp=0, kind=I32, volatile }    -> x7
-    v53  Binop { op=ne, lhs=v40, rhs=v52 }                -> x6
+    v53  Binop { op=ne, lhs=v3, rhs=v52 }                 -> x6
     terminator Bz { cond=v53, target=b10, fall=b9 }   (exit_acc=v53)
   block 9  start_pc=0
     v54  Imm(2)                                           -> x0

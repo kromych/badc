@@ -141,7 +141,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
+               	cmp	w0, w17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, x1

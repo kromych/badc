@@ -39,7 +39,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
+               	cmp	w0, w17
                	cset	x0, ne
                	sxtw	x0, w0
                	add	sp, sp, #0x10
@@ -73,7 +73,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
+               	cmp	w0, w17
                	cset	x0, eq
                	sxtw	x0, w0
                	add	sp, sp, #0x10
@@ -136,7 +136,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
+               	cmp	w0, w17
                	cset	x0, ne
                	sxtw	x0, w0
                	add	sp, sp, #0x10

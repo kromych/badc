@@ -75,7 +75,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movslq	(%r12), %rax
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx
@@ -96,7 +96,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movslq	(%r12), %rax
-               	cmpq	$0x1, %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	movq	(%rsp), %rbx
@@ -286,7 +286,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	0x4(%rax), %rax
-               	cmpq	$0x6f, %rax
+               	cmpl	$0x6f, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -312,7 +312,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	0x2(%rax), %rax
-               	cmpq	$0x6c, %rax
+               	cmpl	$0x6c, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -337,7 +337,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	0x3(%rax), %rax
-               	cmpq	$0x78, %rax
+               	cmpl	$0x78, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -361,7 +361,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	0x4(%rax), %rax
-               	cmpq	$0x79, %rax
+               	cmpl	$0x79, %eax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -395,7 +395,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movsbq	(%rax), %rcx
-               	cmpq	$0x61, %rcx
+               	cmpl	$0x61, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -420,7 +420,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movsbq	(%rax), %rcx
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

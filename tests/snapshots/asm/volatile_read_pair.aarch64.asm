@@ -18,10 +18,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
                	ldrsw	x2, [x0]
-               	cmp	x1, #0x9
+               	cmp	w1, #0x9
                	cset	x0, eq
                	cbz	x0, <addr>
-               	cmp	x2, #0x9
+               	cmp	w2, #0x9
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0

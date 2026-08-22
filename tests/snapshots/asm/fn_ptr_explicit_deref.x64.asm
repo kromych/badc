@@ -39,8 +39,7 @@ Disassembly of section .text:
                	movq	%rax, -0x8(%rbp)
                	movl	$0x28, %edi
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x29, %rax
+               	cmpl	$0x29, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -50,8 +49,7 @@ Disassembly of section .text:
                	movl	$0x28, %edi
                	movq	-0x8(%rbp), %rax
                	callq	*%rax
-               	movslq	%eax, %rax
-               	cmpq	$0x29, %rax
+               	cmpl	$0x29, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
@@ -62,8 +60,7 @@ Disassembly of section .text:
                	movq	(%rbx), %rax
                	movl	$0x28, %edi
                	callq	*%rax
-               	movslq	%eax, %rax
-               	cmpq	$0x29, %rax
+               	cmpl	$0x29, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
@@ -73,8 +70,7 @@ Disassembly of section .text:
                	movq	(%rbx), %rax
                	movl	$0x28, %edi
                	callq	*%rax
-               	movslq	%eax, %rax
-               	cmpq	$0x29, %rax
+               	cmpl	$0x29, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx

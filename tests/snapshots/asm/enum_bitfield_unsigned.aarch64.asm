@@ -29,7 +29,7 @@ Disassembly of section .text:
                	mov	w1, w0
                	mov	x17, #0x7               // =7
                	and	x2, x1, x17
-               	cmp	x2, #0x6
+               	cmp	w2, #0x6
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	mov	w1, w0
                	mov	x17, #0x7               // =7
                	and	x2, x1, x17
-               	cmp	x2, #0x4
+               	cmp	w2, #0x4
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	mov	w0, w0
                	mov	x17, #0x7               // =7
                	and	x0, x0, x17
-               	cmp	x0, #0x2
+               	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	mov	w0, w0
                	mov	x17, #0x7               // =7
                	and	x0, x0, x17
-               	cmp	x0, #0x5
+               	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10

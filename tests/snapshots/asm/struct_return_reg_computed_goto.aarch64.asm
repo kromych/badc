@@ -24,7 +24,7 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	stur	w1, [x29, #-0x18]
                	sxtw	x1, w1
-               	cmp	x1, #0x7
+               	cmp	w1, #0x7
                	b.ne	<addr>
                	stur	x0, [x29, #-0x18]
                	b	<addr>
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	stur	w0, [x29, #-0x18]
                	sxtw	x0, w0
-               	cmp	x0, #0x2
+               	cmp	w0, #0x2
                	b.ne	<addr>
                	stur	x1, [x29, #-0x18]
                	b	<addr>

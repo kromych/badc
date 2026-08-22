@@ -55,13 +55,13 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rbx, %rbx
+               	testl	%ebx, %ebx
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rbx, %rbx
                	jne	<addr>
                	movslq	-0x8(%rbp), %rax
-               	cmpq	$0x10040, %rax          # imm = 0x10040
+               	cmpl	$0x10040, %eax          # imm = 0x10040
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

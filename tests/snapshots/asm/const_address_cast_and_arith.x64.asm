@@ -45,13 +45,13 @@ Disassembly of section .text:
                	retq
                	movq	0x18(%rax), %rdx
                	movslq	(%rdx), %rdx
-               	cmpq	$0xc8, %rdx
+               	cmpl	$0xc8, %edx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	movq	0x20(%rax), %rdx
                	movslq	(%rdx), %rdx
-               	cmpq	$0xc8, %rdx
+               	cmpl	$0xc8, %edx
                	je	<addr>
                	movl	$0x5, %eax
                	retq

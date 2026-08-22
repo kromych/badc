@@ -157,8 +157,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v95  LoadLocal { off=-3, kind=F64 }                   -> d0
     v96  FpCast { kind=FpToInt, value=v95 }               -> x2
     v97  Imm(0)                                           -> x6
-    v98  Extend { value=v96, kind=I32 }                   -> x2
-    v99  BinopI { op=ne, lhs=v98, rhs_imm=7 }             -> x2
+    v98  Extend { value=v96, kind=I32 }                   -> x6
+    v99  BinopI { op=ne, lhs=v96, rhs_imm=7 }             -> x2
     terminator Bz { cond=v99, target=b30, fall=b29 }   (exit_acc=v99)
   block 29  start_pc=0
     v100 Imm(15)                                          -> x0
@@ -169,8 +169,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v103 Binop { op=fadd, lhs=v101, rhs=v92 }             -> d0
     v104 FpCast { kind=FpToInt, value=v103 }              -> x0
     v105 Imm(0)                                           -> x2
-    v106 Extend { value=v104, kind=I32 }                  -> x0
-    v107 BinopI { op=ne, lhs=v106, rhs_imm=8 }            -> x0
+    v106 Extend { value=v104, kind=I32 }                  -> x2
+    v107 BinopI { op=ne, lhs=v104, rhs_imm=8 }            -> x0
     terminator Bz { cond=v107, target=b32, fall=b31 }   (exit_acc=v107)
   block 31  start_pc=0
     v108 Imm(16)                                          -> x0
@@ -182,8 +182,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v112 LoadLocal { off=-3, kind=F64 }                   -> d0
     v113 FpCast { kind=FpToInt, value=v112 }              -> x0
     v114 Imm(0)                                           -> x1
-    v115 Extend { value=v113, kind=I32 }                  -> x0
-    v116 BinopI { op=ne, lhs=v115, rhs_imm=-1 }           -> x0
+    v115 Extend { value=v113, kind=I32 }                  -> x1
+    v116 BinopI { op=ne, lhs=v113, rhs_imm=-1 }           -> x0
     terminator Bz { cond=v116, target=b34, fall=b33 }   (exit_acc=v116)
   block 33  start_pc=0
     v117 Imm(17)                                          -> x0

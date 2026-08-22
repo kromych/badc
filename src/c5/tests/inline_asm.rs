@@ -1293,6 +1293,58 @@ fn inline_asm_global_directive_binds_a_code_stream_label() {
     );
 }
 
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_branch_to_a_weak_template_label_keeps_its_relocation() {
+    use crate::c5::object::elf_reloc_types::R_X86_64_PLT32;
+    const STB_WEAK: u8 = 2;
+    // A weak definition never satisfies a branch in place: the link may
+    // bind another one. GNU as 2.46.1 for the stream this template pastes
+    // keeps `e9 00000000` / `0f 85 00000000` with `R_X86_64_PLT32 wk - 4`
+    // on each field; a `.globl`-declared target resolves against its
+    // definition here with no relocation, as the section path resolves it.
+    // The `if` gives the function a relaxable branch of its own, so the
+    // body re-emit re-records the rows instead of duplicating them.
+    let src = "void f(int x) { if (x) { __asm__ volatile(\
+               \"jmp wk\\n\\tjne wk\\n\\t.weak wk\\nwk:\\n\\tnop\" :: \"r\"(x) : \"cc\"); } }\n\
+               void g(void) { __asm__ volatile(\"jmp gl\\n\\t.globl gl\\ngl:\\n\\tnop\"); }\n\
+               int main(void) { return 0; }";
+    let o = asm_obj(src, crate::Target::LinuxX64);
+    let text = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text");
+    let mut wk: alloc::vec::Vec<_> = text
+        .relocs
+        .iter()
+        .filter(|r| o.symbols[r.sym as usize].name == "wk")
+        .collect();
+    wk.sort_by_key(|r| r.offset);
+    assert_eq!(wk.len(), 2, "one row per branch: {:?}", text.relocs);
+    for r in &wk {
+        assert_eq!((r.rtype, r.addend), (R_X86_64_PLT32, -4));
+        let at = r.offset as usize;
+        assert_eq!(&text.bytes[at..at + 4], [0, 0, 0, 0], "field is the link's");
+    }
+    assert_eq!(text.bytes[wk[0].offset as usize - 1], 0xe9, "rel32 jmp");
+    assert_eq!(
+        &text.bytes[wk[1].offset as usize - 2..wk[1].offset as usize],
+        [0x0f, 0x85],
+        "rel32 jne"
+    );
+    assert!(
+        !text
+            .relocs
+            .iter()
+            .any(|r| o.symbols[r.sym as usize].name == "gl"),
+        "a global definition satisfies the branch in place"
+    );
+    let s = o.symbols.iter().find(|s| s.name == "wk").expect("wk");
+    assert_eq!(s.binding, STB_WEAK, "the definition stays weak");
+}
+
 // Emits a native image, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]

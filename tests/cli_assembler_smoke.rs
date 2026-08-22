@@ -1810,6 +1810,35 @@ fn a_relocated_branch_keeps_the_long_form() {
     assert_eq!(&t[..5], [0xe8, 0, 0, 0, 0], "call to a same-section global");
 }
 
+/// The same binding rule inside a function-body template: an in-stream
+/// definition satisfies a `jmp` / `jcc` only when the link cannot rebind it.
+/// GNU as 2.46.1 for the stream this template pastes keeps the rel32 form
+/// and `R_X86_64_PLT32 wk - 4`, and resolves a `.globl`-declared target
+/// against its definition.
+#[test]
+fn a_template_branch_to_a_weak_label_keeps_its_relocation() {
+    const PLT32: u32 = 4;
+    let bytes = object_of_c(
+        "tmpl-weak-branch",
+        "int f(int x) {\n\
+         __asm__ volatile(\"jmp wk\\n\\tnop\\n.weak wk\\nwk:\\n\\tnop\");\n\
+         __asm__ volatile(\"jmp gl\\n\\t.globl gl\\ngl:\\n\\tnop\");\n\
+         return x;\n}\n",
+    );
+    let relocs = named_relocs(&bytes, ".rela.text");
+    let wk: Vec<_> = relocs.iter().filter(|(_, _, n, _)| n == "wk").collect();
+    let t = section64(&bytes, ".text");
+    assert_eq!(wk.len(), 1, "one branch row: {relocs:?}");
+    let &(off, rtype, _, addend) = wk[0];
+    assert_eq!((rtype, addend), (PLT32, -4));
+    assert_eq!(t[off as usize - 1], 0xe9, "rel32 jmp under the reloc");
+    assert_eq!(&t[off as usize..off as usize + 4], [0, 0, 0, 0]);
+    assert!(
+        !relocs.iter().any(|(_, _, n, _)| n == "gl"),
+        "a global definition resolves in place: {relocs:?}"
+    );
+}
+
 /// A branch relaxes across `.align` and a label-valued `.skip`, whose
 /// padding absorbs the branch's own width. The kernel's `clear_bhb_loop` is
 /// this shape; the bytes are GNU as 2.46.1's for the same source, which

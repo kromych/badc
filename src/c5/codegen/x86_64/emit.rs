@@ -1719,6 +1719,7 @@ pub(crate) fn emit_function(
     let asm_text_abs_refs_snapshot = asm_text_abs_refs.len();
     let asm_text_labels_snapshot = asm_text_labels.len();
     let asm_extern_call_sites_snapshot = asm_extern_call_sites.len();
+    let asm_sym_fixups_snapshot = asm_sym_fixups.len();
     let asm_sections_snapshot = asm_sections.snapshot();
     // A cross-unit `extern _Thread_local` access (`extern_tls_names` maps
     // the access value-id to the referenced symbol) and a same-unit one
@@ -1739,6 +1740,7 @@ pub(crate) fn emit_function(
             asm_text_abs_refs.truncate(asm_text_abs_refs_snapshot);
             asm_text_labels.truncate(asm_text_labels_snapshot);
             asm_extern_call_sites.truncate(asm_extern_call_sites_snapshot);
+            asm_sym_fixups.truncate(asm_sym_fixups_snapshot);
             asm_sections.restore(&asm_sections_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             return false;
@@ -1948,6 +1950,7 @@ pub(crate) fn emit_function(
     let body_elf_tpoff = elf_tpoff_fixups.len();
     let body_line_rows = ssa_line_rows.len();
     let body_asm_extern = asm_extern_call_sites.len();
+    let body_asm_sym = asm_sym_fixups.len();
     // The section sink merges by name, so a re-emit restores its full
     // per-section state rather than a length (see [`AsmSectionSink::restore`]).
     let body_asm_sections = asm_sections.snapshot();
@@ -2047,6 +2050,7 @@ pub(crate) fn emit_function(
                         extern_code_names,
                         asm_sections,
                         asm_extern_call_sites,
+                        asm_sym_fixups,
                         data_fixups,
                         pending_func_fixups,
                         user_extern_data_refs,
@@ -2417,6 +2421,7 @@ pub(crate) fn emit_function(
                 elf_tpoff_fixups.truncate(body_elf_tpoff);
                 ssa_line_rows.truncate(body_line_rows);
                 asm_extern_call_sites.truncate(body_asm_extern);
+                asm_sym_fixups.truncate(body_asm_sym);
                 asm_sections.restore(&body_asm_sections);
                 for b in block_offsets.iter_mut() {
                     *b = 0;
@@ -3607,6 +3612,7 @@ fn emit_inst(
             extern_code_names,
             asm_sections,
             asm_extern_call_sites,
+            &mut *cx.asm_sym_fixups,
             data_fixups,
             pending_func_fixups,
             user_extern_data_refs,
@@ -7859,6 +7865,7 @@ fn emit_inline_asm(
     extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     asm_sections: &mut super::ssa::emit_common::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
+    asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
     data_fixups: &mut Vec<DataFixup>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
@@ -8014,6 +8021,18 @@ fn emit_inline_asm(
     // Code-stream label names, so a `.skip` expression can size its padding
     // from a named code label (a multiply-defined numeric label renamed above).
     let code_label_names = super::asm::scan_label_names(code_text);
+    // Names the unit binds weak, as the section relaxation reads them: an
+    // in-stream definition of one does not satisfy a branch in place, since
+    // the link may bind another definition, so the field keeps a relocation
+    // against the name, as GNU as keeps it.
+    let weak_names = super::ssa::emit_common::asm_weak_only_names(section_blocks, asm_sections);
+    let weak_target_name = |num: u32| -> Option<alloc::string::String> {
+        let idx = num.checked_sub(super::asm::NAMED_LABEL_BASE)?;
+        let name = *code_label_names.get(idx as usize)?;
+        weak_names
+            .contains(name)
+            .then(|| alloc::string::String::from(name))
+    };
     // Registers the asm overwrites: the operand registers plus the explicit
     // clobber list (a bound operand's register is the one the asm was asked
     // to see and affect, so it is not saved around the block). GP registers
@@ -8357,7 +8376,9 @@ fn emit_inline_asm(
             return fail("inline asm: a `rex` prefix on a direct branch");
         }
         // A jmp / jcc to a local label: emit the rel32 form now and record the
-        // site; the displacement is patched below against the label offset.
+        // site; the displacement is patched below against the label offset. A
+        // target the unit binds weak is not satisfied by its in-stream
+        // definition: the field relocates against the name instead.
         if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
             let super::asm::Mnemonic::Table(name) = insn.mnemonic else {
                 return fail("inline asm: label operand on a non-jump");
@@ -8370,7 +8391,15 @@ fn emit_inline_asm(
                 Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
                 None => super::encode::emit_jmp_rel32(code, 0),
             }
-            label_fixups.push((code.len() - 4, num, forward));
+            match weak_target_name(num) {
+                Some(n) => asm_sym_fixups.push(super::AsmSymFixup {
+                    instr_offset: code.len() - 4,
+                    kind: super::ssa::emit_common::AsmRelocKind::JumpRel,
+                    target: super::ssa::emit_common::AsmSectionTarget::Symbol(n),
+                    addend: -4,
+                }),
+                None => label_fixups.push((code.len() - 4, num, forward)),
+            }
             after_insn = true;
             continue;
         }

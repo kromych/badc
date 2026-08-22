@@ -3357,13 +3357,32 @@ pub(super) fn write_relocatable(
                 )));
             }
         };
-        let Some(rtype) = a64_insn_reloc_type(r.kind) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &alloc::format!(
-                    "elf_reloc: asm operand relocation kind {:?} names no field type",
-                    r.kind
-                ),
-            )));
+        // The x86_64 rel32 branch field (a jmp / jcc to a rebindable name):
+        // `instr_offset` is the field itself, and a target keeping its own
+        // symbol binds through the PLT slot as the section path types it; a
+        // target reduced to a section symbol names no entry point.
+        let x86_jump = matches!(
+            r.kind,
+            crate::c5::codegen::ssa::emit_common::AsmRelocKind::JumpRel
+        ) && machine_for_rela == Machine::X86_64;
+        let rtype = match a64_insn_reloc_type(r.kind) {
+            Some(t) => t,
+            None if x86_jump
+                && r.addend == -4
+                && !fixed_section_syms.contains(&sym_idx)
+                && !carve.sym_idx.contains(&sym_idx) =>
+            {
+                R_X86_64_PLT32
+            }
+            None if x86_jump => R_X86_64_PC32,
+            None => {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &alloc::format!(
+                        "elf_reloc: asm operand relocation kind {:?} names no field type",
+                        r.kind
+                    ),
+                )));
+            }
         };
         write_struct(
             &mut rela_bytes,

@@ -6750,7 +6750,7 @@ fn short_form_fits(
 /// statements recorded. A weak definition never resolves in place: the link
 /// may bind a different one, so every reference keeps its relocation,
 /// relaxable branch included.
-fn asm_weak_only_names(
+pub(crate) fn asm_weak_only_names(
     blocks: &[AsmSectionBlock],
     sink: &AsmSectionSink,
 ) -> alloc::collections::BTreeSet<alloc::string::String> {

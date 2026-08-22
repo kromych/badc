@@ -465,7 +465,25 @@ fn fold_asm_sections(
         };
         let at = r.instr_offset;
         let val = (text_base + r.section_offset as usize) as i64 + r.addend - at as i64;
-        build.text[at..at + 4].copy_from_slice(&(val as i32).to_le_bytes());
+        // The shared patcher covers the rel32 data field and the aarch64
+        // PC-relative instruction kinds; both sides landed in the text
+        // stream, so the displacement is final.
+        let patched = crate::c5::codegen::ssa::emit_common::patch_asm_insn_field(
+            &mut build.text,
+            at,
+            r.kind,
+            true,
+            4,
+            val,
+        )
+        .map_err(|m| err(alloc::format!("inline-asm section `{}`: {m}", s.name)))?;
+        if !patched {
+            return Err(err(alloc::format!(
+                "inline-asm section `{}`: this reference to a section label is not \
+                 supported in a single-file image; compile with `-c` and link",
+                s.name
+            )));
+        }
     }
     // The folded sections are placed; remove them so no writer emits a copy.
     let mut keep = bases.iter().map(|b| b.is_none());

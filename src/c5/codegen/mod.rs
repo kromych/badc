@@ -2156,6 +2156,10 @@ pub(crate) struct AsmSectionTextRef {
     /// The field holds the label's absolute address (a `$LABEL` immediate)
     /// rather than a PC-relative displacement. x86_64 only.
     pub absolute: bool,
+    /// Field flavor: `Data` is the x86_64 rel32 / abs32 field; an aarch64
+    /// branch or `adr` carries the instruction-field kind, which selects
+    /// the `R_AARCH64_*` type and the in-place patch.
+    pub kind: ssa::emit_common::AsmRelocKind,
 }
 
 /// Relocation for a function-body inline-asm instruction whose operand

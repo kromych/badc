@@ -876,6 +876,7 @@ pub(crate) fn emit_function(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
+    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     // The text stream's mapping state spans the section, not the function: a
     // body ending in data leaves the counter off the instruction boundary and
     // the next function's first instruction pays the padding, as under GNU as.
@@ -1260,6 +1261,7 @@ pub(crate) fn emit_function(
                     text_align,
                     text_map_state,
                     asm_text_labels,
+                    asm_section_text_refs,
                     Some(AsmGotoCtxA64 {
                         row: &func.jump_tables[table as usize],
                         branch_fixups: &mut branch_fixups,
@@ -1330,6 +1332,7 @@ pub(crate) fn emit_function(
                     &mut deferred_regions,
                     text_map_state,
                     asm_text_labels,
+                    asm_section_text_refs,
                 )
             };
             if !inst_ok {
@@ -3316,6 +3319,7 @@ fn emit_inline_asm_aarch64(
     text_align: &mut usize,
     text_map_state: &mut Option<super::super::map_syms::MapClass>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
+    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> bool {
     use super::super::ir::AsmConstraint;
@@ -3821,11 +3825,22 @@ fn emit_inline_asm_aarch64(
             }
         })
     };
+    // `%lK` label indices this statement's section items reference -- a data
+    // field (`.long %l0 - .`) or a section branch (`b %l[k]`). A statement
+    // with exit work rewrites those relocs below, so the published address is
+    // the same trampoline a template `%lK` branch takes.
+    let data_goto_ks = core::cell::RefCell::new(Vec::<usize>::new());
+    let goto_block = |idx: u8| -> Option<u32> {
+        let ctx = goto_ctx.as_ref()?;
+        let bid = ctx.row.get(1 + idx as usize).copied()?;
+        data_goto_ks.borrow_mut().push(idx as usize);
+        Some(bid)
+    };
     // Assemble the instructions of a pushed section to bytes before layout.
     // The converter above resolves a reference to the enclosing template's
     // operands, which the file-scope encoder has no notion of.
     if !section_blocks.is_empty()
-        && let Err(m) = encode_a64_asm_section_code(&mut section_blocks, &conv)
+        && let Err(m) = encode_a64_asm_section_code(&mut section_blocks, &conv, &goto_block)
     {
         bail_msg(&m);
         return false;
@@ -4220,6 +4235,11 @@ fn emit_inline_asm_aarch64(
     }
     // Patch the label branches now that every definition's offset is known.
     // A named label has exactly one definition, so direction does not apply.
+    // Numeric references without an in-stream definition: the definition may
+    // sit in one of the statement's pushed sections, resolved once those are
+    // materialized below (`jmp 6f` shape). Only a forward reference reaches
+    // one, as the sections follow the code textually.
+    let mut pending_xsec: Vec<(usize, LabelBranch, u32)> = Vec::new();
     for &(site, ref kind, num, forward) in &label_fixups {
         let target = if num >= super::super::ssa::emit_common::NAMED_LABEL_BASE {
             label_defs.iter().find(|&&(n, _)| n == num).map(|&(_, o)| o)
@@ -4236,6 +4256,13 @@ fn emit_inline_asm_aarch64(
                 .map(|&(_, off)| off)
         };
         let Some(target) = target else {
+            if num < super::super::ssa::emit_common::NAMED_LABEL_BASE
+                && forward
+                && !section_blocks.is_empty()
+            {
+                pending_xsec.push((site, *kind, num));
+                continue;
+            }
             bail_msg("aarch64 inline asm: undefined local label");
             return false;
         };
@@ -4335,11 +4362,8 @@ fn emit_inline_asm_aarch64(
             }
         }
     };
-    // `%lK` label indices a section field references (`.long %l0 - .`), and
-    // the per-section reloc counts before this statement's contribution. A
-    // statement with exit work rewrites those relocs below, so the published
-    // address is the same trampoline a template `%lK` branch takes.
-    let data_goto_ks = core::cell::RefCell::new(Vec::<usize>::new());
+    // The per-section reloc counts before this statement's contribution,
+    // bounding the trampoline rewrite below to this statement's relocs.
     let sect_reloc_marks: Vec<usize> = if goto_ctx.is_some() && size > 0 {
         asm_sections
             .relocs_mut()
@@ -4391,16 +4415,11 @@ fn emit_inline_asm_aarch64(
                 &|vid| extern_data_names.get(&vid).cloned(),
             )
         };
-        // An `asm goto` label operand (`.long %l0 - .`): the goto row's block
-        // index. Its text offset is not final here; the reloc carries the
-        // block and is rewritten after layout (see resolve_asm_goto_relocs).
-        let goto_block = |idx: u8| -> Option<u32> {
-            let ctx = goto_ctx.as_ref()?;
-            let bid = ctx.row.get(1 + idx as usize).copied()?;
-            data_goto_ks.borrow_mut().push(idx as usize);
-            Some(bid)
-        };
-        if let Err(m) = super::ssa::emit_common::materialize_asm_sections(
+        // An `asm goto` label operand (`.long %l0 - .`) resolves through
+        // `goto_block` to the row's block index. Its text offset is not final
+        // here; the reloc carries the block and is rewritten after layout
+        // (see resolve_asm_goto_relocs).
+        let defined = match super::ssa::emit_common::materialize_asm_sections(
             &section_blocks,
             &|idx| const_of(idx),
             &label_off,
@@ -4409,8 +4428,38 @@ fn emit_inline_asm_aarch64(
             true,
             asm_sections,
         ) {
-            bail_msg(&m);
-            return false;
+            Ok(d) => d,
+            Err(m) => {
+                bail_msg(&m);
+                return false;
+            }
+        };
+        // Bind each deferred main-stream branch to its section definition.
+        // The two land in different object sections, so the site takes an
+        // instruction-field relocation against the target section rather
+        // than an in-stream displacement.
+        for (site, kind, num) in pending_xsec.drain(..) {
+            let name = alloc::format!("{num}");
+            let Some(d) = defined.iter().find(|d| d.name == name) else {
+                bail_msg("aarch64 inline asm: undefined local label");
+                return false;
+            };
+            let (word, rkind) = match a64_label_branch_reloc(&kind) {
+                Ok(t) => t,
+                Err(m) => {
+                    bail_msg(&m);
+                    return false;
+                }
+            };
+            code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+            asm_section_text_refs.push(super::AsmSectionTextRef {
+                instr_offset: site,
+                section_index: d.section_index,
+                section_offset: d.offset,
+                addend: 0,
+                absolute: false,
+                kind: rkind,
+            });
         }
     }
     // Store the register outputs back through their captured addresses (x16
@@ -4595,6 +4644,7 @@ fn emit_inst(
     deferred_regions: &mut Vec<DeferredAsmRegion>,
     text_map_state: &mut Option<super::super::map_syms::MapClass>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
+    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
 ) -> bool {
     // Unpack the read-only per-function context into the per-field names the
     // lowering below uses, so the body is unchanged.
@@ -5240,6 +5290,7 @@ fn emit_inst(
             text_align,
             text_map_state,
             asm_text_labels,
+            asm_section_text_refs,
             None,
         ),
         // `BlockAddr` is materialized in `emit_function`'s block loop and
@@ -10379,7 +10430,8 @@ pub(crate) fn encode_a64_file_asm_section_code(
             }
         })
     };
-    encode_a64_asm_section_code(blocks, &conv)
+    // File-scope asm has no `asm goto` labels.
+    encode_a64_asm_section_code(blocks, &conv, &|_| None)
 }
 
 /// Encode instruction lines in an executable inline-asm section
@@ -10393,6 +10445,7 @@ pub(crate) fn encode_a64_file_asm_section_code(
 pub(crate) fn encode_a64_asm_section_code(
     blocks: &mut [super::ssa::emit_common::AsmSectionBlock],
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
+    goto_block: &dyn Fn(u8) -> Option<u32>,
 ) -> Result<(), alloc::string::String> {
     use super::ssa::emit_common::AsmSectionItem;
     use super::table::{self, Opnd};
@@ -10428,6 +10481,33 @@ pub(crate) fn encode_a64_asm_section_code(
                     return Err(alloc::format!(
                         "inline asm: `{text}` in a section needs a relocation"
                     ));
+                }
+                // A branch (or `adr`) to an `asm goto` label (`b %l[k]`)
+                // leaves the section for a block of the function. The word
+                // carries a zero displacement; the relocation names the
+                // block, rewritten to its text offset after layout.
+                if let Some(&super::asm::AsmOpndA64::GotoLabel(k)) = insn.operands.last() {
+                    let bid = goto_block(k).ok_or_else(|| {
+                        alloc::format!(
+                            "inline asm: `%l{k}` names no `asm goto` label (section `{text}`)"
+                        )
+                    })?;
+                    let branch = build_label_branch(insn, conv)
+                        .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
+                    let (word, kind) = a64_label_branch_reloc(&branch)
+                        .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
+                    relocs.push(super::ssa::emit_common::AsmSectionReloc {
+                        offset: bytes.len() as u32,
+                        width: 4,
+                        kind,
+                        pcrel: false,
+                        branch: false,
+                        signed: false,
+                        target: super::ssa::emit_common::AsmSectionTarget::TextBlock(bid),
+                        addend: 0,
+                    });
+                    bytes.extend_from_slice(&word.to_le_bytes());
+                    continue;
                 }
                 if let Some((word, kind, expr)) = encode_a64_sym_insn(insn, conv)
                     .map_err(|m| alloc::format!("{m} (section `{text}`)"))?
@@ -10800,18 +10880,28 @@ fn encode_a64_sym_insn(
         _ => {
             // The branch shapes share the label-branch classifier.
             let kind = build_label_branch(insn, conv)?;
-            let (word, k) = match kind {
-                LabelBranch::B => (label_branch_word(&kind, 0)?, K::A64Branch26 { link: false }),
-                LabelBranch::Bl => (label_branch_word(&kind, 0)?, K::A64Branch26 { link: true }),
-                LabelBranch::BCond(_) | LabelBranch::Cb { .. } => {
-                    (label_branch_word(&kind, 0)?, K::A64Condbr19)
-                }
-                LabelBranch::Tb { .. } => (label_branch_word(&kind, 0)?, K::A64Tstbr14),
-                LabelBranch::Adr { rd } => (super::encode::enc_adr(super::Reg(rd), 0), K::A64Adr21),
-            };
+            let (word, k) = a64_label_branch_reloc(&kind)?;
             Ok(Some((word, k, name.clone())))
         }
     }
+}
+
+/// Placeholder word (zero displacement) and relocation kind of a branch or
+/// `adr` classified by [`build_label_branch`]; the relocation fills the
+/// displacement field.
+fn a64_label_branch_reloc(
+    kind: &LabelBranch,
+) -> Result<(u32, super::ssa::emit_common::AsmRelocKind), alloc::string::String> {
+    use super::ssa::emit_common::AsmRelocKind as K;
+    Ok(match *kind {
+        LabelBranch::B => (label_branch_word(kind, 0)?, K::A64Branch26 { link: false }),
+        LabelBranch::Bl => (label_branch_word(kind, 0)?, K::A64Branch26 { link: true }),
+        LabelBranch::BCond(_) | LabelBranch::Cb { .. } => {
+            (label_branch_word(kind, 0)?, K::A64Condbr19)
+        }
+        LabelBranch::Tb { .. } => (label_branch_word(kind, 0)?, K::A64Tstbr14),
+        LabelBranch::Adr { rd } => (super::encode::enc_adr(super::Reg(rd), 0), K::A64Adr21),
+    })
 }
 
 /// Assign the literal pools of an asm statement's sections. Each
@@ -12309,6 +12399,7 @@ mod tests {
                 &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
                 &mut Vec::new(),
+                &mut Vec::new(),
                 &mut None,
                 false,
                 false,
@@ -12498,6 +12589,7 @@ mod tests {
                 &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
                 &mut Vec::new(),
+                &mut Vec::new(),
                 &mut None,
                 false,
                 false,
@@ -12584,6 +12676,7 @@ mod tests {
                 &mut tlv_desc,
                 &alloc::collections::BTreeMap::new(),
                 &alloc::collections::BTreeMap::new(),
+                &mut Vec::new(),
                 &mut Vec::new(),
                 &mut None,
                 false,

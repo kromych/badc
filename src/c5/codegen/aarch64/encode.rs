@@ -2075,6 +2075,7 @@ pub(crate) fn lower(
     let mut text_data_ranges: Vec<(usize, usize)> = Vec::new();
     let mut text_map_state: Option<super::map_syms::MapClass> = None;
     let mut asm_text_labels: Vec<super::AsmTextLabel> = Vec::new();
+    let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
     let name2entpc: alloc::collections::BTreeMap<alloc::string::String, usize> = ssa_funcs
         .iter()
         .map(|f| (f.name.clone(), f.ent_pc))
@@ -2162,6 +2163,7 @@ pub(crate) fn lower(
                 &name2entpc,
                 &data_sym_offsets,
                 &mut asm_text_labels,
+                &mut asm_section_text_refs,
                 &mut text_map_state,
                 native.no_fp_regs,
                 native.strict_align,
@@ -2386,10 +2388,7 @@ pub(crate) fn lower(
         asm_sections: asm_section_list,
         asm_sym_decls,
         text_data_ranges,
-        // The aarch64 ALTERNATIVE replacement is appended to `.text` (a
-        // deferred region), not a separately loaded section, so no
-        // main-stream reference crosses into a pushed section here.
-        asm_section_text_refs: Vec::new(),
+        asm_section_text_refs,
         // No aarch64 form takes a label address as an absolute immediate.
         asm_text_abs_refs: Vec::new(),
         asm_sym_fixups,

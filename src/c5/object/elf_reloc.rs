@@ -3266,10 +3266,15 @@ pub(super) fn write_relocatable(
         let (e, base) = asm_placements[r.section_index];
         let sym = carve.sym_idx[e];
         let addend = base as i64 + r.section_offset as i64 + r.addend;
-        let rtype = match machine_for_rela {
-            Machine::X86_64 if r.absolute => R_X86_64_32S,
-            Machine::X86_64 => R_X86_64_PC32,
-            Machine::Aarch64 => R_AARCH64_PREL32,
+        let rtype = match r.kind {
+            crate::c5::codegen::ssa::emit_common::AsmRelocKind::Data => match machine_for_rela {
+                Machine::X86_64 if r.absolute => R_X86_64_32S,
+                Machine::X86_64 => R_X86_64_PC32,
+                Machine::Aarch64 => R_AARCH64_PREL32,
+            },
+            // An aarch64 branch / `adr` field into the pushed section.
+            kind => a64_insn_reloc_type(kind)
+                .expect("every instruction-field kind maps to a type"),
         };
         write_struct(
             &mut rela_bytes,

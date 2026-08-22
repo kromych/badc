@@ -94,6 +94,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_a64_sym_reloc.c", "linux-x64"),  // aarch64 adrp/:lo12: symbol operands
     ("inline_asm_a64_sp_operand.c", "linux-x64"), // aarch64 sp-operand add/sub
     ("inline_asm_a64_labels.c", "linux-x64"),     // aarch64 local-label branches
+    ("inline_asm_a64_section_branches.c", "linux-x64"), // aarch64 branches into a pushed section
     ("inline_asm_a64_label_directive.c", "linux-x64"), // aarch64 label sharing a directive statement
     ("asm_goto_immediate_operand_no_frame.c", "linux-x64"), // aarch64 asm goto + .align 3
     ("inline_asm_a64_barriers.c", "linux-x64"),        // aarch64 dmb/dsb/isb/clrex

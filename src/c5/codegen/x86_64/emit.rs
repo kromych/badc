@@ -9275,6 +9275,7 @@ fn emit_inline_asm(
                     section_offset: d.offset,
                     addend: -4,
                     absolute: false,
+                    kind: super::ssa::emit_common::AsmRelocKind::Data,
                 }),
                 None => return fail("inline asm: undefined local label"),
             }
@@ -9300,6 +9301,7 @@ fn emit_inline_asm(
                     section_offset: d.offset,
                     addend: 0,
                     absolute: true,
+                    kind: super::ssa::emit_common::AsmRelocKind::Data,
                 }),
                 None => {
                     return fail("inline asm: `$LABEL` address immediate names no local label");

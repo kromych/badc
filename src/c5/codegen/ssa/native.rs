@@ -76,6 +76,7 @@ pub(crate) fn compile_function_to_bytes(
             let mut asm_sections = super::emit_common::AsmSectionSink::default();
             let mut asm_extern_call_sites = Vec::new();
             let mut asm_sym_fixups: Vec<super::AsmSymFixup> = Vec::new();
+            let mut asm_section_text_refs: Vec<super::AsmSectionTextRef> = Vec::new();
             let mut label_relocs = Vec::new();
             let mut rodata = super::RodataBuild::default();
             let mut text_align: usize = 16;
@@ -114,6 +115,7 @@ pub(crate) fn compile_function_to_bytes(
                     &alloc::collections::BTreeMap::new(),
                     &alloc::collections::BTreeMap::new(),
                     &mut asm_text_labels,
+                    &mut asm_section_text_refs,
                     &mut None,
                     false,
                     false,
@@ -133,6 +135,7 @@ pub(crate) fn compile_function_to_bytes(
                 + macho_tlv_fixups.len()
                 + macho_tlv_descriptors.len()
                 + asm_text_labels.len()
+                + asm_section_text_refs.len()
                 + asm_sym_fixups.len()
                 + rodata.addr_fixups.len();
             if outer != 0 {

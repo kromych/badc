@@ -1667,6 +1667,19 @@ fn aarch64_pushsection_reads_the_enclosing_template_operands() {
     );
 }
 
+/// Relocation target name: the symbol's own name, or the target section's
+/// for an STT_SECTION entry.
+#[cfg(feature = "native-emit")]
+fn reloc_target_name(o: &crate::c5::linker::relocatable::EtRel, sym: u32) -> alloc::string::String {
+    let s = &o.symbols[sym as usize];
+    if s.name.is_empty()
+        && let crate::c5::linker::relocatable::EtSymRef::Section(ci) = s.sec
+    {
+        return o.sections[ci].name.clone();
+    }
+    s.name.clone()
+}
+
 // Emits a relocatable object, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
@@ -1688,6 +1701,87 @@ fn aarch64_template_symbol_branches_type_bl_call26_and_b_jump26() {
         branches,
         [(R_AARCH64_CALL26, "helper"), (R_AARCH64_JUMP26, "other")]
     );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_goto_branch_in_a_pushed_section_reaches_the_label_block() {
+    use crate::c5::object::elf_reloc_types::{R_AARCH64_CONDBR19, R_AARCH64_JUMP26};
+    // The `_static_cpu_has` shape on A64: a pushed executable section
+    // branches to an `asm goto` label (`b %l[out]`). The section holds one
+    // `b` word with a zero displacement and a JUMP26 into `.text`; the main
+    // stream reaches the section through its own conditional.
+    let src = "int probe(int x)\n\
+               {\n\
+                   __asm__ goto(\".pushsection .text.cold,\\\"ax\\\"\\n\"\n\
+                                \"cold:\\n\\tb %l[out]\\n\\t\"\n\
+                                \".popsection\\n\\t\"\n\
+                                \"cbz %w0, cold\"\n\
+                                :: \"r\"(x) :: out);\n\
+                   return 1;\n\
+               out:\n\
+                   return 0;\n\
+               }\n";
+    let o = asm_obj(src, crate::Target::LinuxAarch64);
+    let cold = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text.cold")
+        .expect(".text.cold emitted");
+    assert_eq!(cold.bytes, 0x14000000u32.to_le_bytes(), "`b 0` placeholder");
+    let text_len = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .map(|s| s.bytes.len() as i64)
+        .unwrap();
+    let [r] = cold.relocs.as_slice() else {
+        panic!("one branch reloc, got {:?}", cold.relocs);
+    };
+    assert_eq!(
+        (r.rtype, reloc_target_name(&o, r.sym).as_str()),
+        (R_AARCH64_JUMP26, ".text")
+    );
+    assert!(
+        (0..text_len).contains(&r.addend),
+        "the branch lands in the function's text, got addend {}",
+        r.addend
+    );
+    let text = o.sections.iter().find(|s| s.name == ".text").unwrap();
+    assert!(
+        text.relocs
+            .iter()
+            .any(|r| r.rtype == R_AARCH64_CONDBR19 && reloc_target_name(&o, r.sym) == ".text.cold"),
+        "the conditional relocates into the pushed section"
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_numeric_branch_into_a_pushed_section_relocates_to_it() {
+    use crate::c5::object::elf_reloc_types::{R_AARCH64_CONDBR19, R_AARCH64_JUMP26};
+    // A numeric forward reference whose definition sits in the statement's
+    // pushed section (the `jmp 6f` fixup shape). GNU as puts the two in
+    // different object sections, so each branch relocates against the
+    // section with the label's offset as addend.
+    let src = "void probe(long x)\n\
+               {\n\
+                   __asm__ volatile(\"b 1f\\n\\tcbz %0, 1f\\n\\t\"\n\
+                                    \".pushsection .text.fix,\\\"ax\\\"\\n\"\n\
+                                    \"\\tnop\\n1:\\tret\\n\\t\"\n\
+                                    \".popsection\" :: \"r\"(x));\n\
+               }\n";
+    let o = asm_obj(src, crate::Target::LinuxAarch64);
+    let text = o.sections.iter().find(|s| s.name == ".text").unwrap();
+    let hits: alloc::vec::Vec<(u32, i64)> = text
+        .relocs
+        .iter()
+        .filter(|r| reloc_target_name(&o, r.sym) == ".text.fix")
+        .map(|r| (r.rtype, r.addend))
+        .collect();
+    assert_eq!(hits, [(R_AARCH64_JUMP26, 4), (R_AARCH64_CONDBR19, 4)]);
 }
 
 // Emits a relocatable object, so it needs `native-emit`.

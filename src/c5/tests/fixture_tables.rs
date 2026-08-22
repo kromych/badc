@@ -1598,6 +1598,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("file_scope_asm_string_operands.c", 42),
     ("file_scope_asm_a64_relocs.c", 42),
     ("file_scope_asm_a64_label_diff_operand.c", 42),
+    ("inline_asm_a64_section_branches.c", 42),
     ("inline_asm_goto_output.c", 42),
     ("inline_asm_goto_multiret.c", 42),
     ("inline_asm_output_reg.c", 42),

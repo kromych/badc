@@ -43,7 +43,8 @@ use crate::c5::codegen::{
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
-    R_AARCH64_CALL26, R_AARCH64_LD64_GOT_LO12_NC, R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PLT32,
+    R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC, R_X86_64_GOTPCREL,
+    R_X86_64_PC32, R_X86_64_PLT32,
     R_X86_64_REX_GOTPCRELX, aarch64_ldst_lo12_scale, aarch64_movw_field,
 };
 use crate::c5::object::write_native_image;
@@ -908,10 +909,10 @@ fn project_aarch64_pending(
         // reached a target whose runtime address only the writer
         // knows, and this writer has no fixup that carries it, so it
         // falls through to the declined arm.
-        R_AARCH64_CALL26 if reloc.target_section == NativeSymSection::Undef => {
+        R_AARCH64_CALL26 | R_AARCH64_JUMP26 if reloc.target_section == NativeSymSection::Undef => {
             return Err(synth_err(
-                "synthesizer: R_AARCH64_CALL26 still pending after PLT pass \
-                 -- emit_aarch64_plt should have drained it",
+                "synthesizer: an aarch64 branch reloc is still pending after the PLT \
+                 pass -- emit_aarch64_plt should have drained it",
             ));
         }
         rtype if aarch64_ldst_lo12_scale(rtype).is_some() => (AddrPart::InPage, false),

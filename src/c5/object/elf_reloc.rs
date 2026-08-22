@@ -2936,6 +2936,11 @@ pub(super) fn write_relocatable(
         };
         let (rtype, r_offset, r_addend) = match machine_for_rela {
             Machine::X86_64 => (R_X86_64_PLT32, site.instr_offset as u64 + 1, base - 4),
+            // GNU as types the field by the instruction: `bl` takes CALL26,
+            // a plain `b` JUMP26. Both patch the same imm26.
+            Machine::Aarch64 if site.is_tail => {
+                (R_AARCH64_JUMP26, site.instr_offset as u64, base)
+            }
             Machine::Aarch64 => (R_AARCH64_CALL26, site.instr_offset as u64, base),
         };
         let r_info = (sym_idx << 32) | (rtype as u64);
@@ -2988,10 +2993,12 @@ pub(super) fn write_relocatable(
         // (S is the symbol value, A the addend).
         //
         // aarch64 BL/B is 4 bytes with the imm26 in the low
-        // bits; `R_AARCH64_CALL26` applies at the instruction
-        // start with addend 0.
+        // bits; the reloc applies at the instruction start with
+        // addend 0, typed CALL26 for `bl` and JUMP26 for `b` as
+        // GNU as types them.
         let (rtype, r_offset, r_addend) = match machine_for_rela {
             Machine::X86_64 => (R_X86_64_PLT32, site.instr_offset as u64 + 1, -4i64),
+            Machine::Aarch64 if site.is_tail => (R_AARCH64_JUMP26, site.instr_offset as u64, 0),
             Machine::Aarch64 => (R_AARCH64_CALL26, site.instr_offset as u64, 0),
         };
         let r_info = (sym_idx << 32) | (rtype as u64);

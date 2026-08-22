@@ -2468,10 +2468,9 @@ pub(crate) struct RelocCallSite {
     /// symbol the call reaches for.
     pub import_index: usize,
     /// `true` for tail-jumps (`b` / `jmp rel32`), `false` for
-    /// calls (`bl` / `call rel32`). The relocation type is the
-    /// same on each arch -- the link bit / opcode prefix lives
-    /// in the placeholder bytes the codegen already emitted.
-    #[allow(dead_code)]
+    /// calls (`bl` / `call rel32`). x86_64 uses `R_X86_64_PLT32`
+    /// for both; aarch64 types the field `R_AARCH64_JUMP26` /
+    /// `R_AARCH64_CALL26` as GNU as does.
     pub is_tail: bool,
     /// `true` for an address-of site (`lea` rip-relative on
     /// x86_64, `adrp + add` on aarch64) materializing the import's

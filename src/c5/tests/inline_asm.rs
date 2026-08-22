@@ -1670,6 +1670,29 @@ fn aarch64_pushsection_reads_the_enclosing_template_operands() {
 // Emits a relocatable object, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
+fn aarch64_template_symbol_branches_type_bl_call26_and_b_jump26() {
+    use crate::c5::object::elf_reloc_types::{R_AARCH64_CALL26, R_AARCH64_JUMP26};
+    // GNU as types the imm26 field by the instruction: `bl` takes CALL26,
+    // a plain `b` JUMP26. gcc 14 on this unit emits the same pair, and the
+    // branch to the template's own named label resolves without a reloc.
+    let src = "extern void helper(void);\nextern void other(void);\n\
+               void probe(void) { __asm__ volatile(\
+               \"bl helper\\n\\tb other\\n\\tb past\\npast:\\n\\tnop\" ::: \"x30\"); }\n";
+    let (_, relocs) = asm_section(src, ".text");
+    let branches: alloc::vec::Vec<(u32, &str)> = relocs
+        .iter()
+        .filter(|(_, t, _)| matches!(*t, R_AARCH64_CALL26 | R_AARCH64_JUMP26))
+        .map(|(_, t, n)| (*t, n.as_str()))
+        .collect();
+    assert_eq!(
+        branches,
+        [(R_AARCH64_CALL26, "helper"), (R_AARCH64_JUMP26, "other")]
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
 fn aarch64_function_body_layout_directives_match_gnu_as() {
     // `.balign` / `.skip` / `.org` in the main instruction stream. GNU as
     // 2.46.1 for the same statements in a `.text` body emits 44 bytes: the

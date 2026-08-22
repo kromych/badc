@@ -335,7 +335,7 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
 /// reference naming a spilled value, and one per inserted copy. Charging
 /// the copies is what keeps a split that only renames a value the second
 /// allocation would have given a register anyway from looking free.
-pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
+fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
     let weights = super::reg_alloc::block_weights(func);
     let spilled = |v: ValueId| -> bool {
         v != NO_VALUE && matches!(alloc.places.get(v as usize), Some(Place::Spill(_)))
@@ -379,17 +379,6 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
 /// spill traffic, leaving `func` matching the returned allocation.
 pub(crate) fn allocate_split(func: &mut FunctionSsa, target: Target) -> Allocation {
     let base = super::reg_alloc::allocate(func, target);
-    allocate_split_with(func, target, base)
-}
-
-/// [`allocate_split`] over an allocation of `func` the caller already
-/// has, so a pass that allocated to measure its own decision does not
-/// pay for a repeat.
-pub(super) fn allocate_split_with(
-    func: &mut FunctionSsa,
-    target: Target,
-    base: Allocation,
-) -> Allocation {
     let runs = plan(func, &base);
     if runs.is_empty() {
         return base;

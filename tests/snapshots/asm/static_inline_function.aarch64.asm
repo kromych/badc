@@ -17,10 +17,10 @@ Disassembly of section .text:
                	mov	x0, #0xbeef             // =48879
                	movk	x0, #0xdead, lsl #16
                	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	b	<addr>
-               	and	x3, x0, x2
-               	add	x1, x1, x3
+               	mov	x17, #0x1               // =1
+               	and	x2, x0, x17
+               	add	x1, x1, x2
                	lsr	x0, x0, #1
                	cbnz	x0, <addr>
                	cmp	x1, #0x18

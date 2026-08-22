@@ -15,24 +15,25 @@ Disassembly of section .text:
 
 <main>:
                	mov	x3, #0x0                // =0
-               	mov	x4, #0xff               // =255
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
                	mov	x0, x3
                	b	<addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	sxtw	x2, w0
-               	add	x1, x5, x2
-               	ldrsb	x6, [x1]
-               	cmp	x0, #0x2
+               	add	x1, x1, x2
+               	ldrsb	x4, [x1]
+               	cmp	w0, #0x2
                	b.lt	<addr>
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	b.lt	<addr>
-               	cmp	x0, #0x3
+               	cmp	w0, #0x3
                	b.eq	<addr>
                	mov	x1, x3
-               	and	x6, x6, x4
-               	and	x1, x1, x4
-               	cmp	x6, x1
+               	mov	x17, #0xff              // =255
+               	and	x4, x4, x17
+               	mov	x17, #0xff              // =255
+               	and	x1, x1, x17
+               	cmp	w4, w1
                	b.eq	<addr>
                	b	<addr>
                	mov	x1, #0xa                // =10
@@ -47,7 +48,7 @@ Disassembly of section .text:
                	mov	x1, #0x61               // =97
                	b	<addr>
                	add	x0, x2, #0x1
-               	cmp	x0, #0x5
+               	cmp	w0, #0x5
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, x0

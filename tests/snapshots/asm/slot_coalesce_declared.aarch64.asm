@@ -74,30 +74,30 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0xf0]
                	add	x29, sp, #0xf0
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x3                // =3
-               	mov	x4, #0x9                // =9
                	mov	x1, x0
                	b	<addr>
-               	mul	x2, x0, x3
-               	add	x5, x2, #0x7
-               	add	x1, x1, x5
-               	add	x5, x0, x0
-               	add	x5, x5, x0
-               	sub	x2, x5, x2
+               	mov	x17, #0x3               // =3
+               	mul	x2, x0, x17
+               	add	x3, x2, #0x7
+               	add	x1, x1, x3
+               	add	x3, x0, x0
+               	add	x3, x3, x0
+               	sub	x2, x3, x2
                	add	x2, x1, x2
-               	mul	x1, x0, x4
+               	mov	x17, #0x9               // =9
+               	mul	x1, x0, x17
                	sub	x1, x1, x1
                	add	x1, x2, x1
                	add	x0, x0, #0x1
                	cmp	x0, #0x32
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x3                // =3
                	mov	x2, x0
                	b	<addr>
-               	mul	x4, x0, x3
-               	add	x4, x4, #0x7
-               	add	x2, x2, x4
+               	mov	x17, #0x3               // =3
+               	mul	x3, x0, x17
+               	add	x3, x3, #0x7
+               	add	x2, x2, x3
                	add	x0, x0, #0x1
                	cmp	x0, #0x32
                	b.lt	<addr>

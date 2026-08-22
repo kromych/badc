@@ -276,7 +276,7 @@ fn thread_jumps(func: &mut FunctionSsa, chains: &mut JumpChains) {
 
 /// Reverse-postorder number per block from a depth-first search at
 /// the entry; `usize::MAX` for blocks unreachable from the entry.
-pub(crate) fn rpo_numbers(func: &FunctionSsa) -> Vec<usize> {
+pub(super) fn rpo_numbers(func: &FunctionSsa) -> Vec<usize> {
     let n = func.blocks.len();
     let mut po: Vec<BlockId> = Vec::with_capacity(n);
     let mut visited = alloc::vec![false; n];
@@ -418,14 +418,14 @@ fn is_irreducible(func: &FunctionSsa, idom: &[BlockId], rpo: &[usize]) -> bool {
 
 /// A natural loop: the header plus every block that can reach a back
 /// edge's source without passing through the header.
-pub(crate) struct NaturalLoop {
-    pub(crate) header: BlockId,
+pub(super) struct NaturalLoop {
+    pub(super) header: BlockId,
     /// Member blocks, ascending.
-    pub(crate) body: Vec<BlockId>,
+    pub(super) body: Vec<BlockId>,
 }
 
 impl NaturalLoop {
-    pub(crate) fn contains(&self, b: BlockId) -> bool {
+    pub(super) fn contains(&self, b: BlockId) -> bool {
         self.body.binary_search(&b).is_ok()
     }
 }
@@ -433,7 +433,7 @@ impl NaturalLoop {
 /// Natural loops keyed by header, merging the bodies of multiple back
 /// edges that target the same header. Back edges from unreachable
 /// blocks are ignored.
-pub(crate) fn natural_loops(
+pub(super) fn natural_loops(
     func: &FunctionSsa,
     idom: &[BlockId],
     preds: &[Vec<BlockId>],

@@ -57,14 +57,14 @@ Disassembly of section .text:
                	fmov	d16, x0
                	sub	x17, x29, #0x28
                	str	d16, [x17]
-               	mov	x4, #0x1                // =1
                	b	<addr>
                	sxtw	x1, w0
                	asr	x3, x1, #63
                	lsr	x3, x3, #63
-               	add	x5, x1, x3
-               	and	x5, x5, x4
-               	sub	x3, x5, x3
+               	add	x4, x1, x3
+               	mov	x17, #0x1               // =1
+               	and	x4, x4, x17
+               	sub	x3, x4, x3
                	cbnz	x3, <addr>
                	sub	x16, x29, #0x28
                	ldr	d0, [x16]
@@ -118,7 +118,7 @@ Disassembly of section .text:
                	str	d0, [x17]
                	add	x0, x1, #0x1
                	ldursw	x1, [x29, #0x10]
-               	cmp	x0, x1
+               	cmp	w0, w1
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	sub	x16, x29, #0x28

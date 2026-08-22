@@ -19,14 +19,14 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	sub	x3, x29, #0x20
                	mov	x0, #0x0                // =0
-               	mov	x5, #0x3                // =3
                	b	<addr>
                	sxtw	x1, w0
-               	mul	x2, x1, x5
+               	mov	x17, #0x3               // =3
+               	mul	x2, x1, x17
                	sxtw	x4, w2
                	strh	w4, [x3, x1, lsl #1]
                	add	x0, x0, #0x1
-               	cmp	x0, #0x8
+               	cmp	w0, #0x8
                	b.lt	<addr>
                	ldrsh	x0, [x3, #0xe]
                	cmp	w0, #0x15

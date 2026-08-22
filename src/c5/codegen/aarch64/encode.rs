@@ -1598,13 +1598,6 @@ pub(crate) fn enc_adrp(rd: Reg, imm21: i32) -> u32 {
     0x9000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32)
 }
 
-/// Instruction count [`load_imm64`] issues for `value`: one per
-/// non-zero 16-bit lane, and one `movz` for zero.
-pub(crate) fn imm64_insts(value: u64) -> u32 {
-    let lanes = (0..4).filter(|i| (value >> (i * 16)) & 0xFFFF != 0).count();
-    lanes.max(1) as u32
-}
-
 /// Build an arbitrary 64-bit immediate into `rd` using a `movz` plus
 /// up to three `movk`s. Picks the shortest sequence by skipping
 /// 16-bit lanes that are zero.
@@ -2138,7 +2131,7 @@ pub(crate) fn lower(
                 .iter_mut()
                 .map(|f| {
                     if native.optimize {
-                        super::ssa::licm::allocate_hoisted(f, target)
+                        super::ssa::split_ranges::allocate_split(f, target)
                     } else {
                         super::ssa::reg_alloc::allocate(f, target)
                     }

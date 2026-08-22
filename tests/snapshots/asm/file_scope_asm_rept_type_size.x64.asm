@@ -29,34 +29,34 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorq	%rax, %rax
-               	leaq	<rip>, %rsi        # <addr>
                	jmp	<addr>
+               	leaq	<rip>, %rdx        # <addr>
                	movslq	%eax, %rcx
-               	leaq	(%rsi,%rcx), %rdx
+               	addq	%rcx, %rdx
                	movzbq	(%rdx), %rdx
                	xorq	$0x4, %rdx
                	movl	%edx, %edx
                	testq	%rdx, %rdx
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	cmpq	$0x3, %rax
+               	cmpl	$0x3, %eax
                	jl	<addr>
                	movl	$0x3, %eax
-               	leaq	<rip>, %rsi        # <addr>
                	jmp	<addr>
+               	leaq	<rip>, %rdx        # <addr>
                	movslq	%eax, %rcx
-               	leaq	(%rsi,%rcx), %rdx
+               	addq	%rcx, %rdx
                	movzbq	(%rdx), %rdx
                	xorq	$0x7, %rdx
                	movl	%edx, %edx
                	testq	%rdx, %rdx
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	cmpq	$0x8, %rax
+               	cmpl	$0x8, %eax
                	jl	<addr>
                	leaq	<rip>, %rax        # <addr>
                	movslq	(%rax), %rax
-               	cmpq	$0x8, %rax
+               	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
@@ -75,8 +75,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, (%rax)
-               	addb	%al, (%rsp,%rax)
 
 <rept_run>:
                	addb	$0x4, %al

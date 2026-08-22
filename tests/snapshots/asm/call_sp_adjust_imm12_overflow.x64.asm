@@ -3432,15 +3432,15 @@ Disassembly of section .text:
                	movq	%r14, 0x18(%rsp)
                	movq	%r15, 0x20(%rsp)
                	xorq	%rax, %rax
-               	leaq	<rip>, %rdx
                	jmp	<addr>
+               	leaq	<rip>, %rdx
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi
                	leaq	(%rdx,%rsi), %rcx
                	movq	%rax, (%rcx)
-               	movq	%rax, %rsi
-               	shlq	%rsi
-               	movq	%rsi, 0x8(%rcx)
+               	movq	%rax, %rdx
+               	shlq	%rdx
+               	movq	%rdx, 0x8(%rcx)
                	incq	%rax
                	cmpq	$0x105, %rax            # imm = 0x105
                	jl	<addr>

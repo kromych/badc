@@ -83,15 +83,15 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x28]
-               	mov	x2, #0x4240             // =16960
-               	movk	x2, #0xf, lsl #16
                	b	<addr>
                	ldursw	x1, [x29, #-0x28]
                	add	x1, x1, #0x1
                	stur	w1, [x29, #-0x28]
                	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	cmp	x0, x2
+               	mov	x17, #0x4240            // =16960
+               	movk	x17, #0xf, lsl #16
+               	cmp	w0, w17
                	b.lt	<addr>
                	mov	x0, #0x1                // =1
                	sub	x20, x29, #0x10

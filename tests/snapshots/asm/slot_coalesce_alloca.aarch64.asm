@@ -47,19 +47,19 @@ Disassembly of section .text:
                	mov	x0, #0x7b               // =123
                	str	x0, [x2, #0x38]
                	mov	x1, #0x0                // =0
-               	mov	x5, #0x74               // =116
                	mov	x0, x1
                	b	<addr>
                	sub	x4, x29, #0xc0
                	sxtw	x3, w0
-               	lsl	x6, x3, #3
-               	add	x6, x4, x6
+               	lsl	x5, x3, #3
+               	add	x5, x4, x5
                	add	x4, x3, #0x1
                	sxtw	x4, w4
-               	mul	x4, x4, x5
-               	str	x4, [x6]
+               	mov	x17, #0x74              // =116
+               	mul	x4, x4, x17
+               	str	x4, [x5]
                	add	x0, x3, #0x1
-               	cmp	x0, #0x18
+               	cmp	w0, #0x18
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	ldr	x4, [x4]
                	add	x1, x1, x4
                	add	x0, x3, #0x1
-               	cmp	x0, #0x18
+               	cmp	w0, #0x18
                	b.lt	<addr>
                	cbnz	x1, <addr>
                	mov	x0, #0x2                // =2

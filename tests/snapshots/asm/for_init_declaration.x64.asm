@@ -95,35 +95,36 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	movl	%esi, 0x4(%rax)
                	movl	%edx, 0x8(%rax)
-               	leaq	<rip>, %rdx
                	jmp	<addr>
-               	movslq	(%rax), %rsi
-               	addq	%rsi, %rcx
+               	movslq	(%rax), %rdx
+               	addq	%rdx, %rcx
                	addq	$0x4, %rax
-               	leaq	0xc(%rdx), %rsi
-               	cmpq	%rsi, %rax
+               	leaq	<rip>, %rdx
+               	addq	$0xc, %rdx
+               	cmpq	%rdx, %rax
                	jb	<addr>
                	movslq	%ecx, %rax
                	cmpl	$0x7, %eax
                	je	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rsi
                	leaq	<rip>, %rax
                	xorq	%rcx, %rcx
                	movl	$0x1, %edx
                	movl	%edx, (%rax)
                	movl	$0x4, %edx
-               	movl	$0x2, %esi
-               	movl	%esi, 0x4(%rax)
+               	movl	$0x2, %edi
+               	movl	%edi, 0x4(%rax)
                	movl	%edx, 0x8(%rax)
-               	leaq	<rip>, %rdx
                	jmp	<addr>
-               	movslq	(%rax), %rsi
-               	addq	%rsi, %rcx
+               	movslq	(%rax), %rdx
+               	addq	%rdx, %rcx
                	addq	$0x4, %rax
-               	leaq	0xc(%rdx), %rsi
-               	cmpq	%rsi, %rax
+               	leaq	<rip>, %rdx
+               	addq	$0xc, %rdx
+               	cmpq	%rdx, %rax
                	jb	<addr>
                	movslq	%ecx, %rax
+               	movq	%rsi, %rdi
                	movq	%rax, %rsi
                	movb	$0x0, %al
                	callq	<addr>

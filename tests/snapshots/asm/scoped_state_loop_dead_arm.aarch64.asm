@@ -29,21 +29,21 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	adrp	x6, <page>
-               	add	x6, x6, <lo12>
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
                	mov	x4, x1
                	b	<addr>
-               	ldr	x7, [x5]
-               	add	x7, x7, x0
-               	str	x7, [x5]
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
+               	ldr	x6, [x5]
+               	add	x6, x6, x0
+               	str	x6, [x5]
                	add	x4, x4, #0x1
-               	cmp	x3, #0x2
+               	cmp	w3, #0x2
                	b.lo	<addr>
-               	cmp	x3, #0x3
+               	cmp	w3, #0x3
                	b.lo	<addr>
-               	ldr	x2, [x6]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x2, [x2]
                	cmp	x0, x2
                	b.ne	<addr>
                	mov	x2, x1

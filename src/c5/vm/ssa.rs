@@ -2315,6 +2315,8 @@ fn run_inline_asm(
             | Mnemonic::VexNullary { .. }
             | Mnemonic::VexElemExtract { .. }
             | Mnemonic::VexElemInsert { .. }
+            | Mnemonic::MaskOp { .. }
+            | Mnemonic::Kmov { .. }
             | Mnemonic::Evex(_)
             | Mnemonic::VexGpr { .. } => {
                 // The interpreter has no XMM register file; SSE inline asm is a

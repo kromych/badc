@@ -962,6 +962,40 @@ fn e3_branches_take_the_address_size_prefix_by_mode() {
     assert!(!ok && text.contains("64-bit mode"), "{text}");
 }
 
+/// Opmask registers as first-class operands in a `.S` unit, where basic asm
+/// reads `%kN` under a single `%` as a register (extended asm keeps GCC's
+/// `%k<N>` operand-modifier meaning). Bytes are GNU as 2.46.1's, and llvm-mc
+/// agrees on every instruction.
+#[test]
+fn opmask_operands_assemble_in_a_section_unit() {
+    const SRC: &str = concat!(
+        "\t.text\n\t.globl mask_unit\nmask_unit:\n",
+        "\tkxnorw %k2, %k2, %k2\n",             // c5 ec 46 d2
+        "\tkmovd %eax, %k1\n",                  // c5 fb 92 c8
+        "\tkmovw %k1, %ecx\n",                  // c5 f8 93 c9
+        "\tkshiftrw $8, %k1, %k2\n",            // c4 e3 f9 30 d1 08
+        "\tkmovq %k3, (%rdi)\n",                // c4 e1 f8 91 1f
+        "\tkmovb 1(%rsi), %k4\n",               // c5 f9 90 66 01
+        "\tkandq %k1, %k2, %k3\n",              // c4 e1 ec 41 d9
+        "\tktestw %k1, %k2\n",                  // c5 f8 99 d1
+        "\tvpcmpeqd %zmm1, %zmm2, %k3\n",       // 62 f1 6d 48 76 d9
+        "\tvpcmpub $6, (%rdx), %zmm5, %k1\n",   // 62 f3 55 48 3e 0a 06
+        "\tvpmovm2b %k1, %zmm3\n",              // 62 f2 7e 48 28 d9
+        "\tvmovdqu8 (%rsi), %zmm0{%k1}{z}\n",   // 62 f1 7f c9 6f 06
+        "\tret\n",
+    );
+    assert_eq!(
+        text_of("opmask-unit", SRC),
+        [
+            0xc5, 0xec, 0x46, 0xd2, 0xc5, 0xfb, 0x92, 0xc8, 0xc5, 0xf8, 0x93, 0xc9, 0xc4, 0xe3,
+            0xf9, 0x30, 0xd1, 0x08, 0xc4, 0xe1, 0xf8, 0x91, 0x1f, 0xc5, 0xf9, 0x90, 0x66, 0x01,
+            0xc4, 0xe1, 0xec, 0x41, 0xd9, 0xc5, 0xf8, 0x99, 0xd1, 0x62, 0xf1, 0x6d, 0x48, 0x76,
+            0xd9, 0x62, 0xf3, 0x55, 0x48, 0x3e, 0x0a, 0x06, 0x62, 0xf2, 0x7e, 0x48, 0x28, 0xd9,
+            0x62, 0xf1, 0x7f, 0xc9, 0x6f, 0x06, 0xc3,
+        ]
+    );
+}
+
 /// Contents of `.text`, from an object of either ELF class.
 fn text_bytes(b: &[u8]) -> Vec<u8> {
     if b[4] == 1 {

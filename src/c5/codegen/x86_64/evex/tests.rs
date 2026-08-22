@@ -12,12 +12,12 @@ use alloc::vec::Vec;
 
 use crate::c5::ir::AsmRegSize;
 
-use super::super::asm::{AsmMemBase, AsmOpnd, Concrete, encode, parse_template};
+use super::super::asm::{AsmMemBase, AsmOpnd, Concrete, encode, parse_file_template, parse_template};
 
 /// Assemble one AT&T instruction the way the file-scope asm path does.
 fn enc(text: &str) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
-    for insn in parse_template(text.as_bytes())? {
+    for insn in parse_file_template(text.as_bytes())? {
         let reg_of = |b: AsmMemBase| match b {
             AsmMemBase::Reg { num, .. } => num,
             AsmMemBase::Ref(_) => unreachable!("explicit-register template expected"),
@@ -565,9 +565,9 @@ fn opmask_decorators() {
         "vpaddd 64(%rsi),%zmm1,%zmm0{%k3}{z}",
         &[0x62, 0xF1, 0x75, 0xCB, 0xFE, 0x46, 0x01],
     );
-    // `%k<N>` under a single `%` is GCC's operand modifier -- the 32-bit form
-    // of operand N -- not an opmask register, so a decorator is the only place
-    // an opmask is spelled.
+    // In an extended-asm template `%k<N>` under a single `%` stays GCC's
+    // operand modifier -- the 32-bit form of operand N -- not an opmask
+    // register; only the file-scope parse reads it as one.
     assert_eq!(
         parse_template(b"shrl %k1, %k0").unwrap()[0].operands,
         [
@@ -580,6 +580,77 @@ fn opmask_decorators() {
                 size: Some(AsmRegSize::Long)
             }
         ]
+    );
+}
+
+/// Opmask registers as instruction operands: the VEX-encoded `k*` set and
+/// the EVEX forms that read or write one. Byte strings are GNU as 2.46.1's
+/// and llvm-mc's, which agree on every case.
+#[test]
+fn opmask_operands() {
+    // The 0F-map families: byte and dword forms take 0x66, dword and qword
+    // forms VEX.W; the 3-operand forms set VEX.L.
+    gas("kandw %k1,%k2,%k3", &[0xC5, 0xEC, 0x41, 0xD9]);
+    gas("kandnb %k4,%k5,%k6", &[0xC5, 0xD5, 0x42, 0xF4]);
+    gas("kord %k7,%k0,%k1", &[0xC4, 0xE1, 0xFD, 0x45, 0xCF]);
+    gas("kxorq %k2,%k3,%k4", &[0xC4, 0xE1, 0xE4, 0x47, 0xE2]);
+    gas("kxnorw %k5,%k6,%k7", &[0xC5, 0xCC, 0x46, 0xFD]);
+    gas("kaddb %k1,%k2,%k3", &[0xC5, 0xED, 0x4A, 0xD9]);
+    gas("kunpckbw %k1,%k2,%k3", &[0xC5, 0xED, 0x4B, 0xD9]);
+    gas("kunpckwd %k1,%k2,%k3", &[0xC5, 0xEC, 0x4B, 0xD9]);
+    gas("kunpckdq %k1,%k2,%k3", &[0xC4, 0xE1, 0xEC, 0x4B, 0xD9]);
+    gas("knotw %k1,%k2", &[0xC5, 0xF8, 0x44, 0xD1]);
+    gas("kortestd %k3,%k4", &[0xC4, 0xE1, 0xF9, 0x98, 0xE3]);
+    gas("ktestq %k5,%k6", &[0xC4, 0xE1, 0xF8, 0x99, 0xF5]);
+    // The shifts pair the widths per opcode on the 0F3A map.
+    gas("kshiftlw $3,%k1,%k2", &[0xC4, 0xE3, 0xF9, 0x32, 0xD1, 0x03]);
+    gas("kshiftrd $5,%k3,%k4", &[0xC4, 0xE3, 0x79, 0x31, 0xE3, 0x05]);
+    // `kmov`: 90/91 against opmask / memory, 92/93 against a general
+    // register, whose prefix pair differs (F2 for the d/q members).
+    gas("kmovw %k1,%k2", &[0xC5, 0xF8, 0x90, 0xD1]);
+    gas("kmovb (%rax),%k2", &[0xC5, 0xF9, 0x90, 0x10]);
+    gas("kmovq 8(%rsi),%k3", &[0xC4, 0xE1, 0xF8, 0x90, 0x5E, 0x08]);
+    gas("kmovd %k2,(%rax)", &[0xC4, 0xE1, 0xF9, 0x91, 0x10]);
+    gas("kmovw %eax,%k2", &[0xC5, 0xF8, 0x92, 0xD0]);
+    gas("kmovd %eax,%k2", &[0xC5, 0xFB, 0x92, 0xD0]);
+    gas("kmovq %k2,%rax", &[0xC4, 0xE1, 0xFB, 0x93, 0xC2]);
+    gas("kmovw %k2,%r9d", &[0xC5, 0x78, 0x93, 0xCA]);
+    gas("kmovb (%r8),%k2", &[0xC4, 0xC1, 0x79, 0x90, 0x10]);
+    // EVEX compares and tests write an opmask; the mask <-> vector moves
+    // read or write one in a register-only form.
+    gas("vpcmpeqb %zmm1,%zmm2,%k3", &[0x62, 0xF1, 0x6D, 0x48, 0x74, 0xD9]);
+    gas("vpcmpeqd %zmm1,%zmm2,%k3", &[0x62, 0xF1, 0x6D, 0x48, 0x76, 0xD9]);
+    gas("vpcmpeqq %zmm1,%zmm2,%k3", &[0x62, 0xF2, 0xED, 0x48, 0x29, 0xD9]);
+    gas("vpcmpgtw %zmm1,%zmm2,%k3", &[0x62, 0xF1, 0x6D, 0x48, 0x65, 0xD9]);
+    gas("vpcmpd $2,%zmm1,%zmm2,%k3", &[0x62, 0xF3, 0x6D, 0x48, 0x1F, 0xD9, 0x02]);
+    gas("vpcmpuw $2,%zmm1,%zmm2,%k3", &[0x62, 0xF3, 0xED, 0x48, 0x3E, 0xD9, 0x02]);
+    gas("vptestmd %zmm1,%zmm2,%k3", &[0x62, 0xF2, 0x6D, 0x48, 0x27, 0xD9]);
+    gas("vptestnmb %zmm1,%zmm2,%k3", &[0x62, 0xF2, 0x6E, 0x48, 0x26, 0xD9]);
+    gas("vpmovm2d %k1,%zmm2", &[0x62, 0xF2, 0x7E, 0x48, 0x38, 0xD1]);
+    gas("vpmovq2m %zmm19,%k7", &[0x62, 0xB2, 0xFE, 0x48, 0x39, 0xFB]);
+    gas("vcmpps $1,%zmm1,%zmm2,%k3", &[0x62, 0xF1, 0x6C, 0x48, 0xC2, 0xD9, 0x01]);
+    gas(
+        "vcmpsd $3,8(%rax),%xmm2,%k3",
+        &[0x62, 0xF1, 0xEF, 0x08, 0xC2, 0x58, 0x01, 0x03],
+    );
+    // Compressed displacement, embedded broadcast, and a write mask on the
+    // opmask destination.
+    gas(
+        "vpcmpeqd 64(%rax),%zmm2,%k3",
+        &[0x62, 0xF1, 0x6D, 0x48, 0x76, 0x58, 0x01],
+    );
+    gas(
+        "vpcmpeqd (%rax){1to16},%zmm2,%k3",
+        &[0x62, 0xF1, 0x6D, 0x58, 0x76, 0x18],
+    );
+    gas(
+        "vpcmpeqd %zmm1,%zmm2,%k3{%k4}",
+        &[0x62, 0xF1, 0x6D, 0x4C, 0x76, 0xD9],
+    );
+    gas("vpcmpeqq %zmm26,%zmm22,%k5", &[0x62, 0x92, 0xCD, 0x40, 0x29, 0xEA]);
+    gas(
+        "vpcmpgtq (%r9){1to8},%zmm30,%k2{%k1}",
+        &[0x62, 0xD2, 0x8D, 0x51, 0x37, 0x11],
     );
 }
 
@@ -890,11 +961,14 @@ fn refusals() {
     // ModRM.reg, inverting the shape; it is left out of the EVEX table rather
     // than encoded as the memory form, which writes 16 bits.
     refused("vpextrw $3,%xmm16,%eax", "no EVEX");
-    // Instructions that name an opmask as an operand rather than a decorator
-    // are not implemented: `%k<N>` under a single `%` is GCC's operand
-    // modifier, so the spelling is not available to them.
-    refused("kmovw %k1,%eax", "unsupported instruction");
-    refused("vpcmpeqd %zmm1,%zmm2,%k1", "no EVEX");
+    // Opmask operand class mismatches.
+    refused("vpcmpeqd %zmm1,%zmm2,%zmm3", "writes an opmask register");
+    refused("vpmovm2d (%rax),%zmm1", "reads an opmask register");
+    refused("vpmovd2m (%rax),%k1", "vector register source");
+    refused("vpaddd %k1,%zmm1,%zmm0", "vector register or memory");
+    refused("vpcmpeqd %zmm1,%zmm2,%k3{%k4}{z}", "opmask destination");
+    refused("kmovq %eax,%k1", "64-bit general register");
+    refused("kandw %k1,%k2,%eax", "opmask instruction takes");
 }
 
 /// The tuple table is the SDM's, restated as a function; these are the factors

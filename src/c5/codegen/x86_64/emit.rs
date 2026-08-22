@@ -6682,6 +6682,7 @@ fn encode_x86_asm_section_code(
                     imm_of: &imm_of,
                     addr_of: &addr_of,
                     fold: &f,
+                    file_scope: false,
                 };
                 *item = encode_one_x86_section_insn(
                     text,
@@ -6751,6 +6752,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
                     imm_of: &imm_of,
                     addr_of: &addr_of,
                     fold: &none,
+                    file_scope: true,
                 };
                 encode_rept(items, &mut mode, &operand_target, &goto_block, &refs)?;
             } else if let AsmSectionItem::Code(text) = item {
@@ -6761,6 +6763,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
                     imm_of: &imm_of,
                     addr_of: &addr_of,
                     fold: &f,
+                    file_scope: true,
                 };
                 *item = encode_one_x86_section_insn(
                     text,
@@ -6906,6 +6909,10 @@ struct SectionOperandRefs<'a> {
     /// A folded immediate or displacement encodes as a literal, taking the
     /// narrow field GNU as picks at the same point.
     fold: &'a dyn Fn(&str) -> Option<i64>,
+    /// File-scope / `.S`-unit text is basic asm, where `%kN` is an opmask
+    /// register; an extended-asm statement's section text keeps GCC's
+    /// `%k<N>` operand-modifier reading.
+    file_scope: bool,
 }
 
 /// Encode one replacement instruction to a `CodeBytes` item. A direct
@@ -6947,8 +6954,12 @@ fn encode_one_x86_section_insn(
         });
     }
     let mode = *mode;
-    let insns = super::asm::parse_template(text.as_bytes())
-        .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+    let insns = if refs.file_scope {
+        super::asm::parse_file_template(text.as_bytes())
+    } else {
+        super::asm::parse_template(text.as_bytes())
+    }
+    .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
     // Each leading `lock` / `rep` / segment prefix parses as its own entry and
     // rides in front of the instruction's bytes. A prefix statement standing
     // alone is the instruction, so the run stops one short of the end.

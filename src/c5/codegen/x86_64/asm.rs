@@ -230,6 +230,27 @@ pub(crate) enum Mnemonic {
         opcode: u8,
         w: bool,
     },
+    /// A VEX-encoded opmask instruction (the `k*` set except `kmov*`): every
+    /// operand is an opmask register, with the destination in ModRM.reg, the
+    /// r/m source last in AT&T order, and src1 in VEX.vvvv where `vvvv` is
+    /// set (the 3-operand forms, which also set VEX.L). The width letter of
+    /// the mnemonic fixes `pp` and `w`; `imm` is the shifts' trailing byte.
+    MaskOp {
+        pp: u8,
+        map: u8,
+        w: bool,
+        opcode: u8,
+        l: u8,
+        vvvv: bool,
+        imm: bool,
+    },
+    /// `kmov{b,w,d,q}`: an opmask move. The opcode and prefix follow the
+    /// operand pair -- 90/91 between opmask and opmask / memory, 92/93
+    /// between opmask and a 32/64-bit general register -- so only the width
+    /// the size letter names rides the variant.
+    Kmov {
+        width: u8,
+    },
     /// An EVEX-encoded (AVX-512) op. The form carries the opcode fields, the
     /// operand arrangement, the memory tuple type that fixes the compressed
     /// displacement scale, and the `{%kN}` / `{z}` / `{1toN}` decorators the
@@ -753,6 +774,8 @@ pub(crate) const YMM_BASE: u8 = 96;
 /// ZMM registers (AVX-512 512-bit) occupy `ZMM_BASE..ZMM_BASE+32`; only EVEX
 /// encodes them.
 pub(crate) const ZMM_BASE: u8 = 136;
+/// Opmask registers `k0`..`k7` occupy `MASK_BASE..MASK_BASE+8`.
+pub(crate) const MASK_BASE: u8 = 168;
 /// Control / debug / segment registers occupy the ranges below; each is
 /// marked so it never collides with the 0..16 GPRs or the MMX marks.
 const CR_BASE: u8 = 24;
@@ -765,11 +788,35 @@ const SEG_BASE: u8 = 48;
 /// The number of an opmask register `kN`. Opmasks are deliberately absent from
 /// [`reg_by_name`]: under a single `%` their spelling collides with GCC's
 /// `%k<N>` operand modifier, which selects the 32-bit form of operand N and is
-/// what kernel inline asm means by it. They reach the encoder only through the
-/// `{%kN}` write-mask decorator, which is parsed as a decorator.
+/// what kernel inline asm means by it. In extended asm they reach the encoder
+/// as `%%kN` operands and through the `{%kN}` write-mask decorator; only the
+/// file-scope parse, where basic asm makes a single `%` a register sigil,
+/// reads `%kN` as a register.
 fn mask_by_name(name: &str) -> Option<u8> {
     let rest = name.strip_prefix('k')?;
     rest.parse::<u8>().ok().filter(|&i| i < 8)
+}
+
+/// Whether a register number names an opmask register.
+pub(crate) fn is_mask_reg(reg: u8) -> bool {
+    (MASK_BASE..MASK_BASE + 8).contains(&reg)
+}
+
+/// The opmask number of a resolved operand, or `None`.
+pub(crate) fn mask_reg_num(c: &Concrete) -> Option<u8> {
+    match *c {
+        Concrete::Reg { reg, .. } if is_mask_reg(reg) => Some(reg - MASK_BASE),
+        _ => None,
+    }
+}
+
+/// Operand for an opmask register named in a template. The size marker is
+/// unused: the mnemonic's width letter fixes the operation width.
+fn mask_reg_operand(name: &str) -> Option<AsmOpnd> {
+    mask_by_name(name).map(|k| AsmOpnd::Reg {
+        reg: MASK_BASE + k,
+        size: AsmRegSize::Quad,
+    })
 }
 
 /// Assign an x86 register number to each register operand of an
@@ -1080,6 +1127,7 @@ fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
                 .or_else(|| sse_mov(name))
                 .or_else(|| sse_imm(name))
                 .or_else(|| vex_op(name))
+                .or_else(|| mask_op(name))
                 .or_else(|| super::evex::op(name).map(Mnemonic::Evex));
         }
     })
@@ -1612,6 +1660,82 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
     })
 }
 
+/// The opmask-register instruction set (VEX-encoded, SDM "KADDW" .. "KXORW"
+/// pages). The width letter fixes the prefix selections: on the 0F map the
+/// byte and dword forms take 0x66 and the dword and qword forms VEX.W; the
+/// shifts pair the widths per opcode on the 0F3A map under a constant 0x66.
+fn mask_op(name: &str) -> Option<Mnemonic> {
+    let width = |letter: &str| match letter {
+        "b" => Some(1u8),
+        "w" => Some(2),
+        "d" => Some(4),
+        "q" => Some(8),
+        _ => None,
+    };
+    if let Some(rest) = name.strip_prefix("kmov") {
+        return Some(Mnemonic::Kmov { width: width(rest)? });
+    }
+    if let Some(rest) = name.strip_prefix("kshift") {
+        let (base, rest) = match rest.split_at_checked(1)? {
+            ("l", r) => (0x32u8, r),
+            ("r", r) => (0x30, r),
+            _ => return None,
+        };
+        let w = width(rest)?;
+        return Some(Mnemonic::MaskOp {
+            pp: 1,
+            map: 3,
+            w: matches!(w, 2 | 8),
+            opcode: base + u8::from(matches!(w, 4 | 8)),
+            l: 0,
+            vvvv: false,
+            imm: true,
+        });
+    }
+    // The unpacks spell a width pair; each is its own row.
+    let m = |pp, w, l, opcode| {
+        Some(Mnemonic::MaskOp {
+            pp,
+            map: 1,
+            w,
+            opcode,
+            l,
+            vvvv: l == 1,
+            imm: false,
+        })
+    };
+    if let Some(v) = match name {
+        "kunpckbw" => m(1, false, 1, 0x4B),
+        "kunpckwd" => m(0, false, 1, 0x4B),
+        "kunpckdq" => m(0, true, 1, 0x4B),
+        _ => None,
+    } {
+        return Some(v);
+    }
+    // 0F-map families as `(base, opcode, 3-operand)`; the 3-operand forms
+    // set VEX.L.
+    const OPS: &[(&str, u8, bool)] = &[
+        ("kand", 0x41, true),
+        ("kandn", 0x42, true),
+        ("kor", 0x45, true),
+        ("kxnor", 0x46, true),
+        ("kxor", 0x47, true),
+        ("kadd", 0x4A, true),
+        ("knot", 0x44, false),
+        ("kortest", 0x98, false),
+        ("ktest", 0x99, false),
+    ];
+    let (base, letter) = name.split_at_checked(name.len().checked_sub(1)?)?;
+    let &(_, opcode, three) = OPS.iter().find(|r| r.0 == base)?;
+    let w = width(letter)?;
+    m(
+        u8::from(matches!(w, 1 | 4)),
+        matches!(w, 4 | 8),
+        u8::from(three),
+        opcode,
+    )
+}
+
 /// If `movq src, dst` involves an XMM register, encode the SSE quadword move and
 /// return true; otherwise (a plain GP move) return false. The forms: GP64<->xmm
 /// (66 REX.W 0F 6E/7E), xmm<->xmm and mem->xmm load (F3 0F 7E), xmm->mem store
@@ -1885,8 +2009,10 @@ fn parse_label_ref(tok: &str, labels: &[&str]) -> Option<(u32, bool)> {
 
 /// Parse one operand token (already trimmed). `labels` is the template's
 /// named-label intern table (from the definition pre-scan); a bare token
-/// matching an entry is a local-label reference, not a symbol.
-fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
+/// matching an entry is a local-label reference, not a symbol. `file_scope`
+/// selects the basic-asm reading of a single `%`, where `%kN` is an opmask
+/// register rather than GCC's operand modifier.
+fn parse_operand(tok: &str, labels: &[&str], file_scope: bool) -> Result<AsmOpnd, String> {
     // A leading `*` is AT&T's indirect-branch marker (`jmp *%rax`,
     // `call *8(%rbx)`); the operand kind alone selects the encoding.
     let tok = tok.strip_prefix('*').unwrap_or(tok);
@@ -1923,6 +2049,7 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
     }
     if let Some(rest) = tok.strip_prefix("%%") {
         return named_reg_operand(rest)
+            .or_else(|| mask_reg_operand(rest))
             .ok_or_else(|| format!("inline asm: unknown register `{tok}`"));
     }
     if bytes.first() == Some(&b'%') {
@@ -1930,8 +2057,13 @@ fn parse_operand(tok: &str, labels: &[&str]) -> Result<AsmOpnd, String> {
         // A single `%` before a register name is an explicit register. GCC
         // uses this in *basic* asm (no operand list); extended asm spells it
         // `%%reg`. Operand references (`%0`, `%w1`) are never register names,
-        // so trying the register table first is unambiguous.
+        // so trying the register table first is unambiguous -- except for
+        // `%k0`..`%k7`, which extended asm reads as the operand modifier and
+        // only basic asm reads as opmask registers.
         if let Some(op) = named_reg_operand(body) {
+            return Ok(op);
+        }
+        if file_scope && let Some(op) = mask_reg_operand(body) {
             return Ok(op);
         }
         // `%lK`: an `asm goto` label-list reference.
@@ -2401,9 +2533,20 @@ fn parse_raw_bytes(piece: &str) -> Option<Vec<u8>> {
 
 pub(crate) use super::ssa::emit_common::{NAMED_LABEL_BASE, scan_label_names, split_label_def};
 
-/// Parse an AT&T inline-asm template into its instruction sequence.
+/// Parse an AT&T extended-asm template into its instruction sequence.
 /// Instructions are separated by `;` or newlines; operands by commas.
 pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
+    parse_template_in(tmpl, false)
+}
+
+/// Parse file-scope / section-unit asm text. Basic asm has no operand list,
+/// so `%kN` is an opmask register there; everything else parses as
+/// [`parse_template`] parses it.
+pub(crate) fn parse_file_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
+    parse_template_in(tmpl, true)
+}
+
+fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, String> {
     let text =
         core::str::from_utf8(tmpl).map_err(|_| String::from("inline asm: non-UTF8 template"))?;
     let stripped;
@@ -2487,7 +2630,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 let a = a.trim();
                 operands.push(match parse_int(a) {
                     Some(v) => AsmOpnd::Imm(v),
-                    None if a.contains('%') => parse_operand(a, &names)?,
+                    None if a.contains('%') => parse_operand(a, &names, file_scope)?,
                     None => {
                         let expr = sym_disp_expr(a, &names).ok_or_else(|| {
                             format!("inline asm: bad `{tok}`-directive value `{a}`")
@@ -2724,7 +2867,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsn>, String> {
                 }
                 // A bare `%cN` / `%PN` dereferences, except where the
                 // instruction consumes the value as an address.
-                operands.push(match parse_operand(tok, &names)? {
+                operands.push(match parse_operand(tok, &names, file_scope)? {
                     AsmOpnd::RefConst { idx, symbolic } if !takes_bare_address(mnem_tok) => {
                         AsmOpnd::AbsMemRef { idx, symbolic }
                     }
@@ -2777,8 +2920,10 @@ fn strip_evex_decorators<'a>(op: &'a str, decor: &mut EvexDecor) -> Result<&'a s
         let (head, group) = (body[..at].trim_end(), &body[at + 1..]);
         match group {
             "z" => decor.zeroing = true,
-            _ if group.starts_with("%k") => {
-                let Some(k) = mask_by_name(&group[1..]) else {
+            // `{%kN}` or, in extended asm, the escaped `{%%kN}`.
+            _ if group.starts_with("%k") || group.starts_with("%%k") => {
+                let name = group.strip_prefix("%%").unwrap_or(&group[1..]);
+                let Some(k) = mask_by_name(name) else {
                     return Err(format!("inline asm: `{{{group}}}` names no mask register"));
                 };
                 if k == 0 {
@@ -2820,8 +2965,14 @@ fn resolve_evex(
     operands: &[AsmOpnd],
     decor: EvexDecor,
 ) -> Result<Mnemonic, String> {
+    // An opmask operand of a vector instruction (a compare or test
+    // destination, a mask <-> vector move) has only an EVEX form; the `k*`
+    // set itself is VEX-encoded and keeps its own arms.
+    let native_mask = matches!(mnemonic, Mnemonic::MaskOp { .. } | Mnemonic::Kmov { .. });
     let evex_reg = operands.iter().any(|o| match *o {
-        AsmOpnd::Reg { reg, .. } => super::evex::reg_needs_evex(reg),
+        AsmOpnd::Reg { reg, .. } => {
+            super::evex::reg_needs_evex(reg) || (!native_mask && is_mask_reg(reg))
+        }
         _ => false,
     });
     // The VEX packed shift by immediate reads its source from a register only;
@@ -4098,6 +4249,114 @@ fn encode_bespoke(
             code.extend_from_slice(&[0x0F, opcode]);
             code.push(modrm_reg(digit, r & 7));
             code.push(*ib as u8);
+            Ok(())
+        }
+        Mnemonic::MaskOp {
+            pp,
+            map,
+            w,
+            opcode,
+            l,
+            vvvv,
+            imm,
+        } => {
+            let bad =
+                || String::from("inline asm: an opmask instruction takes `%k0`..`%k7` operands");
+            let (ib, rest) = match (imm, ops) {
+                (true, [Concrete::Imm(v), rest @ ..]) => (Some(*v as u8), rest),
+                (true, _) => {
+                    return Err(String::from(
+                        "inline asm: an opmask shift takes an immediate count",
+                    ));
+                }
+                (false, _) => (None, ops),
+            };
+            let (src2, src1, dst) = match (vvvv, rest) {
+                (true, [s2, s1, d]) => (s2, Some(s1), d),
+                (false, [s, d]) => (s, None, d),
+                _ => return Err(String::from("inline asm: opmask operand count")),
+            };
+            let (Some(rm), Some(reg)) = (mask_reg_num(src2), mask_reg_num(dst)) else {
+                return Err(bad());
+            };
+            let v = match src1 {
+                Some(o) => mask_reg_num(o).ok_or_else(bad)?,
+                None => 0,
+            };
+            emit_vex(code, false, false, false, map, w, v, l, pp);
+            code.push(opcode);
+            code.push(modrm_reg(reg, rm));
+            code.extend(ib);
+            Ok(())
+        }
+        Mnemonic::Kmov { width } => {
+            let [src, dst] = two(ops)?;
+            // Prefix selections: `(pp, w)` of the opmask / memory pair
+            // (90 load, 91 store) and of the general-register pair (92 in,
+            // 93 out). The general register is 32-bit except under `kmovq`.
+            let (kpp, kw) = (u8::from(matches!(width, 1 | 4)), width >= 4);
+            let gpp = match width {
+                1 => 1,
+                2 => 0,
+                _ => 3,
+            };
+            let gw = width == 8;
+            let gpr = |c: &Concrete| match *c {
+                Concrete::Reg { reg, size } if reg < MMX_BASE => Some((reg, size)),
+                _ => None,
+            };
+            let gsize = if width == 8 {
+                AsmRegSize::Quad
+            } else {
+                AsmRegSize::Long
+            };
+            let check = |s: AsmRegSize| {
+                (s == gsize).then_some(()).ok_or_else(|| {
+                    format!(
+                        "inline asm: `kmov` takes a {}-bit general register",
+                        gsize.bytes() * 8
+                    )
+                })
+            };
+            match (mask_reg_num(&src), mask_reg_num(&dst)) {
+                (Some(s), Some(d)) => {
+                    emit_vex(code, false, false, false, 1, kw, 0, 0, kpp);
+                    code.extend([0x90, modrm_reg(d, s)]);
+                }
+                (None, Some(d)) => {
+                    if let Some((g, size)) = gpr(&src) {
+                        check(size)?;
+                        emit_vex(code, false, false, g >= 8, 1, gw, 0, 0, gpp);
+                        code.extend([0x92, modrm_reg(d, g)]);
+                    } else {
+                        let mr = MemRm::of(&src).ok_or_else(|| {
+                            String::from("inline asm: bad `kmov` source operand")
+                        })?;
+                        emit_vex(code, false, mr.rex_x(), mr.rex_b(), 1, kw, 0, 0, kpp);
+                        code.push(0x90);
+                        mr.emit(code, mode, addr, d)?;
+                    }
+                }
+                (Some(s), None) => {
+                    if let Some((g, size)) = gpr(&dst) {
+                        check(size)?;
+                        emit_vex(code, g >= 8, false, false, 1, gw, 0, 0, gpp);
+                        code.extend([0x93, modrm_reg(g, s)]);
+                    } else {
+                        let mr = MemRm::of(&dst).ok_or_else(|| {
+                            String::from("inline asm: bad `kmov` destination operand")
+                        })?;
+                        emit_vex(code, false, mr.rex_x(), mr.rex_b(), 1, kw, 0, 0, kpp);
+                        code.push(0x91);
+                        mr.emit(code, mode, addr, s)?;
+                    }
+                }
+                (None, None) => {
+                    return Err(String::from(
+                        "inline asm: `kmov` needs an opmask register operand",
+                    ));
+                }
+            }
             Ok(())
         }
         Mnemonic::Vex { pp, map, w, opcode } => {

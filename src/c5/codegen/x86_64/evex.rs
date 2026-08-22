@@ -11,16 +11,15 @@
 //! when the name is EVEX-only or when an operand (a zmm, a vector register
 //! above 15, a decorator) puts the instruction out of VEX's reach. Anything
 //! this table does not name is refused, not guessed. Opmask registers appear
-//! only as the `{%kN}` write-mask decorator: instructions that read or write
-//! one as an operand -- `kmov*` and the AVX-512 compares -- are not encoded,
-//! because under a single `%` their spelling collides with GCC's `%k<N>`
-//! operand modifier.
+//! as the `{%kN}` write-mask decorator and as operands of the forms marked
+//! `kreg` / `krm` (the compares and tests, the mask <-> vector moves); the
+//! `k*` instruction set itself is VEX-encoded and lives in [`super::asm`].
 
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::asm::{Concrete, MemRm, XMM_BASE, YMM_BASE, ZMM_BASE};
+use super::asm::{Concrete, MemRm, XMM_BASE, YMM_BASE, ZMM_BASE, mask_reg_num};
 
 /// Memory-operand tuple type. It fixes the factor `N` that the hardware
 /// multiplies an EVEX disp8 field by (SDM Vol. 2A, Table 2-34), which depends
@@ -121,6 +120,13 @@ pub(crate) struct Form {
     pub(crate) alt_pp: u8,
     pub(crate) alt_op: u8,
     pub(crate) tuple: Tuple,
+    /// The ModRM.reg operand is an opmask register, not a vector one (the
+    /// compares and tests, and the mask-from-vector moves).
+    pub(crate) kreg: bool,
+    /// The r/m operand is an opmask register (the vector-from-mask moves).
+    /// The ISA gives the mask <-> vector moves register forms only, so a
+    /// [`Shape::Rm`] row with an opmask on either side takes no memory.
+    pub(crate) krm: bool,
     /// Opmask register 1..7 selected by `{%kN}` (0 = none).
     pub(crate) mask: u8,
     /// `{z}`: merge-masking becomes zero-masking.
@@ -141,6 +147,8 @@ const fn form(shape: Shape, pp: u8, map: u8, w: bool, opcode: u8, tuple: Tuple) 
         alt_pp: 0,
         alt_op: 0,
         tuple,
+        kreg: false,
+        krm: false,
         mask: 0,
         zeroing: false,
         bcast: 0,
@@ -172,6 +180,30 @@ const fn vmi(w: bool, opcode: u8, digit: u8, tuple: Tuple) -> Form {
 /// A memory-source-only 0F38 form (the sub-vector broadcasts).
 const fn rmmem(w: bool, opcode: u8, tuple: Tuple) -> Form {
     form(Shape::RmMem, 1, 2, w, opcode, tuple)
+}
+
+/// A compare or test whose destination is an opmask register.
+const fn krvm(pp: u8, map: u8, w: bool, opcode: u8, tuple: Tuple) -> Form {
+    Form {
+        kreg: true,
+        ..rvm(pp, map, w, opcode, tuple)
+    }
+}
+const fn krvmi(pp: u8, map: u8, w: bool, opcode: u8, tuple: Tuple) -> Form {
+    Form {
+        kreg: true,
+        ..rvmi(pp, map, w, opcode, tuple)
+    }
+}
+
+/// A mask <-> vector move (F3 0F38, register forms only): `to_mask` writes
+/// the opmask in ModRM.reg from a vector r/m, its inverse reads one in r/m.
+const fn kmove(w: bool, opcode: u8, to_mask: bool) -> Form {
+    Form {
+        kreg: to_mask,
+        krm: !to_mask,
+        ..form(Shape::Rm, 2, 2, w, opcode, Tuple::FullMem)
+    }
 }
 
 /// A packed move, `load` in the register direction and `store` the other way.
@@ -350,6 +382,30 @@ const TABLE: &[(&str, Form)] = {
     ("vpmovzxwq", rm(1, 2, false, 0x34, QuarterMem)),
     ("vpmovsxbq", rm(1, 2, false, 0x22, EighthMem)),
     ("vpmovzxbq", rm(1, 2, false, 0x32, EighthMem)),
+    // Compares and tests writing an opmask register. Byte and word elements
+    // have no broadcast form; the immediate compares take the predicate as a
+    // trailing byte.
+    ("vpcmpeqb", krvm(1, 1, false, 0x74, FullMem)), ("vpcmpeqw", krvm(1, 1, false, 0x75, FullMem)),
+    ("vpcmpeqd", krvm(1, 1, false, 0x76, Full)),    ("vpcmpeqq", krvm(1, 2, true,  0x29, Full)),
+    ("vpcmpgtb", krvm(1, 1, false, 0x64, FullMem)), ("vpcmpgtw", krvm(1, 1, false, 0x65, FullMem)),
+    ("vpcmpgtd", krvm(1, 1, false, 0x66, Full)),    ("vpcmpgtq", krvm(1, 2, true,  0x37, Full)),
+    ("vpcmpb",  krvmi(1, 3, false, 0x3F, FullMem)), ("vpcmpw",  krvmi(1, 3, true, 0x3F, FullMem)),
+    ("vpcmpd",  krvmi(1, 3, false, 0x1F, Full)),    ("vpcmpq",  krvmi(1, 3, true, 0x1F, Full)),
+    ("vpcmpub", krvmi(1, 3, false, 0x3E, FullMem)), ("vpcmpuw", krvmi(1, 3, true, 0x3E, FullMem)),
+    ("vpcmpud", krvmi(1, 3, false, 0x1E, Full)),    ("vpcmpuq", krvmi(1, 3, true, 0x1E, Full)),
+    ("vptestmb", krvm(1, 2, false, 0x26, FullMem)), ("vptestmw", krvm(1, 2, true, 0x26, FullMem)),
+    ("vptestmd", krvm(1, 2, false, 0x27, Full)),    ("vptestmq", krvm(1, 2, true, 0x27, Full)),
+    ("vptestnmb", krvm(2, 2, false, 0x26, FullMem)),
+    ("vptestnmw", krvm(2, 2, true,  0x26, FullMem)),
+    ("vptestnmd", krvm(2, 2, false, 0x27, Full)),
+    ("vptestnmq", krvm(2, 2, true,  0x27, Full)),
+    ("vcmpps", krvmi(0, 1, false, 0xC2, Full)),  ("vcmppd", krvmi(1, 1, true, 0xC2, Full)),
+    ("vcmpss", krvmi(2, 1, false, 0xC2, ElemW)), ("vcmpsd", krvmi(3, 1, true, 0xC2, ElemW)),
+    // Mask <-> vector moves.
+    ("vpmovm2b", kmove(false, 0x28, false)), ("vpmovm2w", kmove(true, 0x28, false)),
+    ("vpmovm2d", kmove(false, 0x38, false)), ("vpmovm2q", kmove(true, 0x38, false)),
+    ("vpmovb2m", kmove(false, 0x29, true)),  ("vpmovw2m", kmove(true, 0x29, true)),
+    ("vpmovd2m", kmove(false, 0x39, true)),  ("vpmovq2m", kmove(true, 0x39, true)),
     ("vcvtdq2pd",  rm(2, 1, false, 0xE6, Half)),
     ("vcvtps2pd",  rm(0, 1, false, 0x5A, Half)),
     ("vcvtdq2ps",  rm(0, 1, false, 0x5B, Full)),
@@ -457,9 +513,15 @@ pub(crate) fn encode(code: &mut Vec<u8>, f: Form, ops: &[Concrete]) -> Result<()
         (Shape::Mov, [src, dst]) => (None, Some(dst), None, src),
         _ => return bad("EVEX operand count does not match the instruction"),
     };
-    // ModRM.reg holds a vector register, or the form's opcode extension.
+    // ModRM.reg holds a vector register, an opmask register on a `kreg`
+    // form, or the form's opcode extension. An opmask names no vector
+    // length, so it contributes none.
     let (reg, reg_vl) = match (reg_op, f.shape) {
         (None, Shape::VmI(digit)) => (digit, None),
+        (Some(o), _) if f.kreg => match mask_reg_num(o) {
+            Some(n) => (n, None),
+            None => return bad("this instruction writes an opmask register"),
+        },
         (Some(o), _) => match vreg(o) {
             Some((n, vl)) => (n, Some(vl)),
             None => return bad("EVEX destination must be a vector register"),
@@ -476,21 +538,32 @@ pub(crate) fn encode(code: &mut Vec<u8>, f: Form, ops: &[Concrete]) -> Result<()
     // prefix and opcode.
     let mut pp = f.pp;
     let mut opcode = if store { f.store_op } else { f.opcode };
-    let rm = match (vreg(rm_op), MemRm::of(rm_op), rm_op) {
-        (Some(_), ..) if f.shape == Shape::RmMem => {
-            return bad("a sub-vector broadcast takes a memory source");
+    let rm = if f.krm {
+        match mask_reg_num(rm_op) {
+            Some(n) => Rm::Reg(n),
+            None => return bad("this instruction reads an opmask register"),
         }
-        (Some((n, _)), ..) if f.gpr_rm => {
-            if f.alt_op == 0 {
-                return bad("this instruction takes a general register or memory");
+    } else {
+        match (vreg(rm_op), MemRm::of(rm_op), rm_op) {
+            (Some(_), ..) if f.shape == Shape::RmMem => {
+                return bad("a sub-vector broadcast takes a memory source");
             }
-            (pp, opcode) = (f.alt_pp, f.alt_op);
-            Rm::Reg(n)
+            (Some((n, _)), ..) if f.gpr_rm => {
+                if f.alt_op == 0 {
+                    return bad("this instruction takes a general register or memory");
+                }
+                (pp, opcode) = (f.alt_pp, f.alt_op);
+                Rm::Reg(n)
+            }
+            (Some((n, _)), ..) => Rm::Reg(n),
+            (_, _, &Concrete::Reg { reg, .. }) if f.gpr_rm && reg < 16 => Rm::Reg(reg),
+            // A mask <-> vector move has register forms only.
+            (_, Some(_), _) if f.kreg && f.shape == Shape::Rm => {
+                return bad("this instruction takes a vector register source");
+            }
+            (_, Some(m), _) => Rm::Mem(m),
+            _ => return bad("EVEX source must be a vector register or memory"),
         }
-        (Some((n, _)), ..) => Rm::Reg(n),
-        (_, _, &Concrete::Reg { reg, .. }) if f.gpr_rm && reg < 16 => Rm::Reg(reg),
-        (_, Some(m), _) => Rm::Mem(m),
-        _ => return bad("EVEX source must be a vector register or memory"),
     };
     // The vector length is the widest register the instruction names: an
     // insert or extract states one sub-vector and one full one, and L'L
@@ -508,6 +581,9 @@ pub(crate) fn encode(code: &mut Vec<u8>, f: Form, ops: &[Concrete]) -> Result<()
     };
     if f.mask == 0 && f.zeroing {
         return bad("`{z}` needs a `{%k1}`..`{%k7}` write mask");
+    }
+    if f.kreg && f.zeroing {
+        return bad("`{z}` does not apply to an opmask destination");
     }
     // Validate the embedded broadcast against the tuple type: the element
     // count the operand spells must be the number the memory element repeats

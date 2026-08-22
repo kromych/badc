@@ -68,6 +68,14 @@ const SHT_GROUP: u32 = 17;
 const SHT_SYMTAB_SHNDX: u32 = 18;
 const SHT_RELR: u32 = 19;
 const SHT_LLVM_ADDRSIG: u32 = 0x6fff4c03;
+const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
+
+/// Whether `shtype` is one `.eh_frame` arrives with on `machine`:
+/// SHT_PROGBITS everywhere, and the psABI's SHT_X86_64_UNWIND on
+/// x86-64, which gcc and clang both emit.
+fn eh_frame_shtype(machine: u16, shtype: u32) -> bool {
+    shtype == SHT_PROGBITS || (machine == EM_X86_64 && shtype == SHT_X86_64_UNWIND)
+}
 
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
@@ -2504,7 +2512,10 @@ impl<'a> LdsLinker<'a> {
                 let Piece::Inputs(v) = p else { continue };
                 for &i in v {
                     let s = self.insec(i);
-                    if s.name == OUT_EH_FRAME && s.shtype == SHT_PROGBITS && s.size != 0 {
+                    if s.name == OUT_EH_FRAME
+                        && eh_frame_shtype(self.machine, s.shtype)
+                        && s.size != 0
+                    {
                         order.entry(oi).or_default().push(i);
                     }
                 }
@@ -9444,11 +9455,15 @@ SECTIONS {
     /// A `.eh_frame` unit: one text section under `text`, a CIE and a
     /// single FDE covering it.
     fn eh_unit(text: &str, name: &str, cie: &[u8]) -> Vec<u8> {
+        eh_unit_typed(text, name, cie, SHT_PROGBITS)
+    }
+
+    fn eh_unit_typed(text: &str, name: &str, cie: &[u8], shtype: u32) -> Vec<u8> {
         let mut eh = cie.to_vec();
         eh.extend_from_slice(&eh_fde(0x1c));
         TestObj::new()
             .sec(text, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 8, &[0x90; 8])
-            .sec(".eh_frame", SHT_PROGBITS, SHF_ALLOC, 8, &eh)
+            .sec(".eh_frame", shtype, SHF_ALLOC, 8, &eh)
             .reloc(1, 0x20, 1, rt::R_X86_64_PC32, 0)
             .sym(name, STB_GLOBAL, STT_FUNC, 0, 0, 8)
             .build(EM_X86_64)
@@ -9494,6 +9509,38 @@ SECTIONS {
         // Without the option both units keep everything.
         let plain = link_with_script(&script, objs(), &LdsOptions::default()).expect("links");
         assert_eq!(image_section(&plain.image, ".eh_frame").1.len(), 4 * 24);
+    }
+
+    /// The x86-64 psABI types `.eh_frame` SHT_X86_64_UNWIND, and gcc
+    /// and clang emit it that way; pruning and dedup treat it exactly
+    /// as a SHT_PROGBITS input.
+    #[test]
+    fn eh_frame_gc_prunes_unwind_typed_inputs() {
+        let script = parse_linker_script(EH_GC_SCRIPT).expect("parses");
+        let unit = |text, name, cie: &[u8]| eh_unit_typed(text, name, cie, SHT_X86_64_UNWIND);
+        let objs = alloc::vec![
+            parse_lds_object("a.o", unit(".text.live", "live", &eh_cie_zr())).expect("parses"),
+            parse_lds_object("b.o", unit(".text.dead", "dead", &eh_cie_zr_alt())).expect("parses"),
+        ];
+        let opts = LdsOptions {
+            gc_sections: true,
+            entry_override: Some(String::from("live")),
+            ..LdsOptions::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let (addr, body) = image_section(&res.image, ".eh_frame");
+        assert_eq!(body.len(), 24 + 24, "only the live unit's CIE and FDE");
+        assert_eq!(eh_frame::count_fdes(&body), 1);
+        let syms = image_symbols(&res.image);
+        assert_eq!(
+            eh_frame::scan(&body, addr)
+                .expect("scans")
+                .iter()
+                .map(|e| e.pc)
+                .collect::<Vec<_>>(),
+            alloc::vec![find_sym(&syms, "live")],
+            "the surviving FDE still covers its own text"
+        );
     }
 
     /// A CIE no FDE names describes nothing wherever it came from, so

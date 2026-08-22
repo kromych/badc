@@ -903,7 +903,10 @@ pub(crate) fn compact_program_data(
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
     let sets = compute_live_sets(&funcs, program, false);
-    let (out, bss_size, map) = apply_data_liveness(program, &sets, &live_func_pcs, segregate, None);
+    // The caller may redo the compaction from the original with a sharper
+    // live set, so the rewrite works on a copy.
+    let (out, bss_size, map) =
+        apply_data_liveness(program.clone(), &sets, &live_func_pcs, segregate, None);
     Ok(Compaction {
         program: out,
         bss_size,
@@ -921,8 +924,9 @@ pub(crate) fn compact_program_data(
 /// the packed image instead would lose its `.bss` region, whose objects
 /// sit past `data` and so outside the interval model. Those objects keep
 /// the liveness the first pass gave them, so this narrows `.data` only.
+/// Consumes `program`: this is the last use of the pre-compaction image.
 pub(crate) fn recompact_after_inlining(
-    program: &Program,
+    program: Program,
     plan: &CompactionPlan,
     orphaned: &mut OrphanedData,
     segregate: bool,
@@ -953,30 +957,35 @@ pub(crate) fn recompact_after_inlining(
     (out, bss_size)
 }
 
-/// Rewrite `program` to hold only the data objects `sets` marks live and
-/// only the functions in `live_func_pcs`, packing `.data` and mapping
+/// Rewrite `out` in place to hold only the data objects `sets` marks live
+/// and only the functions in `live_func_pcs`, packing `.data` and mapping
 /// every offset surface -- symbol values, relocation slots, relocation
 /// targets and their anchors, AST data references, recorded padding and
 /// alignment marks, object starts -- onto the new layout. Split out of
 /// [`compact_program_data`] so a caller holding a later, sharper live set
 /// (post-inline reachability) applies it through the same code.
 ///
+/// The program is taken by value: this is a whole-program rewrite, and
+/// the symbol table and the AST bodies it copies dominate the cost of
+/// producing one. A caller that still needs the original passes a clone.
+///
 /// `ssa` are bodies the caller lowers instead of re-walking the ASTs,
 /// paired with the map of the image their offsets are in (itself produced
-/// from `program`). Their `Inst::ImmData` offsets -- the only `.data`
-/// offset the IR holds -- are carried back through that map and forward
-/// through this one here, so no consumer is left on a stale layout.
+/// from the same program). Their `Inst::ImmData` offsets -- the only
+/// `.data` offset the IR holds -- are carried back through that map and
+/// forward through this one here, so no consumer is left on a stale
+/// layout.
 pub(crate) fn apply_data_liveness(
-    program: &Program,
+    mut out: Program,
     sets: &LiveSets,
     live_func_pcs: &alloc::collections::BTreeSet<usize>,
     segregate: bool,
     ssa: Option<(&mut [FunctionSsa], &DataMap)>,
 ) -> (Program, i64, DataMap) {
-    let data_len = program.data.len() as i64;
+    let data_len = out.data.len() as i64;
     let starts = &sets.starts;
     let live = &sets.data_live;
-    debug_assert_eq!(*starts, data_object_starts(program));
+    debug_assert_eq!(*starts, data_object_starts(&out));
     debug_assert_eq!(starts.len(), live.len());
     let n = starts.len();
 
@@ -989,8 +998,8 @@ pub(crate) fn apply_data_liveness(
     // one recorded anywhere inside it. The section is placed at the
     // maximum over the objects it keeps, so an object needing A <= that
     // keeps its absolute alignment.
-    let cap = crate::c5::layout::bss_image_align(program.data_align);
-    let obj_align = crate::c5::layout::data_object_aligns(program, starts, cap);
+    let cap = crate::c5::layout::bss_image_align(out.data_align);
+    let obj_align = crate::c5::layout::data_object_aligns(&out, starts, cap);
     // Region boundaries sit on the strictest alignment any kept object
     // needs, so every packed residue past one holds wherever the writers
     // place that region.
@@ -1019,7 +1028,7 @@ pub(crate) fn apply_data_liveness(
     let mut is_readonly = alloc::vec![false; n];
     {
         use crate::c5::token::Token;
-        for sym in &program.symbols {
+        for sym in &out.symbols {
             if sym.class == Token::Glo as i64
                 && sym.defined_here
                 && sym.storage_is_const
@@ -1035,7 +1044,7 @@ pub(crate) fn apply_data_liveness(
         // The anonymous immutable spans -- string literals, `__func__`
         // arrays, staged initializer templates. No symbol names them, so
         // the loop above cannot see them.
-        for &(lo, hi) in &program.const_data_ranges {
+        for &(lo, hi) in &out.const_data_ranges {
             if hi <= lo || !(0..data_len).contains(&lo) {
                 continue;
             }
@@ -1047,7 +1056,7 @@ pub(crate) fn apply_data_liveness(
         }
     }
     let mut has_reloc_slot = alloc::vec![false; n];
-    for off in program.data_reloc_offsets() {
+    for off in out.data_reloc_offsets() {
         if (0..data_len).contains(&off) {
             has_reloc_slot[interval_of(off)] = true;
         }
@@ -1074,7 +1083,7 @@ pub(crate) fn apply_data_liveness(
             && live[i]
             && !has_reloc_slot[i]
             && !is_readonly[i]
-            && program.data[starts[i] as usize..obj_end(i) as usize]
+            && out.data[starts[i] as usize..obj_end(i) as usize]
                 .iter()
                 .all(|&b| b == 0)
     };
@@ -1096,7 +1105,7 @@ pub(crate) fn apply_data_liveness(
     let guard_immutable = !has_reloc_slot[0] && {
         let end = obj_end(0);
         let mut covered = end.min(8);
-        for &(lo, hi) in &program.data_pad_ranges {
+        for &(lo, hi) in &out.data_pad_ranges {
             if lo <= covered && hi > covered {
                 covered = hi;
             }
@@ -1137,7 +1146,7 @@ pub(crate) fn apply_data_liveness(
     // rebuild them from the gaps this pass itself creates.
     let mut new_pad_ranges: Vec<(i64, i64)> = Vec::new();
     let mut new_base = alloc::vec![-1i64; n];
-    let mut new_data: Vec<u8> = Vec::with_capacity(program.data.len());
+    let mut new_data: Vec<u8> = Vec::with_capacity(out.data.len());
     let mut data_ro_len: i64 = 0;
     let mut data_relro_len: i64 = 0;
     for pass in [REGION_RO, REGION_RELRO, REGION_RW] {
@@ -1155,7 +1164,7 @@ pub(crate) fn apply_data_liveness(
                 new_pad_ranges.push((pad_start, new_data.len() as i64));
             }
             new_base[i] = new_data.len() as i64;
-            new_data.extend_from_slice(&program.data[starts[i] as usize..obj_end(i) as usize]);
+            new_data.extend_from_slice(&out.data[starts[i] as usize..obj_end(i) as usize]);
         }
         // Each region ends on an `img_align` boundary so the next one's
         // packed residues hold at any aligned placement of it.
@@ -1228,7 +1237,6 @@ pub(crate) fn apply_data_liveness(
     };
     let map = |off: i64| remap_data_off(off, starts, &new_base, data_len);
 
-    let mut out = program.clone();
     // A relocation whose slot lies in a dropped object drops with it:
     // emitting it would plant a reference -- for an extern target, an
     // undefined symbol -- from an object the unit cannot reach.

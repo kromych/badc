@@ -769,7 +769,7 @@ fn dll_export_load_unload_reload_cycle() {
     // Record the DLL's own name in its export directory, as the CLI
     // does from the `-o` basename.
     let dll_bytes = super::super::object::emit_native_with_options_named(
-        &dll_prog,
+        dll_prog.clone(),
         Target::WindowsX64,
         NativeOptions::new().with_shared_library(),
         Some(&dll_name),

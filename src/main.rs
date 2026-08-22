@@ -2419,7 +2419,7 @@ fn run() {
             };
             let mut opts = reloc_opts;
             opts.dump_ssa &= dump;
-            match badc::emit_native_with_options(&program, target, opts) {
+            match badc::emit_native_with_options_owned(program, target, opts) {
                 Ok(b) => b,
                 Err(e) => {
                     eprint_diagnostic(e);
@@ -4055,7 +4055,7 @@ fn compile_native_tu(
         .or_else(|| program.entry_name.clone());
     let subsystem = program.subsystem;
     let auto_includes = program.auto_includes.clone();
-    match badc::emit_native_with_options(&program, cfg.target, cfg.reloc_opts) {
+    match badc::emit_native_with_options_owned(program, cfg.target, cfg.reloc_opts) {
         Ok(bytes) => match badc::parse_native_elf(&bytes) {
             Ok(obj) => (
                 log,
@@ -4090,7 +4090,7 @@ fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Result<Vec<u8>
         Err(()) => return (log, Err(())),
     };
     warn_dropped_link_pragmas(&program, src_path, &mut log, cfg.stderr_is_tty);
-    match badc::emit_native_with_options(&program, cfg.target, cfg.reloc_opts) {
+    match badc::emit_native_with_options_owned(program, cfg.target, cfg.reloc_opts) {
         Ok(bytes) => (log, Ok(bytes)),
         Err(e) => {
             log.diag(cfg.stderr_is_tty, e);

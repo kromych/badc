@@ -31,7 +31,7 @@ mod tests;
 pub use object::elf_class::ElfClass;
 #[allow(unused_imports)]
 #[cfg(feature = "native-emit")]
-pub use object::{emit_native, emit_native_with_options};
+pub use object::{emit_native, emit_native_with_options, emit_native_with_options_owned};
 pub use {
     codegen::{
         BinaryFormat, CodeModel, Hardening, IndirectBranch, NativeOptions, OutputKind, Target,

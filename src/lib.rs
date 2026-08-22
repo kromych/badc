@@ -124,7 +124,7 @@ pub use c5::{
     predefined_symbols,
 };
 #[cfg(feature = "native-emit")]
-pub use c5::{emit_native, emit_native_with_options};
+pub use c5::{emit_native, emit_native_with_options, emit_native_with_options_owned};
 
 #[cfg(feature = "std")]
 pub use c5::StdHost;

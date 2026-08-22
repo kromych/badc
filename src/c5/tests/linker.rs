@@ -4651,7 +4651,7 @@ fn win64_dll_without_imports_leaves_import_and_iat_dirs_empty() {
             .compile()
             .expect("compile");
         let dll = emit_native_with_options_named(
-            &program,
+            program.clone(),
             target,
             NativeOptions::new().with_shared_library(),
             Some("noimports.dll"),

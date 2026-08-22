@@ -30,6 +30,33 @@ fn compile_obj(src: &str, name: &str) -> EtRel {
     parse_et_rel(&compile_bytes(src, Target::LinuxX64), name).expect("parse")
 }
 
+#[test]
+fn owned_and_borrowed_emit_agree() {
+    // The owning entry hands the program to the data compaction, which
+    // rewrites it in place; the borrowing one copies it first. Both must
+    // emit the same image, including for a unit whose `.data` the
+    // compaction prunes (the unused string below).
+    let src = "static const char unused[] = \"drop me\";\n\
+               const char kept[] = \"keep me\";\n\
+               const char *pick(void) { return kept; }\n";
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(src.to_string(), target, copts.clone())
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let borrowed = emit_native_with_options(&program, target, opts).expect("emit");
+        let owned = crate::c5::emit_native_with_options_owned(program, target, opts).expect("emit");
+        assert_eq!(borrowed, owned, "{target:?}");
+    }
+}
+
 fn compile_obj_aarch64(src: &str, name: &str) -> EtRel {
     parse_et_rel(&compile_bytes(src, Target::LinuxAarch64), name).expect("parse")
 }

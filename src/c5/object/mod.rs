@@ -155,6 +155,20 @@ pub fn emit_native_with_options(
     target: Target,
     options: NativeOptions,
 ) -> Result<Vec<u8>, C5Error> {
+    emit_native_with_options_owned(program.clone(), target, options)
+}
+
+/// [`emit_native_with_options`] taking the program by value. The emit
+/// path rewrites the program -- the data compaction packs `.data` and
+/// maps every offset surface onto the new layout -- so a caller with
+/// nothing left to do with it skips a whole-program copy. The borrowing
+/// forms clone into this one.
+#[cfg(feature = "native-emit")]
+pub fn emit_native_with_options_owned(
+    program: Program,
+    target: Target,
+    options: NativeOptions,
+) -> Result<Vec<u8>, C5Error> {
     emit_native_with_options_named(program, target, options, None)
 }
 
@@ -871,10 +885,11 @@ fn bss_segregation_disabled() -> bool {
 /// `LC_ID_DYLIB` install name) so a consumer linking against it by name
 /// references the file it loads at runtime. `shared_lib_name` is the
 /// `-o` basename for `--shared`; `None` falls back to the per-format
-/// default and is ignored for non-shared output.
+/// default and is ignored for non-shared output. Takes the program by
+/// value, as [`emit_native_with_options_owned`] does.
 #[cfg(feature = "native-emit")]
 pub fn emit_native_with_options_named(
-    program: &Program,
+    program: Program,
     target: Target,
     options: NativeOptions,
     shared_lib_name: Option<&str>,
@@ -920,7 +935,7 @@ pub fn emit_native_with_options_named(
 /// stopped anyway would leave the writer a `Build` with no image.
 #[cfg(feature = "native-emit")]
 fn compact_and_lower(
-    program: &Program,
+    program: Program,
     target: Target,
     options: NativeOptions,
 ) -> Result<(Program, i64, Build), C5Error> {
@@ -929,7 +944,7 @@ fn compact_and_lower(
     let segregate = options.bss_segregate && !bss_segregation_disabled();
     let first =
         crate::c5::codegen::ssa::emit_common::time_pass("object::compact_program_data", || {
-            shadow::compact_program_data(program, target, segregate, options.optimize)
+            shadow::compact_program_data(&program, target, segregate, options.optimize)
         })?;
     let mode = match first.plan {
         Some(_) => LowerMode::DataLivenessProbe,
@@ -995,7 +1010,7 @@ pub(crate) fn single_tu_image_for_test(
     options: NativeOptions,
 ) -> Result<(alloc::vec::Vec<u8>, SingleTuRegions), C5Error> {
     use crate::c5::token::Token;
-    let (compacted, bss_size, mut build) = compact_and_lower(program, target, options)?;
+    let (compacted, bss_size, mut build) = compact_and_lower(program.clone(), target, options)?;
     let program = &compacted;
     build.bss_size = bss_size;
     let pc = build.pc_to_native.len();

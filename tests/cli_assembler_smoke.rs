@@ -2468,6 +2468,14 @@ fn a_near_indirect_branch_takes_an_absolute_address() {
         text_relocs("jmp-abs-sym-rel", src),
         [(3, X86_64_32S, String::from("sym"), 0)],
     );
+    // Outside long mode the reference takes the mode's operand size, and the
+    // address size decides the r/m form and the `67` prefix: gas writes
+    // `ff 26 34 12` / `ff 27` in `.code16` and `ff 25 34 12 00 00` /
+    // `67 ff 27` in `.code32`.
+    let t = text_of("jmp-abs-16", "\t.code16\n\tjmp *0x1234\n\tjmp *(%bx)\n");
+    assert_eq!(t, [0xff, 0x26, 0x34, 0x12, 0xff, 0x27]);
+    let t = text_of("jmp-abs-32", "\t.code32\n\tjmp *0x1234\n\tjmp *(%bx)\n");
+    assert_eq!(t, [0xff, 0x25, 0x34, 0x12, 0, 0, 0x67, 0xff, 0x27]);
 }
 
 const X64: &str = "linux-x64";

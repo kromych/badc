@@ -7438,8 +7438,12 @@ fn encode_one_x86_section_insn(
     // operand uses its constant. A base register is a `%%reg` or an operand's
     // register; a `%a[N]` operand naming an `i`-class link-time address
     // resolves to no register and lowers to a RIP-relative reference.
+    // A reference with no width of its own takes the mode's default operand
+    // size, which the near-branch and stack group promotes to 64 bits in long
+    // mode and leaves at 32 or 16 outside it.
     let mem_size = |insn: &super::asm::AsmInsn| {
-        asm_mem_size(None, insn, refs.operands, refs.op_reg).unwrap_or(AsmRegSize::Quad)
+        asm_mem_size(None, insn, refs.operands, refs.op_reg)
+            .unwrap_or(AsmRegSize::from_width(mode.stack_opsize()))
     };
     let reg_of = |idx: u8, modifier: Option<AsmRegSize>| -> Option<Concrete> {
         let width = refs.operands.get(idx as usize)?.width;
@@ -12280,6 +12284,36 @@ mod code_mode_tests {
                 (10, 4, true, alloc::string::String::from("sym"), 0),
             ]
         );
+    }
+
+    /// A near indirect branch outside long mode: the reference carries no
+    /// width of its own, so it takes the mode's default operand size, and the
+    /// address size decides the r/m form and the `67` prefix. The same rule
+    /// values a stack operand. Bytes measured with GNU as 2.46.1 and llvm-mc
+    /// 21 for the same source.
+    #[test]
+    fn a_near_indirect_branch_follows_the_mode_outside_long_mode() {
+        #[rustfmt::skip]
+        let cases: &[(&str, &[u8])] = &[
+            (".code16\njmp *(%bx)\n",        &[0xff, 0x27]),
+            (".code16\ncall *(%bx)\n",       &[0xff, 0x17]),
+            (".code16\njmp *2(%bp,%si)\n",   &[0xff, 0x62, 0x02]),
+            (".code16\npush (%bx)\n",        &[0xff, 0x37]),
+            (".code16\njmp *0x1234\n",       &[0xff, 0x26, 0x34, 0x12]),
+            (".code16\ncall *0x1234\n",      &[0xff, 0x16, 0x34, 0x12]),
+            (".code32\njmp *(%bx)\n",        &[0x67, 0xff, 0x27]),
+            (".code32\ncall *(%bx)\n",       &[0x67, 0xff, 0x17]),
+            (".code32\npush (%eax)\n",       &[0xff, 0x30]),
+            (".code32\njmp *0x1234\n",       &[0xff, 0x25, 0x34, 0x12, 0x00, 0x00]),
+            (".code32\ncall *0x1234\n",      &[0xff, 0x15, 0x34, 0x12, 0x00, 0x00]),
+            ("jmp *(%rax)\n",                &[0xff, 0x20]),
+            ("push (%rax)\n",                &[0xff, 0x30]),
+        ];
+        for (src, want) in cases {
+            assert_eq!(assemble(src), *want, "{src}");
+        }
+        // Long mode has no 16-bit addressing, as GNU as also reports.
+        assert!(assemble_err("jmp *(%bx)\n").contains("address size 2"));
     }
 
     /// A symbol in a direct far branch's offset relocates in that field,

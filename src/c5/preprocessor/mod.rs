@@ -48,6 +48,7 @@
 //! * `#pragma intrinsic("name")` -- mark a name (e.g. `alloca`) as a
 //!   compiler intrinsic.
 
+use alloc::boxed::Box;
 use alloc::collections::BTreeSet;
 use alloc::format;
 use alloc::string::{String, ToString};

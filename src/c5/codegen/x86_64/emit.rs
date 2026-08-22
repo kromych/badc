@@ -11837,7 +11837,7 @@ mod code_mode_tests {
         )
         .expect("assembles");
         let (mut out, mut rs) = (Vec::new(), Vec::new());
-        for s in sink.iter() {
+        for s in sink.sections().iter() {
             for r in &s.relocs {
                 let name = match &r.target {
                     AsmSectionTarget::Symbol(n) => n.clone(),

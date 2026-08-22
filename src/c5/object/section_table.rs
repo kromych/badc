@@ -39,9 +39,14 @@ pub(crate) struct SectionSpec {
 }
 
 /// The table itself: ordered, deduplicated by (name, type, flags).
+/// Entries are appended only through [`SectionTable::get_or_insert`],
+/// which keeps `by_name` in step: a unit's asm can push a section per
+/// exported symbol, so a scan for the name would make the writer
+/// quadratic in the sections it holds.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SectionTable {
     pub entries: Vec<SectionSpec>,
+    by_name: hashbrown::HashMap<String, usize>,
 }
 
 impl SectionTable {
@@ -59,7 +64,8 @@ impl SectionTable {
         flags: u64,
         align: u64,
     ) -> Result<usize, String> {
-        if let Some(i) = self.entries.iter().position(|e| e.name == name) {
+        debug_assert_eq!(self.by_name.len(), self.entries.len());
+        if let Some(&i) = self.by_name.get(name) {
             let e = &mut self.entries[i];
             if e.sh_type != sh_type {
                 return Err(alloc::format!(
@@ -80,6 +86,7 @@ impl SectionTable {
             bytes: Vec::new(),
             relas: Vec::new(),
         });
+        self.by_name.insert(name.into(), self.entries.len() - 1);
         Ok(self.entries.len() - 1)
     }
 

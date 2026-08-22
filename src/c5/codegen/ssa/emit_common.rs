@@ -1512,13 +1512,13 @@ pub(crate) fn resolve_asm_field_expr(
     place: i64,
     addend: i64,
     self_rel: bool,
-    non_local: &alloc::collections::BTreeSet<alloc::string::String>,
+    non_local: &AsmBindingNames<'_>,
 ) -> Result<AsmFieldTarget, alloc::string::String> {
     let named = |e: alloc::string::String| alloc::format!("inline asm: `{text}`: {e}");
     let mut v = eval_asm_value(text, ctx)
         .and_then(|v| v.combine(AsmExprValue::abs(addend), false))
         .map_err(named)?;
-    if let Some(n) = v.lone_symbol().filter(|n| non_local.contains(*n)) {
+    if let Some(n) = v.lone_symbol().filter(|n| non_local.contains(n)) {
         return Ok(AsmFieldTarget::Reloc {
             target: AsmSectionTarget::Symbol(alloc::string::String::from(n)),
             addend: v.constant(),
@@ -1822,15 +1822,27 @@ pub(crate) struct AsmSectionsSnapshot {
 /// scanning the sink for either makes a unit quadratic in its own asm.
 #[derive(Debug, Default)]
 pub(crate) struct AsmSectionSink {
-    sections: alloc::vec::Vec<AsmSection>,
+    sections: asm_sections::AsmSections,
     /// `(name, flags, sh_type)` identity -> index into `sections`.
     by_key: hashbrown::HashMap<alloc::string::String, usize>,
+    /// Section name -> the identity keys carrying it, in push order. A
+    /// name pushed under different attributes is several sections; the
+    /// last one answers a lookup, as a walk of the sink would.
+    by_name: AsmSinkSectionNames,
     /// Label name -> its section's identity key and its offset there.
     /// Carries only labels of completed calls: that is what a call's
     /// location expressions resolve against, its own coming from the
     /// measurement. Keyed by identity rather than index so a lookup stays
     /// disjoint from a mutable borrow of the section being laid out.
     labels: AsmSinkLabels,
+    /// Per section, how many of its labels the binding counts below hold.
+    /// A call's labels join them where it publishes them, so a rebinding
+    /// under the mark adjusts the counts and one over it does not.
+    published: alloc::vec::Vec<usize>,
+    /// How many published labels and unit-level declarations bind each
+    /// name global or weak, and how many bind it weak.
+    non_local: AsmBindCounts,
+    weak: AsmBindCounts,
     /// Unit-level symbol declarations the unit's templates made outside any
     /// section, merged by name. Applied by the object writer, which is where
     /// every definition the unit holds is known.
@@ -1841,15 +1853,100 @@ pub(crate) struct AsmSectionSink {
     cfi: alloc::vec::Vec<super::cfi::CfiRecord>,
 }
 
+/// Section name -> the identity keys the sink holds under it.
+pub(crate) type AsmSinkSectionNames =
+    hashbrown::HashMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>;
+
+/// The key a bare section name stands for: the last section pushed under
+/// it, as a walk of the sink would find.
+pub(crate) fn sink_section_key<'a>(names: &'a AsmSinkSectionNames, name: &str) -> Option<&'a str> {
+    names.get(name)?.last().map(alloc::string::String::as_str)
+}
+
 /// Label name -> (owning section's identity key, offset within it).
 pub(crate) type AsmSinkLabels =
     hashbrown::HashMap<alloc::string::String, (alloc::string::String, i64)>;
 
-impl core::ops::Deref for AsmSectionSink {
-    type Target = [AsmSection];
+/// The sink state an expression resolves a name against: the labels
+/// earlier statements published and the sections the unit holds.
+pub(crate) struct AsmSinkNames<'a> {
+    labels: &'a AsmSinkLabels,
+    sections: &'a AsmSinkSectionNames,
+}
 
-    fn deref(&self) -> &[AsmSection] {
-        &self.sections
+impl AsmSinkNames<'_> {
+    fn label(&self, name: &str) -> Option<&(alloc::string::String, i64)> {
+        self.labels.get(name)
+    }
+
+    fn section(&self, name: &str) -> Option<&str> {
+        sink_section_key(self.sections, name)
+    }
+}
+
+/// Name -> how many labels and declarations give it one binding. Shared:
+/// a statement's binding tests read the counts as its materialization
+/// found them, while the same materialization keeps adding to the sink's.
+type AsmBindCounts = alloc::rc::Rc<hashbrown::HashMap<alloc::string::String, u32>>;
+
+/// The sink's sections, behind an interface that records every walk of
+/// them. Materialization resolves what it needs through the sink's
+/// indexes, so the total stays linear in a unit's asm; the asymptotic test
+/// reads it.
+mod asm_sections {
+    use super::AsmSection;
+
+    #[derive(Debug, Default)]
+    pub(crate) struct AsmSections {
+        v: alloc::vec::Vec<AsmSection>,
+        walked: core::cell::Cell<u64>,
+    }
+
+    impl AsmSections {
+        pub(crate) fn len(&self) -> usize {
+            self.v.len()
+        }
+
+        pub(crate) fn at(&self, i: usize) -> &AsmSection {
+            &self.v[i]
+        }
+
+        pub(crate) fn at_mut(&mut self, i: usize) -> &mut AsmSection {
+            &mut self.v[i]
+        }
+
+        pub(crate) fn push(&mut self, s: AsmSection) {
+            self.v.push(s);
+        }
+
+        /// Every section, for a pass that has to walk them all.
+        pub(crate) fn all(&self) -> &[AsmSection] {
+            self.note();
+            &self.v
+        }
+
+        pub(crate) fn all_mut(&mut self) -> &mut [AsmSection] {
+            self.note();
+            &mut self.v
+        }
+
+        pub(crate) fn drain_from(&mut self, n: usize) -> alloc::vec::Drain<'_, AsmSection> {
+            self.note();
+            self.v.drain(n..)
+        }
+
+        pub(crate) fn into_vec(self) -> alloc::vec::Vec<AsmSection> {
+            self.v
+        }
+
+        #[cfg(test)]
+        pub(crate) fn walked(&self) -> u64 {
+            self.walked.get()
+        }
+
+        fn note(&self) {
+            self.walked.set(self.walked.get() + self.v.len() as u64);
+        }
     }
 }
 
@@ -1858,14 +1955,48 @@ impl AsmSectionSink {
     /// and the label lists are indexed, so a caller must not add, remove,
     /// or rename either through this.
     pub(crate) fn relocs_mut(&mut self) -> &mut [AsmSection] {
-        &mut self.sections
+        self.sections.all_mut()
     }
 
     /// The accumulated sections and unit-level symbol declarations, for the
     /// object writers. The indexes serve materialization only and are
     /// dropped with the sink.
     pub(crate) fn into_parts(self) -> (alloc::vec::Vec<AsmSection>, alloc::vec::Vec<AsmSymDecl>) {
-        (self.sections, self.sym_decls)
+        (self.sections.into_vec(), self.sym_decls)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.sections.len()
+    }
+
+    pub(crate) fn section(&self, i: usize) -> &AsmSection {
+        self.sections.at(i)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn sections(&self) -> &[AsmSection] {
+        self.sections.all()
+    }
+
+    /// Sections walked, read by the test that locks the per-statement cost
+    /// of materialization to a constant.
+    #[cfg(test)]
+    pub(crate) fn walked(&self) -> u64 {
+        self.sections.walked()
+    }
+
+    pub(crate) fn section_names(&self) -> &AsmSinkSectionNames {
+        &self.by_name
+    }
+
+    /// The counts as they stand, for a statement to test its names against.
+    fn bind_counts(&self, weak_only: bool) -> AsmBindCounts {
+        if weak_only {
+            self.weak.clone()
+        } else {
+            self.non_local.clone()
+        }
     }
 
     /// Append the frame tables the unit's `.cfi_*` directives describe. Runs
@@ -1880,11 +2011,22 @@ impl AsmSectionSink {
         }
         let built = super::cfi::build_cfi_sections(&self.cfi, target)?;
         for s in built {
-            let key = section_key_of(&s);
-            self.by_key.insert(key, self.sections.len());
-            self.sections.push(s);
+            self.push_section(s);
         }
         Ok(())
+    }
+
+    fn push_section(&mut self, s: AsmSection) -> usize {
+        let i = self.sections.len();
+        let key = section_key_of(&s);
+        self.by_name
+            .entry_ref(s.name.as_str())
+            .or_default()
+            .push(key.clone());
+        self.by_key.insert(key, i);
+        self.published.push(0);
+        self.sections.push(s);
+        i
     }
 
     /// Merge the symbol directives a template carried outside any section
@@ -1982,19 +2124,22 @@ impl AsmSectionSink {
                 }
                 _ => continue,
             };
-            let d = match self.sym_decls.iter().position(|d| d.name == *name) {
-                Some(i) => &mut self.sym_decls[i],
+            let di = match self.sym_decls.iter().position(|d| d.name == *name) {
+                Some(i) => i,
                 None => {
                     self.sym_decls.push(AsmSymDecl {
                         name: name.clone(),
                         ..Default::default()
                     });
-                    self.sym_decls.last_mut().expect("just pushed")
+                    self.sym_decls.len() - 1
                 }
             };
             if bind != AsmSymBind::Default {
-                d.bind = bind;
+                let was = core::mem::replace(&mut self.sym_decls[di].bind, bind);
+                count_bind(&mut self.non_local, &mut self.weak, name, was, false);
+                count_bind(&mut self.non_local, &mut self.weak, name, bind, true);
             }
+            let d = &mut self.sym_decls[di];
             if sym_type != AsmSymType::NoType {
                 d.sym_type = sym_type;
             }
@@ -2016,11 +2161,10 @@ impl AsmSectionSink {
     /// Index of `b`'s section, appending an empty one when the sink holds
     /// no section of that identity yet.
     fn get_or_insert(&mut self, b: &AsmSectionBlock) -> usize {
-        let key = section_key(b);
-        if let Some(&i) = self.by_key.get(&key) {
+        if let Some(&i) = self.by_key.get(&section_key(b)) {
             return i;
         }
-        self.sections.push(AsmSection {
+        self.push_section(AsmSection {
             name: b.name.clone(),
             flags: b.flags.clone(),
             sh_type: b.sh_type.clone(),
@@ -2031,21 +2175,30 @@ impl AsmSectionSink {
             after_insn: true,
             map_state: None,
             map: MapMarks::default(),
-        });
-        let i = self.sections.len() - 1;
-        self.by_key.insert(key, i);
-        i
+        })
     }
 
     /// Publish the labels section `sec_idx` gained past `from`, so the next
-    /// call resolves them. Runs once a call's pending entries are settled.
+    /// call resolves them and their bindings answer a binding test. Runs
+    /// once a call's pending entries are settled.
     fn publish_labels(&mut self, sec_idx: usize, from: usize) {
-        let sec = &self.sections[sec_idx];
+        let sec = self.sections.at(sec_idx);
         let key = section_key_of(sec);
-        for l in &sec.labels[from..] {
-            self.labels
-                .insert(l.name.clone(), (key.clone(), l.offset as i64));
+        // The counts cover every label under the mark, the label index
+        // what this call added; the two agree except where a `.set` wrote
+        // into a section the call did not otherwise touch.
+        let counted = self.published[sec_idx];
+        for i in counted.min(from)..sec.labels.len() {
+            let l = &sec.labels[i];
+            if i >= counted {
+                count_label_bind(&mut self.non_local, &mut self.weak, l, true);
+            }
+            if i >= from {
+                self.labels
+                    .insert(l.name.clone(), (key.clone(), l.offset as i64));
+            }
         }
+        self.published[sec_idx] = sec.labels.len();
     }
 
     /// Record the sink's outer length and each existing section's bytes,
@@ -2057,6 +2210,7 @@ impl AsmSectionSink {
             cfi: self.cfi.len(),
             per_section: self
                 .sections
+                .all()
                 .iter()
                 .map(|s| {
                     (
@@ -2079,28 +2233,116 @@ impl AsmSectionSink {
     /// caller may restore the same one more than once.
     pub(crate) fn restore(&mut self, snap: &AsmSectionsSnapshot) {
         if self.sym_decls.len() >= snap.decls.len() {
+            for d in &self.sym_decls {
+                count_bind(&mut self.non_local, &mut self.weak, &d.name, d.bind, false);
+            }
             self.sym_decls.clone_from(&snap.decls);
+            for d in &self.sym_decls {
+                count_bind(&mut self.non_local, &mut self.weak, &d.name, d.bind, true);
+            }
         }
         self.cfi.truncate(snap.cfi.min(self.cfi.len()));
-        for s in self.sections.drain(snap.len.min(self.sections.len())..) {
-            self.by_key.remove(&section_key_of(&s));
-            for l in &s.labels {
+        let keep = snap.len.min(self.sections.len());
+        for (i, s) in self.sections.drain_from(keep).enumerate() {
+            let key = section_key_of(&s);
+            if let Some(v) = self.by_name.get_mut(&s.name)
+                && let Some(at) = v.iter().rposition(|k| *k == key)
+            {
+                v.remove(at);
+            }
+            self.by_key.remove(&key);
+            for (li, l) in s.labels.iter().enumerate() {
+                if li < self.published[keep + i] {
+                    count_label_bind(&mut self.non_local, &mut self.weak, l, false);
+                }
                 self.labels.remove(&l.name);
             }
         }
-        for (s, &(bytes, relocs, labels, align, after_insn, map_state)) in
-            self.sections.iter_mut().zip(&snap.per_section)
+        self.published.truncate(keep);
+        for (i, (s, &(bytes, relocs, labels, align, after_insn, map_state))) in self
+            .sections
+            .all_mut()
+            .iter_mut()
+            .zip(&snap.per_section)
+            .enumerate()
         {
             s.bytes.truncate(bytes);
             s.map.truncate(bytes);
             s.relocs.truncate(relocs);
-            for l in s.labels.drain(labels.min(s.labels.len())..) {
+            for (li, l) in s.labels.drain(labels.min(s.labels.len())..).enumerate() {
+                if labels + li < self.published[i] {
+                    count_label_bind(&mut self.non_local, &mut self.weak, &l, false);
+                }
                 self.labels.remove(&l.name);
             }
+            self.published[i] = self.published[i].min(s.labels.len());
             s.align = align;
             s.after_insn = after_insn;
             s.map_state = map_state;
         }
+    }
+}
+
+/// Move a declaration's binding into or out of the sink's counts.
+fn count_bind(
+    non_local: &mut AsmBindCounts,
+    weak: &mut AsmBindCounts,
+    name: &str,
+    bind: AsmSymBind,
+    add: bool,
+) {
+    match bind {
+        AsmSymBind::Global => count_name(alloc::rc::Rc::make_mut(non_local), name, add),
+        AsmSymBind::Weak => {
+            count_name(alloc::rc::Rc::make_mut(non_local), name, add);
+            count_name(alloc::rc::Rc::make_mut(weak), name, add);
+        }
+        _ => {}
+    }
+}
+
+/// The same for a section label's binding.
+fn count_label_bind(
+    non_local: &mut AsmBindCounts,
+    weak: &mut AsmBindCounts,
+    l: &AsmSectionLabel,
+    add: bool,
+) {
+    if l.global || l.weak {
+        count_name(alloc::rc::Rc::make_mut(non_local), &l.name, add);
+    }
+    if l.weak {
+        count_name(alloc::rc::Rc::make_mut(weak), &l.name, add);
+    }
+}
+
+fn count_name(counts: &mut hashbrown::HashMap<alloc::string::String, u32>, name: &str, add: bool) {
+    if add {
+        *counts.entry_ref(name).or_insert(0) += 1;
+    } else if let Some(c) = counts.get_mut(name) {
+        *c -= 1;
+        if *c == 0 {
+            counts.remove(name);
+        }
+    }
+}
+
+/// Rewrite a label's binding and keep the sink's counts in step. A label
+/// the call has not published carries no count yet; publishing takes its
+/// final binding.
+fn rebind_label(
+    l: &mut AsmSectionLabel,
+    counted: bool,
+    non_local: &mut AsmBindCounts,
+    weak: &mut AsmBindCounts,
+    f: impl FnOnce(&mut AsmSectionLabel),
+) {
+    if counted {
+        count_label_bind(non_local, weak, l, false);
+    }
+    f(l);
+    if counted {
+        count_label_bind(non_local, weak, l, true);
     }
 }
 
@@ -5826,17 +6068,27 @@ struct AsmRelaxSite {
 }
 
 /// Section name -> identity key over the blocks being laid out and the
-/// sections the sink already holds. A name defined by both agrees, the key
-/// being a function of the section's own attributes.
-fn section_name_keys(
-    blocks: &[AsmSectionBlock],
-    sink: &AsmSectionSink,
-) -> alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> {
-    blocks
-        .iter()
-        .map(|b| (b.name.clone(), section_key(b)))
-        .chain(sink.iter().map(|s| (s.name.clone(), section_key_of(s))))
-        .collect()
+/// sections the sink already holds, answered through the sink's name index
+/// rather than by deriving a map per call.
+struct SectionNames<'a> {
+    blocks: &'a [AsmSectionBlock],
+    sink: &'a AsmSectionSink,
+}
+
+impl SectionNames<'_> {
+    /// The key of the section `name` stands for, the sink's answer winning
+    /// over a block of the same name.
+    fn get(&self, name: &str) -> Option<alloc::string::String> {
+        sink_section_key(self.sink.section_names(), name)
+            .map(alloc::string::String::from)
+            .or_else(|| {
+                self.blocks
+                    .iter()
+                    .rev()
+                    .find(|b| b.name == name)
+                    .map(section_key)
+            })
+    }
 }
 
 /// Evaluate a `.set` value over section-local locations: `.` is the offset at
@@ -5857,7 +6109,7 @@ fn eval_section_set_expr(
     labels: &alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)>,
     syms: &alloc::collections::BTreeMap<alloc::string::String, i64>,
     aliases: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
-    sections: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
+    sections: &SectionNames<'_>,
     const_of: &dyn Fn(u8) -> Option<i64>,
 ) -> Result<SectionSetValue, alloc::string::String> {
     let resolve = |t: &str| -> Option<AsmExprLeaf> {
@@ -5883,7 +6135,7 @@ fn eval_section_set_expr(
                 None => match aliases.get(t) {
                     Some(next) => t = next.as_str(),
                     // Last, so a label of the same name wins.
-                    None => return sections.get(t).map(|sk| section_start_leaf(sk)),
+                    None => return sections.get(t).map(|sk| section_start_leaf(&sk)),
                 },
             }
         }
@@ -5957,7 +6209,11 @@ pub(crate) fn fold_asm_operand_expr(
     here: Option<i64>,
     measured: &SectionLabelOffsets,
 ) -> Result<i64, alloc::string::String> {
-    let sink_labels = AsmSinkLabels::new();
+    let (labels, sections) = (AsmSinkLabels::new(), AsmSinkSectionNames::new());
+    let sink_labels = AsmSinkNames {
+        labels: &labels,
+        sections: &sections,
+    };
     let num_unique = alloc::collections::BTreeMap::new();
     let resolve = |t: &str| {
         let at = if t == "." { here? } else { 0 };
@@ -6000,7 +6256,7 @@ fn section_expr_leaf(
     key: &str,
     here: i64,
     measured: &SectionLabelOffsets,
-    sink_labels: &AsmSinkLabels,
+    sink_labels: &AsmSinkNames<'_>,
     num_unique: &alloc::collections::BTreeMap<&str, alloc::string::String>,
     label_off: &dyn Fn(&str) -> Option<LabelLoc>,
 ) -> Option<AsmExprLeaf> {
@@ -6027,7 +6283,10 @@ fn section_expr_leaf(
     }
     // Last, so a label of the same name wins: a bare section name is that
     // section's start.
-    measured.section_named(cur).map(section_start_leaf)
+    sink_labels
+        .section(cur)
+        .or_else(|| measured.section_named(cur))
+        .map(section_start_leaf)
 }
 
 /// A leaf reached through a `.set` chain, renamed to the symbol the source
@@ -6050,7 +6309,7 @@ fn leaf_named(leaf: AsmExprLeaf, name: &str) -> AsmExprLeaf {
 fn section_expr_defined_leaf(
     t: &str,
     measured: &SectionLabelOffsets,
-    sink_labels: &AsmSinkLabels,
+    sink_labels: &AsmSinkNames<'_>,
     num_unique: &alloc::collections::BTreeMap<&str, alloc::string::String>,
     label_off: &dyn Fn(&str) -> Option<LabelLoc>,
 ) -> Option<AsmExprLeaf> {
@@ -6082,7 +6341,7 @@ fn section_expr_defined_leaf(
         }));
     }
     if numeric_label_digits(t).is_none()
-        && let Some((sk, off)) = sink_labels.get(t)
+        && let Some((sk, off)) = sink_labels.label(t)
     {
         return Some(AsmExprLeaf::Loc(AsmExprTerm {
             space: Some((AsmSpace::Section(sk.clone()), *off)),
@@ -6741,7 +7000,7 @@ pub(crate) fn measure_asm_section_offsets(
 fn short_form_fits(
     blocks: &[AsmSectionBlock],
     m: &SectionLabelOffsets,
-    rebindable: &alloc::collections::BTreeSet<alloc::string::String>,
+    rebindable: &AsmBindingNames<'_>,
     s: &AsmRelaxSite,
     const_of: &dyn Fn(u8) -> Option<i64>,
     sink: &AsmSectionSink,
@@ -6783,8 +7042,12 @@ fn short_form_fits(
         // one takes the long form.
         AsmSectionTarget::Expr(text) => {
             let num_unique = alloc::collections::BTreeMap::new();
+            let sink_names = AsmSinkNames {
+                labels: &sink.labels,
+                sections: sink.section_names(),
+            };
             let resolve =
-                |t: &str| section_expr_leaf(t, &key, s.at, m, &sink.labels, &num_unique, &|_| None);
+                |t: &str| section_expr_leaf(t, &key, s.at, m, &sink_names, &num_unique, &|_| None);
             let ctx = AsmExprCtx {
                 resolve: &resolve,
                 const_of,
@@ -6815,30 +7078,43 @@ fn short_form_fits(
 /// statements recorded. A weak definition never resolves in place: the link
 /// may bind a different one, so every reference keeps its relocation,
 /// relaxable branch included.
-pub(crate) fn asm_weak_only_names(
-    blocks: &[AsmSectionBlock],
+pub(crate) fn asm_weak_only_names<'a>(
+    blocks: &'a [AsmSectionBlock],
     sink: &AsmSectionSink,
-) -> alloc::collections::BTreeSet<alloc::string::String> {
+) -> AsmBindingNames<'a> {
+    AsmBindingNames {
+        stmt: stmt_binding_names(blocks, false),
+        counts: sink.bind_counts(true),
+    }
+}
+
+/// A binding test over the statement's own directives and the counts the
+/// sink keeps for what earlier statements bound.
+pub(crate) struct AsmBindingNames<'a> {
+    stmt: alloc::collections::BTreeSet<&'a str>,
+    counts: AsmBindCounts,
+}
+
+impl AsmBindingNames<'_> {
+    pub(crate) fn contains(&self, name: &str) -> bool {
+        self.stmt.contains(name) || self.counts.contains_key(name)
+    }
+}
+
+/// The names a statement's own `.weak` -- and, with `global`, `.globl` --
+/// directives bind.
+fn stmt_binding_names(
+    blocks: &[AsmSectionBlock],
+    global: bool,
+) -> alloc::collections::BTreeSet<&str> {
     blocks
         .iter()
         .flat_map(|b| &b.items)
         .filter_map(|it| match it {
-            AsmSectionItem::Weak(n) => Some(n.clone()),
+            AsmSectionItem::Weak(n) => Some(n.as_str()),
+            AsmSectionItem::Global(n) if global => Some(n.as_str()),
             _ => None,
         })
-        .chain(
-            sink.sym_decls
-                .iter()
-                .filter(|d| d.bind == AsmSymBind::Weak)
-                .map(|d| d.name.clone()),
-        )
-        .chain(
-            sink.sections
-                .iter()
-                .flat_map(|s| &s.labels)
-                .filter(|l| l.weak)
-                .map(|l| l.name.clone()),
-        )
         .collect()
 }
 
@@ -6847,31 +7123,14 @@ pub(crate) fn asm_weak_only_names(
 /// reference). A reference to one keeps its relocation so the link binds
 /// the winning definition; only a local name resolves in place, as GNU
 /// as resolves it.
-fn asm_non_local_names(
-    blocks: &[AsmSectionBlock],
+fn asm_non_local_names<'a>(
+    blocks: &'a [AsmSectionBlock],
     sink: &AsmSectionSink,
-) -> alloc::collections::BTreeSet<alloc::string::String> {
-    blocks
-        .iter()
-        .flat_map(|b| &b.items)
-        .filter_map(|it| match it {
-            AsmSectionItem::Global(n) | AsmSectionItem::Weak(n) => Some(n.clone()),
-            _ => None,
-        })
-        .chain(
-            sink.sym_decls
-                .iter()
-                .filter(|d| matches!(d.bind, AsmSymBind::Global | AsmSymBind::Weak))
-                .map(|d| d.name.clone()),
-        )
-        .chain(
-            sink.sections
-                .iter()
-                .flat_map(|s| &s.labels)
-                .filter(|l| l.global || l.weak)
-                .map(|l| l.name.clone()),
-        )
-        .collect()
+) -> AsmBindingNames<'a> {
+    AsmBindingNames {
+        stmt: stmt_binding_names(blocks, true),
+        counts: sink.bind_counts(false),
+    }
 }
 
 /// Measure with the branch forms `long` fixes, running the second round a
@@ -6984,12 +7243,13 @@ fn measure_round_inner(
         // A section already holding bytes in the sink continues at its
         // current length, so measured offsets, alignment gaps, and the
         // location counter agree with the materialized layout.
-        let mut at = *lens
-            .entry(key.clone())
-            .or_insert_with(|| sink.index_of(b).map_or(0, |i| sink[i].bytes.len() as i64));
+        let mut at = *lens.entry(key.clone()).or_insert_with(|| {
+            sink.index_of(b)
+                .map_or(0, |i| sink.section(i).bytes.len() as i64)
+        });
         let mut state = *states
             .entry(key.clone())
-            .or_insert_with(|| sink.index_of(b).and_then(|i| sink[i].map_state));
+            .or_insert_with(|| sink.index_of(b).and_then(|i| sink.section(i).map_state));
         for (ii, item) in b.items.iter().enumerate() {
             if matches!(item, AsmSectionItem::CodeBytes { .. }) {
                 at += insn_align_gap(at, state, exec, align_is_p2);
@@ -7223,7 +7483,12 @@ fn measure_round_inner(
         lens.insert(key.clone(), at);
         states.insert(key, state);
     }
-    let sections = section_name_keys(blocks, sink);
+    let sections = SectionNames { blocks, sink };
+    let block_sections: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String> =
+        blocks
+            .iter()
+            .map(|b| (b.name.clone(), section_key(b)))
+            .collect();
     let mut syms: alloc::collections::BTreeMap<alloc::string::String, i64> =
         alloc::collections::BTreeMap::new();
     // An assignment this round cannot value is deferred while a fill count
@@ -7263,7 +7528,7 @@ fn measure_round_inner(
         map,
         syms,
         long: AsmRelaxSet::new(),
-        sections,
+        sections: block_sections,
         places,
         aligns,
         aliases,
@@ -7356,14 +7621,27 @@ pub(crate) fn materialize_asm_sections(
         // template). Borrowed apart from the section being laid out.
         let AsmSectionSink {
             sections,
-            labels: sink_labels,
+            labels,
+            by_name,
             cfi: sink_cfi,
+            published,
+            non_local: sink_non_local,
+            weak: sink_weak,
             ..
         } = &mut *sink;
+        let sink_labels = &AsmSinkNames {
+            labels,
+            sections: by_name,
+        };
         if !touched.iter().any(|&(i, _)| i == sec_idx) {
-            touched.push((sec_idx, sections[sec_idx].labels.len()));
+            touched.push((sec_idx, sections.at(sec_idx).labels.len()));
         }
-        let sec = &mut sections[sec_idx];
+        // Labels of earlier calls, which a rebinding here has to move in
+        // the sink's binding counts; this call's are counted when the call
+        // publishes them.
+        let counted = published[sec_idx];
+        let block_key = section_key(b);
+        let sec = sections.at_mut(sec_idx);
         for (ii, item) in b.items.iter().enumerate() {
             // An expression-valued alignment takes the byte count the measure
             // pass settled where the directive stands, so the gap laid down
@@ -7582,10 +7860,21 @@ pub(crate) fn materialize_asm_sections(
                         .map(alloc::string::String::as_str)
                         .unwrap_or(name);
                     let at = sec.bytes.len() as u32;
-                    match sec.labels.iter_mut().find(|l| l.name == *name) {
+                    // Only this call's entries can be pending; a definition
+                    // an earlier call made in this section is a duplicate,
+                    // which the label index answers without a walk.
+                    match sec.labels[counted..].iter_mut().find(|l| l.name == *name) {
                         // A pending `.globl` entry is the definition site.
                         Some(l) if l.offset == PENDING_LABEL => l.offset = at,
                         Some(_) => {
+                            return Err(alloc::format!(
+                                "inline asm: duplicate label `{name}` in a named section"
+                            ));
+                        }
+                        None if sink_labels
+                            .label(name)
+                            .is_some_and(|(k, _)| *k == block_key) =>
+                        {
                             return Err(alloc::format!(
                                 "inline asm: duplicate label `{name}` in a named section"
                             ));
@@ -7746,8 +8035,17 @@ pub(crate) fn materialize_asm_sections(
                 // A section label is local unless `.globl` marked it; record a
                 // pending entry so the definition below keeps that binding.
                 AsmSectionItem::Local(name) => {
-                    match sec.labels.iter_mut().find(|l| l.name == *name) {
-                        Some(l) => l.global = false,
+                    match sec
+                        .labels
+                        .iter_mut()
+                        .enumerate()
+                        .find(|(_, l)| l.name == *name)
+                    {
+                        Some((i, l)) => {
+                            rebind_label(l, i < counted, sink_non_local, sink_weak, |l| {
+                                l.global = false
+                            })
+                        }
                         None => sec.labels.push(AsmSectionLabel {
                             name: name.clone(),
                             offset: PENDING_LABEL,
@@ -7761,10 +8059,19 @@ pub(crate) fn materialize_asm_sections(
                 }
                 AsmSectionItem::Global(name) => {
                     global_names.push(name.clone());
-                    match sec.labels.iter_mut().find(|l| l.name == *name) {
+                    match sec
+                        .labels
+                        .iter_mut()
+                        .enumerate()
+                        .find(|(_, l)| l.name == *name)
+                    {
                         // `.globl` may precede its label; record the pending name
                         // as a zero-length forward entry the definition fills in.
-                        Some(l) => l.global = true,
+                        Some((i, l)) => {
+                            rebind_label(l, i < counted, sink_non_local, sink_weak, |l| {
+                                l.global = true
+                            })
+                        }
                         None => sec.labels.push(AsmSectionLabel {
                             name: name.clone(),
                             offset: PENDING_LABEL,
@@ -8325,9 +8632,21 @@ pub(crate) fn materialize_asm_sections(
     // definition this call has not published yet. Templates carrying `.weak`
     // skip the loop entirely, so it is not on the export-table path.
     for name in &weak_names {
-        for s in sink.sections.iter_mut() {
-            for l in s.labels.iter_mut().filter(|l| l.name == *name) {
-                l.weak = true;
+        let AsmSectionSink {
+            sections,
+            published,
+            non_local,
+            weak,
+            ..
+        } = &mut *sink;
+        for (si, s) in sections.all_mut().iter_mut().enumerate() {
+            for (i, l) in s
+                .labels
+                .iter_mut()
+                .enumerate()
+                .filter(|(_, l)| l.name == *name)
+            {
+                rebind_label(l, i < published[si], non_local, weak, |l| l.weak = true);
             }
         }
     }
@@ -8336,13 +8655,21 @@ pub(crate) fn materialize_asm_sections(
     // and defines in `.rodata`. The per-section pass above already bound the
     // same-section case; this reaches the rest.
     for name in &global_names {
-        for s in sink.sections.iter_mut() {
-            for l in s
+        let AsmSectionSink {
+            sections,
+            published,
+            non_local,
+            weak,
+            ..
+        } = &mut *sink;
+        for (si, s) in sections.all_mut().iter_mut().enumerate() {
+            for (i, l) in s
                 .labels
                 .iter_mut()
-                .filter(|l| l.name == *name && l.offset != PENDING_LABEL)
+                .enumerate()
+                .filter(|(_, l)| l.name == *name && l.offset != PENDING_LABEL)
             {
-                l.global = true;
+                rebind_label(l, i < published[si], non_local, weak, |l| l.global = true);
             }
         }
     }
@@ -8377,9 +8704,10 @@ pub(crate) fn materialize_asm_sections(
         let (Some(sk), Some(off)) = (measured.section(name), measured.offset(name)) else {
             continue;
         };
-        let Some(s) = sink.sections.iter_mut().find(|s| section_key_of(s) == *sk) else {
+        let Some(&si) = sink.by_key.get(sk as &str) else {
             continue;
         };
+        let s = sink.sections.at_mut(si);
         if !s.labels.iter().any(|l| l.name == name) {
             s.labels.push(AsmSectionLabel {
                 name: alloc::string::String::from(name),
@@ -8392,9 +8720,9 @@ pub(crate) fn materialize_asm_sections(
             });
         }
     }
-    for &(sec_idx, _) in &touched {
-        let s = &mut sink.sections[sec_idx];
-        if let Some(l) = s.labels.iter().find(|l| {
+    for &(sec_idx, from) in &touched {
+        let s = sink.sections.at_mut(sec_idx);
+        if let Some(l) = s.labels[from..].iter().find(|l| {
             l.offset == PENDING_LABEL
                 && (l.sym_type != AsmSymType::NoType || l.size.is_some())
                 && !aliased.contains(l.name.as_str())
@@ -8404,7 +8732,14 @@ pub(crate) fn materialize_asm_sections(
                 l.name
             ));
         }
-        s.labels.retain(|l| l.offset != PENDING_LABEL);
+        let mut keep = from;
+        for i in from..s.labels.len() {
+            if s.labels[i].offset != PENDING_LABEL {
+                s.labels.swap(keep, i);
+                keep += 1;
+            }
+        }
+        s.labels.truncate(keep);
     }
     for &(sec_idx, from) in &touched {
         sink.publish_labels(sec_idx, from);
@@ -9931,6 +10266,7 @@ mod asm_section_tests {
         )
         .unwrap();
         let labels: alloc::vec::Vec<_> = sink
+            .sections()
             .iter()
             .flat_map(|s| s.labels.iter())
             .map(|l| (l.name.as_str(), l.global))
@@ -9959,6 +10295,7 @@ mod asm_section_tests {
         )
         .unwrap();
         let s = sink
+            .sections()
             .iter()
             .find(|s| s.name == ".rodata")
             .expect("section built");
@@ -9994,7 +10331,7 @@ mod asm_section_tests {
         )
         .unwrap();
         assert_eq!(sink.len(), 1);
-        let s = &sink[0];
+        let s = sink.section(0);
         assert_eq!(s.align, 8);
         // 8 (quad) + 4 (pcrel long) + 4 + 4 (consts) + 3 ("hi\0").
         assert_eq!(s.bytes.len(), 23);
@@ -10049,7 +10386,7 @@ mod asm_section_tests {
                 &mut sink,
             )
             .unwrap();
-            sink[0].bytes.clone()
+            sink.section(0).bytes.clone()
         };
         let exec = mat(
             ".pushsection .t,\"ax\"\n.byte 1\n.balign 8\n.byte 2\n.popsection\n",
@@ -10486,7 +10823,7 @@ mod asm_section_tests {
         want.extend_from_slice(&(-1i128).to_le_bytes());
         want.extend_from_slice(&(0x5BE0CD191F83D9AB9B05688C510E527Fu128).to_le_bytes());
         want.extend_from_slice(&(0xA54FF53A3C6EF372BB67AE856A09E667u128).to_le_bytes());
-        assert_eq!(sink[0].bytes, want);
+        assert_eq!(sink.section(0).bytes, want);
     }
 
     #[test]
@@ -10534,9 +10871,9 @@ mod asm_section_tests {
         want.extend_from_slice(&[0u8; 8]); // .quad ext + 8 (reloc)
         want.extend_from_slice(&1i32.to_le_bytes());
         want.extend_from_slice(&[0u8; 8]); // .quad . (reloc)
-        assert_eq!(sink[0].bytes, want);
+        assert_eq!(sink.section(0).bytes, want);
         assert_eq!(
-            sink[0].relocs,
+            sink.section(0).relocs,
             alloc::vec![
                 AsmSectionReloc {
                     offset: 0x0c,
@@ -10604,8 +10941,13 @@ mod asm_section_tests {
             )
             .unwrap();
         }
-        assert_eq!(sink[0].bytes.len(), 5); // 3 bytes, 1 pad, 1 byte
-        let f = sink[0].labels.iter().find(|l| l.name == "f").unwrap();
+        assert_eq!(sink.section(0).bytes.len(), 5); // 3 bytes, 1 pad, 1 byte
+        let f = sink
+            .section(0)
+            .labels
+            .iter()
+            .find(|l| l.name == "f")
+            .unwrap();
         assert_eq!(f.size, Some(4));
     }
 
@@ -10727,7 +11069,7 @@ mod asm_section_tests {
             &mut sink,
         )
         .unwrap();
-        assert_eq!(sink[0].bytes, alloc::vec![0x25, 0x80]);
+        assert_eq!(sink.section(0).bytes, alloc::vec![0x25, 0x80]);
         // A non-constant operand leaves the expression unresolved.
         let mut sink2 = AsmSectionSink::default();
         let err = materialize_asm_sections(
@@ -10779,7 +11121,7 @@ mod asm_section_tests {
         )
         .unwrap();
         assert_eq!(
-            sink[0].relocs,
+            sink.section(0).relocs,
             alloc::vec![AsmSectionReloc {
                 offset: 0,
                 width: 4,
@@ -10852,7 +11194,7 @@ mod asm_section_tests {
             &mut sink,
         )
         .unwrap();
-        assert_eq!(sink[0].relocs[0].width, 4);
+        assert_eq!(sink.section(0).relocs[0].width, 4);
     }
 
     #[test]
@@ -10880,7 +11222,7 @@ mod asm_section_tests {
             &mut sink,
         )
         .unwrap();
-        let s = &sink[0];
+        let s = sink.section(0);
         assert_eq!(
             s.bytes,
             alloc::vec![0x04, 0x04, 0x00, 0x04, 0x00, 0x00, 0x00, 0xFC]
@@ -10909,7 +11251,11 @@ mod asm_section_tests {
             &mut sink,
         )
         .unwrap();
-        let entry = sink.iter().find(|s| s.name == ".altinstructions").unwrap();
+        let entry = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".altinstructions")
+            .unwrap();
         assert_eq!(
             entry.bytes,
             alloc::vec![3],
@@ -11185,7 +11531,7 @@ mod asm_section_tests {
         )
         .unwrap();
         assert_eq!(
-            sink[0].relocs[0].target,
+            sink.section(0).relocs[0].target,
             AsmSectionTarget::Symbol(alloc::string::String::from("handler"))
         );
         // Two blocks naming one section merge; a `.popsection` without a
@@ -11204,7 +11550,7 @@ mod asm_section_tests {
         )
         .unwrap();
         assert_eq!(sink.len(), 1);
-        assert_eq!(sink[0].bytes.len(), 8);
+        assert_eq!(sink.section(0).bytes.len(), 8);
         assert!(
             extract_asm_sections(".pushsection .a,\"a\"\n.popsection\n.popsection", false).is_err()
         );
@@ -11231,7 +11577,7 @@ mod asm_section_tests {
                 aarch64,
                 &mut sink,
             )?;
-            Ok(sink[0].align)
+            Ok(sink.section(0).align)
         };
         assert_eq!(sec_align("3", true).unwrap(), 8);
         assert!(sec_align("3", false).is_err());
@@ -11258,7 +11604,7 @@ mod asm_section_tests {
             &mut sink,
         )
         .unwrap();
-        let s = &sink[0];
+        let s = sink.section(0);
         assert_eq!(s.bytes.len(), 16);
         assert_eq!(
             s.labels,
@@ -11312,7 +11658,7 @@ mod asm_section_tests {
             &mut sink,
         )
         .unwrap();
-        let l = &sink[0].labels[0];
+        let l = &sink.section(0).labels[0];
         assert_eq!(l.name, "tramp");
         assert!(l.global);
         assert_eq!(l.sym_type, AsmSymType::Func);
@@ -11340,8 +11686,8 @@ mod asm_section_tests {
             ".pushsection .d,\"a\"\nv:\n.quad 0\n.type v, @object\n.size v, . - v\n.popsection\n",
         )
         .unwrap();
-        assert_eq!(sink[0].labels[0].sym_type, AsmSymType::Object);
-        assert_eq!(sink[0].labels[0].size, Some(8));
+        assert_eq!(sink.section(0).labels[0].sym_type, AsmSymType::Object);
+        assert_eq!(sink.section(0).labels[0].size, Some(8));
         // An unknown type name is rejected at parse rather than mis-typed.
         let err = extract_asm_sections(
             ".pushsection .t,\"a\"\nv:\n.type v, @weird\n.popsection\n",
@@ -11392,7 +11738,7 @@ mod asm_section_tests {
             &mut sink,
         )
         .unwrap();
-        let s = &sink[0];
+        let s = sink.section(0);
         assert_eq!(s.bytes.len(), 4);
         assert_eq!(s.labels.len(), 1);
         assert_eq!(s.labels[0].name, "__initcall_probe7");
@@ -11957,18 +12303,11 @@ mod asm_section_tests {
         assert!(ty("f").unwrap_err().contains("expects"));
     }
 
-    /// The export-table shape modpost generates: two file-scope templates
-    /// per exported symbol, one pushing a section every symbol shares and
-    /// one pushing a section named after the symbol. A unit carries tens of
-    /// thousands of these, so the per-call lookups against the accumulated
-    /// sink -- the section identity and the labels earlier templates
-    /// defined -- have to be indexed; scanning it made the unit quadratic
-    /// in its own asm statements. At this count a scan does not finish in
-    /// the time the whole suite takes.
-    #[test]
-    fn file_scope_asm_sink_lookups_are_indexed() {
-        const N: usize = 4000;
-        let templates: alloc::vec::Vec<alloc::string::String> = (0..N)
+    /// The export-table shape modpost generates: one file-scope template
+    /// per exported symbol, pushing a section every symbol shares and a
+    /// section named after the symbol.
+    fn export_table_templates(n: usize) -> alloc::vec::Vec<alloc::string::String> {
+        (0..n)
             .map(|i| {
                 alloc::format!(
                     "\t.section \"__ksymtab_strings\",\"aMS\",%progbits,1\n\
@@ -11978,12 +12317,25 @@ mod asm_section_tests {
                      \t.previous\n"
                 )
             })
-            .collect();
+            .collect()
+    }
+
+    /// A unit carries tens of thousands of export-table templates, so the
+    /// per-call lookups against the accumulated sink -- the section
+    /// identity, its name, the labels earlier templates defined and the
+    /// bindings they carry -- have to be indexed. What each lookup answers
+    /// is asserted here; that none of them walks the sink is
+    /// [`file_scope_asm_sink_walks_stay_linear`].
+    #[test]
+    fn file_scope_asm_sink_lookups_are_indexed() {
+        const N: usize = 4000;
+        let templates = export_table_templates(N);
         let mut sink = AsmSectionSink::default();
         materialize_file_asm(&templates, true, AsmComments::A64, &|_| Ok(()), &mut sink).unwrap();
         // One shared strings section plus one per symbol.
         assert_eq!(sink.len(), N + 1);
         let strs = sink
+            .sections()
             .iter()
             .find(|s| s.name == "__ksymtab_strings")
             .expect("the shared strings section");
@@ -11996,12 +12348,89 @@ mod asm_section_tests {
         // Each per-symbol section holds the two relative references, both
         // as relocations against the named symbol.
         let sec = sink
+            .sections()
             .iter()
             .find(|s| s.name == "___ksymtab+s3999")
             .expect("the last symbol's section");
         assert_eq!(sec.bytes.len(), 8);
         assert_eq!(sec.labels.len(), 1);
         assert_eq!(sec.relocs.len(), 2);
+    }
+
+    /// The same shape at two sizes, measured in sections walked rather than
+    /// in time, so the result does not depend on the host. Materialization
+    /// resolves through the sink's indexes and walks nothing per statement;
+    /// the only walk here is the one an object writer makes of the finished
+    /// sink. A lookup that derives state over the whole sink per statement
+    /// squares this, which a content assertion cannot see.
+    #[test]
+    fn file_scope_asm_sink_walks_stay_linear() {
+        const N: usize = 1000;
+        let walks = |n: usize| -> u64 {
+            let mut sink = AsmSectionSink::default();
+            materialize_file_asm(
+                &export_table_templates(n),
+                true,
+                AsmComments::A64,
+                &|_| Ok(()),
+                &mut sink,
+            )
+            .unwrap();
+            let _ = sink.sections();
+            sink.walked()
+        };
+        let (small, large) = (walks(N), walks(2 * N));
+        assert!(
+            small <= 4 * N as u64 && large <= 8 * N as u64,
+            "sink walks: {small} over {N} statements, {large} over {}",
+            2 * N
+        );
+        assert!(
+            large <= 3 * small,
+            "doubling the statements multiplied the walks by {}",
+            large as f64 / small as f64
+        );
+    }
+
+    /// A second definition of a name in a section an earlier template
+    /// pushed is a duplicate, which the sink's label index answers.
+    #[test]
+    fn duplicate_section_label_across_templates_is_rejected() {
+        let text =
+            alloc::string::String::from("\t.section \"t\",\"a\"\ndup:\n\t.quad 0\n\t.previous\n");
+        let mut sink = AsmSectionSink::default();
+        let mat = |sink: &mut AsmSectionSink| {
+            materialize_file_asm(
+                core::slice::from_ref(&text),
+                true,
+                AsmComments::A64,
+                &|_| Ok(()),
+                sink,
+            )
+        };
+        mat(&mut sink).unwrap();
+        let err = mat(&mut sink).expect_err("the name is already defined there");
+        assert!(err.contains("duplicate label"), "{err}");
+    }
+
+    /// A bare section name is that section's start whichever template
+    /// pushed the section, so a difference to a label of it folds; the
+    /// sink's name index answers where the section came from.
+    #[test]
+    fn section_name_resolves_across_templates() {
+        let templates = alloc::vec![
+            alloc::string::String::from("\t.section \"t\",\"a\"\n\t.quad 0\nfirst:\n\t.previous\n"),
+            alloc::string::String::from("\t.section \"u\",\"a\"\n\t.quad first - t\n\t.previous\n"),
+        ];
+        let mut sink = AsmSectionSink::default();
+        materialize_file_asm(&templates, true, AsmComments::A64, &|_| Ok(()), &mut sink).unwrap();
+        let u = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == "u")
+            .expect("the second template's section");
+        assert_eq!(u.bytes, 8u64.to_le_bytes(), "`first - t` is the offset");
+        assert!(u.relocs.is_empty(), "an absolute value keeps no relocation");
     }
 
     /// A location expression resolves a label an earlier template defined,
@@ -12032,7 +12461,8 @@ mod asm_section_tests {
         )
         .unwrap();
         let sized = |s: &AsmSectionSink, n: &str| {
-            s.iter()
+            s.sections()
+                .iter()
                 .flat_map(|x| &x.labels)
                 .find(|l| l.name == n)
                 .and_then(|l| l.size)

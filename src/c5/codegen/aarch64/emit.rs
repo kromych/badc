@@ -11322,7 +11322,11 @@ mod tests {
             0xd65f03c0, // ret
         ];
         let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        let sec = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".t")
+            .expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
         let kinds: Vec<(u32, AsmRelocKind, &str)> = sec
             .relocs
@@ -11470,7 +11474,11 @@ mod tests {
             0x0e143c65, // mov w5, v3.s[2]
         ];
         let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        let sec = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".t")
+            .expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
     }
 
@@ -11527,7 +11535,11 @@ mod tests {
             0x2a0103e0, // uxtw x0, w1
         ];
         let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        let sec = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".t")
+            .expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
     }
 
@@ -11561,7 +11573,11 @@ mod tests {
         .unwrap();
         let want_words: [u32; 4] = [0x91000041, 0x91000041, 0x9100001f, 0xf9400064];
         let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        let sec = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".t")
+            .expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
         let kinds: Vec<(u32, AsmRelocKind, &str, i64)> = sec
             .relocs
@@ -11640,7 +11656,11 @@ mod tests {
             0xf2860106, // movk x6, #0x3008
         ];
         let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        let sec = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".t")
+            .expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
         assert!(
             sec.relocs.is_empty(),
@@ -11672,7 +11692,11 @@ mod tests {
             0xd2800007, // movz x7, #0x0
         ];
         let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        let sec = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".t")
+            .expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
         let got: Vec<(u32, AsmRelocKind)> = sec.relocs.iter().map(|r| (r.offset, r.kind)).collect();
         assert_eq!(
@@ -11733,7 +11757,11 @@ mod tests {
                 ".pushsection .t,\"ax\"\n{insn}\n.popsection\n"
             ))
             .map(|s| {
-                let sec = s.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+                let sec = s
+                    .sections()
+                    .iter()
+                    .find(|s| s.name == ".t")
+                    .expect("`.t` emitted");
                 u32::from_le_bytes(sec.bytes[..4].try_into().unwrap())
             })
         };
@@ -11790,7 +11818,11 @@ mod tests {
                 ".pushsection .t,\"ax\"\n{insn}\n.popsection\n"
             ))
             .map(|s| {
-                let sec = s.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+                let sec = s
+                    .sections()
+                    .iter()
+                    .find(|s| s.name == ".t")
+                    .expect("`.t` emitted");
                 u32::from_le_bytes(sec.bytes[..4].try_into().unwrap())
             })
         };
@@ -11881,7 +11913,11 @@ mod tests {
             0xd503201f, // nop
         ];
         let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        let sec = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".t")
+            .expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
         assert!(
             sec.relocs.is_empty(),
@@ -11960,7 +11996,11 @@ mod tests {
         ];
         for (name, want) in [(".t", &want_t[..]), (".u", &want_u[..])] {
             let bytes: Vec<u8> = want.iter().flat_map(|w| w.to_le_bytes()).collect();
-            let sec = sink.iter().find(|s| s.name == name).expect("section");
+            let sec = sink
+                .sections()
+                .iter()
+                .find(|s| s.name == name)
+                .expect("section");
             assert_eq!(sec.bytes, bytes, "{name}");
             assert!(sec.relocs.is_empty(), "{name}: {:?}", sec.relocs);
         }
@@ -11992,7 +12032,11 @@ mod tests {
             0x91002000,
         ];
         let bytes: Vec<u8> = want.iter().flat_map(|w| w.to_le_bytes()).collect();
-        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        let sec = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".t")
+            .expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
     }
 
@@ -12047,7 +12091,11 @@ mod tests {
             0x7ef084e7, // sub d7, d7, d16
         ];
         let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        let sec = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".t")
+            .expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
     }
 
@@ -12111,7 +12159,11 @@ mod tests {
             0x19df2420, // setpn [x0]!, x1!, xzr
         ];
         let bytes: Vec<u8> = want_words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        let sec = sink.iter().find(|s| s.name == ".t").expect("`.t` emitted");
+        let sec = sink
+            .sections()
+            .iter()
+            .find(|s| s.name == ".t")
+            .expect("`.t` emitted");
         assert_eq!(sec.bytes, bytes);
     }
 
@@ -12158,12 +12210,13 @@ mod tests {
         .iter()
         .flat_map(|w| w.to_le_bytes())
         .collect();
-        assert_eq!(sink[0].bytes, want);
+        assert_eq!(sink.section(0).bytes, want);
     }
 
     /// Materialize one file-scope asm text and return the named section.
     fn a64_file_asm_section(text: &str, name: &str) -> super::super::ssa::emit_common::AsmSection {
         a64_file_asm_sink(text)
+            .sections()
             .iter()
             .find(|s| s.name == name)
             .expect("section emitted")

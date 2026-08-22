@@ -173,6 +173,11 @@ pub struct CodeReloc {
 /// decide whether to print, ignore, or treat them as errors.
 #[derive(Debug, Clone)]
 pub struct Program {
+    /// Target the unit was compiled for. Sole source of the target
+    /// for a consumer that lowers the program after the compile --
+    /// the SSA interpreter, which otherwise has to guess the host and
+    /// would lower a cross-target unit under the wrong data model.
+    pub target: crate::c5::codegen::Target,
     pub data: Vec<u8>,
     /// File-scope `asm("...")` templates in source order, parse-time
     /// validated to hold section data directives only. The native
@@ -646,6 +651,7 @@ impl DataOffsets for ExternDataReloc {
 impl DataOffsets for Program {
     fn remap_data_offsets(&mut self, r: &dyn DataRemap) {
         let Self {
+            target: _,
             data: _, // the bytes the offsets index; the pass replaces them wholesale
             file_asm: _,
             asm_weak_names: _,
@@ -780,6 +786,7 @@ mod data_offset_tests {
     /// A `Program` with no content, for seeding one offset per field.
     fn empty_program() -> Program {
         Program {
+            target: crate::c5::codegen::Target::host(),
             data: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),

@@ -3101,6 +3101,7 @@ mod tests {
     /// the structural invariants the tests check.
     fn tiny_program() -> Program {
         Program {
+            target: crate::c5::codegen::Target::host(),
             data: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),

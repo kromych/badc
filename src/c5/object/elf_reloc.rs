@@ -5654,6 +5654,7 @@ mod tests {
 
     fn empty_program(path: &str) -> Program {
         Program {
+            target: crate::c5::codegen::Target::host(),
             data: Vec::new(),
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),

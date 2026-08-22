@@ -155,6 +155,7 @@ fn synth_program_and_build(
     let pc_to_native = synth_pc_to_native(&merged.text, &code_reloc_pcs, &exports);
 
     let program = Program {
+        target,
         data: Vec::new(),
         file_asm: Vec::new(),
         asm_weak_names: Vec::new(),

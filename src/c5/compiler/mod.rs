@@ -3034,6 +3034,7 @@ impl Compiler {
             });
         }
         Ok(Program {
+            target: self.target,
             data: self.data,
             file_asm: self.file_asm,
             asm_weak_names: self.asm_weak_names,

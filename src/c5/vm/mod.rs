@@ -1,7 +1,6 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use super::Target;
 use super::error::C5Error;
 use super::host::Host;
 use super::ir::FunctionSsa;
@@ -106,7 +105,7 @@ impl<H: Host> Vm<H> {
         // function alias of the unit resolves, in the lifted bodies
         // and in the data-slot function addresses.
         let ssa_funcs =
-            super::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false, true)
+            super::codegen::ssa::shadow::produce_ssa_funcs(&program, program.target, false, true)
                 .map(|mut funcs| {
                     super::codegen::ssa::shadow::bind_alias_imports(&program, &mut funcs);
                     funcs

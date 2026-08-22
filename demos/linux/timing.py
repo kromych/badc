@@ -14,6 +14,11 @@ Three modes select what is timed:
                                  preprocessor cost without instrumenting
                                  the compiler
 
+``--time-passes`` adds the per-pass breakdown of the ``-c`` run, read from
+the ``pass:`` lines a ``codegen_test`` build writes under
+``BADC_TIME_PASSES``. ``--reference cc`` adds a second compiler over the same
+units, for absolute standing.
+
 Per-child CPU and peak RSS come from ``wait4``, so they are exact per
 invocation rather than a sum over the run. Wall time under ``-j`` includes
 contention; run ``-j1`` for per-unit numbers that can be compared to each
@@ -28,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -87,18 +93,55 @@ def read_perf_stat(path: Path) -> dict:
     return out
 
 
+PASS_LINE = re.compile(r"^pass: (.+?) -- (\d+)us$")
+
+
+def parse_passes(err: str) -> dict[str, float]:
+    """Sum the `pass: <label> -- <us>us` lines a BADC_TIME_PASSES build
+    writes to stderr. A per-function pass emits one line per function, so
+    labels repeat and are accumulated."""
+    out: dict[str, float] = {}
+    for line in err.splitlines():
+        m = PASS_LINE.match(line.strip())
+        if m:
+            out[m.group(1)] = out.get(m.group(1), 0.0) + int(m.group(2)) / 1e6
+    return out
+
+
+def reference_recorded(gcc_argv: list[str], cc: str, obj: Path) -> list[str]:
+    """The command kbuild recorded, run by `cc`: every flag as recorded, with
+    the compiler and the two output destinations replaced so the tree is not
+    written. This is the cost the reference build itself pays for the unit."""
+    argv = [cc, *gcc_argv[1:]]
+    dep = str(obj) + ".d"
+    for i, a in enumerate(argv):
+        if a == "-o" and i + 1 < len(argv):
+            argv[i + 1] = str(obj)
+        elif a.startswith(("-Wp,-MMD,", "-Wp,-MD,")):
+            argv[i] = a[: a.index(",", 4) + 1] + dep
+        elif a == "-MF" and i + 1 < len(argv):
+            argv[i + 1] = dep
+    if "-o" not in argv:
+        argv += ["-o", str(obj)]
+    return argv
+
+
 def run_measured(cmd: list[str], cwd: Path, out_path: Path | None,
-                 timeout: float) -> dict:
+                 timeout: float, env: dict | None = None,
+                 full_err: bool = False) -> dict:
     """Run one child and return its wall time, CPU split, peak RSS, status.
 
     ``wait4`` supplies the child's own rusage, so the numbers are per
     invocation. ``Popen.returncode`` is set from the wait status to mark the
     child reaped; without it ``subprocess`` would try to reap it again.
+
+    ``full_err`` keeps the whole stderr rather than its first 400 bytes; the
+    pass timer writes one line per pass per function, which does not fit.
     """
     errf = tempfile.TemporaryFile()
     outf = open(out_path, "wb") if out_path else subprocess.DEVNULL
     t0 = time.monotonic()
-    p = subprocess.Popen(cmd, cwd=cwd, stdout=outf, stderr=errf)
+    p = subprocess.Popen(cmd, cwd=cwd, stdout=outf, stderr=errf, env=env)
     try:
         deadline = t0 + timeout
         while True:
@@ -118,9 +161,10 @@ def run_measured(cmd: list[str], cwd: Path, out_path: Path | None,
     rc = -1 if status == -1 else os.waitstatus_to_exitcode(status)
     p.returncode = rc
     errf.seek(0)
-    err = errf.read(4096).decode(errors="replace")
+    err = errf.read().decode(errors="replace") if full_err \
+        else errf.read(4096).decode(errors="replace")
     errf.close()
-    return {
+    rec = {
         "wall": wall,
         "utime": ru.ru_utime,
         "stime": ru.ru_stime,
@@ -128,6 +172,9 @@ def run_measured(cmd: list[str], cwd: Path, out_path: Path | None,
         "rc": rc,
         "err": err[:400],
     }
+    if full_err:
+        rec["passes"] = parse_passes(err)
+    return rec
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -158,6 +205,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--counters",
                     help="perf stat event list to record per unit, e.g. "
                          "instructions,cycles; costs one perf exec per unit")
+    ap.add_argument("--time-passes", action="store_true",
+                    help="set BADC_TIME_PASSES for the -c run and record the "
+                         "per-pass wall it reports; needs a badc built with "
+                         "--features codegen_test. The reported passes do not "
+                         "cover the whole process, so the report states the "
+                         "uninstrumented residual as its own line.")
+    ap.add_argument("--reference",
+                    help="also compile each unit with this reference compiler "
+                         "on the command kbuild recorded, for an absolute "
+                         "wall-clock standing. The recorded line carries work "
+                         "badc's reduced flag set does not do (warnings, "
+                         "stack protector, patchable entries), so the ratio "
+                         "is build cost against build cost, not pass for pass.")
     args = ap.parse_args(argv)
 
     badc = sweep.resolve_badc(args.badc)
@@ -179,6 +239,10 @@ def main(argv: list[str] | None = None) -> int:
     log(f"badc={badc} target={target} units={len(units)}/{n_all} "
         f"stride={args.stride} jobs={args.jobs} mode={args.mode} "
         f"opt={args.opt}")
+
+    pass_env = None
+    if args.time_passes:
+        pass_env = dict(os.environ, BADC_TIME_PASSES="1")
 
     def flags_for(gcc_argv: list[str]) -> list[str]:
         f = sweep.rewrite(gcc_argv)
@@ -203,10 +267,11 @@ def main(argv: list[str] | None = None) -> int:
         def wrap(c: list[str]) -> list[str]:
             return perf_wrap(c, args.counters, statf) if args.counters else c
 
-        def cheapest(cmd: list[str], out: Path | None) -> dict:
+        def cheapest(cmd: list[str], out: Path | None, env: dict | None = None,
+                     full_err: bool = False) -> dict:
             best = None
             for _ in range(args.reps):
-                r = run_measured(cmd, kdir, out, args.timeout)
+                r = run_measured(cmd, kdir, out, args.timeout, env, full_err)
                 if args.counters:
                     r["counters"] = read_perf_stat(statf)
                 if r["rc"] != 0:
@@ -224,11 +289,19 @@ def main(argv: list[str] | None = None) -> int:
                 pp_out.unlink()
         if args.mode in ("full", "both"):
             obj = scratch / (stem + ".o")
-            r = cheapest(wrap(base[:-1] + ["-c", "-o", str(obj), src]), None)
+            r = cheapest(wrap(base[:-1] + ["-c", "-o", str(obj), src]), None,
+                         pass_env, args.time_passes)
             rec["full"] = r
             rec["obj_bytes"] = obj.stat().st_size if obj.is_file() else 0
             if not args.keep_objects and obj.is_file():
                 obj.unlink()
+        if args.reference:
+            ref = scratch / (stem + ".ref.o")
+            rec["ref"] = cheapest(
+                reference_recorded(gcc_argv, args.reference, ref), None)
+            rec["ref_obj_bytes"] = ref.stat().st_size if ref.is_file() else 0
+            if not args.keep_objects and ref.is_file():
+                ref.unlink()
         if statf.is_file():
             statf.unlink()
         return rec
@@ -257,6 +330,8 @@ def main(argv: list[str] | None = None) -> int:
         "mode": args.mode,
         "opt": args.opt,
         "jobs": args.jobs,
+        "time_passes": bool(args.time_passes),
+        "reference": args.reference or "",
         "badc": str(badc),
         "kernel_dir": str(kdir),
         "wall_total": wall,

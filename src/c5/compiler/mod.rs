@@ -2826,6 +2826,8 @@ impl Compiler {
                 parse_start.elapsed().as_micros()
             );
         }
+        #[cfg(feature = "codegen_test")]
+        let post_start = std::time::Instant::now();
         // Trampolines must land before the code-reloc resolve
         // pass: every static-init function-pointer site that
         // names a libc symbol references its trampoline by
@@ -3026,6 +3028,13 @@ impl Compiler {
         };
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;
+        #[cfg(feature = "codegen_test")]
+        if std::env::var("BADC_TIME_PASSES").is_ok() {
+            eprintln!(
+                "pass: compiler post-parse (trampolines, relocs, imports, exports) -- {}us",
+                post_start.elapsed().as_micros()
+            );
+        }
         // `.set name, target` aliases from file-scope asm. The binding follows
         // the unit's `.globl` / `.weak` directives, in either order and from
         // either statement, so the object writer settles it.

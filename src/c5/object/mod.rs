@@ -927,7 +927,10 @@ fn compact_and_lower(
     use crate::c5::codegen::LowerMode;
     use crate::c5::codegen::ssa::shadow;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
-    let first = shadow::compact_program_data(program, target, segregate, options.optimize)?;
+    let first =
+        crate::c5::codegen::ssa::emit_common::time_pass("object::compact_program_data", || {
+            shadow::compact_program_data(program, target, segregate, options.optimize)
+        })?;
     let mode = match first.plan {
         Some(_) => LowerMode::DataLivenessProbe,
         None => LowerMode::Full,
@@ -1039,7 +1042,10 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
             }
             Target::LinuxX64 | Target::WindowsX64 => Machine::X86_64,
         };
-        return elf_reloc::write_relocatable(program, build, machine, target);
+        return crate::c5::codegen::ssa::emit_common::time_pass(
+            "object::write_relocatable",
+            || elf_reloc::write_relocatable(program, build, machine, target),
+        );
     }
     // The no-std build can't reach the relocatable writer; the
     // `-c` path lives in the CLI, which itself is std-only. If

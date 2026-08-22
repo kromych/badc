@@ -894,7 +894,12 @@ pub(crate) fn compact_program_data(
     }
     // Liveness is over program functions and data; the switch dispatch
     // form reaches the same set either way.
-    let funcs = produce_ssa_funcs(program, target, optimize, true)?;
+    // `[nested]`: inside `object::compact_program_data`, so the pass report
+    // lists it without adding it to a phase total twice.
+    let funcs =
+        super::emit_common::time_pass("object::compact_program_data ssa build [nested]", || {
+            produce_ssa_funcs(program, target, optimize, true)
+        })?;
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
     let sets = compute_live_sets(&funcs, program, false);

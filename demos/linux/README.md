@@ -162,6 +162,46 @@ compiler under test rather than the one being measured.
 Prerequisite, as for the sweep: a completed build. A `.cmd` file exists
 only for an object the tree has already built.
 
+## Cost of a compile (`timing.py`, `timing_report.py`)
+
+The sweep records whether a unit compiles; `timing.py` records what it cost.
+It replays the same corpus and writes a JSON record per unit -- wall time,
+user and system CPU and peak RSS from the child's own `wait4` rusage, plus
+the input sizes the cost should scale against. `--stride N` samples every
+Nth unit of the path-sorted corpus, which spreads the sample across
+subsystems rather than truncating it; `-j1` keeps the per-unit numbers free
+of contention.
+
+```sh
+python3 demos/linux/timing.py --kernel-dir <built tree> \
+    --badc target/release/badc --stride 6 --mode both \
+    --time-passes --reference gcc -j1 --out /tmp/cost.json
+python3 demos/linux/timing_report.py /tmp/cost.json
+```
+
+`--mode both` times `-E` and `-c` over the same unit, so their difference
+isolates the post-preprocessor cost with no instrumentation at all.
+
+`--time-passes` adds the per-pass breakdown, read from the `pass:` lines a
+`--features codegen_test` build writes to stderr under `BADC_TIME_PASSES`.
+The timers do not cover every instruction the process executes, so the report
+states the uninstrumented remainder as its own line rather than folding it
+into a pass. A label marked `[nested]` times a region inside another timed
+pass; it is listed among the costliest passes and kept out of the phase
+totals, so the columns still add up.
+
+`--reference cc` compiles each unit with a second compiler as well, on the
+command kbuild recorded. That line carries work badc's rewritten flag set
+does not do (warnings, stack protector, patchable function entries), so the
+ratio is build cost against build cost rather than pass for pass; a
+per-unit distribution and the units badc is furthest behind on come with it.
+
+`timing_report.py` also fits cost against preprocessed and object bytes by
+decile and reports a log-log slope, which is how a superlinear phase shows
+itself. `--exclude <substring>` drops units from the aggregate: one
+pathological unit can own most of a corpus and make every other share
+unreadable.
+
 ## badc-probed configuration (opt-in)
 
 The kernel decides what its code may use by probing the compiler at configure

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import statistics
 from pathlib import Path
 
@@ -59,14 +60,107 @@ def deciles(recs: list[dict], size_key: str, cost) -> list[tuple]:
     return out
 
 
+ARCH_TAG = re.compile(r"\s*\((x86_64|aarch64|riscv64)\)$")
+
+# Ordered: the first pattern matching a pass label decides its phase.
+PHASES: list[tuple[str, str]] = [
+    ("preprocess", r"^preprocess"),
+    ("parse + AST", r"^run_compile"),
+    ("post-parse", r"^compiler post-parse"),
+    ("ssa build", r"^ssa::(produce_ssa_funcs|mem2reg|slot_coalesce)"),
+    ("regalloc", r"^ssa::(reg_alloc|liveness)"),
+    ("native emit", r"^ssa_emit_"),
+    ("mid-end", r"^passes::"),
+    ("object", r"^object::"),
+]
+PHASE_RX = [(n, re.compile(p)) for n, p in PHASES]
+
+
+def phase_of(label: str) -> str:
+    for name, rx in PHASE_RX:
+        if rx.search(label):
+            return name
+    return "other"
+
+
+def pass_totals(recs: list[dict]) -> dict[str, float]:
+    """Per-pass CPU summed over units, arch suffix folded away."""
+    out: dict[str, float] = {}
+    for r in recs:
+        for label, secs in r.get("full", {}).get("passes", {}).items():
+            k = ARCH_TAG.sub("", label)
+            out[k] = out.get(k, 0.0) + secs
+    return out
+
+
+def report_passes(recs: list[dict], top: int) -> None:
+    tot_cpu = sum(cpu(r, "full") for r in recs)
+    all_passes = pass_totals(recs)
+    if not all_passes:
+        print("\n-- no pass timings recorded (needs a codegen_test build)")
+        return
+    # A `[nested]` label times a region inside another timed pass. It is a
+    # breakdown of its parent, not an addition to it, so it stays out of the
+    # phase totals and out of the instrumented sum.
+    passes = {k: v for k, v in all_passes.items() if "[nested]" not in k}
+    inst = sum(passes.values())
+    print(f"\n-- per-pass wall over {len(recs)} compiled units "
+          f"(instrumented {inst:.1f}s of {tot_cpu:.1f}s CPU)")
+    byphase: dict[str, float] = {}
+    for label, secs in passes.items():
+        byphase[phase_of(label)] = byphase.get(phase_of(label), 0.0) + secs
+    byphase["uninstrumented"] = tot_cpu - inst
+    print("   phase              seconds   %total   %instrumented")
+    for name, secs in sorted(byphase.items(), key=lambda kv: -kv[1]):
+        inst_share = "" if name == "uninstrumented" \
+            else f"{100.0 * secs / inst:>10.1f}"
+        print(f"   {name:<18} {secs:>8.2f} {100.0 * secs / tot_cpu:>8.1f}"
+              f"{inst_share}")
+    print(f"\n-- {top} costliest individual passes")
+    print("   seconds   %total  pass")
+    for label, secs in sorted(all_passes.items(), key=lambda kv: -kv[1])[:top]:
+        print(f"   {secs:>7.2f} {100.0 * secs / tot_cpu:>8.2f}  {label}")
+
+
+def report_reference(recs: list[dict], cc: str, top: int) -> None:
+    """badc against the reference compiler over the units both compiled."""
+    both = [r for r in recs if r.get("ref", {}).get("rc") == 0]
+    if not both:
+        print(f"\n-- {cc}: no unit compiled")
+        return
+    b = sum(cpu(r, "full") for r in both)
+    g = sum(cpu(r, "ref") for r in both)
+    ratios = sorted(cpu(r, "full") / cpu(r, "ref") for r in both
+                    if cpu(r, "ref") > 0)
+    print(f"\n-- badc vs {cc} on the recorded command line, "
+          f"{len(both)}/{len(recs)} units {cc} also compiled")
+    print(f"   badc {b:.1f}s CPU   {cc} {g:.1f}s CPU   ratio {b / g:.2f}x")
+    print(f"   per-unit badc/{cc}: p10 {pct(ratios, 10):.2f}  "
+          f"p50 {pct(ratios, 50):.2f}  p90 {pct(ratios, 90):.2f}  "
+          f"max {ratios[-1]:.2f}")
+    print(f"   {top} units where badc is furthest behind")
+    for r in sorted(both, key=lambda r: -(cpu(r, "full") / max(1e-6, cpu(r, "ref"))))[:top]:
+        print(f"   {cpu(r, 'full') / max(1e-6, cpu(r, 'ref')):>6.1f}x  "
+              f"badc {cpu(r, 'full'):6.2f}s  {cc} {cpu(r, 'ref'):5.2f}s  "
+              f"{r['src']}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("json", type=Path, nargs="+")
     ap.add_argument("--top", type=int, default=20)
+    ap.add_argument("--exclude", action="append", default=[],
+                    help="drop units whose source path contains this "
+                         "substring; repeatable. A single outlier unit can "
+                         "own most of the corpus cost, and the shares the "
+                         "rest of the corpus shows are then unreadable.")
     args = ap.parse_args()
 
     for path in args.json:
         d = json.loads(path.read_text())
+        if args.exclude:
+            d["units"] = [u for u in d["units"]
+                          if not any(x in u["src"] for x in args.exclude)]
         recs = [r for r in d["units"] if r.get("full", {}).get("rc") == 0
                 or r.get("pp", {}).get("rc") == 0]
         okfull = [r for r in d["units"] if r.get("full", {}).get("rc") == 0]
@@ -107,6 +201,11 @@ def main() -> int:
                 k = max(1, int(len(s) * frac))
                 print(f"   top {frac * 100:4.0f}% of units ({k:5d}) = "
                       f"{100.0 * sum(s[:k]) / tot:5.1f}% of CPU")
+
+            if has_full and d.get("time_passes"):
+                report_passes(okfull, args.top)
+            if has_full and d.get("reference"):
+                report_reference(okfull, d["reference"], args.top)
 
             rss = [r[key]["maxrss_kb"] / 1024.0 for r in base]
             print(f"\n-- peak RSS per invocation (MB): "

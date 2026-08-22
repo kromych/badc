@@ -8653,6 +8653,34 @@ pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<allo
     Some(out)
 }
 
+/// True when an extended-asm statement lowers to no machine code or data:
+/// after comment stripping the template holds only whitespace and statement
+/// separators, and no operand is a flag output (`=@cc` materializes a
+/// `setcc` even with an empty template). Such a statement writes no
+/// register and reads no operand, so the operand staging -- register
+/// saves, captures, input loads, output store-backs -- is dead and the
+/// frame scratch region it would use is not reserved. The IR instruction
+/// itself stays: it still orders memory accesses. The per-arch scratch
+/// sizing and emitters share this so the region and the staging agree.
+pub(crate) fn asm_statement_is_noop(
+    asm: &crate::c5::ir::AsmBlock,
+    syntax: AsmComments,
+) -> bool {
+    if asm
+        .operands
+        .iter()
+        .any(|op| matches!(op.constraint, crate::c5::ir::AsmConstraint::Flags(_)))
+    {
+        return false;
+    }
+    let Ok(raw) = core::str::from_utf8(&asm.template) else {
+        return false;
+    };
+    let stripped = strip_asm_comments(raw, syntax);
+    let text = stripped.as_deref().unwrap_or(raw);
+    text.bytes().all(|b| b.is_ascii_whitespace() || b == b';')
+}
+
 // Numbering behind the `%=` template escape and the two asm-label
 // uniquifiers. `reset_asm_instance` restarts it at the head of every
 // lowering, so the names an object carries are a function of the program
@@ -9695,6 +9723,59 @@ mod asm_comment_tests {
     fn block_comment_between_instructions() {
         let t = "btl %2,%1\n\t/* output condition code c*/\n\tsetc %[_cc_c]\n";
         assert_eq!(x86(t), "btl %2,%1\n\t \n\tsetc %[_cc_c]\n");
+    }
+}
+
+#[cfg(test)]
+mod asm_noop_tests {
+    use super::*;
+    use crate::c5::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
+
+    fn block(template: &str, constraints: &[AsmConstraint]) -> AsmBlock {
+        AsmBlock {
+            template: template.as_bytes().to_vec(),
+            operands: constraints
+                .iter()
+                .map(|&constraint| AsmOperand {
+                    constraint,
+                    is_output: false,
+                    is_rw: false,
+                    width: 8,
+                    seg: AsmSeg::None,
+                })
+                .collect(),
+            clobber_regs: 0x8,
+            clobber_fp_regs: 0,
+            clobber_memory: true,
+            volatile: true,
+        }
+    }
+
+    /// Templates that lower to nothing: empty, whitespace, statement
+    /// separators, comments. Operands and clobbers do not change that.
+    #[test]
+    fn empty_forms_are_noop() {
+        for t in ["", " \n\t", ";;\n", "/* note */", "// note", "# note"] {
+            let b = block(t, &[AsmConstraint::Reg, AsmConstraint::Bound(5)]);
+            assert!(asm_statement_is_noop(&b, AsmComments::X86), "x86 {t:?}");
+            assert!(asm_statement_is_noop(&b, AsmComments::A64), "a64 {t:?}");
+        }
+    }
+
+    /// Any remaining statement text keeps the full lowering, and a flag
+    /// output materializes a `setcc` even with an empty template.
+    #[test]
+    fn content_and_flag_outputs_are_not_noop() {
+        assert!(!asm_statement_is_noop(&block("nop", &[]), AsmComments::X86));
+        // aarch64 `#` comments only open a statement; here it is an operand.
+        assert!(!asm_statement_is_noop(
+            &block("mov x0, #1", &[]),
+            AsmComments::A64
+        ));
+        assert!(!asm_statement_is_noop(
+            &block("", &[AsmConstraint::Flags(4)]),
+            AsmComments::X86
+        ));
     }
 }
 

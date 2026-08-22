@@ -227,6 +227,14 @@ fn asm_scratch_bytes(func: &FunctionSsa) -> u32 {
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
+        // A no-op statement emits no staging (`emit_inline_asm`), so it
+        // needs no scratch.
+        if super::ssa::emit_common::asm_statement_is_noop(
+            asm,
+            super::ssa::emit_common::AsmComments::X86,
+        ) {
+            continue;
+        }
         let Ok(op_reg) =
             super::asm::assign_operand_regs(&asm.operands, asm.clobber_regs, asm.clobber_fp_regs)
         else {
@@ -7972,6 +7980,15 @@ fn emit_inline_asm_once(
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
     use super::asm::{AsmOpnd, Concrete};
+    // A statement that lowers to nothing keeps only its IR-level ordering
+    // effect; the operand staging around zero bytes of code is dead, and
+    // `asm_scratch_bytes` reserved no region for it.
+    if super::ssa::emit_common::asm_statement_is_noop(
+        asm,
+        super::ssa::emit_common::AsmComments::X86,
+    ) {
+        return true;
+    }
     // Expand `%=` once so the code text and any `.pushsection` content
     // share one instance number, then split off the section blocks; the
     // arch parser sees only the code text.
@@ -11312,6 +11329,48 @@ fn emit_hardened_jmp_r(
     }
     if abi.hardening.sls_indirect_jmp {
         super::encode::emit_int3(code);
+    }
+}
+
+#[cfg(test)]
+mod asm_scratch_tests {
+    use super::*;
+    use super::super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
+
+    fn asm_func(template: &str) -> FunctionSsa {
+        let asm = AsmBlock {
+            template: template.as_bytes().to_vec(),
+            operands: alloc::vec![AsmOperand {
+                constraint: AsmConstraint::Reg,
+                is_output: false,
+                is_rw: false,
+                width: 8,
+                seg: AsmSeg::None,
+            }],
+            clobber_regs: 0,
+            clobber_fp_regs: 0,
+            clobber_memory: true,
+            volatile: true,
+        };
+        FunctionSsa {
+            insts: alloc::vec![
+                Inst::Imm(0),
+                Inst::InlineAsm {
+                    asm: alloc::boxed::Box::new(asm),
+                    args: alloc::vec![0],
+                },
+            ],
+            ..Default::default()
+        }
+    }
+
+    /// A no-op template reserves no frame scratch; the same statement
+    /// with one instruction reserves the operand's save + capture slots.
+    #[test]
+    fn noop_template_needs_no_scratch() {
+        assert_eq!(asm_scratch_bytes(&asm_func("")), 0);
+        assert_eq!(asm_scratch_bytes(&asm_func("/* note */ ;")), 0);
+        assert!(asm_scratch_bytes(&asm_func("nop")) > 0);
     }
 }
 

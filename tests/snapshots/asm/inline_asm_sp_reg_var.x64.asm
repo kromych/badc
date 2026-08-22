@@ -28,11 +28,8 @@ Disassembly of section .text:
 <sp_output_operands>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movq	%rsp, %rax
-               	movq	%rax, -0x10(%rbp)
                	movq	%rsp, %rax
-               	movq	%rax, -0x10(%rbp)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
@@ -42,11 +39,9 @@ Disassembly of section .text:
                	cmpq	$0x1, %rax
                	je	<addr>
                	xorq	%rax, %rax
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movl	$0x2a, %eax
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 

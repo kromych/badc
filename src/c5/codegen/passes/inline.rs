@@ -19,7 +19,7 @@
 //!   relocates into the caller's frame and the prefix copies the argument
 //!   into it, the slot a return delivers through redirects to the
 //!   caller's object, and the reloc path relocates a callee's own slots
-//!   into the caller's frame.
+//!   and frame-kept parameter cells into the caller's frame.
 //!
 //! Those constraints cover the small leaf helpers (R / Ch / Maj /
 //! Sigma / sigma in SHA-512, `lerp` / `fastfloor` / `grad` in
@@ -673,14 +673,20 @@ fn is_inline_candidate(
     // body. The inliner drops them at splice time. A live LoadLocal
     // (its result feeds a downstream operand) would lose data after
     // the drop, so build a use mask first and reject the function if
-    // any allowed-but-dropped inst is actually live. A spilled
-    // parameter cell instead relocates into a caller slot, so its live
-    // accesses are admissible.
+    // any allowed-but-dropped inst is actually live. A parameter cell
+    // kept in the frame -- spilled or materialized -- instead
+    // relocates into a caller slot, so its live accesses are
+    // admissible.
     let used = value_use_mask(func);
     let spilled = spilled_param_cells(func);
     // Parameter cells the splice reads straight from the call-site
     // argument (a parameter past the ABI's argument registers).
     let forwarded = forwarded_param_cells(func, &used);
+    // Cells the reloc splice gives caller frame slots: spilled ones the
+    // body reads back, plus the unspilled ones it materializes with a
+    // synthesized initializing store.
+    let materialized = materialized_param_cells(func, &used);
+    let relocated_cells = relocated_param_cells(func, &used, &materialized);
     // Frame slots holding a register-passed struct parameter's bytes. A
     // body `LocalAddr` of one of these names the relocated cell the splice
     // copies the argument into; any other `LocalAddr` names a caller frame
@@ -704,7 +710,7 @@ fn is_inline_candidate(
     // into the caller's return slot, and a struct-parameter slot is filled
     // from the caller's argument. Every other single-block callee takes
     // the flat path and keeps its strict gates.
-    let reloc = func.blocks.len() > 1 || needs_reloc_splice(func);
+    let reloc = func.blocks.len() > 1 || needs_reloc_splice(func, &used);
     // On the flat path an aggregate return lives in the slot named by the
     // single `Return(LocalAddr(result_slot))`; the splice redirects that
     // slot to the caller's return slot. Reject shapes the redirect cannot
@@ -818,17 +824,18 @@ fn is_inline_candidate(
             | Inst::LoadIndexed { .. } => {}
             Inst::LocalAddr(s) => {
                 // On the reloc path the splice relocates a callee's own local
-                // slot (negative) and a spilled parameter cell (its prologue
-                // spill initializes the relocated slot) into the caller's
-                // frame, and redirects a struct-parameter slot to the caller's
-                // argument address; an unspilled non-aggregate cell (a
-                // stack-passed parameter, the reserved cells) has no
-                // reproducible initialization. On the flat path only a
-                // struct-parameter slot or the return's result slot
-                // (redirected to the caller's object) is admissible.
+                // slot (negative) and a frame-kept parameter cell -- spilled
+                // (its prologue spill initializes the relocated slot) or
+                // materialized (the splice synthesizes that store from the
+                // argument) -- into the caller's frame, and redirects a
+                // struct-parameter slot to the caller's argument address; the
+                // remaining cells (past the parameters, FP, the reserved
+                // cells) have no reproducible initialization. On the flat
+                // path only a struct-parameter slot or the return's result
+                // slot (redirected to the caller's object) is admissible.
                 if reloc {
-                    if *s >= 0 && !spilled.contains(s) && !param_agg_slots.contains(s) {
-                        say(format_args!("LocalAddr of unspilled parameter cell {s}"));
+                    if *s >= 0 && !relocated_cells.contains(s) && !param_agg_slots.contains(s) {
+                        say(format_args!("LocalAddr of non-relocated parameter cell {s}"));
                         return false;
                     }
                 } else if !param_agg_slots.contains(s) && Some(*s) != redirect_slot {
@@ -899,14 +906,15 @@ fn is_inline_candidate(
                 }
             }
             Inst::LoadLocal { off, volatile, .. } => {
-                // A relocated slot read (own local or spilled parameter cell
-                // on the reloc path) is kept by the splice, and a forwarded
-                // parameter cell's read resolves to the call-site argument on
-                // either path. Otherwise the splice drops the read, which is
-                // safe only when the result is dead in the callee body and
-                // the access is not volatile (C99 5.1.2.3p2: a volatile read
-                // is a side effect even when the value is unused).
-                let relocated = reloc && (*off < 0 || spilled.contains(off));
+                // A relocated slot read (own local or frame-kept parameter
+                // cell on the reloc path) is kept by the splice, and a
+                // forwarded parameter cell's read resolves to the call-site
+                // argument on either path. Otherwise the splice drops the
+                // read, which is safe only when the result is dead in the
+                // callee body and the access is not volatile (C99 5.1.2.3p2:
+                // a volatile read is a side effect even when the value is
+                // unused).
+                let relocated = reloc && (*off < 0 || relocated_cells.contains(off));
                 if !relocated && !forwarded.contains(off) && (used[idx] || *volatile) {
                     say(format_args!("live or volatile LoadLocal at v{}", idx));
                     return false;
@@ -917,7 +925,7 @@ fn is_inline_candidate(
                 // store is dropped; a drop into a struct-parameter slot would
                 // leave the redirected read stale, and a dropped volatile
                 // store would elide a required access (C99 6.7.3p6).
-                let relocated = reloc && (*off < 0 || spilled.contains(off));
+                let relocated = reloc && (*off < 0 || relocated_cells.contains(off));
                 if !relocated && (param_agg_slots.contains(off) || *volatile) {
                     say(format_args!(
                         "StoreLocal into a struct-parameter slot or volatile at v{}",
@@ -1016,11 +1024,12 @@ fn is_inline_candidate(
 /// Parameter cells (slots >= 2) whose first program-order access is the
 /// walker's prologue spill: a `StoreLocal` of the cell's own `ParamRef`
 /// (the i-th declared parameter sits at cell i + 2). Only such a cell
-/// relocates into a caller frame slot at the splice -- the kept spill
-/// then initializes the relocated slot with the remapped argument. A
+/// relocates into a caller frame slot at the splice with the kept spill
+/// initializing the relocated slot from the remapped argument. A
 /// stack-passed parameter's cell has no spill (the caller's
-/// outgoing-argument slot arrives initialized), so relocating it would
-/// read an uninitialized slot.
+/// outgoing-argument slot arrives initialized); the splice materializes
+/// it instead, synthesizing the store this spill provides
+/// (`materialized_param_cells`).
 fn spilled_param_cells(func: &FunctionSsa) -> BTreeSet<i64> {
     let mut seen: BTreeSet<i64> = BTreeSet::new();
     let mut spilled: BTreeSet<i64> = BTreeSet::new();
@@ -1056,12 +1065,12 @@ fn spilled_param_cells(func: &FunctionSsa) -> BTreeSet<i64> {
 /// by-address struct return in `n_params`, which bounds the index because
 /// every splice site passes at least that many arguments.
 ///
-/// Read-only shapes only: a `LocalAddr` has no frame slot to point at
-/// after the splice, and a `StoreLocal` has no reproducible caller
-/// storage (it also keeps this set disjoint from `spilled_param_cells`,
-/// whose spill is such a store). A floating-point read is out -- the body
-/// reads the walker's entry conversion, not the raw cell. A cell whose
-/// reads are all dead keeps the established drop. `used` is
+/// Read-only shapes only: a stored or address-taken cell needs frame
+/// storage and is materialized instead (`materialized_param_cells`; the
+/// spill defining `spilled_param_cells` is such a store, so all three
+/// sets are disjoint). A floating-point read is out -- the body reads
+/// the walker's entry conversion, not the raw cell. A cell whose reads
+/// are all dead keeps the established drop. `used` is
 /// `value_use_mask(func)`.
 fn forwarded_param_cells(func: &FunctionSsa, used: &[bool]) -> BTreeSet<i64> {
     let mut live: BTreeSet<i64> = BTreeSet::new();
@@ -1094,6 +1103,74 @@ fn forwarded_param_cells(func: &FunctionSsa, used: &[bool]) -> BTreeSet<i64> {
     live.difference(&barred).copied().collect()
 }
 
+/// Parameter cells (slots >= 2) without a prologue spill that the reloc
+/// splice materializes: the cell relocates into a fresh caller slot and
+/// the splice prefix synthesizes the initializing store the spill would
+/// have provided, from the call-site argument. A stack-passed
+/// parameter's cell arrives holding the argument's full eight bytes
+/// (the caller's outgoing-argument store, System V AMD64 3.2.3 /
+/// AAPCS64 6.4.2, restriped by the prologue), so an I64 store of the
+/// argument reproduces the entry state; the body's accesses -- an
+/// assignment among them -- then relocate with the cell.
+///
+/// Materialized are the cells forwarding cannot resolve (a store, a
+/// taken address, or a volatile read) that carry an access the splice
+/// must keep (a live or volatile access, or the taken address);
+/// read-only cells stay forwarded and dead traffic keeps the
+/// established drop. An FP-kind access reads the walker's entry
+/// conversion rather than the raw cell, and a cell past the declared
+/// parameters has no argument; both bar the cell. `used` is
+/// `value_use_mask(func)`.
+fn materialized_param_cells(func: &FunctionSsa, used: &[bool]) -> BTreeSet<i64> {
+    let spilled = spilled_param_cells(func);
+    let mut unforwardable: BTreeSet<i64> = BTreeSet::new();
+    let mut kept: BTreeSet<i64> = BTreeSet::new();
+    let mut barred: BTreeSet<i64> = BTreeSet::new();
+    for (idx, inst) in func.insts.iter().enumerate() {
+        let (cell, fp) = match inst {
+            Inst::LocalAddr(s) if *s >= 2 => {
+                unforwardable.insert(*s);
+                kept.insert(*s);
+                (*s, false)
+            }
+            Inst::StoreLocal {
+                off,
+                kind,
+                volatile,
+                ..
+            } if *off >= 2 => {
+                unforwardable.insert(*off);
+                if *volatile {
+                    kept.insert(*off);
+                }
+                (*off, matches!(kind, StoreKind::F32 | StoreKind::F64))
+            }
+            Inst::LoadLocal {
+                off,
+                kind,
+                volatile,
+            } if *off >= 2 => {
+                if *volatile {
+                    unforwardable.insert(*off);
+                }
+                if *volatile || used[idx] {
+                    kept.insert(*off);
+                }
+                (*off, matches!(kind, LoadKind::F32 | LoadKind::F64))
+            }
+            _ => continue,
+        };
+        if fp || cell - 2 >= func.n_params as i64 {
+            barred.insert(cell);
+        }
+    }
+    unforwardable
+        .intersection(&kept)
+        .copied()
+        .filter(|c| !barred.contains(c) && !spilled.contains(c))
+        .collect()
+}
+
 /// Which instructions a block actually contains. Folding a constant
 /// condition leaves the dead arm's instructions in the flat array with
 /// no block naming them; a scan over the raw array would read code that
@@ -1112,10 +1189,15 @@ fn in_block_mask(func: &FunctionSsa) -> Vec<bool> {
 }
 
 /// Parameter cells a splice of `callee` has to give frame slots of its
-/// own: those the body spills and then reads back through a slot.
-fn relocated_param_cells(callee: &FunctionSsa, callee_used: &[bool]) -> BTreeSet<i64> {
+/// own: those the body spills and then reads back through a slot, plus
+/// the materialized cells, whose slot the splice initializes instead.
+fn relocated_param_cells(
+    callee: &FunctionSsa,
+    callee_used: &[bool],
+    materialized: &BTreeSet<i64>,
+) -> BTreeSet<i64> {
     let spilled = spilled_param_cells(callee);
-    callee
+    let mut out: BTreeSet<i64> = callee
         .insts
         .iter()
         .enumerate()
@@ -1129,7 +1211,9 @@ fn relocated_param_cells(callee: &FunctionSsa, callee_used: &[bool]) -> BTreeSet
             _ => None,
         })
         .filter(|s| spilled.contains(s))
-        .collect()
+        .collect();
+    out.extend(materialized.iter().copied());
+    out
 }
 
 /// Per-callee body facts the frame gates and the splice read. Each is
@@ -1140,6 +1224,9 @@ fn relocated_param_cells(callee: &FunctionSsa, callee_used: &[bool]) -> BTreeSet
 struct CalleeFacts {
     /// Parameter cells a splice gives frame slots of its own.
     relocated: BTreeSet<i64>,
+    /// Cells in `relocated` without a prologue spill; the splice prefix
+    /// synthesizes their initializing store from the call-site argument.
+    materialized: BTreeSet<i64>,
     /// Parameter cells whose reads resolve to the call-site argument.
     forwarded: BTreeSet<i64>,
     /// Frame slots one splice relocates into the caller: the callee's
@@ -1147,6 +1234,8 @@ struct CalleeFacts {
     /// body that reads its parameters out of the argument values and
     /// holds nothing in the frame costs nothing.
     frame_cost: i64,
+    /// Routed to the relocating splice (`needs_reloc_splice`).
+    needs_reloc: bool,
 }
 
 /// Facts keyed by callee entry pc.
@@ -1246,13 +1335,17 @@ struct Callee<'a> {
 
 fn callee_facts(callee: &FunctionSsa) -> CalleeFacts {
     let used = value_use_mask(callee);
-    let relocated = relocated_param_cells(callee, &used);
+    let materialized = materialized_param_cells(callee, &used);
+    let relocated = relocated_param_cells(callee, &used, &materialized);
     let forwarded = forwarded_param_cells(callee, &used);
+    let needs_reloc = needs_reloc_splice(callee, &used);
     let frame_cost = callee.locals + relocated.len() as i64;
     CalleeFacts {
         relocated,
+        materialized,
         forwarded,
         frame_cost,
+        needs_reloc,
     }
 }
 
@@ -1827,16 +1920,16 @@ fn splice_multi_block(
     let mut original = core::mem::take(caller);
     let agg_map = merge_agg_descs(&mut original.agg_descs, &callee.agg_descs);
     let splice_block = original.blocks[splice_block_idx].clone();
-    // Spilled parameter cells that need materialization -- the cell's
-    // address is taken, an access is volatile, or an access whose value the
-    // body consumes -- relocate into fresh caller slots below the callee's
-    // relocated own locals; the kept prologue spill (`StoreLocal` of the
-    // `ParamRef`, first access by construction) initializes the relocated
-    // cell with the remapped argument value. A cell touched only by dead
-    // non-volatile accesses (the leftover spill itself) keeps the
-    // established drop; the candidate filter rejects live accesses to
-    // unspilled cells.
+    // Frame-kept parameter cells -- the cell's address is taken, an access
+    // is volatile, or an access whose value the body consumes -- relocate
+    // into fresh caller slots below the callee's relocated own locals. A
+    // spilled cell's kept prologue spill (`StoreLocal` of the `ParamRef`,
+    // first access by construction) initializes the relocated cell with
+    // the remapped argument value; a materialized cell has no spill and
+    // the prefix synthesizes that store instead. A cell touched only by
+    // dead non-volatile accesses keeps the established drop.
     let param_cells = &facts.relocated;
+    let materialized = &facts.materialized;
     // Parameter cells whose reads resolve to the call-site argument
     // instead of a frame slot; disjoint from `param_cells`.
     let forwarded = &facts.forwarded;
@@ -1939,6 +2032,8 @@ fn splice_multi_block(
         // The by-value aggregate parameter copies close the prefix block:
         // a `LocalAddr` of the relocated cell plus the `Mcpy` per parameter.
         at += 2 * param_slot_copy.len() as u32;
+        // One synthesized initializing store per materialized cell.
+        at += materialized.len() as u32;
         // The aggregate-return copy opens the postfix block: one
         // `LocalAddr(ret_slot)` plus a load and a store per piece. The ids
         // are position arithmetic like everything else; only the copy's own
@@ -2117,6 +2212,24 @@ fn splice_multi_block(
                 src,
                 size: d.size as i64,
                 align: d.align,
+            });
+            new_inst_src.push((0, 0));
+            new_f32.push(false);
+        }
+        // The initializing store a materialized cell's missing prologue
+        // spill would have provided: the argument occupies its outgoing
+        // stack slot as a full eight-byte value, so an I64 store of the
+        // call-site argument reproduces the cell's entry state.
+        for &cell in materialized.iter() {
+            let value = call_args
+                .get((cell - 2) as usize)
+                .map(|&a| map_v(a, &remap))
+                .unwrap_or(NO_VALUE);
+            new_insts.push(Inst::StoreLocal {
+                off: param_cell_reloc[&cell],
+                value,
+                kind: StoreKind::I64,
+                volatile: false,
             });
             new_inst_src.push((0, 0));
             new_f32.push(false);
@@ -2729,15 +2842,17 @@ fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
 
 /// Whether a single-block callee must go through `splice_multi_block`
 /// rather than the flat single-block path. The flat path never allocates
-/// a caller slot for an own local, so a body that takes the address of
-/// one -- an asm output written through it, an aggregate the body builds
-/// in the frame before copying it out -- needs the relocation the
-/// multi-block splice performs. The one exception is the slot a flat
-/// aggregate return redirects to the caller's return slot. Multi-block
-/// callees always take that path regardless; this only reclassifies
-/// single-block ones, and `is_inline_candidate` derives its `reloc` gate
-/// from the same predicate.
-fn needs_reloc_splice(c: &FunctionSsa) -> bool {
+/// a caller slot, so a body that takes the address of an own local -- an
+/// asm output written through it, an aggregate the body builds in the
+/// frame before copying it out -- needs the relocation the multi-block
+/// splice performs, and so does a parameter cell kept in the frame
+/// (spilled and read back, or materialized from the argument). The one
+/// exception is the slot a flat aggregate return redirects to the
+/// caller's return slot. Multi-block callees always take that path
+/// regardless; this only reclassifies single-block ones, and
+/// `is_inline_candidate` derives its `reloc` gate from the same
+/// predicate. `used` is `value_use_mask(c)`.
+fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
     if c.blocks.len() != 1 {
         return false;
     }
@@ -2749,6 +2864,10 @@ fn needs_reloc_splice(c: &FunctionSsa) -> bool {
     // relocating path emits. A cell that binds to the argument instead
     // needs nothing this path does not already provide.
     if needs_param_agg_copy(c) {
+        return true;
+    }
+    let materialized = materialized_param_cells(c, used);
+    if !relocated_param_cells(c, used, &materialized).is_empty() {
         return true;
     }
     let result = flat_result_slot(c);
@@ -2878,7 +2997,7 @@ fn inline_caller(
                 // let the call survive the local walk; the multi-block pass
                 // runs once over the whole function.
                 let inlined =
-                    inlined.filter(|(c, ..)| c.blocks.len() == 1 && !needs_reloc_splice(c));
+                    inlined.filter(|(c, ..)| c.blocks.len() == 1 && !facts[&c.ent_pc].needs_reloc);
                 if let Some((callee, call_args, ret_slot, callee_pc)) = inlined {
                     let agg_map: &[u32] = agg_maps
                         .get(&callee_pc)
@@ -3101,7 +3220,7 @@ fn inline_caller(
             matches!(&caller.insts[pc as usize],
                 Inst::Call { target_pc, args, ret_slot_local, .. }
                 if callees.get(target_pc).is_some_and(|c| (c.blocks.len() > 1
-                    || needs_reloc_splice(c))
+                    || facts[target_pc].needs_reloc)
                     && args.len() >= c.n_params
                     && (c.ret_agg.is_none() || *ret_slot_local != 0)))
         })
@@ -3218,7 +3337,7 @@ fn inline_caller(
                 } = &caller.insts[pc as usize]
                     && let Some(c) = callees.get(target_pc)
                     && !unaffordable.contains(target_pc)
-                    && (c.blocks.len() > 1 || needs_reloc_splice(c))
+                    && (c.blocks.len() > 1 || facts[target_pc].needs_reloc)
                     // Same argument-count guard as the single-block path;
                     // an aggregate-returning callee also needs the site's
                     // return slot for the postfix copy.
@@ -3973,11 +4092,13 @@ mod tests {
     }
 
     /// A volatile access the splice would drop keeps the callee out of
-    /// line (C99 5.1.2.3p2 / 6.7.3p6): a dead read of a volatile
-    /// parameter cell and a volatile local store both reject; the same
-    /// shapes without `volatile` stay candidates. A callee without inline
-    /// asm keeps the strict flat-path gates, so the negative-slot store
-    /// still rejects when volatile.
+    /// line (C99 5.1.2.3p2 / 6.7.3p6): a dead volatile read of a cell
+    /// past the declared parameters (no argument to materialize the cell
+    /// from) and a volatile local store both reject; the same shapes
+    /// without `volatile` stay candidates. A callee without inline asm
+    /// keeps the strict flat-path gates, so the negative-slot store
+    /// still rejects when volatile. A volatile read of a declared
+    /// parameter's cell is materialized instead and stays a candidate.
     #[test]
     fn volatile_access_rejects_inlining() {
         let abi = Target::LinuxX64.abi();
@@ -3994,11 +4115,27 @@ mod tests {
             insts,
             ..Default::default()
         };
+        let in_range = single(
+            alloc::vec![
+                Inst::LoadLocal {
+                    off: 2,
+                    kind: LoadKind::I32,
+                    volatile: true,
+                },
+                Inst::Imm(1),
+            ],
+            1,
+        );
+        assert_eq!(
+            materialized_param_cells(&in_range, &value_use_mask(&in_range)),
+            BTreeSet::from([2])
+        );
+        assert!(is_inline_candidate(&in_range, 32, abi, None));
         for volatile in [false, true] {
             let read = single(
                 alloc::vec![
                     Inst::LoadLocal {
-                        off: 2,
+                        off: 3,
                         kind: LoadKind::I32,
                         volatile,
                     },
@@ -4036,9 +4173,10 @@ mod tests {
     /// multi-block splice relocates -- and `needs_reloc_splice` routes it
     /// off the flat path. An input-only single-block asm (`__wrmsr` shape)
     /// is likewise admitted. The same output addressing a parameter cell
-    /// relocates only when the walker's prologue spill precedes it (the
-    /// spill initializes the fresh caller slot); without the spill (a
-    /// stack-passed parameter's cell) the candidate is rejected.
+    /// relocates when the walker's prologue spill precedes it (the spill
+    /// initializes the fresh caller slot); without the spill and without
+    /// a declared parameter to materialize from, the candidate is
+    /// rejected.
     #[test]
     fn output_asm_to_own_local_inlines() {
         use crate::c5::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
@@ -4103,14 +4241,16 @@ mod tests {
         };
         let own = out_via_local(-1, false);
         assert!(is_inline_candidate(&own, 32, abi, None));
-        assert!(needs_reloc_splice(&own));
+        assert!(needs_reloc_splice(&own, &value_use_mask(&own)));
         let param = out_via_local(2, true);
         assert!(is_inline_candidate(&param, 32, abi, None));
-        assert!(needs_reloc_splice(&param));
+        assert!(needs_reloc_splice(&param, &value_use_mask(&param)));
+        // Without the spill and without a matching argument (n_params is
+        // 0 here), the cell can be neither relocated nor materialized.
         let unspilled = out_via_local(2, false);
         let mut reason = alloc::string::String::new();
         assert!(!is_inline_candidate(&unspilled, 32, abi, Some(&mut reason)));
-        assert_eq!(reason, "LocalAddr of unspilled parameter cell 2");
+        assert_eq!(reason, "LocalAddr of non-relocated parameter cell 2");
 
         // Input-only single-block asm: admitted, routed to the reloc splice.
         let input_only = FunctionSsa {
@@ -4150,7 +4290,7 @@ mod tests {
             ..Default::default()
         };
         assert!(is_inline_candidate(&input_only, 32, abi, None));
-        assert!(needs_reloc_splice(&input_only));
+        assert!(needs_reloc_splice(&input_only, &value_use_mask(&input_only)));
     }
 
     /// Both segment-access variants are inline candidates, and the operand
@@ -4351,8 +4491,9 @@ mod tests {
     /// spill, so its cell read is resolved to the call-site argument
     /// rather than relocated. The read's own width conversion carries
     /// over: signed narrow sign-extends, unsigned narrow masks. A write
-    /// to the cell, or its address being taken, keeps the rejection --
-    /// neither has a reproducible initialization in the caller frame.
+    /// to the cell, or its address being taken, materializes the cell
+    /// instead; a cell past the declared parameters or with an FP-kind
+    /// access keeps the rejection.
     #[test]
     fn stack_passed_parameter_cell_is_read_from_the_argument() {
         let abi = Target::LinuxX64.abi();
@@ -4450,7 +4591,10 @@ mod tests {
                 rhs_imm: 0xffff
             }
         ));
-        // A cell the body writes, or whose address it takes, stays out.
+        // A cell the body writes, or whose address it takes, cannot
+        // forward; it is materialized -- relocated into a fresh caller
+        // slot the splice initializes from the argument -- and the callee
+        // routes to the relocating splice.
         let written = cell_read(
             LoadKind::I64,
             Some(Inst::StoreLocal {
@@ -4460,18 +4604,170 @@ mod tests {
                 volatile: false,
             }),
         );
-        assert!(forwarded_param_cells(&written, &value_use_mask(&written)).is_empty());
+        let used = value_use_mask(&written);
+        assert!(forwarded_param_cells(&written, &used).is_empty());
+        assert_eq!(
+            materialized_param_cells(&written, &used),
+            BTreeSet::from([3])
+        );
+        assert!(needs_reloc_splice(&written, &used));
         let mut reason = alloc::string::String::new();
-        assert!(!is_inline_candidate(&written, 32, abi, Some(&mut reason)));
-        assert_eq!(reason, "live or volatile LoadLocal at v2");
+        assert!(
+            is_inline_candidate(&written, 32, abi, Some(&mut reason)),
+            "{reason}"
+        );
         let addressed = cell_read(LoadKind::I64, Some(Inst::LocalAddr(3)));
-        assert!(forwarded_param_cells(&addressed, &value_use_mask(&addressed)).is_empty());
-        assert!(!is_inline_candidate(&addressed, 32, abi, None));
+        let used = value_use_mask(&addressed);
+        assert!(forwarded_param_cells(&addressed, &used).is_empty());
+        assert_eq!(
+            materialized_param_cells(&addressed, &used),
+            BTreeSet::from([3])
+        );
+        assert!(is_inline_candidate(&addressed, 32, abi, None));
         // A cell index past the declared parameters has no argument.
         let mut past = cell_read(LoadKind::I64, None);
         past.n_params = 1;
         assert!(forwarded_param_cells(&past, &value_use_mask(&past)).is_empty());
         assert!(!is_inline_candidate(&past, 32, abi, None));
+        // An FP-kind access reads the walker's entry conversion, not the
+        // raw cell: neither forwarded nor materialized.
+        let fp = cell_read(
+            LoadKind::F64,
+            Some(Inst::StoreLocal {
+                off: 3,
+                value: 3,
+                kind: StoreKind::F64,
+                volatile: false,
+            }),
+        );
+        let used = value_use_mask(&fp);
+        assert!(forwarded_param_cells(&fp, &used).is_empty());
+        assert!(materialized_param_cells(&fp, &used).is_empty());
+        assert!(!is_inline_candidate(&fp, 32, abi, None));
+    }
+
+    /// A stack-passed parameter's cell the body assigns is materialized:
+    /// the splice relocates it into a fresh caller slot, synthesizes the
+    /// initializing store from the call-site argument in the prefix, and
+    /// the call-free callee's sites share one pooled region.
+    #[test]
+    fn assigned_stack_passed_parameter_cell_is_materialized() {
+        let abi = Target::LinuxX64.abi();
+        // v0 read cell 2, v1 = v0 + 1, v2 write it back, v3 re-read;
+        // Return(v3).
+        let insts = alloc::vec![
+            Inst::LoadLocal {
+                off: 2,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 0,
+                rhs_imm: 1,
+            },
+            Inst::StoreLocal {
+                off: 2,
+                value: 1,
+                kind: StoreKind::I64,
+                volatile: false,
+            },
+            Inst::LoadLocal {
+                off: 2,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+        ];
+        let callee = FunctionSsa {
+            ent_pc: 100,
+            n_params: 1,
+            inst_src: alloc::vec![(0, 0); 4],
+            f32_values: alloc::vec![false; 4],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..4,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            }],
+            insts,
+            ..Default::default()
+        };
+        let used = value_use_mask(&callee);
+        assert_eq!(materialized_param_cells(&callee, &used), BTreeSet::from([2]));
+        assert!(needs_reloc_splice(&callee, &used));
+        assert!(is_inline_candidate(&callee, 32, abi, None));
+        let call = |arg: ValueId| Inst::Call {
+            target_pc: 100,
+            args: alloc::vec![arg],
+            fixed_args: 1,
+            fp_return: false,
+            fp_arg_mask: 0,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        let caller_insts = alloc::vec![
+            Inst::Imm(41),
+            call(0),
+            Inst::Imm(7),
+            call(2),
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 1,
+                rhs: 3,
+            },
+        ];
+        let caller = FunctionSsa {
+            ent_pc: 1,
+            inst_src: alloc::vec![(0, 0); 5],
+            f32_values: alloc::vec![false; 5],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..5,
+                terminator: Terminator::Return(4),
+                exit_acc: 4,
+            }],
+            insts: caller_insts,
+            ..Default::default()
+        };
+        let mut funcs = alloc::vec![caller, callee];
+        run(&mut funcs, 32, abi);
+        let caller = &funcs[0];
+        assert!(
+            caller.insts.iter().all(|i| !matches!(i, Inst::Call { .. })),
+            "both sites must inline"
+        );
+        assert_eq!(caller.locals, 1, "two sites share one 1-slot region");
+        // Each site carries the synthesized init (an I64 store of the
+        // argument Imm into the relocated slot) plus the body's store.
+        let stores: Vec<i64> = caller
+            .insts
+            .iter()
+            .filter_map(|i| match i {
+                Inst::StoreLocal {
+                    off,
+                    value,
+                    kind: StoreKind::I64,
+                    volatile: false,
+                } => {
+                    if matches!(caller.insts.get(*value as usize), Some(Inst::Imm(k)) if *k == 41 || *k == 7)
+                    {
+                        Some(*off)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(stores, alloc::vec![-1, -1], "one init store per site");
+        assert!(
+            caller
+                .insts
+                .iter()
+                .all(|i| !matches!(i, Inst::LoadLocal { off, .. } if *off >= 0)),
+            "every cell read must address the relocated slot"
+        );
     }
 
     /// One-instruction leaf returning a constant: the smallest shape the

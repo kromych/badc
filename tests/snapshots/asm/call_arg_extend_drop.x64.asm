@@ -54,40 +54,30 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<cell_escapes>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	%edi, 0x10(%rbp)
-               	leaq	0x10(%rbp), %rax
-               	movslq	(%rax), %rax
-               	leaq	(%rax,%rax,2), %rax
-               	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
                	movl	$0x14, %edi
                	callq	<addr>
                	cmpq	$0x1a6d, %rax           # imm = 0x1A6D
                	je	<addr>
                	movl	$0x2, %eax
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x7, %rdi
-               	callq	<addr>
+               	movabsq	$-0x7, %rax
+               	movl	%eax, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rax
+               	movslq	(%rax), %rax
+               	leaq	(%rax,%rax,2), %rax
                	cmpq	$-0x15, %rax
                	je	<addr>
                	movl	$0x3, %eax
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq

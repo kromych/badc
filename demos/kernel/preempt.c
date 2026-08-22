@@ -65,6 +65,7 @@ static void spin_unlock(volatile unsigned *l) {
 /* Defined with the portable helpers below; forward-declared for the arch
  * setup code above them. */
 static void serial_puts(const char *s);
+static void serial_putdec(unsigned v);
 
 #if defined(__x86_64__)
 
@@ -163,6 +164,86 @@ static void idt_set(int vec, void *handler, unsigned short cs) {
     e[12] = e[13] = e[14] = e[15] = 0;
 }
 
+/* ---- Diagnostic gates for the vectors the demo does not install. Without
+ *      them a fault escalates to #DF and then a triple fault, which resets the
+ *      guest with nothing on the serial line. ---- */
+
+#define FAULT_STUB_BYTES 16
+/* Vectors whose exception pushes an error code: 8, 10..14, 17, 21, 29, 30. */
+#define FAULT_ERRCODE_MASK 0x60227D00u
+
+static void serial_puthex(UINTN v) {
+    char buf[16];
+    int n = 0;
+    if (v == 0) {
+        buf[n++] = '0';
+    }
+    while (v) {
+        unsigned d = (unsigned)(v & 0xF);
+        buf[n++] = (char)(d < 10 ? '0' + d : 'a' + (d - 10));
+        v >>= 4;
+    }
+    while (n) {
+        serial_putc(buf[--n]);
+    }
+}
+
+/* Called by the stubs with the stack pointer at the pushed vector number: above
+ * it sits the CPU's error code, where architecturally present, then RIP. */
+void fault_report(UINTN *frame) {
+    /* The pushed immediate arrives sign-extended; the vector is 8 bits. */
+    unsigned vec = (unsigned)(frame[0] & 0xFF);
+    int with_err = vec < 32 && ((FAULT_ERRCODE_MASK >> vec) & 1u);
+    serial_puts("BADC-PREEMPT: unhandled vector ");
+    serial_putdec(vec);
+    serial_puts(" error 0x");
+    serial_puthex(with_err ? frame[1] : 0);
+    serial_puts(" rip 0x");
+    serial_puthex(with_err ? frame[2] : frame[1]);
+    serial_puts("\r\n");
+}
+
+/* Common tail of every stub: report, then halt. Naked, so the pushed vector
+ * stays where fault_report expects it. */
+__attribute__((naked)) void fault_isr(void) {
+    __asm__ volatile("mov %rsp, %rcx\n\t" /* arg1 = &vector (MS x64 ABI) */
+                     "and $-16, %rsp\n\t"
+                     "sub $32, %rsp\n\t"
+                     "call fault_report\n\t"
+                     "fault_halted:\n\t"
+                     "hlt\n\t"
+                     "jmp fault_halted\n\t");
+}
+
+/* One stub per vector, FAULT_STUB_BYTES apart, so gate N is stub N. */
+#define FAULT_STR_(x) #x
+#define FAULT_STR(x) FAULT_STR_(x)
+#define FAULT_STUB(v)                                                          \
+    ".balign " FAULT_STR(FAULT_STUB_BYTES) "\n\tpush $" #v "\n\tjmp fault_isr\n\t"
+#define FAULT_STUB16(hi)                                                       \
+    FAULT_STUB(hi##0)                                                          \
+    FAULT_STUB(hi##1) FAULT_STUB(hi##2) FAULT_STUB(hi##3) FAULT_STUB(hi##4)    \
+    FAULT_STUB(hi##5) FAULT_STUB(hi##6) FAULT_STUB(hi##7) FAULT_STUB(hi##8)    \
+    FAULT_STUB(hi##9) FAULT_STUB(hi##a) FAULT_STUB(hi##b) FAULT_STUB(hi##c)    \
+    FAULT_STUB(hi##d) FAULT_STUB(hi##e) FAULT_STUB(hi##f)
+
+__attribute__((naked)) void fault_stubs(void) {
+    __asm__ volatile(FAULT_STUB16(0x0) FAULT_STUB16(0x1) FAULT_STUB16(0x2)
+                     FAULT_STUB16(0x3) FAULT_STUB16(0x4) FAULT_STUB16(0x5)
+                     FAULT_STUB16(0x6) FAULT_STUB16(0x7) FAULT_STUB16(0x8)
+                     FAULT_STUB16(0x9) FAULT_STUB16(0xa) FAULT_STUB16(0xb)
+                     FAULT_STUB16(0xc) FAULT_STUB16(0xd) FAULT_STUB16(0xe)
+                     FAULT_STUB16(0xf));
+}
+
+static void install_fault_gates(unsigned short cs) {
+    UINTN base = ((UINTN)fault_stubs + FAULT_STUB_BYTES - 1) &
+                 ~(UINTN)(FAULT_STUB_BYTES - 1);
+    for (int v = 0; v < 256; v++) {
+        idt_set(v, (void *)(base + (UINTN)v * FAULT_STUB_BYTES), cs);
+    }
+}
+
 /* The scheduler: called from the ISR with the interrupted context's saved
  * stack pointer; returns the stack pointer to switch to. */
 UINTN schedule(UINTN sp) {
@@ -257,8 +338,15 @@ static void halt(void) { __asm__ volatile("hlt"); }
 
 static void arch_start_scheduler(void *st) {
     (void)st; /* the x86_64 firmware IDT/PIC/PIT are reprogrammed directly */
+    install_fault_gates(read_cs());
     idt_set(0x20, (void *)timer_isr, read_cs());
     lidt(g_idt, sizeof(g_idt) - 1);
+#ifdef PREEMPT_FAULT_INJECT
+    /* Raise #GP with the gates installed and interrupts still masked: the
+     * diagnostic has to name vector 13 and the offending selector. */
+    __asm__ volatile("mov $0x1234, %ax\n\t"
+                     "mov %ax, %ds\n\t");
+#endif
     pic_remap();
     pit_start();
     sti();

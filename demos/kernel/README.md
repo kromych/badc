@@ -68,6 +68,14 @@ scheduler stops and prints `BADC-PREEMPT-OK`.
   has no symbol references), saves the full integer context with `stp`, and
   returns through `eret`.
 
+On x86_64 every vector the demo does not install gets a diagnostic gate: a
+16-byte stub pushes its vector number and jumps to a common handler that prints
+the vector, the error code where the CPU pushed one, and the faulting RIP, then
+halts. Without them an unexpected exception escalates to a triple fault, which
+resets the guest with nothing on the serial line. Building with
+`-DPREEMPT_FAULT_INJECT` raises `#GP` right after the IDT is installed, which is
+how the smoke checks the diagnostic.
+
 All addresses and saved stack pointers use the pointer-width `UINTN`
 (`unsigned long long`), not `unsigned long`, because the EFI targets are LLP64
 (`long` is 32-bit); a 32-bit IDT base or saved SP would fault on the first

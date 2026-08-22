@@ -6615,20 +6615,29 @@ fn encode_x86_asm_section_code(
             extern_data_names.get(&v).cloned()
         })
     };
-    let refs = SectionOperandRefs {
-        op_reg,
-        operands,
-        imm_of: &imm_of,
-        addr_of: &addr_of,
-    };
     let mut mode = super::table::Mode::Bits64;
+    let mut fold = super::ssa::emit_common::AsmParseFold::default();
     for b in blocks.iter_mut() {
+        fold.enter_block(&*b);
         for item in b.items.iter_mut() {
-            let AsmSectionItem::Code(text) = item else {
-                continue;
-            };
-            *item =
-                encode_one_x86_section_insn(text, &mut mode, &operand_target, goto_block, &refs)?;
+            if let AsmSectionItem::Code(text) = item {
+                let f = |e: &str| fold.fold(e, &imm_of);
+                let refs = SectionOperandRefs {
+                    op_reg,
+                    operands,
+                    imm_of: &imm_of,
+                    addr_of: &addr_of,
+                    fold: &f,
+                };
+                *item = encode_one_x86_section_insn(
+                    text,
+                    &mut mode,
+                    &operand_target,
+                    goto_block,
+                    &refs,
+                )?;
+            }
+            fold.note_item(item, &imm_of);
         }
     }
     Ok(())
@@ -6652,24 +6661,65 @@ pub(crate) fn encode_x86_file_asm_section_code(
     let goto_block = |_: u8| -> Option<u32> { None };
     let imm_of = |_: u8| -> Option<i64> { None };
     let addr_of = |_: u8| -> Option<(AsmSectionTarget, i64)> { None };
-    let refs = SectionOperandRefs {
-        op_reg: &[],
-        operands: &[],
-        imm_of: &imm_of,
-        addr_of: &addr_of,
-    };
     let mut mode = if class.is32() {
         super::table::Mode::Bits32
     } else {
         super::table::Mode::Bits64
     };
-    super::ssa::emit_common::for_each_section_item_mut(blocks, &mut |item| {
-        let AsmSectionItem::Code(text) = item else {
-            return Ok(());
-        };
-        *item = encode_one_x86_section_insn(text, &mut mode, &operand_target, &goto_block, &refs)?;
+    // Inside a deferred `.rept` nothing folds: the count, and with it every
+    // offset the body's copies take, is settled by the layout.
+    fn encode_rept(
+        items: &mut [super::ssa::emit_common::AsmSectionItem],
+        mode: &mut super::table::Mode,
+        operand_target: &dyn Fn(u8) -> Option<super::ssa::emit_common::AsmSectionTarget>,
+        goto_block: &dyn Fn(u8) -> Option<u32>,
+        refs: &SectionOperandRefs<'_>,
+    ) -> Result<(), alloc::string::String> {
+        use super::ssa::emit_common::AsmSectionItem;
+        for it in items {
+            if let AsmSectionItem::Rept { items, .. } = it {
+                encode_rept(items, mode, operand_target, goto_block, refs)?;
+            } else if let AsmSectionItem::Code(text) = it {
+                *it = encode_one_x86_section_insn(text, mode, operand_target, goto_block, refs)?;
+            }
+        }
         Ok(())
-    })
+    }
+    let mut fold = super::ssa::emit_common::AsmParseFold::default();
+    for b in blocks.iter_mut() {
+        fold.enter_block(&*b);
+        for item in b.items.iter_mut() {
+            if let AsmSectionItem::Rept { items, .. } = item {
+                let none = |_: &str| None;
+                let refs = SectionOperandRefs {
+                    op_reg: &[],
+                    operands: &[],
+                    imm_of: &imm_of,
+                    addr_of: &addr_of,
+                    fold: &none,
+                };
+                encode_rept(items, &mut mode, &operand_target, &goto_block, &refs)?;
+            } else if let AsmSectionItem::Code(text) = item {
+                let f = |e: &str| fold.fold(e, &imm_of);
+                let refs = SectionOperandRefs {
+                    op_reg: &[],
+                    operands: &[],
+                    imm_of: &imm_of,
+                    addr_of: &addr_of,
+                    fold: &f,
+                };
+                *item = encode_one_x86_section_insn(
+                    text,
+                    &mut mode,
+                    &operand_target,
+                    &goto_block,
+                    &refs,
+                )?;
+            }
+            fold.note_item(item, &imm_of);
+        }
+    }
+    Ok(())
 }
 
 /// Opcode of a branch whose displacement field is rel8 only.
@@ -6769,6 +6819,11 @@ struct SectionOperandRefs<'a> {
     operands: &'a [super::super::ir::AsmOperand],
     imm_of: &'a dyn Fn(u8) -> Option<i64>,
     addr_of: &'a dyn Fn(u8) -> Option<(super::ssa::emit_common::AsmSectionTarget, i64)>,
+    /// The value an operand expression already has at this point of the
+    /// stream, when the walk's [`AsmParseFold`] can prove it is a constant.
+    /// A folded immediate or displacement encodes as a literal, taking the
+    /// narrow field GNU as picks at the same point.
+    fold: &'a dyn Fn(&str) -> Option<i64>,
 }
 
 /// Encode one replacement instruction to a `CodeBytes` item. A direct
@@ -7109,6 +7164,13 @@ fn encode_one_x86_section_insn(
         match *o {
             AsmOpnd::Imm(v) => concrete.push(Concrete::Imm(v)),
             AsmOpnd::ImmSym { expr } => {
+                // An expression that is already a constant encodes as the
+                // literal, taking the operand's narrowest form.
+                if let Some(v) = insn.sym_exprs.get(expr as usize).and_then(|e| (refs.fold)(e))
+                {
+                    concrete.push(Concrete::Imm(v));
+                    continue;
+                }
                 if sym_imm.is_some() {
                     return Err(alloc::format!(
                         "inline asm: replacement `{text}` has more than one symbol immediate"
@@ -7343,6 +7405,23 @@ fn encode_one_x86_section_insn(
                     })?),
                     None => None,
                 };
+                // A displacement expression that is already a constant
+                // encodes as the literal, taking the narrowest based form.
+                if let Some(v) = insn
+                    .sym_exprs
+                    .get(expr as usize)
+                    .and_then(|e| (refs.fold)(e))
+                    .and_then(|v| i32::try_from(v).ok())
+                {
+                    concrete.push(Concrete::Mem {
+                        base,
+                        index,
+                        scale,
+                        disp: v,
+                        size,
+                    });
+                    continue;
+                }
                 if sym_disp.is_some() {
                     return Err(alloc::format!(
                         "inline asm: replacement `{text}` has more than one memory operand"
@@ -7464,40 +7543,6 @@ fn encode_one_x86_section_insn(
     }
     let mut body =
         encode(&concrete).map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
-    // A narrower alternative for a symbol immediate whose expression folds
-    // to a constant: GNU as picks the operand's `imm8` form when the value
-    // is known at assembly time, and the wide field only when a relocation
-    // has to fill it. The section relaxation settles which applies, so the
-    // narrow encoding rides alongside the wide one.
-    let short = match (&sym_imm, &imm_field) {
-        (Some((target, off, idx)), Some(f)) if f.width > 1 && sym_disp.is_none() => {
-            narrow_imm_form(
-                &concrete,
-                *idx,
-                &encode,
-                target,
-                *off,
-                insn.seg.or(operand_seg),
-                prefix,
-            )
-        }
-        // The same rule for a based memory operand's displacement: `disp8`
-        // when the expression is already a value, the wide field when a
-        // relocation has to fill it.
-        (None, _) => match &sym_disp {
-            Some((target, off, idx, false)) => narrow_disp_form(
-                &concrete,
-                *idx,
-                &encode,
-                target,
-                *off,
-                insn.seg.or(operand_seg),
-                prefix,
-            ),
-            _ => None,
-        },
-        _ => None,
-    };
     let mut bytes = alloc::vec::Vec::new();
     let sizes = push_legacy_prefixes(&mut bytes, &body, insn.seg.or(operand_seg), prefix);
     // A field of `body` past the size prefixes lands in `bytes` shifted by the
@@ -7596,126 +7641,7 @@ fn encode_one_x86_section_insn(
     Ok(AsmSectionItem::CodeBytes {
         bytes,
         relocs,
-        short,
-    })
-}
-
-/// The `imm8` encoding of an instruction whose symbol immediate sits at
-/// `idx`, when the form has one and it is shorter than the wide field's.
-/// The field is located the same way the wide one is: encode with two probe
-/// values that differ in every byte and take the run that differs.
-fn narrow_imm_form(
-    concrete: &[super::asm::Concrete],
-    idx: usize,
-    encode: &EncodeFn<'_>,
-    target: &super::ssa::emit_common::AsmSectionTarget,
-    off: i64,
-    seg: Option<u8>,
-    prefix: &[u8],
-) -> Option<super::ssa::emit_common::AsmShortBranch> {
-    use super::asm::Concrete;
-    use super::ssa::emit_common::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
-    let (_, p1, p2) = IMM_PROBE[2];
-    let with = |v: i64| {
-        let mut ops = concrete.to_vec();
-        ops[idx] = Concrete::Imm(v);
-        encode(&ops).ok()
-    };
-    let (a, b) = (with(p1)?, with(p2)?);
-    let wide = with(IMM_PROBE[0].1)?;
-    if a.len() >= wide.len() || a.len() != b.len() {
-        return None;
-    }
-    let (start, len) = differing_run(&a, &b)?;
-    if len != 1 {
-        return None;
-    }
-    let mut bytes = alloc::vec::Vec::new();
-    let sizes = push_legacy_prefixes(&mut bytes, &a, seg, prefix);
-    if start < sizes {
-        return None;
-    }
-    let offset = (bytes.len() + start - sizes) as u32;
-    bytes.extend_from_slice(&a[sizes..]);
-    bytes[offset as usize] = 0;
-    Some(AsmShortBranch {
-        bytes,
-        reloc: AsmSectionReloc {
-            offset,
-            width: 1,
-            kind: AsmRelocKind::Data,
-            pcrel: false,
-            branch: false,
-            signed: false,
-            target: target.clone(),
-            addend: off,
-        },
-    })
-}
-
-/// The `disp8` encoding of an instruction whose symbolic displacement sits
-/// at `idx`, when the based form has one. Located as the wide field is: two
-/// probe values that differ in the byte, taking the run that differs.
-fn narrow_disp_form(
-    concrete: &[super::asm::Concrete],
-    idx: usize,
-    encode: &EncodeFn<'_>,
-    target: &super::ssa::emit_common::AsmSectionTarget,
-    off: i64,
-    seg: Option<u8>,
-    prefix: &[u8],
-) -> Option<super::ssa::emit_common::AsmShortBranch> {
-    use super::asm::Concrete;
-    use super::ssa::emit_common::{AsmRelocKind, AsmSectionReloc, AsmShortBranch};
-    let with = |v: i32| {
-        let mut ops = concrete.to_vec();
-        ops[idx] = match ops[idx] {
-            Concrete::Mem {
-                base,
-                index,
-                scale,
-                size,
-                ..
-            } => Concrete::Mem {
-                base,
-                index,
-                scale,
-                disp: v,
-                size,
-            },
-            _ => return None,
-        };
-        encode(&ops).ok()
-    };
-    let (a, b) = (with(0x5B)?, with(0x24)?);
-    let wide = with(RIPREL_PROBE_DISP)?;
-    if a.len() >= wide.len() || a.len() != b.len() {
-        return None;
-    }
-    let (start, len) = differing_run(&a, &b)?;
-    if len != 1 {
-        return None;
-    }
-    let mut bytes = alloc::vec::Vec::new();
-    let sizes = push_legacy_prefixes(&mut bytes, &a, seg, prefix);
-    if start < sizes {
-        return None;
-    }
-    let offset = (bytes.len() + start - sizes) as u32;
-    bytes.extend_from_slice(&a[sizes..]);
-    bytes[offset as usize] = 0;
-    Some(AsmShortBranch {
-        bytes,
-        reloc: AsmSectionReloc {
-            offset,
-            width: 1,
-            kind: AsmRelocKind::Data,
-            pcrel: false,
-            branch: false,
-            signed: true,
-            target: target.clone(),
-            addend: off,
-        },
+        short: None,
     })
 }
 

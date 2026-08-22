@@ -1207,12 +1207,13 @@ pub(crate) struct AsmSectionReloc {
     pub addend: i64,
 }
 
-/// An instruction's short encoding, supplied by the arch encoder next to the
-/// long one. The two differ only in one field's width, so a single
-/// relocation describes the short form; the layout selects it when the
-/// narrow field holds what the field resolves to -- a branch whose target is
-/// a label of its own section, or an immediate whose expression folds. GNU
-/// as makes the same choice by the same rule.
+/// A direct branch's short encoding, supplied by the arch encoder next to
+/// the long one. The two differ only in the displacement field's width, so
+/// a single relocation describes the short form; the layout selects it when
+/// the target is a label of the branch's own section within the narrow
+/// field's reach. GNU as makes the same choice by the same rule; a
+/// non-branch field's width is settled earlier, when the instruction is
+/// parsed ([`AsmParseFold`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmShortBranch {
     pub bytes: alloc::vec::Vec<u8>,
@@ -1283,6 +1284,9 @@ pub(crate) enum AsmSpace {
     Deferred(u32),
     /// A named section, by its `(name, flags, sh_type)` key.
     Section(alloc::string::String),
+    /// A run of parse-time fixed-size items, numbered by [`AsmParseFold`].
+    /// Two labels of one run are a constant apart in every layout.
+    Frag(u32),
 }
 
 /// One symbolic term of an expression value: where the location lives when
@@ -6409,6 +6413,211 @@ pub(crate) fn push_x86_exec_align_fill(
 /// byte, so `.balign n, 0x90` pads like a fill-less `.balign n`.
 pub(crate) const X86_NOP_OPCODE: u8 = 0x90;
 
+/// GNU as fixes a non-branch operand field's width when it parses the
+/// instruction: the expression narrows only when it is a constant at that
+/// point, which a difference of already-defined labels is exactly when the
+/// items between them have parse-time fixed sizes. This context follows a
+/// statement's blocks in source order, numbering each run of fixed-size
+/// items and recording where every name is defined, so the arch encoder can
+/// fold such an expression to its value before it chooses the encoding. A
+/// branch carrying a short alternative, an alignment, an `.org`, and a fill
+/// whose count does not fold end the run: a difference across one has a
+/// layout-dependent value, and GNU as keeps the wide field there even when
+/// the final layout would fit the narrow one.
+///
+/// The walk goes block by block, which within one chain is source order.
+/// Across chains the blocks do not record how the source interleaved them,
+/// so a reference to a label of another chain folds only when that chain
+/// was walked already; where GNU as saw the definition earlier in the
+/// source, the field stays wide. The value of every fold is exact -- a run
+/// has one size in every layout -- so the boundary costs width only.
+#[derive(Default)]
+pub(crate) struct AsmParseFold {
+    /// `(section key, subsection)` -> the chain's current run and offset.
+    /// A chain re-entered after other sections continues where it left off.
+    chains: alloc::collections::BTreeMap<(alloc::string::String, u32), (u32, i64)>,
+    cur: (alloc::string::String, u32),
+    runs: u32,
+    names: alloc::collections::BTreeMap<alloc::string::String, AsmFoldDef>,
+    /// Numeric label digits -> latest definition, for `Nb` references.
+    numeric: alloc::collections::BTreeMap<alloc::string::String, (u32, i64)>,
+}
+
+/// What a name means to the fold: a location in a run, an absolute value,
+/// or a definition it cannot value (which shadows an earlier one).
+enum AsmFoldDef {
+    Loc(u32, i64),
+    Abs(i64),
+    Opaque,
+}
+
+impl AsmParseFold {
+    /// Continue (or open) the chain of `block`'s section and subsection.
+    pub(crate) fn enter_block(&mut self, block: &AsmSectionBlock) {
+        let key = (section_key(block), block.subsection);
+        if !self.chains.contains_key(&key) {
+            let id = self.next_run();
+            self.chains.insert(key.clone(), (id, 0));
+        }
+        self.cur = key;
+    }
+
+    fn next_run(&mut self) -> u32 {
+        self.runs += 1;
+        self.runs
+    }
+
+    fn here(&self) -> Option<(u32, i64)> {
+        self.chains.get(&self.cur).copied()
+    }
+
+    /// End the current run: what follows sits a layout-dependent distance
+    /// from everything before this point.
+    fn break_run(&mut self) {
+        let id = self.next_run();
+        if let Some(c) = self.chains.get_mut(&self.cur) {
+            *c = (id, 0);
+        }
+    }
+
+    fn advance(&mut self, n: i64) {
+        if let Some(c) = self.chains.get_mut(&self.cur) {
+            c.1 += n;
+        }
+    }
+
+    /// The leaf a name means at this point of the walk: the location
+    /// counter, a numeric `Nb` reference, or a recorded definition. `None`
+    /// leaves the name symbolic, which keeps its expression out of the fold;
+    /// a name an earlier statement of the unit defined stays symbolic too,
+    /// as the distance to it spans items this walk never saw.
+    fn leaf(&self, t: &str) -> Option<AsmExprLeaf> {
+        let loc = |(run, off): (u32, i64)| {
+            AsmExprLeaf::Loc(AsmExprTerm {
+                space: Some((AsmSpace::Frag(run), off)),
+                target: AsmSectionTarget::Symbol(alloc::string::String::from(t)),
+            })
+        };
+        if t == "." {
+            return self.here().map(loc);
+        }
+        if let Some(d) = numeric_label_digits(t) {
+            if d.len() == t.len() || t.ends_with('f') {
+                return None;
+            }
+            return self.numeric.get(d).copied().map(loc);
+        }
+        match self.names.get(t)? {
+            AsmFoldDef::Loc(run, off) => Some(loc((*run, *off))),
+            AsmFoldDef::Abs(v) => Some(AsmExprLeaf::Abs(*v)),
+            AsmFoldDef::Opaque => None,
+        }
+    }
+
+    /// The expression's value when it is a constant at this point of the
+    /// parse, which is when GNU as folds it into the operand.
+    pub(crate) fn fold(&self, expr: &str, const_of: &dyn Fn(u8) -> Option<i64>) -> Option<i64> {
+        let ctx = AsmExprCtx {
+            resolve: &|t| self.leaf(t),
+            const_of,
+            lax_div: false,
+        };
+        eval_asm_value(expr, &ctx).ok().and_then(|v| v.to_abs())
+    }
+
+    /// Record `item`'s effect on the walk: a definition, a fixed-size
+    /// advance, or the end of the current run.
+    pub(crate) fn note_item(
+        &mut self,
+        item: &AsmSectionItem,
+        const_of: &dyn Fn(u8) -> Option<i64>,
+    ) {
+        match item {
+            AsmSectionItem::Label(name) => {
+                let Some(here) = self.here() else { return };
+                match numeric_label_digits(name) {
+                    Some(d) if d.len() == name.len() => {
+                        self.numeric.insert(alloc::string::String::from(d), here);
+                    }
+                    _ => {
+                        self.names
+                            .insert(name.clone(), AsmFoldDef::Loc(here.0, here.1));
+                    }
+                }
+            }
+            AsmSectionItem::Data { width, values } => {
+                self.advance(*width as i64 * values.len() as i64)
+            }
+            AsmSectionItem::Bytes(b) => self.advance(b.len() as i64),
+            AsmSectionItem::Fill { count, unit, .. } => match self.fold(count, const_of) {
+                Some(n) => self.advance(n.max(0) * *unit as i64),
+                None => self.break_run(),
+            },
+            AsmSectionItem::CodeBytes {
+                bytes, short: None, ..
+            } => self.advance(bytes.len() as i64),
+            AsmSectionItem::SymSet { name, target } => {
+                let def = match self.leaf(target) {
+                    Some(AsmExprLeaf::Loc(AsmExprTerm {
+                        space: Some((AsmSpace::Frag(r), off)),
+                        ..
+                    })) => AsmFoldDef::Loc(r, off),
+                    Some(AsmExprLeaf::Abs(v)) => AsmFoldDef::Abs(v),
+                    _ => AsmFoldDef::Opaque,
+                };
+                self.names.insert(name.clone(), def);
+            }
+            AsmSectionItem::SetExpr { name, expr } => {
+                let ctx = AsmExprCtx {
+                    resolve: &|t| self.leaf(t),
+                    const_of,
+                    lax_div: false,
+                };
+                let def = match eval_asm_value(expr, &ctx) {
+                    Ok(v) => fold_def_of(v),
+                    Err(_) => AsmFoldDef::Opaque,
+                };
+                self.names.insert(name.clone(), def);
+            }
+            AsmSectionItem::AbsSet { name, value } => {
+                self.names.insert(name.clone(), AsmFoldDef::Abs(*value));
+            }
+            // Symbol attributes and deferred diagnostics deposit no bytes.
+            AsmSectionItem::Global(_)
+            | AsmSectionItem::Local(_)
+            | AsmSectionItem::Weak(_)
+            | AsmSectionItem::Visibility { .. }
+            | AsmSectionItem::Type { .. }
+            | AsmSectionItem::Size { .. }
+            | AsmSectionItem::CondDiag(_)
+            | AsmSectionItem::Cfi(_)
+            | AsmSectionItem::Reloc { .. } => {}
+            // A branch both of whose widths ride into the layout, an
+            // alignment, an `.org`, a deferred repeat, a literal pool, or
+            // unencoded text: the layout owns the size.
+            _ => self.break_run(),
+        }
+    }
+}
+
+/// The definition a `.set` expression value records: a constant, a location
+/// offset into a run, or neither.
+fn fold_def_of(v: AsmExprValue) -> AsmFoldDef {
+    if let Some(c) = v.to_abs() {
+        return AsmFoldDef::Abs(c);
+    }
+    match (&v.pos, &v.neg) {
+        (
+            Some(AsmExprTerm {
+                space: Some((AsmSpace::Frag(r), off)),
+                ..
+            }),
+            None,
+        ) => AsmFoldDef::Loc(*r, off + v.add),
+        _ => AsmFoldDef::Opaque,
+    }
+}
+
 /// Measure the section-relative offset of every label the blocks define,
 /// before the field values (or the main stream) are laid out. Each item's
 /// byte length is structural -- data width times count, string length,
@@ -6461,11 +6670,9 @@ pub(crate) fn measure_asm_section_offsets(
     }
 }
 
-/// Whether the short form of the site fits under `m`: a branch whose target
-/// is in reach, or a narrow immediate whose expression folds to a value the
-/// field holds. Only a target the materializer resolves in place qualifies;
-/// any other keeps a relocation, which the link fills at the long form's
-/// width, and an absolute field cannot carry one at all.
+/// Whether the site's short branch reaches its target under `m`. Only a
+/// target the materializer resolves in place qualifies; any other keeps a
+/// relocation, which the link fills at the long form's width.
 fn short_form_fits(
     blocks: &[AsmSectionBlock],
     m: &SectionLabelOffsets,
@@ -6483,9 +6690,6 @@ fn short_form_fits(
     let key = section_key(&blocks[s.site.0]);
     let place = s.at + short.reloc.offset as i64;
     let value = match &short.reloc.target {
-        // An absolute field holds a value, not a link-time address, so a
-        // name that survives as a symbol rules the narrow form out.
-        AsmSectionTarget::Symbol(_) if !short.reloc.pcrel => return false,
         AsmSectionTarget::Symbol(name) => {
             // The reference takes the location of the name its `.set` chain
             // ends at and the binding of the name written, as the
@@ -6508,30 +6712,14 @@ fn short_form_fits(
             }
             off + short.reloc.addend - place
         }
-        // An expression target reaches where the materializer folds it to a
-        // constant; a symbol left in the value keeps its relocation. The
-        // main stream's labels are not laid out yet, so a target naming one
-        // takes the long form.
+        // A branch to an expression reaches where the materializer folds it
+        // to a constant; a symbol left in the value keeps its relocation.
+        // The main stream's labels are not laid out yet, so a target naming
+        // one takes the long form.
         AsmSectionTarget::Expr(text) => {
             let num_unique = alloc::collections::BTreeMap::new();
-            // A label at or after this site moves with the site's own width,
-            // so an absolute field naming one has two self-consistent
-            // layouts with different values. GNU as picks the wide one by
-            // settling the field before the layout; take the same value by
-            // narrowing only what cannot move.
-            let ahead = core::cell::Cell::new(false);
-            let resolve = |t: &str| {
-                let leaf =
-                    section_expr_leaf(t, &key, s.at, m, &sink.labels, &num_unique, &|_| None);
-                if let Some(AsmExprLeaf::Loc(term)) = &leaf
-                    && let Some((AsmSpace::Section(k), off)) = &term.space
-                    && *k == key
-                    && *off > s.at
-                {
-                    ahead.set(true);
-                }
-                leaf
-            };
+            let resolve =
+                |t: &str| section_expr_leaf(t, &key, s.at, m, &sink.labels, &num_unique, &|_| None);
             let ctx = AsmExprCtx {
                 resolve: &resolve,
                 const_of,
@@ -6544,12 +6732,9 @@ fn short_form_fits(
                 &space,
                 place,
                 short.reloc.addend,
-                short.reloc.pcrel || short.reloc.kind.self_relative(),
+                true,
                 rebindable,
             );
-            if ahead.get() && !short.reloc.pcrel {
-                return false;
-            }
             match folded {
                 Ok(AsmFieldTarget::Abs(c)) => c,
                 _ => return false,
@@ -8117,31 +8302,6 @@ pub(crate) fn materialize_asm_sections(
         sink.publish_labels(sec_idx, from);
     }
     Ok(defined)
-}
-
-/// Apply `f` to every item of the blocks, including items nested in
-/// `.rept` bodies, so the arch encoders reach a repeated instruction.
-pub(crate) fn for_each_section_item_mut(
-    blocks: &mut [AsmSectionBlock],
-    f: &mut dyn FnMut(&mut AsmSectionItem) -> Result<(), alloc::string::String>,
-) -> Result<(), alloc::string::String> {
-    fn walk(
-        items: &mut [AsmSectionItem],
-        f: &mut dyn FnMut(&mut AsmSectionItem) -> Result<(), alloc::string::String>,
-    ) -> Result<(), alloc::string::String> {
-        for it in items {
-            if let AsmSectionItem::Rept { items, .. } = it {
-                walk(items, f)?;
-            } else {
-                f(it)?;
-            }
-        }
-        Ok(())
-    }
-    for b in blocks {
-        walk(&mut b.items, f)?;
-    }
-    Ok(())
 }
 
 /// Reject the unit-level symbol directives an operand statement's sections

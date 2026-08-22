@@ -633,7 +633,7 @@ int f(unsigned *p)
 
 /// `.set name, .` assigns the location counter's value, not an alias to a
 /// symbol spelled `.`: the name reads back as a label at that spot. GNU as
-/// 2.46.1 fills the same values.
+/// 2.46 fills the same values.
 #[test]
 fn a_set_to_the_location_counter_defines_a_label() {
     let b = object_of(
@@ -981,6 +981,117 @@ fn label_difference_operands_in_plain_text() {
             0x00, 0x00, 0x00, 0x13, 0x83, 0xed, 0x02, 0x81, 0xed, 0x13, 0x00, 0x00, 0x00, 0x8b,
             0x58, 0x02, 0x8b, 0x88, 0x13, 0x00, 0x00, 0x00, 0x90, 0x90,
         ]
+    );
+}
+
+/// A constant operand expression encodes as the literal, so it reaches
+/// every short form the encoder has, not only the one-field-narrower one:
+/// `disp8` and `imm8` in one instruction, the dropped displacement byte of
+/// a zero, and the `D1` shift-by-one opcode. Each expectation is GNU as
+/// 2.46's encoding of the same source.
+#[test]
+fn a_folded_operand_expression_takes_every_short_form() {
+    let t = text_of(
+        "fold-imm-disp",
+        "\t.text\na:\n\tnop\nb:\n\taddl $(b - a), (a - b)(%rdx)\n",
+    );
+    assert_eq!(t, [0x90, 0x83, 0x42, 0xff, 0x01], "disp8 and imm8 together");
+    let t = text_of("fold-disp0", "\t.text\na:\nb:\n\tmovl (a - b)(%rbx), %eax\n");
+    assert_eq!(t, [0x8b, 0x03], "a zero displacement drops its byte");
+    let t = text_of("fold-shift1", "\t.text\na:\n\tnop\nb:\n\tshll $(b - a), %ecx\n");
+    assert_eq!(t, [0x90, 0xd1, 0xe1], "shift by one takes the D1 form");
+    let t = text_of("fold-dot-imm", "\t.text\na:\n\tnop\n\tpushq $(. - a)\n");
+    assert_eq!(t, [0x90, 0x6a, 0x01], "`.` is the instruction's own start");
+    let t = text_of("fold-dot-disp", "\t.text\na:\n\tnop\n\tmovl (a - .)(%rbx), %eax\n");
+    assert_eq!(t, [0x90, 0x8b, 0x43, 0xff]);
+}
+
+/// GNU as fixes a non-branch field's width when it parses the instruction,
+/// so a difference folds only over items whose sizes are already fixed
+/// there. A branch that may still relax, an alignment, and an `.org`
+/// between the labels keep the wide field even though the final layout
+/// would fit the narrow one -- the value is still resolved in place. A
+/// fixed-size span folds whatever it holds: data, a `call`, an instruction
+/// whose own wide field waits for a relocation. Each expectation is GNU as
+/// 2.46's encoding of the same source.
+#[test]
+fn an_operand_difference_narrows_only_over_a_parse_fixed_span() {
+    let t = text_of(
+        "fold-branch-span",
+        "\t.text\na:\n\tnop\n\tjmp far\nb:\n\tmovl (a - b)(%rbx), %eax\n\
+         \taddq $(b - a), %r8\nfar:\n\tnop\n",
+    );
+    assert_eq!(
+        t,
+        [
+            0x90, 0xeb, 0x0d, 0x8b, 0x83, 0xfd, 0xff, 0xff, 0xff, 0x49, 0x81, 0xc0, 0x03, 0x00,
+            0x00, 0x00, 0x90,
+        ],
+        "a span over a relaxable jmp keeps both wide fields"
+    );
+    let t = text_of(
+        "fold-align-span",
+        "\t.text\na:\n\tnop\n\t.balign 4\nb:\n\tpushq $(b - a)\n",
+    );
+    assert_eq!(&t[4..], [0x68, 0x04, 0x00, 0x00, 0x00], "span over .balign");
+    let t = text_of(
+        "fold-org-span",
+        "\t.text\na:\n\tnop\n\t.org 4\nb:\n\tpushq $(b - a)\n",
+    );
+    assert_eq!(&t[4..], [0x68, 0x04, 0x00, 0x00, 0x00], "span over .org");
+    let t = text_of(
+        "fold-fill-span",
+        "\t.text\na:\n\tnop\n\t.fill 3,1,0x90\nb:\n\tpushq $(b - a)\n\
+         c:\n\tnop\n\t.skip 3\nd:\n\tpushq $(d - c)\n",
+    );
+    assert_eq!(&t[4..6], [0x6a, 0x04], "a constant .fill span folds");
+    assert_eq!(&t[10..], [0x6a, 0x04], "a constant .skip span folds");
+    let t = text_of(
+        "fold-fixed-insns-span",
+        "\t.text\na:\n\tnop\n\tcall x\n\taddl $x, %eax\nb:\n\tpushq $(b - a)\n",
+    );
+    assert_eq!(&t[11..], [0x6a, 0x0b], "calls and relocated fields are fixed");
+    let t = text_of(
+        "fold-mul-expr",
+        "\t.text\na:\n\tnop\n\tnop\nb:\n\tpushq $((b - a) * 8 - 6)\n",
+    );
+    assert_eq!(&t[2..], [0x6a, 0x0a], "arithmetic over a folded difference");
+}
+
+/// The fold reads names as the source defined them up to the instruction:
+/// numeric labels by their latest definition, `.set` aliases through the
+/// chain, a `.set` to the location counter as a label, and a weak or global
+/// binding not at all -- a difference of two defined locations is a value
+/// whatever their binding. A subsection is its own chain, so a difference
+/// across two of them stays wide. Each expectation is GNU as 2.46's
+/// encoding of the same source.
+#[test]
+fn an_operand_difference_resolves_names_as_the_parse_defined_them() {
+    let t = text_of("fold-numeric", "\t.text\n1:\n\tnop\n2:\n\tpushq $(2b - 1b)\n");
+    assert_eq!(t, [0x90, 0x6a, 0x01]);
+    let t = text_of(
+        "fold-set-alias",
+        "\t.text\na:\n\tnop\n\t.set x, a\nb:\n\tpushq $(b - x)\n",
+    );
+    assert_eq!(t, [0x90, 0x6a, 0x01]);
+    let t = text_of(
+        "fold-set-dot",
+        "\t.text\na:\n\tnop\n\t.set x, .\nb:\n\tnop\n\tpushq $(x - a)\n",
+    );
+    assert_eq!(t, [0x90, 0x90, 0x6a, 0x01], "`.set x, .` is a location");
+    let t = text_of(
+        "fold-weak-diff",
+        "\t.text\n\t.weak b\na:\n\tnop\nb:\n\tpushq $(b - a)\n",
+    );
+    assert_eq!(t, [0x90, 0x6a, 0x01], "binding does not hold a difference");
+    let t = text_of(
+        "fold-subsec-cross",
+        "\t.text\n\t.subsection 1\na:\n\tnop\n\t.subsection 0\nb:\n\tnop\n\tpushq $(b - a)\n",
+    );
+    assert_eq!(
+        t,
+        [0x90, 0x68, 0xfa, 0xff, 0xff, 0xff, 0x90],
+        "a cross-subsection difference stays wide"
     );
 }
 

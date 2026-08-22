@@ -107,9 +107,8 @@ fn plan(func: &FunctionSsa, alloc: &Allocation) -> Vec<Run> {
     // values it holds rather than the function's value count.
     let mut touched: Vec<ValueId> = Vec::new();
     let mut run_id: u32 = 0;
-    let spilled = |v: ValueId| -> bool {
-        matches!(alloc.places.get(v as usize), Some(Place::Spill(_)))
-    };
+    let spilled =
+        |v: ValueId| -> bool { matches!(alloc.places.get(v as usize), Some(Place::Spill(_))) };
     let mut prev: Option<usize> = None;
     for &b in &order {
         let block = &func.blocks[b];
@@ -244,7 +243,7 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
         before[old + 1] += before[old];
     }
     let mut cur = 0usize;
-    for old in 0..n_old {
+    for (old, slot) in remap.iter_mut().enumerate() {
         while cur < order.len() && runs[order[cur] as usize].first as usize == old {
             let k = order[cur] as usize;
             copy_id[k] = insts.len() as ValueId;
@@ -261,7 +260,7 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
             );
             cur += 1;
         }
-        remap[old] = insts.len() as ValueId;
+        *slot = insts.len() as ValueId;
         insts.push(func.insts[old].clone());
         inst_src.push(func.inst_src.get(old).copied().unwrap_or((0, 0)));
         f32_values.push(func.f32_values.get(old).copied().unwrap_or(false));
@@ -383,9 +382,9 @@ pub(crate) fn allocate_split(func: &mut FunctionSsa, target: Target) -> Allocati
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::super::ir::{Block, LoadKind, StoreKind, Terminator};
     use super::super::reg_alloc::{RegBanks, with_pool_size_override};
+    use super::*;
 
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         let n = insts.len();
@@ -599,14 +598,11 @@ mod tests {
         apply(&mut f, &runs);
         let cp = copies(&f);
         assert_eq!(cp.len(), 1);
-        let (phi_in, last_store) = f
-            .insts
-            .iter()
-            .fold((None, None), |(p, s), i| match i {
-                Inst::Phi { incoming, .. } => (Some(incoming.clone()), s),
-                Inst::StoreLocal { value, .. } => (p, Some(*value)),
-                _ => (p, s),
-            });
+        let (phi_in, last_store) = f.insts.iter().fold((None, None), |(p, s), i| match i {
+            Inst::Phi { incoming, .. } => (Some(incoming.clone()), s),
+            Inst::StoreLocal { value, .. } => (p, Some(*value)),
+            _ => (p, s),
+        });
         assert_eq!(phi_in.expect("phi survives")[0].1, 0, "edge use keeps v0");
         assert_eq!(last_store, Some(cp[0]), "the in-block use takes the copy");
     }
@@ -802,11 +798,17 @@ mod tests {
             for c in copies(&f) {
                 match alloc.places[c as usize] {
                     Place::IntReg(r) if banks.callee_gprs.contains(&r) => {
-                        assert!(alloc.gpr_used.contains(&r), "callee-saved copy reg {r} saved");
+                        assert!(
+                            alloc.gpr_used.contains(&r),
+                            "callee-saved copy reg {r} saved"
+                        );
                         checked += 1;
                     }
                     Place::FpReg(r) if banks.callee_fprs.contains(&r) => {
-                        assert!(alloc.fp_used.contains(&r), "callee-saved copy reg {r} saved");
+                        assert!(
+                            alloc.fp_used.contains(&r),
+                            "callee-saved copy reg {r} saved"
+                        );
                         checked += 1;
                     }
                     _ => {}
@@ -858,4 +860,3 @@ mod tests {
         assert!(plan(&f, &alloc_spilling_v0(4)).is_empty());
     }
 }
-

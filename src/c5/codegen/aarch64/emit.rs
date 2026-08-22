@@ -5132,9 +5132,7 @@ fn emit_inst(
         Inst::Bswap { value, width } => {
             emit_bswap(code, dst, *value, *width, alloc, frame, scratch)
         }
-        Inst::Copy { value, is_fp } => {
-            emit_copy(code, dst, *value, *is_fp, alloc, frame, scratch)
-        }
+        Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame, scratch),
         Inst::FpCast { kind, value } => {
             use super::super::ir::FpCastKind;
             let src_place = alloc

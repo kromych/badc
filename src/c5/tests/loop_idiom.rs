@@ -217,7 +217,12 @@ fn call_in_the_body_is_left_alone() {
         "char g(void);\nvoid f(char *p, int n) { for (int i = 0; i < n; i++) p[i] = g(); }",
         "f",
     );
-    assert_eq!(calls(&f), 1, "only the call the source wrote: {:?}", f.insts);
+    assert_eq!(
+        calls(&f),
+        1,
+        "only the call the source wrote: {:?}",
+        f.insts
+    );
 }
 
 /// An exit out of the middle of the loop is not one transfer.

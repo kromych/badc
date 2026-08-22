@@ -290,7 +290,14 @@ impl Assembly<'_> {
         }
     }
 
-    fn clear(&mut self, node: ValueId, operand: ValueId, keep: u64, shift: u32, depth: u32) -> bool {
+    fn clear(
+        &mut self,
+        node: ValueId,
+        operand: ValueId,
+        keep: u64,
+        shift: u32,
+        depth: u32,
+    ) -> bool {
         self.interior.push(node);
         let from = self.terms.len();
         if !self.walk(operand, shift, depth + 1) {
@@ -464,10 +471,7 @@ fn resolve_stored_byte(func: &FunctionSsa, value: ValueId) -> (ValueId, u32) {
                 op: BinOp::Shr | BinOp::Shru,
                 lhs,
                 rhs_imm,
-            }) if *rhs_imm > 0
-                && rhs_imm % 8 == 0
-                && shift + *rhs_imm as u32 + 8 <= 64 =>
-            {
+            }) if *rhs_imm > 0 && rhs_imm % 8 == 0 && shift + *rhs_imm as u32 + 8 <= 64 => {
                 shift += *rhs_imm as u32;
                 cur = *lhs;
             }
@@ -476,7 +480,9 @@ fn resolve_stored_byte(func: &FunctionSsa, value: ValueId) -> (ValueId, u32) {
                 lhs,
                 rhs_imm,
             }) if byte_survives(*rhs_imm as u64, shift) => cur = *lhs,
-            Some(Inst::Extend { value, kind }) if extend_keeps_low(*kind).is_some_and(|w| shift + 8 <= w) => {
+            Some(Inst::Extend { value, kind })
+                if extend_keeps_low(*kind).is_some_and(|w| shift + 8 <= w) =>
+            {
                 cur = *value
             }
             _ => break,
@@ -957,13 +963,7 @@ mod tests {
         );
         // The little-endian assembly is the reversed one there.
         let mut g = fresh(
-            alloc::vec![
-                param(0),
-                u8_load(0, 0),
-                u8_load(0, 1),
-                shl(2, 8),
-                or(1, 3),
-            ],
+            alloc::vec![param(0), u8_load(0, 0), u8_load(0, 1), shl(2, 8), or(1, 3),],
             Terminator::Return(4),
         );
         run_one(&mut g, false);
@@ -1003,13 +1003,7 @@ mod tests {
     #[test]
     fn strict_align_declines() {
         let mut f = fresh(
-            alloc::vec![
-                param(0),
-                u8_load(0, 0),
-                u8_load(0, 1),
-                shl(2, 8),
-                or(1, 3),
-            ],
+            alloc::vec![param(0), u8_load(0, 0), u8_load(0, 1), shl(2, 8), or(1, 3),],
             Terminator::Return(4),
         );
         run(core::slice::from_mut(&mut f), true, true);
@@ -1266,16 +1260,13 @@ mod tests {
             ..
         } = f.insts[last as usize]
         else {
-            panic!("expected a wide I64 store, got {:?}", f.insts[last as usize]);
+            panic!(
+                "expected a wide I64 store, got {:?}",
+                f.insts[last as usize]
+            );
         };
         assert!(
-            matches!(
-                f.insts[value as usize],
-                Inst::Bswap {
-                    value: 1,
-                    width: 8
-                }
-            ),
+            matches!(f.insts[value as usize], Inst::Bswap { value: 1, width: 8 }),
             "expected the store of a reversal of the source, got {:?}",
             f.insts[value as usize]
         );

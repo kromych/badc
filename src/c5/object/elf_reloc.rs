@@ -39,6 +39,7 @@ use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget};
 use super::elf_class::{
     Elf64Ehdr, Elf64Rela, Elf64Shdr, Elf64Sym, ElfClass, write_ehdr, write_shdr, write_sym,
 };
+use super::strtab::build_string_table;
 use super::{AddrPart, Build};
 use crate::c5::CodeModel;
 use crate::c5::layout::{round_up, write_struct};
@@ -238,22 +239,6 @@ const SHN_ABS: u16 = 0xfff1;
 /// Size of the ELF64 relocation record the in-memory tables use
 /// before [`encode_reloc_table`] narrows them for the class.
 const ELF64_RELA_SIZE: usize = 24;
-
-/// Build a NUL-separated string blob. Returns (`bytes`, `offsets`)
-/// where `offsets[i]` is the offset of `names[i]` in `bytes`.
-/// `bytes[0]` is the leading NUL so offset 0 indexes the empty
-/// string per the ELF convention.
-fn build_strtab(names: &[&str]) -> (Vec<u8>, Vec<u32>) {
-    let mut bytes = Vec::new();
-    bytes.push(0);
-    let mut offsets = Vec::with_capacity(names.len());
-    for name in names {
-        offsets.push(bytes.len() as u32);
-        bytes.extend_from_slice(name.as_bytes());
-        bytes.push(0);
-    }
-    (bytes, offsets)
-}
 
 /// psABI whose relocation numbers an object carries. Fixed by the
 /// machine and the ELF class: an ELFCLASS32 x86 object is an i386
@@ -2238,7 +2223,7 @@ pub(super) fn write_relocatable(
         all_names.push(MapClass::Code.symbol_name());
         all_names.push(MapClass::Data.symbol_name());
     }
-    let (strtab_bytes, name_offs) = build_strtab(&all_names);
+    let (strtab_bytes, name_offs) = build_string_table(&all_names);
     // Patch the file symbols' name offsets against the final
     // strtab; they sit right after the null entry.
     for i in 0..file_names.len() {
@@ -4110,7 +4095,7 @@ pub(super) fn write_relocatable(
         shstrtab_names.push(".comment".to_string());
     }
     let name_refs: Vec<&str> = shstrtab_names.iter().map(|n| n.as_str()).collect();
-    let (shstrtab_bytes, shstrtab_offs) = build_strtab(&name_refs);
+    let (shstrtab_bytes, shstrtab_offs) = build_string_table(&name_refs);
     // Name offset of a fixed section, addressed by its nominal index.
     let fixed_name = |nominal: u16| shstrtab_offs[shndx_map(nominal) as usize - 1];
 

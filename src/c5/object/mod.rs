@@ -21,6 +21,8 @@ pub(crate) mod pe;
 pub(crate) mod section_table;
 #[cfg(feature = "std")]
 pub(crate) mod so_versions;
+#[cfg(feature = "std")]
+pub(crate) mod strtab;
 pub(crate) mod weak_undef;
 
 #[cfg(feature = "native-emit")]

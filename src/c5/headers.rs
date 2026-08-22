@@ -46,7 +46,7 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 /// and leaves the compiler's own facilities in place. Ordinary headers keep
 /// the usual order (`-I` shadows the embedded set, as it does in gcc and
 /// clang).
-pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &["_builtins.h", "arm_neon.h"];
+pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &["_builtins.h", "arm_neon.h", "x86intrin.h"];
 
 /// Whether `name` is a compiler-owned intrinsic header.
 pub(super) fn compiler_owned_header(name: &str) -> bool {
@@ -71,6 +71,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../libc/include/_builtins.h"),
     ),
     ("arm_neon.h", include_str!("../../libc/include/arm_neon.h")),
+    (
+        "x86intrin.h",
+        include_str!("../../libc/include/x86intrin.h"),
+    ),
     ("stdalign.h", include_str!("../../libc/include/stdalign.h")),
     ("stddef.h", include_str!("../../libc/include/stddef.h")),
     ("stdint.h", include_str!("../../libc/include/stdint.h")),

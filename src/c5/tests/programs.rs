@@ -1159,6 +1159,16 @@ fn builtin_types_compatible_ptr_array() {
 }
 
 #[test]
+fn builtin_types_compatible_typedef() {
+    // C99 6.7.7p3: an array typedef in a `__builtin_types_compatible_p`
+    // type-name position is that array type, `A *` over it names a
+    // pointer to the array, and both compose through chained aliases,
+    // qualifiers, deferred / zero-length / multi-dimensional bounds and
+    // aggregate elements. Matches gcc.
+    assert_eq!(run_fixture("builtin_types_compatible_typedef.c"), 0);
+}
+
+#[test]
 fn builtin_types_compatible_fnptr() {
     // C99 6.7.5.3p15: function and function-pointer type names as
     // `__builtin_types_compatible_p` arguments, including a typedef against
@@ -2844,6 +2854,35 @@ fn zero_length_array() {
     // treated as a flexible array member (zero storage, real bytes
     // follow the fixed part).
     assert_eq!(run_fixture("zero_length_array.c"), 0);
+}
+
+#[test]
+fn x86intrin_umbrella_scalar_subset() {
+    use crate::{CompileOptions, Compiler, Target};
+    // <x86intrin.h> carries the scalar ia32 subset: byte swaps, bit
+    // scans, rotates, rdtsc/rdtscp/rdpmc and pause. It compiles on the
+    // x86 targets only; elsewhere the include reports the missing
+    // header, as gcc's per-target header set does.
+    let compiles = |target: Target| -> bool {
+        let src = "#include <x86intrin.h>\n\
+                   unsigned long long f(unsigned int *aux) {\n\
+                     __pause();\n\
+                     return __rdtsc() + __rdtscp(aux) + __rdpmc(0)\n\
+                       + (unsigned long long)__bswapd(__bsfd(0x10) + __bsrd(0x10))\n\
+                       + (unsigned long long)_bswap64(1) + _lrotl(1, 2)\n\
+                       + __rolw(1, 3) + __rorb(8, 1) + _rotr(4u, 1);\n\
+                   }\n";
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .is_ok()
+    };
+    assert!(compiles(Target::LinuxX64), "x86intrin.h on linux-x64");
+    assert!(compiles(Target::WindowsX64), "x86intrin.h on windows-x64");
+    assert!(
+        !compiles(Target::LinuxAarch64),
+        "x86intrin.h must report non-x86 targets"
+    );
 }
 
 #[test]

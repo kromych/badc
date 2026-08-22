@@ -5417,6 +5417,12 @@ impl Compiler {
         &mut self,
     ) -> Result<(i64, alloc::vec::Vec<i64>, Option<FnTypeName>), C5Error> {
         self.pending.typeof_operand_was_array = false;
+        // Clear the array carriers so a stale value from an earlier parse
+        // cannot read as this type name's extent; the base parse below
+        // refills them for an array typedef or `typeof` base.
+        self.pending.typedef_base_array_size = 0;
+        self.pending.typedef_base_array_dims.clear();
+        self.pending.typedef_base_zero_len = false;
         let mut ty = self.parse_decl_base_type()?;
         // A function-pointer / function-type base -- a typedef, or `typeof`
         // of a function or of a function's address -- carries the pointee
@@ -5438,24 +5444,33 @@ impl Compiler {
             });
         // `typeof(arr)` and an array typedef leave the operand's extent on
         // the carrier; a multi-dimensional alias also fills the dims list.
+        // The carrier gates (not the `typeof` flag): a bare array typedef
+        // in the type-name position is that array type (C99 6.7.7p3).
         let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
         let base_dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
-        let mut dims = if !self.pending.typeof_operand_was_array {
+        let base_zero_len = core::mem::take(&mut self.pending.typedef_base_zero_len);
+        let mut dims = if base_extent == 0 && !base_zero_len {
             alloc::vec::Vec::new()
         } else if !base_dims.is_empty() {
             base_dims
+        } else if base_zero_len {
+            alloc::vec![0]
         } else {
             alloc::vec![if base_extent > 0 { base_extent } else { -1 }]
         };
         while self.lex.tk == Token::MulOp {
             self.next()?;
+            if !dims.is_empty() {
+                // `A *` over an array base names a pointer to the array
+                // (C99 6.7.7p3): fold the extent into the aggregate
+                // pointee, as the declarator path does.
+                ty = self.array_agg_type(ty, &dims);
+                dims.clear();
+            }
             ty += Ty::Ptr as i64;
             if let Some(f) = fn_ty.as_mut() {
                 f.ptr_depth += 1;
             }
-            // A pointer through the specifier names a pointer, not an
-            // array; the extent belongs to the pointee.
-            dims.clear();
             while self.lex.tk == Token::TypeQual {
                 self.next()?;
             }

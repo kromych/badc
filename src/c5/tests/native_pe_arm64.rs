@@ -614,13 +614,11 @@ fn fixture_parity() {
         eprintln!("skip fixture_parity: no PE runner on this host");
         return;
     }
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_PE_ARM64_FIXTURES {
+    let failures = super::parity_failures(NATIVE_PE_ARM64_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture(name);
-        if !outcome.matches(*expected) {
-            failures.push(format!("{name}: expected {expected}, got {outcome:?}"));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name}: expected {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} PE/aarch64 fixtures regressed:\n  {}",
@@ -637,13 +635,11 @@ fn fixture_parity_native_optimized() {
         return;
     }
     let opts = NativeOptions::new().with_optimize();
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_PE_ARM64_FIXTURES {
+    let failures = super::parity_failures(NATIVE_PE_ARM64_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture_with_options(name, opts, "-O");
-        if !outcome.matches(*expected) {
-            failures.push(format!("{name} (-O): expected {expected}, got {outcome:?}"));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name} (-O): expected {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} PE/aarch64 fixtures regressed under -O:\n  {}",

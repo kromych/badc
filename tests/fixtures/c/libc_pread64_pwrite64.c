@@ -7,9 +7,8 @@
 // binding exists; on other targets main is a no-op so the fixture stays
 // green everywhere.
 #include <unistd.h>
-#include <fcntl.h>
+#include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 #ifdef __linux__
 typedef long (*pread64_fn)(int, void *, unsigned long, long);
@@ -32,9 +31,10 @@ static struct vec tbl[] = {
 
 int main(void) {
 #ifdef __linux__
-    char path[64];
-    sprintf(path, "badc_p64_%d.bin", (int)getpid());
-    int fd = open(path, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    // mkstemp, not a pid-derived name: the JIT lane runs this in the test
+    // harness process, where every concurrent instance shares one pid.
+    char path[] = "/tmp/badc_p64XXXXXX";
+    int fd = mkstemp(path);
     if (fd < 0) {
         return 1;
     }

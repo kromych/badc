@@ -955,13 +955,11 @@ fn unistd_extensions_join_the_macos_link() {
 
 #[test]
 fn fixture_parity() {
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_FIXTURES {
+    let failures = super::parity_failures(NATIVE_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture(name);
-        if !outcome.matches(*expected) {
-            failures.push(format!("{name}: expected exit {expected}, got {outcome:?}"));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name}: expected exit {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} native fixtures regressed:\n  {}",
@@ -996,15 +994,11 @@ fn atoi_negative_sign_extends() {
 #[test]
 fn fixture_parity_native_optimized() {
     let opts = NativeOptions::new().with_optimize();
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in NATIVE_FIXTURES {
+    let failures = super::parity_failures(NATIVE_FIXTURES, |name, expected| {
         let outcome = build_and_run_fixture_with_options(name, opts, "-O");
-        if !outcome.matches(*expected) {
-            failures.push(format!(
-                "{name} (-O): expected exit {expected}, got {outcome:?}"
-            ));
-        }
-    }
+        (!outcome.matches(*expected))
+            .then(|| format!("{name} (-O): expected exit {expected}, got {outcome:?}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} native fixtures regressed under -O:\n  {}",

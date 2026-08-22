@@ -26,6 +26,14 @@ skip:
 cargo test --release --lib
 ```
 
+The whole-corpus parity tests build and run their fixtures across worker
+threads drawn from one process-wide pool, so the bound is the total in flight
+rather than a per-test width -- `cargo test` has several of those tests running
+at once. The pool is sized from `available_parallelism()`: half the cores,
+never below the concurrency the serial loops already reached, never above
+eight. `BADC_TEST_JOBS=N` sets it explicitly for hosts whose memory does not
+track their core count.
+
 ## Fixtures worth reading
 
 Each of these under `tests/fixtures/c/` pins a distinct hard feature:

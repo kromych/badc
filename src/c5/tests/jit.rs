@@ -1760,26 +1760,21 @@ fn jit_fixture(name: &str) -> i32 {
 /// suite ran a thread-local through the JIT.
 #[test]
 fn unsupported_fixtures_are_refused() {
-    let mut failures: Vec<String> = Vec::new();
-    for (name, needle) in JIT_UNSUPPORTED_FIXTURES {
+    let failures = super::parity_failures(JIT_UNSUPPORTED_FIXTURES, |name, needle| {
         let src = super::with_prelude(&super::load_fixture(name));
         let program = match Compiler::new(src).compile() {
             Ok(p) => p,
-            Err(e) => {
-                failures.push(format!("{name}: compile failed: {e}"));
-                continue;
-            }
+            Err(e) => return Some(format!("{name}: compile failed: {e}")),
         };
         match jit_run(&program, &[name.to_string()]) {
-            Ok(exit) => failures.push(format!("{name}: expected a refusal, ran and exited {exit}")),
+            Ok(exit) => Some(format!("{name}: expected a refusal, ran and exited {exit}")),
             Err(e) => {
                 let msg = format!("{e}");
-                if !msg.contains(needle) {
-                    failures.push(format!("{name}: refusal does not name `{needle}`: {msg}"));
-                }
+                (!msg.contains(needle))
+                    .then(|| format!("{name}: refusal does not name `{needle}`: {msg}"))
             }
         }
-    }
+    });
     assert!(
         failures.is_empty(),
         "{} of {} unsupported JIT fixtures did not refuse as expected:\n  {}",
@@ -1791,13 +1786,10 @@ fn unsupported_fixtures_are_refused() {
 
 #[test]
 fn fixture_parity() {
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in JIT_FIXTURES {
+    let failures = super::parity_failures(JIT_FIXTURES, |name, expected| {
         let got = jit_fixture(name);
-        if got != *expected {
-            failures.push(format!("{name}: expected {expected}, got {got}"));
-        }
-    }
+        (got != *expected).then(|| format!("{name}: expected {expected}, got {got}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} JIT fixtures regressed:\n  {}",
@@ -1819,19 +1811,15 @@ fn fixture_parity_native_optimized() {
     path.push("tests");
     path.push("fixtures");
     path.push("c");
-    let mut failures: Vec<String> = Vec::new();
-    for (name, expected) in JIT_FIXTURES {
+    let failures = super::parity_failures(JIT_FIXTURES, |name, expected| {
         let mut p = path.clone();
         p.push(name);
         let src =
             std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
         let got = jit_exit_native_optimized(&src, &[name]);
-        if got != *expected {
-            failures.push(format!(
-                "{name} (native optimizer on): expected {expected}, got {got}"
-            ));
-        }
-    }
+        (got != *expected)
+            .then(|| format!("{name} (native optimizer on): expected {expected}, got {got}"))
+    });
     assert!(
         failures.is_empty(),
         "{} of {} JIT fixtures regressed under the native optimizer:\n  {}",

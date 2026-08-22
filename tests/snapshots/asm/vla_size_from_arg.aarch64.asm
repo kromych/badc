@@ -31,15 +31,15 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	sp, x4
                	mov	x0, #0x0                // =0
+               	mov	x5, #0xff               // =255
                	b	<addr>
                	sxtw	x1, w0
-               	add	x5, x4, x1
+               	add	x6, x4, x1
                	add	x2, x1, #0x1
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	strb	w2, [x5]
+               	and	x2, x2, x5
+               	strb	w2, [x6]
                	add	x0, x1, #0x1
-               	cmp	w0, w3
+               	cmp	x0, x3
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, x0
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	ldrb	w5, [x5]
                	add	x1, x1, x5
                	add	x0, x2, #0x1
-               	cmp	w0, w3
+               	cmp	x0, x3
                	b.lt	<addr>
                	sxtw	x0, w1
                	sub	sp, x29, #0x20

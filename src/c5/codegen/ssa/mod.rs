@@ -7,6 +7,7 @@ pub(crate) mod cfi;
 #[cfg(feature = "std")]
 pub(crate) mod dump;
 pub(crate) mod emit_common;
+pub(crate) mod licm;
 pub(crate) mod liveness;
 pub(crate) mod mem2reg;
 pub(crate) mod native;

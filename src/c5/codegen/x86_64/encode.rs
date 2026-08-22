@@ -2271,7 +2271,7 @@ pub(crate) fn lower(
                 .iter_mut()
                 .map(|f| {
                     if native.optimize {
-                        super::ssa::split_ranges::allocate_split(f, target)
+                        super::ssa::licm::allocate_hoisted(f, target)
                     } else {
                         super::ssa::reg_alloc::allocate(f, target)
                     }

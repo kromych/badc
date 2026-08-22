@@ -27,32 +27,32 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	str	x3, [x0, #0x10]
-               	sub	x4, x29, #0x20
+               	mov	x4, #0x7                // =7
+               	sub	x5, x29, #0x20
                	ldr	w2, [x0, #0x4]
                	cmp	w2, #0x4
                	cset	x2, eq
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x2, eq
-               	mov	w5, w2
-               	cbz	x5, <addr>
+               	mov	w6, w2
+               	cbz	x6, <addr>
+               	ldr	w6, [x0, #0x4]
+               	and	x6, x6, x4
+               	add	x6, x3, x6
+               	ldrb	w6, [x6]
+               	strb	w6, [x5]
                	ldr	w5, [x0, #0x4]
-               	mov	x17, #0x7               // =7
-               	and	x5, x5, x17
-               	add	x5, x3, x5
-               	ldrb	w5, [x5]
-               	strb	w5, [x4]
-               	ldr	w4, [x0, #0x4]
-               	add	x4, x4, #0x1
-               	str	w4, [x0, #0x4]
+               	add	x5, x5, #0x1
+               	str	w5, [x0, #0x4]
                	mov	w2, w2
                	cbz	x2, <addr>
-               	sub	x4, x29, #0x28
+               	sub	x5, x29, #0x28
                	sxtw	x2, w1
                	add	x1, x2, #0x1
-               	add	x2, x4, x2
-               	ldurb	w4, [x29, #-0x20]
-               	strb	w4, [x2]
-               	cmp	w1, #0x4
+               	add	x2, x5, x2
+               	ldurb	w5, [x29, #-0x20]
+               	strb	w5, [x2]
+               	cmp	x1, #0x4
                	b.ge	<addr>
                	b	<addr>
                	adrp	x0, <page>
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	w1, #0x4
+               	cmp	x1, #0x4
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x30
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	mov	x17, #0x43              // =67
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	w0, #0x0
+               	cmp	x0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0xa                // =10

@@ -4184,14 +4184,14 @@ Disassembly of section .text:
                	stp	x26, x27, [sp, #0x30]
                	str	x28, [sp, #0x40]
                	mov	x0, #0x0                // =0
-               	b	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
+               	b	<addr>
                	lsl	x3, x0, #4
                	add	x1, x2, x3
                	str	x0, [x1]
-               	lsl	x2, x0, #1
-               	str	x2, [x1, #0x8]
+               	lsl	x3, x0, #1
+               	str	x3, [x1, #0x8]
                	add	x0, x0, #0x1
                	cmp	x0, #0x105
                	b.lt	<addr>

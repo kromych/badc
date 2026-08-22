@@ -27,9 +27,9 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x2, %ecx
+               	leaq	<rip>, %rdx
                	jmp	<addr>
-               	leaq	<rip>, %rax
-               	addq	%rdi, %rax
+               	leaq	(%rdx,%r8), %rax
                	movsbq	(%rax), %rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -37,26 +37,25 @@ Disassembly of section .text:
                	imulq	%rcx, %rax
                	movslq	%eax, %rax
                	jmp	<addr>
-               	leaq	<rip>, %rdx
                	movslq	%eax, %rsi
-               	addq	%rsi, %rdx
-               	movl	$0x1, %esi
-               	movb	%sil, (%rdx)
+               	addq	%rdx, %rsi
+               	movl	$0x1, %edi
+               	movb	%dil, (%rsi)
                	addq	%rcx, %rax
-               	cmpl	$0x186a0, %eax          # imm = 0x186A0
+               	cmpq	$0x186a0, %rax          # imm = 0x186A0
                	jl	<addr>
-               	leaq	0x1(%rdi), %rcx
-               	movslq	%ecx, %rdi
-               	movq	%rdi, %rax
-               	imulq	%rdi, %rax
+               	leaq	0x1(%r8), %rcx
+               	movslq	%ecx, %r8
+               	movq	%r8, %rax
+               	imulq	%r8, %rax
                	cmpq	$0x186a0, %rax          # imm = 0x186A0
                	jl	<addr>
                	xorq	%rcx, %rcx
                	movl	$0x2, %eax
+               	leaq	<rip>, %rdi
                	jmp	<addr>
-               	leaq	<rip>, %rsi
                	movslq	%eax, %rdx
-               	addq	%rdx, %rsi
+               	leaq	(%rdi,%rdx), %rsi
                	movsbq	(%rsi), %rsi
                	testq	%rsi, %rsi
                	jne	<addr>
@@ -65,9 +64,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	leaq	0x1(%rdx), %rax
-               	cmpl	$0x186a0, %eax          # imm = 0x186A0
+               	cmpq	$0x186a0, %rax          # imm = 0x186A0
                	jl	<addr>
-               	cmpl	$0x2578, %ecx           # imm = 0x2578
+               	cmpq	$0x2578, %rcx           # imm = 0x2578
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

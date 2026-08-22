@@ -754,27 +754,27 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
                	mov	x1, #0x0                // =0
-               	mov	x0, x1
-               	b	<addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
+               	mov	x0, x1
+               	b	<addr>
                	sxtw	x2, w0
                	str	x2, [x3, x2, lsl #3]
                	add	x0, x2, #0x1
-               	cmp	w0, #0xb4
+               	cmp	x0, #0xb4
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
+               	b	<addr>
                	sxtw	x2, w0
-               	ldr	x4, [x3, x2, lsl #3]
-               	add	x3, x2, #0x1
-               	sxtw	x3, w3
-               	mul	x3, x4, x3
-               	add	x1, x1, x3
+               	ldr	x5, [x3, x2, lsl #3]
+               	add	x4, x2, #0x1
+               	sxtw	x4, w4
+               	mul	x4, x5, x4
+               	add	x1, x1, x4
                	add	x0, x2, #0x1
-               	cmp	w0, #0xb4
+               	cmp	x0, #0xb4
                	b.lt	<addr>
                	add	x20, x1, #0xa
                	mov	x21, #0x7               // =7

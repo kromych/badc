@@ -5478,6 +5478,13 @@ fn split_spilled_reload_run() {
 }
 
 #[test]
+fn hoist_loop_invariant_address() {
+    // Loop-invariant addresses and constants lifted out of the loops
+    // that rebuild them; the results are unchanged.
+    assert_eq!(run_fixture("hoist_loop_invariant_address.c"), 42);
+}
+
+#[test]
 fn linked_list() {
     assert_eq!(run_fixture("linked_list.c"), 10);
 }

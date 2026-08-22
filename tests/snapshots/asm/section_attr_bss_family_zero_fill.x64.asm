@@ -67,25 +67,25 @@ Disassembly of section .text:
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
                	leaq	<rip>, %rsi
+               	jmp	<addr>
                	movslq	%eax, %rcx
-               	addq	%rcx, %rsi
-               	movsbq	(%rsi), %rsi
-               	testq	%rsi, %rsi
+               	leaq	(%rsi,%rcx), %rdi
+               	movsbq	(%rdi), %rdi
+               	testq	%rdi, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	cmpl	$0x4000, %eax           # imm = 0x4000
+               	cmpq	$0x4000, %rax           # imm = 0x4000
                	jl	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
                	leaq	<rip>, %rsi
+               	jmp	<addr>
                	movslq	%eax, %rcx
-               	movq	(%rsi,%rcx,8), %rsi
-               	testq	%rsi, %rsi
+               	movq	(%rsi,%rcx,8), %rdi
+               	testq	%rdi, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	cmpl	$0x8, %eax
+               	cmpq	$0x8, %rax
                	jl	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	addq	%rsi, %rcx
                	movslq	0xc(%rax), %rax
                	addq	%rcx, %rax
-               	cmpl	$0x6, %eax
+               	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0x7, %eax
                	retq

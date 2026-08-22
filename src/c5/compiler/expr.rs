@@ -5510,9 +5510,12 @@ impl Compiler {
                 });
             } else if !ptr_dims.is_empty() && levels > 0 {
                 // `T (*)[N]`: fold the pointee dimensions into the tag so the
-                // pointee keeps its size, as the cast path does.
-                ty = self.array_agg_type(ty, &ptr_dims) + levels * Ty::Ptr as i64;
-                dims.clear();
+                // pointee keeps its size, as the cast path does. An array
+                // typedef base contributes the inner dimensions (C99
+                // 6.7.7p3: `A (*)[N]` is a pointer to `N` arrays of `A`).
+                let mut pointee = ptr_dims;
+                pointee.append(&mut dims);
+                ty = self.array_agg_type(ty, &pointee) + levels * Ty::Ptr as i64;
             } else {
                 ty += levels * Ty::Ptr as i64;
             }
@@ -5520,6 +5523,9 @@ impl Compiler {
         // Abstract array declarator `T []` / `T [N]` (C99 6.7.6). An
         // omitted bound is an incomplete array type, which C99 6.7.5.2p6
         // makes compatible with any bound for the same element type.
+        // These bounds are outer; an array typedef base supplies the
+        // inner ones, as the `typeof` type-name reader orders them.
+        let mut outer = alloc::vec::Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
             let n = if self.lex.tk == ']' {
@@ -5539,7 +5545,11 @@ impl Compiler {
                 return Err(self.compile_err("close bracket expected in an array type name"));
             }
             self.next()?;
-            dims.push(n);
+            outer.push(n);
+        }
+        if !outer.is_empty() {
+            outer.append(&mut dims);
+            dims = outer;
         }
         Ok((ty, dims, fn_ty))
     }

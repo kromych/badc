@@ -45,6 +45,14 @@ _Static_assert(__builtin_types_compatible_p(T0, int[]) == 1, "T0 ~ []");
 _Static_assert(__builtin_types_compatible_p(SA, struct S[3]) == 1, "struct arr");
 _Static_assert(__builtin_types_compatible_p(SA, struct S *) == 0, "struct ptr");
 
+// Bounds written on the type name are outer, the alias supplies the inner:
+// `T5 [3]` is `int[3][5]`, and `T5 (*)[3]` a pointer to it.
+_Static_assert(__builtin_types_compatible_p(T5[3], int[3][5]) == 1, "outer bound");
+_Static_assert(__builtin_types_compatible_p(T5[3], int[5][3]) == 0, "bound order");
+_Static_assert(__builtin_types_compatible_p(T5[3], int[15]) == 0, "not flattened");
+_Static_assert(__builtin_types_compatible_p(T5 (*)[3], int (*)[3][5]) == 1, "ptee outer");
+_Static_assert(__builtin_types_compatible_p(T5 (*)[3], int (*)[5][3]) == 0, "ptee order");
+
 int main(void) {
     // `typeof` of an array object composes with a pointer declarator the
     // same way the typedef does.

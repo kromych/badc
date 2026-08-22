@@ -1482,14 +1482,13 @@ int main(void) { return 0; }
 }
 
 #[test]
-fn file_scope_asm_set_rejects_a_location_value() {
+fn file_scope_asm_set_takes_a_location_value() {
     // A `.set` whose value is a location rather than an absolute (`. + 4`)
-    // gives GNU as a section-relative symbol, and a field referencing it takes
-    // a relocation against the section. badc's section symbols are absolute
-    // values, so such an assignment is diagnosed rather than emitted as an
-    // offset that would be wrong once the section is placed.
-    // TODO location-valued section symbols.
-    use crate::c5::Target;
+    // gives GNU as a section-relative symbol, and a field referencing it
+    // takes a relocation against the section. Verified against gas 2.46:
+    // `locptr` local at `.rodata.locval + 6`, the `.long` relocated there.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"asm(".pushsection .rodata.locval, \"a\"\n"
     ".globl locbase\n"
     "locbase:\n"
@@ -1499,12 +1498,30 @@ fn file_scope_asm_set_rejects_a_location_value() {
     ".popsection\n");
 int main(void) { return 0; }
 "#;
-    let err = Compiler::with_target(src.to_string(), Target::LinuxX64)
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
         .compile()
-        .expect_err("a location-valued `.set` is not an absolute value");
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let sym = obj
+        .symbols
+        .iter()
+        .find(|s| s.name == "locptr")
+        .expect("`locptr` must be defined");
+    // The section reads as `RelRo`: read-only payload whose own field the
+    // loader relocates.
     assert!(
-        format!("{err:?}").contains("location"),
-        "diagnostic must name the location value: {err:?}"
+        matches!(sym.section, crate::c5::linker::object::NativeSymSection::RelRo),
+        "`locptr` must be defined in its read-only section: {:?}",
+        sym.section
+    );
+    assert_eq!(
+        sym.value, 6,
+        "`.set locptr, . + 4` defines a label 4 past the assignment"
     );
 }
 

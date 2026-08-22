@@ -7168,11 +7168,15 @@ fn measure_round_inner(
         match eval_section_set_expr(
             name, expr, key, *at, &map, &syms, &aliases, &sections, const_of,
         ) {
+            // The maps are read by every later expression, so a reassigned
+            // name keeps only its last value's kind.
             Ok(SectionSetValue::Abs(v)) => {
                 syms.insert(name.clone(), v);
+                map.remove(name);
             }
             Ok(SectionSetValue::Loc(sk, off)) => {
                 map.insert(name.clone(), (sk, off));
+                syms.remove(name);
             }
             Err(e) => set_err = set_err.or(Some(e)),
         }
@@ -8284,6 +8288,37 @@ pub(crate) fn materialize_asm_sections(
             _ => None,
         })
         .collect();
+    // A `.set` whose value reduced to a location defines the name as a
+    // label of the owning section, as GNU as does, so a field referencing
+    // it relocates against a definition.
+    for name in blocks.iter().flat_map(|b| &b.items).filter_map(|it| {
+        match it {
+            AsmSectionItem::SetExpr { name, .. } => Some(name.as_str()),
+            _ => None,
+        }
+    }) {
+        let (Some(sk), Some(off)) = (measured.section(name), measured.offset(name)) else {
+            continue;
+        };
+        let Some(s) = sink
+            .sections
+            .iter_mut()
+            .find(|s| section_key_of(s) == *sk)
+        else {
+            continue;
+        };
+        if !s.labels.iter().any(|l| l.name == name) {
+            s.labels.push(AsmSectionLabel {
+                name: alloc::string::String::from(name),
+                offset: off as u32,
+                global: false,
+                weak: false,
+                sym_type: AsmSymType::NoType,
+                size: None,
+                absolute: None,
+            });
+        }
+    }
     for &(sec_idx, _) in &touched {
         let s = &mut sink.sections[sec_idx];
         if let Some(l) = s.labels.iter().find(|l| {

@@ -42,8 +42,8 @@ use super::lds::{
 };
 use super::object::{
     Elf32Ehdr, Elf32Rel, Elf32Rela, Elf32Shdr, Elf32Sym, Elf64Ehdr, Elf64Rel, Elf64Shdr, ElfClass,
-    SharedLibrary, absolute_in_pie_body, elf_reloc_desc, is_c_identifier, locate_reloc,
-    read_struct,
+    SharedLibrary, absolute_in_pie_body, elf_reloc_desc, elf_reloc_field_width, implicit_addend,
+    is_c_identifier, locate_reloc, read_struct,
 };
 use crate::c5::object::elf_reloc_types as rt;
 use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
@@ -479,7 +479,7 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
             };
             let rtype = class.reloc_type(r_info);
             let addend = if rel {
-                implicit_addend(
+                rel_addend(
                     &bytes,
                     &sections[target],
                     ehdr.e_machine,
@@ -537,10 +537,9 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
     })
 }
 
-/// The addend an `SHT_REL` entry keeps in the field it relocates,
-/// sign-extended from the field's width. A type that touches no field
-/// (`R_*_NONE`) has none.
-fn implicit_addend(
+/// Locate and decode the field an `SHT_REL` entry keeps its addend
+/// in. A type that touches no field (`R_*_NONE`) has none.
+fn rel_addend(
     bytes: &[u8],
     sec: &RawSection,
     machine: u16,
@@ -551,11 +550,7 @@ fn implicit_addend(
     if rtype == R_NONE {
         return Ok(0);
     }
-    let width = match machine {
-        EM_386 => rt::i386_field_width(rtype),
-        _ => None,
-    };
-    let Some(width) = width else {
+    let Some(width) = elf_reloc_field_width(machine, rtype) else {
         return Err(err(&format!(
             "{source}: {} in `{}' has no implicit-addend field",
             elf_reloc_desc(machine, rtype),
@@ -570,12 +565,7 @@ fn implicit_addend(
         )));
     }
     let at = sec.data_off + offset as usize;
-    let raw = &bytes[at..at + width as usize];
-    Ok(match width {
-        1 => raw[0] as i8 as i64,
-        2 => i16::from_le_bytes([raw[0], raw[1]]) as i64,
-        _ => i32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]) as i64,
-    })
+    Ok(implicit_addend(&bytes[at..at + width as usize]))
 }
 
 /// A relocation writing a whole load address into a field narrower

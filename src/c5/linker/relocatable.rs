@@ -30,7 +30,9 @@ use super::gnu_property;
 use super::lds::{
     BinOp, DataWidth, Expr, LinkerScript, SectionContent, SectionsItem, SortKind, UnOp,
 };
-use super::object::{Elf64Ehdr, Elf64Shdr, read_struct};
+use super::object::{
+    Elf64Ehdr, Elf64Shdr, elf_reloc_desc, elf_reloc_field_width, implicit_addend, read_struct,
+};
 
 pub const EM_386: u16 = 3;
 pub const EM_X86_64: u16 = 62;
@@ -68,11 +70,18 @@ const STT_FILE: u8 = 4;
 const ELF64_SHDR_SIZE: usize = 64;
 const ELF64_SYM_SIZE: usize = 24;
 const ELF64_RELA_SIZE: usize = 24;
+const ELF64_REL_SIZE: usize = 16;
 
 fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
         "linker::relocatable: {msg}",
     )))
+}
+
+/// An input shape the relocatable link declines rather than a broken
+/// invariant: the reader's own diagnostics stay internal errors.
+fn unsupported(msg: &str) -> C5Error {
+    C5Error::Compile(crate::c5::error::fmt_unsupported_err(msg))
 }
 
 /// Where a symbol's `st_shndx` points, with section indices mapped to
@@ -210,8 +219,15 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         return Err(err(&format!("{source}: not an ELF object")));
     }
     let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
-    if ehdr.e_ident[4] != 2 || ehdr.e_ident[5] != 1 {
-        return Err(err(&format!("{source}: not a little-endian ELF64 object")));
+    if ehdr.e_ident[4] != 2 {
+        return Err(unsupported(&format!(
+            "{source}: a relocatable link takes ELFCLASS64 inputs only"
+        )));
+    }
+    if ehdr.e_ident[5] != 1 {
+        return Err(unsupported(&format!(
+            "{source}: a relocatable link takes little-endian inputs only"
+        )));
     }
     if ehdr.e_type != ET_REL {
         return Err(err(&format!(
@@ -263,13 +279,7 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
                     "{source}: SHT_SYMTAB_SHNDX (>= 0xff00 sections) is not supported"
                 )));
             }
-            SHT_REL => {
-                return Err(err(&format!(
-                    "{source}: SHT_REL relocations are not supported (x86_64 / aarch64 \
-                     objects use SHT_RELA)"
-                )));
-            }
-            SHT_RELA | SHT_GROUP => {
+            SHT_RELA | SHT_REL | SHT_GROUP => {
                 if sh.sh_type == SHT_GROUP {
                     group_shndx.push(i);
                 }
@@ -362,33 +372,50 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         }
     }
 
-    // Relocation sections attach to their carried target.
+    // Relocation sections attach to their carried target. An SHT_REL
+    // entry keeps its addend in the field it relocates, so it is read
+    // out of the target's bytes and the entry becomes RELA-shaped.
+    // The output tables are RELA whatever the input carried; the field
+    // keeps its bytes, which a RELA consumer overwrites.
     for sh in shdrs.iter().skip(1) {
-        if sh.sh_type != SHT_RELA {
-            continue;
-        }
-        if sh.sh_entsize != ELF64_RELA_SIZE as u64 {
-            return Err(err(&format!("{source}: SHT_RELA entry size mismatch")));
+        let rel = match sh.sh_type {
+            SHT_RELA => false,
+            SHT_REL => true,
+            _ => continue,
+        };
+        let ent = if rel {
+            ELF64_REL_SIZE
+        } else {
+            ELF64_RELA_SIZE
+        };
+        if sh.sh_entsize != ent as u64 {
+            let kind = if rel { "SHT_REL" } else { "SHT_RELA" };
+            return Err(err(&format!("{source}: {kind} entry size mismatch")));
         }
         let Some(ci) = carried.get(sh.sh_info as usize).copied().flatten() else {
             continue; // relocations for a consumed section carry nothing
         };
         let body = section_slice(bytes, sh)?;
-        let n = body.len() / ELF64_RELA_SIZE;
-        let relocs = &mut sections[ci].relocs;
-        relocs.reserve(n);
+        let n = body.len() / ent;
+        let mut relocs: Vec<EtReloc> = Vec::with_capacity(n);
         for j in 0..n {
-            let off = j * ELF64_RELA_SIZE;
+            let off = j * ent;
             let r_offset = u64::from_le_bytes(body[off..off + 8].try_into().unwrap());
             let r_info = u64::from_le_bytes(body[off + 8..off + 16].try_into().unwrap());
-            let r_addend = i64::from_le_bytes(body[off + 16..off + 24].try_into().unwrap());
+            let rtype = (r_info & 0xffff_ffff) as u32;
+            let addend = if rel {
+                rel_addend(&sections[ci], ehdr.e_machine, rtype, r_offset, source)?
+            } else {
+                i64::from_le_bytes(body[off + 16..off + 24].try_into().unwrap())
+            };
             relocs.push(EtReloc {
                 offset: r_offset,
                 sym: (r_info >> 32) as u32,
-                rtype: (r_info & 0xffff_ffff) as u32,
-                addend: r_addend,
+                rtype,
+                addend,
             });
         }
+        sections[ci].relocs.extend(relocs);
     }
 
     // Groups.
@@ -434,6 +461,38 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
         symbols,
         groups,
     })
+}
+
+/// Read one `SHT_REL` entry's implicit addend out of the section it
+/// relocates. A type whose field is not a plain little-endian integer
+/// -- the aarch64 instruction forms -- carries no recoverable addend.
+fn rel_addend(
+    sec: &EtSection,
+    machine: u16,
+    rtype: u32,
+    offset: u64,
+    source: &str,
+) -> Result<i64, C5Error> {
+    if rtype == 0 {
+        return Ok(0); // R_*_NONE
+    }
+    let Some(width) = elf_reloc_field_width(machine, rtype) else {
+        return Err(unsupported(&format!(
+            "{source}: {} in `{}' has no implicit-addend field",
+            elf_reloc_desc(machine, rtype),
+            sec.name
+        )));
+    };
+    let end = offset + width as u64;
+    if sec.sh_type == SHT_NOBITS || end > sec.bytes.len() as u64 {
+        return Err(err(&format!(
+            "{source}: relocation offset 0x{offset:x} outside `{}'",
+            sec.name
+        )));
+    }
+    Ok(implicit_addend(
+        &sec.bytes[offset as usize..end as usize],
+    ))
 }
 
 fn read_carried(bytes: &[u8], sh: &Elf64Shdr, shstr: &[u8]) -> Result<EtSection, C5Error> {

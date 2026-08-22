@@ -327,6 +327,33 @@ pub(crate) fn elf_reloc_desc(em_machine: u16, rtype: u32) -> String {
     }
 }
 
+/// Byte width of the plain little-endian field a relocation reads and
+/// writes, selected by the ELF `e_machine` number. `None` when the
+/// type has no such field, which is what an `SHT_REL` entry needs to
+/// recover its addend from.
+pub(crate) fn elf_reloc_field_width(em_machine: u16, rtype: u32) -> Option<u32> {
+    use crate::c5::object::elf_reloc_types::{
+        aarch64_field_width, i386_field_width, x86_64_field_width,
+    };
+    match em_machine {
+        super::relocatable::EM_386 => i386_field_width(rtype),
+        EM_AARCH64 => aarch64_field_width(rtype),
+        _ => x86_64_field_width(rtype),
+    }
+}
+
+/// The addend an `SHT_REL` entry keeps in the field it relocates,
+/// sign-extended from the field's width.
+pub(crate) fn implicit_addend(field: &[u8]) -> i64 {
+    match field.len() {
+        1 => field[0] as i8 as i64,
+        2 => i16::from_le_bytes([field[0], field[1]]) as i64,
+        4 => i32::from_le_bytes([field[0], field[1], field[2], field[3]]) as i64,
+        8 => i64::from_le_bytes(field.try_into().unwrap()),
+        _ => 0,
+    }
+}
+
 /// Where a relocation entry came from. Held by a [`RelocSite`] so a
 /// diagnostic can name the containing object and the input section;
 /// the section lookup runs only when a diagnostic is formatted.

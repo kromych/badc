@@ -61,6 +61,7 @@ pub(crate) const R_AARCH64_ABS32: u32 = 258;
 pub(crate) const R_AARCH64_ABS16: u32 = 259;
 pub(crate) const R_AARCH64_PREL64: u32 = 260;
 pub(crate) const R_AARCH64_PREL32: u32 = 261;
+pub(crate) const R_AARCH64_PREL16: u32 = 262;
 pub(crate) const R_AARCH64_MOVW_UABS_G0: u32 = 263;
 pub(crate) const R_AARCH64_MOVW_UABS_G0_NC: u32 = 264;
 pub(crate) const R_AARCH64_MOVW_UABS_G1: u32 = 265;
@@ -242,6 +243,43 @@ pub(crate) fn aarch64_reloc_desc(rtype: u32) -> String {
 /// i386 counterpart of [`x86_64_reloc_desc`].
 pub(crate) fn i386_reloc_desc(rtype: u32) -> String {
     desc(I386_RELOC_NAMES, rtype)
+}
+
+/// Byte width of the plain little-endian field an `R_X86_64_*`
+/// relocation reads and writes. `None` for a type with no such field.
+/// Every x86_64 form is either a data word or an instruction
+/// displacement, both read at their width.
+pub(crate) fn x86_64_field_width(rtype: u32) -> Option<u32> {
+    if let Some((w, _)) = x86_64_abs_field(rtype) {
+        return Some(w);
+    }
+    if let Some((w, _)) = x86_64_pcrel_data_field(rtype) {
+        return Some(w);
+    }
+    match rtype {
+        R_X86_64_PC32 | R_X86_64_PLT32 | R_X86_64_GOTPCREL | R_X86_64_REX_GOTPCRELX
+        | R_X86_64_GOTPC32 | R_X86_64_TPOFF32 => Some(4),
+        R_X86_64_16 | R_X86_64_PC16 => Some(2),
+        R_X86_64_8 | R_X86_64_PC8 => Some(1),
+        R_X86_64_DTPOFF64 | R_X86_64_GOTPC64 => Some(8),
+        _ => None,
+    }
+}
+
+/// aarch64 counterpart of [`x86_64_field_width`]. Only the data forms
+/// have a plain field: the instruction forms write an immediate split
+/// across an encoding, which no addend can be read back from.
+pub(crate) fn aarch64_field_width(rtype: u32) -> Option<u32> {
+    if let Some((w, _)) = aarch64_abs_field(rtype) {
+        return Some(w);
+    }
+    if let Some((w, _)) = aarch64_pcrel_data_field(rtype) {
+        return Some(w);
+    }
+    match rtype {
+        R_AARCH64_ABS16 | R_AARCH64_PREL16 => Some(2),
+        _ => None,
+    }
 }
 
 /// Byte width of the field an `R_386_*` relocation reads and writes, or

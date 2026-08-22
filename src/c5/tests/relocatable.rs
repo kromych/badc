@@ -11,36 +11,27 @@ use crate::c5::{
     CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
 };
 
-fn compile_obj(src: &str, name: &str) -> EtRel {
+fn compile_bytes(src: &str, target: Target) -> Vec<u8> {
     let copts = CompileOptions {
         no_entry_point: true,
         ..Default::default()
     };
-    let program = Compiler::with_options(src.to_string(), Target::LinuxX64, copts)
+    let program = Compiler::with_options(src.to_string(), target, copts)
         .compile()
         .expect("compile");
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
     };
-    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
-    parse_et_rel(&bytes, name).expect("parse")
+    emit_native_with_options(&program, target, opts).expect("emit")
+}
+
+fn compile_obj(src: &str, name: &str) -> EtRel {
+    parse_et_rel(&compile_bytes(src, Target::LinuxX64), name).expect("parse")
 }
 
 fn compile_obj_aarch64(src: &str, name: &str) -> EtRel {
-    let copts = CompileOptions {
-        no_entry_point: true,
-        ..Default::default()
-    };
-    let program = Compiler::with_options(src.to_string(), Target::LinuxAarch64, copts)
-        .compile()
-        .expect("compile");
-    let opts = NativeOptions {
-        output_kind: OutputKind::Relocatable,
-        ..Default::default()
-    };
-    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
-    parse_et_rel(&bytes, name).expect("parse")
+    parse_et_rel(&compile_bytes(src, Target::LinuxAarch64), name).expect("parse")
 }
 
 fn compile_obj_with_debug_info(src: &str, name: &str) -> EtRel {
@@ -1007,4 +998,144 @@ fn a_local_reference_into_a_dropped_group_fails_the_merge() {
     )
     .expect_err("the reference has nowhere to land");
     assert!(format!("{e}").contains("discarded local `bloc'"), "{e}");
+}
+
+// ------------------------------------------- raw ET_REL inspection
+
+/// Section-header view over a written ET_REL image.
+struct Img<'a> {
+    b: &'a [u8],
+}
+
+impl<'a> Img<'a> {
+    fn u16(&self, at: usize) -> u16 {
+        u16::from_le_bytes(self.b[at..at + 2].try_into().unwrap())
+    }
+    fn u32(&self, at: usize) -> u32 {
+        u32::from_le_bytes(self.b[at..at + 4].try_into().unwrap())
+    }
+    fn u64(&self, at: usize) -> u64 {
+        u64::from_le_bytes(self.b[at..at + 8].try_into().unwrap())
+    }
+    fn shdr(&self, i: usize) -> usize {
+        self.u64(40) as usize + i * self.u16(58) as usize
+    }
+    fn shnum(&self) -> usize {
+        self.u16(60) as usize
+    }
+    fn body(&self, i: usize) -> &'a [u8] {
+        let (off, size) = (
+            self.u64(self.shdr(i) + 24) as usize,
+            self.u64(self.shdr(i) + 32) as usize,
+        );
+        &self.b[off..off + size]
+    }
+}
+
+/// Rewrite every `SHT_RELA` table into `SHT_REL` form: the addend
+/// moves into the field the entry relocates, which is where a REL
+/// producer keeps it. Bodies shrink in place, so the file keeps its
+/// layout.
+fn to_rel_form(bytes: &[u8]) -> Vec<u8> {
+    use crate::c5::linker::object::elf_reloc_field_width;
+    let mut out = bytes.to_vec();
+    let img = Img { b: bytes };
+    let machine = img.u16(18);
+    for i in 1..img.shnum() {
+        let sh = img.shdr(i);
+        if img.u32(sh + 4) != 4 {
+            continue; // not SHT_RELA
+        }
+        let target = img.shdr(img.u32(sh + 44) as usize);
+        let (tgt_off, tgt_nobits) = (img.u64(target + 24) as usize, img.u32(target + 4) == 8);
+        let body = img.body(i).to_vec();
+        let mut rel: Vec<u8> = Vec::new();
+        for e in body.as_chunks::<24>().0 {
+            let r_offset = u64::from_le_bytes(e[0..8].try_into().unwrap());
+            let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            let addend = i64::from_le_bytes(e[16..24].try_into().unwrap());
+            let width = elf_reloc_field_width(machine, (r_info & 0xffff_ffff) as u32);
+            if let Some(w) = width
+                && !tgt_nobits
+            {
+                let at = tgt_off + r_offset as usize;
+                out[at..at + w as usize].copy_from_slice(&addend.to_le_bytes()[..w as usize]);
+            }
+            rel.extend_from_slice(&r_offset.to_le_bytes());
+            rel.extend_from_slice(&r_info.to_le_bytes());
+        }
+        let off = img.u64(sh + 24) as usize;
+        out[off..off + rel.len()].copy_from_slice(&rel);
+        out[sh + 4..sh + 8].copy_from_slice(&9u32.to_le_bytes()); // SHT_REL
+        out[sh + 32..sh + 40].copy_from_slice(&(rel.len() as u64).to_le_bytes());
+        out[sh + 56..sh + 64].copy_from_slice(&16u64.to_le_bytes());
+    }
+    out
+}
+
+/// A `SHT_REL` input reads the same as the `SHT_RELA` object it was
+/// made from: every entry keeps its offset, symbol and type, and the
+/// addend comes back out of the relocated field.
+#[test]
+fn sht_rel_inputs_take_their_addend_from_the_relocated_field() {
+    let rela_bytes = compile_bytes(
+        "extern int table[8];\n\
+         int helper(int);\n\
+         int pick(int n) { return table[n] + helper(n) + table[3]; }\n",
+        Target::LinuxX64,
+    );
+    let rel_bytes = to_rel_form(&rela_bytes);
+    let img = Img { b: &rel_bytes };
+    assert!(
+        (1..img.shnum()).any(|i| img.u32(img.shdr(i) + 4) == 9),
+        "the input carries SHT_REL tables"
+    );
+    assert!(
+        !(1..img.shnum()).any(|i| img.u32(img.shdr(i) + 4) == 4),
+        "and no SHT_RELA table is left"
+    );
+
+    let rela = parse_et_rel(&rela_bytes, "a.o").expect("parse RELA");
+    let rel = parse_et_rel(&rel_bytes, "a.o").expect("parse REL");
+    let entries = |o: &EtRel| -> Vec<(String, u64, u32, u32, i64)> {
+        o.sections
+            .iter()
+            .flat_map(|s| {
+                s.relocs
+                    .iter()
+                    .map(move |r| (s.name.clone(), r.offset, r.sym, r.rtype, r.addend))
+            })
+            .collect()
+    };
+    assert!(entries(&rela).iter().any(|e| e.4 != 0), "addends to recover");
+    assert_eq!(entries(&rela), entries(&rel));
+
+    // Both forms merge to the same tables: the output is RELA
+    // whatever the input carried. Only the relocated fields differ,
+    // and a RELA consumer overwrites those.
+    let opts = RelinkOptions::default();
+    let merge_of = |o: EtRel| {
+        let bytes = link_relocatable(&[o], &opts).expect("link");
+        parse_et_rel(&bytes, "merged").expect("parse merged")
+    };
+    let (ma, mb) = (merge_of(rela), merge_of(rel));
+    assert_eq!(entries(&ma), entries(&mb));
+    let names = |o: &EtRel| -> Vec<String> { o.symbols.iter().map(|s| s.name.clone()).collect() };
+    assert_eq!(names(&ma), names(&mb));
+}
+
+/// An aarch64 instruction relocation splits its value across an
+/// encoding, so a `SHT_REL` entry has no field to read an addend from.
+/// The input is declined by name rather than reported as a badc bug.
+#[test]
+fn an_aarch64_instruction_relocation_has_no_implicit_addend() {
+    let bytes = compile_bytes(
+        "int helper(int);\nint entry(int n) { return helper(n); }\n",
+        Target::LinuxAarch64,
+    );
+    let e = parse_et_rel(&to_rel_form(&bytes), "a.o").expect_err("no field to read");
+    let msg = alloc::format!("{e}");
+    assert!(msg.contains("has no implicit-addend field"), "{msg}");
+    assert!(msg.contains("R_AARCH64_"), "{msg}");
+    assert!(!msg.contains("internal compiler error"), "{msg}");
 }

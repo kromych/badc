@@ -29,6 +29,26 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
+               	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
+               	movl	$0x40, %ecx
+               	shlq	%cl, %rax
+               	movabsq	$0x123456789abcdef, %r11 # imm = 0x123456789ABCDEF
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x5, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
+               	movl	$0x41, %ecx
+               	shlq	%cl, %rax
+               	movabsq	$0x2468acf13579bde, %r11 # imm = 0x2468ACF13579BDE
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x6, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	xorq	%rax, %rax

@@ -8063,6 +8063,65 @@ fn literal_index_guarded_assert_call_folds_away() {
     }
 }
 
+/// A shift whose count is outside `0 ..= 63` has no result C99 6.5.7p3
+/// defines, so it must not fold to one: folding makes
+/// `__builtin_constant_p` over the result true and decides the guard of
+/// a branch the source only reaches when the count is in range. The
+/// kernel's `FIELD_PREP` range check is this shape -- an arm the
+/// compiler cannot prove dead computes `1 << (12 - 12 - 1)`, and a
+/// folded count leaves an unconditional call to a build-time assertion
+/// that has no definition. An in-range count still folds, and the same
+/// check then fires as written.
+#[test]
+fn out_of_range_shift_count_does_not_feed_a_constant_p_guard() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        extern void __compiletime_assert_73(void) __attribute__((__error__(\"too large\")));\n\
+        extern void __compiletime_assert_74(void) __attribute__((__error__(\"too large\")));\n\
+        unsigned long long sink;\n\
+        static void undefined_count(unsigned lg2) {\n\
+            unsigned long long v = ((unsigned long long)1 << (lg2 - 12 - 1)) - 1;\n\
+            if (__builtin_constant_p(v) ? (~0xffffffffffull & v) : 0)\n\
+                __compiletime_assert_73();\n\
+            sink = v;\n\
+        }\n\
+        static void defined_count(unsigned lg2) {\n\
+            unsigned long long v = ((unsigned long long)1 << (lg2 + 30)) - 1;\n\
+            if (__builtin_constant_p(v) ? (~0xffffffffffull & v) : 0)\n\
+                __compiletime_assert_74();\n\
+            sink = v;\n\
+        }\n\
+        void f(void) { undefined_count(12); }\n\
+        void g(void) { defined_count(12); }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let obj = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        assert!(
+            !syms.iter().any(|(n, _)| n == "__compiletime_assert_73"),
+            "{target:?}: an undefined shift count must leave no assert reference"
+        );
+        assert!(
+            syms.iter().any(|(n, _)| n == "__compiletime_assert_74"),
+            "{target:?}: an in-range count must still decide the guard"
+        );
+    }
+}
+
 /// `(offset, symbol name, addend)` for every `.rela.text` entry whose
 /// type is `R_X86_64_PLT32` (4): the branches this unit leaves for the
 /// linker to resolve by name.

@@ -120,8 +120,18 @@ pub(crate) fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, EvalTrap
 ///   * division / modulo by zero;
 ///   * `i64::MIN / -1` and `i64::MIN % -1` -- `wrapping_div` folds a
 ///     value the native `idiv` traps on (#DE), so folding would change
-///     the program's runtime behavior.
+///     the program's runtime behavior;
+///   * a shift whose count is negative or at least the register width --
+///     C99 6.5.7p3 leaves the result undefined, so there is no value to
+///     fold to. [`apply_binop`]'s mask to the low six bits is what the
+///     hardware does at run time, not a translation-time answer, and
+///     baking it in makes a `__builtin_constant_p` over the result true
+///     and can decide a branch the source never meant to reach. Matches
+///     the range analysis, which gives such a shift no bounds.
 pub(crate) fn fold_binop(op: BinOp, lhs: i64, rhs: i64) -> Option<i64> {
+    if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru) && !(0..64).contains(&rhs) {
+        return None;
+    }
     if matches!(
         op,
         BinOp::Fadd
@@ -251,9 +261,26 @@ mod tests {
     }
 
     #[test]
+    fn fold_refuses_out_of_range_shift_counts() {
+        // C99 6.5.7p3: no defined result, so nothing to fold to. The
+        // interpreter still answers, masking to the register width.
+        for op in [BinOp::Shl, BinOp::Shr, BinOp::Shru] {
+            assert_eq!(fold_binop(op, 1, 64), None);
+            assert_eq!(fold_binop(op, 1, 65), None);
+            assert_eq!(fold_binop(op, 1, -1), None);
+            assert_eq!(fold_binop(op, 1, i64::MIN), None);
+            assert!(fold_binop(op, 1, 0).is_some());
+            assert!(fold_binop(op, 1, 63).is_some());
+        }
+        assert_eq!(apply_binop(BinOp::Shl, 1, 65), Ok(2));
+        // A rotate is not a C operator; every count is defined for it.
+        assert_eq!(fold_binop(BinOp::Ror, 1, 65), Some(i64::MIN));
+    }
+
+    #[test]
     fn fold_matches_interpreter_semantics() {
         assert_eq!(fold_binop(BinOp::Add, i64::MAX, 1), Some(i64::MIN));
-        assert_eq!(fold_binop(BinOp::Shl, 1, 65), Some(2));
+        assert_eq!(fold_binop(BinOp::Shl, 1, 3), Some(8));
         assert_eq!(fold_binop(BinOp::Shr, -8, 1), Some(-4));
         assert_eq!(
             fold_binop(BinOp::Shru, -8, 1),

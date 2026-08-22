@@ -17,6 +17,38 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
+               	mov	x0, #0xcdef             // =52719
+               	movk	x0, #0x89ab, lsl #16
+               	movk	x0, #0x4567, lsl #32
+               	movk	x0, #0x123, lsl #48
+               	mov	x1, #0x40               // =64
+               	lsl	x0, x0, x1
+               	mov	x17, #0xcdef            // =52719
+               	movk	x17, #0x89ab, lsl #16
+               	movk	x17, #0x4567, lsl #32
+               	movk	x17, #0x123, lsl #48
+               	cmp	x0, x17
+               	b.eq	<addr>
+               	mov	x0, #0x5                // =5
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0xcdef             // =52719
+               	movk	x0, #0x89ab, lsl #16
+               	movk	x0, #0x4567, lsl #32
+               	movk	x0, #0x123, lsl #48
+               	mov	x1, #0x41               // =65
+               	lsl	x0, x0, x1
+               	mov	x17, #0x9bde            // =39902
+               	movk	x17, #0x1357, lsl #16
+               	movk	x17, #0x8acf, lsl #32
+               	movk	x17, #0x246, lsl #48
+               	cmp	x0, x17
+               	b.eq	<addr>
+               	mov	x0, #0x6                // =6
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0
                	mov	x0, #0x0                // =0

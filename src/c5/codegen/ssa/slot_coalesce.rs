@@ -41,8 +41,8 @@
 //! storage) carries `None` and its location is dropped, since no single
 //! frame address holds it for the whole scope.
 
-use super::super::ir::{BinOp, FunctionSsa, Inst, ValueId};
-use super::mem2reg::successors;
+use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, ValueId};
+use super::mem2reg::SuccGraph;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
@@ -676,27 +676,18 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         }
     }
 
-    // CFG edges, shared by the scalar and the group dataflow. Both are
-    // monotone from the empty set and run off a worklist, so the sweep
-    // count tracks loop depth and the least fixed point is order-free.
-    let succ: Vec<Vec<usize>> = f
-        .blocks
-        .iter()
-        .map(|blk| {
-            successors(&blk.terminator, &f.computed_goto_targets, &f.jump_tables)
-                .iter()
-                .map(|&b| b as usize)
-                .collect()
-        })
-        .collect();
-    let mut preds: Vec<Vec<usize>> = alloc::vec![Vec::new(); nb];
-    for (b, ss) in succ.iter().enumerate() {
-        for &s in ss {
-            preds[s].push(b);
-        }
-    }
-
-    // Backward scalar liveness to a fixed point.
+    // Backward liveness to a fixed point. Unlike the SSA-value sets,
+    // which are sparse enough to carry one row of live ids per block,
+    // this relation is dense -- a slot read after a merge stays live
+    // back to its store on every path -- so a bit row per block is the
+    // compact form and each sweep is over words, not members.
+    //
+    // Off a worklist: a block is recomputed only when a successor's
+    // live-in grew, so the sweep count tracks loop depth rather than the
+    // block count. The dataflow is monotone from the empty set, so its
+    // least fixed point -- and hence the result -- does not depend on
+    // the visit order.
+    let graph = SuccGraph::new(f);
     let mut live_in = alloc::vec![0u64; nb * words];
     let mut live_out = alloc::vec![0u64; nb * words];
     let mut work: Vec<usize> = (0..nb).collect();
@@ -706,8 +697,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         let mut grew = false;
         for w in 0..words {
             let mut out = 0u64;
-            for &s in &succ[b] {
-                out |= live_in[s * words + w];
+            for &s in graph.of(b as BlockId) {
+                out |= live_in[s as usize * words + w];
             }
             live_out[b * words + w] = out;
             let v = gen_bits[b * words + w] | (out & !kill[b * words + w]);
@@ -717,10 +708,10 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
             }
         }
         if grew {
-            for &p in &preds[b] {
-                if !queued[p] {
-                    queued[p] = true;
-                    work.push(p);
+            for &p in graph.preds_of(b as BlockId) {
+                if !queued[p as usize] {
+                    queued[p as usize] = true;
+                    work.push(p as usize);
                 }
             }
         }
@@ -731,8 +722,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
     // other live slot, then leaves the live set; a LoadLocal use adds its
     // slot.
     let mut interfere = alloc::vec![0u64; n * words];
+    let mut live = alloc::vec![0u64; words];
     for (b, blk) in f.blocks.iter().enumerate() {
-        let mut live = live_out[b * words..(b + 1) * words].to_vec();
+        live.copy_from_slice(&live_out[b * words..(b + 1) * words]);
         let r = blk.inst_range.start as usize..blk.inst_range.end as usize;
         for inst in f.insts[r].iter().rev() {
             match inst {
@@ -842,8 +834,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         let mut grew = false;
         for w in 0..gwords {
             let mut out = 0u64;
-            for &s in &succ[b] {
-                out |= r_in[s * gwords + w];
+            for &s in graph.of(b as BlockId) {
+                out |= r_in[s as usize * gwords + w];
             }
             r_out[b * gwords + w] = out;
             let v = g_read[b * gwords + w] | out;
@@ -853,10 +845,10 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
             }
         }
         if grew {
-            for &p in &preds[b] {
-                if !queued[p] {
-                    queued[p] = true;
-                    work.push(p);
+            for &p in graph.preds_of(b as BlockId) {
+                if !queued[p as usize] {
+                    queued[p as usize] = true;
+                    work.push(p as usize);
                 }
             }
         }
@@ -871,8 +863,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         let mut grew = false;
         for w in 0..gwords {
             let mut inb = 0u64;
-            for &p in &preds[b] {
-                inb |= s_out[p * gwords + w];
+            for &p in graph.preds_of(b as BlockId) {
+                inb |= s_out[p as usize * gwords + w];
             }
             s_in[b * gwords + w] = inb;
             let v = g_event[b * gwords + w] | inb;
@@ -882,10 +874,10 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
             }
         }
         if grew {
-            for &s in &succ[b] {
-                if !queued[s] {
-                    queued[s] = true;
-                    work.push(s);
+            for &s in graph.of(b as BlockId) {
+                if !queued[s as usize] {
+                    queued[s as usize] = true;
+                    work.push(s as usize);
                 }
             }
         }

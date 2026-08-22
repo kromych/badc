@@ -401,7 +401,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // collapses to today's per-value behaviour. Class-level
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
-    let liveness = super::liveness::Liveness::compute(func);
+    let liveness = super::emit_common::time_pass("ssa::liveness::Liveness::compute", || {
+        super::liveness::Liveness::compute(func)
+    });
     // Reads the block-level live-out sets the analysis above solved.
     let last_use = compute_last_use(func, liveness.block_liveness());
     // Interference over individual values, the relation the coalescer
@@ -411,7 +413,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let value_of: Vec<ValueId> = (0..func.insts.len() as ValueId).collect();
     let value_interference = liveness.interference(func, &value_of);
     let mut classes = super::phi_class::PhiClasses::build(func, &value_interference);
-    let mut calls_after_def = compute_calls_after_def(func, &liveness, target);
+    let mut calls_after_def =
+        super::emit_common::time_pass("ssa::liveness::values_live_across_calls", || {
+            compute_calls_after_def(func, &liveness, target)
+        });
     // Promote per-value `calls_after_def` to the class: members share
     // one register, so a member whose own range does not cross a call
     // still needs a callee-saved home when another member's does.

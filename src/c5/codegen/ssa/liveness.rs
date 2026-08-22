@@ -27,24 +27,186 @@ const NO_RANK: u32 = u32::MAX;
 /// Sentinel for a value covered by no block's `inst_range`.
 const NO_BLOCK: BlockId = BlockId::MAX;
 
+/// Ceiling on the words a dense live-set row array may occupy, 1 MiB
+/// each. Every ordinary function stays far below it; past it the
+/// `blocks * values / 64` area is the storage and the sweep cost alike,
+/// and the per-value walk takes over.
+const DENSE_WORD_BUDGET: usize = 1 << 17;
+
+/// Group `(block, element)` pairs into one row per block. The pairs
+/// arrive element-major, so the stable scatter leaves each row
+/// ascending.
+fn rows_by_block(nblocks: usize, pairs: &[(u32, u32)]) -> (Vec<u32>, Vec<u32>) {
+    let mut off = vec![0u32; nblocks + 1];
+    for &(b, _) in pairs {
+        off[b as usize + 1] += 1;
+    }
+    for i in 0..nblocks {
+        off[i + 1] += off[i];
+    }
+    let mut cur: Vec<u32> = off[..nblocks].to_vec();
+    let mut dat = vec![0u32; pairs.len()];
+    for &(b, e) in pairs {
+        dat[cur[b as usize] as usize] = e;
+        cur[b as usize] += 1;
+    }
+    (off, dat)
+}
+
+/// Counting sort of `(element, payload)` pairs into one row per
+/// element, returned as CSR offsets plus the payloads.
+fn rows_by_elem<T: Copy + Default>(nelems: usize, pairs: &[(u32, T)]) -> (Vec<u32>, Vec<T>) {
+    let mut off = vec![0u32; nelems + 1];
+    for &(e, _) in pairs {
+        off[e as usize + 1] += 1;
+    }
+    for i in 0..nelems {
+        off[i + 1] += off[i];
+    }
+    let mut cur: Vec<u32> = off[..nelems].to_vec();
+    let mut dat = vec![T::default(); pairs.len()];
+    for &(e, p) in pairs {
+        dat[cur[e as usize] as usize] = p;
+        cur[e as usize] += 1;
+    }
+    (off, dat)
+}
+
+/// Least fixed point of the backward liveness equations
+///
+///   live_out[b] = exit_seed[b] + U live_in[s] for s in succ(b)
+///   live_in[b]  = use_seed[b] + (live_out[b] minus kill[b])
+///
+/// over an arbitrary element domain. The result is one ascending row of
+/// element ids per block, so a membership query is a binary search and
+/// an enumeration costs the row length.
+///
+/// Each element is walked back from its seed blocks until a killing
+/// block stops the propagation, so the cost follows the (block, live
+/// element) pairs the answer contains rather than the
+/// `blocks * elements / 64` area a bit row per block sweeps whatever
+/// the answer is. The area term is what grew faster than the function;
+/// the walk pays a per-element and a per-solve overhead instead, so
+/// [`BlockLiveness`] uses it only once the area outgrows the function.
+pub(crate) struct SparseLive {
+    in_off: Vec<u32>,
+    in_rows: Vec<u32>,
+    out_off: Vec<u32>,
+    out_rows: Vec<u32>,
+}
+
+impl SparseLive {
+    /// `use_seed` names blocks with an upward-exposed use, `exit_seed`
+    /// blocks where the element is live on exit regardless of its
+    /// successors (a phi operand consumed on the edge), and `kill` the
+    /// blocks that define the element. All three are `(element, block)`
+    /// pairs in any order; duplicates are ignored.
+    pub(crate) fn solve(
+        nelems: usize,
+        nblocks: usize,
+        graph: &super::mem2reg::SuccGraph,
+        use_seed: &[(u32, BlockId)],
+        exit_seed: &[(u32, BlockId)],
+        kill: &[(u32, BlockId)],
+    ) -> Self {
+        let (use_off, use_dat) = rows_by_elem(nelems, use_seed);
+        let (exit_off, exit_dat) = rows_by_elem(nelems, exit_seed);
+        let (kill_off, kill_dat) = rows_by_elem(nelems, kill);
+        // Per-block stamps: a block carries the element id it was last
+        // marked for, so each (block, element) pair is recorded once
+        // without clearing between elements.
+        let mut in_stamp = vec![u32::MAX; nblocks];
+        let mut out_stamp = vec![u32::MAX; nblocks];
+        let mut kill_stamp = vec![u32::MAX; nblocks];
+        let mut in_pairs: Vec<(u32, u32)> = Vec::new();
+        let mut out_pairs: Vec<(u32, u32)> = Vec::new();
+        let mut stack: Vec<BlockId> = Vec::new();
+        for e in 0..nelems as u32 {
+            for &b in &kill_dat[kill_off[e as usize] as usize..kill_off[e as usize + 1] as usize] {
+                kill_stamp[b as usize] = e;
+            }
+            let mut mark_in = |b: BlockId, pairs: &mut Vec<(u32, u32)>, st: &mut Vec<BlockId>| {
+                if in_stamp[b as usize] != e {
+                    in_stamp[b as usize] = e;
+                    pairs.push((b, e));
+                    st.push(b);
+                }
+            };
+            for &b in &use_dat[use_off[e as usize] as usize..use_off[e as usize + 1] as usize] {
+                mark_in(b, &mut in_pairs, &mut stack);
+            }
+            for &b in &exit_dat[exit_off[e as usize] as usize..exit_off[e as usize + 1] as usize] {
+                if out_stamp[b as usize] != e {
+                    out_stamp[b as usize] = e;
+                    out_pairs.push((b, e));
+                    if kill_stamp[b as usize] != e {
+                        mark_in(b, &mut in_pairs, &mut stack);
+                    }
+                }
+            }
+            while let Some(b) = stack.pop() {
+                for &p in graph.preds_of(b) {
+                    if out_stamp[p as usize] != e {
+                        out_stamp[p as usize] = e;
+                        out_pairs.push((p, e));
+                        if kill_stamp[p as usize] != e {
+                            mark_in(p, &mut in_pairs, &mut stack);
+                        }
+                    }
+                }
+            }
+        }
+        let (in_off, in_rows) = rows_by_block(nblocks, &in_pairs);
+        let (out_off, out_rows) = rows_by_block(nblocks, &out_pairs);
+        SparseLive {
+            in_off,
+            in_rows,
+            out_off,
+            out_rows,
+        }
+    }
+
+    /// Elements live on entry to `b`, ascending.
+    pub(crate) fn in_row(&self, b: BlockId) -> &[u32] {
+        &self.in_rows[self.in_off[b as usize] as usize..self.in_off[b as usize + 1] as usize]
+    }
+
+    /// Elements live on exit from `b`, ascending.
+    pub(crate) fn out_row(&self, b: BlockId) -> &[u32] {
+        &self.out_rows[self.out_off[b as usize] as usize..self.out_off[b as usize + 1] as usize]
+    }
+}
+
 /// Per-block live-in / live-out sets over the CFG.
 ///
-/// The bit universe is the set of values that cross a block boundary:
-/// those referenced from a block other than the one defining them, plus
-/// those a phi names on an incoming edge. Every other value is defined
-/// and dies inside one block, so it can never appear in a live-in or
-/// live-out set -- the dataflow's least fixed point only ever admits
-/// members of that set. Excluding the rest shrinks the per-block bitset
-/// from the function's value count to the crossing count, which is what
-/// keeps the storage off `blocks * values`.
+/// The element domain is the set of values that cross a block
+/// boundary: those referenced from a block other than the one defining
+/// them, plus those a phi names on an incoming edge. Every other value
+/// is defined and dies inside one block, so it can never appear in a
+/// live-in or live-out set.
+///
+/// The sets are held one of two ways, chosen per function by
+/// [`BlockLiveness::compute`]: a bit row per block, whose area is
+/// `blocks * ceil(universe / 64)` words, or one ascending row of live
+/// ranks per block. The bit rows are the compact and faster form while
+/// that area stays within the function's own size; past it the area is
+/// what grows faster than the function, and the rows -- which hold only
+/// the pairs that are live -- take over.
 pub(crate) struct BlockLiveness {
-    words: usize,
-    /// Value id -> bit index, `NO_RANK` outside the universe.
+    /// Value id -> universe rank, `NO_RANK` outside the universe.
     rank: Vec<u32>,
-    /// Bit index -> value id.
+    /// Rank -> value id; ascending, so rank order is value order.
     universe: Vec<ValueId>,
-    live_in: Vec<u64>,
-    live_out: Vec<u64>,
+    live: LiveSets,
+}
+
+enum LiveSets {
+    Dense {
+        words: usize,
+        live_in: Vec<u64>,
+        live_out: Vec<u64>,
+    },
+    Sparse(SparseLive),
 }
 
 impl BlockLiveness {
@@ -98,11 +260,37 @@ impl BlockLiveness {
             }
         }
         let words = universe.len().div_ceil(64).max(1);
+        let graph = super::mem2reg::SuccGraph::new(func);
+        // The bit rows cost their whole area whatever is live, so they
+        // stay only while that area is within the budget.
+        let live = if nblocks.saturating_mul(words) <= DENSE_WORD_BUDGET {
+            Self::solve_dense(func, &graph, &rank, words)
+        } else {
+            LiveSets::Sparse(Self::solve_sparse(func, &graph, &rank, universe.len()))
+        };
+        Self {
+            rank,
+            universe,
+            live,
+        }
+    }
+
+    /// Backward dataflow over one bit row per block, off a postorder
+    /// worklist: a block is revisited only when a successor's live-in
+    /// grew, so the iteration count tracks loop depth rather than the
+    /// block count.
+    ///   live_out[b] = phi_live_out[b] | U live_in[succ];
+    ///   live_in[b]  = used_set[b] | (live_out[b] & ~kill[b]).
+    fn solve_dense(
+        func: &FunctionSsa,
+        graph: &super::mem2reg::SuccGraph,
+        rank: &[u32],
+        words: usize,
+    ) -> LiveSets {
+        let nblocks = func.blocks.len();
         if nblocks == 0 {
-            return Self {
+            return LiveSets::Dense {
                 words,
-                rank,
-                universe,
                 live_in: Vec::new(),
                 live_out: Vec::new(),
             };
@@ -150,26 +338,8 @@ impl BlockLiveness {
                 }
                 super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
             }
-            if blk.exit_acc != NO_VALUE {
-                mark(blk.exit_acc);
-            }
-            match &blk.terminator {
-                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
-                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                    if *target != NO_VALUE =>
-                {
-                    mark(*target)
-                }
-                Terminator::Return(v) if *v != NO_VALUE => mark(*v),
-                _ => {}
-            }
+            Self::for_each_exit_use(blk, &mut mark);
         }
-        // Backward dataflow off a postorder worklist: a block is
-        // revisited only when a successor's live-in grew, so the
-        // iteration count tracks loop depth rather than the block count.
-        //   live_out[b] = phi_live_out[b] | U live_in[succ];
-        //   live_in[b]  = used_set[b] | (live_out[b] & ~kill[b]).
-        let graph = super::mem2reg::SuccGraph::new(func);
         let mut live_in = vec![0u64; nblocks * words];
         let mut live_out = vec![0u64; nblocks * words];
         let mut scratch = vec![0u64; words];
@@ -205,45 +375,152 @@ impl BlockLiveness {
                 }
             }
         }
-        Self {
+        LiveSets::Dense {
             words,
-            rank,
-            universe,
             live_in,
             live_out,
         }
     }
 
-    fn is_set(bits: &[u64], base: usize, r: u32) -> bool {
-        bits[base + (r as usize) / 64] & (1u64 << ((r as usize) % 64)) != 0
+    /// The same fixed point solved per value over the seed lists the
+    /// scan below collects.
+    fn solve_sparse(
+        func: &FunctionSsa,
+        graph: &super::mem2reg::SuccGraph,
+        rank: &[u32],
+        nelems: usize,
+    ) -> SparseLive {
+        // Kill: the block defining each universe value. A value covered
+        // by no block's `inst_range` (an instruction orphaned by branch
+        // folding) has none, so nothing stops its propagation -- the
+        // same answer the dense rows give, whose kill set only ever held
+        // values a block covers.
+        let mut kill: Vec<(u32, BlockId)> = Vec::new();
+        let mut exit_seed: Vec<(u32, BlockId)> = Vec::new();
+        for (b, blk) in func.blocks.iter().enumerate() {
+            for v in blk.inst_range.clone() {
+                if let Some(&r) = rank.get(v as usize)
+                    && r != NO_RANK
+                {
+                    kill.push((r, b as BlockId));
+                }
+            }
+            for idx in blk.inst_range.clone() {
+                let Inst::Phi { incoming, .. } = &func.insts[idx as usize] else {
+                    continue;
+                };
+                for (pred, v) in incoming {
+                    if *v != NO_VALUE
+                        && let Some(&r) = rank.get(*v as usize)
+                        && r != NO_RANK
+                    {
+                        exit_seed.push((r, *pred));
+                    }
+                }
+            }
+        }
+        // An upward-exposed use makes the value live-in at its block;
+        // `seen` stamps dedup the uses within one block.
+        let mut use_seed: Vec<(u32, BlockId)> = Vec::new();
+        let mut seen: Vec<u32> = vec![u32::MAX; nelems];
+        for (b, blk) in func.blocks.iter().enumerate() {
+            let (start, end) = (blk.inst_range.start, blk.inst_range.end);
+            let mut mark = |v: ValueId| {
+                if v != NO_VALUE
+                    && (v < start || v >= end)
+                    && let Some(&r) = rank.get(v as usize)
+                    && r != NO_RANK
+                    && seen[r as usize] != b as u32
+                {
+                    seen[r as usize] = b as u32;
+                    use_seed.push((r, b as BlockId));
+                }
+            };
+            for idx in start..end {
+                if matches!(func.insts[idx as usize], Inst::Phi { .. }) {
+                    continue;
+                }
+                super::reg_alloc::for_each_operand(&func.insts[idx as usize], &mut mark);
+            }
+            Self::for_each_exit_use(blk, &mut mark);
+        }
+        SparseLive::solve(
+            nelems,
+            func.blocks.len(),
+            graph,
+            &use_seed,
+            &exit_seed,
+            &kill,
+        )
+    }
+
+    /// The values a block reads at its exit: the accumulator and the
+    /// terminator's operand.
+    fn for_each_exit_use(blk: &super::super::ir::Block, mut mark: impl FnMut(ValueId)) {
+        if blk.exit_acc != NO_VALUE {
+            mark(blk.exit_acc);
+        }
+        match &blk.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
+                if *target != NO_VALUE =>
+            {
+                mark(*target)
+            }
+            Terminator::Return(v) if *v != NO_VALUE => mark(*v),
+            _ => {}
+        }
     }
 
     pub(crate) fn live_in(&self, b: BlockId, v: ValueId) -> bool {
         match self.rank.get(v as usize) {
-            Some(&r) if r != NO_RANK => Self::is_set(&self.live_in, b as usize * self.words, r),
+            Some(&r) if r != NO_RANK => match &self.live {
+                LiveSets::Dense { words, live_in, .. } => is_set(live_in, b as usize * words, r),
+                LiveSets::Sparse(s) => s.in_row(b).binary_search(&r).is_ok(),
+            },
             _ => false,
         }
     }
 
     pub(crate) fn live_out(&self, b: BlockId, v: ValueId) -> bool {
         match self.rank.get(v as usize) {
-            Some(&r) if r != NO_RANK => Self::is_set(&self.live_out, b as usize * self.words, r),
+            Some(&r) if r != NO_RANK => match &self.live {
+                LiveSets::Dense {
+                    words, live_out, ..
+                } => is_set(live_out, b as usize * words, r),
+                LiveSets::Sparse(s) => s.out_row(b).binary_search(&r).is_ok(),
+            },
             _ => false,
         }
     }
 
     /// Every value live on exit from `b`, in ascending value order.
     pub(crate) fn for_each_live_out(&self, b: BlockId, mut f: impl FnMut(ValueId)) {
-        let base = b as usize * self.words;
-        for w in 0..self.words {
-            let mut bits = self.live_out[base + w];
-            while bits != 0 {
-                let r = w * 64 + bits.trailing_zeros() as usize;
-                f(self.universe[r]);
-                bits &= bits - 1;
+        match &self.live {
+            LiveSets::Dense {
+                words, live_out, ..
+            } => {
+                let base = b as usize * words;
+                for w in 0..*words {
+                    let mut bits = live_out[base + w];
+                    while bits != 0 {
+                        let r = w * 64 + bits.trailing_zeros() as usize;
+                        f(self.universe[r]);
+                        bits &= bits - 1;
+                    }
+                }
+            }
+            LiveSets::Sparse(s) => {
+                for &r in s.out_row(b) {
+                    f(self.universe[r as usize]);
+                }
             }
         }
     }
+}
+
+fn is_set(bits: &[u64], base: usize, r: u32) -> bool {
+    bits[base + (r as usize) / 64] & (1u64 << ((r as usize) % 64)) != 0
 }
 
 pub(crate) struct Liveness {
@@ -467,17 +744,17 @@ impl Liveness {
     /// counted in the predecessors' live-out, so they are not added
     /// here. The cost is linear in code size times the live-set width,
     /// not quadratic in the value count.
-    /// The live set is a bit vector (the `live_out` rows' own shape)
-    /// and the nodes currently live ride a counted sparse set, so a
-    /// definition point emits each (def-node, live-node) edge exactly
-    /// once with no per-edge allocation; the pair list is laid out as a
-    /// CSR row per node at the end.
+    /// The live values ride a sparse set and the nodes currently live
+    /// a counted sparse set, so a definition point emits each
+    /// (def-node, live-node) edge exactly once with no per-edge
+    /// allocation; the pair list is laid out as a CSR row per node at
+    /// the end.
     #[allow(dead_code)]
     pub(crate) fn interference(&self, func: &FunctionSsa, node_of: &[ValueId]) -> Interference {
         let n = func.insts.len();
         // Edges packed (low << 32) | high: one-word sort + dedup.
         let mut pairs: Vec<u64> = Vec::new();
-        let mut live = LiveNodeSet::new(n, n.div_ceil(64).max(1));
+        let mut live = LiveNodeSet::new(n, track_occupancy(func));
         for (b, blk) in func.blocks.iter().enumerate() {
             live.clear();
             self.blocks
@@ -570,31 +847,44 @@ impl Liveness {
         func: &FunctionSsa,
         tls_addr_is_call: bool,
     ) -> Vec<bool> {
+        // Monomorphised on the occupancy mode so the ordinary function
+        // pays no test for bookkeeping it does not do.
+        if track_occupancy(func) {
+            self.sweep_calls::<true>(func, tls_addr_is_call)
+        } else {
+            self.sweep_calls::<false>(func, tls_addr_is_call)
+        }
+    }
+
+    fn sweep_calls<const TRACK: bool>(
+        &self,
+        func: &FunctionSsa,
+        tls_addr_is_call: bool,
+    ) -> Vec<bool> {
         let n = func.insts.len();
         let mut out = vec![false; n];
-        let words = n.div_ceil(64).max(1);
-        let mut live: Vec<u64> = vec![0; words];
-        let set = |live: &mut [u64], v: ValueId| live[v as usize / 64] |= 1 << (v % 64);
+        let mut live = SparseValueSet::new(n, TRACK);
         for (b, blk) in func.blocks.iter().enumerate() {
-            live.iter_mut().for_each(|w| *w = 0);
-            self.blocks
-                .for_each_live_out(b as BlockId, |v| set(&mut live, v));
+            live.clear();
+            self.blocks.for_each_live_out(b as BlockId, |v| {
+                live.set::<TRACK>(v);
+            });
             if blk.exit_acc != NO_VALUE && (blk.exit_acc as usize) < n {
-                set(&mut live, blk.exit_acc);
+                live.set::<TRACK>(blk.exit_acc);
             }
             match &blk.terminator {
                 Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
                     if (*cond as usize) < n {
-                        set(&mut live, *cond);
+                        live.set::<TRACK>(*cond);
                     }
                 }
                 Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
                     if (*target as usize) < n =>
                 {
-                    set(&mut live, *target);
+                    live.set::<TRACK>(*target);
                 }
                 Terminator::Return(v) if *v != NO_VALUE && (*v as usize) < n => {
-                    set(&mut live, *v);
+                    live.set::<TRACK>(*v);
                 }
                 _ => {}
             }
@@ -606,26 +896,19 @@ impl Liveness {
                 ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
                     || super::reg_alloc::is_setjmp_barrier(inst);
                 if super::reg_alloc::produces_value(inst) {
-                    live[idx as usize / 64] &= !(1 << (idx % 64));
+                    live.unset(idx);
                 }
                 // After removing the call's own result (its definition
                 // point), `live` holds exactly the values live at the
                 // point just after the call returns. Each such value's
                 // range spans the call.
                 if is_call {
-                    for (w, &word) in live.iter().enumerate() {
-                        let mut bits = word;
-                        while bits != 0 {
-                            let v = (w as u32) * 64 + bits.trailing_zeros();
-                            bits &= bits - 1;
-                            out[v as usize] = true;
-                        }
-                    }
+                    live.for_each(|v| out[v as usize] = true);
                 }
                 if !matches!(inst, Inst::Phi { .. }) {
                     super::reg_alloc::for_each_operand(inst, |op| {
                         if op != NO_VALUE && (op as usize) < n {
-                            set(&mut live, op);
+                            live.set::<TRACK>(op);
                         }
                     });
                 }
@@ -635,13 +918,131 @@ impl Liveness {
     }
 }
 
-/// The values live at a sweep point, tracked at two granularities:
-/// membership as a bit vector (the `live_out` rows' own shape) and
-/// the distinct register-allocation nodes those values belong to as
-/// a counted sparse set, so a definition can enumerate live nodes
-/// without touching per-value state.
-struct LiveNodeSet {
+/// Whether a per-block live-set sweep over `func` should track which
+/// words of its bit vector hold members. The sweep clears the set once
+/// per block and scans it at each call, so the full-width form costs
+/// `blocks * values / 64` -- the area term that grows faster than the
+/// function. Tracking removes it, at a per-insertion cost that only
+/// pays once the area is large.
+fn track_occupancy(func: &FunctionSsa) -> bool {
+    func.blocks
+        .len()
+        .saturating_mul(func.insts.len().div_ceil(64))
+        > DENSE_WORD_BUDGET
+}
+
+/// Set of value ids as a bit vector that also tracks which of its words
+/// hold a member, so enumerating and clearing cost the occupied words
+/// rather than the vector's width -- the term that made a per-call scan
+/// of the whole set grow with the function. Insertion stays a load, a
+/// test and a store; only the first member of a word appends to the
+/// occupancy list.
+struct SparseValueSet {
     bits: Vec<u64>,
+    /// Words that have held a member since the last clear, each listed
+    /// once -- a word that empties and refills must not be listed
+    /// again, or the list grows with the instruction count rather than
+    /// with the set's width. Empty when `track` is false.
+    touched: Vec<u32>,
+    listed: Vec<bool>,
+    track: bool,
+}
+
+impl SparseValueSet {
+    /// `track` records which words hold members, so a clear or an
+    /// enumeration costs the occupied words instead of the set's whole
+    /// width. It earns its per-insertion bookkeeping only once that
+    /// width is large: over a narrow set the full-width memset and scan
+    /// are contiguous and vectorised, and cost less.
+    fn new(n: usize, track: bool) -> Self {
+        let words = n.div_ceil(64).max(1);
+        SparseValueSet {
+            bits: alloc::vec![0; words],
+            touched: Vec::new(),
+            listed: alloc::vec![false; if track { words } else { 0 }],
+            track,
+        }
+    }
+
+    /// Add `v`, without reporting whether it was already a member.
+    /// `TRACK` must match the mode the set was built with.
+    fn set<const TRACK: bool>(&mut self, v: ValueId) {
+        let w = v as usize / 64;
+        self.bits[w] |= 1u64 << (v % 64);
+        if TRACK && !self.listed[w] {
+            self.listed[w] = true;
+            self.touched.push(w as u32);
+        }
+    }
+
+    /// Drop `v` if present.
+    fn unset(&mut self, v: ValueId) {
+        self.bits[v as usize / 64] &= !(1u64 << (v % 64));
+    }
+
+    /// Whether `v` was absent and is now a member.
+    fn insert(&mut self, v: ValueId) -> bool {
+        let (w, m) = (v as usize / 64, 1u64 << (v % 64));
+        if self.bits[w] & m != 0 {
+            return false;
+        }
+        if self.track {
+            self.set::<true>(v);
+        } else {
+            self.set::<false>(v);
+        }
+        true
+    }
+
+    /// Whether `v` was a member and is now removed.
+    fn remove(&mut self, v: ValueId) -> bool {
+        let (w, m) = (v as usize / 64, 1u64 << (v % 64));
+        if self.bits[w] & m == 0 {
+            return false;
+        }
+        self.bits[w] &= !m;
+        true
+    }
+
+    /// Call `f` with every member, in no particular order.
+    fn for_each(&mut self, mut f: impl FnMut(ValueId)) {
+        let mut emit = |w: u32, mut word: u64| {
+            while word != 0 {
+                f(w * 64 + word.trailing_zeros());
+                word &= word - 1;
+            }
+        };
+        if self.track {
+            for &w in &self.touched {
+                emit(w, self.bits[w as usize]);
+            }
+        } else {
+            for (w, &word) in self.bits.iter().enumerate() {
+                emit(w as u32, word);
+            }
+        }
+    }
+
+    fn clear(&mut self) {
+        if !self.track {
+            self.bits.iter_mut().for_each(|w| *w = 0);
+            return;
+        }
+        for &w in &self.touched {
+            self.bits[w as usize] = 0;
+            self.listed[w as usize] = false;
+        }
+        self.touched.clear();
+    }
+}
+
+/// The values live at a sweep point, tracked at two granularities:
+/// membership as a sparse value set and the distinct register-
+/// allocation nodes those values belong to as a counted sparse set,
+/// so a definition can enumerate live nodes without touching
+/// per-value state.
+struct LiveNodeSet {
+    vals: SparseValueSet,
     /// Live-value count per node; a node leaves `nodes` at zero.
     count: Vec<u32>,
     /// Compact list of nodes with a nonzero count.
@@ -651,9 +1052,9 @@ struct LiveNodeSet {
 }
 
 impl LiveNodeSet {
-    fn new(n: usize, words: usize) -> Self {
+    fn new(n: usize, track: bool) -> Self {
         LiveNodeSet {
-            bits: alloc::vec![0; words],
+            vals: SparseValueSet::new(n, track),
             count: alloc::vec![0; n],
             nodes: Vec::new(),
             pos: alloc::vec![u32::MAX; n],
@@ -667,7 +1068,7 @@ impl LiveNodeSet {
             self.pos[nd as usize] = u32::MAX;
         }
         self.nodes.clear();
-        self.bits.iter_mut().for_each(|w| *w = 0);
+        self.vals.clear();
     }
 
     fn enter(&mut self, nd: ValueId) {
@@ -680,20 +1081,16 @@ impl LiveNodeSet {
     }
 
     fn insert(&mut self, v: ValueId, node_of: &[ValueId]) {
-        let (w, m) = (v as usize / 64, 1u64 << (v % 64));
-        if self.bits[w] & m != 0 {
+        if !self.vals.insert(v) {
             return;
         }
-        self.bits[w] |= m;
         self.enter(node_of[v as usize]);
     }
 
     fn remove(&mut self, v: ValueId, node_of: &[ValueId]) {
-        let (w, m) = (v as usize / 64, 1u64 << (v % 64));
-        if self.bits[w] & m == 0 {
+        if !self.vals.remove(v) {
             return;
         }
-        self.bits[w] &= !m;
         let nd = node_of[v as usize] as usize;
         self.count[nd] -= 1;
         if self.count[nd] == 0 {
@@ -852,6 +1249,306 @@ mod tests {
 
     fn identity(n: usize) -> Vec<ValueId> {
         (0..n as ValueId).collect()
+    }
+
+    fn blk(inst_range: core::ops::Range<u32>, terminator: Terminator) -> Block {
+        Block {
+            start_pc: 0,
+            inst_range,
+            terminator,
+            exit_acc: NO_VALUE,
+        }
+    }
+
+    /// The backward equations iterated over dense rows to a fixed
+    /// point, the form [`SparseLive`] replaces. Rows are returned as
+    /// ascending element lists so they compare directly.
+    fn reference_live(
+        nelems: usize,
+        nblocks: usize,
+        graph: &super::super::mem2reg::SuccGraph,
+        use_seed: &[(u32, BlockId)],
+        exit_seed: &[(u32, BlockId)],
+        kill: &[(u32, BlockId)],
+    ) -> (Vec<Vec<u32>>, Vec<Vec<u32>>) {
+        let mut used = alloc::vec![alloc::vec![false; nelems]; nblocks];
+        let mut exits = alloc::vec![alloc::vec![false; nelems]; nblocks];
+        let mut kills = alloc::vec![alloc::vec![false; nelems]; nblocks];
+        for (tbl, src) in [
+            (&mut used, use_seed),
+            (&mut exits, exit_seed),
+            (&mut kills, kill),
+        ] {
+            for &(e, b) in src {
+                tbl[b as usize][e as usize] = true;
+            }
+        }
+        let mut live_in = alloc::vec![alloc::vec![false; nelems]; nblocks];
+        let mut live_out = alloc::vec![alloc::vec![false; nelems]; nblocks];
+        loop {
+            let mut changed = false;
+            for b in 0..nblocks {
+                for e in 0..nelems {
+                    let mut o = exits[b][e];
+                    for &s in graph.of(b as BlockId) {
+                        o |= live_in[s as usize][e];
+                    }
+                    live_out[b][e] = o;
+                    let i = used[b][e] || (o && !kills[b][e]);
+                    if i != live_in[b][e] {
+                        live_in[b][e] = i;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        let rows = |t: &[Vec<bool>]| -> Vec<Vec<u32>> {
+            t.iter()
+                .map(|r| {
+                    r.iter()
+                        .enumerate()
+                        .filter(|&(_, &v)| v)
+                        .map(|(e, _)| e as u32)
+                        .collect()
+                })
+                .collect()
+        };
+        (rows(&live_in), rows(&live_out))
+    }
+
+    /// The per-element walk must reproduce the fixed point exactly on
+    /// arbitrary graphs: loops, unreachable blocks, empty blocks,
+    /// multiple killing blocks per element, and elements live across
+    /// most of the graph.
+    #[test]
+    fn sparse_live_matches_the_reference_dataflow() {
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move |m: u32| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 33) as u32 % m
+        };
+        let mut covered = 0usize;
+        for case in 0..64 {
+            let nblocks = 2 + (case % 11);
+            let nelems = 1 + (case % 7);
+            let blocks: Vec<Block> = (0..nblocks)
+                .map(|b| {
+                    let term = match next(3) {
+                        0 => Terminator::Return(NO_VALUE),
+                        1 => Terminator::Jmp(next(nblocks as u32)),
+                        _ => Terminator::Bz {
+                            cond: 0,
+                            target: next(nblocks as u32),
+                            fall_through: next(nblocks as u32),
+                        },
+                    };
+                    // Half the blocks are empty; `b` keeps the ranges
+                    // distinct so no two blocks claim one instruction.
+                    let start = b as u32;
+                    blk(start..start + next(2), term)
+                })
+                .collect();
+            let func = func_with(alloc::vec![Inst::Imm(0); nblocks + 1], blocks);
+            let graph = super::super::mem2reg::SuccGraph::new(&func);
+            let mut pick = |n: usize| -> Vec<(u32, BlockId)> {
+                (0..n)
+                    .map(|_| (next(nelems as u32), next(nblocks as u32)))
+                    .collect()
+            };
+            let (uses, exits, kills) = (pick(nblocks), pick(nblocks / 2), pick(nblocks));
+            let (ref_in, ref_out) = reference_live(nelems, nblocks, &graph, &uses, &exits, &kills);
+            let live = SparseLive::solve(nelems, nblocks, &graph, &uses, &exits, &kills);
+            for b in 0..nblocks {
+                assert_eq!(live.in_row(b as BlockId), &ref_in[b][..], "live-in b{b}");
+                assert_eq!(live.out_row(b as BlockId), &ref_out[b][..], "live-out b{b}");
+            }
+            for b in 0..nblocks {
+                covered += ref_in[b].len() + ref_out[b].len();
+            }
+        }
+        // The generated cases must carry real live sets; an all-empty
+        // fixed point would compare equal without testing anything.
+        assert!(covered > 1000, "thin coverage: {covered} live pairs");
+    }
+
+    /// The two representations must answer every query alike, so which
+    /// one a function's shape selects cannot move a single allocation
+    /// decision. Driven over a chain of blocks whose values cross it.
+    #[test]
+    fn dense_and_sparse_sets_answer_alike() {
+        const W: u32 = 70;
+        let mut insts: Vec<Inst> = (0..W).map(|i| Inst::Imm(i as i64)).collect();
+        let mut blocks = alloc::vec![blk(0..W, Terminator::Jmp(1))];
+        // Each block consumes one of the wide block's values, so the
+        // rest stay live past it.
+        for b in 1..W {
+            let at = insts.len() as u32;
+            insts.push(Inst::Binop {
+                op: BinOp::Add,
+                lhs: b - 1,
+                rhs: b,
+            });
+            blocks.push(blk(at..at + 1, Terminator::Jmp(b + 1)));
+        }
+        let end = insts.len() as u32;
+        blocks.push(blk(end..end, Terminator::Return(end - 1)));
+        let func = func_with(insts, blocks);
+        let dense = BlockLiveness::compute(&func);
+        assert!(
+            matches!(dense.live, LiveSets::Dense { .. }),
+            "a function of this size must keep the dense rows",
+        );
+        let graph = super::super::mem2reg::SuccGraph::new(&func);
+        let sparse = BlockLiveness {
+            rank: dense.rank.clone(),
+            universe: dense.universe.clone(),
+            live: LiveSets::Sparse(BlockLiveness::solve_sparse(
+                &func,
+                &graph,
+                &dense.rank,
+                dense.universe.len(),
+            )),
+        };
+        for b in 0..func.blocks.len() as BlockId {
+            for v in 0..func.insts.len() as ValueId {
+                assert_eq!(
+                    dense.live_in(b, v),
+                    sparse.live_in(b, v),
+                    "live_in b{b} v{v}"
+                );
+                assert_eq!(
+                    dense.live_out(b, v),
+                    sparse.live_out(b, v),
+                    "live_out b{b} v{v}"
+                );
+            }
+            let (mut d, mut s) = (Vec::new(), Vec::new());
+            dense.for_each_live_out(b, |v| d.push(v));
+            sparse.for_each_live_out(b, |v| s.push(v));
+            assert_eq!(d, s, "live-out enumeration of b{b}");
+            assert!(!d.is_empty() || b + 1 == func.blocks.len() as BlockId);
+        }
+    }
+
+    /// A block holding no instruction still carries a live value
+    /// across: the old bit rows stored one per block whatever its
+    /// contents, and the sparse rows must keep the pass-through pairs.
+    #[test]
+    fn empty_blocks_pass_a_live_value_through() {
+        // b0: v0 = Imm; b1, b2 empty; b3: Return v0.
+        let insts = alloc::vec![Inst::Imm(0)];
+        let blocks = alloc::vec![
+            blk(0..1, Terminator::Jmp(1)),
+            blk(1..1, Terminator::Jmp(2)),
+            blk(1..1, Terminator::Jmp(3)),
+            blk(1..1, Terminator::Return(0)),
+        ];
+        let func = func_with(insts, blocks);
+        let live = Liveness::compute(&func);
+        let b = live.block_liveness();
+        for mid in 1..4 {
+            assert!(b.live_in(mid, 0), "v0 must be live-in at b{mid}");
+        }
+        for pass in 0..3 {
+            assert!(b.live_out(pass, 0), "v0 must be live-out of b{pass}");
+        }
+        assert!(!b.live_out(3, 0), "v0 dies at the return");
+        assert!(!b.live_in(0, 0), "v0's own block does not carry it in");
+    }
+
+    /// Every value of a wide definition block read again at the far end
+    /// of a chain stays live at each intermediate block, and the rows
+    /// enumerate in value order.
+    #[test]
+    fn dense_cross_block_ranges_are_carried_at_every_block() {
+        const W: u32 = 40;
+        let mut insts: Vec<Inst> = (0..W).map(|i| Inst::Imm(i as i64)).collect();
+        let mut acc = W - 1;
+        // The tail block sums them, so all W values cross every block.
+        let chain = 6;
+        for i in 0..W - 1 {
+            insts.push(Inst::Binop {
+                op: BinOp::Add,
+                lhs: i,
+                rhs: acc,
+            });
+            acc = W + i;
+        }
+        let mut blocks = alloc::vec![blk(0..W, Terminator::Jmp(1))];
+        for b in 1..chain {
+            blocks.push(blk(W..W, Terminator::Jmp(b + 1)));
+        }
+        blocks.push(blk(
+            W..insts.len() as u32,
+            Terminator::Return(insts.len() as u32 - 1),
+        ));
+        let func = func_with(insts, blocks);
+        let live = Liveness::compute(&func);
+        let bl = live.block_liveness();
+        for b in 1..=chain {
+            let mut seen: Vec<ValueId> = Vec::new();
+            bl.for_each_live_out(b - 1, |v| seen.push(v));
+            assert_eq!(seen, identity(W as usize), "b{} live-out", b - 1);
+            for v in 0..W {
+                assert!(bl.live_in(b, v), "v{v} must be live-in at b{b}");
+            }
+        }
+    }
+
+    /// A phi operand is a use on its own incoming edge only: it is
+    /// live-out of the predecessor the phi names and of no other, and
+    /// the phi's block does not carry it in.
+    #[test]
+    fn phi_operand_is_live_out_of_its_named_predecessor_only() {
+        // b0: v0 = Imm; Bz -> b1 / b2
+        // b1: v1 = Imm;  b2: v2 = Imm
+        // b3: v3 = Phi[b1:v1, b2:v2]; Return v3
+        let insts = alloc::vec![
+            Inst::Imm(0),
+            Inst::Imm(1),
+            Inst::Imm(2),
+            Inst::Phi {
+                incoming: alloc::vec![(1, 1), (2, 2)],
+                kind: LoadKind::I64,
+            },
+        ];
+        let blocks = alloc::vec![
+            blk(
+                0..1,
+                Terminator::Bz {
+                    cond: 0,
+                    target: 2,
+                    fall_through: 1,
+                },
+            ),
+            blk(1..2, Terminator::Jmp(3)),
+            blk(2..3, Terminator::Jmp(3)),
+            blk(3..4, Terminator::Return(3)),
+        ];
+        let func = func_with(insts, blocks);
+        let bl = Liveness::compute(&func);
+        let b = bl.block_liveness();
+        assert!(
+            b.live_out(1, 1) && !b.live_out(2, 1),
+            "v1 crosses b1's edge"
+        );
+        assert!(
+            b.live_out(2, 2) && !b.live_out(1, 2),
+            "v2 crosses b2's edge"
+        );
+        assert!(
+            !b.live_in(3, 1) && !b.live_in(3, 2),
+            "a phi operand is consumed on the edge, not live into the join",
+        );
+        assert!(
+            !b.live_out(0, 1) && !b.live_out(0, 2),
+            "neither operand is live before its own definition",
+        );
     }
 
     /// `block_has_use_after` (now table-driven) must still distinguish a

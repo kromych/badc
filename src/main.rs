@@ -1779,26 +1779,33 @@ fn run() {
     // archive whose members are pulled on demand.
     let mut shared_libs: Vec<badc::SharedLibrary> = Vec::new();
     let mut search_paths: Vec<String> = library_paths.clone();
-    if target.binary_format() == badc::BinaryFormat::MachO {
-        // ld64's defaults. The runtime dylibs live in the dyld shared
-        // cache, not on disk, so the SDK's stub directory is the one
-        // that resolves the system libraries.
-        for d in ["/usr/local/lib", "/usr/lib"] {
-            search_paths.push(d.to_string());
-        }
-        if let Some(sdk_lib) = macos_sdk_lib_dir() {
-            search_paths.push(sdk_lib);
-        }
-    } else {
-        for d in [
-            "/usr/lib64",
-            "/lib64",
-            "/usr/lib",
-            "/lib",
-            "/usr/lib/x86_64-linux-gnu",
-            "/usr/lib/aarch64-linux-gnu",
-        ] {
-            search_paths.push(d.to_string());
+    // The host's library directories hold this platform's libraries, so
+    // they are the target's only when linking for the host platform --
+    // the rule the system include path already follows. A cross link
+    // names its own sysroot through `-L`.
+    let native_link = target == badc::Target::host();
+    if native_link {
+        if target.binary_format() == badc::BinaryFormat::MachO {
+            // ld64's defaults. The runtime dylibs live in the dyld shared
+            // cache, not on disk, so the SDK's stub directory is the one
+            // that resolves the system libraries.
+            for d in ["/usr/local/lib", "/usr/lib"] {
+                search_paths.push(d.to_string());
+            }
+            if let Some(sdk_lib) = macos_sdk_lib_dir() {
+                search_paths.push(sdk_lib);
+            }
+        } else {
+            for d in [
+                "/usr/lib64",
+                "/lib64",
+                "/usr/lib",
+                "/lib",
+                "/usr/lib/x86_64-linux-gnu",
+                "/usr/lib/aarch64-linux-gnu",
+            ] {
+                search_paths.push(d.to_string());
+            }
         }
     }
     for name in &lib_names {
@@ -1837,11 +1844,16 @@ fn run() {
     // shared object is read (not the `libc.so` linker script), so no
     // extra DT_NEEDED entry is introduced; on Mach-O the SDK's
     // `libSystem.tbd` stands in for the dylib the shared cache holds.
-    if mode == Mode::NativeExecutable && !freestanding {
-        let libc_names: &[&str] = if target.binary_format() == badc::BinaryFormat::MachO {
-            &["libSystem.tbd", "libSystem.B.dylib", "libSystem.dylib"]
-        } else {
-            &["libc.so.6", "libc.so"]
+    // The library read here is the host's, so this stands in for the
+    // target's C library on a native link only: a cross link resolves
+    // the same references from the bundled sources instead.
+    if mode == Mode::NativeExecutable && !freestanding && native_link {
+        // A PE image reaches its C library through the import table the
+        // `#pragma binding` set names, so no library file is read for it.
+        let libc_names: &[&str] = match target.binary_format() {
+            badc::BinaryFormat::MachO => &["libSystem.tbd", "libSystem.B.dylib", "libSystem.dylib"],
+            badc::BinaryFormat::Elf => &["libc.so.6", "libc.so"],
+            badc::BinaryFormat::Pe => &[],
         };
         for cand in libc_names {
             if let Some(p) = search_paths
@@ -3286,9 +3298,7 @@ fn default_system_include_paths(target: badc::Target, freestanding: bool) -> Vec
     if freestanding {
         return Vec::new();
     }
-    let native = cfg!(target_os = "linux")
-        && ((cfg!(target_arch = "x86_64") && matches!(target, badc::Target::LinuxX64))
-            || (cfg!(target_arch = "aarch64") && matches!(target, badc::Target::LinuxAarch64)));
+    let native = cfg!(target_os = "linux") && target == badc::Target::host();
     if !native {
         return Vec::new();
     }

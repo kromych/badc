@@ -303,6 +303,39 @@ fn on_demand_runtime_sources_compile_only_when_a_symbol_needs_them() {
     );
 }
 
+// A cross link reads none of the host's libraries. The host's C
+// library exports names the target's does not -- `fnmatch` is one
+// glibc has and msvcrt lacks -- and resolving a reference against the
+// host's would import a name the target's C library cannot supply,
+// producing an image the loader rejects. The bundled sources define it
+// instead, so the name stays out of the import table.
+#[test]
+fn a_cross_link_does_not_import_host_libc_names() {
+    let dir = tempdir("cross-host-libc");
+    let src = write_source(
+        &dir,
+        "match.c",
+        "#include <fnmatch.h>\nint main(void) { return fnmatch(\"a*\", \"abc\", 0); }\n",
+    );
+    let exe = dir.join("match.exe");
+    run(
+        Command::new(badc())
+            .arg("--target=windows-x64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "link windows-x64",
+    );
+    let image = std::fs::read(&exe).expect("read the image");
+    // An import name is the only place a PE image spells a symbol.
+    assert!(
+        !image.windows(b"fnmatch".len()).any(|w| w == b"fnmatch"),
+        "`fnmatch` reached the import table of {}",
+        exe.display()
+    );
+}
+
 // An archive-only invocation is a valid link: the members supply the
 // objects and `main` is pulled by the runtime's reference to it. The
 // input-emptiness check must count archives, not just sources/objects.

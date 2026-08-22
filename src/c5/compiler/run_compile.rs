@@ -180,6 +180,16 @@ impl Compiler {
             .map_err(|m| self.compile_err(m))
     }
 
+    /// Record a `.set` alias of the unit, a later assignment to the same name
+    /// winning as in GNU as.
+    fn set_alias(sets: &mut Vec<(String, String, i64)>, name: &str, target: &str, addend: i64) {
+        let e = (String::from(name), String::from(target), addend);
+        match sets.iter_mut().find(|(n, _, _)| n == name) {
+            Some(slot) => *slot = e,
+            None => sets.push(e),
+        }
+    }
+
     /// Run one GNU-as source unit through the section-directive engine and
     /// record it for the object writers. `globl_shortcut` routes a stream of
     /// nothing but `.globl` at C symbols, which only a translation unit has.
@@ -260,11 +270,15 @@ impl Compiler {
                         self.asm_idents.push(s.clone());
                     }
                     engine::AsmSectionItem::SymSet { name, target } => {
-                        // A later assignment to the same name wins, as in
-                        // GNU as.
-                        match self.asm_sym_sets.iter_mut().find(|(n, _)| n == name) {
-                            Some(e) => e.1 = target.clone(),
-                            None => self.asm_sym_sets.push((name.clone(), target.clone())),
+                        Self::set_alias(&mut self.asm_sym_sets, name, target, 0);
+                    }
+                    // `.set name, sym + k` names the same alias at an offset.
+                    // A target this unit's layout places defines the name as
+                    // a label of the owning section instead; the object
+                    // writer drops the alias record there.
+                    engine::AsmSectionItem::SetExpr { name, expr } => {
+                        if let Some((target, addend)) = engine::asm_sym_offset_expr(expr) {
+                            Self::set_alias(&mut self.asm_sym_sets, name, target, addend);
                         }
                     }
                     _ => {}
@@ -1288,7 +1302,12 @@ impl Compiler {
                             let name = self.symbols[id_idx].link_name().into();
                             let bind = alias_bind(&self.symbols[id_idx]);
                             self.function_aliases
-                                .push(crate::c5::program::FunctionAlias { name, target, bind });
+                                .push(crate::c5::program::FunctionAlias {
+                                    name,
+                                    target,
+                                    bind,
+                                    addend: 0,
+                                });
                         }
                         // Function prototype, not a definition. C99 6.7
                         // permits several declarators in one declaration,
@@ -2749,6 +2768,7 @@ impl Compiler {
                         name,
                         target,
                         bind: crate::c5::program::AliasBind::Weak,
+                        addend: 0,
                     });
                 continue;
             }
@@ -2761,7 +2781,12 @@ impl Compiler {
                 let name = self.symbols[id_idx].link_name().into();
                 let bind = alias_bind(&self.symbols[id_idx]);
                 self.function_aliases
-                    .push(crate::c5::program::FunctionAlias { name, target, bind });
+                    .push(crate::c5::program::FunctionAlias {
+                        name,
+                        target,
+                        bind,
+                        addend: 0,
+                    });
             }
         }
         Ok(())

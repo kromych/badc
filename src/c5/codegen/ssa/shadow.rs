@@ -335,9 +335,11 @@ pub(crate) fn alias_import_bindings(
                 out.insert(*pc, ent);
                 break;
             }
+            // An alias at an offset names no function entry, so a call
+            // through it stays an unbound import.
             match program.function_aliases.iter().find(|a| a.name == n) {
-                Some(a) => n = a.target.as_str(),
-                None => break,
+                Some(a) if a.addend == 0 => n = a.target.as_str(),
+                _ => break,
             }
         }
     }

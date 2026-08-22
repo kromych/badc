@@ -2148,6 +2148,92 @@ fn a_set_alias_of_an_undefined_name_resolves_against_the_name() {
     );
 }
 
+/// `.set name, sym + k` assigns the symbol at an offset. Where the unit's
+/// layout does not place `sym`, the name is an alias with an addend: GNU as
+/// 2.46.1 emits no symbol for it and lands every reference on `sym`, the
+/// offset folded into the addend. For `.text: .set x, ext+8; call x; jmp x`
+/// it writes `e8 00 00 00 00 e9 00 00 00 00` with `PLT32 ext + 4` at 0x1 and
+/// 0x6; for `.set x, ext+8; .data; .quad x; .long x` it writes `64 ext + 8`
+/// at 0 and `32 ext + 8` at 8. An alias of a name the unit defines takes its
+/// place at the offset, keeping the target's type and size, as gas gives
+/// `d+8` value 8 size 16 OBJECT and `f+1` value 1 size 1 FUNC.
+#[test]
+fn a_set_alias_of_a_symbol_at_an_offset_carries_the_addend() {
+    const OBJECT_GLOBAL: u8 = 0x11;
+    const FUNC_GLOBAL: u8 = 0x12;
+    const GLOBAL: u8 = 1;
+    const SHN_UNDEF: u16 = 0;
+    const PLT32: u32 = 4;
+    const ABS64: u32 = 1;
+    const ABS32: u32 = 10;
+    // An undefined end: no symbol for the alias, the offset in the addend.
+    let src = "\t.text\n\t.set x, ext+8\n\tcall x\n\tjmp x\n";
+    assert_eq!(
+        text_of("set-off-call", src),
+        [0xe8, 0, 0, 0, 0, 0xe9, 0, 0, 0, 0]
+    );
+    let bytes = object_of("set-off-undef", src);
+    let syms = sym_bindings(&bytes);
+    assert_eq!(syms.iter().find(|s| s.0 == "x"), None, "{syms:?}");
+    assert_eq!(
+        syms.iter().find(|s| s.0 == "ext"),
+        Some(&(String::from("ext"), GLOBAL, SHN_UNDEF)),
+        "{syms:?}"
+    );
+    assert_eq!(
+        named_relocs(&bytes, ".rela.text"),
+        [
+            (1, PLT32, String::from("ext"), 4),
+            (6, PLT32, String::from("ext"), 4),
+        ],
+    );
+    let bytes = object_of(
+        "set-off-data",
+        "\t.set x, ext+8\n\t.data\n\t.quad x\n\t.long x\n",
+    );
+    assert_eq!(
+        named_relocs(&bytes, ".rela.data"),
+        [
+            (0, ABS64, String::from("ext"), 8),
+            (8, ABS32, String::from("ext"), 8),
+        ],
+    );
+    // Offsets accumulate along a chain of assignments.
+    let bytes = object_of(
+        "set-off-chain",
+        "\t.text\n\t.set a, b+2\n\t.set b, ext+8\n\t.quad a\n",
+    );
+    assert_eq!(
+        named_relocs(&bytes, ".rela.text"),
+        [(0, ABS64, String::from("ext"), 10)],
+    );
+    // A defined end: the name takes its target's place at the offset.
+    let bytes = object_of_c(
+        "set-off-defined",
+        "int d[4] = {1,2,3,4};\nvoid f(void) {}\n\
+         __asm__(\".globl ad\\n.set ad, d+8\\n.globl af\\n.set af, f+1\\n\");\n",
+    );
+    let syms = sym_table(&bytes);
+    let of = |n: &str| syms.iter().find(|s| s.0 == n).cloned().unwrap();
+    let (_, d_info, d_shndx, d_val, d_size) = of("d");
+    let (_, f_info, f_shndx, f_val, f_size) = of("f");
+    assert_eq!((d_info, d_size, f_info), (OBJECT_GLOBAL, 16, FUNC_GLOBAL));
+    assert_eq!(
+        of("ad"),
+        (
+            String::from("ad"),
+            OBJECT_GLOBAL,
+            d_shndx,
+            d_val + 8,
+            d_size
+        )
+    );
+    assert_eq!(
+        of("af"),
+        (String::from("af"), FUNC_GLOBAL, f_shndx, f_val + 1, f_size)
+    );
+}
+
 /// A `.set` alias whose chain ends at a definition of this unit takes that
 /// definition's section, value, type and size, through whichever channel
 /// defines the name. GNU as 2.46.1 over the equivalent assembly emits

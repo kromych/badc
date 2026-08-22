@@ -1681,7 +1681,7 @@ pub struct Compiler {
     pub(super) asm_visibility: Vec<(String, crate::c5::program::SymVisibility)>,
     /// `.set name, target` symbol aliases from file-scope asm, merged
     /// onto `Program::function_aliases`.
-    pub(super) asm_sym_sets: Vec<(String, String)>,
+    pub(super) asm_sym_sets: Vec<(String, String, i64)>,
     /// `.file "name"` operands from file-scope asm, in directive order.
     pub(super) asm_file_names: Vec<String>,
     /// `.ident` strings from file-scope asm, in directive order.
@@ -3030,11 +3030,12 @@ impl Compiler {
         // the unit's `.globl` / `.weak` directives, in either order and from
         // either statement, so the object writer settles it.
         let mut function_aliases = self.function_aliases;
-        for (name, target) in self.asm_sym_sets {
+        for (name, target, addend) in self.asm_sym_sets {
             function_aliases.push(crate::c5::program::FunctionAlias {
                 name,
                 target,
                 bind: crate::c5::program::AliasBind::Assigned,
+                addend,
             });
         }
         Ok(Program {

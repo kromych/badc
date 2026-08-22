@@ -73,6 +73,9 @@ pub struct FunctionAlias {
     pub name: String,
     pub target: String,
     pub bind: AliasBind,
+    /// Byte offset from the target (`.set name, target + 8`). A reference
+    /// through the alias takes it in the relocation addend.
+    pub addend: i64,
 }
 
 /// ELF symbol visibility, as the `.hidden` / `.internal` / `.protected`

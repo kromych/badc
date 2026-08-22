@@ -1709,19 +1709,25 @@ pub(super) fn write_relocatable(
             .asm_sym_decls
             .iter()
             .filter_map(|d| {
+                // Offsets accumulate along the chain: `.set a, b + 4` over
+                // `.set b, c + 8` values `a` at `c + 12`.
                 let mut v = d.value.as_ref()?;
+                let mut off = 0i64;
                 for _ in 0..build.asm_sym_decls.len() {
-                    let AsmSymValue::Sym(t) = v else { break };
+                    let AsmSymValue::Sym(t, k) = v else { break };
                     match value_of(t.as_str()) {
-                        Some(next) => v = next,
+                        Some(next) => {
+                            off += k;
+                            v = next;
+                        }
                         None => break,
                     }
                 }
                 match v {
-                    AsmSymValue::Abs(_) => Some((d.name.as_str(), v)),
-                    AsmSymValue::Sym(t) => (asm_label_names.contains(t.as_str())
+                    AsmSymValue::Abs(n) => Some((d.name.as_str(), AsmSymValue::Abs(n + off))),
+                    AsmSymValue::Sym(t, k) => (asm_label_names.contains(t.as_str())
                         || defined_fn_names.contains(t.as_str()))
-                    .then_some((d.name.as_str(), v)),
+                    .then(|| (d.name.as_str(), AsmSymValue::Sym(t.clone(), off + k))),
                 }
             })
             .collect::<Vec<_>>()
@@ -1771,29 +1777,35 @@ pub(super) fn write_relocatable(
     // symbol for it and resolves every reference against the chain's end,
     // which surfaces as an undefined global. The map carries those aliases;
     // one whose end is defined keeps its own symbol below.
+    // Offsets accumulate along the chain, so a reference through it takes
+    // the distance from the end in its addend.
     fn alias_chain_end<'p>(
         aliases: &'p [crate::c5::program::FunctionAlias],
         a: &'p crate::c5::program::FunctionAlias,
-    ) -> &'p str {
+    ) -> (&'p str, i64) {
         let mut target = a.target.as_str();
+        let mut off = a.addend;
         for _ in 0..aliases.len() {
             match aliases.iter().find(|x| x.name == target) {
-                Some(next) => target = next.target.as_str(),
+                Some(next) => {
+                    target = next.target.as_str();
+                    off += next.addend;
+                }
                 None => break,
             }
         }
-        target
+        (target, off)
     }
-    let undef_alias_end: alloc::collections::BTreeMap<&str, &str> = program
+    let undef_alias_end: alloc::collections::BTreeMap<&str, (&str, i64)> = program
         .function_aliases
         .iter()
         .filter_map(|a| {
-            let end = alias_chain_end(&program.function_aliases, a);
+            let (end, off) = alias_chain_end(&program.function_aliases, a);
             (!asm_defined_labels.contains(end)
                 && !defined_fn_names.contains(end)
                 && !defined_obj_by_name.contains_key(end)
                 && func_strs.iter().all(|n| n != end))
-            .then_some((a.name.as_str(), end))
+            .then_some((a.name.as_str(), (end, off)))
         })
         .collect();
     // An alias that emits a symbol of its own defines the name; one whose
@@ -1949,8 +1961,8 @@ pub(super) fn write_relocatable(
             AsmSectionTarget::Symbol(name) => Some(name.as_str()),
             _ => None,
         });
-        for name in referenced.chain(undef_alias_end.values().copied()) {
-            let n = undef_alias_end.get(name).copied().unwrap_or(name);
+        for name in referenced.chain(undef_alias_end.values().map(|&(n, _)| n)) {
+            let n = undef_alias_end.get(name).map_or(name, |&(n, _)| n);
             if !defined_fn_names.contains(n)
                 && !program.function_aliases.iter().any(|a| a.name == n)
                 && defined_data_by_name(n).is_none()
@@ -2206,10 +2218,9 @@ pub(super) fn write_relocatable(
     }
     // The assignments outside any section, less the names a section or the
     // code stream also defines: those have their own entry above.
-    let asm_decl_set: Vec<(&str, &AsmSymValue)> = asm_set_defs
+    let asm_decl_set: Vec<&(&str, AsmSymValue)> = asm_set_defs
         .iter()
-        .copied()
-        .filter(|&(n, _)| !asm_label_names.contains(n))
+        .filter(|&&(n, _)| !asm_label_names.contains(n))
         .collect();
     let asm_decl_set_start = all_names.len();
     for &(n, _) in &asm_decl_set {
@@ -2332,15 +2343,16 @@ pub(super) fn write_relocatable(
     // assignment to another name takes that name's placement, which the
     // chain resolution above narrowed to a definition of this unit.
     let set_place = |v: &AsmSymValue| -> Result<(u16, u64, u8, u64), C5Error> {
-        let t = match v {
+        let (t, off) = match v {
             AsmSymValue::Abs(n) => return Ok((SHN_ABS, *n as u64, STT_NOTYPE, 0)),
-            AsmSymValue::Sym(t) => t.as_str(),
+            AsmSymValue::Sym(t, k) => (t.as_str(), *k),
         };
-        defined_place(t)?.ok_or_else(|| {
+        let (shndx, value, st_type, st_size) = defined_place(t)?.ok_or_else(|| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                 "elf_reloc: `.set` target `{t}` has no definition"
             )))
-        })
+        })?;
+        Ok((shndx, value.wrapping_add_signed(off), st_type, st_size))
     };
     // Binding of an assigned name: local unless a directive of the unit
     // declared it global or weak. Both channels a directive arrives through
@@ -2472,16 +2484,14 @@ pub(super) fn write_relocatable(
         .iter()
         .enumerate()
         .map(|(i, a)| -> Result<Option<(u8, Elf64Sym)>, C5Error> {
-            if undef_alias_end.contains_key(a.name.as_str()) {
+            // A label of the unit under the same name carries it already:
+            // an assignment the layout placed defines one.
+            if undef_alias_end.contains_key(a.name.as_str())
+                || asm_label_names.contains(a.name.as_str())
+            {
                 return Ok(None);
             }
-            let mut target = a.target.as_str();
-            for _ in 0..program.function_aliases.len() {
-                match program.function_aliases.iter().find(|x| x.name == target) {
-                    Some(next) => target = next.target.as_str(),
-                    None => break,
-                }
-            }
+            let (target, off) = alias_chain_end(&program.function_aliases, a);
             let bind = alias_bind(a);
             let Some((shndx, value, st_type, st_size)) = defined_place(target)? else {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -2495,7 +2505,7 @@ pub(super) fn write_relocatable(
                     st_info: pack_sym_info(bind, st_type),
                     st_other: vis_for(&a.name),
                     st_shndx: shndx,
-                    st_value: value,
+                    st_value: value.wrapping_add_signed(off),
                     st_size,
                 },
             )))
@@ -3351,11 +3361,12 @@ pub(super) fn write_relocatable(
                 home_sym(plan.map_ref(off.wrapping_add_signed(r.addend), *off))
             }
             AsmSectionTarget::Symbol(name) => {
-                // A dropped alias resolves against its chain's end.
-                let name = undef_alias_end
+                // A dropped alias resolves against its chain's end, its
+                // distance from it riding in the addend.
+                let (name, alias_off) = undef_alias_end
                     .get(name.as_str())
                     .copied()
-                    .unwrap_or(name.as_str());
+                    .unwrap_or((name.as_str(), 0));
                 let (sym, base) = if let Some(pair) = asm_label_ref(name) {
                     pair
                 } else if let Some(&idx) = func_symidx_by_name.get(name) {
@@ -3374,7 +3385,7 @@ pub(super) fn write_relocatable(
                         ),
                     )));
                 };
-                (sym, base + r.addend)
+                (sym, base + r.addend + alias_off)
             }
             other => {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -3500,25 +3511,27 @@ pub(super) fn write_relocatable(
                         )));
                     }
                     AsmSectionTarget::Symbol(name) => {
-                        // A dropped alias resolves against its chain's end.
-                        let name = undef_alias_end
+                        // A dropped alias resolves against its chain's end,
+                        // its distance from it riding in the addend.
+                        let (name, alias_off) = undef_alias_end
                             .get(name.as_str())
                             .copied()
-                            .unwrap_or(name.as_str());
+                            .unwrap_or((name.as_str(), 0));
+                        let addend = r.addend + alias_off;
                         if let Some((sym, base)) = asm_label_ref(name) {
-                            (sym, base + r.addend)
+                            (sym, base + addend)
                         } else if let Some(&idx) = func_symidx_by_name.get(name) {
-                            (idx as u64, r.addend)
+                            (idx as u64, addend)
                         } else if let Some(&idx) = defined_data_symidx.get(name) {
                             // An external-linkage object carries its binding on
                             // its own symbol; reducing to section+addend would
                             // present it to readers as a local definition.
-                            (idx, r.addend)
+                            (idx, addend)
                         } else if let Some(val) = defined_data_by_name(name) {
                             let (sym, off) = data_section_ref(val);
-                            (sym, off + r.addend)
+                            (sym, off + addend)
                         } else if let Some(&idx) = extern_symidx_by_name.get(name) {
-                            (idx as u64, r.addend)
+                            (idx as u64, addend)
                         } else {
                             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                                 &alloc::format!(

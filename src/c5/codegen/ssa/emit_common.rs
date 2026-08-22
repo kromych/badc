@@ -1751,12 +1751,12 @@ pub(crate) enum AsmSymBind {
 }
 
 /// The value a `.set` / `.equ` / `.equiv` outside any section assigned: a
-/// constant, which binds the name `SHN_ABS`, or another symbol, whose
-/// definition the name takes.
+/// constant, which binds the name `SHN_ABS`, or another symbol at a byte
+/// offset, whose definition the name takes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AsmSymValue {
     Abs(i64),
-    Sym(alloc::string::String),
+    Sym(alloc::string::String, i64),
 }
 
 /// A symbol directive an asm template carried outside any section. GNU as
@@ -1943,7 +1943,7 @@ impl AsmSectionSink {
                     AsmSymBind::Default,
                     AsmSymType::NoType,
                     None,
-                    Some(AsmSymValue::Sym(target.clone())),
+                    Some(AsmSymValue::Sym(target.clone(), 0)),
                 ),
                 // Outside a section there is no layout to value a location
                 // expression against, so one here must fold to a constant.
@@ -4141,6 +4141,23 @@ pub(crate) fn is_asm_symbol_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$'))
 }
 
+/// A `.set` value written as a symbol at a byte offset (`sym`, `sym + 8`,
+/// `sym - 4`). The name it assigns is an alias of `sym` at that offset
+/// wherever the unit's layout does not place the value itself. `None` for
+/// any other expression, including one over the location counter.
+pub(crate) fn asm_sym_offset_expr(expr: &str) -> Option<(&str, i64)> {
+    let expr = expr.trim();
+    let named = |s: &str| is_asm_symbol_name(s) && s != ".";
+    if named(expr) {
+        return Some((expr, 0));
+    }
+    let at = expr.find(['+', '-'])?;
+    let (sym, rest) = expr.split_at(at);
+    let sym = sym.trim();
+    let v = parse_raw_int(rest[1..].trim())?;
+    named(sym).then(|| (sym, if rest.starts_with('-') { -v } else { v }))
+}
+
 /// A GNU as local numeric label: all decimal digits (`2`, `14470`). Its
 /// definition (`2:`) and references (`2b` / `2f`) are local to one asm
 /// instance, so the materializer renames each to a unique symbol.
@@ -5892,17 +5909,28 @@ fn eval_section_set_expr(
             }),
             None,
         ) => Ok(SectionSetValue::Loc(sk.clone(), off + v.add)),
+        // `.set x, sym + k` over a name this unit's layout does not define:
+        // the name is an alias of `sym` at that offset, which the object
+        // writer places against the definition wherever it lands.
+        (
+            Some(AsmExprTerm {
+                space: None,
+                target: AsmSectionTarget::Symbol(_),
+            }),
+            None,
+        ) => Ok(SectionSetValue::Alias),
         _ => Err(alloc::format!(
             "inline asm: `.set {name}, {expr}` is not an absolute value or a location"
         )),
     }
 }
 
-/// A `.set` assignment's value: an absolute constant, or a location of a
-/// section of this unit.
+/// A `.set` assignment's value: an absolute constant, a location of a
+/// section of this unit, or a symbol the unit's layout does not place.
 enum SectionSetValue {
     Abs(i64),
     Loc(alloc::string::String, i64),
+    Alias,
 }
 
 /// The `(name, flags, sh_type)` identity key of a section block, as the
@@ -7215,6 +7243,12 @@ fn measure_round_inner(
             }
             Ok(SectionSetValue::Loc(sk, off)) => {
                 map.insert(name.clone(), (sk, off));
+                syms.remove(name);
+            }
+            // Placed by the object writer against the target's definition,
+            // so the layout records no value for it.
+            Ok(SectionSetValue::Alias) => {
+                map.remove(name);
                 syms.remove(name);
             }
             Err(e) => set_err = set_err.or(Some(e)),

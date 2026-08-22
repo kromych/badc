@@ -1002,7 +1002,8 @@ fn a_local_reference_into_a_dropped_group_fails_the_merge() {
 
 // ------------------------------------------- raw ET_REL inspection
 
-/// Section-header view over a written ET_REL image.
+/// Section-header view over a written ET_REL image, resolving the
+/// extended-numbering escapes in section header 0.
 struct Img<'a> {
     b: &'a [u8],
 }
@@ -1017,11 +1018,23 @@ impl<'a> Img<'a> {
     fn u64(&self, at: usize) -> u64 {
         u64::from_le_bytes(self.b[at..at + 8].try_into().unwrap())
     }
+    fn shoff(&self) -> usize {
+        self.u64(40) as usize
+    }
     fn shdr(&self, i: usize) -> usize {
-        self.u64(40) as usize + i * self.u16(58) as usize
+        self.shoff() + i * self.u16(58) as usize
     }
     fn shnum(&self) -> usize {
-        self.u16(60) as usize
+        match self.u16(60) {
+            0 => self.u64(self.shdr(0) + 32) as usize,
+            n => n as usize,
+        }
+    }
+    fn shstrndx(&self) -> usize {
+        match self.u16(62) {
+            0xffff => self.u32(self.shdr(0) + 40) as usize,
+            n => n as usize,
+        }
     }
     fn body(&self, i: usize) -> &'a [u8] {
         let (off, size) = (
@@ -1030,6 +1043,160 @@ impl<'a> Img<'a> {
         );
         &self.b[off..off + size]
     }
+    fn strz(&self, tab: &[u8], off: usize) -> String {
+        let end = tab[off..].iter().position(|&c| c == 0).unwrap() + off;
+        String::from_utf8(tab[off..end].to_vec()).unwrap()
+    }
+    fn name(&self, i: usize) -> String {
+        let shstr = self.body(self.shstrndx());
+        self.strz(shstr, self.u32(self.shdr(i)) as usize)
+    }
+    fn find(&self, name: &str) -> usize {
+        (1..self.shnum())
+            .find(|&i| self.name(i) == name)
+            .unwrap_or_else(|| panic!("no section `{name}'"))
+    }
+    /// `(name, st_shndx)` of every `.symtab` entry.
+    fn syms(&self) -> Vec<(String, u16)> {
+        let symtab = self.find(".symtab");
+        let strtab = self.body(self.u32(self.shdr(symtab) + 40) as usize);
+        let body = self.body(symtab);
+        body.as_chunks::<24>()
+            .0
+            .iter()
+            .map(|e| {
+                let name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;
+                (
+                    self.strz(strtab, name),
+                    u16::from_le_bytes(e[6..8].try_into().unwrap()),
+                )
+            })
+            .collect()
+    }
+    /// `st_name` offsets, in symbol order.
+    fn sym_name_offsets(&self) -> Vec<u32> {
+        self.body(self.find(".symtab"))
+            .as_chunks::<24>()
+            .0
+            .iter()
+            .map(|e| u32::from_le_bytes(e[0..4].try_into().unwrap()))
+            .collect()
+    }
+}
+
+/// An output past `SHN_LORESERVE` sections numbers itself the way gas
+/// and GNU ld do: `e_shnum` 0 with the real count in section header
+/// 0's `sh_size`, `e_shstrndx` `SHN_XINDEX` with the real index in its
+/// `sh_link`, and every symbol in a high section reaching it through
+/// `SHT_SYMTAB_SHNDX`.
+#[test]
+fn extended_section_numbering_round_trips() {
+    const N: usize = 0xff00 + 16;
+    const SHN_XINDEX: u16 = 0xffff;
+    let names: Vec<String> = (0..N).map(|i| alloc::format!(".s{i}")).collect();
+    let secs: Vec<(&str, u64, &[u8])> = names
+        .iter()
+        .map(|n| (n.as_str(), SHF_A, &[0u8; 8][..]))
+        .collect();
+    let mut o = group_obj("big.o", &secs);
+    o.symbols.push(sym("low", STB_GLOBAL, 0, 0));
+    o.symbols.push(sym("high", STB_GLOBAL, N - 1, 0));
+    // A relocation against the high symbol: its entry must survive the
+    // renumbering with the symbol index intact.
+    o.sections[0].relocs.push(EtReloc {
+        offset: 0,
+        sym: 1,
+        rtype: R_X86_64_64,
+        addend: 0,
+    });
+    let bytes = link_relocatable(&[o], &RelinkOptions::default()).expect("link");
+    let img = Img { b: &bytes };
+
+    let shnum = img.shnum();
+    assert!(shnum > 0xff00, "{shnum} sections");
+    assert_eq!(img.u16(60), 0, "e_shnum escapes to section header 0");
+    assert_eq!(img.u64(img.shdr(0) + 32) as usize, shnum);
+    assert_eq!(img.u16(62), SHN_XINDEX, "e_shstrndx escapes too");
+    assert_eq!(img.name(img.shstrndx()), ".shstrtab");
+
+    // The companion index table covers the whole symbol table.
+    let xi = img.find(".symtab_shndx");
+    let symtab = img.find(".symtab");
+    assert_eq!(img.u32(img.shdr(xi) + 4), 18, "SHT_SYMTAB_SHNDX");
+    assert_eq!(img.u32(img.shdr(xi) + 40) as usize, symtab, "sh_link");
+    assert_eq!(img.u64(img.shdr(xi) + 56), 4, "sh_entsize");
+    let ext: Vec<u32> = img
+        .body(xi)
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
+        .collect();
+    let syms = img.syms();
+    assert_eq!(ext.len(), syms.len());
+
+    // The high definition points through the table, the low one does
+    // not, and both name the section they were defined in.
+    let at = |n: &str| syms.iter().position(|(s, _)| s == n).expect(n);
+    let high = at("high");
+    assert_eq!(syms[high].1, SHN_XINDEX);
+    assert!(ext[high] >= 0xff00);
+    assert_eq!(img.name(ext[high] as usize), names[N - 1]);
+    let low = at("low");
+    assert!(syms[low].1 < 0xff00 && syms[low].1 != 0);
+    assert_eq!(ext[low], 0, "a low section needs no extended entry");
+    assert_eq!(img.name(syms[low].1 as usize), names[0]);
+
+    // Reading the output back resolves both symbols to their sections.
+    let merged = parse_et_rel(&bytes, "merged").expect("round-trip parse");
+    let sec_of = |n: &str| match merged.symbols.iter().find(|s| s.name == n).expect(n).sec {
+        EtSymRef::Section(i) => merged.sections[i].name.clone(),
+        other => panic!("{n}: {other:?}"),
+    };
+    assert_eq!(sec_of("high"), names[N - 1]);
+    assert_eq!(sec_of("low"), names[0]);
+    let reloc_syms: Vec<&str> = merged
+        .sections
+        .iter()
+        .flat_map(|s| s.relocs.iter())
+        .map(|r| merged.symbols[r.sym as usize].name.as_str())
+        .collect();
+    assert_eq!(reloc_syms, alloc::vec!["high"]);
+}
+
+/// The merged string tables share suffixes the way gas and GNU ld
+/// build theirs: a name that ends another name points into it and the
+/// tail is stored once.
+#[test]
+fn merged_string_tables_share_suffixes() {
+    let mut o = group_obj("a.o", &[(".text", SHF_AX, &[0u8; 8])]);
+    for n in ["do_bump", "bump", "ump", "unrelated"] {
+        o.symbols.push(sym(n, STB_GLOBAL, 0, 0));
+    }
+    o.sections[0].relocs.push(EtReloc {
+        offset: 0,
+        sym: 0,
+        rtype: R_X86_64_64,
+        addend: 0,
+    });
+    let bytes = link_relocatable(&[o], &RelinkOptions::default()).expect("link");
+    let img = Img { b: &bytes };
+
+    let syms = img.syms();
+    let offs = img.sym_name_offsets();
+    let at = |n: &str| offs[syms.iter().position(|(s, _)| s == n).expect(n)];
+    assert_eq!(at("bump"), at("do_bump") + 3);
+    assert_eq!(at("ump"), at("do_bump") + 4);
+    assert_ne!(at("unrelated"), at("do_bump"));
+    // Leading NUL, "do_bump", "unrelated": the two suffixes cost
+    // nothing and the section symbols have no names.
+    let strtab = img.body(img.u32(img.shdr(img.find(".symtab")) + 40) as usize);
+    assert_eq!(strtab.len(), 1 + 8 + 10);
+
+    // Section names merge the same way: `.text` is a suffix of
+    // `.rela.text`.
+    let sh_name = |n: &str| img.u32(img.shdr(img.find(n)));
+    assert_eq!(sh_name(".text"), sh_name(".rela.text") + 5);
 }
 
 /// Rewrite every `SHT_RELA` table into `SHT_REL` form: the addend
@@ -1107,7 +1274,10 @@ fn sht_rel_inputs_take_their_addend_from_the_relocated_field() {
             })
             .collect()
     };
-    assert!(entries(&rela).iter().any(|e| e.4 != 0), "addends to recover");
+    assert!(
+        entries(&rela).iter().any(|e| e.4 != 0),
+        "addends to recover"
+    );
     assert_eq!(entries(&rela), entries(&rel));
 
     // Both forms merge to the same tables: the output is RELA

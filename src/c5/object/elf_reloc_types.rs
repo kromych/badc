@@ -257,8 +257,12 @@ pub(crate) fn x86_64_field_width(rtype: u32) -> Option<u32> {
         return Some(w);
     }
     match rtype {
-        R_X86_64_PC32 | R_X86_64_PLT32 | R_X86_64_GOTPCREL | R_X86_64_REX_GOTPCRELX
-        | R_X86_64_GOTPC32 | R_X86_64_TPOFF32 => Some(4),
+        R_X86_64_PC32
+        | R_X86_64_PLT32
+        | R_X86_64_GOTPCREL
+        | R_X86_64_REX_GOTPCRELX
+        | R_X86_64_GOTPC32
+        | R_X86_64_TPOFF32 => Some(4),
         R_X86_64_16 | R_X86_64_PC16 => Some(2),
         R_X86_64_8 | R_X86_64_PC8 => Some(1),
         R_X86_64_DTPOFF64 | R_X86_64_GOTPC64 => Some(8),

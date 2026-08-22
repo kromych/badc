@@ -1812,6 +1812,59 @@ fn a_set_alias_binds_as_the_unit_declared_the_name() {
     }
 }
 
+/// A `.set` alias whose chain ends at a name the unit does not define emits
+/// no symbol of its own: GNU as 2.46.1 drops the alias, resolves every
+/// reference against the chain's end, and gives the end an undefined global
+/// entry whether or not anything references it. A `.globl` on the alias
+/// changes none of that.
+#[test]
+fn a_set_alias_of_an_undefined_name_resolves_against_the_name() {
+    const GLOBAL: u8 = 1;
+    const SHN_UNDEF: u16 = 0;
+    const PLT32: u32 = 4;
+    const ABS64: u32 = 1;
+    let find = |syms: &[(String, u8, u16)], n: &str| syms.iter().find(|s| s.0 == n).cloned();
+    // Unreferenced: the alias vanishes and the end surfaces undefined.
+    let bytes = object_of("set-undef", "\t.text\n\t.set x, ext\n");
+    let syms = sym_bindings(&bytes);
+    assert_eq!(find(&syms, "x"), None, "{syms:?}");
+    assert_eq!(
+        find(&syms, "ext"),
+        Some((String::from("ext"), GLOBAL, SHN_UNDEF)),
+        "{syms:?}"
+    );
+    // A branch through the alias, also via a chain and under `.globl`,
+    // relocates against the end.
+    for (name, src) in [
+        ("set-undef-call", "\t.text\n\t.set x, ext\n\tcall x\n"),
+        (
+            "set-undef-chain",
+            "\t.text\n\t.set a, b\n\t.set b, ext\n\tcall a\n",
+        ),
+        (
+            "set-undef-globl",
+            "\t.text\n\t.globl x\n\t.set x, ext\n\tcall x\n",
+        ),
+    ] {
+        let bytes = object_of(name, src);
+        let syms = sym_bindings(&bytes);
+        assert_eq!(find(&syms, "x"), None, "{name}: {syms:?}");
+        assert_eq!(find(&syms, "a"), None, "{name}: {syms:?}");
+        assert_eq!(find(&syms, "b"), None, "{name}: {syms:?}");
+        assert_eq!(
+            named_relocs(&bytes, ".rela.text"),
+            [(1, PLT32, String::from("ext"), -4)],
+            "{name}"
+        );
+    }
+    // A data field through the alias relocates against the end too.
+    let bytes = object_of("set-undef-data", "\t.set x, ext\n\t.data\n\t.quad x\n");
+    assert_eq!(
+        named_relocs(&bytes, ".rela.data"),
+        [(0, ABS64, String::from("ext"), 0)],
+    );
+}
+
 /// An `__attribute__((alias))` declarator's symbol takes the declarator's own
 /// linkage, as gcc 16.1 emits it: `static` binds it local,
 /// `__attribute__((weak))` weak, and external linkage global.

@@ -16,76 +16,16 @@ Disassembly of section .text:
 <core>:
                	mov	x8, x0
                	add	x0, x3, #0x0
-               	ldrb	w4, [x0, #0x3]
-               	mov	w4, w4
-               	lsl	x4, x4, #8
-               	mov	w4, w4
-               	ldrb	w5, [x0, #0x2]
-               	orr	x4, x4, x5
-               	mov	w4, w4
-               	lsl	x4, x4, #8
-               	mov	w4, w4
-               	ldrb	w5, [x0, #0x1]
-               	orr	x4, x4, x5
-               	mov	w4, w4
-               	lsl	x4, x4, #8
-               	mov	w4, w4
-               	ldrb	w0, [x0]
-               	orr	x0, x4, x0
+               	ldr	w0, [x0]
                	mov	w4, w0
                	add	x0, x3, #0x4
-               	ldrb	w5, [x0, #0x3]
-               	mov	w5, w5
-               	lsl	x5, x5, #8
-               	mov	w5, w5
-               	ldrb	w6, [x0, #0x2]
-               	orr	x5, x5, x6
-               	mov	w5, w5
-               	lsl	x5, x5, #8
-               	mov	w5, w5
-               	ldrb	w6, [x0, #0x1]
-               	orr	x5, x5, x6
-               	mov	w5, w5
-               	lsl	x5, x5, #8
-               	mov	w5, w5
-               	ldrb	w0, [x0]
-               	orr	x0, x5, x0
+               	ldr	w0, [x0]
                	mov	w5, w0
                	add	x0, x3, #0x8
-               	ldrb	w6, [x0, #0x3]
-               	mov	w6, w6
-               	lsl	x6, x6, #8
-               	mov	w6, w6
-               	ldrb	w7, [x0, #0x2]
-               	orr	x6, x6, x7
-               	mov	w6, w6
-               	lsl	x6, x6, #8
-               	mov	w6, w6
-               	ldrb	w7, [x0, #0x1]
-               	orr	x6, x6, x7
-               	mov	w6, w6
-               	lsl	x6, x6, #8
-               	mov	w6, w6
-               	ldrb	w0, [x0]
-               	orr	x0, x6, x0
+               	ldr	w0, [x0]
                	mov	w6, w0
                	add	x0, x3, #0xc
-               	ldrb	w3, [x0, #0x3]
-               	mov	w3, w3
-               	lsl	x3, x3, #8
-               	mov	w3, w3
-               	ldrb	w7, [x0, #0x2]
-               	orr	x3, x3, x7
-               	mov	w3, w3
-               	lsl	x3, x3, #8
-               	mov	w3, w3
-               	ldrb	w7, [x0, #0x1]
-               	orr	x3, x3, x7
-               	mov	w3, w3
-               	lsl	x3, x3, #8
-               	mov	w3, w3
-               	ldrb	w0, [x0]
-               	orr	x0, x3, x0
+               	ldr	w0, [x0]
                	mov	w3, w0
                	mov	x0, #0x0                // =0
                	mov	w1, w4

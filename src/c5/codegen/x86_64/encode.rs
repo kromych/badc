@@ -1981,6 +1981,18 @@ pub(crate) fn lower(
         super::ssa::emit_common::time_pass("passes::unroll::run (x86_64)", || {
             crate::c5::codegen::passes::unroll::run(&mut ssa_funcs);
         });
+        // Merge byte-at-a-time memory idioms after the unroll, which
+        // straight-lines the per-byte loops they are often written as,
+        // and before the inliner: a helper that collapses to one wide
+        // access becomes a single-block candidate the inliner takes,
+        // and its call sites see the merged body.
+        super::ssa::emit_common::time_pass("passes::byteload::run (x86_64)", || {
+            crate::c5::codegen::passes::byteload::run(
+                &mut ssa_funcs,
+                target.is_little_endian(),
+                native.strict_align,
+            );
+        });
         // Seed a parameter every call site of an internal function
         // agrees a constant for, and record the range each parameter's
         // argument stays inside for the range analysis below. After

@@ -270,6 +270,19 @@ impl Target {
         )
     }
 
+    /// Byte order of the target's data accesses. Both instruction sets
+    /// badc emits can run either way; every target it emits for selects
+    /// the little-endian one, and the linker rejects `-EB` input.
+    pub fn is_little_endian(self) -> bool {
+        match self {
+            Target::MacOSAarch64
+            | Target::LinuxAarch64
+            | Target::LinuxX64
+            | Target::WindowsX64
+            | Target::WindowsAarch64 => true,
+        }
+    }
+
     /// Whether the target is x86_64 (any OS). Gates the x86 named
     /// address spaces (`__seg_gs` / `__seg_fs`), whose accesses ride a
     /// segment-override prefix that only the x86 encoder emits.

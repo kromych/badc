@@ -3263,6 +3263,21 @@ fn builtin_bswap_reversal() {
 }
 
 #[test]
+fn byte_load_wide_merge() {
+    // Byte-assembly readers merge to one wide load, with a byte
+    // reversal for the order opposite the target's; the 3-byte reader
+    // has no width to merge into.
+    assert_eq!(run_fixture("byte_load_wide_merge.c"), 0);
+}
+
+#[test]
+fn byte_store_wide_merge() {
+    // The store side: runs of byte stores of one value merge to one
+    // wide store, reversed first for the opposite order.
+    assert_eq!(run_fixture("byte_store_wide_merge.c"), 0);
+}
+
+#[test]
 fn sysexits_codes() {
     // <sysexits.h>: the BSD exit-status codes, same on every target.
     assert_eq!(run_fixture("sysexits_codes.c"), 0);

@@ -3184,8 +3184,8 @@ fn bss_segregation_resolves_data_pointer_into_bss() {
     let into_bss = [".data", ".data.rel.ro"]
         .iter()
         .filter_map(|name| elf64_section(&bytes, name))
-        .flat_map(|sec| sec.chunks_exact(8))
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .flat_map(|sec| sec.as_chunks::<8>().0.iter())
+        .map(|c| u64::from_le_bytes(*c))
         .any(|v| v >= bss_addr && v < bss_addr + bss_size);
     assert!(
         into_bss,
@@ -3768,7 +3768,9 @@ fn aarch64_fp_access_folds_constant_displacement() {
     .expect("emit relocatable");
     let text = elf64_section(&obj, ".text").expect(".text");
     let words = || {
-        text.chunks_exact(4)
+        text.as_chunks::<4>()
+            .0
+            .iter()
             .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
     };
     // Unsigned-offset FP loads/stores scale the immediate by the access
@@ -3831,7 +3833,9 @@ fn aarch64_call_sp_adjust_covers_wide_outgoing_area() {
         .expect("caller size");
     let body = &text[entry..(entry + size).min(text.len())];
     let words: alloc::vec::Vec<u32> = body
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect();
     // 4112 bytes split as `sub sp, sp, #1, lsl #12` + `sub sp, sp, #16`
@@ -4078,7 +4082,7 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
         .expect("emit relocatable");
         let rela = elf64_section(&obj, ".rela.text").expect(".rela.text");
         let mut types = std::collections::BTreeSet::new();
-        for e in rela.chunks_exact(24) {
+        for e in rela.as_chunks::<24>().0.iter() {
             let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
             types.insert((r_info & 0xffff_ffff) as u32);
         }
@@ -4095,7 +4099,7 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
             core::str::from_utf8(&strtab[off..end]).unwrap()
         };
         let (mut saw_counter, mut saw_other_undef, mut saw_private) = (false, false, false);
-        for e in symtab.chunks_exact(24) {
+        for e in symtab.as_chunks::<24>().0.iter() {
             let st_name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;
             let st_info = e[4];
             let st_shndx = u16::from_le_bytes(e[6..8].try_into().unwrap());
@@ -4131,7 +4135,12 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
         );
         // ELF requires every STB_LOCAL entry to precede the first
         // non-local one, which `.symtab`'s sh_info points at.
-        let bindings: Vec<u8> = symtab.chunks_exact(24).map(|e| e[4] >> 4).collect();
+        let bindings: Vec<u8> = symtab
+            .as_chunks::<24>()
+            .0
+            .iter()
+            .map(|e| e[4] >> 4)
+            .collect();
         assert!(
             bindings.windows(2).all(|w| !(w[0] != 0 && w[1] == 0)),
             "{target:?}: an STB_LOCAL symbol follows a non-local one"
@@ -4860,8 +4869,10 @@ fn a64_asm_goto_published_label_static_frame_region() {
         .expect("probe symbol");
     let (lo, hi) = (probe.value as usize, (probe.value + probe.size) as usize);
     let words: alloc::vec::Vec<u32> = obj.text[lo..hi]
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     let count = |base: u32| words.iter().filter(|&&w| w & 0xFF80_03FF == base).count();
     assert_eq!(
@@ -4909,8 +4920,10 @@ fn a64_asm_goto_immediate_jump_label_frameless() {
         .expect("probe symbol");
     let (lo, hi) = (probe.value as usize, (probe.value + probe.size) as usize);
     let words: alloc::vec::Vec<u32> = obj.text[lo..hi]
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     assert!(
         words
@@ -5406,7 +5419,11 @@ fn relocated_slots_are_zero_in_relocatable_objects() {
                     *tty, SHT_NOBITS,
                     "{ctx}: `{name}` relocates the no-bits section `{tname}`"
                 );
-                for r in obj[*off as usize..(*off + *size) as usize].chunks_exact(24) {
+                for r in obj[*off as usize..(*off + *size) as usize]
+                    .as_chunks::<24>()
+                    .0
+                    .iter()
+                {
                     let r_offset = u64::from_le_bytes(r[0..8].try_into().unwrap());
                     let rtype = u32::from_le_bytes(r[8..12].try_into().unwrap());
                     let Some(w) = slot_width(machine, rtype) else {
@@ -5510,7 +5527,7 @@ fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
         // Both asm references landed, each against a defined target.
         let rela = elf64_section(&obj, ".rela.export_symbol").expect("asm section relocations");
         assert_eq!(rela.len(), 48, "{target:?}: expected two RELA entries");
-        for r in rela.chunks_exact(24) {
+        for r in rela.as_chunks::<24>().0.iter() {
             let sym_idx = u32::from_le_bytes(r[12..16].try_into().unwrap()) as usize;
             let (name, _, shndx, _, _) = &syms[sym_idx];
             assert!(
@@ -5761,8 +5778,10 @@ fn strict_align_narrows_the_aggregate_copy_transfer_width() {
     // one of the two 4-aligned struct pointers.
     let a64_wide = |obj: &[u8]| -> usize {
         elf_text(obj)
-            .chunks_exact(4)
-            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes(*w))
             .filter(|insn| {
                 let ldst64 = insn & 0xFFC0_0000 == 0xF940_0000 || insn & 0xFFC0_0000 == 0xF900_0000;
                 let base = (insn >> 5) & 31;
@@ -5819,8 +5838,10 @@ fn a64_wide_off_object(obj: &[u8]) -> usize {
         0xBD00_0000, // str  St
     ];
     elf_text(obj)
-        .chunks_exact(4)
-        .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
         .filter(|insn| {
             let base = (insn >> 5) & 31;
             WIDE.contains(&(insn & 0xFFC0_0000)) && base != 29 && base != 31
@@ -5956,8 +5977,10 @@ fn strict_align_narrows_the_oversize_aggregate_transfers() {
     // aarch64: `strb Wt, [Xn, #imm]`, one per copied byte.
     let a64_strb = |obj: &[u8]| -> usize {
         elf_text(obj)
-            .chunks_exact(4)
-            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes(*w))
             .filter(|insn| insn & 0xFFC0_0000 == 0x3900_0000)
             .count()
     };
@@ -6034,8 +6057,10 @@ fn strict_align_narrows_the_under_aligned_member_access() {
     // aarch64 counter (which admits 4-byte forms) sees it separately.
     let a64_over_bound = |obj: &[u8]| -> usize {
         elf_text(obj)
-            .chunks_exact(4)
-            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes(*w))
             .filter(|insn| {
                 let base = (insn >> 5) & 31;
                 let op = insn & 0xFFC0_0000;
@@ -6151,8 +6176,10 @@ fn staged_aggregate_template_is_eight_aligned() {
     // access, so any is a narrowed template copy.
     let count = |want: u32| -> usize {
         elf_text(&obj)
-            .chunks_exact(4)
-            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes(*w))
             .filter(|insn| insn & 0xFFC0_0000 == want)
             .count()
     };
@@ -8050,7 +8077,7 @@ fn x64_branch_relocs(obj: &[u8]) -> alloc::vec::Vec<(u64, alloc::string::String,
     };
     let (rela, symtab, strtab) = (body(".rela.text"), body(".symtab"), body(".strtab"));
     let mut out = alloc::vec::Vec::new();
-    for e in rela.chunks_exact(24) {
+    for e in rela.as_chunks::<24>().0.iter() {
         let r_offset = u64::from_le_bytes(e[0..8].try_into().unwrap());
         let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
         let r_addend = i64::from_le_bytes(e[16..24].try_into().unwrap());
@@ -8381,8 +8408,10 @@ fn a64_branch_protection_lands_pads_at_entries_and_indirect_targets() {
     const BTI_J: u32 = 0xD503_249F;
     let words = |o: &[u8]| -> alloc::vec::Vec<u32> {
         elf_text(o)
-            .chunks_exact(4)
-            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes(*w))
             .collect()
     };
     let plain = words(&emit_hardened(
@@ -8521,8 +8550,10 @@ const PAC_VLA_SRC: &str = "int vla(int n) { int a[n]; a[0] = n; for (int i = 1; 
 /// `.text` as instruction words.
 fn a64_words(obj: &[u8]) -> alloc::vec::Vec<u32> {
     elf_text(obj)
-        .chunks_exact(4)
-        .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
         .collect()
 }
 

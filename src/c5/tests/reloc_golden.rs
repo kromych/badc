@@ -168,15 +168,45 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
     ("data_calls", "win-x64", 0x240709c74f032833, 1184),
     ("data_calls", "win-arm64", 0xf765a8339663fc2e, 1304),
     ("struct_param_spill", "linux-x64", 0xd49c313ae0cf8dca, 1088),
-    ("struct_param_spill", "linux-arm64", 0x1082e6a5446c509b, 1200),
-    ("struct_param_spill", "macos-arm64", 0x1082e6a5446c509b, 1200),
+    (
+        "struct_param_spill",
+        "linux-arm64",
+        0x1082e6a5446c509b,
+        1200,
+    ),
+    (
+        "struct_param_spill",
+        "macos-arm64",
+        0x1082e6a5446c509b,
+        1200,
+    ),
     ("struct_param_spill", "win-x64", 0x2997dc76495250e4, 1128),
     ("struct_param_spill", "win-arm64", 0x710c329b9202779a, 1240),
-    ("fp_across_struct_call", "linux-x64", 0x89f3021634a8b74c, 1216),
-    ("fp_across_struct_call", "linux-arm64", 0xa811f4219a80cdcf, 1288),
-    ("fp_across_struct_call", "macos-arm64", 0xa811f4219a80cdcf, 1288),
+    (
+        "fp_across_struct_call",
+        "linux-x64",
+        0x89f3021634a8b74c,
+        1216,
+    ),
+    (
+        "fp_across_struct_call",
+        "linux-arm64",
+        0xa811f4219a80cdcf,
+        1288,
+    ),
+    (
+        "fp_across_struct_call",
+        "macos-arm64",
+        0xa811f4219a80cdcf,
+        1288,
+    ),
     ("fp_across_struct_call", "win-x64", 0x8c0dd4f89866bcea, 1280),
-    ("fp_across_struct_call", "win-arm64", 0xa811f4219a80cdcf, 1288),
+    (
+        "fp_across_struct_call",
+        "win-arm64",
+        0xa811f4219a80cdcf,
+        1288,
+    ),
 ];
 
 #[test]

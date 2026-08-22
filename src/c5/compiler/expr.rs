@@ -4131,7 +4131,7 @@ impl Compiler {
                         // run the sequence, then restore.
                         let lhs_ast = self.ast_vstack.pop().flatten();
                         let rhs_ast = self.ast_acc.take();
-                        let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
+                        let saved_vstack = core::mem::take(&mut self.ast_vstack);
                         self.ast_vstack.push(None);
                         // RHS is the pointer; a pointer-to-array RHS left
                         // its array stride in `end_of_expr_stride` at the
@@ -4357,7 +4357,7 @@ impl Compiler {
                         // masking from the operand type.
                         let lhs_ast = self.ast_vstack.pop().flatten();
                         let rhs_ast = self.ast_acc.take();
-                        let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
+                        let saved_vstack = core::mem::take(&mut self.ast_vstack);
                         self.ast_vstack.push(None);
                         self.maybe_mask_operands_to_unsigned_common(t, self.ty);
                         self.ast_binop(crate::c5::ir::BinOp::Divu);
@@ -4409,7 +4409,7 @@ impl Compiler {
                 if is_unsigned_ty(common) {
                     let lhs_ast = self.ast_vstack.pop().flatten();
                     let rhs_ast = self.ast_acc.take();
-                    let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
+                    let saved_vstack = core::mem::take(&mut self.ast_vstack);
                     self.ast_vstack.push(None);
                     self.maybe_mask_operands_to_unsigned_common(t, self.ty);
                     self.ast_binop(crate::c5::ir::BinOp::Modu);

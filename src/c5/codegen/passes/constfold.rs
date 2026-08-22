@@ -75,8 +75,7 @@ fn is_bool_value(func: &FunctionSsa, v: ValueId, depth: u32) -> bool {
         Some(Inst::Imm(k)) => *k == 0 || *k == 1,
         Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => is_compare_op(*op),
         Some(Inst::Extend { value, kind }) => {
-            !matches!(kind, LoadKind::F32 | LoadKind::F64)
-                && is_bool_value(func, *value, depth - 1)
+            !matches!(kind, LoadKind::F32 | LoadKind::F64) && is_bool_value(func, *value, depth - 1)
         }
         Some(Inst::Phi { incoming, kind }) => {
             !matches!(kind, LoadKind::F32 | LoadKind::F64)

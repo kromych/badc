@@ -966,11 +966,7 @@ mod tests {
         insts.push(store(k + 1, k)); //       v15
         insts.push(Inst::LocalAddr(-3)); //   v16
         insts.push(load(k + 3)); //           v17
-        let mut f = func(
-            insts,
-            Terminator::Return(12),
-            alloc::vec![(-2, 2), (-3, 1)],
-        );
+        let mut f = func(insts, Terminator::Return(12), alloc::vec![(-2, 2), (-3, 1)]);
         let split = split_objects(&mut f, 2);
         assert_eq!(
             split,

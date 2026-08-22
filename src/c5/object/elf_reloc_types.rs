@@ -765,9 +765,6 @@ mod tests {
     fn unassigned_numbers_describe_themselves() {
         assert_eq!(aarch64_reloc_desc(287), "R_AARCH64_MOVW_PREL_G0 (287)");
         assert_eq!(x86_64_reloc_desc(4), "R_X86_64_PLT32 (4)");
-        assert_eq!(
-            format!("{}", aarch64_reloc_desc(9999)),
-            "relocation type 9999"
-        );
+        assert_eq!(aarch64_reloc_desc(9999).to_string(), "relocation type 9999");
     }
 }

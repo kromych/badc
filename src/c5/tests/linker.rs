@@ -210,8 +210,10 @@ unsigned long two_reads(void) {
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // Rt (bits 4:0) is allocator-chosen; the sysreg field is fixed.
     let has_mrs = |base: u32| words.iter().any(|&w| w & 0xFFFF_FFE0 == base);
@@ -254,8 +256,10 @@ int main(void) { inst_neg_zero(); inst_neg_one(); return 0; }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     assert!(
         words.contains(&0xd500_409f),
@@ -308,8 +312,10 @@ int lse_fetch(int i, atomic_t *v) {
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // Rs (bits 20:16), Rt (bits 4:0) and Rn (bits 9:5) are allocator-chosen.
     let stadd_mask = !((0x1Fu32 << 16) | (0x1F << 5));
@@ -366,8 +372,10 @@ int main(void) { unsigned int u = 0; return futex_op(1, &u); }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // Rn (bits 9:5) is the allocator-chosen address register.
     let rn_mask = !(0x1Fu32 << 5);
@@ -416,8 +424,10 @@ int main(void) { unsigned long v = 0; return (int)load_zeropad(&v); }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // Rn (bits 9:5) and Rt (bits 4:0) are allocator-chosen.
     let ldr_mask = !((0x1Fu32 << 5) | 0x1F);
@@ -455,8 +465,10 @@ int main(void) { unsigned t = 0, f[2] = {1, 2}; store2(&t, f); return 0; }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // Rn (bits 9:5) and Rt (bits 4:0) are allocator-chosen.
     let str_mask = !((0x1Fu32 << 5) | 0x1F);
@@ -490,8 +502,10 @@ int main(void) { nop_pad(); return 0; }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let nops = obj
         .text
-        .chunks_exact(4)
-        .filter(|c| u32::from_le_bytes((*c).try_into().unwrap()) == 0xd503_201f)
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|c| u32::from_le_bytes(**c) == 0xd503_201f)
         .count();
     assert!(nops >= 8, "`.rept 8` must expand to 8 nops: found {nops}");
 }
@@ -530,8 +544,10 @@ void spin(void) { __asm__ volatile("b ."); }
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let words: alloc::vec::Vec<u32> = obj
         .text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // CBNZ Rt (bits 4:0) is allocator-chosen; the rest is the 64-bit
     // branch-to-self word with imm19 == 0.
@@ -3133,7 +3149,7 @@ fn asm_data_directive_quoted_symbol_matches_bare() {
             .3;
         assert_eq!(rela.len(), 2 * 24, "{target:?}: two relocations");
         let symbols = elf_symbols(&bytes);
-        for (k, r) in rela.chunks_exact(24).enumerate() {
+        for (k, r) in rela.as_chunks::<24>().0.iter().enumerate() {
             let r_offset = u64::from_le_bytes(r[0..8].try_into().unwrap());
             let r_info = u64::from_le_bytes(r[8..16].try_into().unwrap());
             let r_addend = i64::from_le_bytes(r[16..24].try_into().unwrap());
@@ -3384,9 +3400,15 @@ int main(void) { return 0; }
         ],
     );
     // `b 1b` folds to `b .` (0x14000000) and carries no relocation.
-    let fold = obj.text.chunks_exact(4).enumerate().any(|(i, w)| {
-        w == [0, 0, 0, 0x14] && !obj.text_relocs.iter().any(|r| r.offset == 4 * i as u64)
-    });
+    let fold = obj
+        .text
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .enumerate()
+        .any(|(i, w)| {
+            *w == [0, 0, 0, 0x14] && !obj.text_relocs.iter().any(|r| r.offset == 4 * i as u64)
+        });
     assert!(fold, "{:02x?}", obj.text);
 }
 
@@ -7942,7 +7964,9 @@ fn elf_symbols(bytes: &[u8]) -> alloc::vec::Vec<(String, u8, u16, u64, u64)> {
         .unwrap()
         .3;
     symtab
-        .chunks_exact(24)
+        .as_chunks::<24>()
+        .0
+        .iter()
         .map(|e| {
             let st_name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;
             let end = strtab[st_name..].iter().position(|&b| b == 0).unwrap();
@@ -8055,7 +8079,7 @@ fn file_scope_asm_numeric_labels_bind_per_definition() {
         // bytes 1, 2, 3, 4 sit at 0, 1, 2, 3). The labels are local and
         // untyped, so each reduces to the section symbol and the
         // per-instance binding rides the addend.
-        for (i, r) in rela.chunks_exact(24).enumerate() {
+        for (i, r) in rela.as_chunks::<24>().0.iter().enumerate() {
             let r_info = u64::from_le_bytes(r[8..16].try_into().unwrap());
             let r_addend = i64::from_le_bytes(r[16..24].try_into().unwrap());
             let (name, info, shndx, _, _) = &symbols[(r_info >> 32) as usize];
@@ -9948,8 +9972,10 @@ fn aarch64_asm_replacement_branch_resolves_to_in_region_label() {
         .expect(".text missing")
         .3;
     let words: alloc::vec::Vec<u32> = text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // The region is `b 1f; nop; 1: nop`; the branch resolves to +2 words.
     assert!(
@@ -10015,8 +10041,10 @@ fn aarch64_asm_replacement_branch_to_symbol_relocates_out_of_line() {
         0x9400_0000
     );
     let ret = text
-        .chunks_exact(4)
-        .position(|c| u32::from_le_bytes(c.try_into().unwrap()) == 0xd65f_03c0)
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .position(|c| u32::from_le_bytes(*c) == 0xd65f_03c0)
         .expect("ret present");
     assert!(off > ret * 4, "replacement branch is not out of line");
 }
@@ -10058,8 +10086,10 @@ fn aarch64_clobbered_callee_saved_register_is_saved_around_the_block() {
         .expect(".text missing")
         .3;
     let words: alloc::vec::Vec<u32> = text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     let template = words
         .iter()
@@ -10110,8 +10140,10 @@ fn aarch64_fixed_operand_outside_the_pool_is_saved_and_restored() {
         .expect(".text missing")
         .3;
     let words: alloc::vec::Vec<u32> = text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // x30 is stored to the operand frame before the template and reloaded
     // after it: `str x30, [sp, #imm]` / `ldr x30, [sp, #imm]` (0xf90*/0xf94*
@@ -10166,8 +10198,10 @@ fn aarch64_file_scope_section_assembles_instructions() {
         .expect(".text.stub missing")
         .3;
     let words: alloc::vec::Vec<u32> = sec
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // mov x10, x30 / mov x30, x9 / ret x10, as the reference assembler encodes
     // them (orr Xd, xzr, Xm; ret Xn).
@@ -10210,8 +10244,10 @@ fn aarch64_asm_replacement_goto_branch_targets_label_block() {
         .expect(".text missing")
         .3;
     let words: alloc::vec::Vec<u32> = text
-        .chunks_exact(4)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
         .collect();
     // `return 1;` lowers the l_yes block to `mov x0, #1`.
     let lyes = words
@@ -10901,7 +10937,7 @@ fn x86_alternative_replacement_goto_branch_relocates_to_block() {
     // Find the reloc at byte offset `off` in a `.rela.*` body; return
     // `(r_info, r_addend)`.
     let at = |rela: &[u8], off: u64| -> (u64, i64) {
-        for b in rela.chunks_exact(24) {
+        for b in rela.as_chunks::<24>().0.iter() {
             if u64::from_le_bytes(b[0..8].try_into().unwrap()) == off {
                 return (
                     u64::from_le_bytes(b[8..16].try_into().unwrap()),
@@ -11007,7 +11043,7 @@ fn x86_static_cpu_has_memory_operand_replacement_encodes_and_relocates() {
     // The `testb` disp32 reloc: at byte offset 2, PC32 against `cap`, addend
     // `2 - 5 = -3` (GNU as: `cap - 3`).
     let at = |off: u64| -> (u64, i64) {
-        for b in rela.chunks_exact(24) {
+        for b in rela.as_chunks::<24>().0.iter() {
             if u64::from_le_bytes(b[0..8].try_into().unwrap()) == off {
                 return (
                     u64::from_le_bytes(b[8..16].try_into().unwrap()),
@@ -11746,8 +11782,8 @@ fn undefined_weak_reference_in_single_tu_image_reads_as_null() {
             _ => {
                 // `adrp xd, #0` (0x90000000 | rd) and `bl #0` (0x94000000)
                 // are the aarch64 unresolved-placeholder shapes.
-                for word in bytes.chunks_exact(4) {
-                    let w = u32::from_le_bytes(word.try_into().unwrap());
+                for word in bytes.as_chunks::<4>().0.iter() {
+                    let w = u32::from_le_bytes(*word);
                     assert_ne!(w & 0xFFFF_FFE0, 0x9000_0000, "{target:?}: `adrp xd, #0`");
                     assert_ne!(w, 0x9400_0000, "{target:?}: `bl #0`");
                 }
@@ -12593,7 +12629,9 @@ int main(void) { return 0; }
                 .iter()
                 .find(|(n, _, _, _)| n == sec)
                 .map_or(0, |s| {
-                    s.3.chunks_exact(24)
+                    s.3.as_chunks::<24>()
+                        .0
+                        .iter()
                         .filter(|r| {
                             let ty = u32::from_le_bytes(r[8..12].try_into().unwrap());
                             // CALL26 / PLT32+PC32 call forms.
@@ -12650,8 +12688,10 @@ int main(void) { return 0; }
             .find(|(n, _, _, _)| n == ".rodata")
             .unwrap_or_else(|| panic!("{target:?}: .rodata missing"));
         let words: Vec<u32> =
-            ro.3.chunks_exact(4)
-                .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            ro.3.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| u32::from_le_bytes(*c))
                 .collect();
         for want in [0x300u32, 0x340] {
             assert!(
@@ -12854,8 +12894,8 @@ fn asm_address_constraint_renders_as_a_memory_reference() {
         "void pl(const void *p) { __asm__ volatile(\"prfm pldl1keep, %a0\\n\" : : \"p\" (p)); }\nint main(void) { return 0; }\n",
         Target::LinuxAarch64,
     );
-    let found = a64.chunks_exact(4).any(|w| {
-        let w = u32::from_le_bytes(w.try_into().unwrap());
+    let found = a64.as_chunks::<4>().0.iter().any(|w| {
+        let w = u32::from_le_bytes(*w);
         w & 0xFFFF_FC1F == 0xF980_0000
     });
     assert!(found, "aarch64: `prfm pldl1keep, [Xn]` not encoded");
@@ -12907,8 +12947,10 @@ fn asm_prfm_accepts_a_bare_q_operand_reference() {
         .expect(".text")
         .3;
     let words = || {
-        text.chunks_exact(4)
-            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+        text.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes(*w))
     };
     // prfm pstl1strm, [Xn]: base-register form, zero offset, prfop 0x11.
     let prfm = words()
@@ -13934,7 +13976,9 @@ fn label_addr_table_is_relocated_read_only_data() {
             );
             let rela = sec_of(&alloc::format!(".rela{sec}")).3.clone();
             let hits = rela
-                .chunks_exact(24)
+                .as_chunks::<24>()
+                .0
+                .iter()
                 .filter(|e| {
                     let r_offset = u64::from_le_bytes(e[0..8].try_into().unwrap());
                     let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
@@ -13984,7 +14028,9 @@ fn label_addr_table_is_relocated_read_only_data() {
                 .unwrap_or_else(|| panic!("{target:?}: no `{sec}` section symbol"));
             sec_of(".rela.text")
                 .3
-                .chunks_exact(24)
+                .as_chunks::<24>()
+                .0
+                .iter()
                 .filter(|e| {
                     let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
                     (r_info >> 32) as usize == idx

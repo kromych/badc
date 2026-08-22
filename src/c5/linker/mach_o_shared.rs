@@ -125,7 +125,7 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         && t_size > 0
     {
         let data = bytes
-            .get(t_off..t_off.checked_add(t_size).unwrap_or(usize::MAX))
+            .get(t_off..t_off.saturating_add(t_size))
             .ok_or_else(|| err("export trie extent runs past end of file"))?;
         walk_export_trie(data, &mut exports)?;
     }

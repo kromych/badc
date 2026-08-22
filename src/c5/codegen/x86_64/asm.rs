@@ -1673,7 +1673,9 @@ fn mask_op(name: &str) -> Option<Mnemonic> {
         _ => None,
     };
     if let Some(rest) = name.strip_prefix("kmov") {
-        return Some(Mnemonic::Kmov { width: width(rest)? });
+        return Some(Mnemonic::Kmov {
+            width: width(rest)?,
+        });
     }
     if let Some(rest) = name.strip_prefix("kshift") {
         let (base, rest) = match rest.split_at_checked(1)? {
@@ -4329,9 +4331,8 @@ fn encode_bespoke(
                         emit_vex(code, false, false, g >= 8, 1, gw, 0, 0, gpp);
                         code.extend([0x92, modrm_reg(d, g)]);
                     } else {
-                        let mr = MemRm::of(&src).ok_or_else(|| {
-                            String::from("inline asm: bad `kmov` source operand")
-                        })?;
+                        let mr = MemRm::of(&src)
+                            .ok_or_else(|| String::from("inline asm: bad `kmov` source operand"))?;
                         emit_vex(code, false, mr.rex_x(), mr.rex_b(), 1, kw, 0, 0, kpp);
                         code.push(0x90);
                         mr.emit(code, mode, addr, d)?;

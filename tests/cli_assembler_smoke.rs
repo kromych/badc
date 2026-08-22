@@ -953,7 +953,10 @@ fn e3_branches_take_the_address_size_prefix_by_mode() {
     );
     assert_eq!(
         text_of("e3-branches", SRC),
-        [0xe3, 0xfe, 0x67, 0xe3, 0xfd, 0xe3, 0xfe, 0x67, 0xe3, 0xfd, 0x67, 0xe3, 0xfd, 0xe3, 0xfe]
+        [
+            0xe3, 0xfe, 0x67, 0xe3, 0xfd, 0xe3, 0xfe, 0x67, 0xe3, 0xfd, 0x67, 0xe3, 0xfd, 0xe3,
+            0xfe
+        ]
     );
     // A counter the mode cannot address is rejected, as GNU as rejects it.
     let d = dir("e3-reject");
@@ -970,18 +973,18 @@ fn e3_branches_take_the_address_size_prefix_by_mode() {
 fn opmask_operands_assemble_in_a_section_unit() {
     const SRC: &str = concat!(
         "\t.text\n\t.globl mask_unit\nmask_unit:\n",
-        "\tkxnorw %k2, %k2, %k2\n",             // c5 ec 46 d2
-        "\tkmovd %eax, %k1\n",                  // c5 fb 92 c8
-        "\tkmovw %k1, %ecx\n",                  // c5 f8 93 c9
-        "\tkshiftrw $8, %k1, %k2\n",            // c4 e3 f9 30 d1 08
-        "\tkmovq %k3, (%rdi)\n",                // c4 e1 f8 91 1f
-        "\tkmovb 1(%rsi), %k4\n",               // c5 f9 90 66 01
-        "\tkandq %k1, %k2, %k3\n",              // c4 e1 ec 41 d9
-        "\tktestw %k1, %k2\n",                  // c5 f8 99 d1
-        "\tvpcmpeqd %zmm1, %zmm2, %k3\n",       // 62 f1 6d 48 76 d9
-        "\tvpcmpub $6, (%rdx), %zmm5, %k1\n",   // 62 f3 55 48 3e 0a 06
-        "\tvpmovm2b %k1, %zmm3\n",              // 62 f2 7e 48 28 d9
-        "\tvmovdqu8 (%rsi), %zmm0{%k1}{z}\n",   // 62 f1 7f c9 6f 06
+        "\tkxnorw %k2, %k2, %k2\n",           // c5 ec 46 d2
+        "\tkmovd %eax, %k1\n",                // c5 fb 92 c8
+        "\tkmovw %k1, %ecx\n",                // c5 f8 93 c9
+        "\tkshiftrw $8, %k1, %k2\n",          // c4 e3 f9 30 d1 08
+        "\tkmovq %k3, (%rdi)\n",              // c4 e1 f8 91 1f
+        "\tkmovb 1(%rsi), %k4\n",             // c5 f9 90 66 01
+        "\tkandq %k1, %k2, %k3\n",            // c4 e1 ec 41 d9
+        "\tktestw %k1, %k2\n",                // c5 f8 99 d1
+        "\tvpcmpeqd %zmm1, %zmm2, %k3\n",     // 62 f1 6d 48 76 d9
+        "\tvpcmpub $6, (%rdx), %zmm5, %k1\n", // 62 f3 55 48 3e 0a 06
+        "\tvpmovm2b %k1, %zmm3\n",            // 62 f2 7e 48 28 d9
+        "\tvmovdqu8 (%rsi), %zmm0{%k1}{z}\n", // 62 f1 7f c9 6f 06
         "\tret\n",
     );
     assert_eq!(
@@ -2499,7 +2502,7 @@ fn sym_entries(bytes: &[u8]) -> Vec<(String, u8, u16)> {
 /// `(name, sh_type, sh_flags, sh_addralign, sh_entsize)` per section.
 fn section_headers(bytes: &[u8]) -> Vec<(String, u32, u64, u64, u64)> {
     let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
-    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as u32;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
     let shoff = u64at(0x28) as usize;
     let (shentsize, shnum, shstrndx) = (u16at(0x3a), u16at(0x3c), u16at(0x3e));

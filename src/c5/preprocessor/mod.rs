@@ -419,13 +419,12 @@ fn obs_hash(name: &str) -> u64 {
     const K: u64 = 0x517c_c1b7_2722_0a95;
     let bytes = name.as_bytes();
     let mut h = bytes.len() as u64;
-    let mut chunks = bytes.chunks_exact(8);
-    for c in &mut chunks {
-        let c = u64::from_le_bytes(c.try_into().expect("eight-byte chunk"));
-        h = (h.rotate_left(5) ^ c).wrapping_mul(K);
+    let (chunks, remainder) = bytes.as_chunks::<8>();
+    for c in chunks {
+        h = (h.rotate_left(5) ^ u64::from_le_bytes(*c)).wrapping_mul(K);
     }
     let mut tail = 0u64;
-    for &b in chunks.remainder() {
+    for &b in remainder {
         tail = tail << 8 | b as u64;
     }
     h = (h.rotate_left(5) ^ tail).wrapping_mul(K);

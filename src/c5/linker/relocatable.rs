@@ -405,8 +405,8 @@ pub fn parse_et_rel(bytes: &[u8], source: &str) -> Result<EtRel, C5Error> {
             .map(|s| s.name.clone())
             .unwrap_or_default();
         let mut members = Vec::new();
-        for w in body[4..].chunks_exact(4) {
-            let shndx = u32::from_le_bytes(w.try_into().unwrap()) as usize;
+        for w in body[4..].as_chunks::<4>().0.iter() {
+            let shndx = u32::from_le_bytes(*w) as usize;
             // Rela members are implied by their target; record only
             // carried sections.
             if let Some(ci) = carried.get(shndx).copied().flatten() {
@@ -1859,9 +1859,9 @@ fn sha1(data: &[u8]) -> [u8; 20] {
     }
     msg.extend_from_slice(&ml.to_be_bytes());
     let mut w = [0u32; 80];
-    for chunk in msg.chunks_exact(64) {
-        for (i, word) in chunk.chunks_exact(4).enumerate() {
-            w[i] = u32::from_be_bytes(word.try_into().unwrap());
+    for chunk in msg.as_chunks::<64>().0.iter() {
+        for (i, word) in chunk.as_chunks::<4>().0.iter().enumerate() {
+            w[i] = u32::from_be_bytes(*word);
         }
         for i in 16..80 {
             w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);

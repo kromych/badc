@@ -3527,12 +3527,7 @@ fn inline_caller(
 /// the splicing but not the devirtualization sweep. `code_syms` maps
 /// each parser-symbol index defined here as a function to its ent_pc
 /// (see `devirtualize_indirect_calls`).
-pub(crate) fn run(
-    funcs: &mut [FunctionSsa],
-    cap: u32,
-    abi: Abi,
-    code_syms: &BTreeMap<u32, usize>,
-) {
+pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi, code_syms: &BTreeMap<u32, usize>) {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
     // Env-var override for the `is_inline` attribute pending parser
@@ -5216,7 +5211,12 @@ mod tests {
         assert!(!devirt(&mut funcs, &[], &BTreeMap::new(), &BTreeMap::new()));
 
         let mut funcs = alloc::vec![indirect_pair_caller(1, 200, false), leaf(200)];
-        assert!(!devirt(&mut funcs, &[200], &BTreeMap::new(), &BTreeMap::new()));
+        assert!(!devirt(
+            &mut funcs,
+            &[200],
+            &BTreeMap::new(),
+            &BTreeMap::new()
+        ));
 
         // 200 calls 1 directly: the edge 1 -> 200 would close a cycle.
         let mut funcs = alloc::vec![
@@ -5253,11 +5253,19 @@ mod tests {
             leaf(300),
         ];
         let mut regions: BTreeMap<usize, CallerRegions> = BTreeMap::new();
-        regions.entry(1).or_default().per_callee.insert(300, Some((0, 4)));
+        regions
+            .entry(1)
+            .or_default()
+            .per_callee
+            .insert(300, Some((0, 4)));
         assert!(!devirt(&mut funcs, &[], &regions, &BTreeMap::new()));
         // The same record in another caller does not constrain this one.
         let mut other: BTreeMap<usize, CallerRegions> = BTreeMap::new();
-        other.entry(9).or_default().per_callee.insert(300, Some((0, 4)));
+        other
+            .entry(9)
+            .or_default()
+            .per_callee
+            .insert(300, Some((0, 4)));
         assert!(devirt(&mut funcs, &[], &other, &BTreeMap::new()));
     }
 
@@ -5309,7 +5317,15 @@ mod tests {
         };
         let caller_imm = [Inst::ImmCode(200)];
         let caller_plain = [Inst::Imm(3)];
-        assert!(splice_may_gain_direct_call(&param_target, &[0], &caller_imm));
-        assert!(!splice_may_gain_direct_call(&param_target, &[0], &caller_plain));
+        assert!(splice_may_gain_direct_call(
+            &param_target,
+            &[0],
+            &caller_imm
+        ));
+        assert!(!splice_may_gain_direct_call(
+            &param_target,
+            &[0],
+            &caller_plain
+        ));
     }
 }

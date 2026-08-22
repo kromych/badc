@@ -640,7 +640,7 @@ impl Compiler {
         // vstack and the rhs float ast back on `ast_acc`.
         let lhs_ast = self.ast_vstack.pop().flatten();
         let rhs_ast = self.ast_acc.take();
-        let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
+        let saved_vstack = core::mem::take(&mut self.ast_vstack);
         self.ast_vstack.push(None);
         let rhs_temp = self.reserve_slots(1);
         let rhs_ty = self.ty;

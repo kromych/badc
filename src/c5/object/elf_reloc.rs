@@ -326,7 +326,7 @@ fn fold_rel_addends(class: ElfClass, table: &[u8], body: &mut [u8]) -> Result<()
     if !class.is32() {
         return Ok(());
     }
-    for row in table.chunks_exact(ELF64_RELA_SIZE) {
+    for row in table.as_chunks::<ELF64_RELA_SIZE>().0.iter() {
         let off = u64::from_le_bytes(row[0..8].try_into().unwrap()) as usize;
         let rtype = u64::from_le_bytes(row[8..16].try_into().unwrap()) as u32;
         let addend = i64::from_le_bytes(row[16..24].try_into().unwrap());
@@ -362,7 +362,7 @@ fn encode_reloc_table(class: ElfClass, table: &[u8]) -> Vec<u8> {
         return table.to_vec();
     }
     let mut out = Vec::with_capacity(table.len() / ELF64_RELA_SIZE * 8);
-    for row in table.chunks_exact(ELF64_RELA_SIZE) {
+    for row in table.as_chunks::<ELF64_RELA_SIZE>().0.iter() {
         let r_offset = u64::from_le_bytes(row[0..8].try_into().unwrap());
         let r_info = u64::from_le_bytes(row[8..16].try_into().unwrap());
         let info = class.reloc_info((r_info >> 32) as u32, r_info as u32);
@@ -618,7 +618,7 @@ fn carve_partition_relas(bytes: &mut Vec<u8>, carve: &mut CarvePlan, text_sym: u
         return;
     }
     let mut kept: Vec<u8> = Vec::with_capacity(bytes.len());
-    for row in bytes.chunks_exact(ELF64_RELA_SIZE) {
+    for row in bytes.as_chunks::<ELF64_RELA_SIZE>().0.iter() {
         let r_offset = u64::from_le_bytes(row[0..8].try_into().unwrap());
         let mut r_info = u64::from_le_bytes(row[8..16].try_into().unwrap());
         let mut r_addend = i64::from_le_bytes(row[16..24].try_into().unwrap());
@@ -3887,7 +3887,7 @@ pub(super) fn write_relocatable(
     if matches!(abi, RelocAbi::X86_64 | RelocAbi::I386) {
         let mut used = alloc::vec![false; symbols.len()];
         let mark = |used: &mut Vec<bool>, table: &[u8]| {
-            for rec in table.chunks_exact(ELF64_RELA_SIZE) {
+            for rec in table.as_chunks::<ELF64_RELA_SIZE>().0.iter() {
                 let info = u64::from_le_bytes(rec[8..16].try_into().unwrap());
                 if let Some(u) = used.get_mut((info >> 32) as usize) {
                     *u = true;
@@ -3921,7 +3921,7 @@ pub(super) fn write_relocatable(
             first_global -= (symbols.len() - kept.len()) as u32;
             symbols = kept;
             let rewrite = |table: &mut [u8]| {
-                for rec in table.chunks_exact_mut(ELF64_RELA_SIZE) {
+                for rec in table.as_chunks_mut::<ELF64_RELA_SIZE>().0.iter_mut() {
                     let info = u64::from_le_bytes(rec[8..16].try_into().unwrap());
                     let ns = remap[(info >> 32) as usize];
                     rec[8..16].copy_from_slice(&((ns << 32) | (info & 0xffff_ffff)).to_le_bytes());
@@ -5438,7 +5438,7 @@ mod tests {
         for name in [".rel.debug_info", ".rel.debug_line"] {
             let (off, size) = secs[name];
             assert!(size > 0 && size % 8 == 0, "{name} holds Elf32_Rel records");
-            for row in bytes[off..off + size].chunks_exact(8) {
+            for row in bytes[off..off + size].as_chunks::<8>().0.iter() {
                 let info = u32::from_le_bytes(row[4..8].try_into().unwrap());
                 assert_eq!(info & 0xff, R_386_32, "{name} entry type");
             }

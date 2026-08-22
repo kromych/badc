@@ -364,7 +364,9 @@ mod tests {
             .unwrap_or_else(|e| panic!("max2 aarch64: {e}"));
         // Two return blocks => at least two `ret` (0xd65f03c0) words.
         let ret_count = bytes
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == 0xd65f03c0)
             .count();
         assert!(

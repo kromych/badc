@@ -8697,10 +8697,7 @@ pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<allo
 /// frame scratch region it would use is not reserved. The IR instruction
 /// itself stays: it still orders memory accesses. The per-arch scratch
 /// sizing and emitters share this so the region and the staging agree.
-pub(crate) fn asm_statement_is_noop(
-    asm: &crate::c5::ir::AsmBlock,
-    syntax: AsmComments,
-) -> bool {
+pub(crate) fn asm_statement_is_noop(asm: &crate::c5::ir::AsmBlock, syntax: AsmComments) -> bool {
     if asm
         .operands
         .iter()
@@ -10072,8 +10069,10 @@ mod asm_section_tests {
             assert!(out[..zeros].iter().all(|&b| b == 0), "gap {gap} zeros");
             assert!(
                 out[zeros..]
-                    .chunks_exact(A64_NOP.len())
-                    .all(|c| c == A64_NOP),
+                    .as_chunks::<{ A64_NOP.len() }>()
+                    .0
+                    .iter()
+                    .all(|c| c == &A64_NOP),
                 "gap {gap} nops"
             );
             assert_eq!((out.len() - zeros) / A64_NOP.len(), nops, "gap {gap} count");

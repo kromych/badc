@@ -3417,7 +3417,7 @@ mod tests {
         let p = build_aarch64_pdata(0x1000, text_size);
         // Each entry is 8 bytes (BeginAddress + UnwindData).
         assert_eq!(p.bytes.len() % 8, 0);
-        for entry in p.bytes.chunks_exact(8) {
+        for entry in p.bytes.as_chunks::<8>().0.iter() {
             let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
             let function_length = (unwind_data >> 2) & 0x7FF;
             let flag = unwind_data & 0b11;

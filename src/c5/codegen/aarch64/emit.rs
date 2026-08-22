@@ -12584,7 +12584,9 @@ mod tests {
         );
         assert!(ok, "emit_store_indexed bailed");
         let words: Vec<u32> = code
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
             .collect();
         // The precomputed address: `add x16, x16, x17, lsl #3` for an

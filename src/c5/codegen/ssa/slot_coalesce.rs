@@ -247,7 +247,14 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
     let mut memo = alloc::vec![Ref::Other; ni];
     let mut escaped: BTreeSet<i64> = BTreeSet::new();
     for v in 0..ni {
-        resolve(&f.insts, v as ValueId, &movable, &mut state, &mut memo, &mut escaped);
+        resolve(
+            &f.insts,
+            v as ValueId,
+            &movable,
+            &mut state,
+            &mut memo,
+            &mut escaped,
+        );
     }
     let refs = memo;
     let base_of = |v: ValueId| match refs.get(v as usize) {
@@ -597,9 +604,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         let pinned = dedicated
             || !has_events[g]
             || (lo..=hi).any(|off| {
-                escaped.contains(&off)
-                    || field_slots.contains(&off)
-                    || region_slots.contains(&off)
+                escaped.contains(&off) || field_slots.contains(&off) || region_slots.contains(&off)
             });
         shareable[g] = !pinned;
     }
@@ -609,8 +614,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
     let mut reserved_single: BTreeSet<i64> = BTreeSet::new();
     let mut candidates: BTreeSet<i64> = BTreeSet::new();
     for (_, inst) in f.insts.iter().enumerate().filter(|(i, _)| in_block[*i]) {
-        if let Inst::LoadLocal { off, volatile, .. } | Inst::StoreLocal { off, volatile, .. } =
-            inst
+        if let Inst::LoadLocal { off, volatile, .. } | Inst::StoreLocal { off, volatile, .. } = inst
             && movable(*off)
             && !agg_cells.contains(off)
         {
@@ -917,8 +921,8 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
                 if kind == START {
                     continue;
                 }
-                for w in 0..gwords {
-                    let mut m = live[w];
+                for (w, &lw) in live.iter().enumerate().take(gwords) {
+                    let mut m = lw;
                     if w == sg / 64 {
                         m &= !(1u64 << (sg % 64));
                     }
@@ -1457,7 +1461,11 @@ mod tests {
         assert_eq!(f.locals, 4, "disjoint 4-cell arrays share one block");
         assert!(matches!(f.insts[1], Inst::LocalAddr(-4)));
         assert!(matches!(f.insts[5], Inst::LocalAddr(-4)));
-        assert_eq!(map.get(&-8), Some(&None), "shared storage drops the location");
+        assert_eq!(
+            map.get(&-8),
+            Some(&None),
+            "shared storage drops the location"
+        );
 
         // Interleaved: A write, B write, A read, B read.
         let mut insts = alloc::vec![Inst::LoadLocal {
@@ -1600,7 +1608,10 @@ mod tests {
 
         let mut f = build(false);
         coalesce(&mut f, true);
-        assert_eq!(f.locals, 8, "a pointer argument escapes for the whole function");
+        assert_eq!(
+            f.locals, 8,
+            "a pointer argument escapes for the whole function"
+        );
     }
 
     /// The address take anchors the start of a group's lifetime: a take
@@ -1646,14 +1657,20 @@ mod tests {
             *value = 3;
         }
         coalesce(&mut early, true);
-        assert_eq!(early.locals, 8, "a take before the other group's store interferes");
+        assert_eq!(
+            early.locals, 8,
+            "a take before the other group's store interferes"
+        );
 
         let mut late = seq(false);
         if let Inst::Store { value, .. } = &mut late.insts[1] {
             *value = 3;
         }
         coalesce(&mut late, true);
-        assert_eq!(late.locals, 4, "a take after the other group's last read shares");
+        assert_eq!(
+            late.locals, 4,
+            "a take after the other group's last read shares"
+        );
     }
 
     /// A pointer stored to memory escapes its object, and groups of

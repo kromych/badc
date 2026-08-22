@@ -679,27 +679,26 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // that is the integer constant zero: its predecessor-exit move
     // re-materialises the bits through the integer scratch, which on
     // x86_64 is a flag-writing `xor`.
-    let fp_zero_phi_income = |succ: super::super::ir::BlockId,
-                              pred: super::super::ir::BlockId|
-     -> bool {
-        let Some(block) = func.blocks.get(succ as usize) else {
-            return false;
-        };
-        for i in block.inst_range.clone() {
-            let Some(Inst::Phi { incoming, kind }) = func.insts.get(i as usize) else {
-                break;
+    let fp_zero_phi_income =
+        |succ: super::super::ir::BlockId, pred: super::super::ir::BlockId| -> bool {
+            let Some(block) = func.blocks.get(succ as usize) else {
+                return false;
             };
-            if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
-                continue;
+            for i in block.inst_range.clone() {
+                let Some(Inst::Phi { incoming, kind }) = func.insts.get(i as usize) else {
+                    break;
+                };
+                if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                    continue;
+                }
+                if incoming.iter().any(|&(p, s)| {
+                    p == pred && matches!(func.insts.get(s as usize), Some(Inst::Imm(0)))
+                }) {
+                    return true;
+                }
             }
-            if incoming.iter().any(|&(p, s)| {
-                p == pred && matches!(func.insts.get(s as usize), Some(Inst::Imm(0)))
-            }) {
-                return true;
-            }
-        }
-        false
-    };
+            false
+        };
     let mut branch_fused: Vec<bool> = vec![false; func.insts.len()];
     for (bidx, block) in func.blocks.iter().enumerate() {
         let (cond, target_blk, fall_through) = match block.terminator {
@@ -3010,9 +3009,8 @@ int main(void) { return 0; }
         };
         // Pin uncapped banks so the pressure-matrix env cannot spill
         // the dead value instead of coloring it.
-        let alloc = with_pool_size_override(usize::MAX, usize::MAX, || {
-            allocate(&f, Target::LinuxX64)
-        });
+        let alloc =
+            with_pool_size_override(usize::MAX, usize::MAX, || allocate(&f, Target::LinuxX64));
         assert!(
             super::super::emit_common::is_dead_pure(&f.insts[dead as usize], dead, &alloc),
             "the unread shift must be dead-pure"

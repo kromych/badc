@@ -343,7 +343,9 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
         if sh.sh_type == SHT_SYMTAB_SHNDX {
             let raw = section_bytes(&bytes, Some(sh), source)?;
             shndx_ext = raw
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
                 .collect();
         }
@@ -9184,7 +9186,9 @@ VERSION { LINUX_2.6 { global: __vdso_time; time; local: *; }; }
         // `.dynamic` names each table at the address it landed on.
         let dyn_off = section_file_off(&res.image, sec(".dynamic").2);
         let tags: HashMap<u64, u64> = res.image[dyn_off..dyn_off + sec(".dynamic").3 as usize]
-            .chunks_exact(16)
+            .as_chunks::<16>()
+            .0
+            .iter()
             .map(|c| {
                 (
                     u64::from_le_bytes(c[0..8].try_into().unwrap()),
@@ -9309,7 +9313,9 @@ VERSION { LINUX_2.6 { global: __vdso_time; time; local: *; }; }
         assert!(sec(".dynamic").2 < sec(".data").2);
         let dyn_off = section_file_off(&res.image, sec(".dynamic").2);
         let tags: HashMap<u64, u64> = res.image[dyn_off..dyn_off + sec(".dynamic").3 as usize]
-            .chunks_exact(16)
+            .as_chunks::<16>()
+            .0
+            .iter()
             .map(|c| {
                 (
                     u64::from_le_bytes(c[0..8].try_into().unwrap()),
@@ -9546,7 +9552,9 @@ SECTIONS {
 
     fn dyn_tags(image: &[u8]) -> Vec<(u64, u64)> {
         let (_, body) = image_section(image, ".dynamic");
-        body.chunks_exact(16)
+        body.as_chunks::<16>()
+            .0
+            .iter()
             .map(|c| {
                 (
                     u64::from_le_bytes(c[..8].try_into().unwrap()),
@@ -9637,7 +9645,9 @@ SECTIONS {
         let (got_addr, _) = image_section(&res.image, ".got");
         let (_, rela) = image_section(&res.image, ".rela.dyn");
         let entries: Vec<(u64, u32, u32)> = rela
-            .chunks_exact(24)
+            .as_chunks::<24>()
+            .0
+            .iter()
             .map(|c| {
                 let info = u64::from_le_bytes(c[8..16].try_into().unwrap());
                 (
@@ -11234,7 +11244,7 @@ VERSION { LINUX_2.6 { global: exported; local: *; }; }
         let dynamic = elf32_body(&res.image, ".dynamic");
         assert!(dynamic.len().is_multiple_of(8));
         let mut syment = None;
-        for e in dynamic.chunks_exact(8) {
+        for e in dynamic.as_chunks::<8>().0.iter() {
             let (t, v) = (
                 u32::from_le_bytes(e[0..4].try_into().unwrap()) as u64,
                 u32::from_le_bytes(e[4..8].try_into().unwrap()) as u64,

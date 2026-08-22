@@ -2049,6 +2049,9 @@ impl Compiler {
     /// `Expr::CompoundLiteral` whose value is the object's address
     /// (array decays per 6.3.2.1p3, struct yields its address) or the
     /// loaded scalar.
+    // The literal's three outputs come from one multi-branch decision;
+    // binding them to its value folds that chain into a tuple expression.
+    #[allow(clippy::needless_late_init)]
     pub(super) fn parse_block_compound_literal(
         &mut self,
         t: i64,

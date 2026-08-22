@@ -3215,7 +3215,11 @@ fn fused_branch_cc(
     if let Some(positive) = int_cmp_cc(op) {
         // A `cmp`-set flag state is never "unordered": inverting the
         // cc is the exact negation.
-        let cc = if negate { invert_cc(positive)? } else { positive };
+        let cc = if negate {
+            invert_cc(positive)?
+        } else {
+            positive
+        };
         return Some(FusedBranch::Jcc(cc));
     }
     // FP compares. `ucomisd` leaves ZF=PF=CF=1 on NaN: `A` / `Ae` are
@@ -7176,8 +7180,7 @@ fn encode_one_x86_section_insn(
     // label target resolves to a one-byte displacement rather than the
     // mode-width one the other branches take.
     if let Some(op) = short_branch_opcode(mnem) {
-        let prefix =
-            e3_branch_prefix(mnem, mode).map_err(|m| alloc::format!("{m} (`{text}`)"))?;
+        let prefix = e3_branch_prefix(mnem, mode).map_err(|m| alloc::format!("{m} (`{text}`)"))?;
         let target = if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
             Some(AsmSectionTarget::Symbol(alloc::format!(
                 "{num}{}",
@@ -11508,8 +11511,8 @@ fn emit_hardened_jmp_r(
 
 #[cfg(test)]
 mod asm_scratch_tests {
-    use super::*;
     use super::super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
+    use super::*;
 
     fn asm_func(template: &str) -> FunctionSsa {
         let asm = AsmBlock {

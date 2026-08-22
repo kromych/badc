@@ -19,13 +19,13 @@ Disassembly of section .text:
                	add	x29, sp, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x3, [x0]
-               	mov	x2, #0x0                // =0
+               	ldr	x2, [x0]
+               	mov	x0, #0x0                // =0
                	adrp	x14, <page>
                	add	x14, x14, <lo12>
-               	ldr	x0, [x14]
-               	orr	x1, x2, x0
-               	orr	x0, x3, x2
+               	ldr	x1, [x14]
+               	orr	x1, x0, x1
+               	orr	x0, x2, x0
                	mov	x3, #0xffff             // =65535
                	movk	x3, #0xffff, lsl #16
                	movk	x3, #0xffff, lsl #32
@@ -859,10 +859,10 @@ Disassembly of section .text:
                	cmp	x5, x15
                	cset	x6, lo
                	add	x4, x20, x4
-               	add	x6, x4, x6
-               	eor	x4, x1, x5
-               	eor	x5, x0, x6
-               	orr	x4, x4, x5
+               	add	x4, x4, x6
+               	eor	x5, x1, x5
+               	eor	x4, x0, x4
+               	orr	x4, x5, x4
                	cmp	x4, #0x0
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
@@ -989,21 +989,21 @@ Disassembly of section .text:
                	add	x5, x5, #0x1
                	add	x4, x4, #0x1
                	sub	x6, x4, x6
-               	add	x5, x12, x5
-               	cmp	x5, x12
-               	cset	x4, lo
+               	add	x4, x12, x5
+               	cmp	x4, x12
+               	cset	x5, lo
                	add	x6, x14, x6
-               	add	x6, x6, x4
+               	add	x5, x6, x5
                	mov	x17, #0xcfc7            // =53191
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	eor	x4, x5, x17
+               	eor	x4, x4, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffcf, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	eor	x5, x6, x17
+               	eor	x5, x5, x17
                	orr	x4, x4, x5
                	cmp	x4, #0x0
                	b.eq	<addr>

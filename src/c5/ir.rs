@@ -1351,14 +1351,15 @@ pub(crate) struct FunctionSsa {
     /// locations); without debug info it coalesces the declared range
     /// too. 0 for SSA built outside the walker, which disables coalescing.
     pub synthetic_base: i64,
-    /// `(base_offset, cells)` for each multi-cell slot group -- a declared
-    /// aggregate / multi-cell scalar (seeded from the parser) or a synthetic
-    /// aggregate (`alloc_synthetic_struct`). The group occupies `base_offset
-    /// ..= base_offset + cells - 1` (base is the lowest address). Declared
-    /// groups may overlap a reused slot across disjoint scopes.
-    /// `ssa_slot_coalesce` reserves these so a coalesced scalar never lands on
-    /// an interior cell, which is referenced by no instruction. Empty for SSA
-    /// built outside the walker.
+    /// `(base_offset, cells)` for each slot group -- a declared aggregate of
+    /// any cell count / a multi-cell scalar (seeded from the parser) or a
+    /// synthetic aggregate (`alloc_synthetic_struct`). The group occupies
+    /// `base_offset ..= base_offset + cells - 1` (base is the lowest
+    /// address). Declared groups may overlap a reused slot across disjoint
+    /// scopes. `ssa_slot_coalesce` reserves these so a coalesced scalar never
+    /// lands on an interior cell, which is referenced by no instruction, and
+    /// `passes::sroa` reads them as its candidate set. Empty for SSA built
+    /// outside the walker.
     pub multi_cell_slots: Vec<(i64, i64)>,
     /// Automatic objects whose required alignment exceeds the 8-byte frame
     /// slot (C11 6.7.5 `_Alignas` / GNU `aligned`, or a type whose natural

@@ -11,23 +11,23 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
   block 1  start_pc=0
     v14  Imm(4631107791820423168)                         -> x0
     v15  Imm(0)                                           -> x1
-    v16  LocalAddr(-1)                                    -> x1
-    v17  Imm(0)                                           -> x2
-    v18  Store { addr=v16, disp=0, value=v17, kind=I64 }  -> -
-    v19  LocalAddr(-1)                                    -> x1
-    v20  Store { addr=v19, disp=0, value=v14, kind=I64 }  -> -
-    v21  LocalAddr(-1)                                    -> x0
-    v22  Load { addr=v21, disp=0, kind=F64 }              -> d0
+    v16  Imm(0)                                           -> x1
+    v17  Imm(0)                                           -> x1
+    v18  StoreLocal { off=-1, value=v17, kind=I64 }       -> -
+    v19  Imm(0)                                           -> x1
+    v20  StoreLocal { off=-1, value=v14, kind=I64 }       -> -
+    v21  Imm(0)                                           -> x0
+    v22  LoadLocal { off=-1, kind=F64 }                   -> d0
     terminator Jmp(b2)   (exit_acc=v22)
   block 2  start_pc=0
     v23  Imm(0)                                           -> x0
-    v24  LocalAddr(-1)                                    -> x0
-    v25  Imm(0)                                           -> x1
-    v26  Store { addr=v24, disp=0, value=v25, kind=I64 }  -> -
-    v27  LocalAddr(-1)                                    -> x0
-    v28  Store { addr=v27, disp=0, value=v22, kind=F64 }  -> -
-    v29  LocalAddr(-1)                                    -> x0
-    v30  Load { addr=v29, disp=0, kind=I64 }              -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Imm(0)                                           -> x0
+    v26  StoreLocal { off=-1, value=v25, kind=I64 }       -> -
+    v27  Imm(0)                                           -> x0
+    v28  StoreLocal { off=-1, value=v22, kind=F64 }       -> -
+    v29  Imm(0)                                           -> x0
+    v30  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b3)   (exit_acc=v30)
   block 3  start_pc=0
     v4   LoadLocal { off=-2, kind=I64 }                   -> x1

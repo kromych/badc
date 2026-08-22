@@ -11,18 +11,18 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v5   Imm(0)                                           -> x0
     v6   ImmData(24)                                      -> x0
     v7   Imm(0)                                           -> x1
-    v8   LocalAddr(-3)                                    -> x1
-    v9   Imm(1)                                           -> x2
-    v10  Load { addr=v8, disp=0, kind=U32 }               -> x2
-    v11  BinopI { op=and, lhs=v10, rhs_imm=-4294967233 }  -> x2
-    v12  Imm(64)                                          -> x6
-    v13  BinopI { op=or, lhs=v11, rhs_imm=64 }            -> x2
-    v14  Store { addr=v8, disp=0, value=v13, kind=I32 }   -> -
-    v15  LocalAddr(-3)                                    -> x6
+    v8   Imm(0)                                           -> x1
+    v9   Imm(1)                                           -> x1
+    v10  LoadLocal { off=-3, kind=U32 }                   -> x1
+    v11  BinopI { op=and, lhs=v10, rhs_imm=-4294967233 }  -> x1
+    v12  Imm(64)                                          -> x2
+    v13  BinopI { op=or, lhs=v11, rhs_imm=64 }            -> x1
+    v14  StoreLocal { off=-3, value=v13, kind=I32 }       -> -
+    v15  Imm(0)                                           -> x2
     v16  BinopI { op=and, lhs=v13, rhs_imm=4294967295 }   -> x1
     v17  BinopI { op=and, lhs=v16, rhs_imm=-64 }          -> x1
     v18  BinopI { op=or, lhs=v17, rhs_imm=1 }             -> x1
-    v19  Store { addr=v15, disp=0, value=v18, kind=I32 }  -> -
+    v19  StoreLocal { off=-3, value=v18, kind=I32 }       -> -
     v20  Imm(2048)                                        -> x2
     v21  BinopI { op=add, lhs=v6, rhs_imm=2048 }          -> x2
     v22  Imm(8)                                           -> x2
@@ -42,7 +42,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v36  BinopI { op=or, lhs=v34, rhs_imm=320 }           -> x2
     v37  Store { addr=v6, disp=2060, value=v36, kind=I32 } -> -
     v38  Imm(0)                                           -> x2
-    v39  LocalAddr(-3)                                    -> x2
+    v39  Imm(0)                                           -> x2
     v40  Imm(0)                                           -> x2
     v41  Imm(0)                                           -> x2
     v42  Imm(0)                                           -> x2

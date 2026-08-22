@@ -35,15 +35,13 @@ Disassembly of section .text:
                	movq	%r14, 0x18(%rsp)
                	movq	%r15, 0x20(%rsp)
                	leaq	<rip>, %rax
-               	movq	(%rax), %rsi
-               	xorq	%rdx, %rdx
+               	movq	(%rax), %rdx
+               	xorq	%rax, %rax
                	leaq	<rip>, %r10
                	movq	%r10, 0x48(%rsp)
                	movq	0x48(%rsp), %r10
-               	movq	(%r10), %rax
-               	movq	%rdx, %rcx
+               	movq	(%r10), %rcx
                	orq	%rax, %rcx
-               	movq	%rsi, %rax
                	orq	%rdx, %rax
                	movabsq	$-0x1, %rsi
                	movabsq	$0x7fffffffffffffff, %rdx # imm = 0x7FFFFFFFFFFFFFFF
@@ -1115,11 +1113,9 @@ Disassembly of section .text:
                	movq	%rdi, %r10
                	movq	0x38(%rsp), %rdi
                	addq	%r10, %rdi
-               	addq	%rdi, %r9
-               	movq	%rcx, %rdi
-               	xorq	%r8, %rdi
-               	movq	%rax, %r8
-               	xorq	%r9, %r8
+               	addq	%r9, %rdi
+               	xorq	%rcx, %r8
+               	xorq	%rax, %rdi
                	orq	%r8, %rdi
                	testq	%rdi, %rdi
                	je	<addr>
@@ -1271,20 +1267,18 @@ Disassembly of section .text:
                	movq	%r9, %r10
                	movq	%rdi, %r9
                	subq	%r10, %r9
-               	movq	%r8, %r10
-               	movq	0x58(%rsp), %r8
-               	addq	%r10, %r8
-               	cmpq	0x58(%rsp), %r8
-               	setb	%dil
-               	movzbq	%dil, %rdi
+               	movq	0x58(%rsp), %rdi
+               	addq	%r8, %rdi
+               	cmpq	0x58(%rsp), %rdi
+               	setb	%r8b
+               	movzbq	%r8b, %r8
                	movq	%r9, %r10
                	movq	0x48(%rsp), %r9
                	addq	%r10, %r9
-               	addq	%rdi, %r9
-               	movq	%r8, %rdi
+               	addq	%r9, %r8
                	xorq	$-0x3039, %rdi          # imm = 0xCFC7
-               	movabsq	$-0x3000000001, %r8     # imm = 0xFFFFFFCFFFFFFFFF
-               	xorq	%r9, %r8
+               	movabsq	$-0x3000000001, %r11    # imm = 0xFFFFFFCFFFFFFFFF
+               	xorq	%r11, %r8
                	orq	%r8, %rdi
                	testq	%rdi, %rdi
                	je	<addr>

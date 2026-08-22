@@ -31,12 +31,12 @@ Disassembly of section .text:
                	subq	$0x60, %rsp
                	movabsq	$-0x1, %rax
                	movq	%rax, -0x58(%rbp)
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x48(%rbp), %rax
                	movq	%rax, -0x50(%rbp)
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x48(%rbp), %rax
                	movq	-0x58(%rbp), %rcx
                	movq	%rcx, (%rax)
-               	leaq	-0x40(%rbp), %rax
+               	leaq	-0x48(%rbp), %rax
                	movq	-0x58(%rbp), %rcx
                	movq	%rcx, 0x38(%rax)
                	movq	-0x50(%rbp), %rax
@@ -45,14 +45,14 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	incq	%rcx
                	movq	%rcx, 0x38(%rax)
-               	leaq	-0x40(%rbp), %rcx
+               	leaq	-0x48(%rbp), %rcx
                	movq	(%rcx), %rcx
                	cmpq	$0x1234567, %rcx        # imm = 0x1234567
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	-0x40(%rbp), %rcx
+               	leaq	-0x48(%rbp), %rcx
                	movq	0x38(%rcx), %rcx
                	cmpq	$0x1234568, %rcx        # imm = 0x1234568
                	setne	%cl

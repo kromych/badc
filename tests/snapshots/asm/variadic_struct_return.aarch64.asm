@@ -182,13 +182,13 @@ Disassembly of section .text:
                	sub	x16, x29, #0x18
                	str	x0, [x16]
                	sub	x0, x29, #0x18
-               	sub	x1, x29, #0x70
+               	sub	x1, x29, #0x30
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
                	str	x10, [x1]
                	ldr	x10, [sp], #0x10
                	mov	x0, x1
-               	sub	x0, x29, #0x70
+               	sub	x0, x29, #0x30
                	ldr	x0, [x0]
                	cmp	x0, #0x9
                	b.eq	<addr>
@@ -205,7 +205,7 @@ Disassembly of section .text:
                	str	x0, [x16]
                	str	x1, [x16, #0x8]
                	sub	x0, x29, #0x28
-               	sub	x1, x29, #0x38
+               	sub	x1, x29, #0x48
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
                	str	x10, [x1]
@@ -213,12 +213,12 @@ Disassembly of section .text:
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x1
-               	sub	x0, x29, #0x38
+               	sub	x0, x29, #0x48
                	ldr	x0, [x0]
                	cmp	x0, #0xb
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x38
+               	sub	x0, x29, #0x48
                	ldr	x0, [x0, #0x8]
                	cmp	x0, #0x16
                	cset	x0, ne
@@ -237,7 +237,7 @@ Disassembly of section .text:
                	str	x0, [x16]
                	str	x1, [x16, #0x8]
                	sub	x0, x29, #0x10
-               	sub	x1, x29, #0x58
+               	sub	x1, x29, #0x68
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
                	str	x10, [x1]
@@ -245,12 +245,12 @@ Disassembly of section .text:
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x1
-               	sub	x0, x29, #0x58
+               	sub	x0, x29, #0x68
                	ldr	x0, [x0]
                	cmp	x0, #0x64
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x58
+               	sub	x0, x29, #0x68
                	ldr	x0, [x0, #0x8]
                	cmp	x0, #0x4
                	cset	x0, ne

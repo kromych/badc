@@ -93,21 +93,21 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	leaq	<rip>, %rax
-               	movq	(%rax), %rdx
+               	movq	(%rax), %rcx
                	xorq	%rax, %rax
-               	leaq	<rip>, %rcx
-               	movq	(%rcx), %rcx
+               	leaq	<rip>, %rdx
+               	movq	(%rdx), %rdx
                	movq	%rax, %r13
-               	orq	%rcx, %r13
-               	movq	%rdx, %rbx
+               	orq	%rdx, %r13
+               	movq	%rcx, %rbx
                	orq	%rax, %rbx
                	leaq	<rip>, %rcx
-               	movq	(%rcx), %rdx
-               	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
+               	leaq	<rip>, %rdx
+               	movq	(%rdx), %rdx
                	movq	%rax, %r14
-               	orq	%rcx, %r14
-               	movq	%rdx, %r12
+               	orq	%rdx, %r14
+               	movq	%rcx, %r12
                	orq	%rax, %r12
                	movl	$0x2, %edi
                	cmpq	%rbx, %r12

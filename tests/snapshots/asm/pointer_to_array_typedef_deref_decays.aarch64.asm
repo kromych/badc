@@ -22,12 +22,12 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	stur	x0, [x29, #-0x58]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x48
                	stur	x0, [x29, #-0x50]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x48
                	ldur	x1, [x29, #-0x58]
                	str	x1, [x0]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x48
                	ldur	x1, [x29, #-0x58]
                	str	x1, [x0, #0x38]
                	ldur	x0, [x29, #-0x50]
@@ -38,14 +38,14 @@ Disassembly of section .text:
                	str	x1, [x0]
                	add	x1, x1, #0x1
                	str	x1, [x0, #0x38]
-               	sub	x1, x29, #0x40
+               	sub	x1, x29, #0x48
                	ldr	x1, [x1]
                	mov	x17, #0x4567            // =17767
                	movk	x17, #0x123, lsl #16
                	cmp	x1, x17
                	cset	x1, ne
                	cbnz	x1, <addr>
-               	sub	x1, x29, #0x40
+               	sub	x1, x29, #0x48
                	ldr	x1, [x1, #0x38]
                	mov	x17, #0x4568            // =17768
                	movk	x17, #0x123, lsl #16

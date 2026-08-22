@@ -100,11 +100,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
   block 1  start_pc=0
     v4   LoadLocal { off=-4, kind=I64 }                   -> x1
     v5   Imm(1)                                           -> x1
-    v6   LocalAddr(-3)                                    -> x1
+    v6   LocalAddr(-1)                                    -> x1
     v7   LoadLocal { off=-4, kind=I64 }                   -> x2
     v8   Store { addr=v6, disp=0, value=v1, kind=I64 }    -> -
     v9   LoadLocal { off=-4, kind=I64 }                   -> x0
-    v10  LocalAddr(-3)                                    -> x1
+    v10  LocalAddr(-1)                                    -> x1
     terminator Jmp(b2)
   block 2  start_pc=0
     v214 Imm(0)                                           -> x0
@@ -189,11 +189,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v15  Imm(0)                                           -> x1
     v16  LoadLocal { off=-4, kind=I64 }                   -> x1
     v17  Imm(1)                                           -> x1
-    v18  LocalAddr(-3)                                    -> x1
+    v18  LocalAddr(-1)                                    -> x1
     v19  LoadLocal { off=-4, kind=I64 }                   -> x6
     v20  Store { addr=v18, disp=0, value=v14, kind=I64 }  -> -
     v21  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v22  LocalAddr(-3)                                    -> x1
+    v22  LocalAddr(-1)                                    -> x1
     terminator Jmp(b17)
   block 17  start_pc=0
     v226 Imm(0)                                           -> x0
@@ -278,11 +278,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v27  Imm(0)                                           -> x1
     v28  LoadLocal { off=-4, kind=I64 }                   -> x1
     v29  Imm(1)                                           -> x1
-    v30  LocalAddr(-3)                                    -> x1
+    v30  LocalAddr(-1)                                    -> x1
     v31  LoadLocal { off=-4, kind=I64 }                   -> x6
     v32  Store { addr=v30, disp=0, value=v26, kind=I64 }  -> -
     v33  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v34  LocalAddr(-3)                                    -> x1
+    v34  LocalAddr(-1)                                    -> x1
     terminator Jmp(b32)
   block 32  start_pc=0
     v238 Imm(0)                                           -> x0
@@ -367,11 +367,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v39  Imm(0)                                           -> x1
     v40  LoadLocal { off=-4, kind=I64 }                   -> x1
     v41  Imm(1)                                           -> x1
-    v42  LocalAddr(-3)                                    -> x1
+    v42  LocalAddr(-1)                                    -> x1
     v43  LoadLocal { off=-4, kind=I64 }                   -> x6
     v44  Store { addr=v42, disp=0, value=v38, kind=I64 }  -> -
     v45  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v46  LocalAddr(-3)                                    -> x1
+    v46  LocalAddr(-1)                                    -> x1
     terminator Jmp(b47)
   block 47  start_pc=0
     v250 Imm(0)                                           -> x0
@@ -456,11 +456,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v51  Imm(0)                                           -> x1
     v52  LoadLocal { off=-4, kind=I64 }                   -> x1
     v53  Imm(1)                                           -> x1
-    v54  LocalAddr(-3)                                    -> x1
+    v54  LocalAddr(-1)                                    -> x1
     v55  LoadLocal { off=-4, kind=I64 }                   -> x6
     v56  Store { addr=v54, disp=0, value=v50, kind=I64 }  -> -
     v57  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v58  LocalAddr(-3)                                    -> x1
+    v58  LocalAddr(-1)                                    -> x1
     terminator Jmp(b62)
   block 62  start_pc=0
     v262 Imm(0)                                           -> x0
@@ -545,11 +545,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v63  Imm(0)                                           -> x1
     v64  LoadLocal { off=-4, kind=I64 }                   -> x1
     v65  Imm(1)                                           -> x1
-    v66  LocalAddr(-3)                                    -> x1
+    v66  LocalAddr(-1)                                    -> x1
     v67  LoadLocal { off=-4, kind=I64 }                   -> x6
     v68  Store { addr=v66, disp=0, value=v62, kind=I64 }  -> -
     v69  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v70  LocalAddr(-3)                                    -> x1
+    v70  LocalAddr(-1)                                    -> x1
     terminator Jmp(b77)
   block 77  start_pc=0
     v274 Imm(0)                                           -> x0
@@ -634,11 +634,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v75  Imm(0)                                           -> x1
     v76  LoadLocal { off=-4, kind=I64 }                   -> x1
     v77  Imm(1)                                           -> x1
-    v78  LocalAddr(-3)                                    -> x1
+    v78  LocalAddr(-1)                                    -> x1
     v79  LoadLocal { off=-4, kind=I64 }                   -> x6
     v80  Store { addr=v78, disp=0, value=v74, kind=I64 }  -> -
     v81  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v82  LocalAddr(-3)                                    -> x1
+    v82  LocalAddr(-1)                                    -> x1
     terminator Jmp(b92)
   block 92  start_pc=0
     v286 Imm(0)                                           -> x0
@@ -723,11 +723,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v87  Imm(0)                                           -> x1
     v88  LoadLocal { off=-4, kind=I64 }                   -> x1
     v89  Imm(1)                                           -> x1
-    v90  LocalAddr(-3)                                    -> x1
+    v90  LocalAddr(-1)                                    -> x1
     v91  LoadLocal { off=-4, kind=I64 }                   -> x6
     v92  Store { addr=v90, disp=0, value=v86, kind=I64 }  -> -
     v93  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v94  LocalAddr(-3)                                    -> x1
+    v94  LocalAddr(-1)                                    -> x1
     terminator Jmp(b107)
   block 107  start_pc=0
     v298 Imm(0)                                           -> x0
@@ -812,11 +812,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v99  Imm(0)                                           -> x1
     v100 LoadLocal { off=-4, kind=I64 }                   -> x1
     v101 Imm(1)                                           -> x1
-    v102 LocalAddr(-3)                                    -> x1
+    v102 LocalAddr(-1)                                    -> x1
     v103 LoadLocal { off=-4, kind=I64 }                   -> x6
     v104 Store { addr=v102, disp=0, value=v98, kind=I64 } -> -
     v105 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v106 LocalAddr(-3)                                    -> x1
+    v106 LocalAddr(-1)                                    -> x1
     terminator Jmp(b122)
   block 122  start_pc=0
     v310 Imm(0)                                           -> x0
@@ -901,11 +901,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v111 Imm(0)                                           -> x1
     v112 LoadLocal { off=-4, kind=I64 }                   -> x1
     v113 Imm(1)                                           -> x1
-    v114 LocalAddr(-3)                                    -> x1
+    v114 LocalAddr(-1)                                    -> x1
     v115 LoadLocal { off=-4, kind=I64 }                   -> x6
     v116 Store { addr=v114, disp=0, value=v110, kind=I64 } -> -
     v117 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v118 LocalAddr(-3)                                    -> x1
+    v118 LocalAddr(-1)                                    -> x1
     terminator Jmp(b137)
   block 137  start_pc=0
     v322 Imm(0)                                           -> x0
@@ -990,11 +990,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v123 Imm(0)                                           -> x1
     v124 LoadLocal { off=-4, kind=I64 }                   -> x1
     v125 Imm(1)                                           -> x1
-    v126 LocalAddr(-3)                                    -> x1
+    v126 LocalAddr(-1)                                    -> x1
     v127 LoadLocal { off=-4, kind=I64 }                   -> x6
     v128 Store { addr=v126, disp=0, value=v122, kind=I64 } -> -
     v129 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v130 LocalAddr(-3)                                    -> x1
+    v130 LocalAddr(-1)                                    -> x1
     terminator Jmp(b152)
   block 152  start_pc=0
     v334 Imm(0)                                           -> x0
@@ -1079,11 +1079,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v135 Imm(0)                                           -> x1
     v136 LoadLocal { off=-4, kind=I64 }                   -> x1
     v137 Imm(1)                                           -> x1
-    v138 LocalAddr(-3)                                    -> x1
+    v138 LocalAddr(-1)                                    -> x1
     v139 LoadLocal { off=-4, kind=I64 }                   -> x6
     v140 Store { addr=v138, disp=0, value=v134, kind=I64 } -> -
     v141 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v142 LocalAddr(-3)                                    -> x1
+    v142 LocalAddr(-1)                                    -> x1
     terminator Jmp(b167)
   block 167  start_pc=0
     v346 Imm(0)                                           -> x0
@@ -1168,11 +1168,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v147 Imm(0)                                           -> x1
     v148 LoadLocal { off=-4, kind=I64 }                   -> x1
     v149 Imm(1)                                           -> x1
-    v150 LocalAddr(-3)                                    -> x1
+    v150 LocalAddr(-1)                                    -> x1
     v151 LoadLocal { off=-4, kind=I64 }                   -> x6
     v152 Store { addr=v150, disp=0, value=v146, kind=I64 } -> -
     v153 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v154 LocalAddr(-3)                                    -> x1
+    v154 LocalAddr(-1)                                    -> x1
     terminator Jmp(b182)
   block 182  start_pc=0
     v358 Imm(0)                                           -> x0
@@ -1257,11 +1257,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v159 Imm(0)                                           -> x1
     v160 LoadLocal { off=-4, kind=I64 }                   -> x1
     v161 Imm(1)                                           -> x1
-    v162 LocalAddr(-3)                                    -> x1
+    v162 LocalAddr(-1)                                    -> x1
     v163 LoadLocal { off=-4, kind=I64 }                   -> x6
     v164 Store { addr=v162, disp=0, value=v158, kind=I64 } -> -
     v165 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v166 LocalAddr(-3)                                    -> x1
+    v166 LocalAddr(-1)                                    -> x1
     terminator Jmp(b197)
   block 197  start_pc=0
     v370 Imm(0)                                           -> x0
@@ -1346,11 +1346,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v171 Imm(0)                                           -> x1
     v172 LoadLocal { off=-4, kind=I64 }                   -> x1
     v173 Imm(1)                                           -> x1
-    v174 LocalAddr(-3)                                    -> x1
+    v174 LocalAddr(-1)                                    -> x1
     v175 LoadLocal { off=-4, kind=I64 }                   -> x6
     v176 Store { addr=v174, disp=0, value=v170, kind=I64 } -> -
     v177 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v178 LocalAddr(-3)                                    -> x1
+    v178 LocalAddr(-1)                                    -> x1
     terminator Jmp(b212)
   block 212  start_pc=0
     v382 Imm(0)                                           -> x0
@@ -1435,11 +1435,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v183 Imm(0)                                           -> x1
     v184 LoadLocal { off=-4, kind=I64 }                   -> x1
     v185 Imm(1)                                           -> x1
-    v186 LocalAddr(-3)                                    -> x1
+    v186 LocalAddr(-1)                                    -> x1
     v187 LoadLocal { off=-4, kind=I64 }                   -> x6
     v188 Store { addr=v186, disp=0, value=v182, kind=I64 } -> -
     v189 LoadLocal { off=-4, kind=I64 }                   -> x0
-    v190 LocalAddr(-3)                                    -> x1
+    v190 LocalAddr(-1)                                    -> x1
     terminator Jmp(b227)
   block 227  start_pc=0
     v394 Imm(0)                                           -> x0
@@ -1536,7 +1536,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v201 LocalAddr(-2)                                    -> x0
     v202 Imm(0)                                           -> x1
     v203 Store { addr=v201, disp=0, value=v202, kind=I64 } -> -
-    v204 LocalAddr(-1)                                    -> x0
+    v204 LocalAddr(-3)                                    -> x0
     v205 ImmData(8)                                       -> x1
     v206 Mcpy { dst=v204, src=v205, size=8, align=8 }     -> x0
     v207 LocalAddr(-2)                                    -> x1
@@ -1623,7 +1623,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     v209 Imm(2)                                           -> x0
     terminator Return(v209)   (exit_acc=v209)
   block 261  start_pc=0
-    v210 LocalAddr(-1)                                    -> x1
+    v210 LocalAddr(-3)                                    -> x1
     terminator Jmp(b262)
   block 262  start_pc=0
     v418 Imm(0)                                           -> x0

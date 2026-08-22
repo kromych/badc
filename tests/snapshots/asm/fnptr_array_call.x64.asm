@@ -97,13 +97,6 @@ Disassembly of section .text:
                	callq	*%rax
                	movq	%rax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	leaq	-0x20(%rbp), %rcx
-               	pushq	%rdx
-               	movq	(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	popq	%rdx
-               	movq	%rcx, %rax
-               	leaq	-0x20(%rbp), %rax
                	movq	(%rax), %rax
                	movl	(%rax), %eax
                	xorq	$0x9, %rax
@@ -120,13 +113,6 @@ Disassembly of section .text:
                	callq	*%rax
                	movq	%rax, -0x10(%rbp)
                	leaq	-0x10(%rbp), %rax
-               	leaq	-0x18(%rbp), %rcx
-               	pushq	%rdx
-               	movq	(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	popq	%rdx
-               	movq	%rcx, %rax
-               	leaq	-0x18(%rbp), %rax
                	movq	(%rax), %rax
                	movl	(%rax), %eax
                	xorq	$0x7, %rax

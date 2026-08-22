@@ -38,18 +38,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v24  LoadLocal { off=-6, kind=I64 }                   -> x1
     terminator Jmp(b5)   (exit_acc=v23)
   block 5  start_pc=0
-    v26  LocalAddr(-5)                                    -> x0
+    v26  LocalAddr(-3)                                    -> x0
     v27  Imm(3)                                           -> x0
     v28  Imm(0)                                           -> x0
-    v29  LocalAddr(-5)                                    -> x0
+    v29  LocalAddr(-3)                                    -> x0
     v30  Imm(3)                                           -> x0
     v31  Imm(0)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v31)
   block 6  start_pc=0
-    v33  LocalAddr(-5)                                    -> x0
+    v33  LocalAddr(-3)                                    -> x0
     v34  Imm(4)                                           -> x0
     v35  Imm(0)                                           -> x0
-    v36  LocalAddr(-5)                                    -> x0
+    v36  LocalAddr(-3)                                    -> x0
     v37  Load { addr=v36, disp=0, kind=I64 }              -> x0
     v38  Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v38)
@@ -71,11 +71,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v50  LoadLocal { off=-6, kind=I64 }                   -> x1
     terminator Jmp(b10)   (exit_acc=v49)
   block 10  start_pc=0
-    v52  LocalAddr(-3)                                    -> x0
+    v52  LocalAddr(-5)                                    -> x0
     v53  Imm(122)                                         -> x0
     v54  Imm(0)                                           -> x0
     v55  Imm(8791026472627208192)                         -> x0
-    v56  LocalAddr(-3)                                    -> x0
+    v56  LocalAddr(-5)                                    -> x0
     v57  Imm(122)                                         -> x0
     v58  Imm(0)                                           -> x0
     terminator Jmp(b11)   (exit_acc=v58)

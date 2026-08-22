@@ -93,13 +93,6 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	str	x0, [x16]
                	sub	x0, x29, #0x8
-               	sub	x1, x29, #0x20
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
-               	sub	x0, x29, #0x20
                	ldr	x0, [x0]
                	ldr	w0, [x0]
                	mov	x17, #0x9               // =9
@@ -120,13 +113,6 @@ Disassembly of section .text:
                	sub	x16, x29, #0x10
                	str	x0, [x16]
                	sub	x0, x29, #0x10
-               	sub	x1, x29, #0x18
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldr	x10, [sp], #0x10
-               	mov	x0, x1
-               	sub	x0, x29, #0x18
                	ldr	x0, [x0]
                	ldr	w0, [x0]
                	mov	x17, #0x7               // =7

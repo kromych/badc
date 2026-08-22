@@ -145,10 +145,14 @@ struct FieldUse {
 /// Rewrite every splittable object's accesses to per-field slots,
 /// decompose its block initializer, and neutralise the dead
 /// base-address instructions. Returns `(base_slot, field_slots)` for
-/// each object actually split. Splits nothing when the fields the split
-/// would put in registers outnumber `budget` (the target's usable GPR
-/// file), since the mem2reg re-run would then spill the loop-carried
-/// phis back to the frame at a net loss.
+/// each object actually split. `budget` is the target's usable GPR
+/// file: a round admits objects greedily under it, largest register
+/// demand first, so the object paying for the most memory traffic is
+/// never displaced by a smaller one. An object that does not fit stays
+/// memory-resident this round -- the mem2reg re-run would spill the
+/// loop-carried phis back to the frame at a net loss -- and is
+/// reconsidered next round, once this round's promotions have
+/// collapsed into their consumers.
 fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> {
     let Some(cells_of) = candidate_objects(func) else {
         return Vec::new();
@@ -417,21 +421,27 @@ fn split_objects(func: &mut FunctionSsa, budget: usize) -> Vec<(i64, Vec<i64>)> 
         }
     }
 
-    // Assign a slot to every field of every surviving object.
-    let order: Vec<i64> = fields_of
-        .keys()
-        .copied()
-        .filter(|b| !declined.contains(b))
-        .collect();
     // Only a field some load reads occupies a register: one that is
     // written and never read becomes a dead def the store elimination
-    // removes, so counting it declines the split for a demand the split
-    // does not create.
-    let total: usize = order
+    // removes, so counting it would decline the split for a demand the
+    // split does not create. Rank the surviving objects by that demand,
+    // largest first (ties by base for determinism), and admit each that
+    // still fits the remaining budget.
+    let mut ranked: Vec<(usize, i64)> = fields_of
         .iter()
-        .map(|b| fields_of[b].values().filter(|u| u.load).count())
-        .sum();
-    if order.is_empty() || total > budget {
+        .filter(|(b, _)| !declined.contains(b))
+        .map(|(&b, fields)| (fields.values().filter(|u| u.load).count(), b))
+        .collect();
+    ranked.sort_by_key(|&(demand, base)| (core::cmp::Reverse(demand), base));
+    let mut remaining = budget;
+    let mut order: Vec<i64> = Vec::new();
+    for (demand, base) in ranked {
+        if demand <= remaining {
+            remaining -= demand;
+            order.push(base);
+        }
+    }
+    if order.is_empty() {
         return Vec::new();
     }
     let mut slots_of: BTreeMap<i64, BTreeMap<(i64, i64), i64>> = BTreeMap::new();
@@ -943,6 +953,36 @@ mod tests {
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
 
+    /// Two objects whose joint demand exceeds the budget: the one with
+    /// the larger demand splits, the other stays memory-resident, so a
+    /// small newcomer never turns a fitting split into no split at all.
+    #[test]
+    fn budget_admits_largest_demand_first() {
+        let mut insts = two_elem_array().insts;
+        let k = insts.len() as ValueId;
+        // One-cell object at -3: store then load one 8-byte field.
+        insts.push(Inst::Imm(9)); //          v13
+        insts.push(Inst::LocalAddr(-3)); //   v14
+        insts.push(store(k + 1, k)); //       v15
+        insts.push(Inst::LocalAddr(-3)); //   v16
+        insts.push(load(k + 3)); //           v17
+        let mut f = func(
+            insts,
+            Terminator::Return(12),
+            alloc::vec![(-2, 2), (-3, 1)],
+        );
+        let split = split_objects(&mut f, 2);
+        assert_eq!(
+            split,
+            alloc::vec![(-2, alloc::vec![-2, -1])],
+            "only the two-field array fits the budget"
+        );
+        assert!(
+            matches!(f.insts[14], Inst::LocalAddr(-3)),
+            "the skipped object keeps its address expressions"
+        );
+    }
+
     /// `Block::exit_acc` naming an address into the object is a liveness
     /// pin, not a use of the address, so it must not decline the split;
     /// the neutralised expression still defines a value there.
@@ -1062,6 +1102,78 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    /// A one-cell aggregate splits and promotes end to end: both
+    /// members are lifted and the base slot is reported fully promoted.
+    #[test]
+    fn one_cell_aggregate_promotes_through_run() {
+        let insts = alloc::vec![
+            Inst::Imm(1),        // v0
+            Inst::LocalAddr(-2), // v1
+            Inst::Store {
+                addr: 1,
+                disp: 0,
+                value: 0,
+                kind: StoreKind::I32,
+                volatile: false,
+                align: 0,
+            }, // v2
+            Inst::Imm(2),        // v3
+            Inst::LocalAddr(-2), // v4
+            Inst::Store {
+                addr: 4,
+                disp: 4,
+                value: 3,
+                kind: StoreKind::I32,
+                volatile: false,
+                align: 0,
+            }, // v5
+            Inst::LocalAddr(-2), // v6
+            Inst::Load {
+                addr: 6,
+                disp: 0,
+                kind: LoadKind::U32,
+                volatile: false,
+                align: 0,
+            }, // v7
+            Inst::LocalAddr(-2), // v8
+            Inst::Load {
+                addr: 8,
+                disp: 4,
+                kind: LoadKind::U32,
+                volatile: false,
+                align: 0,
+            }, // v9
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 7,
+                rhs: 9,
+            }, // v10
+        ];
+        let mut f = func(insts, Terminator::Return(10), alloc::vec![(-2, 1)]);
+        let promoted = run(&mut f, 64);
+        assert_eq!(promoted, alloc::vec![-2], "the one-cell base promotes");
+        assert!(
+            !f.insts
+                .iter()
+                .any(|i| matches!(i, Inst::Store { .. } | Inst::StoreLocal { .. })),
+            "no member store survives: {:?}",
+            f.insts
+        );
+        // The re-run forwarded both member loads to the stored values.
+        assert!(
+            f.insts.iter().any(|i| matches!(
+                i,
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 0,
+                    rhs: 3,
+                }
+            )),
+            "the sum reads the stored values directly: {:?}",
+            f.insts
+        );
     }
 
     /// Two fields inside one 8-byte cell cannot reuse the object's

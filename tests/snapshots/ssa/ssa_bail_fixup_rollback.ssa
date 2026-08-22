@@ -1165,14 +1165,14 @@ fn ent_pc=3 n_params=0 variadic=false locals=14
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-13)                                   -> x0
+    v1   LocalAddr(-9)                                    -> x0
     v2   ImmData(24)                                      -> x1
     v3   Mcpy { dst=v1, src=v2, size=8, align=8 }         -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v4)
   block 1  start_pc=0
-    v12  LocalAddr(-4)                                    -> x2
+    v12  LocalAddr(-13)                                   -> x2
     v13  Extend { value=v6, kind=I32 }                    -> x6
     v14  Binop { op=add, lhs=v12, rhs=v7 }                -> x2
     v15  BinopI { op=and, lhs=v7, rhs_imm=255 }           -> x6
@@ -1189,13 +1189,13 @@ fn ent_pc=3 n_params=0 variadic=false locals=14
     v8   BinopI { op=lt, lhs=v7, rhs_imm=32 }             -> x2
     terminator Bnz { cond=v8, target=b1, fall=b4 }   (exit_acc=v8)
   block 4  start_pc=0
-    v17  LocalAddr(-12)                                   -> x7
+    v17  LocalAddr(-8)                                    -> x7
     v18  Imm(0)                                           -> x6
     v19  Imm(64)                                          -> x2
-    v20  LocalAddr(-13)                                   -> x1
-    v21  LocalAddr(-4)                                    -> x8
+    v20  LocalAddr(-9)                                    -> x1
+    v21  LocalAddr(-13)                                   -> x8
     v22  Call { target_pc=2, args=[v17, v18, v19, v20, v21], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v23  LocalAddr(-12)                                   -> x0
+    v23  LocalAddr(-8)                                    -> x0
     v24  Load { addr=v23, disp=0, kind=U8 }               -> x0
     v25  BinopI { op=xor, lhs=v24, rhs_imm=77 }           -> x0
     v26  BinopI { op=and, lhs=v25, rhs_imm=4294967295 }   -> x0

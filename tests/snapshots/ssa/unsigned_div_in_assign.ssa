@@ -36,45 +36,46 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    v2   ImmData(8)                                       -> x1
-    v3   Mcpy { dst=v1, src=v2, size=8, align=8 }         -> x0
-    v4   LocalAddr(-1)                                    -> x0
+    v1   Imm(0)                                           -> x0
+    v2   Imm(0)                                           -> x0
+    v3   Imm(240)                                         -> x0
+    v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    v6   Imm(240)                                         -> x0
-    v7   Imm(24)                                          -> x0
-    v8   Imm(10)                                          -> x0
-    v9   Imm(0)                                           -> x0
-    v10  Imm(42949672960)                                 -> x0
-    v11  Imm(10)                                          -> x0
-    v12  Imm(240)                                         -> x0
-    v13  Imm(7)                                           -> x0
-    v14  Imm(2)                                           -> x0
-    v15  Imm(0)                                           -> x0
-    v16  Imm(8589934592)                                  -> x0
-    v17  Imm(2)                                           -> x0
-    v18  Imm(10)                                          -> x0
-    v19  Imm(1000)                                        -> x0
-    v20  Imm(4294967296000)                               -> x0
-    v21  Imm(1000)                                        -> x0
-    v22  Imm(2)                                           -> x0
-    v23  Imm(1002)                                        -> x0
-    v24  Imm(4303557230592)                               -> x0
-    v25  Imm(1002)                                        -> x0
-    v26  Imm(4303557230592)                               -> x0
-    v27  Imm(1002)                                        -> x0
-    v28  Imm(1)                                           -> x0
-    terminator Jmp(b1)   (exit_acc=v28)
+    v6   Imm(0)                                           -> x0
+    v7   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v8   Imm(24)                                          -> x0
+    v9   Imm(10)                                          -> x0
+    v10  Imm(0)                                           -> x0
+    v11  Imm(42949672960)                                 -> x0
+    v12  Imm(10)                                          -> x0
+    v13  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v14  Imm(7)                                           -> x0
+    v15  Imm(2)                                           -> x0
+    v16  Imm(0)                                           -> x0
+    v17  Imm(8589934592)                                  -> x0
+    v18  Imm(2)                                           -> x0
+    v19  Imm(10)                                          -> x0
+    v20  Imm(1000)                                        -> x0
+    v21  Imm(4294967296000)                               -> x0
+    v22  Imm(1000)                                        -> x0
+    v23  Imm(2)                                           -> x0
+    v24  Imm(1002)                                        -> x0
+    v25  Imm(4303557230592)                               -> x0
+    v26  Imm(1002)                                        -> x0
+    v27  Imm(4303557230592)                               -> x0
+    v28  Imm(1002)                                        -> x0
+    v29  Imm(1)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v29)
   block 1  start_pc=0
-    v29  Imm(0)                                           -> x0
-    v30  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v29)
+    v30  Imm(0)                                           -> x0
+    v31  Imm(0)                                           -> x1
+    terminator Jmp(b2)   (exit_acc=v30)
   block 2  start_pc=0
-    v33  Phi { incoming=[b1:v29], kind=I64 }              -> x0
-    v34  LoadLocal { off=-2, kind=I64 }                   -> x0
-    v35  Imm(0)                                           -> x0
+    v34  Phi { incoming=[b1:v30], kind=I64 }              -> x0
+    v35  LoadLocal { off=-2, kind=I64 }                   -> x0
     v36  Imm(0)                                           -> x0
-    terminator Return(v36)   (exit_acc=v36)
+    v37  Imm(0)                                           -> x0
+    terminator Return(v37)   (exit_acc=v37)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

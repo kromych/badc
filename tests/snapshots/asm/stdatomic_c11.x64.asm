@@ -99,10 +99,10 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x18(%rbp), %rax
                	xorq	%rcx, %rcx
                	movb	%cl, (%rax)
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x18(%rbp), %rax
                	movl	$0x1, %ecx
                	movq	%rax, %r11
                	movq	%rcx, %r10
@@ -115,14 +115,14 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	-0x18(%rbp), %rcx
                	xorq	%rax, %rax
                	movb	%al, (%rcx)
-               	movl	%eax, -0x18(%rbp)
-               	leaq	-0x18(%rbp), %rax
+               	movl	%eax, -0x20(%rbp)
+               	leaq	-0x20(%rbp), %rax
                	movl	$0x2a, %ecx
                	movl	%ecx, (%rax)
-               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x20(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpq	$0x2a, %rax
                	je	<addr>

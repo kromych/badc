@@ -17,26 +17,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	sub	x0, x29, #0x18
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x1]
-               	strb	w10, [x0]
-               	ldrb	w10, [x1, #0x1]
-               	strb	w10, [x0, #0x1]
-               	ldrb	w10, [x1, #0x2]
-               	strb	w10, [x0, #0x2]
-               	ldrb	w10, [x1, #0x3]
-               	strb	w10, [x0, #0x3]
-               	ldr	x10, [sp], #0x10
-               	sub	x1, x29, #0x10
                	mov	x0, #0x41a80000         // =1101529088
-               	sub	x2, x29, #0x8
+               	sub	x1, x29, #0x18
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
                	str	d0, [sp, #0x20]
-               	str	x2, [sp]
+               	str	x1, [sp]
                	str	x0, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	dup	v0.4s, w1
@@ -47,10 +33,10 @@ Disassembly of section .text:
                	ldr	x0, [sp, #0x10]
                	ldr	x1, [sp, #0x18]
                	ldr	d0, [sp, #0x20]
-               	ldursw	x0, [x29, #-0x8]
-               	str	w0, [x1]
-               	sub	x0, x29, #0x10
-               	ldr	s0, [x0]
+               	ldursw	x0, [x29, #-0x18]
+               	stur	w0, [x29, #-0x10]
+               	sub	x16, x29, #0x10
+               	ldr	s0, [x16]
                	mov	x0, #0x42280000         // =1109917696
                	fmov	s17, w0
                	fcmp	s0, s17

@@ -53,9 +53,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x230
                	str	x20, [sp]
                	str	x19, [sp, #0x10]
-               	sub	x0, x29, #0x10
-               	mov	x1, #0x0                // =0
-               	str	x1, [x0]
                	mov	x0, #0x1                // =1
                	sub	x0, x29, #0x18
                	mov	x1, #0x0                // =0

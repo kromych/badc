@@ -87,30 +87,30 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r8, %r8
-               	movl	%eax, %edi
+               	xorq	%rdi, %rdi
+               	movl	%eax, %r8d
                	movq	%rax, %r9
                	shrq	$0x20, %r9
                	movl	%ecx, %ebx
                	movq	%rcx, %r12
                	shrq	$0x20, %r12
-               	movq	%rdi, %r13
+               	movq	%r8, %r13
                	imulq	%rbx, %r13
                	shrq	$0x20, %r13
                	imulq	%r9, %rbx
                	addq	%r13, %rbx
                	movl	%ebx, %r13d
                	shrq	$0x20, %rbx
-               	imulq	%r12, %rdi
-               	addq	%r13, %rdi
-               	shrq	$0x20, %rdi
+               	imulq	%r12, %r8
+               	addq	%r13, %r8
+               	shrq	$0x20, %r8
                	imulq	%r12, %r9
                	addq	%rbx, %r9
-               	addq	%r9, %rdi
+               	addq	%r9, %r8
                	movq	%rax, %r9
-               	imulq	%r8, %r9
-               	imulq	%rcx, %r8
-               	addq	%r9, %rdi
+               	imulq	%rdi, %r9
+               	imulq	%rcx, %rdi
+               	addq	%r9, %r8
                	addq	%rdi, %r8
                	movabsq	$-0x22409b8b647cc5c5, %r11 # imm = 0xDDBF64749B833A3B
                	movq	%r8, %rdi

@@ -2190,7 +2190,7 @@ impl Compiler {
             let elem_size = self.size_of_type(t);
             let cl_slots = self.slots_of_type(t);
             slot = self.reserve_slots(cl_slots);
-            if cl_slots > 1 {
+            if cl_slots >= 1 {
                 self.multi_cell_temps.push((slot, cl_slots));
             }
             let needs_runtime = self.struct_init_needs_runtime()?;

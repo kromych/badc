@@ -235,35 +235,8 @@ Disassembly of section .text:
                	ldrb	w10, [x1, #0xb]
                	strb	w10, [x0, #0xb]
                	ldr	x10, [sp], #0x10
-               	sub	x1, x29, #0x20
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x2]
-               	str	x10, [x1]
-               	ldr	x10, [sp], #0x10
-               	sub	x1, x29, #0x20
-               	sub	x2, x29, #0x18
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x2]
-               	ldr	x10, [sp], #0x10
-               	mov	x1, x2
                	mov	x0, #0x0                // =0
-               	sub	x0, x29, #0x18
-               	ldrsw	x0, [x0]
-               	cmp	x0, #0xd
-               	cset	x0, ne
-               	cbnz	x0, <addr>
-               	sub	x0, x29, #0x18
-               	ldrsw	x0, [x0, #0x4]
-               	cmp	x0, #0xe
-               	cset	x0, ne
-               	cbz	x0, <addr>
-               	mov	x0, #0x29               // =41
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
-               	ret
+               	mov	x0, #0x0                // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
@@ -272,7 +245,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x19, [sp], #0x50
                	ret
-               	b	<addr>
                	b	<addr>
                	b	<addr>
                	b	<addr>

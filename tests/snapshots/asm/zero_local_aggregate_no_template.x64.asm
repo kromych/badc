@@ -70,9 +70,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x220, %rsp            # imm = 0x220
                	movq	%rbx, (%rsp)
-               	leaq	-0x10(%rbp), %rax
-               	xorq	%rcx, %rcx
-               	movq	%rcx, (%rax)
                	movl	$0x1, %eax
                	leaq	-0x18(%rbp), %rax
                	xorq	%rcx, %rcx

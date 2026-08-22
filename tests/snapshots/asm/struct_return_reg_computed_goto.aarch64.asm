@@ -18,20 +18,20 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x18]
+               	stur	w0, [x29, #-0x20]
                	adr	x0, <addr>
                	br	x0
                	mov	x0, #0x7                // =7
-               	stur	w0, [x29, #-0x18]
+               	stur	w0, [x29, #-0x20]
                	sxtw	x0, w0
                	cmp	x0, #0x7
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x18]
+               	stur	x0, [x29, #-0x20]
                	b	<addr>
                	mov	x0, #0x1                // =1
-               	stur	x0, [x29, #-0x18]
-               	ldur	x0, [x29, #-0x18]
+               	stur	x0, [x29, #-0x20]
+               	ldur	x0, [x29, #-0x20]
                	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -44,33 +44,33 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	stur	w0, [x29, #0x10]
                	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x18]
+               	stur	w1, [x29, #-0x20]
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	adr	x0, <addr>
-               	stur	x0, [x29, #-0x18]
+               	stur	x0, [x29, #-0x20]
                	b	<addr>
                	adr	x0, <addr>
-               	stur	x0, [x29, #-0x18]
-               	ldur	x0, [x29, #-0x18]
+               	stur	x0, [x29, #-0x20]
+               	ldur	x0, [x29, #-0x20]
                	br	x0
                	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x18]
+               	stur	w0, [x29, #-0x20]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
                	ret
                	mov	x0, #0x2                // =2
-               	stur	w0, [x29, #-0x18]
+               	stur	w0, [x29, #-0x20]
                	sxtw	x0, w0
                	cmp	x0, #0x2
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x18]
+               	stur	x0, [x29, #-0x20]
                	b	<addr>
                	mov	x0, #0x1                // =1
-               	stur	x0, [x29, #-0x18]
-               	ldur	x0, [x29, #-0x18]
+               	stur	x0, [x29, #-0x20]
+               	ldur	x0, [x29, #-0x20]
                	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

@@ -7502,6 +7502,107 @@ fn write_only_aggregate_members_do_not_decline_the_split() {
     }
 }
 
+/// A declared aggregate is recorded as a slot group whatever its cell
+/// count: an 8-byte struct and an 8-byte array each take a `(base, 1)`
+/// entry, which is what admits them to the scalar promotion's candidate
+/// set. A scalar local takes none.
+#[test]
+fn one_cell_aggregate_is_recorded_as_a_slot_group() {
+    let program = crate::Compiler::with_options(
+        "struct pair { unsigned int a; unsigned int b; }; \
+         extern void sink(struct pair *, int *); \
+         long f(void) { \
+             long r = 0; \
+             struct pair s = { 1, 2 }; \
+             int a[2] = { 3, 4 }; \
+             sink(&s, a); \
+             r += s.a + a[1]; \
+             return r; \
+         }"
+        .to_string(),
+        crate::Target::LinuxX64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let cells = |name: &str| -> Option<i64> {
+        let slot = program
+            .variables
+            .iter()
+            .find(|v| v.name == name)
+            .expect("declared local")
+            .fp_slot;
+        program
+            .finished_functions
+            .iter()
+            .flat_map(|f| f.multi_cell_slots.iter())
+            .find(|&&(base, _)| base == slot)
+            .map(|&(_, c)| c)
+    };
+    assert_eq!(cells("s"), Some(1), "the one-cell struct takes a group");
+    assert_eq!(cells("a"), Some(1), "the one-cell array takes a group");
+    assert_eq!(cells("r"), None, "a scalar takes none");
+}
+
+/// The state machine again, over an aggregate that fits one 8-byte cell.
+/// The candidate set is the walker's slot-group list, and one-cell
+/// aggregates were not recorded there, so the state member stayed in
+/// memory and the unreachable call survived while the same shape with
+/// 8-byte members folded.
+#[test]
+fn one_cell_aggregate_state_fold_drops_unreachable_call() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const SRC: &str = "\
+        enum st { st_done = 0, st_run, st_wait }; \
+        struct walk { enum st state; unsigned int data; }; \
+        extern void assert_canary(void); \
+        extern void runtime_canary(void); \
+        extern long gate; \
+        static __attribute__((always_inline)) void step(struct walk *w, long n) { \
+            switch (w->state) { \
+            case st_done: assert_canary(); return; \
+            case st_run: w->data += (unsigned int)n; w->state = st_wait; return; \
+            case st_wait: w->state = st_done; return; \
+            } \
+        } \
+        long walk_all(long n) { \
+            long acc = 0; \
+            for (struct walk w = { .state = st_run, .data = 5 }; \
+                 w.state != st_done; step(&w, n)) \
+                acc += (long)w.data; \
+            if (gate == 77) runtime_canary(); \
+            return acc; \
+        }";
+
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            SRC.to_string(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit object ({target:?}): {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        let named = |n: &str| syms.iter().any(|(s, _)| s == n);
+        assert!(
+            !named("assert_canary"),
+            "{target:?}: the one-cell aggregate's state member stayed in memory, \
+             so the unreachable state's call survives (symbols: {syms:?})"
+        );
+        assert!(
+            named("runtime_canary"),
+            "{target:?}: the runtime-guarded call was dropped, so the check is vacuous \
+             (symbols: {syms:?})"
+        );
+    }
+}
+
 /// `(rela section, r_offset, symbol name, addend)` for every relocation
 /// the object carries.
 fn elf_relocations(

@@ -1487,7 +1487,7 @@ impl Compiler {
                         let slots = self.slots_of_type(pty);
                         let param_val = self.symbols[idx].val;
                         let local_val = self.reserve_slots(slots);
-                        if slots > 1 {
+                        if slots >= 1 {
                             self.multi_cell_temps.push((local_val, slots));
                         }
                         // dst = &local
@@ -1838,25 +1838,27 @@ impl Compiler {
                     for i in core::mem::take(&mut self.pending_block_static_syms) {
                         self.symbols[i].owner_ent_pc = Some(ent_pc as u64);
                     }
-                    // Record declared multi-cell locals (aggregates and
-                    // multi-cell scalars) for slot coalescing. A declared
-                    // local at frame slot `fp_slot` (most-negative cell)
-                    // occupying `cells` 8-byte cells covers
-                    // `fp_slot ..= fp_slot + cells - 1`; the interior cells
-                    // carry no direct slot reference, so the pass must
-                    // reserve them. Computed from the per-function variable
-                    // list assembled just above (`local_storage_slots`
-                    // mirrors the parser's reservation). Patches the
-                    // `FinishedFunction` pushed by `ast_finish_function`.
-                    // A struct-by-value parameter keeps its body-visible copy
-                    // in a negative slot too (C99 6.5.2.2 + the host ABI), so
-                    // `fp_slot < 0` -- not `!is_parameter` -- selects every
-                    // local that needs its interior cells reserved.
+                    // Record declared aggregate locals (any cell count) and
+                    // multi-cell scalars. A declared local at frame slot
+                    // `fp_slot` (most-negative cell) occupying `cells` 8-byte
+                    // cells covers `fp_slot ..= fp_slot + cells - 1`; slot
+                    // coalescing reserves the interior cells, which carry no
+                    // direct slot reference, and the scalar promotion reads
+                    // the list as its candidate set -- a one-cell aggregate's
+                    // members are split targets like any other's. Computed
+                    // from the per-function variable list assembled just
+                    // above (`local_storage_slots` mirrors the parser's
+                    // reservation). Patches the `FinishedFunction` pushed by
+                    // `ast_finish_function`. A struct-by-value parameter
+                    // keeps its body-visible copy in a negative slot too
+                    // (C99 6.5.2.2 + the host ABI), so `fp_slot < 0` -- not
+                    // `!is_parameter` -- selects every such local.
                     let mut multi_cell: Vec<(i64, i64)> = Vec::new();
                     for v in &self.variables[vars_start..] {
                         if v.fp_slot < 0 {
                             let cells = self.local_storage_slots(v.type_tag, v.array_size as i64);
-                            if cells > 1 {
+                            let aggregate = is_struct_value_ty(v.type_tag) || v.array_size > 0;
+                            if cells > 1 || (cells == 1 && aggregate) {
                                 multi_cell.push((v.fp_slot, cells));
                             }
                         }

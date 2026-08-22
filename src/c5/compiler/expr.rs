@@ -1660,7 +1660,7 @@ impl Compiler {
                     let result_temp_off: i64 = if callee_returns_struct {
                         let slots = self.slots_of_type(callee_ret_ty);
                         let off = self.reserve_slots(slots);
-                        if slots > 1 {
+                        if slots >= 1 {
                             self.multi_cell_temps.push((off, slots));
                         }
                         off

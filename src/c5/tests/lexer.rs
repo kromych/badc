@@ -292,6 +292,27 @@ fn line_text_by_number_honours_line_markers() {
     lex.file = "b.h".into();
     assert_eq!(lex.line_text_by_number(7), Some("int gamma;"));
     assert_eq!(lex.line_text_by_number(99), None);
+    // One entry per marker, not per line.
+    assert_eq!(lex.line_index_entries(), 3);
+}
+
+#[test]
+fn line_index_is_sized_by_markers_not_lines() {
+    // A preprocessed kernel unit runs to hundreds of thousands of lines
+    // and asks single-digit questions of them, so the index is sized by
+    // the markers it has to honour rather than by the buffer's lines.
+    use crate::c5::lexer::Lexer;
+    let mut src = String::from("# 1 \"big.h\"\n");
+    for i in 1..=20000 {
+        src.push_str(&format!("int v{i};\n"));
+    }
+    src.push_str("# 1 \"main.c\"\nint last;\n");
+    let mut lex = Lexer::new(src);
+    lex.file = "big.h".into();
+    assert_eq!(lex.line_text_by_number(19999), Some("int v19999;"));
+    lex.file = "main.c".into();
+    assert_eq!(lex.line_text_by_number(1), Some("int last;"));
+    assert_eq!(lex.line_index_entries(), 2);
 }
 
 #[test]

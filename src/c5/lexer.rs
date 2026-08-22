@@ -350,14 +350,62 @@ pub(crate) struct LexerSnapshot {
     str_elem_bytes: usize,
 }
 
-/// Marker-aware map from (file, line) to the line's byte span in
-/// `Lexer::src`. First occurrence wins, matching the sequential-scan
-/// semantics it replaces. Built once, on the first diagnostic that
-/// echoes a source line; the source buffer never changes after
-/// construction.
+/// Resolved (file, line) -> byte span answers; `None` when no run
+/// holds the line.
+type LineSpanMemo = alloc::collections::BTreeMap<(u32, u32), Option<(u32, u32)>>;
+
+/// A run of consecutive lines between two preprocessor line markers:
+/// the lines in `Lexer::src[start..end]` are numbered `first_line`,
+/// `first_line + 1`, ... in `LineIndex::files[file_id]`.
+struct LineRun {
+    file_id: u32,
+    first_line: u32,
+    start: u32,
+    end: u32,
+}
+
+/// Marker-aware view of the preprocessed buffer, mapping (file, line) to
+/// the line's byte span in `Lexer::src`. One entry per line marker, not
+/// per line: the buffers run to hundreds of thousands of lines and a
+/// compile asks single-digit questions of them. The first run holding a
+/// (file, line) pair answers it, matching the sequential-scan semantics
+/// this replaces. Built once, on the first diagnostic that echoes a
+/// source line; the source buffer never changes after construction.
 struct LineIndex {
     files: Vec<String>,
-    spans: alloc::collections::BTreeMap<(u32, u32), (u32, u32)>,
+    runs: Vec<LineRun>,
+    /// Spans already resolved, so a diagnostic repeated on a discarded
+    /// trial-parse path walks no run twice.
+    memo: core::cell::RefCell<LineSpanMemo>,
+}
+
+impl LineIndex {
+    /// Byte span of `line` in `files[file_id]`, or `None` when no run
+    /// holds it.
+    fn span_of(&self, src: &[u8], file_id: u32, line: u32) -> Option<(u32, u32)> {
+        let nl = |from: usize, to: usize| src[from..to].iter().position(|&b| b == b'\n');
+        for run in &self.runs {
+            if run.file_id != file_id || line < run.first_line {
+                continue;
+            }
+            let end = run.end as usize;
+            let mut pos = run.start as usize;
+            let mut skip = line - run.first_line;
+            while skip > 0 && pos < end {
+                match nl(pos, end) {
+                    Some(k) => pos += k + 1,
+                    None => pos = end,
+                }
+                skip -= 1;
+            }
+            if skip > 0 || pos >= end {
+                continue;
+            }
+            let stop = pos + nl(pos, end).unwrap_or(end - pos);
+            return Some((pos as u32, stop as u32));
+        }
+        None
+    }
 }
 
 pub(crate) struct Lexer {
@@ -1528,7 +1576,7 @@ impl Lexer {
     /// has read ahead of it (an unused-parameter warning fires at the
     /// closing brace but names the parameter's declaration line).
     pub(crate) fn line_text_by_number(&self, target: usize) -> Option<&str> {
-        // Build the (file, line) -> byte-span index on first use. A
+        // Split the buffer into marker-delimited runs on first use. A
         // diagnostic may be constructed speculatively on a trial-parse
         // path that its caller discards, so this lookup must not
         // re-scan the buffer per call.
@@ -1536,22 +1584,28 @@ impl Lexer {
             let src = &self.src;
             let n = src.len();
             let mut files: Vec<String> = alloc::vec![String::from("<source>")];
-            let mut spans: alloc::collections::BTreeMap<(u32, u32), (u32, u32)> =
-                alloc::collections::BTreeMap::new();
+            let mut runs: Vec<LineRun> = Vec::new();
             let mut file_id: u32 = 0;
-            let mut line = 1usize;
+            let mut first_line: u32 = 1;
+            let mut start = 0usize;
             let mut i = 0usize;
             while i < n {
-                let start = i;
-                let mut j = i;
-                while j < n && src[j] != b'\n' {
-                    j += 1;
-                }
-                let bytes = &src[start..j];
-                if bytes.first() == Some(&b'#')
-                    && let Some(marker) = parse_line_marker(&bytes[1..])
+                let j = match src[i..].iter().position(|&b| b == b'\n') {
+                    Some(k) => i + k,
+                    None => n,
+                };
+                if src[i] == b'#'
+                    && let Some(marker) = parse_line_marker(&src[i + 1..j])
                 {
-                    line = marker.line;
+                    if i > start {
+                        runs.push(LineRun {
+                            file_id,
+                            first_line,
+                            start: start as u32,
+                            end: i as u32,
+                        });
+                    }
+                    first_line = marker.line as u32;
                     if let Some(f) = marker.file {
                         file_id = match files.iter().position(|x| *x == f) {
                             Some(id) => id as u32,
@@ -1561,22 +1615,45 @@ impl Lexer {
                             }
                         };
                     }
-                    i = j + 1;
-                    continue;
+                    start = j + 1;
                 }
-                spans
-                    .entry((file_id, line as u32))
-                    .or_insert((start as u32, j as u32));
-                line += 1;
                 i = j + 1;
             }
-            LineIndex { files, spans }
+            if start < n {
+                runs.push(LineRun {
+                    file_id,
+                    first_line,
+                    start: start as u32,
+                    end: n as u32,
+                });
+            }
+            LineIndex {
+                files,
+                runs,
+                memo: core::cell::RefCell::new(LineSpanMemo::new()),
+            }
         });
         let file_id = index.files.iter().position(|f| *f == self.file)? as u32;
-        let (start, end) = *index.spans.get(&(file_id, target as u32))?;
+        let key = (file_id, target as u32);
+        let cached = index.memo.borrow().get(&key).copied();
+        let span = match cached {
+            Some(hit) => hit,
+            None => {
+                let span = index.span_of(&self.src, key.0, key.1);
+                index.memo.borrow_mut().insert(key, span);
+                span
+            }
+        };
+        let (start, end) = span?;
         core::str::from_utf8(&self.src[start as usize..end as usize])
             .ok()
             .map(|s| s.trim_end())
+    }
+
+    /// Entries the line index holds, 0 when no diagnostic built it.
+    #[cfg(test)]
+    pub(crate) fn line_index_entries(&self) -> usize {
+        self.line_index.get().map_or(0, |i| i.runs.len())
     }
 
     pub fn next(

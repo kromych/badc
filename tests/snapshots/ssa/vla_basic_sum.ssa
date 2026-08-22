@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=compute
-fn ent_pc=0 n_params=1 variadic=false locals=6
+fn ent_pc=0 n_params=1 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(6)                                    -> -
@@ -15,7 +15,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v9   Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v8)
   block 1  start_pc=0
-    v17  LoadLocal { off=-1, kind=I64 }                   -> x6
+    v17  LoadLocal { off=-2, kind=I64 }                   -> x6
     v18  Extend { value=v10, kind=I32 }                   -> x6
     v19  BinopI { op=shl, lhs=v11, rhs_imm=2 }            -> x6
     v20  Binop { op=add, lhs=v6, rhs=v19 }                -> x6
@@ -42,7 +42,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     terminator Jmp(b7)   (exit_acc=v25)
   block 5  start_pc=0
     v36  Extend { value=v29, kind=I32 }                   -> x8
-    v37  LoadLocal { off=-1, kind=I64 }                   -> x8
+    v37  LoadLocal { off=-2, kind=I64 }                   -> x8
     v38  Extend { value=v28, kind=I32 }                   -> x8
     v39  BinopI { op=shl, lhs=v30, rhs_imm=2 }            -> x8
     v40  Binop { op=add, lhs=v6, rhs=v39 }                -> x8

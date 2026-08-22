@@ -30,13 +30,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x40
                	mov	x1, #0x3                // =3
                	str	w1, [x0]
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x40
                	mov	x1, #0x5                // =5
                	str	w1, [x0, #0x4]
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x40
                	ldrsw	x1, [x0]
                	ldrsw	x0, [x0, #0x4]
                	add	x0, x1, x0
@@ -47,7 +47,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x40
                	ldrsw	x1, [x0]
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x40
                	ldrsw	x2, [x0]
                	ldrsw	x0, [x0, #0x4]
                	lsl	x0, x0, #1
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x40
                	ldr	x0, [x0]
                	bl	<addr>
                	cmp	x0, #0x12c
@@ -87,12 +87,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x40
                	ldrsw	x0, [x0]
                	cmp	x0, #0x3
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x40
                	ldrsw	x0, [x0, #0x4]
                	cmp	x0, #0x5
                	cset	x0, ne

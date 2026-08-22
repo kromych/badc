@@ -258,11 +258,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v29  Imm(69)                                          -> x0
     terminator Return(v29)   (exit_acc=v29)
   block 12  start_pc=0
-    v30  LocalAddr(-4)                                    -> x0
+    v30  LocalAddr(-8)                                    -> x0
     v31  BinopI { op=add, lhs=v30, rhs_imm=16 }           -> x0
     v32  Imm(1)                                           -> x0
     v33  Imm(0)                                           -> x0
-    v34  LocalAddr(-8)                                    -> x0
+    v34  LocalAddr(-4)                                    -> x0
     v35  BinopI { op=add, lhs=v34, rhs_imm=16 }           -> x0
     v36  Imm(2)                                           -> x0
     v37  Imm(0)                                           -> x0
@@ -277,10 +277,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     v44  Imm(76)                                          -> x0
     terminator Return(v44)   (exit_acc=v44)
   block 14  start_pc=0
-    v45  LocalAddr(-4)                                    -> x0
+    v45  LocalAddr(-8)                                    -> x0
     v46  BinopI { op=add, lhs=v45, rhs_imm=16 }           -> x0
     v47  Imm(1)                                           -> x0
-    v48  LocalAddr(-8)                                    -> x0
+    v48  LocalAddr(-4)                                    -> x0
     v49  BinopI { op=add, lhs=v48, rhs_imm=16 }           -> x0
     v50  Imm(2)                                           -> x0
     v51  Imm(3)                                           -> x0

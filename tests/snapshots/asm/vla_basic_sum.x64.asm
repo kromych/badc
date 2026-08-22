@@ -28,7 +28,7 @@ Disassembly of section .text:
 <compute>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	shlq	$0x2, %rax
@@ -64,8 +64,8 @@ Disassembly of section .text:
                	cmpq	%rdi, %rsi
                	jl	<addr>
                	movslq	%ecx, %rax
-               	leaq	-0x30(%rbp), %rsp
-               	addq	$0x30, %rsp
+               	leaq	-0x10(%rbp), %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 

@@ -96,14 +96,14 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x70
+               	sub	sp, sp, #0x30
                	mov	x0, #0x2                // =2
                	bl	<addr>
-               	sub	x16, x29, #0x20
+               	sub	x16, x29, #0x10
                	str	d0, [x16]
                	str	d1, [x16, #0x8]
-               	sub	x0, x29, #0x20
-               	sub	x1, x29, #0x30
+               	sub	x0, x29, #0x10
+               	sub	x1, x29, #0x20
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
                	str	x10, [x1]
@@ -111,14 +111,14 @@ Disassembly of section .text:
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x1
-               	sub	x0, x29, #0x30
+               	sub	x0, x29, #0x20
                	ldr	d0, [x0]
                	mov	x0, #0x4008000000000000 // =4613937818241073152
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x30
+               	sub	x0, x29, #0x20
                	ldr	d0, [x0, #0x8]
                	mov	x0, #0x4002000000000000 // =4612248968380809216
                	fmov	d17, x0
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	str	x0, [x16]
                	str	x1, [x16, #0x8]
                	sub	x0, x29, #0x10
-               	sub	x1, x29, #0x50
+               	sub	x1, x29, #0x20
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
                	str	x10, [x1]
@@ -143,24 +143,24 @@ Disassembly of section .text:
                	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
                	mov	x0, x1
-               	sub	x0, x29, #0x50
+               	sub	x0, x29, #0x20
                	ldr	d0, [x0]
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x50
+               	sub	x0, x29, #0x20
                	ldr	x0, [x0, #0x8]
                	cmp	x0, #0x2a
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x70
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>

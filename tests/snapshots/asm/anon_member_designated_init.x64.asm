@@ -44,16 +44,16 @@ Disassembly of section .text:
                	movq	%r13, 0x10(%rsp)
                	movq	%r14, 0x18(%rsp)
                	xorq	%rax, %rax
-               	movl	%eax, -0x88(%rbp)
+               	movl	%eax, -0x70(%rbp)
                	movl	$0x7, %eax
-               	movl	%eax, -0x80(%rbp)
+               	movl	%eax, -0x88(%rbp)
                	movl	$0x10, %eax
+               	movq	%rax, -0x80(%rbp)
+               	leaq	-0x70(%rbp), %rax
                	movq	%rax, -0x78(%rbp)
-               	leaq	-0x88(%rbp), %rax
-               	movq	%rax, -0x70(%rbp)
-               	movslq	-0x80(%rbp), %r12
-               	movq	-0x70(%rbp), %r13
-               	movq	-0x78(%rbp), %r14
+               	movslq	-0x88(%rbp), %r12
+               	movq	-0x78(%rbp), %r13
+               	movq	-0x80(%rbp), %r14
                	leaq	-0x18(%rbp), %rax
                	xorq	%rbx, %rbx
                	movq	%rbx, (%rax)
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leaq	-0x68(%rbp), %rcx
                	movl	%eax, (%rcx)
-               	leaq	-0x88(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rcx
                	leaq	-0x68(%rbp), %rax
                	movq	%rcx, 0x8(%rax)
                	movl	$0x8, %ecx
@@ -116,7 +116,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	jne	<addr>
                	movq	0x8(%rcx), %rax
-               	leaq	-0x88(%rbp), %rdx
+               	leaq	-0x70(%rbp), %rdx
                	cmpq	%rdx, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -145,7 +145,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leaq	-0x50(%rbp), %rcx
                	movl	%eax, (%rcx)
-               	leaq	-0x88(%rbp), %rcx
+               	leaq	-0x70(%rbp), %rcx
                	leaq	-0x50(%rbp), %rax
                	movq	%rcx, 0x8(%rax)
                	movl	$0x4, %ecx
@@ -161,7 +161,7 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	jne	<addr>
                	movq	0x8(%rax), %rcx
-               	leaq	-0x88(%rbp), %rdx
+               	leaq	-0x70(%rbp), %rdx
                	cmpq	%rdx, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx

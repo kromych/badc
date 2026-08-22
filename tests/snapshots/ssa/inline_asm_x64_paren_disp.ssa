@@ -6,9 +6,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)
   block 1  start_pc=0
-    v38  LocalAddr(-2)                                    -> x0
+    v38  LocalAddr(-1)                                    -> x0
     v39  InlineAsm { template="lea (2f)(%%rip), %0\n\tjmp 3f\n2:\n\t.long 11\n\t.long 22\n3:\n", ops=1, args=[v38] } -> -
-    v40  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v40  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b2)   (exit_acc=v40)
   block 2  start_pc=0
     v1   Imm(0)                                           -> x1
@@ -29,9 +29,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v10  Imm(2)                                           -> x0
     terminator Return(v10)   (exit_acc=v10)
   block 6  start_pc=0
-    v41  LocalAddr(-2)                                    -> x0
+    v41  LocalAddr(-1)                                    -> x0
     v42  InlineAsm { template="lea 2f(%%rip), %0\n\tjmp 3f\n2:\n\t.long 33\n\t.long 44\n3:\n", ops=1, args=[v41] } -> -
-    v43  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v43  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b7)   (exit_acc=v43)
   block 7  start_pc=0
     v11  Imm(0)                                           -> x1
@@ -52,9 +52,9 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v20  Imm(4)                                           -> x0
     terminator Return(v20)   (exit_acc=v20)
   block 11  start_pc=0
-    v44  LocalAddr(-2)                                    -> x0
+    v44  LocalAddr(-1)                                    -> x0
     v45  InlineAsm { template="jmp 3f\n2:\n\t.long 55\n\t.long 66\n3:\n\tlea (2b)(%%rip), %0\n", ops=1, args=[v44] } -> -
-    v46  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v46  LoadLocal { off=-1, kind=I64 }                   -> x0
     terminator Jmp(b12)   (exit_acc=v46)
   block 12  start_pc=0
     v21  Imm(0)                                           -> x1
@@ -75,16 +75,16 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v30  Imm(6)                                           -> x0
     terminator Return(v30)   (exit_acc=v30)
   block 16  start_pc=0
-    v31  LocalAddr(-1)                                    -> x0
+    v31  LocalAddr(-2)                                    -> x0
     v32  ImmData(8)                                       -> x1
     v33  Mcpy { dst=v31, src=v32, size=8, align=8 }       -> x0
-    v34  LocalAddr(-1)                                    -> x0
+    v34  LocalAddr(-2)                                    -> x0
     terminator Jmp(b17)
   block 17  start_pc=0
     v47  Imm(0)                                           -> x1
-    v48  LocalAddr(-2)                                    -> x1
+    v48  LocalAddr(-1)                                    -> x1
     v49  InlineAsm { template="movl (4)(%1), %0", ops=2, args=[v48, v34] } -> -
-    v50  LoadLocal { off=-2, kind=I32 }                   -> x0
+    v50  LoadLocal { off=-1, kind=I32 }                   -> x0
     v51  BinopI { op=shl, lhs=v50, rhs_imm=32 }           -> x1
     v52  Extend { value=v50, kind=I32 }                   -> x1
     terminator Jmp(b18)   (exit_acc=v50)

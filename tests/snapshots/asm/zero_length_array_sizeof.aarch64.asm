@@ -31,7 +31,7 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	str	x3, [x0, #0x10]
                	sub	x0, x29, #0x18
-               	sub	x4, x29, #0x28
+               	sub	x4, x29, #0x20
                	ldr	w2, [x0, #0x4]
                	cmp	x2, #0x4
                	cset	x2, eq
@@ -50,11 +50,11 @@ Disassembly of section .text:
                	str	w4, [x0, #0x4]
                	mov	w0, w2
                	cbz	x0, <addr>
-               	sub	x2, x29, #0x20
+               	sub	x2, x29, #0x28
                	sxtw	x0, w1
                	add	x1, x0, #0x1
                	add	x0, x2, x0
-               	ldurb	w2, [x29, #-0x28]
+               	ldurb	w2, [x29, #-0x20]
                	strb	w2, [x0]
                	sxtw	x0, w1
                	cmp	x0, #0x4
@@ -75,14 +75,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x28
                	ldrb	w0, [x0]
                	mov	x17, #0x42              // =66
                	eor	x0, x0, x17
                	mov	w0, w0
                	mov	x1, #0x1                // =1
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x28
                	ldrb	w0, [x0, #0x1]
                	mov	x17, #0x41              // =65
                	eor	x0, x0, x17
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	cset	x1, ne
                	mov	x0, #0x1                // =1
                	cbnz	x1, <addr>
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x28
                	ldrb	w0, [x0, #0x2]
                	mov	x17, #0x44              // =68
                	eor	x0, x0, x17
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x28
                	ldrb	w0, [x0, #0x3]
                	mov	x17, #0x43              // =67
                	eor	x0, x0, x17

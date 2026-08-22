@@ -50,13 +50,6 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x50]!
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
-               	sub	x0, x29, #0x8
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
-               	str	x10, [x0]
-               	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -65,6 +58,13 @@ Disassembly of section .text:
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x8
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [sp], #0x10
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x8
                	bl	<addr>
                	ldrsw	x0, [x20]
                	cmp	x0, #0x5
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x8
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -113,25 +113,25 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x18
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x18
-               	sub	x1, x29, #0x20
+               	sub	x0, x29, #0x20
+               	sub	x1, x29, #0x18
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	sub	x0, x29, #0x18
+               	sub	x0, x29, #0x20
                	ldrsw	x0, [x0]
                	cmp	x0, #0x7
                	cset	x0, ne
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x18
+               	sub	x0, x29, #0x20
                	ldrsw	x0, [x0, #0x4]
                	cmp	x0, #0x8
                	cset	x0, ne

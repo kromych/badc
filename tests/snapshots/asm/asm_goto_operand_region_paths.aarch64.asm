@@ -44,9 +44,9 @@ Disassembly of section .text:
                	ret
 
 <vla_goto>:
-               	str	x19, [sp, #-0x50]!
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	str	x19, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	mov	x0, #0x9                // =9
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
@@ -64,26 +64,26 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	strb	w1, [x0, #0x8]
                	ldrb	w1, [x0, #0x8]
-               	stur	x0, [x29, #-0x28]
-               	stur	x1, [x29, #-0x30]
-               	ldur	x0, [x29, #-0x30]
+               	stur	x0, [x29, #-0x18]
+               	stur	x1, [x29, #-0x20]
+               	ldur	x0, [x29, #-0x20]
                	cbnz	w0, <addr>
-               	ldur	x0, [x29, #-0x28]
+               	ldur	x0, [x29, #-0x18]
                	b	<addr>
-               	ldur	x0, [x29, #-0x28]
+               	ldur	x0, [x29, #-0x18]
                	b	<addr>
                	ldrb	w0, [x0]
-               	sub	sp, x29, #0x40
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
+               	sub	sp, x29, #0x30
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	ret
                	ldrb	w1, [x0]
                	ldrb	w0, [x0, #0x8]
                	add	x0, x1, x0
                	sxtw	x0, w0
-               	sub	sp, x29, #0x40
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
+               	sub	sp, x29, #0x30
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	ret
 
 <main>:

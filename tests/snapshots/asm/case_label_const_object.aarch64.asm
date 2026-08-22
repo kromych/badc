@@ -17,17 +17,17 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x20
                	mov	x1, #0x0                // =0
                	str	x1, [x0]
                	str	x1, [x0, #0x8]
                	mov	x1, #0x9                // =9
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x20
                	str	w1, [x0, #0x8]
                	mov	x1, #0x5                // =5
-               	sub	x0, x29, #0x10
-               	str	w1, [x0, #0x4]
                	sub	x0, x29, #0x20
+               	str	w1, [x0, #0x4]
+               	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -41,13 +41,13 @@ Disassembly of section .text:
                	mov	x0, #0x9                // =9
                	str	w0, [x2]
                	mov	x0, #0x1                // =1
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x20
                	ldrsw	x0, [x0]
                	cmp	x0, #0x0
                	cset	x1, eq
                	mov	x0, #0x0                // =0
                	cbz	x1, <addr>
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x10
                	ldrsw	x0, [x0, #0x8]
                	cmp	x0, #0x7
                	cset	x0, eq
@@ -72,9 +72,9 @@ Disassembly of section .text:
                	b	<addr>
 
 <stays_vla>:
-               	str	x19, [sp, #-0x50]!
-               	stp	x29, x30, [sp, #0x40]
-               	add	x29, sp, #0x40
+               	str	x19, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	mov	x0, #0x10               // =16
                	add	x17, x0, #0xf
                	and	x17, x17, #0xfffffffffffffff0
@@ -100,9 +100,9 @@ Disassembly of section .text:
                	cmp	x0, #0x3
                	cset	x0, eq
                	sxtw	x0, w0
-               	sub	sp, x29, #0x40
-               	ldp	x29, x30, [sp, #0x40]
-               	ldr	x19, [sp], #0x50
+               	sub	sp, x29, #0x20
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x19, [sp], #0x30
                	ret
 
 <main>:

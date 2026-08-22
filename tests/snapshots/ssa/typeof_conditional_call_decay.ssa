@@ -69,20 +69,20 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v32  Imm(0)                                           -> x0
     terminator Jmp(b12)   (exit_acc=v32)
   block 12  start_pc=0
-    v34  LocalAddr(-2)                                    -> x1
+    v34  LocalAddr(-5)                                    -> x1
     v35  Imm(0)                                           -> x0
     v36  Store { addr=v34, disp=0, value=v35, kind=I64 }  -> -
     v37  BinopI { op=add, lhs=v34, rhs_imm=8 }            -> x2
     v38  Store { addr=v34, disp=8, value=v35, kind=I16 }  -> -
-    v39  LocalAddr(-5)                                    -> x1
+    v39  LocalAddr(-3)                                    -> x1
     v40  Store { addr=v39, disp=0, value=v35, kind=I64 }  -> -
     v41  BinopI { op=add, lhs=v39, rhs_imm=8 }            -> x2
     v42  Store { addr=v39, disp=8, value=v35, kind=I64 }  -> -
     v43  BinopI { op=add, lhs=v39, rhs_imm=16 }           -> x2
     v44  Store { addr=v39, disp=16, value=v35, kind=I32 } -> -
-    v45  LocalAddr(-2)                                    -> x1
+    v45  LocalAddr(-5)                                    -> x1
     v46  BinopI { op=and, lhs=v45, rhs_imm=255 }          -> x1
-    v47  LocalAddr(-5)                                    -> x1
+    v47  LocalAddr(-3)                                    -> x1
     v48  BinopI { op=and, lhs=v47, rhs_imm=255 }          -> x1
     terminator Return(v35)   (exit_acc=v35)
   block 13  start_pc=0

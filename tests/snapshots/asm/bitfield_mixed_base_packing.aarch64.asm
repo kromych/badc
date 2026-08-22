@@ -131,7 +131,7 @@ Disassembly of section .text:
                	and	x1, x1, x17
                	orr	x1, x1, x2
                	strb	w1, [x0, #0x7]
-               	sub	x0, x29, #0x18
+               	sub	x0, x29, #0x8
                	ldrh	w1, [x0]
                	mov	x17, #0xfe00            // =65024
                	movk	x17, #0xffff, lsl #16
@@ -141,7 +141,7 @@ Disassembly of section .text:
                	mov	x17, #0x1ff             // =511
                	orr	x1, x1, x17
                	strh	w1, [x0]
-               	sub	x0, x29, #0x18
+               	sub	x0, x29, #0x8
                	ldrh	w2, [x0, #0x2]
                	mov	x17, #0xfe00            // =65024
                	movk	x17, #0xffff, lsl #16

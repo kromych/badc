@@ -74,7 +74,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=11
     v50  Imm(5)                                           -> x0
     terminator Return(v50)   (exit_acc=v50)
   block 10  start_pc=0
-    v51  LocalAddr(-10)                                   -> x0
+    v51  LocalAddr(-8)                                    -> x0
     v52  Imm(8)                                           -> x2
     v53  Imm(0)                                           -> x2
     v54  Imm(0)                                           -> x2
@@ -88,15 +88,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=11
     v60  Imm(6)                                           -> x0
     terminator Return(v60)   (exit_acc=v60)
   block 12  start_pc=0
-    v61  LocalAddr(-10)                                   -> x2
+    v61  LocalAddr(-8)                                    -> x2
     v62  Imm(7)                                           -> x6
-    v63  LocalAddr(-2)                                    -> x0
+    v63  LocalAddr(-10)                                   -> x0
     v64  Store { addr=v63, disp=0, value=v62, kind=I64 }  -> -
     v65  Imm(0)                                           -> x6
     v66  BinopI { op=add, lhs=v63, rhs_imm=8 }            -> x7
     v67  Store { addr=v63, disp=8, value=v65, kind=I64 }  -> -
     v68  Mcpy { dst=v61, src=v63, size=16, align=16 }     -> x0
-    v69  LocalAddr(-10)                                   -> x0
+    v69  LocalAddr(-8)                                    -> x0
     v70  Load { addr=v69, disp=0, kind=I64 }              -> x0
     v71  BinopI { op=shl, lhs=v70, rhs_imm=32 }           -> x2
     v72  Extend { value=v70, kind=I32 }                   -> x0

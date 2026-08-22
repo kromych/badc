@@ -3242,6 +3242,66 @@ fn zero_local_aggregate_emits_no_writable_template() {
     }
 }
 
+/// Block-scoped arrays with disjoint lifetimes share one frame block
+/// (the interpreter-loop shape); an array whose address escapes into a
+/// call argument keeps dedicated whole-function storage. Variable
+/// bounds keep the subscripts non-constant so the arrays stay
+/// memory-resident.
+#[test]
+fn block_scoped_arrays_share_frame_slots() {
+    use crate::Target;
+    let program = super::compile_str(
+        r#"
+            long long tally(const long long *p, int n) {
+                long long s = 0;
+                for (int i = 0; i < n; i++) s += p[i];
+                return s;
+            }
+            long long dispatch(int op, long long x, int n) {
+                long long r = 0;
+                switch (op) {
+                case 0: { long long a[8];
+                          for (int i = 0; i < n; i++) a[i] = x + i;
+                          for (int i = 0; i < n; i++) r += a[i]; break; }
+                case 1: { long long b[8];
+                          for (int i = 0; i < n; i++) b[i] = x * i;
+                          for (int i = 0; i < n; i++) r += b[i]; break; }
+                case 2: { long long c[8];
+                          for (int i = 0; i < n; i++) c[i] = x - i;
+                          for (int i = 0; i < n; i++) r += c[i]; break; }
+                case 3: { long long e[8];
+                          for (int i = 0; i < n; i++) e[i] = x ^ i;
+                          r = tally(e, n); break; }
+                }
+                return r;
+            }
+            int main(void) { return (int)dispatch(0, 1, 8); }
+        "#,
+    );
+    let mut funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::host(), false, true)
+            .expect("ssa");
+    let locals_of = |funcs: &[crate::c5::ir::FunctionSsa]| {
+        funcs
+            .iter()
+            .find(|f| f.name == "dispatch")
+            .expect("dispatch")
+            .locals
+    };
+    let before = locals_of(&funcs);
+    assert!(before >= 32, "four 8-cell arrays occupy the walked frame");
+    crate::c5::codegen::ssa::slot_coalesce::run(&mut funcs, false);
+    let after = locals_of(&funcs);
+    assert!(
+        after <= before - 16,
+        "arms 0-2 share one block ({before} -> {after})"
+    );
+    assert!(
+        after >= 16,
+        "the escaped arm keeps its own 8-cell block ({after})"
+    );
+}
+
 /// `-g` must not change emitted machine code: DWARF tables are
 /// appended to the image, never woven into `.text`. The function's
 /// disjoint-lifetime locals exercise slot coalescing -- the pass

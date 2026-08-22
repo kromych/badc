@@ -1,34 +1,34 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=5
+fn ent_pc=0 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(5)                                    -> -
     v1   Imm(7)                                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   LoadLocal { off=-1, kind=I32 }                   -> x0
+    v3   LoadLocal { off=-2, kind=I32 }                   -> x0
     v4   Imm(56)                                          -> x0
     v5   Imm(0)                                           -> x1
     v6   Intrinsic { kind=1, args=[v4] }                  -> x0
     v7   Imm(0)                                           -> x0
-    v8   LoadLocal { off=-3, kind=I64 }                   -> x0
+    v8   LoadLocal { off=-2, kind=I64 }                   -> x0
     v9   Imm(0)                                           -> x0
-    v10  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v11  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v10  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v11  LoadLocal { off=-2, kind=I32 }                   -> x0
     v12  Imm(56)                                          -> x0
     v13  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v13)
   block 1  start_pc=0
-    v15  LoadLocal { off=-4, kind=I64 }                   -> x0
+    v15  LoadLocal { off=-2, kind=I64 }                   -> x0
     v16  Imm(8)                                           -> x0
     v17  Imm(7)                                           -> x0
-    v18  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v18  LoadLocal { off=-2, kind=I32 }                   -> x0
     v19  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v19)
   block 2  start_pc=0
     v21  Imm(100)                                         -> x0
     v22  Imm(0)                                           -> x0
-    v23  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v23  LoadLocal { off=-2, kind=I64 }                   -> x0
     v24  Imm(56)                                          -> x0
     v25  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v25)

@@ -104,7 +104,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0xa0(%rbp), %rdx
                	movl	$0x7, %esi
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x50(%rbp), %rax
                	movq	%rsi, (%rax)
                	xorq	%rsi, %rsi
                	movq	%rsi, 0x8(%rax)

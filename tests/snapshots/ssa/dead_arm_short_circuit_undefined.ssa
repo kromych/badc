@@ -4,7 +4,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-4)                                    -> x0
+    v1   LocalAddr(-8)                                    -> x0
     v2   Imm(0)                                           -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 }    -> -
     v4   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x2
@@ -12,10 +12,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v6   LocalAddr(-6)                                    -> x0
     v7   ImmData(8)                                       -> x1
     v8   Mcpy { dst=v6, src=v7, size=16, align=8 }        -> x0
-    v9   LocalAddr(-8)                                    -> x0
+    v9   LocalAddr(-4)                                    -> x0
     v10  ImmData(24)                                      -> x1
     v11  Mcpy { dst=v9, src=v10, size=16, align=8 }       -> x0
-    v12  LocalAddr(-4)                                    -> x0
+    v12  LocalAddr(-8)                                    -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
     v207 Imm(0)                                           -> x0
@@ -92,7 +92,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v16  Imm(0)                                           -> x0
     terminator Jmp(b21)   (exit_acc=v16)
   block 21  start_pc=0
-    v18  LocalAddr(-8)                                    -> x0
+    v18  LocalAddr(-4)                                    -> x0
     terminator Jmp(b22)
   block 22  start_pc=0
     v241 Imm(0)                                           -> x1
@@ -134,7 +134,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v19  Imm(0)                                           -> x0
     terminator Jmp(b32)   (exit_acc=v19)
   block 32  start_pc=0
-    v21  LocalAddr(-4)                                    -> x0
+    v21  LocalAddr(-8)                                    -> x0
     terminator Jmp(b33)
   block 33  start_pc=0
     v258 Imm(0)                                           -> x1
@@ -216,7 +216,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v25  Imm(0)                                           -> x0
     terminator Jmp(b54)   (exit_acc=v25)
   block 54  start_pc=0
-    v27  LocalAddr(-8)                                    -> x0
+    v27  LocalAddr(-4)                                    -> x0
     terminator Jmp(b55)
   block 55  start_pc=0
     v290 Imm(0)                                           -> x1

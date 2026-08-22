@@ -102,18 +102,18 @@ Disassembly of section .text:
                	movabsq	$-0x7, %rdx
                	movl	$0x186a0, %esi          # imm = 0x186A0
                	movl	$0xb2d05e00, %edi       # imm = 0xB2D05E00
-               	movq	%rdx, -0x18(%rbp)
-               	movq	%rsi, -0x10(%rbp)
+               	movq	%rdx, -0x10(%rbp)
+               	movq	%rsi, -0x18(%rbp)
                	movq	%rdi, -0x8(%rbp)
                	leaq	0x9(%rax), %rcx
-               	leaq	-0x10(%rbp), %rdx
+               	leaq	-0x18(%rbp), %rdx
                	movq	(%rdx), %rsi
                	subq	$0x12c, %rsi            # imm = 0x12C
                	movq	%rsi, (%rdx)
-               	movq	-0x10(%rbp), %rdx
-               	movsbq	-0x18(%rbp), %rsi
+               	movq	-0x18(%rbp), %rdx
+               	movsbq	-0x10(%rbp), %rsi
                	addq	%rsi, %rdx
-               	movq	%rdx, -0x10(%rbp)
+               	movq	%rdx, -0x18(%rbp)
                	movl	-0x8(%rbp), %esi
                	movslq	%ecx, %rcx
                	addq	$0x64b, %rcx            # imm = 0x64B

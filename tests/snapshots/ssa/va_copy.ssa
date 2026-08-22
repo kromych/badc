@@ -4,11 +4,11 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-3)                                    -> x0
+    v1   LocalAddr(-6)                                    -> x0
     v2   LocalAddr(2)                                     -> x1
     v3   Intrinsic { kind=4, args=[v1, v2] }              -> x0
-    v4   LocalAddr(-6)                                    -> x0
-    v5   LocalAddr(-3)                                    -> x1
+    v4   LocalAddr(-3)                                    -> x0
+    v5   LocalAddr(-6)                                    -> x1
     v6   Intrinsic { kind=7, args=[v4, v5] }              -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x1
@@ -16,7 +16,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     terminator Jmp(b2)   (exit_acc=v7)
   block 1  start_pc=0
     v15  Extend { value=v11, kind=I32 }                   -> x2
-    v16  LocalAddr(-6)                                    -> x2
+    v16  LocalAddr(-3)                                    -> x2
     v17  Imm(4)                                           -> x6
     v18  Intrinsic { kind=5, args=[v16, v17] }            -> x2
     v19  Load { addr=v18, disp=0, kind=I32 }              -> x2
@@ -38,9 +38,9 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     v14  Binop { op=lt, lhs=v12, rhs=v13 }                -> x2
     terminator Bnz { cond=v14, target=b1, fall=b3 }   (exit_acc=v14)
   block 3  start_pc=0
-    v29  LocalAddr(-6)                                    -> x0
+    v29  LocalAddr(-3)                                    -> x0
     v30  Intrinsic { kind=6, args=[v29] }                 -> x0
-    v31  LocalAddr(-3)                                    -> x0
+    v31  LocalAddr(-6)                                    -> x0
     v32  Intrinsic { kind=6, args=[v31] }                 -> x0
     v33  Extend { value=v11, kind=I32 }                   -> x0
     v34  BinopI { op=shl, lhs=v33, rhs_imm=32 }           -> x1

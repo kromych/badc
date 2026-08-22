@@ -17,7 +17,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	sub	x0, x29, #0x30
+               	sub	x0, x29, #0x40
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -37,17 +37,17 @@ Disassembly of section .text:
                	mov	x7, #0x0                // =0
                	b	<addr>
                	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x40]
+               	stur	w0, [x29, #-0x10]
                	b	<addr>
-               	sub	x0, x29, #0x30
+               	sub	x0, x29, #0x40
                	mov	w1, w7
                	ldr	x1, [x0, x1, lsl #3]
-               	ldursw	x0, [x29, #-0x40]
+               	ldursw	x0, [x29, #-0x10]
                	ror	x8, x1, x0
-               	sub	x0, x29, #0x30
+               	sub	x0, x29, #0x40
                	mov	w1, w7
                	ldr	x5, [x0, x1, lsl #3]
-               	ldursw	x4, [x29, #-0x40]
+               	ldursw	x4, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
@@ -70,10 +70,10 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	x8, x1
                	b.ne	<addr>
-               	ldursw	x0, [x29, #-0x40]
+               	ldursw	x0, [x29, #-0x10]
                	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x40]
-               	ldursw	x0, [x29, #-0x40]
+               	stur	w0, [x29, #-0x10]
+               	ldursw	x0, [x29, #-0x10]
                	cmp	x0, #0x40
                	b.lt	<addr>
                	mov	w0, w7
@@ -85,10 +85,10 @@ Disassembly of section .text:
                	movk	x4, #0x89ab, lsl #16
                	movk	x4, #0x4567, lsl #32
                	movk	x4, #0x123, lsl #48
-               	stur	x4, [x29, #-0x38]
-               	ldur	x0, [x29, #-0x38]
+               	stur	x4, [x29, #-0x8]
+               	ldur	x0, [x29, #-0x8]
                	lsr	x0, x0, #7
-               	ldur	x1, [x29, #-0x38]
+               	ldur	x1, [x29, #-0x8]
                	lsl	x1, x1, #57
                	orr	x6, x0, x1
                	mov	x0, #0x0                // =0

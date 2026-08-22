@@ -141,17 +141,17 @@ fn ent_pc=3 n_params=1 variadic=true locals=6
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x1
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-3)                                    -> x0
+    v3   LocalAddr(-6)                                    -> x0
     v4   LocalAddr(2)                                     -> x2
     v5   Intrinsic { kind=4, args=[v3, v4] }              -> x0
-    v6   LocalAddr(-6)                                    -> x0
-    v7   LocalAddr(-3)                                    -> x2
+    v6   LocalAddr(-3)                                    -> x0
+    v7   LocalAddr(-6)                                    -> x2
     v8   Intrinsic { kind=7, args=[v6, v7] }              -> x0
     v9   Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v1)
   block 1  start_pc=0
     v18  Extend { value=v11, kind=I32 }                   -> x6
-    v19  LocalAddr(-3)                                    -> x6
+    v19  LocalAddr(-6)                                    -> x6
     v20  Imm(4)                                           -> x7
     v21  Intrinsic { kind=5, args=[v19, v20] }            -> x6
     v22  Load { addr=v21, disp=0, kind=I32 }              -> x6
@@ -177,7 +177,7 @@ fn ent_pc=3 n_params=1 variadic=true locals=6
     terminator Jmp(b7)   (exit_acc=v26)
   block 5  start_pc=0
     v36  Extend { value=v29, kind=I32 }                   -> x6
-    v37  LocalAddr(-6)                                    -> x6
+    v37  LocalAddr(-3)                                    -> x6
     v38  Imm(4)                                           -> x7
     v39  Intrinsic { kind=5, args=[v37, v38] }            -> x6
     v40  Load { addr=v39, disp=0, kind=I32 }              -> x6
@@ -198,9 +198,9 @@ fn ent_pc=3 n_params=1 variadic=true locals=6
     v32  Binop { op=lt, lhs=v30, rhs=v31 }                -> x6
     terminator Bnz { cond=v32, target=b5, fall=b8 }   (exit_acc=v32)
   block 8  start_pc=0
-    v44  LocalAddr(-6)                                    -> x1
+    v44  LocalAddr(-3)                                    -> x1
     v45  Intrinsic { kind=6, args=[v44] }                 -> x1
-    v46  LocalAddr(-3)                                    -> x1
+    v46  LocalAddr(-6)                                    -> x1
     v47  Intrinsic { kind=6, args=[v46] }                 -> x1
     v48  Extend { value=v29, kind=I32 }                   -> x0
     v49  BinopI { op=shl, lhs=v48, rhs_imm=32 }           -> x1

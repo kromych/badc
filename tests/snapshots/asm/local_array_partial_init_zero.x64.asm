@@ -44,8 +44,8 @@ Disassembly of section .text:
                	movl	0x9c(%rax), %eax
                	addq	%rcx, %rax
                	movl	%eax, %eax
-               	movl	%eax, -0xb0(%rbp)
-               	movl	-0xb0(%rbp), %eax
+               	movl	%eax, -0x8(%rbp)
+               	movl	-0x8(%rbp), %eax
                	leaq	-0x70(%rbp), %rcx
                	xorq	%rax, %rax
                	movq	%rax, (%rcx)
@@ -87,8 +87,8 @@ Disassembly of section .text:
                	movl	0x9c(%rax), %eax
                	addq	%rcx, %rax
                	movl	%eax, %eax
-               	movl	%eax, -0xb0(%rbp)
-               	movl	-0xb0(%rbp), %eax
+               	movl	%eax, -0x8(%rbp)
+               	movl	-0x8(%rbp), %eax
                	leaq	-0x70(%rbp), %rcx
                	xorq	%rax, %rax
                	movq	%rax, (%rcx)

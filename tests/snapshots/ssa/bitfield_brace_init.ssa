@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=4
+fn ent_pc=0 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -34,76 +34,76 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v25  Imm(0)                                           -> x0
     terminator Jmp(b4)   (exit_acc=v25)
   block 4  start_pc=0
-    v27  LocalAddr(-2)                                    -> x0
+    v27  LocalAddr(-1)                                    -> x0
     v28  ImmData(16)                                      -> x1
     v29  Mcpy { dst=v27, src=v28, size=4, align=8 }       -> x0
-    v30  LocalAddr(-2)                                    -> x0
+    v30  LocalAddr(-1)                                    -> x0
     v31  Imm(38177707)                                    -> x0
     v32  Imm(171)                                         -> x0
     v33  Imm(0)                                           -> x0
     terminator Jmp(b5)   (exit_acc=v33)
   block 5  start_pc=0
-    v35  LocalAddr(-2)                                    -> x0
+    v35  LocalAddr(-1)                                    -> x0
     v36  Imm(38177707)                                    -> x0
     v37  Imm(149131)                                      -> x0
     v38  Imm(1)                                           -> x0
     v39  Imm(0)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v39)
   block 6  start_pc=0
-    v41  LocalAddr(-2)                                    -> x0
+    v41  LocalAddr(-1)                                    -> x0
     v42  Imm(38177707)                                    -> x0
     v43  Imm(74565)                                       -> x0
     v44  Imm(74565)                                       -> x0
     v45  Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v45)
   block 7  start_pc=0
-    v47  LocalAddr(-3)                                    -> x0
+    v47  LocalAddr(-1)                                    -> x0
     v48  ImmData(24)                                      -> x1
     v49  Mcpy { dst=v47, src=v48, size=1, align=8 }       -> x0
-    v50  LocalAddr(-3)                                    -> x0
+    v50  LocalAddr(-1)                                    -> x0
     v51  Imm(255)                                         -> x0
     v52  Imm(7)                                           -> x0
     v53  Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v53)
   block 8  start_pc=0
-    v55  LocalAddr(-3)                                    -> x0
+    v55  LocalAddr(-1)                                    -> x0
     v56  Imm(255)                                         -> x0
     v57  Imm(31)                                          -> x0
     v58  Imm(7)                                           -> x0
     v59  Imm(0)                                           -> x0
     terminator Jmp(b9)   (exit_acc=v59)
   block 9  start_pc=0
-    v61  LocalAddr(-3)                                    -> x0
+    v61  LocalAddr(-1)                                    -> x0
     v62  Imm(255)                                         -> x0
     v63  Imm(3)                                           -> x0
     v64  Imm(3)                                           -> x0
     v65  Imm(0)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v65)
   block 10  start_pc=0
-    v67  LocalAddr(-4)                                    -> x0
+    v67  LocalAddr(-1)                                    -> x0
     v68  ImmData(32)                                      -> x1
     v69  Mcpy { dst=v67, src=v68, size=1, align=8 }       -> x0
-    v70  LocalAddr(-4)                                    -> x0
+    v70  LocalAddr(-1)                                    -> x0
     v71  Imm(9)                                           -> x0
     v72  Imm(1)                                           -> x0
     v73  Imm(0)                                           -> x0
     terminator Jmp(b11)   (exit_acc=v73)
   block 11  start_pc=0
-    v75  LocalAddr(-4)                                    -> x0
+    v75  LocalAddr(-1)                                    -> x0
     v76  Imm(9)                                           -> x0
     v77  Imm(2)                                           -> x0
     v78  Imm(2)                                           -> x0
     v79  Imm(0)                                           -> x0
     terminator Jmp(b12)   (exit_acc=v79)
   block 12  start_pc=0
-    v81  LocalAddr(-4)                                    -> x0
+    v81  LocalAddr(-1)                                    -> x0
     v82  Imm(9)                                           -> x0
     v83  Imm(0)                                           -> x0
     v84  Imm(0)                                           -> x0
     v85  Imm(0)                                           -> x0
     terminator Jmp(b13)   (exit_acc=v85)
   block 13  start_pc=0
-    v87  LocalAddr(-4)                                    -> x0
+    v87  LocalAddr(-1)                                    -> x0
     v88  Imm(9)                                           -> x0
     v89  Imm(0)                                           -> x0
     v90  Imm(0)                                           -> x0

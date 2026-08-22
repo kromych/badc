@@ -44,9 +44,9 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rax, %rsp
-               	movq	%rdx, -0x18(%rbp)
-               	movq	-0x18(%rbp), %rsi
-               	leaq	-0x40(%rbp), %rcx
+               	movq	%rdx, -0x20(%rbp)
+               	movq	-0x20(%rbp), %rsi
+               	leaq	-0x30(%rbp), %rcx
                	movq	%rsi, (%rcx)
                	sarq	$0x3f, %rsi
                	movq	%rsi, 0x8(%rcx)
@@ -96,7 +96,7 @@ Disassembly of section .text:
 <int128_vla>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x20, %rsp
                	movl	$0x2, %esi
                	movl	$0x20, %eax
                	movq	%rax, %r11
@@ -120,7 +120,7 @@ Disassembly of section .text:
                	movslq	(%rcx), %rdx
                	orq	$0x2, %rdx
                	movl	%edx, (%rcx)
-               	leaq	-0x28(%rbp), %rcx
+               	leaq	-0x18(%rbp), %rcx
                	movq	%rsi, (%rcx)
                	xorq	%rdx, %rdx
                	movq	%rdx, 0x8(%rcx)
@@ -133,7 +133,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	leaq	0x10(%rax), %rdx
                	movl	$0x6, %esi
-               	leaq	-0x38(%rbp), %rcx
+               	leaq	-0x18(%rbp), %rcx
                	movq	%rsi, (%rcx)
                	xorq	%rsi, %rsi
                	movq	%rsi, 0x8(%rcx)
@@ -148,8 +148,8 @@ Disassembly of section .text:
                	addq	$0x10, %rax
                	movq	(%rax), %rsi
                	leaq	(%rcx,%rsi), %rax
-               	leaq	-0x50(%rbp), %rsp
-               	addq	$0x50, %rsp
+               	leaq	-0x20(%rbp), %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
 

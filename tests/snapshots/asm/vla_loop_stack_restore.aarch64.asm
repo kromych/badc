@@ -14,17 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	str	x19, [sp, #-0x70]!
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
+               	str	x19, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x8]
+               	stur	w0, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	mov	x6, x0
                	mov	x3, x0
                	b	<addr>
                	mov	x7, sp
-               	ldursw	x1, [x29, #-0x8]
+               	ldursw	x1, [x29, #-0x10]
                	lsl	x4, x1, #18
                	add	x17, x4, #0xf
                	and	x17, x17, #0xfffffffffffffff0
@@ -69,14 +69,14 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	sxtw	x0, w0
-               	sub	sp, x29, #0x60
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x19, [sp], #0x70
+               	sub	sp, x29, #0x30
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	ret
                	mov	x0, #0x2                // =2
                	b	<addr>
                	mov	x0, #0x1                // =1
-               	sub	sp, x29, #0x60
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x19, [sp], #0x70
+               	sub	sp, x29, #0x30
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	ret

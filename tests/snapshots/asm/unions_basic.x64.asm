@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
                	movl	$0x2a, %ecx
                	movl	%ecx, (%rax)
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
                	movl	$0x4, %eax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	leaq	-0x8(%rbp), %rax
@@ -59,10 +59,10 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x5, %eax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq

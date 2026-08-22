@@ -85,22 +85,22 @@ Disassembly of section .text:
                	movk	x2, #0x1, lsl #16
                	mov	x3, #0x5e00             // =24064
                	movk	x3, #0xb2d0, lsl #16
-               	stur	x2, [x29, #-0x10]
+               	stur	x2, [x29, #-0x18]
                	stur	x3, [x29, #-0x8]
                	mov	x1, #0xfff9             // =65529
                	movk	x1, #0xffff, lsl #16
                	movk	x1, #0xffff, lsl #32
                	movk	x1, #0xffff, lsl #48
-               	sturb	w1, [x29, #-0x18]
+               	sturb	w1, [x29, #-0x10]
                	add	x1, x0, #0x9
-               	sub	x2, x29, #0x10
+               	sub	x2, x29, #0x18
                	ldr	x3, [x2]
                	sub	x3, x3, #0x12c
                	str	x3, [x2]
-               	ldur	x2, [x29, #-0x10]
-               	ldursb	x3, [x29, #-0x18]
+               	ldur	x2, [x29, #-0x18]
+               	ldursb	x3, [x29, #-0x10]
                	add	x2, x2, x3
-               	stur	x2, [x29, #-0x10]
+               	stur	x2, [x29, #-0x18]
                	ldur	w3, [x29, #-0x8]
                	sxtw	x1, w1
                	add	x1, x1, #0x64b

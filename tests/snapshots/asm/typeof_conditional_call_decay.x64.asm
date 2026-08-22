@@ -54,11 +54,11 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x28(%rbp), %rcx
                	xorq	%rax, %rax
                	movq	%rax, (%rcx)
                	movw	%ax, 0x8(%rcx)
-               	leaq	-0x28(%rbp), %rcx
+               	leaq	-0x18(%rbp), %rcx
                	movq	%rax, (%rcx)
                	movq	%rax, 0x8(%rcx)
                	movl	%eax, 0x10(%rcx)

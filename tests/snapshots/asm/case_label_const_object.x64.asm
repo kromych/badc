@@ -29,17 +29,17 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x20(%rbp), %rax
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
                	movq	%rcx, 0x8(%rax)
                	movl	$0x9, %ecx
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x20(%rbp), %rax
                	movl	%ecx, 0x8(%rax)
                	movl	$0x5, %ecx
-               	leaq	-0x10(%rbp), %rax
-               	movl	%ecx, 0x4(%rax)
                	leaq	-0x20(%rbp), %rax
+               	movl	%ecx, 0x4(%rax)
+               	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
                	movq	(%rcx), %rdx
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	movl	%eax, (%rdx)
                	movl	$0x1, %eax
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x20(%rbp), %rax
                	movslq	(%rax), %rax
                	testq	%rax, %rax
                	sete	%cl
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	movslq	0x8(%rax), %rax
                	cmpq	$0x7, %rax
                	sete	%al
@@ -90,7 +90,7 @@ Disassembly of section .text:
 <stays_vla>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x10, %rsp
                	movl	$0x10, %eax
                	movq	%rax, %r11
                	addq	$0xf, %r11
@@ -119,8 +119,8 @@ Disassembly of section .text:
                	sete	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
-               	leaq	-0x30(%rbp), %rsp
-               	addq	$0x30, %rsp
+               	leaq	-0x10(%rbp), %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
 

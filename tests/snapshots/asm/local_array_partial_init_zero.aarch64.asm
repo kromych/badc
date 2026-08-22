@@ -33,8 +33,8 @@ Disassembly of section .text:
                	ldr	w0, [x0, #0x9c]
                	add	x0, x1, x0
                	mov	w0, w0
-               	stur	w0, [x29, #-0xb0]
-               	ldur	w0, [x29, #-0xb0]
+               	stur	w0, [x29, #-0x8]
+               	ldur	w0, [x29, #-0x8]
                	sub	x1, x29, #0x70
                	mov	x0, #0x0                // =0
                	str	x0, [x1]
@@ -77,8 +77,8 @@ Disassembly of section .text:
                	ldr	w0, [x0, #0x9c]
                	add	x0, x1, x0
                	mov	w0, w0
-               	stur	w0, [x29, #-0xb0]
-               	ldur	w0, [x29, #-0xb0]
+               	stur	w0, [x29, #-0x8]
+               	ldur	w0, [x29, #-0x8]
                	sub	x1, x29, #0x70
                	mov	x0, #0x0                // =0
                	str	x0, [x1]

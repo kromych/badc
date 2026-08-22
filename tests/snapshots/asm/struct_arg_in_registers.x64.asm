@@ -45,13 +45,13 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x40(%rbp), %rax
                	movl	$0x3, %ecx
                	movl	%ecx, (%rax)
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x40(%rbp), %rax
                	movl	$0x5, %ecx
                	movl	%ecx, 0x4(%rax)
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x40(%rbp), %rax
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rax
                	addq	%rcx, %rax
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x40(%rbp), %rax
                	movslq	(%rax), %rcx
                	imulq	$0xa, %rcx, %rcx
                	addq	$0x9, %rcx
@@ -77,7 +77,7 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x40(%rbp), %rax
                	movslq	(%rax), %rdx
                	movslq	0x4(%rax), %rax
                	shlq	%rax
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rdi
+               	leaq	-0x40(%rbp), %rdi
                	movq	(%rdi), %rdi
                	callq	<addr>
                	cmpq	$0x12c, %rax            # imm = 0x12C
@@ -100,14 +100,14 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x40(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpq	$0x3, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x8(%rbp), %rax
+               	leaq	-0x40(%rbp), %rax
                	movslq	0x4(%rax), %rax
                	cmpq	$0x5, %rax
                	setne	%al

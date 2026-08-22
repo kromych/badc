@@ -43,7 +43,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=4
     terminator Return(v26)   (exit_acc=v26)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
-fn ent_pc=4 n_params=0 variadic=false locals=3
+fn ent_pc=4 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -79,7 +79,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
-    v29  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v29  LoadLocal { off=-1, kind=I64 }                   -> x0
     v30  Imm(3)                                           -> x7
     v31  Imm(11)                                          -> x6
     v32  Imm(22)                                          -> x2
@@ -97,7 +97,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
   block 4  start_pc=0
     v41  Imm(0)                                           -> x0
     v42  Imm(0)                                           -> x0
-    v43  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v43  LoadLocal { off=-1, kind=I64 }                   -> x0
     v44  Imm(2)                                           -> x7
     v45  Imm(40)                                          -> x6
     v46  Imm(60)                                          -> x2

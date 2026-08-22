@@ -17,58 +17,58 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x40
                	add	x0, x0, #0x0
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x20
                	add	x0, x0, #0x0
                	mov	x1, #0xa                // =10
                	str	w1, [x0]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x40
                	mov	x1, #0x2                // =2
                	str	w1, [x0, #0x4]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x20
                	mov	x1, #0x14               // =20
                	str	w1, [x0, #0x4]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x40
                	mov	x1, #0x3                // =3
                	str	w1, [x0, #0x8]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x20
                	mov	x1, #0x1e               // =30
                	str	w1, [x0, #0x8]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x40
                	mov	x1, #0x4                // =4
                	str	w1, [x0, #0xc]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x20
                	mov	x1, #0x28               // =40
                	str	w1, [x0, #0xc]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x40
                	mov	x1, #0x5                // =5
                	str	w1, [x0, #0x10]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x20
                	mov	x1, #0x32               // =50
                	str	w1, [x0, #0x10]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x40
                	mov	x1, #0x6                // =6
                	str	w1, [x0, #0x14]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x20
                	mov	x1, #0x3c               // =60
                	str	w1, [x0, #0x14]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x40
                	mov	x1, #0x7                // =7
                	str	w1, [x0, #0x18]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x20
                	mov	x1, #0x46               // =70
                	str	w1, [x0, #0x18]
-               	sub	x0, x29, #0x20
+               	sub	x0, x29, #0x40
                	mov	x1, #0x8                // =8
                	str	w1, [x0, #0x1c]
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0x20
                	mov	x1, #0x50               // =80
                	str	w1, [x0, #0x1c]
-               	sub	x6, x29, #0x20
-               	sub	x3, x29, #0x40
+               	sub	x6, x29, #0x40
+               	sub	x3, x29, #0x20
                	mov	x2, #0x0                // =0
                	mov	x0, x2
                	b	<addr>

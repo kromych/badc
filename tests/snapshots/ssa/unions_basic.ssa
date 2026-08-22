@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=3
+fn ent_pc=0 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -53,37 +53,37 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v38  Imm(5)                                           -> x0
     terminator Return(v38)   (exit_acc=v38)
   block 7  start_pc=0
-    v39  LocalAddr(-3)                                    -> x0
+    v39  LocalAddr(-2)                                    -> x0
     v40  Imm(1)                                           -> x0
     v41  Imm(0)                                           -> x0
-    v42  LocalAddr(-3)                                    -> x0
+    v42  LocalAddr(-2)                                    -> x0
     v43  BinopI { op=add, lhs=v42, rhs_imm=8 }            -> x0
     v44  Imm(100)                                         -> x0
     v45  Imm(0)                                           -> x0
-    v46  LocalAddr(-3)                                    -> x0
+    v46  LocalAddr(-2)                                    -> x0
     v47  Imm(1)                                           -> x0
     v48  Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v48)
   block 8  start_pc=0
-    v50  LocalAddr(-3)                                    -> x0
+    v50  LocalAddr(-2)                                    -> x0
     v51  BinopI { op=add, lhs=v50, rhs_imm=8 }            -> x0
     v52  Imm(100)                                         -> x0
     v53  Imm(0)                                           -> x0
     terminator Jmp(b9)   (exit_acc=v53)
   block 9  start_pc=0
-    v55  LocalAddr(-3)                                    -> x0
+    v55  LocalAddr(-2)                                    -> x0
     v56  Imm(2)                                           -> x0
     v57  Imm(0)                                           -> x0
-    v58  LocalAddr(-3)                                    -> x0
+    v58  LocalAddr(-2)                                    -> x0
     v59  BinopI { op=add, lhs=v58, rhs_imm=8 }            -> x0
     v60  Imm(0)                                           -> x0
     v61  Imm(0)                                           -> x0
-    v62  LocalAddr(-3)                                    -> x0
+    v62  LocalAddr(-2)                                    -> x0
     v63  Imm(2)                                           -> x0
     v64  Imm(0)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v64)
   block 10  start_pc=0
-    v66  LocalAddr(-3)                                    -> x0
+    v66  LocalAddr(-2)                                    -> x0
     v67  BinopI { op=add, lhs=v66, rhs_imm=8 }            -> x1
     v68  Load { addr=v66, disp=8, kind=I64 }              -> x0
     v69  Imm(0)                                           -> x0

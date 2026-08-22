@@ -105,7 +105,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x1f0, %rsp            # imm = 0x1F0
                	leaq	<rip>, %rdi
-               	leaq	-0xa0(%rbp), %rax
+               	leaq	-0x1e0(%rbp), %rax
                	pushq	%rcx
                	movq	(%rdi), %rcx
                	movq	%rcx, (%rax)
@@ -176,31 +176,31 @@ Disassembly of section .text:
                	movq	%rcx, 0x88(%rax)
                	movq	%rcx, 0x90(%rax)
                	movl	%ecx, 0x98(%rax)
-               	leaq	-0xa0(%rbp), %rax
+               	leaq	-0x1e0(%rbp), %rax
                	movzwq	(%rax), %rax
                	leaq	-0x140(%rbp), %rcx
                	movw	%ax, (%rcx)
-               	leaq	-0xa0(%rbp), %rax
+               	leaq	-0x1e0(%rbp), %rax
                	movzwq	0x2(%rax), %rcx
                	leaq	-0x140(%rbp), %rax
                	movw	%cx, 0x2(%rax)
-               	leaq	-0xa0(%rbp), %rax
+               	leaq	-0x1e0(%rbp), %rax
                	movzwq	0xa(%rax), %rcx
                	leaq	-0x140(%rbp), %rax
                	movw	%cx, 0xa(%rax)
-               	leaq	-0xa0(%rbp), %rax
+               	leaq	-0x1e0(%rbp), %rax
                	movslq	0x24(%rax), %rcx
                	leaq	-0x140(%rbp), %rax
                	movl	%ecx, 0x24(%rax)
-               	leaq	-0xa0(%rbp), %rax
+               	leaq	-0x1e0(%rbp), %rax
                	movslq	0x2c(%rax), %rcx
                	leaq	-0x140(%rbp), %rax
                	movl	%ecx, 0x2c(%rax)
-               	leaq	-0xa0(%rbp), %rax
+               	leaq	-0x1e0(%rbp), %rax
                	movslq	0x98(%rax), %rcx
                	leaq	-0x140(%rbp), %rax
                	movl	%ecx, 0x98(%rax)
-               	leaq	-0x1e0(%rbp), %rax
+               	leaq	-0xa0(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
                	movq	(%rcx), %rdx
@@ -265,7 +265,7 @@ Disassembly of section .text:
                	addq	$0x1f0, %rsp            # imm = 0x1F0
                	popq	%rbp
                	retq
-               	leaq	-0x1e0(%rbp), %rdi
+               	leaq	-0xa0(%rbp), %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>

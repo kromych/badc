@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=3
+fn ent_pc=2 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -13,16 +13,16 @@ fn ent_pc=2 n_params=0 variadic=false locals=3
     v7   Imm(0)                                           -> x1
     v8   Imm(0)                                           -> x1
     v9   Imm(1)                                           -> x1
-    v10  LoadLocal { off=-3, kind=U32 }                   -> x1
+    v10  LoadLocal { off=-1, kind=U32 }                   -> x1
     v11  BinopI { op=and, lhs=v10, rhs_imm=-4294967233 }  -> x1
     v12  Imm(64)                                          -> x2
     v13  BinopI { op=or, lhs=v11, rhs_imm=64 }            -> x1
-    v14  StoreLocal { off=-3, value=v13, kind=I32 }       -> -
+    v14  StoreLocal { off=-1, value=v13, kind=I32 }       -> -
     v15  Imm(0)                                           -> x2
     v16  BinopI { op=and, lhs=v13, rhs_imm=4294967295 }   -> x1
     v17  BinopI { op=and, lhs=v16, rhs_imm=-64 }          -> x1
     v18  BinopI { op=or, lhs=v17, rhs_imm=1 }             -> x1
-    v19  StoreLocal { off=-3, value=v18, kind=I32 }       -> -
+    v19  StoreLocal { off=-1, value=v18, kind=I32 }       -> -
     v20  Imm(2048)                                        -> x2
     v21  BinopI { op=add, lhs=v6, rhs_imm=2048 }          -> x2
     v22  Imm(8)                                           -> x2

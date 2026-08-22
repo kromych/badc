@@ -34,33 +34,33 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
+               	sub	sp, sp, #0x20
                	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x20]
+               	stur	x0, [x29, #-0x8]
                	mov	x0, #0x2a               // =42
-               	sub	x1, x29, #0x20
+               	sub	x1, x29, #0x8
                	bl	<addr>
-               	sub	x16, x29, #0x8
+               	sub	x16, x29, #0x10
                	str	x0, [x16]
-               	sub	x0, x29, #0x8
-               	sub	x1, x29, #0x10
+               	sub	x0, x29, #0x10
+               	sub	x1, x29, #0x18
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
                	str	x10, [x1]
                	ldr	x10, [sp], #0x10
                	mov	x0, x1
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x18
                	ldr	x0, [x0]
                	cmp	x0, #0x2a
                	cset	x0, eq
                	cbz	x0, <addr>
-               	ldur	x0, [x29, #-0x20]
+               	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x2a
                	cset	x0, eq
                	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
                	sxtw	x0, w0
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1

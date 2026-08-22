@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
-fn ent_pc=5 n_params=0 variadic=false locals=3
+fn ent_pc=5 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -69,7 +69,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=3
     v59  Imm(194)                                         -> x0
     v60  Imm(0)                                           -> x0
     v61  Imm(0)                                           -> x0
-    v62  LocalAddr(-3)                                    -> x0
+    v62  LocalAddr(-2)                                    -> x0
     v63  BinopI { op=add, lhs=v62, rhs_imm=8 }            -> x0
     v64  Imm(0)                                           -> x1
     v65  Imm(0)                                           -> x1

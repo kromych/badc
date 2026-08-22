@@ -90,7 +90,7 @@ Disassembly of section .text:
                	ret
                	sub	x2, x29, #0xa0
                	mov	x3, #0x7                // =7
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x50
                	str	x3, [x0]
                	mov	x3, #0x0                // =0
                	str	x3, [x0, #0x8]

@@ -378,7 +378,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	xorq	%rcx, %rcx
                	movq	%rcx, (%rax)
-               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	leaq	<rip>, %rcx
                	pushq	%rdx
                	movq	(%rcx), %rdx
@@ -406,7 +406,7 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x18(%rbp), %rcx
+               	leaq	-0x8(%rbp), %rcx
                	movq	(%rcx), %rax
                	andq	$0x1, %rax
                	addq	$0xa, %rax

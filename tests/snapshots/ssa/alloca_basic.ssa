@@ -1,20 +1,20 @@
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=single
-fn ent_pc=6 n_params=0 variadic=false locals=5
+fn ent_pc=6 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(5)                                    -> -
     v1   Imm(32)                                          -> x2
     v2   Intrinsic { kind=1, args=[v1] }                  -> x3
     v3   Imm(0)                                           -> x0
-    v4   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v4   LoadLocal { off=-2, kind=I64 }                   -> x0
     v5   Imm(85)                                          -> x6
     v6   CallExt { binding_idx=67, args=[v2, v5, v1], fp_arg_mask=0x0 } -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v7)
   block 1  start_pc=0
-    v15  LoadLocal { off=-1, kind=I64 }                   -> x2
+    v15  LoadLocal { off=-2, kind=I64 }                   -> x2
     v16  Extend { value=v9, kind=I32 }                    -> x2
     v17  Binop { op=add, lhs=v2, rhs=v10 }                -> x2
     v18  Load { addr=v17, disp=0, kind=I8 }               -> x2
@@ -38,7 +38,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=5
     terminator Return(v21)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=dynamic
-fn ent_pc=7 n_params=1 variadic=false locals=4
+fn ent_pc=7 n_params=1 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(4)                                    -> -
@@ -53,7 +53,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=4
     v9   Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v7)
   block 1  start_pc=0
-    v17  LoadLocal { off=-1, kind=I64 }                   -> x7
+    v17  LoadLocal { off=-2, kind=I64 }                   -> x7
     v18  Extend { value=v10, kind=I32 }                   -> x7
     v19  BinopI { op=shl, lhs=v11, rhs_imm=2 }            -> x7
     v20  Binop { op=add, lhs=v5, rhs=v19 }                -> x7
@@ -82,7 +82,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=4
     terminator Jmp(b7)   (exit_acc=v28)
   block 5  start_pc=0
     v38  Extend { value=v30, kind=I32 }                   -> x7
-    v39  LoadLocal { off=-1, kind=I64 }                   -> x7
+    v39  LoadLocal { off=-2, kind=I64 }                   -> x7
     v40  Extend { value=v31, kind=I32 }                   -> x7
     v41  BinopI { op=shl, lhs=v32, rhs_imm=2 }            -> x7
     v42  Binop { op=add, lhs=v5, rhs=v41 }                -> x7
@@ -110,7 +110,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=4
     terminator Return(v47)   (exit_acc=v47)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=distinct
-fn ent_pc=8 n_params=0 variadic=false locals=8
+fn ent_pc=8 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(6)                                    -> -
@@ -119,7 +119,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     v3   Imm(0)                                           -> x1
     v4   Intrinsic { kind=1, args=[v1] }                  -> x12
     v5   Imm(0)                                           -> x0
-    v6   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v6   LoadLocal { off=-2, kind=I64 }                   -> x0
     v7   LoadLocal { off=-2, kind=I64 }                   -> x0
     v8   Binop { op=eq, lhs=v2, rhs=v4 }                  -> x0
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
@@ -127,21 +127,21 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     v9   Imm(1)                                           -> x0
     terminator Return(v9)   (exit_acc=v9)
   block 2  start_pc=0
-    v10  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v10  LoadLocal { off=-2, kind=I64 }                   -> x0
     v11  Imm(65)                                          -> x6
     v12  Imm(16)                                          -> x13
     v13  CallExt { binding_idx=67, args=[v2, v11, v12], fp_arg_mask=0x0 } -> x0
     v14  LoadLocal { off=-2, kind=I64 }                   -> x0
     v15  Imm(66)                                          -> x6
     v16  CallExt { binding_idx=67, args=[v4, v15, v12], fp_arg_mask=0x0 } -> x0
-    v17  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v17  LoadLocal { off=-2, kind=I64 }                   -> x0
     v18  Imm(0)                                           -> x0
     v19  Load { addr=v2, disp=0, kind=I8 }                -> x0
     v20  BinopI { op=ne, lhs=v19, rhs_imm=65 }            -> x0
     v21  Imm(0)                                           -> x1
     terminator Bnz { cond=v20, target=b12, fall=b3 }   (exit_acc=v20)
   block 3  start_pc=0
-    v22  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v22  LoadLocal { off=-2, kind=I64 }                   -> x0
     v23  Imm(15)                                          -> x0
     v24  BinopI { op=add, lhs=v2, rhs_imm=15 }            -> x0
     v25  Load { addr=v2, disp=15, kind=I8 }               -> x0
@@ -150,7 +150,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     terminator Jmp(b4)   (exit_acc=v26)
   block 4  start_pc=0
     v28  Phi { incoming=[b12:v20, b3:v26], kind=I64 }     -> x0
-    v29  LoadLocal { off=-7, kind=I64 }                   -> x1
+    v29  LoadLocal { off=-2, kind=I64 }                   -> x1
     terminator Bz { cond=v28, target=b6, fall=b5 }   (exit_acc=v28)
   block 5  start_pc=0
     v30  Imm(2)                                           -> x0
@@ -172,7 +172,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     terminator Jmp(b8)   (exit_acc=v40)
   block 8  start_pc=0
     v42  Phi { incoming=[b11:v34, b7:v40], kind=I64 }     -> x0
-    v43  LoadLocal { off=-8, kind=I64 }                   -> x1
+    v43  LoadLocal { off=-2, kind=I64 }                   -> x1
     terminator Bz { cond=v42, target=b10, fall=b9 }   (exit_acc=v42)
   block 9  start_pc=0
     v44  Imm(3)                                           -> x0
@@ -186,7 +186,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     terminator Jmp(b4)
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=looped
-fn ent_pc=9 n_params=1 variadic=false locals=4
+fn ent_pc=9 n_params=1 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(4)                                    -> -
@@ -200,11 +200,11 @@ fn ent_pc=9 n_params=1 variadic=false locals=4
     v14  Imm(8)                                           -> x6
     v15  Intrinsic { kind=1, args=[v14] }                 -> x6
     v16  Imm(0)                                           -> x8
-    v17  LoadLocal { off=-3, kind=I64 }                   -> x8
+    v17  LoadLocal { off=-2, kind=I64 }                   -> x8
     v18  Extend { value=v6, kind=I32 }                    -> x8
     v19  Store { addr=v15, disp=0, value=v8, kind=I64 }   -> -
     v20  Extend { value=v7, kind=I32 }                    -> x8
-    v21  LoadLocal { off=-3, kind=I64 }                   -> x8
+    v21  LoadLocal { off=-2, kind=I64 }                   -> x8
     v22  Load { addr=v15, disp=0, kind=I64 }              -> x6
     v23  BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x6
     v24  Extend { value=v8, kind=I32 }                    -> x6
@@ -231,7 +231,7 @@ fn ent_pc=9 n_params=1 variadic=false locals=4
     terminator Return(v28)   (exit_acc=v28)
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=inner_alloca_disturbs_outer
-fn ent_pc=10 n_params=1 variadic=false locals=5
+fn ent_pc=10 n_params=1 variadic=false locals=2
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(5)                                    -> -
@@ -240,7 +240,7 @@ fn ent_pc=10 n_params=1 variadic=false locals=5
     v3   Imm(64)                                          -> x2
     v4   Intrinsic { kind=1, args=[v3] }                  -> x3
     v5   Imm(0)                                           -> x0
-    v6   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v6   LoadLocal { off=-2, kind=I64 }                   -> x0
     v7   LoadLocal { off=2, kind=I32 }                    -> x0
     v8   CallExt { binding_idx=67, args=[v4, v1, v3], fp_arg_mask=0x0 } -> x0
     v9   Imm(20)                                          -> x7
@@ -250,7 +250,7 @@ fn ent_pc=10 n_params=1 variadic=false locals=5
     v13  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v12)
   block 1  start_pc=0
-    v20  LoadLocal { off=-1, kind=I64 }                   -> x2
+    v20  LoadLocal { off=-2, kind=I64 }                   -> x2
     v21  Extend { value=v14, kind=I32 }                   -> x2
     v22  Binop { op=add, lhs=v4, rhs=v15 }                -> x2
     v23  Load { addr=v22, disp=0, kind=I8 }               -> x2

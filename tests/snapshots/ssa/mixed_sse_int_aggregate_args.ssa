@@ -8,14 +8,14 @@ fn ent_pc=0 n_params=5 variadic=false locals=7
     v2   Imm(0)                                           -> x0
     v3   ParamRef(3, kind=F64)                            -> d0
     v4   Imm(0)                                           -> x0
-    v5   LocalAddr(-2)                                    -> x0
+    v5   LocalAddr(-6)                                    -> x0
     v6   Load { addr=v5, disp=0, kind=F64 }               -> d1
     v7   Imm(4612811918334230528)                         -> x0
     v8   Binop { op=fne, lhs=v6, rhs=v7 }                 -> x0
     v9   Imm(0)                                           -> x1
     terminator Bnz { cond=v8, target=b19, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
-    v10  LocalAddr(-2)                                    -> x0
+    v10  LocalAddr(-6)                                    -> x0
     v11  BinopI { op=add, lhs=v10, rhs_imm=8 }            -> x1
     v12  Load { addr=v10, disp=8, kind=I64 }              -> x0
     v13  BinopI { op=ne, lhs=v12, rhs_imm=7 }             -> x0
@@ -65,14 +65,14 @@ fn ent_pc=0 n_params=5 variadic=false locals=7
     v37  Imm(4)                                           -> x0
     terminator Return(v37)   (exit_acc=v37)
   block 12  start_pc=0
-    v38  LocalAddr(-6)                                    -> x0
+    v38  LocalAddr(-2)                                    -> x0
     v39  Load { addr=v38, disp=0, kind=F64 }              -> d0
     v40  Imm(4615063718147915776)                         -> x0
     v41  Binop { op=fne, lhs=v39, rhs=v40 }               -> x0
     v42  Imm(0)                                           -> x1
     terminator Bnz { cond=v41, target=b17, fall=b13 }   (exit_acc=v41)
   block 13  start_pc=0
-    v43  LocalAddr(-6)                                    -> x0
+    v43  LocalAddr(-2)                                    -> x0
     v44  BinopI { op=add, lhs=v43, rhs_imm=8 }            -> x1
     v45  Load { addr=v43, disp=8, kind=F64 }              -> d0
     v46  Imm(4616752568008179712)                         -> x0
@@ -126,10 +126,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-2)                                    -> x0
+    v1   LocalAddr(-6)                                    -> x0
     v2   Imm(4612811918334230528)                         -> x1
     v3   Store { addr=v1, disp=0, value=v2, kind=F64 }    -> -
-    v4   LocalAddr(-2)                                    -> x0
+    v4   LocalAddr(-6)                                    -> x0
     v5   BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x1
     v6   Imm(7)                                           -> x1
     v7   Store { addr=v4, disp=8, value=v6, kind=I64 }    -> -
@@ -140,17 +140,17 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v12  BinopI { op=add, lhs=v11, rhs_imm=8 }            -> x1
     v13  Imm(4602678819172646912)                         -> x1
     v14  Store { addr=v11, disp=8, value=v13, kind=F64 }  -> -
-    v15  LocalAddr(-6)                                    -> x0
+    v15  LocalAddr(-2)                                    -> x0
     v16  Imm(4615063718147915776)                         -> x1
     v17  Store { addr=v15, disp=0, value=v16, kind=F64 }  -> -
-    v18  LocalAddr(-6)                                    -> x0
+    v18  LocalAddr(-2)                                    -> x0
     v19  BinopI { op=add, lhs=v18, rhs_imm=8 }            -> x1
     v20  Imm(4616752568008179712)                         -> x1
     v21  Store { addr=v18, disp=8, value=v20, kind=F64 }  -> -
     v22  Imm(4)                                           -> x6
-    v23  LocalAddr(-2)                                    -> x7
+    v23  LocalAddr(-6)                                    -> x7
     v24  LocalAddr(-4)                                    -> x2
-    v25  LocalAddr(-6)                                    -> x8
+    v25  LocalAddr(-2)                                    -> x8
     v26  Imm(4608308318706860032)                         -> x1
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0

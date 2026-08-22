@@ -71,7 +71,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	w0, [x29, #-0x10]
+               	ldur	w0, [x29, #-0x8]
                	mov	x17, #0xfff8            // =65528
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	mov	x17, #0x5               // =5
                	orr	x0, x0, x17
-               	stur	w0, [x29, #-0x10]
+               	stur	w0, [x29, #-0x8]
                	mov	w0, w0
                	mov	x17, #0x7               // =7
                	and	x0, x0, x17

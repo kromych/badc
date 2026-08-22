@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
-fn ent_pc=5 n_params=0 variadic=false locals=2
+fn ent_pc=5 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -17,10 +17,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v9   Imm(1)                                           -> x0
     terminator Return(v9)   (exit_acc=v9)
   block 2  start_pc=0
-    v10  LocalAddr(-2)                                    -> x0
+    v10  LocalAddr(-1)                                    -> x0
     v11  Imm(16885952)                                    -> x1
     v12  Store { addr=v10, disp=0, value=v11, kind=I32 }  -> -
-    v13  LocalAddr(-2)                                    -> x7
+    v13  LocalAddr(-1)                                    -> x7
     v14  CallExt { binding_idx=51, args=[v13], fp_arg_mask=0x0 } -> x7
     v15  ImmData(50)                                      -> x6
     v16  CallExt { binding_idx=69, args=[v14, v15], fp_arg_mask=0x0 } -> x0

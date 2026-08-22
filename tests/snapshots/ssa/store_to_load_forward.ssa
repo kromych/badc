@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=5
+fn ent_pc=3 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -49,7 +49,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v43  Imm(7)                                           -> x0
     v44  Imm(1028)                                        -> x0
     v45  Imm(0)                                           -> x0
-    v46  LoadLocal { off=-5, kind=I64 }                   -> x0
+    v46  LoadLocal { off=-3, kind=I64 }                   -> x0
     v47  Imm(1007)                                        -> x0
     v48  Imm(4325032067072)                               -> x0
     v49  Imm(1014)                                        -> x0
@@ -62,8 +62,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     terminator Jmp(b1)   (exit_acc=v55)
   block 1  start_pc=0
     v57  Imm(0)                                           -> x0
-    v58  StoreLocal { off=-4, value=v57, kind=I64 }       -> -
-    v59  LocalAddr(-4)                                    -> x0
+    v58  StoreLocal { off=-1, value=v57, kind=I64 }       -> -
+    v59  LocalAddr(-1)                                    -> x0
     v60  Imm(21)                                          -> x1
     v61  Imm(0)                                           -> x2
     v62  Imm(0)                                           -> x2
@@ -80,8 +80,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     terminator Return(v70)   (exit_acc=v70)
   block 3  start_pc=0
     v71  Imm(5)                                           -> x0
-    v72  StoreLocal { off=-3, value=v71, kind=I64 }       -> -
-    v73  LocalAddr(-3)                                    -> x0
+    v72  StoreLocal { off=-1, value=v71, kind=I64 }       -> -
+    v73  LocalAddr(-1)                                    -> x0
     v74  Imm(9)                                           -> x1
     v75  Imm(0)                                           -> x1
     v76  Imm(9)                                           -> x1

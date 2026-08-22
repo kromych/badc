@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
-fn ent_pc=2 n_params=0 variadic=false locals=22
+fn ent_pc=2 n_params=0 variadic=false locals=21
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -39,8 +39,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=22
     v33  Load { addr=v30, disp=156, kind=U32 }            -> x0
     v34  Binop { op=add, lhs=v29, rhs=v33 }               -> x0
     v35  BinopI { op=and, lhs=v34, rhs_imm=4294967295 }   -> x0
-    v36  StoreLocal { off=-22, value=v35, kind=I32, volatile } -> -
-    v37  LoadLocal { off=-22, kind=U32, volatile }        -> x0
+    v36  StoreLocal { off=-1, value=v35, kind=I32, volatile } -> -
+    v37  LoadLocal { off=-1, kind=U32, volatile }         -> x0
     v38  BinopI { op=and, lhs=v37, rhs_imm=255 }          -> x0
     terminator Jmp(b6)   (exit_acc=v28)
   block 6  start_pc=0
@@ -136,8 +136,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=22
     v106 Load { addr=v103, disp=156, kind=U32 }           -> x0
     v107 Binop { op=add, lhs=v102, rhs=v106 }             -> x0
     v108 BinopI { op=and, lhs=v107, rhs_imm=4294967295 }  -> x0
-    v109 StoreLocal { off=-22, value=v108, kind=I32, volatile } -> -
-    v110 LoadLocal { off=-22, kind=U32, volatile }        -> x0
+    v109 StoreLocal { off=-1, value=v108, kind=I32, volatile } -> -
+    v110 LoadLocal { off=-1, kind=U32, volatile }         -> x0
     v111 BinopI { op=and, lhs=v110, rhs_imm=255 }         -> x0
     terminator Jmp(b17)   (exit_acc=v101)
   block 17  start_pc=0

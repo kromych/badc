@@ -19,8 +19,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x10]
-               	sub	x0, x29, #0x8
+               	stur	w0, [x29, #-0x8]
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -29,7 +29,7 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x40
                	ret
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x10
                	ldrsw	x0, [x0, #0x4]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -43,10 +43,10 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x40
                	ret
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x10
                	ldrsw	x0, [x0]
                	mov	x1, #0x541b             // =21531
-               	sub	x2, x29, #0x10
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x40
                	ret
-               	ldursw	x0, [x29, #-0x10]
+               	ldursw	x0, [x29, #-0x8]
                	cmp	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -63,12 +63,12 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0x40
                	ret
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x10
                	mov	x20, #0x0               // =0
                	ldrsw	x0, [x0]
                	bl	<addr>
                	sxtw	x0, w0
-               	sub	x0, x29, #0x8
+               	sub	x0, x29, #0x10
                	ldrsw	x0, [x0, #0x4]
                	bl	<addr>
                	sxtw	x0, w0

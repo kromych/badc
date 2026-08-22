@@ -262,9 +262,9 @@ fn ent_pc=8 n_params=0 variadic=false locals=34
     terminator Bz { cond=v138, target=b46, fall=b7 }   (exit_acc=v144)
   block 7  start_pc=0
     v145 Imm(0)                                           -> x3
-    v146 StoreLocal { off=-22, value=v145, kind=I32 }     -> -
+    v146 StoreLocal { off=-1, value=v145, kind=I32 }      -> -
     v147 Extend { value=v136, kind=I32 }                  -> x7
-    v148 LocalAddr(-22)                                   -> x6
+    v148 LocalAddr(-1)                                    -> x6
     v149 CallExt { binding_idx=290, args=[v147, v148, v145], fp_arg_mask=0x0 } -> x0
     v150 Imm(0)                                           -> x0
     v151 LoadLocal { off=-34, kind=I32 }                  -> x0
@@ -278,7 +278,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=34
     v159 Binop { op=ne, lhs=v22, rhs=v156 }               -> x0
     terminator Bz { cond=v159, target=b45, fall=b8 }   (exit_acc=v159)
   block 8  start_pc=0
-    v383 LoadLocal { off=-21, kind=I32 }                  -> x0
+    v383 LoadLocal { off=-22, kind=I32 }                  -> x0
     v384 Imm(1)                                           -> x0
     v385 Imm(4294967296)                                  -> x0
     v386 Imm(1)                                           -> x3
@@ -779,26 +779,26 @@ fn ent_pc=8 n_params=0 variadic=false locals=34
     v358 BinopI { op=shl, lhs=v357, rhs_imm=32 }          -> [spill 48]
     v359 Extend { value=v357, kind=I32 }                  -> x0
     v360 Imm(0)                                           -> [spill 49]
-    v361 LoadLocal { off=-20, kind=I32 }                  -> [spill 50]
-    v362 LoadLocal { off=-19, kind=I32 }                  -> [spill 51]
-    v363 LoadLocal { off=-18, kind=I32 }                  -> [spill 52]
-    v364 LoadLocal { off=-17, kind=I32 }                  -> [spill 53]
-    v365 LoadLocal { off=-16, kind=I32 }                  -> [spill 54]
-    v366 LoadLocal { off=-15, kind=I32 }                  -> [spill 55]
-    v367 LoadLocal { off=-14, kind=I32 }                  -> [spill 56]
-    v368 LoadLocal { off=-13, kind=I32 }                  -> [spill 57]
-    v369 LoadLocal { off=-12, kind=I32 }                  -> [spill 58]
-    v370 LoadLocal { off=-11, kind=I32 }                  -> [spill 59]
-    v371 LoadLocal { off=-10, kind=I32 }                  -> [spill 60]
-    v372 LoadLocal { off=-9, kind=I32 }                   -> [spill 61]
-    v373 LoadLocal { off=-8, kind=I32 }                   -> [spill 62]
-    v374 LoadLocal { off=-7, kind=I32 }                   -> [spill 63]
-    v375 LoadLocal { off=-6, kind=I32 }                   -> [spill 64]
-    v376 LoadLocal { off=-5, kind=I32 }                   -> [spill 65]
-    v377 LoadLocal { off=-4, kind=I32 }                   -> [spill 66]
-    v378 LoadLocal { off=-3, kind=I32 }                   -> [spill 67]
-    v379 LoadLocal { off=-2, kind=I32 }                   -> [spill 68]
-    v380 LoadLocal { off=-1, kind=I32 }                   -> [spill 69]
+    v361 LoadLocal { off=-21, kind=I32 }                  -> [spill 50]
+    v362 LoadLocal { off=-20, kind=I32 }                  -> [spill 51]
+    v363 LoadLocal { off=-19, kind=I32 }                  -> [spill 52]
+    v364 LoadLocal { off=-18, kind=I32 }                  -> [spill 53]
+    v365 LoadLocal { off=-17, kind=I32 }                  -> [spill 54]
+    v366 LoadLocal { off=-16, kind=I32 }                  -> [spill 55]
+    v367 LoadLocal { off=-15, kind=I32 }                  -> [spill 56]
+    v368 LoadLocal { off=-14, kind=I32 }                  -> [spill 57]
+    v369 LoadLocal { off=-13, kind=I32 }                  -> [spill 58]
+    v370 LoadLocal { off=-12, kind=I32 }                  -> [spill 59]
+    v371 LoadLocal { off=-11, kind=I32 }                  -> [spill 60]
+    v372 LoadLocal { off=-10, kind=I32 }                  -> [spill 61]
+    v373 LoadLocal { off=-9, kind=I32 }                   -> [spill 62]
+    v374 LoadLocal { off=-8, kind=I32 }                   -> [spill 63]
+    v375 LoadLocal { off=-7, kind=I32 }                   -> [spill 64]
+    v376 LoadLocal { off=-6, kind=I32 }                   -> [spill 65]
+    v377 LoadLocal { off=-5, kind=I32 }                   -> [spill 66]
+    v378 LoadLocal { off=-4, kind=I32 }                   -> [spill 67]
+    v379 LoadLocal { off=-3, kind=I32 }                   -> [spill 68]
+    v380 LoadLocal { off=-2, kind=I32 }                   -> [spill 69]
     v381 Call { target_pc=7, args=[v167, v177, v187, v197, v207, v217, v229, v239, v249, v259, v269, v279, v289, v299, v309, v319, v329, v339, v349, v359], fixed_args=20, fp_return=false, fp_arg_mask=0x0 } -> x7
     v382 CallExt { binding_idx=193, args=[v381], fp_arg_mask=0x0 } -> x0
     terminator Unreachable

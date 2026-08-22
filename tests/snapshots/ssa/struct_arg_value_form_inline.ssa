@@ -65,7 +65,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=2
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=main
-fn ent_pc=5 n_params=0 variadic=false locals=7
+fn ent_pc=5 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -74,7 +74,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=7
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    v6   LoadLocal { off=-7, kind=U32 }                   -> x0
+    v6   LoadLocal { off=-1, kind=U32 }                   -> x0
     v7   Imm(0)                                           -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
@@ -95,7 +95,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=7
     v12  Imm(0)                                           -> x0
     v13  Imm(0)                                           -> x0
     v14  Imm(0)                                           -> x0
-    v15  LoadLocal { off=-7, kind=U32 }                   -> x0
+    v15  LoadLocal { off=-1, kind=U32 }                   -> x0
     v16  Imm(0)                                           -> x0
     terminator Jmp(b6)
   block 6  start_pc=0
@@ -207,10 +207,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=7
     terminator Jmp(b25)
   block 25  start_pc=0
     v110 Imm(0)                                           -> x0
-    v111 LoadLocal { off=-5, kind=I64 }                   -> x0
+    v111 LoadLocal { off=-2, kind=I64 }                   -> x0
     v112 Imm(8)                                           -> x0
     v113 Imm(0)                                           -> x0
-    v114 LoadLocal { off=-4, kind=I64 }                   -> x0
+    v114 LoadLocal { off=-1, kind=I64 }                   -> x0
     v115 Imm(42)                                          -> x0
     terminator Jmp(b26)   (exit_acc=v115)
   block 26  start_pc=0

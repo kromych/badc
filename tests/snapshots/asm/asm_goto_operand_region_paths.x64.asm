@@ -65,7 +65,7 @@ Disassembly of section .text:
 <vla_goto>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x20, %rsp
                	movl	$0x9, %eax
                	movq	%rax, %r11
                	addq	$0xf, %r11
@@ -85,26 +85,26 @@ Disassembly of section .text:
                	movl	$0x7, %ecx
                	movb	%cl, 0x8(%rax)
                	movsbq	%cl, %rcx
-               	movq	%rax, -0x30(%rbp)
-               	movq	%rcx, -0x28(%rbp)
-               	movq	-0x28(%rbp), %rax
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rcx, -0x18(%rbp)
+               	movq	-0x18(%rbp), %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	-0x30(%rbp), %rax
+               	movq	-0x20(%rbp), %rax
                	jmp	<addr>
-               	movq	-0x30(%rbp), %rax
+               	movq	-0x20(%rbp), %rax
                	jmp	<addr>
                	movsbq	(%rax), %rax
-               	leaq	-0x30(%rbp), %rsp
-               	addq	$0x30, %rsp
+               	leaq	-0x20(%rbp), %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	movsbq	(%rax), %rcx
                	movsbq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	leaq	-0x30(%rbp), %rsp
-               	addq	$0x30, %rsp
+               	leaq	-0x20(%rbp), %rsp
+               	addq	$0x20, %rsp
                	popq	%rbp
                	retq
 

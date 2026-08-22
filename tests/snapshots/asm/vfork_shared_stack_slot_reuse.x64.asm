@@ -196,9 +196,9 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	xorq	%rbx, %rbx
-               	movl	%ebx, -0xb0(%rbp)
+               	movl	%ebx, -0x8(%rbp)
                	movslq	%eax, %rdi
-               	leaq	-0xb0(%rbp), %rsi
+               	leaq	-0x8(%rbp), %rsi
                	movq	%rbx, %rdx
                	xorl	%eax, %eax
                	callq	<addr>

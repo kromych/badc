@@ -189,9 +189,9 @@ Disassembly of section .text:
                	ret
                	cbz	x1, <addr>
                	mov	x20, #0x0               // =0
-               	stur	w20, [x29, #-0xb0]
+               	stur	w20, [x29, #-0x8]
                	sxtw	x0, w0
-               	sub	x1, x29, #0xb0
+               	sub	x1, x29, #0x8
                	mov	x2, x20
                	bl	<addr>
                	sxtw	x0, w0

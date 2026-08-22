@@ -47,10 +47,10 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movl	$0x101a8c0, %ecx        # imm = 0x101A8C0
                	movl	%ecx, (%rax)
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x8(%rbp), %rdi
                	movq	(%rdi), %rdi
                	xorl	%eax, %eax
                	callq	<addr>

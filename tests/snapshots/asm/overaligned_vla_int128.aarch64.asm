@@ -30,9 +30,9 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x0
-               	stur	x2, [x29, #-0x18]
-               	ldur	x3, [x29, #-0x18]
-               	sub	x1, x29, #0x40
+               	stur	x2, [x29, #-0x20]
+               	ldur	x3, [x29, #-0x20]
+               	sub	x1, x29, #0x30
                	str	x3, [x1]
                	asr	x3, x3, #63
                	str	x3, [x1, #0x8]
@@ -80,9 +80,9 @@ Disassembly of section .text:
                	ret
 
 <int128_vla>:
-               	str	x19, [sp, #-0x70]!
-               	stp	x29, x30, [sp, #0x60]
-               	add	x29, sp, #0x60
+               	str	x19, [sp, #-0x40]!
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
                	mov	x3, #0x2                // =2
                	mov	x0, #0x20               // =32
                	add	x17, x0, #0xf
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	mov	x17, #0x2               // =2
                	orr	x2, x2, x17
                	str	w2, [x1]
-               	sub	x1, x29, #0x28
+               	sub	x1, x29, #0x18
                	str	x3, [x1]
                	mov	x2, #0x0                // =0
                	str	x2, [x1, #0x8]
@@ -118,7 +118,7 @@ Disassembly of section .text:
                	mov	x1, x0
                	add	x2, x0, #0x10
                	mov	x3, #0x6                // =6
-               	sub	x1, x29, #0x38
+               	sub	x1, x29, #0x18
                	str	x3, [x1]
                	mov	x3, #0x0                // =0
                	str	x3, [x1, #0x8]
@@ -133,9 +133,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x10
                	ldr	x3, [x0]
                	add	x0, x1, x3
-               	sub	sp, x29, #0x60
-               	ldp	x29, x30, [sp, #0x60]
-               	ldr	x19, [sp], #0x70
+               	sub	sp, x29, #0x30
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x19, [sp], #0x40
                	ret
 
 <main>:

@@ -81,7 +81,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x1f0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0x1e0
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x2]
                	str	x10, [x0]
@@ -152,31 +152,31 @@ Disassembly of section .text:
                	str	x1, [x0, #0x88]
                	str	x1, [x0, #0x90]
                	str	w1, [x0, #0x98]
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0x1e0
                	ldrh	w0, [x0]
                	sub	x1, x29, #0x140
                	strh	w0, [x1]
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0x1e0
                	ldrh	w1, [x0, #0x2]
                	sub	x0, x29, #0x140
                	strh	w1, [x0, #0x2]
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0x1e0
                	ldrh	w1, [x0, #0xa]
                	sub	x0, x29, #0x140
                	strh	w1, [x0, #0xa]
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0x1e0
                	ldrsw	x1, [x0, #0x24]
                	sub	x0, x29, #0x140
                	str	w1, [x0, #0x24]
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0x1e0
                	ldrsw	x1, [x0, #0x2c]
                	sub	x0, x29, #0x140
                	str	w1, [x0, #0x2c]
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0x1e0
                	ldrsw	x1, [x0, #0x98]
                	sub	x0, x29, #0x140
                	str	w1, [x0, #0x98]
-               	sub	x0, x29, #0x1e0
+               	sub	x0, x29, #0xa0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
@@ -241,7 +241,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x1f0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x1e0
+               	sub	x0, x29, #0xa0
                	bl	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x3                // =3

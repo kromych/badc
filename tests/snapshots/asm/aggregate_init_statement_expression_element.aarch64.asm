@@ -94,14 +94,14 @@ Disassembly of section .text:
                	add	x29, sp, #0x40
                	mov	x20, x0
                	sxtw	x20, w20
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x20
                	mov	x1, #0x0                // =0
                	str	x1, [x0]
                	str	w1, [x0, #0x8]
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x20
                	str	w20, [x0]
                	mov	x1, #0x7                // =7
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x20
                	str	w1, [x0, #0x4]
                	add	x0, x20, #0x1
                	add	x1, x20, #0x2
@@ -113,9 +113,9 @@ Disassembly of section .text:
                	mov	w1, w2
                	add	x0, x0, x1
                	mov	w1, w0
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x20
                	str	w1, [x0, #0x8]
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x20
                	bl	<addr>
                	ldr	w1, [x0]
                	mov	w2, w20

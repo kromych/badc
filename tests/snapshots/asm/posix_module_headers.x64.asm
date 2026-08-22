@@ -160,7 +160,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	xorq	%rax, %rax
                	movl	$0x4, %edi
-               	leaq	-0x2b8(%rbp), %rsi
+               	leaq	-0x2d8(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax

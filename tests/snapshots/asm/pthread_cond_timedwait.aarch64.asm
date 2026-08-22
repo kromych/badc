@@ -18,7 +18,7 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0xe0]
                	add	x29, sp, #0xe0
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0xb0
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -27,7 +27,7 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0xf0
                	ret
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0xb0
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	ldr	x19, [sp, #0x10]
                	ldr	x20, [sp], #0xf0
                	ret
-               	sub	x0, x29, #0x40
+               	sub	x0, x29, #0xb0
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -51,28 +51,28 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0x40
                	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
                	sub	x0, x29, #0x70
                	bl	<addr>
                	sxtw	x0, w0
-               	sub	x0, x29, #0xb0
+               	sub	x0, x29, #0x10
                	mov	x1, #0x1                // =1
                	str	x1, [x0]
-               	sub	x0, x29, #0xb0
+               	sub	x0, x29, #0x10
                	str	x20, [x0, #0x8]
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0x40
                	sub	x1, x29, #0x70
-               	sub	x2, x29, #0xb0
+               	sub	x2, x29, #0x10
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, x0
                	sub	x0, x29, #0x70
                	bl	<addr>
                	sxtw	x0, w0
-               	sub	x0, x29, #0xa0
+               	sub	x0, x29, #0x40
                	bl	<addr>
                	sxtw	x0, w0
                	sub	x0, x29, #0x70

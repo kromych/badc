@@ -42,7 +42,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	movq	%rsi, 0x10(%rax)
                	leaq	-0x18(%rbp), %rax
-               	leaq	-0x28(%rbp), %rdi
+               	leaq	-0x20(%rbp), %rdi
                	movl	0x4(%rax), %edx
                	cmpq	$0x4, %rdx
                	sete	%dl
@@ -64,11 +64,11 @@ Disassembly of section .text:
                	movl	%edx, %eax
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	-0x20(%rbp), %rdx
+               	leaq	-0x28(%rbp), %rdx
                	movslq	%ecx, %rax
                	leaq	0x1(%rax), %rcx
                	addq	%rdx, %rax
-               	movzbq	-0x28(%rbp), %rdx
+               	movzbq	-0x20(%rbp), %rdx
                	movb	%dl, (%rax)
                	movslq	%ecx, %rax
                	cmpq	$0x4, %rax
@@ -89,14 +89,14 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x28(%rbp), %rax
                	movzbq	(%rax), %rax
                	xorq	$0x42, %rax
                	movl	%eax, %eax
                	movl	$0x1, %ecx
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x28(%rbp), %rax
                	movzbq	0x1(%rax), %rax
                	xorq	$0x41, %rax
                	movl	%eax, %eax
@@ -106,7 +106,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	testq	%rcx, %rcx
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x28(%rbp), %rax
                	movzbq	0x2(%rax), %rax
                	xorq	$0x44, %rax
                	movl	%eax, %eax
@@ -115,7 +115,7 @@ Disassembly of section .text:
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x28(%rbp), %rax
                	movzbq	0x3(%rax), %rax
                	xorq	$0x43, %rax
                	movl	%eax, %eax

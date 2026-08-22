@@ -49,27 +49,27 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x18
                	mov	x1, #0x5                // =5
                	str	w1, [x0]
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x18
                	mov	x1, #0x6                // =6
                	str	w1, [x0, #0x4]
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x18
                	mov	x1, #0x7                // =7
                	str	w1, [x0, #0x8]
-               	sub	x0, x29, #0x18
-               	sub	x1, x29, #0x10
+               	sub	x0, x29, #0x8
+               	sub	x1, x29, #0x18
                	cmp	x0, x1
                	b.ne	<addr>
                	mov	x0, #0x5                // =5
                	b	<addr>
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x18
                	ldrsw	x1, [x0]
-               	sub	x0, x29, #0x10
+               	sub	x0, x29, #0x18
                	ldrsw	x0, [x0, #0x4]
                	add	x0, x1, x0
-               	sub	x1, x29, #0x10
+               	sub	x1, x29, #0x18
                	ldrsw	x1, [x1, #0x8]
                	add	x0, x0, x1
                	sxtw	x0, w0

@@ -34,7 +34,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	xorq	%rax, %rax
-               	movl	%eax, -0x18(%rbp)
+               	movl	%eax, -0x8(%rbp)
                	callq	<addr>
                	movabsq	$0x123456789, %r11      # imm = 0x123456789
                	cmpq	%r11, %rax

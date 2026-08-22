@@ -65,10 +65,10 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	-0x10(%rbp), %eax
+               	movl	-0x8(%rbp), %eax
                	andq	$-0x8, %rax
                	orq	$0x5, %rax
-               	movl	%eax, -0x10(%rbp)
+               	movl	%eax, -0x8(%rbp)
                	movl	%eax, %eax
                	andq	$0x7, %rax
                	cmpq	$0x5, %rax

@@ -105,12 +105,12 @@ Disassembly of section .text:
                	andq	$-0xc1, %rcx
                	orq	%rdx, %rcx
                	movb	%cl, 0x7(%rax)
-               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rcx
                	andq	$-0x200, %rcx           # imm = 0xFE00
                	orq	$0x1ff, %rcx            # imm = 0x1FF
                	movw	%cx, (%rax)
-               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	movzwq	0x2(%rax), %rdx
                	andq	$-0x200, %rdx           # imm = 0xFE00
                	orq	$0x123, %rdx            # imm = 0x123

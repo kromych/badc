@@ -25,37 +25,20 @@ Disassembly of section .text:
                	int3
                	int3
 
-<cb>:
-               	leaq	0x7(%rdi), %rax
-               	retq
-
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r13, 0x10(%rsp)
-               	leaq	-<rip>, %r12       # <addr>
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %rax
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	jmp	<addr>
-               	movq	%rbx, %rcx
-               	shlq	%rcx
-               	incq	%rcx
-               	leaq	(%rax,%rcx), %r13
-               	movq	%r12, %rax
-               	movq	%rbx, %rdi
-               	callq	*%rax
-               	addq	%r13, %rax
-               	incq	%rbx
-               	cmpq	$0x3, %rbx
+               	movq	%rax, %rdx
+               	shlq	%rdx
+               	incq	%rdx
+               	addq	%rdx, %rcx
+               	leaq	0x7(%rax), %rdx
+               	addq	%rdx, %rcx
+               	incq	%rax
+               	cmpq	$0x3, %rax
                	jl	<addr>
+               	movq	%rcx, %rax
                	andq	$0x7f, %rax
                	movslq	%eax, %rax
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r13
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq

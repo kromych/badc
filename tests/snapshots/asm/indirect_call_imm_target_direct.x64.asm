@@ -1,5 +1,5 @@
 
-fn_ptr_return_type.x64:	file format elf64-x86-64
+indirect_call_imm_target_direct.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
@@ -25,53 +25,46 @@ Disassembly of section .text:
                	int3
                	int3
 
-<anon>:
-               	leaq	<rip>, %rax
+<fact>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
+               	movq	%rdi, %rbx
+               	movslq	%ebx, %rbx
+               	cmpq	$0x2, %rbx
+               	jge	<addr>
+               	movl	$0x1, %eax
+               	movslq	%eax, %rax
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
-
-<vec>:
-               	leaq	<rip>, %rax
-               	retq
-
-<go_s>:
-               	leaq	-<rip>, %rax       # <addr>
-               	retq
-
-<go_i>:
-               	leaq	-<rip>, %rax       # <addr>
-               	retq
+               	leaq	-0x1(%rbx), %rdi
+               	callq	<addr>
+               	imulq	%rbx, %rax
+               	movslq	%eax, %rax
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	movl	$0x5, %edi
                	callq	<addr>
-               	movslq	(%rax), %rax
-               	cmpq	$0x7, %rax
+               	movslq	%eax, %rax
+               	cmpq	$0x78, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
+               	xorq	%rdi, %rdi
                	callq	<addr>
-               	movslq	(%rax), %rax
-               	cmpq	$0x7, %rax
+               	movslq	%eax, %rax
+               	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	callq	<addr>
-               	movslq	0x8(%rax), %rax
-               	cmpq	$0x1e, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	callq	<addr>
-               	movslq	(%rax), %rax
-               	cmpq	$0xa, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbp
-               	retq
-               	xorq	%rax, %rax
+               	movl	$0x2a, %eax
                	popq	%rbp
                	retq

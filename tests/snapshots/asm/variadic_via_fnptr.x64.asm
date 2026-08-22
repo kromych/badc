@@ -116,28 +116,24 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	popq	%rbp
                	retq
-               	leaq	-<rip>, %rax      # <addr>
                	movl	$0x9, %edi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
                	movl	$0x3, %ecx
-               	movq	%rax, %r8
                	movb	$0x0, %al
-               	callq	*%r8
+               	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$0x23a3, %rax           # imm = 0x23A3
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbp
                	retq
-               	leaq	-<rip>, %rax      # <addr>
                	movl	$0x9, %edi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
                	movl	$0x3, %ecx
-               	movq	%rax, %r8
                	movb	$0x0, %al
-               	callq	*%r8
+               	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$0x23a3, %rax           # imm = 0x23A3
                	je	<addr>

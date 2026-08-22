@@ -115,18 +115,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-<rip>, %rax      # <addr>
                	movl	$0x4, %edi
                	movl	$0x1, %esi
                	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
                	movl	$0x3, %ecx
                	movabsq	$0x4011000000000000, %r8 # imm = 0x4011000000000000
-               	movq	%rax, %r9
                	movq	%rdx, %xmm0
                	movq	%r8, %xmm1
                	movq	%rcx, %rdx
                	movb	$0x2, %al
-               	callq	*%r9
+               	callq	<addr>
                	movsd	%xmm0, 0x8(%rsp)
                	movabsq	$0x4025800000000000, %rax # imm = 0x4025800000000000
                	movsd	0x8(%rsp), %xmm14

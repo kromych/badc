@@ -184,6 +184,34 @@ fn region_key(
     }
 }
 
+/// True when the spliced copy may contain a `CallIndirect` the devirt
+/// sweep (`devirtualize_indirect_calls`) later turns into a direct
+/// `Call`: its target is an `ImmCode` in the callee's own body, or a
+/// parameter whose argument at this site defines one. Pool safety rests
+/// on pool copies never holding an `Inst::Call` -- nothing is ever
+/// spliced into them, so no activation nests -- so such a copy takes
+/// the callee's own record instead (`region_key` callers downgrade).
+/// Mirrors the sweep's one-level target match.
+fn splice_may_gain_direct_call(
+    callee: &FunctionSsa,
+    call_args: &[ValueId],
+    caller_insts: &[Inst],
+) -> bool {
+    callee.insts.iter().any(|i| {
+        let Inst::CallIndirect { target, .. } = i else {
+            return false;
+        };
+        match callee.insts.get(*target as usize) {
+            Some(Inst::ImmCode(_)) => true,
+            Some(Inst::ParamRef { idx, .. }) => call_args
+                .get(*idx as usize)
+                .and_then(|&a| caller_insts.get(a as usize))
+                .is_some_and(|ai| matches!(ai, Inst::ImmCode(_))),
+            _ => false,
+        }
+    })
+}
+
 impl CallerRegions {
     /// Slot-magnitude base for a splice needing `needed` slots given the
     /// caller's current locals count. Reuses the keyed record when it
@@ -300,6 +328,150 @@ fn call_cycle_members(funcs: &[FunctionSsa]) -> BTreeSet<usize> {
         }
     }
     members
+}
+
+/// Rewrite each `Inst::CallIndirect` whose target value is an
+/// `Inst::ImmCode` of a function defined in this unit into the direct
+/// `Inst::Call`, keeping the argument list and return metadata; the
+/// emit then issues a direct call and the site becomes an inline
+/// candidate on the next candidacy round. Inlining a higher-order
+/// wrapper is what produces these pairs: the callee's `ImmCode`
+/// argument lands next to the wrapper's `CallIndirect`.
+///
+/// A site is skipped when the rewrite could change behavior or an
+/// invariant this run relies on:
+///
+/// * the `ImmCode` payload names no function of this unit (an
+///   undefined callee's placeholder ent_pc), or it carries an
+///   `extern_imm_code_refs` entry whose symbol `code_syms` does not
+///   resolve to that same ent_pc -- the walker records the entry for
+///   any symbol whose value was 0, which is a defined function at
+///   ent_pc 0 as often as an unresolved reference, and only the
+///   symbol table tells them apart;
+/// * the pointer's declared variadic-ness disagrees with the callee's
+///   (`is_variadic` drives the direct call's argument placement);
+/// * the target can reach stack-pointer asm (`sp_asm_reachers`
+///   propagates over direct edges only, so an admitted edge must not
+///   lead there);
+/// * the edge would close a direct-call cycle (`call_cycle_members`
+///   likewise assumes the direct graph gains no cycle mid-run);
+/// * the target reaches a callee with a shared region record in this
+///   caller (`CallerRegions::per_callee`). The record's sharing rests
+///   on same-callee copies never nesting, and every copy enclosing
+///   this site carries such a record if it holds any slots; inlining
+///   the devirtualized call could otherwise re-splice an enclosing
+///   copy's callee inside itself, re-activating its record's slots.
+///
+/// The `ImmCode` keeps its definition; with no use left it is
+/// dead-pure and the emit drops it.
+fn devirtualize_indirect_calls(
+    funcs: &mut [FunctionSsa],
+    sp_tainted: &BTreeSet<usize>,
+    regions: &BTreeMap<usize, CallerRegions>,
+    code_syms: &BTreeMap<u32, usize>,
+) -> bool {
+    let idx_of: BTreeMap<usize, usize> = funcs
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.ent_pc, i))
+        .collect();
+    let variadic: BTreeMap<usize, bool> = funcs.iter().map(|f| (f.ent_pc, f.is_variadic)).collect();
+    // Direct-call adjacency by function index, extended as rewrites land
+    // so every reachability check runs against the current graph.
+    let mut succ: Vec<BTreeSet<usize>> = funcs
+        .iter()
+        .map(|f| {
+            f.insts
+                .iter()
+                .filter_map(|i| match i {
+                    Inst::Call { target_pc, .. } => idx_of.get(target_pc).copied(),
+                    _ => None,
+                })
+                .collect()
+        })
+        .collect();
+    let reach_set = |succ: &[BTreeSet<usize>], from: usize| -> Vec<bool> {
+        let mut seen = vec![false; succ.len()];
+        let mut work = vec![from];
+        while let Some(v) = work.pop() {
+            if core::mem::replace(&mut seen[v], true) {
+                continue;
+            }
+            work.extend(succ[v].iter().copied().filter(|&w| !seen[w]));
+        }
+        seen
+    };
+    let mut changed = false;
+    for fi in 0..funcs.len() {
+        let ref_sym: BTreeMap<u32, u32> = funcs[fi].extern_imm_code_refs.iter().copied().collect();
+        let recorded: Vec<usize> = regions
+            .get(&funcs[fi].ent_pc)
+            .map(|r| {
+                r.per_callee
+                    .keys()
+                    .filter_map(|pc| idx_of.get(pc).copied())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut rewrites: Vec<(usize, usize)> = Vec::new();
+        for (ci, inst) in funcs[fi].insts.iter().enumerate() {
+            let Inst::CallIndirect {
+                target,
+                callee_variadic,
+                ..
+            } = inst
+            else {
+                continue;
+            };
+            let Some(Inst::ImmCode(k)) = funcs[fi].insts.get(*target as usize) else {
+                continue;
+            };
+            if let Some(sym) = ref_sym.get(target)
+                && code_syms.get(sym) != Some(k)
+            {
+                continue;
+            }
+            let Some(&ki) = idx_of.get(k) else { continue };
+            if variadic[k] != *callee_variadic || sp_tainted.contains(k) {
+                continue;
+            }
+            let reach = reach_set(&succ, ki);
+            if reach[fi] || recorded.iter().any(|&r| reach[r]) {
+                continue;
+            }
+            rewrites.push((ci, ki));
+        }
+        for (ci, ki) in rewrites {
+            let target_pc = funcs[ki].ent_pc;
+            let taken = core::mem::replace(&mut funcs[fi].insts[ci], Inst::Imm(0));
+            let Inst::CallIndirect {
+                args,
+                fixed_args,
+                fp_return,
+                fp_arg_mask,
+                arg_aggs,
+                ret_agg,
+                ret_slot_local,
+                ..
+            } = taken
+            else {
+                unreachable!("collected above");
+            };
+            funcs[fi].insts[ci] = Inst::Call {
+                target_pc,
+                args,
+                fixed_args,
+                fp_return,
+                fp_arg_mask,
+                arg_aggs,
+                ret_agg,
+                ret_slot_local,
+            };
+            succ[fi].insert(ki);
+            changed = true;
+        }
+    }
+    changed
 }
 
 fn store_width(kind: StoreKind) -> i64 {
@@ -1893,7 +2065,17 @@ fn splice_multi_block(
     // the caller proceeds to further sites, so no two sites may share.
     let needed = callee.locals + param_cells.len() as i64;
     let region_base = if needed > 0 {
-        let key = region_key(original.ent_pc, callee, cyclic, sp_tainted);
+        // A copy that may gain a direct call through the devirt sweep
+        // must not share the pool (see `splice_may_gain_direct_call`).
+        let key = region_key(original.ent_pc, callee, cyclic, sp_tainted).map(|k| {
+            if matches!(k, RegionKey::Pool)
+                && splice_may_gain_direct_call(callee, call_args, &original.insts)
+            {
+                RegionKey::Callee(callee.ent_pc)
+            } else {
+                k
+            }
+        });
         regions.place(key, needed, original.locals)
     } else {
         original.locals
@@ -3342,8 +3524,15 @@ fn inline_caller(
 
 /// Inline eligible callees across every function in `funcs`. A
 /// callee is eligible per `is_inline_candidate`; `cap == 0` disables
-/// the pass.
-pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
+/// the splicing but not the devirtualization sweep. `code_syms` maps
+/// each parser-symbol index defined here as a function to its ent_pc
+/// (see `devirtualize_indirect_calls`).
+pub(crate) fn run(
+    funcs: &mut [FunctionSsa],
+    cap: u32,
+    abi: Abi,
+    code_syms: &BTreeMap<u32, usize>,
+) {
     #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
     // Env-var override for the `is_inline` attribute pending parser
@@ -3367,6 +3556,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             }
         }
     }
+    // Pair up `CallIndirect` sites with the `ImmCode` targets already on
+    // the tape before candidacy is evaluated; the sweep is independent of
+    // the splicing below, so it runs even with inlining disabled.
+    let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
+    devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms);
     let any_marked = funcs.iter().any(|f| f.is_inline);
     if funcs.is_empty() || (cap == 0 && !any_marked) {
         #[cfg(feature = "codegen_test")]
@@ -3381,16 +3575,24 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
     }
     // Pre-inline state driving the frame gates and region reuse: the
     // per-caller locals snapshot, call-cycle membership, stack-pointer-asm
-    // taint, and the per-caller region records.
+    // taint, and the per-caller region records. Both sets stay exact
+    // across the run: splicing only moves bodies along existing edges,
+    // and the devirt sweep admits no edge that reaches stack-pointer asm
+    // or closes a cycle.
     let orig_locals: Vec<i64> = funcs.iter().map(|f| f.locals).collect();
     let cyclic = call_cycle_members(funcs);
-    let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
     let mut regions: BTreeMap<usize, CallerRegions> = BTreeMap::new();
     // Iterate to a fixed point: each pass re-evaluates candidacy on
     // the now-substituted function bodies, so a helper that became a
     // leaf after its own sub-calls were inlined becomes eligible on
     // the next round. `INLINE_FIXPOINT_ITERS` bounds the depth.
     for iter in 0..INLINE_FIXPOINT_ITERS {
+        // Pair up `CallIndirect` sites the previous round's splices put
+        // next to an `ImmCode` argument, so the devirtualized call is an
+        // inline candidate this round.
+        if iter > 0 {
+            devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms);
+        }
         // The splice reads each callee's pre-iteration body while the
         // callers are rewritten in place, so the candidates -- and only
         // they -- are copied; a body no call site can splice is never
@@ -3511,6 +3713,8 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
         }
         let _ = iter;
     }
+    // Pairs the final round's splices created have had no sweep yet.
+    devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms);
     // Surface a mandatory inline request the pass could not honour. The
     // detection is factored into `unhonoured_always_inline` so it is
     // unit-testable without capturing stderr.
@@ -3521,6 +3725,17 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], cap: u32, abi: Abi) {
             name = funcs[i].name,
         );
     }
+}
+
+/// Standalone devirtualization sweep for after the inline run: the
+/// post-inline promotions (mem2reg on spliced callers, sroa) turn
+/// function-pointer cells into `ImmCode` values and expose pairs the
+/// in-run sweeps could not see. No splicing follows, so no region
+/// record constrains the rewrite; the remaining guards are those of
+/// `devirtualize_indirect_calls`.
+pub(crate) fn devirtualize(funcs: &mut [FunctionSsa], code_syms: &BTreeMap<u32, usize>) {
+    let sp_tainted = crate::c5::ir::sp_asm_reachers(funcs);
+    devirtualize_indirect_calls(funcs, &sp_tainted, &BTreeMap::new(), code_syms);
 }
 
 /// Return `(index, reason)` for each function marked always_inline /
@@ -3699,7 +3914,7 @@ mod tests {
     fn callfree_region_pools_across_sites() {
         let abi = Target::LinuxX64.abi();
         let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 8), asm_callee(100, 4),];
-        run(&mut funcs, 32, abi);
+        run(&mut funcs, 32, abi, &BTreeMap::new());
         assert!(
             funcs[0]
                 .insts
@@ -3719,7 +3934,7 @@ mod tests {
     fn offcycle_callee_region_reused_across_sites() {
         let abi = Target::LinuxX64.abi();
         let mut funcs = alloc::vec![multi_call_caller(1, 2, 200, 2), calling_callee(200, 3, 999),];
-        run(&mut funcs, 32, abi);
+        run(&mut funcs, 32, abi, &BTreeMap::new());
         let inner_calls = funcs[0]
             .insts
             .iter()
@@ -3788,7 +4003,7 @@ mod tests {
             ..Default::default()
         };
         let mut funcs = alloc::vec![multi_call_caller(1, 2, 200, 2), callee];
-        run(&mut funcs, 32, abi);
+        run(&mut funcs, 32, abi, &BTreeMap::new());
         let indirect = funcs[0]
             .insts
             .iter()
@@ -3827,7 +4042,7 @@ mod tests {
             calling_callee(300, 2, 400),
             partner,
         ];
-        run(&mut funcs, 32, abi);
+        run(&mut funcs, 32, abi, &BTreeMap::new());
         assert_eq!(
             funcs[0].locals, 6,
             "2 splices of a 2-slot cycle member must append 2 regions"
@@ -3868,7 +4083,7 @@ mod tests {
                     calling_callee(500, 400, 600),
                     leaf,
                 ];
-                run(&mut funcs, 32, abi);
+                run(&mut funcs, 32, abi, &BTreeMap::new());
                 let leaf_calls = funcs[0]
                     .insts
                     .iter()
@@ -3915,7 +4130,7 @@ mod tests {
                 ..Default::default()
             };
             let mut funcs = alloc::vec![multi_call_caller(1, 2, 500, 1), callee, leaf];
-            run(&mut funcs, 32, abi);
+            run(&mut funcs, 32, abi, &BTreeMap::new());
             let calls = funcs[0]
                 .insts
                 .iter()
@@ -3939,7 +4154,7 @@ mod tests {
             multi_call_caller(1, 2, 100, 2),
             asm_callee_with_template(100, 4, b"mov %%rsp, (%0)"),
         ];
-        run(&mut funcs, 32, abi);
+        run(&mut funcs, 32, abi, &BTreeMap::new());
         assert_eq!(
             funcs[0].locals, 10,
             "2 sites of a 4-slot sp-asm callee append"
@@ -3963,7 +4178,7 @@ mod tests {
         let mut sw = asm_callee_with_template(999, 1, b"mov %%rsp, (%0)");
         sw.is_variadic = true; // keep it out of the candidate set
         let mut funcs = alloc::vec![caller, asm_callee(100, 4), sw];
-        run(&mut funcs, 32, abi);
+        run(&mut funcs, 32, abi, &BTreeMap::new());
         assert_eq!(funcs[0].locals, 10, "sp-tainted caller: sites append");
     }
 
@@ -4758,7 +4973,7 @@ mod tests {
             ..Default::default()
         };
         let mut funcs = alloc::vec![caller, callee];
-        run(&mut funcs, 32, abi);
+        run(&mut funcs, 32, abi, &BTreeMap::new());
         let caller = &funcs[0];
         assert!(
             caller.insts.iter().all(|i| !matches!(i, Inst::Call { .. })),
@@ -4847,7 +5062,7 @@ mod tests {
             let mut funcs: Vec<FunctionSsa> = (0..n).map(|i| leaf_callee(i + 1)).collect();
             funcs.push(driver(0, &(1..=n).collect::<Vec<_>>()));
             CANDIDATE_ENTRIES.with(|c| c.set(0));
-            run(&mut funcs, 64, Target::LinuxX64.abi());
+            run(&mut funcs, 64, Target::LinuxX64.abi(), &BTreeMap::new());
             assert!(
                 !funcs
                     .last()
@@ -4883,7 +5098,7 @@ mod tests {
         caller.frame_align = 16;
         caller.realign_region_bytes = 16;
         let mut funcs = alloc::vec![caller, callee];
-        run(&mut funcs, 32, abi);
+        run(&mut funcs, 32, abi, &BTreeMap::new());
         assert!(
             funcs[0]
                 .insts
@@ -4913,7 +5128,7 @@ mod tests {
         callee.frame_align = 32;
         callee.realign_region_bytes = 32;
         let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 1), callee];
-        run(&mut funcs, 32, abi);
+        run(&mut funcs, 32, abi, &BTreeMap::new());
         assert!(
             funcs[0]
                 .insts
@@ -4921,5 +5136,180 @@ mod tests {
                 .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 100)),
             "an above-16 region callee must not inline"
         );
+    }
+
+    /// Caller whose only call is indirect through an `ImmCode(k)`.
+    fn indirect_pair_caller(ent_pc: usize, k: usize, callee_variadic: bool) -> FunctionSsa {
+        let insts = alloc::vec![
+            Inst::ImmCode(k),
+            Inst::CallIndirect {
+                target: 0,
+                args: alloc::vec![],
+                callee_variadic,
+                fixed_args: 0,
+                fp_return: false,
+                fp_arg_mask: 0,
+                arg_aggs: alloc::vec![],
+                ret_agg: None,
+                ret_slot_local: 0,
+            },
+            Inst::Imm(0),
+        ];
+        FunctionSsa {
+            ent_pc,
+            inst_src: alloc::vec![(0, 0); 3],
+            f32_values: alloc::vec![false; 3],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            }],
+            insts,
+            ..Default::default()
+        }
+    }
+
+    fn leaf(ent_pc: usize) -> FunctionSsa {
+        FunctionSsa {
+            ent_pc,
+            inst_src: alloc::vec![(0, 0)],
+            f32_values: alloc::vec![false],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Return(0),
+                exit_acc: 0,
+            }],
+            insts: alloc::vec![Inst::Imm(7)],
+            ..Default::default()
+        }
+    }
+
+    fn devirt(
+        funcs: &mut [FunctionSsa],
+        sp: &[usize],
+        regions: &BTreeMap<usize, CallerRegions>,
+        syms: &BTreeMap<u32, usize>,
+    ) -> bool {
+        let sp: BTreeSet<usize> = sp.iter().copied().collect();
+        devirtualize_indirect_calls(funcs, &sp, regions, syms)
+    }
+
+    /// The pair rewrites into the direct call; the guards each hold it
+    /// back: a variadic-ness mismatch, a stack-pointer-asm target, and a
+    /// cycle-closing edge.
+    #[test]
+    fn indirect_call_of_imm_code_becomes_direct() {
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, false), leaf(200)];
+        assert!(devirt(&mut funcs, &[], &BTreeMap::new(), &BTreeMap::new()));
+        assert!(matches!(
+            funcs[0].insts[1],
+            Inst::Call { target_pc: 200, .. }
+        ));
+
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, false), {
+            let mut f = leaf(200);
+            f.is_variadic = true;
+            f
+        }];
+        assert!(!devirt(&mut funcs, &[], &BTreeMap::new(), &BTreeMap::new()));
+
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, false), leaf(200)];
+        assert!(!devirt(&mut funcs, &[200], &BTreeMap::new(), &BTreeMap::new()));
+
+        // 200 calls 1 directly: the edge 1 -> 200 would close a cycle.
+        let mut funcs = alloc::vec![
+            indirect_pair_caller(1, 200, false),
+            calling_callee(200, 0, 1),
+        ];
+        assert!(!devirt(&mut funcs, &[], &BTreeMap::new(), &BTreeMap::new()));
+    }
+
+    /// An `extern_imm_code_refs` entry admits the rewrite only when the
+    /// symbol resolves to the payload ent_pc: a defined function at
+    /// ent_pc 0 and an unresolved reference carry the same entry shape.
+    #[test]
+    fn devirt_consults_the_symbol_for_a_ref_carrying_target() {
+        let mut pair = indirect_pair_caller(1, 0, false);
+        pair.extern_imm_code_refs = alloc::vec![(0, 7)];
+        let mut funcs = alloc::vec![pair.clone(), leaf(0)];
+        assert!(!devirt(&mut funcs, &[], &BTreeMap::new(), &BTreeMap::new()));
+
+        let syms: BTreeMap<u32, usize> = [(7u32, 0usize)].into_iter().collect();
+        let mut funcs = alloc::vec![pair, leaf(0)];
+        assert!(devirt(&mut funcs, &[], &BTreeMap::new(), &syms));
+        assert!(matches!(funcs[0].insts[1], Inst::Call { target_pc: 0, .. }));
+    }
+
+    /// A target reaching a callee with a shared region record in this
+    /// caller stays indirect: inlining it could re-splice that callee
+    /// inside its own recorded copy.
+    #[test]
+    fn devirt_skips_target_reaching_a_recorded_region() {
+        let mut funcs = alloc::vec![
+            indirect_pair_caller(1, 200, false),
+            calling_callee(200, 0, 300),
+            leaf(300),
+        ];
+        let mut regions: BTreeMap<usize, CallerRegions> = BTreeMap::new();
+        regions.entry(1).or_default().per_callee.insert(300, Some((0, 4)));
+        assert!(!devirt(&mut funcs, &[], &regions, &BTreeMap::new()));
+        // The same record in another caller does not constrain this one.
+        let mut other: BTreeMap<usize, CallerRegions> = BTreeMap::new();
+        other.entry(9).or_default().per_callee.insert(300, Some((0, 4)));
+        assert!(devirt(&mut funcs, &[], &other, &BTreeMap::new()));
+    }
+
+    /// `run` pairs, devirtualizes and then inlines the target: no call
+    /// of either form is left.
+    #[test]
+    fn run_inlines_the_devirtualized_call() {
+        let abi = Target::LinuxX64.abi();
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, false), leaf(200)];
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        assert!(
+            funcs[0]
+                .insts
+                .iter()
+                .all(|i| !matches!(i, Inst::Call { .. } | Inst::CallIndirect { .. })),
+            "the devirtualized call must inline"
+        );
+    }
+
+    /// The standalone sweep derives the stack-pointer set itself: a
+    /// target holding stack-pointer asm stays indirect, a plain one
+    /// rewrites.
+    #[test]
+    fn standalone_devirtualize_guards_sp_targets() {
+        let mut funcs = alloc::vec![
+            indirect_pair_caller(1, 200, false),
+            asm_callee_with_template(200, 0, b"mov sp, x0"),
+        ];
+        devirtualize(&mut funcs, &BTreeMap::new());
+        assert!(matches!(funcs[0].insts[1], Inst::CallIndirect { .. }));
+
+        let mut funcs = alloc::vec![indirect_pair_caller(1, 200, false), leaf(200)];
+        devirtualize(&mut funcs, &BTreeMap::new());
+        assert!(matches!(funcs[0].insts[1], Inst::Call { .. }));
+    }
+
+    /// The splice-time predicate behind the pool downgrade: an in-body
+    /// `ImmCode` target or an `ImmCode` argument feeding a `ParamRef`
+    /// target counts; anything else does not.
+    #[test]
+    fn splice_devirt_predicate_matches_the_sweep() {
+        let body = indirect_pair_caller(5, 200, false);
+        assert!(splice_may_gain_direct_call(&body, &[], &[]));
+
+        let mut param_target = indirect_pair_caller(5, 200, false);
+        param_target.insts[0] = Inst::ParamRef {
+            idx: 0,
+            kind: LoadKind::I64,
+        };
+        let caller_imm = [Inst::ImmCode(200)];
+        let caller_plain = [Inst::Imm(3)];
+        assert!(splice_may_gain_direct_call(&param_target, &[0], &caller_imm));
+        assert!(!splice_may_gain_direct_call(&param_target, &[0], &caller_plain));
     }
 }

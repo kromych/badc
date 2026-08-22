@@ -1957,12 +1957,15 @@ pub(crate) fn lower(
             });
         // Inline after mem2reg so the candidate filter sees the
         // promoted form: dead cell loads / stores are gone and the
-        // callee's body reads its parameters via `ParamRef`.
+        // callee's body reads its parameters via `ParamRef`. The symbol
+        // map feeds the pass's indirect-call devirtualization.
+        let code_syms = super::ssa::emit_common::defined_fn_syms(program);
         super::ssa::emit_common::time_pass("passes::inline::run (x86_64)", || {
             crate::c5::codegen::passes::inline::run(
                 &mut ssa_funcs,
                 native.inline_cap,
                 target.abi(),
+                &code_syms,
             );
         });
         // Turn self-tail-recursion into a loop back edge on the
@@ -2134,6 +2137,15 @@ pub(crate) fn lower(
         // register-starved unrolled loop.
         super::ssa::emit_common::time_pass("passes::store_forward::run (x86_64)", || {
             crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
+        });
+        // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
+        // inline run exposed -- the post-inline promotions and the
+        // forwarding above turn function-pointer cell reads into
+        // `ImmCode` values -- so the emit issues direct calls. Last of
+        // the passes that change call targets.
+        super::ssa::emit_common::time_pass("passes::inline::devirtualize (x86_64)", || {
+            let code_syms = super::ssa::emit_common::defined_fn_syms(program);
+            crate::c5::codegen::passes::inline::devirtualize(&mut ssa_funcs, &code_syms);
         });
         // Block layout: fallthrough chains, loop rotation to
         // bottom-test, branch inversion. Reorders blocks and remaps

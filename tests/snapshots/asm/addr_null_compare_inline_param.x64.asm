@@ -25,20 +25,14 @@ Disassembly of section .text:
                	int3
                	int3
 
-<handler>:
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-<rip>, %rax       # <addr>
-               	callq	*%rax
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rcx
+               	incq	%rcx
+               	movl	%ecx, (%rax)
                	movl	$0x5, %eax
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax

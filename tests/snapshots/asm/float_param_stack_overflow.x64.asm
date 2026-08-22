@@ -120,7 +120,6 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-<rip>, %rax      # <addr>
                	movl	$0x3fc00000, %edi       # imm = 0x3FC00000
                	movl	$0x3f000000, %esi       # imm = 0x3F000000
                	subq	$0x10, %rsp
@@ -134,7 +133,7 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm5
                	movsd	0x18(%rsp), %xmm6
                	movsd	0x18(%rsp), %xmm7
-               	callq	*%rax
+               	callq	<addr>
                	addq	$0x10, %rsp
                	movslq	%eax, %rax
                	cmpq	$0x37f, %rax            # imm = 0x37F

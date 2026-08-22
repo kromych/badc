@@ -1860,11 +1860,13 @@ pub(crate) fn lower(
             });
         // Inline after mem2reg; see x86_64.rs's matching block for
         // the ordering rationale.
+        let code_syms = super::ssa::emit_common::defined_fn_syms(program);
         super::ssa::emit_common::time_pass("passes::inline::run (aarch64)", || {
             crate::c5::codegen::passes::inline::run(
                 &mut ssa_funcs,
                 native.inline_cap,
                 target.abi(),
+                &code_syms,
             );
         });
         // Turn self-tail-recursion into a loop back edge; see x86_64.rs's
@@ -2017,6 +2019,15 @@ pub(crate) fn lower(
         // register-starved unrolled loop.
         super::ssa::emit_common::time_pass("passes::store_forward::run (aarch64)", || {
             crate::c5::codegen::passes::store_forward::run(&mut ssa_funcs);
+        });
+        // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
+        // inline run exposed -- the post-inline promotions and the
+        // forwarding above turn function-pointer cell reads into
+        // `ImmCode` values -- so the emit issues direct calls. Last of
+        // the passes that change call targets.
+        super::ssa::emit_common::time_pass("passes::inline::devirtualize (aarch64)", || {
+            let code_syms = super::ssa::emit_common::defined_fn_syms(program);
+            crate::c5::codegen::passes::inline::devirtualize(&mut ssa_funcs, &code_syms);
         });
         // Block layout: fallthrough chains, loop rotation to
         // bottom-test, branch inversion. Reorders blocks and remaps

@@ -85,24 +85,20 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	leaq	-<rip>, %rbx      # <addr>
+               	subq	$0x10, %rsp
                	movabsq	$-0x1, %rax
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	movl	$0x2, %esi
                	movl	$0x64, %edx
                	movl	$0x17, %ecx
-               	movq	%rbx, %r8
                	movb	$0x0, %al
-               	callq	*%r8
+               	callq	<addr>
                	movslq	-0x8(%rbp), %rax
                	cmpq	$0x7b, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movabsq	$-0x1, %rax
@@ -111,20 +107,17 @@ Disassembly of section .text:
                	movl	$0x3, %esi
                	movl	$0x32, %edx
                	movl	$0x46, %ecx
-               	movq	%rbx, %r9
                	movq	%rsi, %r8
                	movb	$0x0, %al
-               	callq	*%r9
+               	callq	<addr>
                	movslq	-0x8(%rbp), %rax
                	cmpq	$0x7b, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	movq	(%rsp), %rbx
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	(%rsp), %rbx
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq

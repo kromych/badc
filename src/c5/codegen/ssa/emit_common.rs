@@ -9564,6 +9564,22 @@ pub(crate) fn record_post_prologue_pc(
     prologue_native.insert(func.ent_pc, code_len);
 }
 
+/// Parser-symbol index -> ent_pc for every function this program
+/// defines. The inliner's devirtualization reads it to tell a defined
+/// function at ent_pc 0 apart from an unresolved reference, both of
+/// which carry an `extern_imm_code_refs` entry.
+pub(crate) fn defined_fn_syms(
+    program: &crate::c5::program::Program,
+) -> alloc::collections::BTreeMap<u32, usize> {
+    program
+        .symbols
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.is_fun_entity() && s.defined_here)
+        .map(|(i, s)| (i as u32, s.val as usize))
+        .collect()
+}
+
 /// True when an SSA inst can be skipped entirely because its
 /// result has no consumers and the inst itself has no side effects.
 /// Per-arch emit dispatch checks this before invoking `emit_inst`;

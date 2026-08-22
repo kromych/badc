@@ -37,14 +37,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v1   ImmData(24)                                      -> x3
     v2   ImmCode(ent_pc=0)                                -> x0
     v3   Store { addr=v1, disp=0, value=v2, kind=I64 }    -> -
-    v4   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
-    v5   Imm(0)                                           -> x1
+    v4   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
+    v5   Imm(0)                                           -> x0
     v6   Store { addr=v1, disp=8, value=v5, kind=I32 }    -> -
-    v7   Imm(0)                                           -> x1
-    v8   LoadLocal { off=-1, kind=I64 }                   -> x1
-    v9   Load { addr=v1, disp=0, kind=I64 }               -> x1
+    v7   Imm(0)                                           -> x0
+    v8   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v9   Load { addr=v1, disp=0, kind=I64 }               -> x0
     v10  Imm(10)                                          -> x7
-    v11  CallIndirect { target=v2, args=[v10], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v11  Call { target_pc=0, args=[v10], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
     v13  Extend { value=v11, kind=I32 }                   -> x12
     v14  Imm(0)                                           -> x0
@@ -72,9 +72,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v28  ImmData(24)                                      -> x0
     v29  ImmCode(ent_pc=1)                                -> x0
     v30  Store { addr=v1, disp=0, value=v29, kind=I64 }   -> -
-    v31  Load { addr=v1, disp=0, kind=I64 }               -> x1
+    v31  Load { addr=v1, disp=0, kind=I64 }               -> x0
     v32  Imm(100)                                         -> x7
-    v33  CallIndirect { target=v29, args=[v32], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v33  Call { target_pc=1, args=[v32], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v34  BinopI { op=shl, lhs=v33, rhs_imm=32 }           -> x1
     v35  Extend { value=v33, kind=I32 }                   -> x12
     v36  Imm(0)                                           -> x0

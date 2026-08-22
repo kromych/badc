@@ -176,6 +176,98 @@ fn gnu_identity_macros_are_opt_in() {
 }
 
 #[test]
+fn gnu_predefine_set_is_locked() {
+    // Every macro `--gnu` adds over the default set, with its value. A
+    // capability macro here is a promise about what badc backs, so the
+    // list is exact in both directions: adding one requires backing the
+    // feature, dropping one requires removing the promise.
+    let base = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let mut gnu = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    gnu.enable_gnu(false, true);
+    let mut added: Vec<(String, String)> = gnu
+        .macros
+        .iter()
+        .filter(|(k, _)| !base.macros.contains_key(*k))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    added.sort();
+    let version = crate::GNU_COMPAT_VERSION;
+    let mut want: Vec<(String, String)> = [
+        ("__GCC_ASM_FLAG_OUTPUTS__", "1"),
+        ("__GCC_ATOMIC_BOOL_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_CHAR16_T_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_CHAR32_T_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_CHAR_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_INT_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_LLONG_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_LONG_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_POINTER_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_SHORT_LOCK_FREE", "2"),
+        ("__GCC_ATOMIC_TEST_AND_SET_TRUEVAL", "1"),
+        ("__GCC_ATOMIC_WCHAR_T_LOCK_FREE", "2"),
+        ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1", "1"),
+        ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2", "1"),
+        ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4", "1"),
+        ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8", "1"),
+        ("__GNUC_STDC_INLINE__", "1"),
+        ("__STRICT_ANSI__", "1"),
+    ]
+    .iter()
+    .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+    .collect();
+    let mut claim = version.split('.');
+    for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
+        want.push((name.to_string(), claim.next().expect("x.y.z").to_string()));
+    }
+    want.push((
+        "__VERSION__".to_string(),
+        format!(
+            "\"{version} Compatible badc {}\"",
+            env!("CARGO_PKG_VERSION")
+        ),
+    ));
+    want.sort();
+    assert_eq!(added, want, "the --gnu predefine set changed");
+    // A 16-byte compare-exchange has no lowering, so the width the
+    // `__sync_*` family does not cover stays unclaimed.
+    assert!(
+        !gnu.macros
+            .contains_key("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16")
+    );
+    // `-std=gnu*` drops the ISO-conformance macro and nothing else.
+    let mut gnu_dialect = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    gnu_dialect.enable_gnu(false, false);
+    assert!(!gnu_dialect.macros.contains_key("__STRICT_ANSI__"));
+    // The inline-model macro follows `gnu89_inline`; exactly one is set.
+    let mut gnu89 = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    gnu89.enable_gnu(true, true);
+    assert!(gnu89.macros.contains_key("__GNUC_GNU_INLINE__"));
+    assert!(!gnu89.macros.contains_key("__GNUC_STDC_INLINE__"));
+    // The asm flag-output macro is x86-only, as the feature is.
+    let mut arm = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
+    arm.enable_gnu(false, true);
+    assert!(!arm.macros.contains_key("__GCC_ASM_FLAG_OUTPUTS__"));
+}
+
+#[test]
+fn segment_and_utf_capability_macros_track_the_feature() {
+    // `__SEG_FS` / `__SEG_GS` report the x86 named address spaces, so
+    // they follow the target rather than the dialect; the C11 UTF
+    // encoding macros hold on every target.
+    let probe = "#ifdef __SEG_GS\nGS yes\n#else\nGS no\n#endif\n\
+                 #ifdef __SEG_FS\nFS yes\n#else\nFS no\n#endif\n\
+                 U16 __STDC_UTF_16__\nU32 __STDC_UTF_32__\n";
+    let mut x86 = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let out = x86.process(probe).expect("preprocessor failed");
+    assert!(out.contains("GS yes") && out.contains("FS yes"), "{out}");
+    assert!(out.contains("U16 1") && out.contains("U32 1"), "{out}");
+    let mut arm = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
+    let out = arm.process(probe).expect("preprocessor failed");
+    assert!(out.contains("GS no") && out.contains("FS no"), "{out}");
+    assert!(out.contains("U16 1") && out.contains("U32 1"), "{out}");
+}
+
+#[test]
 fn gnu_identity_version_derives_from_the_shared_claim() {
     // The `__GNUC__` triple and `__VERSION__` must state
     // `GNU_COMPAT_VERSION` -- the same claim `--version` prints --

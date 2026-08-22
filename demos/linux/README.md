@@ -306,8 +306,8 @@ In particular `scripts/cc-version.sh` classifies the reference
 compiler (`-E`), keeping `CONFIG_GCC_VERSION` at the reference
 toolchain's value: identification follows the compiler that built the
 objects, classification stays with the toolchain whose bug-history gates
-the corpus was captured under (badc's claimed `__GNUC__`, 4.2.1, sits
-below the kernel's gcc floor).
+the corpus was captured under (badc's claimed `__GNUC__`, 4.3.0, sits
+below the kernel's gcc floor, 8.1.0).
 
 The one way a kernel C unit reaches another compiler is `$BADC_FALLBACK`,
 which names units explicitly. It exists to bisect a suspected miscompile:

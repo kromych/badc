@@ -29,7 +29,7 @@ Named as the kernel's CC. Per invocation:
   build's ``$(CC)`` reports, so an identification the shim did not give
   cannot survive the build. Classification stays with the reference
   compiler: ``scripts/cc-version.sh`` asks via ``-E``, and badc's claimed
-  ``__GNUC__`` (4.2.1) is below the kernel's gcc floor.
+  ``__GNUC__`` (4.3.0) is below the kernel's gcc floor (8.1.0).
 - Anything else (cc-option probes, -E, -S, links, the host tools under
   scripts/ and tools/): the real compiler, untouched. Configuration
   answers stay the reference compiler's, so the built object population

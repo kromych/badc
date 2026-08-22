@@ -45,7 +45,7 @@ extern crate alloc;
 // build the consts below from a single spelling of each.
 macro_rules! gnu_compat_version {
     () => {
-        "4.2.1"
+        "4.3.0"
     };
 }
 macro_rules! version_line {
@@ -64,7 +64,8 @@ macro_rules! version_line {
 /// derives `__GNUC__` / `__GNUC_MINOR__` / `__GNUC_PATCHLEVEL__`
 /// and `__VERSION__` from it, and [`VERSION_LINE`] states it, so
 /// the claim cannot drift between the macros and the banner. See
-/// `Preprocessor::enable_gnu` for why the value stays at 4.2.1.
+/// `Preprocessor::enable_gnu` for what backs the value and what
+/// bounds it.
 pub const GNU_COMPAT_VERSION: &str = gnu_compat_version!();
 
 /// One-line compiler identification: name, release version, and

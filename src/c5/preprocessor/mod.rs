@@ -816,10 +816,9 @@ impl Preprocessor {
         // `__GNUC__` and the rest of the GCC identity are opt-in
         // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
         // extensions real code gates on `__GNUC__`, but not all of them
-        // (`<x86intrin.h>` and the x86 intrinsics are absent), so it
-        // does not claim the macro by default; code that gates an
-        // intrinsic path on `__GNUC__` plus an x86 target would
-        // otherwise fail to compile.
+        // (the x86 SIMD intrinsics are absent), so it does not claim the
+        // macro by default; code that gates an intrinsic path on
+        // `__GNUC__` plus an x86 target would otherwise fail to compile.
         // Byte-order predefines (GCC/clang form). Every supported target
         // is little-endian.
         macros.insert("__ORDER_LITTLE_ENDIAN__".to_string(), "1234".to_string());
@@ -881,6 +880,11 @@ impl Preprocessor {
         // `__STDC_NO_VLA__` stays undefined: c5 supports C99 6.7.6.2
         // variable-length arrays (single dimension, block scope).
         macros.insert("__STDC_NO_COMPLEX__".to_string(), "1".to_string());
+        // C11 6.10.8.2: `char16_t` / `char32_t` values are the UTF-16 /
+        // UTF-32 code units of the character, which is what `u"..."` and
+        // `U"..."` encode here.
+        macros.insert("__STDC_UTF_16__".to_string(), "1".to_string());
+        macros.insert("__STDC_UTF_32__".to_string(), "1".to_string());
         macros.insert(
             "__DATE__".to_string(),
             format!("\"{}\"", env!("BADC_BUILD_DATE")),
@@ -898,6 +902,14 @@ impl Preprocessor {
                 macros.insert("__AARCH64EL__".to_string(), "1".to_string());
             }
             Target::LinuxX64 | Target::WindowsX64 => {}
+        }
+        // x86 named address spaces (`int __seg_gs *p`): gcc predefines
+        // these where the qualifiers are available, and an access through
+        // one rides a segment-override prefix. x86-only, as the
+        // qualifiers themselves are.
+        if target.is_x86_64() {
+            macros.insert("__SEG_FS".to_string(), "1".to_string());
+            macros.insert("__SEG_GS".to_string(), "1".to_string());
         }
         // GCC/Clang define `__CHAR_UNSIGNED__` exactly when plain
         // `char` is unsigned (C99 6.2.5p15 leaves it
@@ -1058,8 +1070,8 @@ impl Preprocessor {
 
     /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
     /// only on request because it implements most, but not all, of the
-    /// GNU C surface (`<x86intrin.h>` and the x86 intrinsics are
-    /// absent). Exactly one of `__GNUC_STDC_INLINE__` /
+    /// GNU C surface (the x86 SIMD intrinsics are absent). Exactly one
+    /// of `__GNUC_STDC_INLINE__` /
     /// `__GNUC_GNU_INLINE__` reports which inline linkage model is in
     /// force, per `gnu89_inline`; headers key the spelling of their
     /// inline declarations off it.
@@ -1069,19 +1081,21 @@ impl Preprocessor {
     /// `gcc`/`clang -std=c11` does, so portable code uses the standard
     /// path for the GNU-only features badc lacks.
     pub fn enable_gnu(&mut self, gnu89_inline: bool, strict_ansi: bool) {
-        // The claimed version (`crate::GNU_COMPAT_VERSION`) stays at
-        // 4.2.1. The language features a 5.1 claim implies are backed --
-        // `__atomic_*` (4.7), `asm goto`
-        // (4.5), `__builtin_types_compatible_p` including array type
-        // names, designated-initializer ranges, `__builtin_*_overflow`
-        // (5.1) -- but the version also gates the x86 intrinsic surface.
-        // Real code keys `<x86intrin.h>` and the SSE2 / SSSE3 / SSE4.1 /
-        // AES-NI / PCLMUL / RDRAND intrinsic families off `__GNUC__ >=
-        // 4.4`, along with per-function `__attribute__((target(...)))`.
-        // badc lowers none of those, so 4.2.1 is the highest version it
-        // can claim without selecting paths it cannot compile. Raise it
-        // once the intrinsics are lowered, not merely once a header
-        // named `<x86intrin.h>` exists.
+        // The claimed version (`crate::GNU_COMPAT_VERSION`) is 4.3.0:
+        // every feature GCC 4.3 documents is backed -- `__builtin_bswap32`
+        // / `__builtin_bswap64`, the `hot` / `cold` / `alloc_size` /
+        // `error` / `warning` attributes, `__COUNTER__` -- and later
+        // features that real code gates on their own capability macros
+        // rather than on the version (`__atomic_*`, `asm goto`,
+        // `_Static_assert`, `_Generic`, `__has_attribute`,
+        // `__builtin_*_overflow`) are backed too.
+        // 4.4 is the first version badc cannot honor: it documents
+        // per-function `__attribute__((target(...)))` and the x86
+        // intrinsic header family, and real code turns its SSE2 / SSSE3 /
+        // SSE4.1 / AES-NI / PCLMUL / RDRAND paths on at `__GNUC__ >= 4.4`.
+        // badc parses the target attribute without interpreting it and
+        // lowers no `__m128i` intrinsic, so a 4.4 claim selects code it
+        // cannot compile. Raise the claim once those are lowered.
         let mut compat = crate::GNU_COMPAT_VERSION.split('.');
         for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
             let component = compat.next().expect("GNU_COMPAT_VERSION is x.y.z");
@@ -1107,13 +1121,33 @@ impl Preprocessor {
             ),
         );
         // The `__sync_*` builtins lower for these widths, so the
-        // capability macros a lock-free path tests are honest.
+        // capability macros a lock-free path tests are honest. 16 stays
+        // undefined: a 16-byte compare-exchange has no lowering.
         for w in [1u32, 2, 4, 8] {
             self.macros.insert(
                 alloc::format!("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{w}"),
                 "1".to_string(),
             );
         }
+        // C11 7.17.5 lock-free property, in the GCC spelling
+        // `<stdatomic.h>` and lock-free paths test. Every type named
+        // here is at most 8 bytes wide on every supported target and
+        // the `__atomic_*` builtins lower to a lock-free instruction at
+        // those widths, so all are 2 (always lock-free).
+        for name in [
+            "BOOL", "CHAR", "CHAR16_T", "CHAR32_T", "WCHAR_T", "SHORT", "INT", "LONG", "LLONG",
+            "POINTER",
+        ] {
+            self.macros.insert(
+                alloc::format!("__GCC_ATOMIC_{name}_LOCK_FREE"),
+                "2".to_string(),
+            );
+        }
+        // `__atomic_test_and_set` sets the byte to 1.
+        self.macros.insert(
+            "__GCC_ATOMIC_TEST_AND_SET_TRUEVAL".to_string(),
+            "1".to_string(),
+        );
         // Report strict ISO conformance alongside `__GNUC__`, exactly as
         // `gcc`/`clang -std=c11` does, so a header takes its standard-C
         // path rather than a GNU-dialect path for any extension badc

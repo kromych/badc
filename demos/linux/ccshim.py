@@ -22,7 +22,7 @@ Routing, one rule per probe class:
   are classification queries (``scripts/cc-version.sh``), not capability
   probes; the kernel's version gates encode a specific toolchain's bug history
   rather than a feature badc either has or lacks, and badc's claimed
-  ``__GNUC__`` (4.2.1) sits below the kernel's gcc floor.
+  ``__GNUC__`` (4.3.0) sits below the kernel's gcc floor (8.1.0).
 - ``--version``: answered by badc. The first line becomes
   ``CONFIG_CC_VERSION_TEXT`` -- the boot banner's and ``/proc/version``'s
   compiler identification -- and identification, unlike classification, must

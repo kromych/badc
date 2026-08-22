@@ -1159,6 +1159,21 @@ fn builtin_types_compatible_ptr_array() {
 }
 
 #[test]
+fn gnu_capability_macros_match_their_features() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    // Every capability macro the `--gnu` predefine set claims, checked
+    // against the behaviour it promises: the atomic lock-free properties
+    // and test-and-set true value, the `__sync_*` widths, the byte-swap
+    // builtins the version claim covers, and the UTF literal encodings.
+    let src = super::load_fixture("gnu_capability_macros.c");
+    let opts = CompileOptions::default().with_gnu(true);
+    let program = Compiler::with_options(src, Target::host(), opts)
+        .compile()
+        .expect("fixture must compile under --gnu");
+    assert_eq!(Vm::new(program).with_pointer_tracking().run().unwrap(), 0);
+}
+
+#[test]
 fn builtin_types_compatible_typedef() {
     // C99 6.7.7p3: an array typedef in a `__builtin_types_compatible_p`
     // type-name position is that array type, `A *` over it names a

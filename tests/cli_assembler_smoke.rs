@@ -245,6 +245,16 @@ fn visibility(bytes: &[u8], want: &str) -> Option<u8> {
 
 /// `(name, binding, section index)` of every named symbol table entry.
 fn sym_bindings(bytes: &[u8]) -> Vec<(String, u8, u16)> {
+    sym_table(bytes)
+        .into_iter()
+        .filter(|s| !s.0.is_empty())
+        .map(|(n, info, shndx, _, _)| (n, info >> 4, shndx))
+        .collect()
+}
+
+/// `(name, st_info, st_shndx, st_value, st_size)` of every `.symtab` entry,
+/// in table order.
+fn sym_table(bytes: &[u8]) -> Vec<(String, u8, u16, u64, u64)> {
     let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
     let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
     let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
@@ -263,11 +273,14 @@ fn sym_bindings(bytes: &[u8]) -> Vec<(String, u8, u16)> {
             let sym = off + e;
             let n = stroff + u32at(sym);
             let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
-            if end == 0 {
-                continue;
-            }
             let name = String::from_utf8(bytes[n..n + end].to_vec()).unwrap();
-            out.push((name, bytes[sym + 4] >> 4, u16at(sym + 6) as u16));
+            out.push((
+                name,
+                bytes[sym + 4],
+                u16at(sym + 6) as u16,
+                u64at(sym + 8),
+                u64at(sym + 16),
+            ));
         }
     }
     out
@@ -2135,6 +2148,93 @@ fn a_set_alias_of_an_undefined_name_resolves_against_the_name() {
     );
 }
 
+/// A `.set` alias whose chain ends at a definition of this unit takes that
+/// definition's section, value, type and size, through whichever channel
+/// defines the name. GNU as 2.46.1 over the equivalent assembly emits
+/// `(value, size, type, bind)` `(0, 4, OBJECT, LOCAL)` for an alias of a
+/// `.data` object, `(0, 4, TLS, LOCAL)` for one of a `.tdata` object,
+/// `(1, 0, NOTYPE, LOCAL)` for one of a code-stream label at `.text+1`, and
+/// `(0, 3, FUNC, GLOBAL)` for a `.globl` alias of a 3-byte function.
+#[test]
+fn a_set_alias_of_a_defined_name_takes_its_place() {
+    const NOTYPE_LOCAL: u8 = 0x00;
+    const OBJECT_LOCAL: u8 = 0x01;
+    const TLS_LOCAL: u8 = 0x06;
+    const OBJECT_GLOBAL: u8 = 0x11;
+    const FUNC_GLOBAL: u8 = 0x12;
+    const ABS64: u32 = 1;
+    // `(st_info, st_shndx, st_value, st_size)` of a named entry.
+    let place = |bytes: &[u8], n: &str| {
+        sym_table(bytes)
+            .into_iter()
+            .find(|s| s.0 == n)
+            .map(|(_, info, shndx, val, size)| (info, shndx, val, size))
+    };
+    let at = |bytes: &[u8], n: &str, info: u8| {
+        let (_, shndx, val, size) = place(bytes, n).unwrap_or_else(|| panic!("no `{n}` entry"));
+        (info, shndx, val, size)
+    };
+    // Assembled directly: an alias of a data object, a chain through it,
+    // and a `.globl` alias of a function.
+    let bytes = object_of(
+        "set-defined-s",
+        "\t.text\n\t.globl g\n\t.type g, @function\ng:\n\tret\n\t.size g, .-g\n\
+         \t.data\n\t.globl d\n\t.type d, @object\n\t.size d, 4\nd:\n\t.long 5\n\
+         \t.set alias_d, d\n\t.globl alias_g\n\t.set alias_g, g\n\t.set chain, alias_d\n",
+    );
+    let d = at(&bytes, "d", OBJECT_GLOBAL);
+    let g = at(&bytes, "g", FUNC_GLOBAL);
+    assert_eq!((d.2, d.3, g.2, g.3), (0, 4, 0, 1));
+    assert_eq!(
+        place(&bytes, "alias_d"),
+        Some((OBJECT_LOCAL, d.1, d.2, d.3))
+    );
+    assert_eq!(place(&bytes, "chain"), Some((OBJECT_LOCAL, d.1, d.2, d.3)));
+    assert_eq!(place(&bytes, "alias_g"), Some((FUNC_GLOBAL, g.1, g.2, g.3)));
+    // The same assignments in a C unit's file-scope asm. A target that is
+    // neither an inline-asm section label nor a function body reaches the
+    // writer through another channel: a data or thread-local object, or a
+    // label an inline-asm template defined in the main code stream.
+    let bytes = object_of_c(
+        "set-defined-c",
+        "int d = 5;\n_Thread_local int t = 3;\n\
+         void f(void) { __asm__ volatile(\"nop\\n mylbl:\\n nop\\n\"); }\n\
+         __asm__(\".set ad, d\\n.set chain, ad\\n.set at, t\\n.set al, mylbl\\n\
+         .globl af\\n.set af, f\\n\");\n",
+    );
+    let d = at(&bytes, "d", OBJECT_GLOBAL);
+    let t = at(&bytes, "t", TLS_LOCAL | 0x10);
+    let lbl = at(&bytes, "mylbl", NOTYPE_LOCAL);
+    let f = at(&bytes, "f", FUNC_GLOBAL);
+    assert_eq!((d.3, t.3, lbl.2), (4, 4, 1));
+    assert_eq!(place(&bytes, "ad"), Some((OBJECT_LOCAL, d.1, d.2, d.3)));
+    assert_eq!(place(&bytes, "chain"), Some((OBJECT_LOCAL, d.1, d.2, d.3)));
+    assert_eq!(place(&bytes, "at"), Some((TLS_LOCAL, t.1, t.2, t.3)));
+    assert_eq!(
+        place(&bytes, "al"),
+        Some((NOTYPE_LOCAL, lbl.1, lbl.2, lbl.3))
+    );
+    assert_eq!(place(&bytes, "af"), Some((FUNC_GLOBAL, f.1, f.2, f.3)));
+    // A C reference to such an alias binds to the definition rather than
+    // adding an undefined entry beside it.
+    let bytes = object_of_c(
+        "set-defined-ref",
+        "int d = 5;\n__asm__(\".globl ad\\n.set ad, d\\n\");\nextern int ad;\nint *q = &ad;\n",
+    );
+    let ad: Vec<_> = sym_table(&bytes)
+        .into_iter()
+        .filter(|s| s.0 == "ad")
+        .collect();
+    assert_eq!(ad.len(), 1, "{ad:?}");
+    assert_eq!(ad[0].1 >> 4, 1, "{ad:?}");
+    assert_ne!(ad[0].2, 0, "{ad:?}");
+    let rows: Vec<_> = named_relocs(&bytes, ".rela.data")
+        .into_iter()
+        .map(|(_, ty, name, addend)| (ty, name, addend))
+        .collect();
+    assert_eq!(rows, [(ABS64, String::from("ad"), 0)]);
+}
+
 /// An `__attribute__((alias))` declarator's symbol takes the declarator's own
 /// linkage, as gcc 16.1 emits it: `static` binds it local,
 /// `__attribute__((weak))` weak, and external linkage global.
@@ -2474,29 +2574,10 @@ fn frames_appear_only_for_a_closed_description() {
 /// `(name, st_info, st_shndx)` of every symbol table entry, the unnamed
 /// ones included, in table order.
 fn sym_entries(bytes: &[u8]) -> Vec<(String, u8, u16)> {
-    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
-    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
-    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
-    let shoff = u64at(0x28) as usize;
-    let (shentsize, shnum) = (u16at(0x3a), u16at(0x3c));
-    let mut out = Vec::new();
-    for i in 0..shnum {
-        let sh = shoff + i * shentsize;
-        if u32at(sh + 4) != 2 {
-            continue;
-        }
-        let off = u64at(sh + 0x18) as usize;
-        let size = u64at(sh + 0x20) as usize;
-        let stroff = u64at(shoff + u32at(sh + 0x28) * shentsize + 0x18) as usize;
-        for e in (0..size).step_by(24) {
-            let sym = off + e;
-            let n = stroff + u32at(sym);
-            let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
-            let name = String::from_utf8(bytes[n..n + end].to_vec()).unwrap();
-            out.push((name, bytes[sym + 4], u16at(sym + 6) as u16));
-        }
-    }
-    out
+    sym_table(bytes)
+        .into_iter()
+        .map(|(n, info, shndx, _, _)| (n, info, shndx))
+        .collect()
 }
 
 /// `(name, sh_type, sh_flags, sh_addralign, sh_entsize)` per section.

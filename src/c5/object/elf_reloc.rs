@@ -1734,6 +1734,38 @@ pub(super) fn write_relocatable(
         .copied()
         .chain(asm_set_defs.iter().map(|&(n, _)| n))
         .collect();
+    // Objects this unit defines, by name: unified `.data` offset (TLS block
+    // offset for a thread-local), byte size, and whether it is thread-local.
+    // An alias definition carries its target's offset and binds like any
+    // defined object; dropping it here would hand its name an undefined
+    // entry beside the definition.
+    let defined_obj_by_name: alloc::collections::BTreeMap<&str, (i64, u64, bool)> = {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.name.is_empty()
+                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
+            })
+            .map(|s| {
+                let size = crate::c5::layout::data_object_byte_size(s);
+                (s.link_name(), (s.val, size, s.is_thread_local))
+            })
+            .collect()
+    };
+    // The non-thread-local ones, whose value is a `.data` offset: an
+    // inline-asm section reloc naming one resolves section-relative like the
+    // attribute path.
+    let defined_data_by_name = |n: &str| -> Option<i64> {
+        defined_obj_by_name
+            .get(n)
+            .filter(|&&(_, _, tls)| !tls)
+            .map(|&(val, _, _)| val)
+    };
     // The end of an alias's `.set` chain. An alias whose chain ends at a
     // name nothing in the unit defines is no definition: GNU as emits no
     // symbol for it and resolves every reference against the chain's end,
@@ -1759,10 +1791,17 @@ pub(super) fn write_relocatable(
             let end = alias_chain_end(&program.function_aliases, a);
             (!asm_defined_labels.contains(end)
                 && !defined_fn_names.contains(end)
+                && !defined_obj_by_name.contains_key(end)
                 && func_strs.iter().all(|n| n != end))
             .then_some((a.name.as_str(), end))
         })
         .collect();
+    // An alias that emits a symbol of its own defines the name; one whose
+    // chain ends undefined does not, and its references keep an undefined
+    // entry to resolve against.
+    let defines_alias = |n: &str| -> bool {
+        program.function_aliases.iter().any(|a| a.name == n) && !undef_alias_end.contains_key(n)
+    };
     let mut user_extern_names: Vec<&str> = Vec::new();
     for site in &build.user_extern_call_sites {
         let s = site.symbol_name.as_str();
@@ -1883,33 +1922,14 @@ pub(super) fn write_relocatable(
         .chain(&build.tls_extern_data_relocs)
     {
         let s = r.symbol_name.as_str();
-        if !asm_defined_labels.contains(s) && !user_extern_data_names.contains(&s) {
+        if !asm_defined_labels.contains(s)
+            && !defines_alias(s)
+            && !user_extern_data_names.contains(&s)
+        {
             user_extern_data_names.push(s);
         }
     }
 
-    // Data objects defined in this unit, by name and unified data
-    // offset; an inline-asm section reloc naming one resolves
-    // section-relative like the attribute path. An alias definition
-    // carries its target's offset and binds like any defined object;
-    // dropping it here would hand its name an undefined entry beside
-    // the definition.
-    let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = {
-        use crate::c5::symbol::Linkage;
-        use crate::c5::token::Token;
-        program
-            .symbols
-            .iter()
-            .filter(|s| {
-                s.class == Token::Glo as i64
-                    && s.defined_here
-                    && !s.is_thread_local
-                    && !s.name.is_empty()
-                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
-            })
-            .map(|s| (s.link_name(), s.val))
-            .collect()
-    };
     // Inline-asm section reloc and function-body symbol-operand names with
     // neither a definition in this unit nor an existing UNDEF entry get
     // their own undefined symbols.
@@ -1933,7 +1953,7 @@ pub(super) fn write_relocatable(
             let n = undef_alias_end.get(name).copied().unwrap_or(name);
             if !defined_fn_names.contains(n)
                 && !program.function_aliases.iter().any(|a| a.name == n)
-                && !defined_data_by_name.contains_key(n)
+                && defined_data_by_name(n).is_none()
                 && !asm_defined_labels.contains(n)
                 && !user_extern_names.contains(&n)
                 && !user_extern_data_names.contains(&n)
@@ -1948,7 +1968,7 @@ pub(super) fn write_relocatable(
     for n in program.asm_visibility.iter().map(|(n, _)| n.as_str()) {
         if !defined_fn_names.contains(n)
             && !program.function_aliases.iter().any(|a| a.name == n)
-            && !defined_data_by_name.contains_key(n)
+            && defined_data_by_name(n).is_none()
             && !asm_defined_labels.contains(n)
             && !user_extern_names.contains(&n)
             && !user_extern_data_names.contains(&n)
@@ -1969,7 +1989,7 @@ pub(super) fn write_relocatable(
         .filter(|&n| {
             !defined_fn_names.contains(n)
                 && !program.function_aliases.iter().any(|a| a.name == n)
-                && !defined_data_by_name.contains_key(n)
+                && defined_data_by_name(n).is_none()
                 && !asm_defined_labels.contains(n)
                 && !user_extern_names.contains(&n)
                 && !user_extern_data_names.contains(&n)
@@ -2207,7 +2227,7 @@ pub(super) fn write_relocatable(
                 && d.value.is_none()
                 && !defined_fn_names.contains(d.name.as_str())
                 && !program.function_aliases.iter().any(|a| a.name == d.name)
-                && !defined_data_by_name.contains_key(d.name.as_str())
+                && defined_data_by_name(d.name.as_str()).is_none()
                 && !asm_defined_labels.contains(d.name.as_str())
                 && !user_extern_names.contains(&d.name.as_str())
                 && !user_extern_data_names.contains(&d.name.as_str())
@@ -2267,6 +2287,47 @@ pub(super) fn write_relocatable(
             None => (SHIDX_TEXT, off),
         }
     };
+    // The unit's TLS block is `.tdata` bytes then `.tbss` zero fill; an
+    // offset past the initialized bytes is `.tbss`-relative.
+    let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
+    let tls_home = |off: i64| {
+        if off >= tls_init_len {
+            (SHIDX_TBSS, off - tls_init_len)
+        } else {
+            (SHIDX_TDATA, off)
+        }
+    };
+    // Where a name this unit defines lands: section index, value, symbol type
+    // and size. Every definition channel resolves here -- a label of an
+    // inline-asm section, a label the main code stream defines, a function
+    // body, and a data or thread-local object.
+    let defined_place = |t: &str| -> Result<Option<(u16, u64, u8, u64)>, C5Error> {
+        if let Some(l) = asm_labels.iter().find(|l| l.name == t) {
+            return Ok(Some((l.shndx, l.value, l.st_type, l.st_size)));
+        }
+        if let Some(s) = asm_text_label_syms.iter().find(|s| s.name == t) {
+            let (shndx, value) = text_place(s.offset as u64);
+            return Ok(Some((shndx, value, s.st_type, s.st_size)));
+        }
+        if let Some(i) = func_strs.iter().position(|n| n == t) {
+            let (lo, hi) = func_extent(i)?;
+            let (shndx, value) = text_place(lo as u64);
+            return Ok(Some((shndx, value, STT_FUNC, hi.saturating_sub(lo) as u64)));
+        }
+        let Some(&(val, size, tls)) = defined_obj_by_name.get(t) else {
+            return Ok(None);
+        };
+        if tls {
+            let (shndx, value) = tls_home(val);
+            return Ok(Some((shndx, value as u64, STT_TLS, size)));
+        }
+        let (shndx, value) = match plan.map(val.max(0) as u64) {
+            DataHome::Data(o) => (SHIDX_DATA, o),
+            DataHome::Bss(o) => (SHIDX_BSS, o),
+            DataHome::Named(e, o) => (carve.shndx[e], o),
+        };
+        Ok(Some((shndx, value, STT_OBJECT, size)))
+    };
     // Where an assignment's value lands: a constant is SHN_ABS, an
     // assignment to another name takes that name's placement, which the
     // chain resolution above narrowed to a definition of this unit.
@@ -2275,21 +2336,11 @@ pub(super) fn write_relocatable(
             AsmSymValue::Abs(n) => return Ok((SHN_ABS, *n as u64, STT_NOTYPE, 0)),
             AsmSymValue::Sym(t) => t.as_str(),
         };
-        if let Some(l) = asm_labels.iter().find(|l| l.name == t) {
-            return Ok((l.shndx, l.value, l.st_type, l.st_size));
-        }
-        if let Some(s) = asm_text_label_syms.iter().find(|s| s.name == t) {
-            let (shndx, value) = text_place(s.offset as u64);
-            return Ok((shndx, value, s.st_type, s.st_size));
-        }
-        let Some(i) = func_strs.iter().position(|n| n == t) else {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("elf_reloc: `.set` target `{t}` has no definition"),
-            )));
-        };
-        let (lo, hi) = func_extent(i)?;
-        let (shndx, value) = text_place(lo as u64);
-        Ok((shndx, value, STT_FUNC, hi.saturating_sub(lo) as u64))
+        defined_place(t)?.ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "elf_reloc: `.set` target `{t}` has no definition"
+            )))
+        })
     };
     // Binding of an assigned name: local unless a directive of the unit
     // declared it global or weak. Both channels a directive arrives through
@@ -2432,37 +2483,20 @@ pub(super) fn write_relocatable(
                 }
             }
             let bind = alias_bind(a);
-            let st_name = name_offs[fn_alias_names_start + i];
-            let st_other = vis_for(&a.name);
-            if let Some(l) = asm_labels.iter().find(|l| l.name == target) {
-                return Ok(Some((
-                    bind,
-                    Elf64Sym {
-                        st_name,
-                        st_info: pack_sym_info(bind, l.st_type),
-                        st_other,
-                        st_shndx: l.shndx,
-                        st_value: l.value,
-                        st_size: l.st_size,
-                    },
-                )));
-            }
-            let Some(ti) = func_strs.iter().position(|n| n == target) else {
+            let Some((shndx, value, st_type, st_size)) = defined_place(target)? else {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("alias `{}`: target `{target}` has no emitted body", a.name),
+                    &format!("alias `{}`: target `{target}` has no definition", a.name),
                 )));
             };
-            let (lo, hi) = func_extent(ti)?;
-            let (shndx, value) = text_place(lo as u64);
             Ok(Some((
                 bind,
                 Elf64Sym {
-                    st_name,
-                    st_info: pack_sym_info(bind, STT_FUNC),
-                    st_other,
+                    st_name: name_offs[fn_alias_names_start + i],
+                    st_info: pack_sym_info(bind, st_type),
+                    st_other: vis_for(&a.name),
                     st_shndx: shndx,
                     st_value: value,
-                    st_size: hi.saturating_sub(lo) as u64,
+                    st_size,
                 },
             )))
         })
@@ -2503,16 +2537,6 @@ pub(super) fn write_relocatable(
     // `_Thread_local` objects: STT_TLS against `.tdata` / `.tbss` with a
     // section-relative value, so a sibling unit's local-exec relocation
     // and this unit's debug info resolve through the merged TLS block.
-    // The unit's block is `.tdata` bytes then `.tbss` zero fill; an
-    // offset past the initialized bytes is `.tbss`-relative.
-    let tls_init_len = program.tls_init_size.min(program.tls_data.len()) as i64;
-    let tls_home = |off: i64| {
-        if off >= tls_init_len {
-            (SHIDX_TBSS, off - tls_init_len)
-        } else {
-            (SHIDX_TDATA, off)
-        }
-    };
     let mut defined_tls_symidx: alloc::collections::BTreeMap<&str, u64> =
         alloc::collections::BTreeMap::new();
     for (i, (name, off, size)) in defined_tls_locals
@@ -3338,7 +3362,7 @@ pub(super) fn write_relocatable(
                     (idx as u64, 0)
                 } else if let Some(&idx) = defined_data_symidx.get(name) {
                     (idx, 0)
-                } else if let Some(&val) = defined_data_by_name.get(name) {
+                } else if let Some(val) = defined_data_by_name(name) {
                     data_section_ref(val)
                 } else if let Some(&idx) = extern_symidx_by_name.get(name) {
                     (idx as u64, 0)
@@ -3490,7 +3514,7 @@ pub(super) fn write_relocatable(
                             // its own symbol; reducing to section+addend would
                             // present it to readers as a local definition.
                             (idx, r.addend)
-                        } else if let Some(&val) = defined_data_by_name.get(name) {
+                        } else if let Some(val) = defined_data_by_name(name) {
                             let (sym, off) = data_section_ref(val);
                             (sym, off + r.addend)
                         } else if let Some(&idx) = extern_symidx_by_name.get(name) {
@@ -3632,12 +3656,19 @@ pub(super) fn write_relocatable(
     // defining unit's storage. The addend carries the byte offset added
     // to the symbol (`&extern_arr[N]`).
     for r in &build.extern_data_relocs {
-        let (sym_idx, base) = match asm_label_ref(r.symbol_name.as_str()) {
-            Some(pair) => pair,
-            None => {
+        let name = r.symbol_name.as_str();
+        // A name this unit defines through an alias resolves against the
+        // alias's own symbol, as a call through one does.
+        let alias_sym = defines_alias(name)
+            .then(|| func_symidx_by_name.get(name).copied())
+            .flatten();
+        let (sym_idx, base) = match (asm_label_ref(name), alias_sym) {
+            (Some(pair), _) => pair,
+            (None, Some(idx)) => (idx as u64, 0),
+            (None, None) => {
                 let pos = user_extern_data_names
                     .iter()
-                    .position(|n| *n == r.symbol_name.as_str())
+                    .position(|n| *n == name)
                     .expect("user_extern_data_names contains every extern_data_reloc name");
                 (user_extern_data_sym_idx[pos] as u64, 0)
             }

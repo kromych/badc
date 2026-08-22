@@ -6787,6 +6787,34 @@ pub(crate) fn short_branch_opcode(mnem: &str) -> Option<u8> {
     })
 }
 
+/// Address-size prefix of an `E3 rel8` branch. The counter the name spells is
+/// the instruction's address size: the mode's default takes no prefix, the
+/// mode's other address size takes `67`, and a width the mode cannot address
+/// has no encoding, as GNU as rejects it.
+fn e3_branch_prefix(
+    mnem: &str,
+    mode: super::table::Mode,
+) -> Result<Option<u8>, alloc::string::String> {
+    let width: u8 = match mnem {
+        "jcxz" => 2,
+        "jecxz" => 4,
+        "jrcxz" => 8,
+        _ => return Ok(None),
+    };
+    let dflt = mode.addrsize();
+    let alt = if dflt == 2 { 4 } else { dflt / 2 };
+    if width == dflt {
+        Ok(None)
+    } else if width == alt {
+        Ok(Some(0x67))
+    } else {
+        Err(alloc::format!(
+            "inline asm: `{mnem}` does not encode in {}-bit mode",
+            dflt * 8
+        ))
+    }
+}
+
 /// A branch target's section target: a bare name resolves through the label,
 /// section and `.set` maps; an expression over them (`jmp sym + 4`) is valued
 /// where the section materializes.
@@ -7013,6 +7041,8 @@ fn encode_one_x86_section_insn(
     // label target resolves to a one-byte displacement rather than the
     // mode-width one the other branches take.
     if let Some(op) = short_branch_opcode(mnem) {
+        let prefix =
+            e3_branch_prefix(mnem, mode).map_err(|m| alloc::format!("{m} (`{text}`)"))?;
         let target = if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
             Some(AsmSectionTarget::Symbol(alloc::format!(
                 "{num}{}",
@@ -7025,10 +7055,12 @@ fn encode_one_x86_section_insn(
                 .map(|t| branch_section_target(t))
         };
         if let Some(target) = target {
+            let mut bytes = alloc::vec::Vec::new();
+            bytes.extend(prefix);
+            bytes.extend([op, 0]);
             return Ok(AsmSectionItem::CodeBytes {
-                bytes: alloc::vec![op, 0],
                 relocs: alloc::vec![AsmSectionReloc {
-                    offset: 1,
+                    offset: bytes.len() as u32 - 1,
                     width: 1,
                     // Not `JumpRel`: these have no wider form, so GNU as
                     // fixes them up rather than relaxing them, and a global
@@ -7040,8 +7072,15 @@ fn encode_one_x86_section_insn(
                     target,
                     addend: -1,
                 }],
+                bytes,
                 short: None,
             });
+        }
+        // `jcxz` / `jecxz` have no catalogue row to fall back to.
+        if matches!(mnem, "jcxz" | "jecxz") {
+            return Err(alloc::format!(
+                "inline asm: replacement `{text}`: `{mnem}` takes a label target"
+            ));
         }
     }
     let is_call = mnem.starts_with("call");
@@ -12363,6 +12402,29 @@ mod code_mode_tests {
         assert_eq!(assemble(".Lx:\nnop\njrcxz .Lx\n"), [0x90, 0xe3, 0xfd]);
         assert_eq!(assemble(".Lx:\nnop\nloope .Lx\n"), [0x90, 0xe1, 0xfd]);
         assert_eq!(assemble(".Lx:\nnop\nloopne .Lx\n"), [0x90, 0xe0, 0xfd]);
+        assert_eq!(assemble(".Lx:\nnop\nloopz .Lx\n"), [0x90, 0xe1, 0xfd]);
+        assert_eq!(assemble(".Lx:\nnop\nloopnz .Lx\n"), [0x90, 0xe0, 0xfd]);
+    }
+
+    /// The counter an `E3` branch name spells is the address size, so the
+    /// name off the mode's default takes the `67` prefix and a width the
+    /// mode cannot address is rejected.
+    #[test]
+    fn e3_branch_takes_the_address_size_of_its_counter() {
+        assert_eq!(assemble("x: jecxz x\n"), [0x67, 0xe3, 0xfd]);
+        assert_eq!(assemble(".code32\nx: jecxz x\n"), [0xe3, 0xfe]);
+        assert_eq!(assemble(".code32\nx: jcxz x\n"), [0x67, 0xe3, 0xfd]);
+        assert_eq!(assemble(".code16\nx: jcxz x\n"), [0xe3, 0xfe]);
+        assert_eq!(assemble(".code16\nx: jecxz x\n"), [0x67, 0xe3, 0xfd]);
+        assert!(assemble_err("x: jcxz x\n").contains("64-bit mode"));
+        assert!(assemble_err(".code32\nx: jrcxz x\n").contains("32-bit mode"));
+        assert!(assemble_err(".code16\nx: jrcxz x\n").contains("16-bit mode"));
+        // No wider form exists: a target out of rel8 range is an error, not
+        // a relaxation.
+        assert!(
+            assemble_err("x: .skip 200, 0x90\njecxz x\n").contains("out of range"),
+            "an out-of-range rel8 target must be diagnosed"
+        );
     }
 
     /// A `.code16` stub's symbol immediate takes the 16-bit field, and the

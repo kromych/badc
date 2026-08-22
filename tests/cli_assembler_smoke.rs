@@ -935,6 +935,33 @@ fn code32_and_code64_short_branches_take_rel8() {
     assert_eq!(t, bytes);
 }
 
+/// `jcxz` / `jecxz` / `jrcxz` are one `E3 rel8` opcode; the counter the name
+/// spells is the address size, so the name off the mode's default carries the
+/// `67` prefix. Bytes are GNU as 2.46.1's for the same unit.
+#[test]
+fn e3_branches_take_the_address_size_prefix_by_mode() {
+    const SRC: &str = concat!(
+        "\t.code16\n",
+        "a:\tjcxz a\n",  // e3 fe
+        "b:\tjecxz b\n", // 67 e3 fd
+        "\t.code32\n",
+        "c:\tjecxz c\n", // e3 fe
+        "d:\tjcxz d\n",  // 67 e3 fd
+        "\t.code64\n",
+        "e:\tjecxz e\n", // 67 e3 fd
+        "f:\tjrcxz f\n", // e3 fe
+    );
+    assert_eq!(
+        text_of("e3-branches", SRC),
+        [0xe3, 0xfe, 0x67, 0xe3, 0xfd, 0xe3, 0xfe, 0x67, 0xe3, 0xfd, 0x67, 0xe3, 0xfd, 0xe3, 0xfe]
+    );
+    // A counter the mode cannot address is rejected, as GNU as rejects it.
+    let d = dir("e3-reject");
+    write(&d, "r.s", "x:\tjcxz x\n");
+    let (ok, text) = run(&d, &["-q", "-c", "--target=linux-x64", "r.s", "-o", "r.o"]);
+    assert!(!ok && text.contains("64-bit mode"), "{text}");
+}
+
 /// Contents of `.text`, from an object of either ELF class.
 fn text_bytes(b: &[u8]) -> Vec<u8> {
     if b[4] == 1 {

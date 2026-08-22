@@ -1801,9 +1801,22 @@ fn split_mnemonic_exact(tok: &str) -> Option<(Mnemonic, Option<AsmRegSize>)> {
         // `ud2` with a byte suffix.
         "ud2a" => Some("ud2"),
         "ud2b" => Some("ud1"),
+        // Flag aliases of the `loop` conditionals.
+        "loopz" => Some("loope"),
+        "loopnz" => Some("loopne"),
         _ => None,
     } {
         return Some((Mnemonic::Table(table_mnemonic(sized)?), None));
+    }
+    // The narrower counter widths of the `E3 rel8` branch. The catalogue row
+    // is `jrcxz`; these differ from it only by the address-size prefix, which
+    // the encoder selects from the mode, so they carry no row of their own.
+    if let Some(name) = match tok {
+        "jcxz" => Some("jcxz"),
+        "jecxz" => Some("jecxz"),
+        _ => None,
+    } {
+        return Some((Mnemonic::Table(name), None));
     }
     // AT&T zero/sign-extending moves; the second width letter is the
     // operation width, the first rides the mnemonic to the r/m operand.

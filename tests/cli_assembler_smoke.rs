@@ -923,6 +923,18 @@ fn code16_same_section_branches_resolve_in_place() {
     );
 }
 
+/// The same source relaxes to the same `rel8` bytes under `.code32` and
+/// `.code64`: only the long form's displacement width varies by mode.
+#[test]
+fn code32_and_code64_short_branches_take_rel8() {
+    let bytes = [0x90, 0xeb, 0xfd, 0x90, 0xeb, 0x01, 0x90, 0x90, 0x74, 0xf6];
+    let body = "c:\tnop\n\tjmp c\n\tnop\n\tjmp f\n\tnop\nf:\tnop\n\tje c\n";
+    let t = text_of("code32-br", &format!("\t.code32\n\t.text\n{body}"));
+    assert_eq!(t, bytes);
+    let t = text_of("code64-br", &format!("\t.text\n{body}"));
+    assert_eq!(t, bytes);
+}
+
 /// Contents of `.text`, from an object of either ELF class.
 fn text_bytes(b: &[u8]) -> Vec<u8> {
     if b[4] == 1 {

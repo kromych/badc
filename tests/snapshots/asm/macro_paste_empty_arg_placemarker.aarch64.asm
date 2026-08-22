@@ -29,7 +29,7 @@ Disassembly of section .text:
                	mov	x0, #0x9                // =9
                	str	w0, [x1]
                	sxtw	x0, w0
-               	cmp	w0, #0x9
+               	cmp	x0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret

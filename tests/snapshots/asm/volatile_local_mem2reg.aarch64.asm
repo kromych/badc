@@ -22,11 +22,11 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	stur	w1, [x29, #-0x8]
                	ldursw	x1, [x29, #-0x8]
-               	cmp	w1, #0x2
+               	cmp	x1, #0x2
                	cset	x1, eq
                	cbz	x1, <addr>
                	ldursw	x1, [x29, #-0x8]
-               	cmp	w1, #0x2
+               	cmp	x1, #0x2
                	cset	x1, eq
                	cbz	x1, <addr>
                	mov	x0, #0x0                // =0

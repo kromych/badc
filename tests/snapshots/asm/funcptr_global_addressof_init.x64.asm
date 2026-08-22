@@ -39,7 +39,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movq	(%rbx), %rax
                	callq	*%rax
-               	cmpl	$0x2a, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -50,7 +51,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	callq	*%rax
-               	cmpl	$0x15, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x15, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx

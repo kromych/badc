@@ -15,25 +15,25 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v9   Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v8)
   block 1  start_pc=0
-    v17  LoadLocal { off=-2, kind=I64 }                   -> x1
-    v18  Extend { value=v10, kind=I32 }                   -> x1
-    v19  BinopI { op=shl, lhs=v18, rhs_imm=2 }            -> x6
+    v17  LoadLocal { off=-2, kind=I64 }                   -> x6
+    v18  Extend { value=v10, kind=I32 }                   -> x6
+    v19  BinopI { op=shl, lhs=v11, rhs_imm=2 }            -> x6
     v20  Binop { op=add, lhs=v6, rhs=v19 }                -> x6
-    v21  BinopI { op=shl, lhs=v18, rhs_imm=1 }            -> x6
+    v21  BinopI { op=shl, lhs=v11, rhs_imm=1 }            -> x6
     v22  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x8
     v23  Extend { value=v21, kind=I32 }                   -> x8
-    v24  StoreIndexed { base=v6, index=v18, scale=4, value=v21, kind=I32 } -> -
+    v24  StoreIndexed { base=v6, index=v11, scale=4, value=v21, kind=I32 } -> -
     terminator Jmp(b2)   (exit_acc=v24)
   block 2  start_pc=0
     v14  Extend { value=v10, kind=I32 }                   -> x0
-    v15  BinopI { op=add, lhs=v18, rhs_imm=1 }            -> x0
+    v15  BinopI { op=add, lhs=v11, rhs_imm=1 }            -> x0
     v16  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v15)
   block 3  start_pc=0
     v10  Phi { incoming=[b0:v8, b2:v15], kind=I64 }       -> x0
     v11  Extend { value=v10, kind=I32 }                   -> x1
-    v12  LoadLocal { off=2, kind=I32 }                    -> x1
-    v13  Binop { op=lt, lhs=v10, rhs=v1 }                 -> x1
+    v12  LoadLocal { off=2, kind=I32 }                    -> x6
+    v13  Binop { op=lt, lhs=v11, rhs=v1 }                 -> x6
     terminator Bnz { cond=v13, target=b1, fall=b4 }   (exit_acc=v13)
   block 4  start_pc=0
     v25  Imm(0)                                           -> x0
@@ -41,27 +41,27 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v27  Imm(0)                                           -> x1
     terminator Jmp(b7)   (exit_acc=v25)
   block 5  start_pc=0
-    v36  Extend { value=v29, kind=I32 }                   -> x6
-    v37  LoadLocal { off=-2, kind=I64 }                   -> x6
-    v38  Extend { value=v28, kind=I32 }                   -> x6
-    v39  BinopI { op=shl, lhs=v38, rhs_imm=2 }            -> x8
+    v36  Extend { value=v29, kind=I32 }                   -> x8
+    v37  LoadLocal { off=-2, kind=I64 }                   -> x8
+    v38  Extend { value=v28, kind=I32 }                   -> x8
+    v39  BinopI { op=shl, lhs=v30, rhs_imm=2 }            -> x8
     v40  Binop { op=add, lhs=v6, rhs=v39 }                -> x8
-    v41  LoadIndexed { base=v6, index=v38, scale=4, kind=I32 } -> x8
+    v41  LoadIndexed { base=v6, index=v30, scale=4, kind=I32 } -> x8
     v42  Binop { op=add, lhs=v29, rhs=v41 }               -> x1
     v43  Imm(0)                                           -> x8
     v44  Extend { value=v42, kind=I32 }                   -> x8
     terminator Jmp(b6)   (exit_acc=v44)
   block 6  start_pc=0
     v33  Extend { value=v28, kind=I32 }                   -> x0
-    v34  BinopI { op=add, lhs=v38, rhs_imm=1 }            -> x0
+    v34  BinopI { op=add, lhs=v30, rhs_imm=1 }            -> x0
     v35  Imm(0)                                           -> x6
     terminator Jmp(b7)   (exit_acc=v34)
   block 7  start_pc=0
     v28  Phi { incoming=[b4:v25, b6:v34], kind=I64 }      -> x0
     v29  Phi { incoming=[b4:v25, b6:v42], kind=I64 }      -> x1
     v30  Extend { value=v28, kind=I32 }                   -> x6
-    v31  LoadLocal { off=2, kind=I32 }                    -> x6
-    v32  Binop { op=lt, lhs=v28, rhs=v1 }                 -> x6
+    v31  LoadLocal { off=2, kind=I32 }                    -> x8
+    v32  Binop { op=lt, lhs=v30, rhs=v1 }                 -> x8
     terminator Bnz { cond=v32, target=b5, fall=b8 }   (exit_acc=v32)
   block 8  start_pc=0
     v45  Extend { value=v29, kind=I32 }                   -> x0

@@ -317,7 +317,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movq	(%rax), %rax
                	movslq	(%rax), %rax
-               	cmpl	$0x1, %eax
+               	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	movq	(%rsp), %rbx
@@ -329,7 +329,7 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movq	(%rcx), %rax
                	movslq	(%rax), %rax
-               	cmpl	$0x2, %eax
+               	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	movq	(%rsp), %rbx

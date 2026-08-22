@@ -31,7 +31,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	ldursw	x0, [x29, #-0x8]
-               	cmp	w0, #0x2a
+               	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10

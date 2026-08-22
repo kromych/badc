@@ -42,14 +42,14 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movsbq	(%rax), %rax
-               	cmpl	$0x61, %eax
+               	cmpq	$0x61, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	movsbq	0x2(%rax), %rax
-               	cmpl	$0x64, %eax
+               	cmpq	$0x64, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -66,7 +66,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	movsbq	(%rax), %rax
-               	cmpl	$0x61, %eax
+               	cmpq	$0x61, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

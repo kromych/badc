@@ -51,14 +51,15 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
-               	movslq	%eax, %rdx
                	leaq	(%rbx,%rdx), %rsi
                	movzbq	(%rsi), %rsi
                	addq	%rsi, %rcx
                	leaq	0x1(%rdx), %rax
-               	cmpl	$0x1f40, %eax           # imm = 0x1F40
+               	movslq	%eax, %rdx
+               	cmpq	$0x1f40, %rdx           # imm = 0x1F40
                	jl	<addr>
-               	cmpl	$0x5dc0, %ecx           # imm = 0x5DC0
+               	movslq	%ecx, %rax
+               	cmpq	$0x5dc0, %rax           # imm = 0x5DC0
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

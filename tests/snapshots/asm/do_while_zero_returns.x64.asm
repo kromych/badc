@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <from_value>:
                	movslq	%edi, %rdi
-               	testl	%edi, %edi
+               	testq	%rdi, %rdi
                	jge	<addr>
                	imulq	$-0x1, %rdi, %rax
                	movslq	%eax, %rax
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	jne	<addr>
                	xorq	%rax, %rax
                	retq
-               	testl	%edi, %edi
+               	testq	%rdi, %rdi
                	jle	<addr>
                	movl	$0x1, %eax
                	movslq	%eax, %rax

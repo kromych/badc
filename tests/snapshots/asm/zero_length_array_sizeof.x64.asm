@@ -40,10 +40,10 @@ Disassembly of section .text:
                	movq	%rsi, 0x10(%rax)
                	leaq	-0x20(%rbp), %rdi
                	movl	0x4(%rax), %edx
-               	cmpl	$0x4, %edx
+               	cmpq	$0x4, %rdx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	testl	%edx, %edx
+               	testq	%rdx, %rdx
                	sete	%dl
                	movzbq	%dl, %rdx
                	movl	%edx, %r8d
@@ -66,7 +66,8 @@ Disassembly of section .text:
                	addq	%rdi, %rdx
                	movzbq	-0x20(%rbp), %rdi
                	movb	%dil, (%rdx)
-               	cmpl	$0x4, %ecx
+               	movslq	%ecx, %rdx
+               	cmpq	$0x4, %rdx
                	jge	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
@@ -77,7 +78,8 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	cmpl	$0x4, %ecx
+               	movslq	%ecx, %rax
+               	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	addq	$0x30, %rsp
@@ -93,7 +95,7 @@ Disassembly of section .text:
                	movzbq	0x1(%rcx), %rdx
                	xorq	$0x41, %rdx
                	movl	%edx, %edx
-               	testl	%edx, %edx
+               	testq	%rdx, %rdx
                	setne	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
@@ -101,7 +103,7 @@ Disassembly of section .text:
                	movzbq	0x2(%rcx), %rax
                	xorq	$0x44, %rax
                	movl	%eax, %eax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -109,7 +111,7 @@ Disassembly of section .text:
                	movzbq	0x3(%rcx), %rax
                	xorq	$0x43, %rax
                	movl	%eax, %eax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

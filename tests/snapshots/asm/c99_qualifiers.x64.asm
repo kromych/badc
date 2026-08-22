@@ -41,7 +41,7 @@ Disassembly of section .text:
                	cmpq	$0x1, %rcx
                	jb	<addr>
                	movslq	%eax, %rax
-               	cmpl	$0x7, %eax
+               	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x10, %rsp

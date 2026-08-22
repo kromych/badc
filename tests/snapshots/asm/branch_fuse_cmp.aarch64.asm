@@ -131,7 +131,7 @@ Disassembly of section .text:
                	cbnz	x1, <addr>
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	cmp	w0, #0x4
+               	cmp	x0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10

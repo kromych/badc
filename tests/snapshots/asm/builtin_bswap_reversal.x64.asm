@@ -53,7 +53,7 @@ Disassembly of section .text:
                	movzwq	-0x18(%rbp), %rax
                	movzwl	%ax, %eax
                	rolw	$0x8, %ax
-               	cmpl	$0xcdab, %eax           # imm = 0xCDAB
+               	cmpq	$0xcdab, %rax           # imm = 0xCDAB
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x20, %rsp
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	retq
                	movl	-0x10(%rbp), %eax
                	bswapl	%eax
-               	cmpl	$0x44332211, %eax       # imm = 0x44332211
+               	cmpq	$0x44332211, %rax       # imm = 0x44332211
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	retq
                	movq	-0x8(%rbp), %rax
                	bswapl	%eax
-               	cmpl	$0x8070605, %eax        # imm = 0x8070605
+               	cmpq	$0x8070605, %rax        # imm = 0x8070605
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x20, %rsp

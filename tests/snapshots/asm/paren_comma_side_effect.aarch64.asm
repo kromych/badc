@@ -63,7 +63,7 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	str	w2, [x3]
                	ldrsw	x20, [x0]
-               	cmp	w20, #0x7
+               	cmp	x20, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	bl	<addr>
@@ -84,7 +84,7 @@ Disassembly of section .text:
                	mov	x2, #0xd                // =13
                	str	w2, [x0]
                	sxtw	x20, w2
-               	cmp	w20, #0xd
+               	cmp	x20, #0xd
                	b.eq	<addr>
                	mov	x21, #0x2               // =2
                	mov	x0, x21

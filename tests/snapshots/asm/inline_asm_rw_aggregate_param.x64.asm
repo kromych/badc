@@ -195,15 +195,16 @@ Disassembly of section .text:
                	movb	%al, 0xf(%rsi)
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movslq	%eax, %rcx
                	leaq	(%rsi,%rcx), %rdx
                	movzbq	(%rdx), %rdi
                	leaq	0xa(%rcx), %rdx
+               	movslq	%edx, %rdx
                	andq	$0xff, %rdx
-               	cmpl	%edx, %edi
+               	cmpq	%rdx, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	cmpl	$0x10, %eax
+               	movslq	%eax, %rcx
+               	cmpq	$0x10, %rcx
                	jl	<addr>
                	movl	$0x2a, %eax
                	addq	$0x30, %rsp

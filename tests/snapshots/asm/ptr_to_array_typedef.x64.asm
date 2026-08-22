@@ -30,38 +30,38 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0xa0, %rsp
                	movq	%rbx, (%rsp)
-               	xorq	%rax, %rax
-               	movq	%rax, -0x88(%rbp)
+               	xorq	%rdx, %rdx
+               	movq	%rdx, -0x88(%rbp)
                	jmp	<addr>
                	leaq	-0x60(%rbp), %r8
-               	movslq	%eax, %rcx
-               	movq	%rcx, %rsi
+               	movq	%rax, %rsi
                	shlq	$0x5, %rsi
                	leaq	(%r8,%rsi), %rdi
                	leaq	(%rdi), %rbx
-               	movq	%rcx, %rdx
-               	shlq	$0x2, %rdx
-               	leaq	(%rdx), %r9
+               	movq	%rax, %rcx
+               	shlq	$0x2, %rcx
+               	leaq	(%rcx), %r9
                	movslq	%r9d, %r9
                	movq	%r9, (%rbx)
-               	leaq	0x1(%rdx), %r8
+               	leaq	0x1(%rcx), %r8
                	movslq	%r8d, %r8
                	movq	%r8, 0x8(%rdi)
                	leaq	-0x60(%rbp), %rdi
                	addq	%rdi, %rsi
-               	addq	$0x2, %rdx
-               	movslq	%edx, %rdx
-               	movq	%rdx, 0x10(%rsi)
-               	movq	%rcx, %rdx
-               	shlq	$0x5, %rdx
-               	leaq	(%rdi,%rdx), %rsi
-               	movq	%rcx, %rdx
-               	shlq	$0x2, %rdx
-               	addq	$0x3, %rdx
-               	movslq	%edx, %rdx
-               	movq	%rdx, 0x18(%rsi)
-               	leaq	0x1(%rcx), %rax
-               	cmpl	$0x3, %eax
+               	addq	$0x2, %rcx
+               	movslq	%ecx, %rcx
+               	movq	%rcx, 0x10(%rsi)
+               	movq	%rax, %rcx
+               	shlq	$0x5, %rcx
+               	leaq	(%rdi,%rcx), %rsi
+               	movq	%rax, %rcx
+               	shlq	$0x2, %rcx
+               	addq	$0x3, %rcx
+               	movslq	%ecx, %rcx
+               	movq	%rcx, 0x18(%rsi)
+               	leaq	0x1(%rax), %rdx
+               	movslq	%edx, %rax
+               	cmpq	$0x3, %rax
                	jl	<addr>
                	leaq	-0x88(%rbp), %rcx
                	leaq	<rip>, %rax

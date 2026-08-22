@@ -17,7 +17,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x110
-               	cmp	w0, #0x0
+               	sxtw	x0, w0
+               	cmp	x0, #0x0
                	b.ge	<addr>
                	mov	x0, #0x84000000         // =2214592512
                	mov	x1, #0x1                // =1

@@ -50,7 +50,7 @@ Disassembly of section .text:
                	ldr	d1, [sp, #0x48]
                	ldr	d2, [sp, #0x50]
                	ldursw	x1, [x29, #-0x8]
-               	cmp	w1, #0x2a
+               	cmp	x1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x70
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	ldr	d0, [sp, #0x30]
                	ldr	d1, [sp, #0x38]
                	ldursw	x1, [x29, #-0x8]
-               	cmp	w1, #0x2a
+               	cmp	x1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x70
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x8]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0x7fff, lsl #16
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x70

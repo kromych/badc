@@ -147,7 +147,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movslq	%edi, %rdi
                	movl	$0x5, %eax
-               	cmpl	$0xa, %edi
+               	cmpq	$0xa, %rdi
                	jle	<addr>
                	movl	$0x9, %eax
                	movslq	%eax, %rax
@@ -260,7 +260,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	cmpl	$0x7, %eax
+               	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x10, %rsp
@@ -335,7 +335,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x7, %eax
                	movslq	%eax, %rax
-               	cmpl	$0x7, %eax
+               	cmpq	$0x7, %rax
                	movl	$0x1, %eax
                	jne	<addr>
                	movl	$0x3, %ecx
@@ -351,7 +351,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x7, %eax
                	movslq	%eax, %rax
-               	cmpl	$0x5, %eax
+               	cmpq	$0x5, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

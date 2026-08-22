@@ -114,11 +114,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	%ecx, %edx
                	movl	%edx, %edx
-               	cmpl	%ecx, %edx
+               	cmpq	%rcx, %rdx
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpl	$0x4, %ecx
+               	cmpq	$0x4, %rcx
                	jb	<addr>
                	leaq	<rip>, %rcx
                	xorq	%rax, %rax

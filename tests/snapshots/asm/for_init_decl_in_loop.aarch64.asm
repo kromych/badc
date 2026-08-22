@@ -51,9 +51,9 @@ Disassembly of section .text:
                	add	x2, x2, x3
                	add	x0, x0, #0xf
                	add	x2, x2, x0
-               	sxtw	x0, w1
-               	add	x1, x0, #0x1
-               	cmp	w1, #0x5
+               	add	x1, x4, #0x1
+               	sxtw	x4, w1
+               	cmp	x4, #0x5
                	b.lt	<addr>
                	sxtw	x0, w2
                	ret

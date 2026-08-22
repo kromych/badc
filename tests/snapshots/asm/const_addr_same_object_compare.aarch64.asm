@@ -19,7 +19,9 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	cmp	x0, x1
-               	b.ne	<addr>
+               	cset	x0, ne
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>

@@ -61,8 +61,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
     v43  LocalAddr(-4)                                    -> x2
     v44  Imm(0)                                           -> x2
     v45  LocalAddr(-4)                                    -> x2
-    v46  Extend { value=v32, kind=I32 }                   -> x2
-    v47  BinopI { op=ne, lhs=v32, rhs_imm=44 }            -> x0
+    v46  Extend { value=v32, kind=I32 }                   -> x0
+    v47  BinopI { op=ne, lhs=v46, rhs_imm=44 }            -> x0
     terminator Bz { cond=v47, target=b2, fall=b1 }   (exit_acc=v47)
   block 1  start_pc=0
     v48  Imm(1)                                           -> x0
@@ -71,7 +71,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
     v49  LocalAddr(-4)                                    -> x0
     v50  BinopI { op=add, lhs=v49, rhs_imm=4 }            -> x0
     v51  Extend { value=v39, kind=I32 }                   -> x0
-    v52  BinopI { op=ne, lhs=v39, rhs_imm=89 }            -> x0
+    v52  BinopI { op=ne, lhs=v51, rhs_imm=89 }            -> x0
     terminator Bz { cond=v52, target=b4, fall=b3 }   (exit_acc=v52)
   block 3  start_pc=0
     v53  Imm(2)                                           -> x0
@@ -105,31 +105,31 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
     v79  Fma { a=v61, b=v62, c=v77, neg_product=false, neg_addend=false } -> d0
     v80  Imm(0)                                           -> x0
     v81  LocalAddr(-1)                                    -> x0
-    v82  FpCast { kind=FpToInt, value=v79 }               -> x0
-    v83  Imm(0)                                           -> x1
-    v84  LocalAddr(-1)                                    -> x1
-    v85  BinopI { op=add, lhs=v84, rhs_imm=4 }            -> x1
-    v86  Imm(4611686018427387904)                         -> x1
+    v82  FpCast { kind=FpToInt, value=v79 }               -> x1
+    v83  Imm(0)                                           -> x0
+    v84  LocalAddr(-1)                                    -> x0
+    v85  BinopI { op=add, lhs=v84, rhs_imm=4 }            -> x0
+    v86  Imm(4611686018427387904)                         -> x0
     v87  Binop { op=fmul, lhs=v79, rhs=v86 }              -> d1
     v88  Fma { a=v79, b=v86, c=v55, neg_product=false, neg_addend=false } -> d0
-    v89  FpCast { kind=FpToInt, value=v88 }               -> x1
+    v89  FpCast { kind=FpToInt, value=v88 }               -> x0
     v90  Imm(0)                                           -> x2
     v91  LocalAddr(-1)                                    -> x2
     v92  LocalAddr(-1)                                    -> x2
     v93  LocalAddr(-3)                                    -> x2
     v94  Imm(0)                                           -> x2
     v95  LocalAddr(-3)                                    -> x2
-    v96  Extend { value=v82, kind=I32 }                   -> x2
-    v97  BinopI { op=ne, lhs=v82, rhs_imm=10 }            -> x0
+    v96  Extend { value=v82, kind=I32 }                   -> x1
+    v97  BinopI { op=ne, lhs=v96, rhs_imm=10 }            -> x1
     terminator Bz { cond=v97, target=b6, fall=b5 }   (exit_acc=v97)
   block 5  start_pc=0
     v98  Imm(3)                                           -> x0
     terminator Return(v98)   (exit_acc=v98)
   block 6  start_pc=0
-    v99  LocalAddr(-3)                                    -> x0
-    v100 BinopI { op=add, lhs=v99, rhs_imm=4 }            -> x0
+    v99  LocalAddr(-3)                                    -> x1
+    v100 BinopI { op=add, lhs=v99, rhs_imm=4 }            -> x1
     v101 Extend { value=v89, kind=I32 }                   -> x0
-    v102 BinopI { op=ne, lhs=v89, rhs_imm=30 }            -> x0
+    v102 BinopI { op=ne, lhs=v101, rhs_imm=30 }           -> x0
     terminator Bz { cond=v102, target=b8, fall=b7 }   (exit_acc=v102)
   block 7  start_pc=0
     v103 Imm(4)                                           -> x0

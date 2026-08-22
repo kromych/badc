@@ -55,8 +55,8 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rax)
                	xorq	%rax, %rax
                	jmp	<addr>
-               	leaq	-0x18(%rbp), %rcx
-               	movq	%rcx, %r11
+               	leaq	-0x18(%rbp), %rdx
+               	movq	%rdx, %r11
                	movl	(%r11), %r10d
                	cmpq	$0x30, %r10
                	jae	<addr>
@@ -65,10 +65,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
-               	movq	%r10, %rcx
-               	movslq	%eax, %rax
-               	incq	%rax
-               	cmpl	$0x6, %eax
+               	movq	%r10, %rdx
+               	leaq	0x1(%rcx), %rax
+               	movslq	%eax, %rcx
+               	cmpq	$0x6, %rcx
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
                	movq	%rax, %r11

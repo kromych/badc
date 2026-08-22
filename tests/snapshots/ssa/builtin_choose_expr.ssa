@@ -82,21 +82,21 @@ fn ent_pc=3 n_params=0 variadic=false locals=25
     terminator Jmp(b14)   (exit_acc=v17)
   block 12  start_pc=0
     v71  LocalAddr(-16)                                   -> x2
-    v72  Extend { value=v65, kind=I32 }                   -> x1
-    v73  BinopI { op=shl, lhs=v72, rhs_imm=3 }            -> x6
+    v72  Extend { value=v65, kind=I32 }                   -> x6
+    v73  BinopI { op=shl, lhs=v66, rhs_imm=3 }            -> x6
     v74  Binop { op=add, lhs=v71, rhs=v73 }               -> x2
     v75  Imm(-1)                                          -> x6
     v76  Store { addr=v74, disp=0, value=v75, kind=I64, volatile } -> -
     terminator Jmp(b13)   (exit_acc=v76)
   block 13  start_pc=0
     v68  Extend { value=v65, kind=I32 }                   -> x0
-    v69  BinopI { op=add, lhs=v72, rhs_imm=1 }            -> x0
+    v69  BinopI { op=add, lhs=v66, rhs_imm=1 }            -> x0
     v70  Imm(0)                                           -> x1
     terminator Jmp(b14)   (exit_acc=v69)
   block 14  start_pc=0
     v65  Phi { incoming=[b11:v17, b13:v69], kind=I64 }    -> x0
     v66  Extend { value=v65, kind=I32 }                   -> x1
-    v67  BinopI { op=lt, lhs=v65, rhs_imm=16 }            -> x1
+    v67  BinopI { op=lt, lhs=v66, rhs_imm=16 }            -> x2
     terminator Bnz { cond=v67, target=b12, fall=b15 }   (exit_acc=v67)
   block 15  start_pc=0
     v77  Imm(0)                                           -> x0

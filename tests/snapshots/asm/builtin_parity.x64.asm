@@ -52,7 +52,7 @@ Disassembly of section .text:
                	shrq	$0x10, %rcx
                	addq	%rcx, %rax
                	andq	$0x1, %rax
-               	cmpl	$0x1, %eax
+               	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0xb, %eax
                	addq	$0x10, %rsp

@@ -59,7 +59,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	mov	x1, #0x0                // =0
                	b	<addr>
-               	sxtw	x2, w1
                	asr	x3, x2, #63
                	lsr	x3, x3, #63
                	add	x5, x2, x3
@@ -112,7 +111,8 @@ Disassembly of section .text:
                	add	x0, x0, x3
                	b	<addr>
                	add	x1, x2, #0x1
-               	cmp	w1, #0xa
+               	sxtw	x2, w1
+               	cmp	x2, #0xa
                	b.lt	<addr>
                	sub	x1, x29, #0x20
                	ldp	x29, x30, [sp, #0x40]
@@ -141,9 +141,9 @@ Disassembly of section .text:
                	str	x19, [sp, #-0x50]!
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
-               	sub	x1, x29, #0x20
+               	sub	x2, x29, #0x20
                	add	x0, x29, #0x10
-               	mov	x16, x1
+               	mov	x16, x2
                	add	x17, x29, #0xd0
                	str	x17, [x16]
                	add	x17, x29, #0x50
@@ -167,7 +167,7 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x16, x29, #0x28
                	ldr	d0, [x16]
-               	mov	x17, x1
+               	mov	x17, x2
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]
                	cmp	x16, #0x0
@@ -184,15 +184,15 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x2, x16
-               	ldr	d1, [x2]
+               	mov	x3, x16
+               	ldr	d1, [x3]
                	fadd	d0, d0, d1
                	sub	x17, x29, #0x28
                	str	d0, [x17]
-               	sxtw	x0, w0
-               	add	x0, x0, #0x1
-               	ldursw	x2, [x29, #0x10]
-               	cmp	w0, w2
+               	add	x0, x1, #0x1
+               	sxtw	x1, w0
+               	ldursw	x3, [x29, #0x10]
+               	cmp	x1, x3
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	sub	x16, x29, #0x28

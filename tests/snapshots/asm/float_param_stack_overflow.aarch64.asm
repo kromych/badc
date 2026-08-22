@@ -83,7 +83,8 @@ Disassembly of section .text:
                	fmov	d1, d8
                	bl	<addr>
                	add	sp, sp, #0x10
-               	cmp	w0, #0x3ff
+               	sxtw	x0, w0
+               	cmp	x0, #0x3ff
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]
@@ -104,7 +105,8 @@ Disassembly of section .text:
                	fmov	d1, d8
                	bl	<addr>
                	add	sp, sp, #0x10
-               	cmp	w0, #0x37f
+               	sxtw	x0, w0
+               	cmp	x0, #0x37f
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x10]

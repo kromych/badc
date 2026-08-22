@@ -121,13 +121,14 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	cbz	x1, <addr>
                	str	x20, [x21]
-               	cmp	w0, #0x0
-               	cset	x1, ne
-               	cbnz	x0, <addr>
+               	sxtw	x1, w0
+               	cmp	x1, #0x0
+               	cset	x0, ne
+               	cbnz	x1, <addr>
                	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0xf
-               	cset	x1, ne
-               	cbz	x1, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]

@@ -141,7 +141,7 @@ Disassembly of section .text:
                	movzwq	0x2(%rax), %rcx
                	xorq	$0x3344, %rcx           # imm = 0x3344
                	movl	%ecx, %ecx
-               	testl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorq	%rdx, %rdx
@@ -150,7 +150,7 @@ Disassembly of section .text:
                	movzwq	0x4(%rax), %rax
                	xorq	$0xfeed, %rax           # imm = 0xFEED
                	movl	%eax, %eax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	sete	%dl
                	movzbq	%dl, %rdx
                	movslq	%edx, %rax

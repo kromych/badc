@@ -25,7 +25,8 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	sxtw	x2, w2
                	add	x0, x0, x2
-               	cmp	w0, #0x3
+               	sxtw	x0, w0
+               	cmp	x0, #0x3
                	b.eq	<addr>
                	mov	x0, x1
                	ret

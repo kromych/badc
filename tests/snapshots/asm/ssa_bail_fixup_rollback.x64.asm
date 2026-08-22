@@ -120,7 +120,7 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	incq	%rax
                	movl	%eax, %ecx
-               	cmpl	$0x40, %ecx
+               	cmpq	$0x40, %rcx
                	jb	<addr>
                	subq	$0x40, %r13
                	addq	$0x40, %r12
@@ -153,13 +153,13 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	jmp	<addr>
                	leaq	-0x20(%rbp), %rdx
-               	movslq	%eax, %rcx
                	addq	%rcx, %rdx
                	movq	%rcx, %rsi
                	andq	$0xff, %rsi
                	movb	%sil, (%rdx)
                	leaq	0x1(%rcx), %rax
-               	cmpl	$0x20, %eax
+               	movslq	%eax, %rcx
+               	cmpq	$0x20, %rcx
                	jl	<addr>
                	leaq	-0x68(%rbp), %rbx
                	xorq	%rsi, %rsi

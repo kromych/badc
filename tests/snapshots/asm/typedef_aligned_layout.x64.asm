@@ -225,7 +225,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpl	$0x2, %eax
+               	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x45, %eax
                	popq	%rbp
@@ -242,22 +242,25 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	addq	$0x3, %rax
-               	cmpl	$0x6, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0x4e, %eax
                	popq	%rbp
                	retq
                	movl	$0x9, %edi
                	callq	<addr>
+               	movq	%rax, %rcx
+               	movslq	%ecx, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
+               	movq	%rax, %rcx
+               	movslq	%ecx, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax

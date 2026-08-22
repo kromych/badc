@@ -75,7 +75,8 @@ Disassembly of section .text:
                	movl	$0x1, %r8d
                	movb	$0x0, %al
                	callq	<addr>
-               	cmpl	$0x3, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x3, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

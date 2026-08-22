@@ -21,14 +21,14 @@ Disassembly of section .text:
                	mov	x17, #0xc2c2            // =49858
                	eor	x1, x1, x17
                	mov	w2, w1
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x1, ne
                	cbnz	x2, <addr>
                	ldrb	w1, [x0]
                	mov	x17, #0x2               // =2
                	eor	x1, x1, x17
                	mov	w1, w1
-               	cmp	w1, #0x0
+               	cmp	x1, #0x0
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
@@ -37,13 +37,13 @@ Disassembly of section .text:
                	mov	x17, #0x8               // =8
                	eor	x1, x1, x17
                	mov	w2, w1
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x1, ne
                	cbnz	x2, <addr>
                	ldrb	w1, [x0, #0x2]
                	mov	x17, #0x1               // =1
                	and	x1, x1, x17
-               	cmp	w1, #0x1
+               	cmp	x1, #0x1
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x3                // =3
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	mov	x17, #0x2               // =2
                	eor	x1, x1, x17
                	mov	w2, w1
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x1, ne
                	cbnz	x2, <addr>
                	ldr	x1, [x0, #0x30]
@@ -65,14 +65,14 @@ Disassembly of section .text:
                	mov	x17, #0xc4              // =196
                	eor	x1, x1, x17
                	mov	w2, w1
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x1, ne
                	cbnz	x2, <addr>
                	ldrb	w1, [x0, #0x41]
                	mov	x17, #0x1               // =1
                	eor	x1, x1, x17
                	mov	w1, w1
-               	cmp	w1, #0x0
+               	cmp	x1, #0x0
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5

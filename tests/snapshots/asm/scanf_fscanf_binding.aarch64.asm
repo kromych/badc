@@ -59,12 +59,13 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
+               	sxtw	x0, w0
                	mov	x20, #0x0               // =0
                	stur	w20, [x29, #-0x10]
                	stur	w20, [x29, #-0x8]
                	mov	x17, #0x869f            // =34463
                	movk	x17, #0x1, lsl #16
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

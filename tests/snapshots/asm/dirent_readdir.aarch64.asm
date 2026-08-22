@@ -48,7 +48,8 @@ Disassembly of section .text:
                	mov	x0, x22
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	w21, #0x2
+               	sxtw	x0, w21
+               	cmp	x0, #0x2
                	cset	x0, gt
                	cbz	x0, <addr>
                	sxtw	x0, w20

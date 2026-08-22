@@ -54,7 +54,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	%r8d, %eax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

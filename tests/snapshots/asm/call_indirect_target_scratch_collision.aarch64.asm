@@ -48,13 +48,13 @@ Disassembly of section .text:
                	mov	x1, x21
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	w21, #0x0
+               	cmp	x21, #0x0
                	cset	x0, eq
                	cbnz	x21, <addr>
                	ldursw	x0, [x29, #-0x8]
                	mov	x17, #0x40              // =64
                	movk	x17, #0x1, lsl #16
-               	cmp	w0, w17
+               	cmp	x0, x17
                	cset	x0, eq
                	cbz	x0, <addr>
                	sxtw	x0, w20

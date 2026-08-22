@@ -101,7 +101,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	testq	%rbx, %rbx
+               	movslq	%ebx, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

@@ -61,11 +61,11 @@ Disassembly of section .text:
                	movl	$0x2c, %esi
                	movl	%esi, (%rdx)
                	movsbq	(%rax), %rax
-               	cmpl	$0xb, %eax
+               	cmpq	$0xb, %rax
                	movl	$0x1, %eax
                	jne	<addr>
                	movslq	0xc(%rcx), %rcx
-               	cmpl	$0x16, %ecx
+               	cmpq	$0x16, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -77,7 +77,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movslq	(%rdx), %rax
-               	cmpl	$0x2c, %eax
+               	cmpq	$0x2c, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

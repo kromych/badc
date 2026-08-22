@@ -34,7 +34,7 @@ Disassembly of section .text:
                	uxtb	w0, w0
                	brk	#0x1
                	ldursw	x0, [x29, #-0x10]
-               	cmp	w0, #0x2
+               	cmp	x0, #0x2
                	b.ne	<addr>
                	mov	x20, #0x0               // =0
                	sxtw	x0, w20

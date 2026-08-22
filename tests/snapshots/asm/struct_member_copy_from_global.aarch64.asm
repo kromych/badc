@@ -16,30 +16,32 @@ Disassembly of section .text:
 <new_client>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	w2, [x0]
-               	mov	x1, #0x9                // =9
-               	str	w1, [x0]
                	ldr	w1, [x0]
+               	mov	x2, #0x9                // =9
+               	str	w2, [x0]
+               	ldr	w2, [x0]
                	mov	x0, #0x1                // =1
                	mov	x3, x0
+               	sxtw	x1, w1
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	w2, w17
+               	cmp	x1, x17
                	b.lt	<addr>
-               	mov	x2, x0
-               	sxtw	x2, w2
-               	add	x2, x2, #0x1
+               	mov	x1, x0
+               	sxtw	x1, w1
+               	add	x1, x1, #0x1
+               	sxtw	x3, w2
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	w1, w17
+               	cmp	x3, x17
                	b.lt	<addr>
                	sxtw	x0, w0
-               	add	x0, x2, x0
-               	cmp	w1, #0x9
+               	add	x0, x1, x0
+               	cmp	x3, #0x9
                	b.ne	<addr>
                	mov	x1, #0x0                // =0
                	add	x0, x0, x1
@@ -52,10 +54,10 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	b	<addr>
-               	mov	x2, #0xff9c             // =65436
-               	movk	x2, #0xffff, lsl #16
-               	movk	x2, #0xffff, lsl #32
-               	movk	x2, #0xffff, lsl #48
+               	mov	x1, #0xff9c             // =65436
+               	movk	x1, #0xffff, lsl #16
+               	movk	x1, #0xffff, lsl #32
+               	movk	x1, #0xffff, lsl #48
                	b	<addr>
 
 <main>:
@@ -103,7 +105,7 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	mov	x0, x20
                	ldrsw	x0, [x20]
-               	cmp	w0, #0x9
+               	cmp	x0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x40]

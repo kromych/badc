@@ -207,7 +207,6 @@ Disassembly of section .text:
                	movb	%al, 0xf(%rdi)
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movslq	%eax, %rcx
                	leaq	(%rdi,%rcx), %r8
                	movzbq	(%r8), %r8
                	leaq	(%rdx,%rcx), %r9
@@ -216,10 +215,11 @@ Disassembly of section .text:
                	movzbq	(%rbx), %rbx
                	xorq	%rbx, %r9
                	andq	$0xff, %r9
-               	cmpl	%r9d, %r8d
+               	cmpq	%r9, %r8
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	cmpl	$0x10, %eax
+               	movslq	%eax, %rcx
+               	cmpq	$0x10, %rcx
                	jl	<addr>
                	movl	$0x2a, %eax
                	movq	(%rsp), %rbx

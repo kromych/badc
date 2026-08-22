@@ -69,11 +69,12 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x20]
                	ldursw	x3, [x29, #-0x28]
                	add	x0, x0, x3
+               	sxtw	x0, w0
                	mov	x17, #0x2800            // =10240
                	movk	x17, #0xee6b, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x30

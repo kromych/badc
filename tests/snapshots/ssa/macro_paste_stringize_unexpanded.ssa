@@ -14,8 +14,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v8   Extend { value=v5, kind=I32 }                    -> x2
     v9   Binop { op=add, lhs=v7, rhs=v8 }                 -> x0
     v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x2
-    v11  Extend { value=v9, kind=I32 }                    -> x2
-    v12  BinopI { op=ne, lhs=v9, rhs_imm=3 }              -> x0
+    v11  Extend { value=v9, kind=I32 }                    -> x0
+    v12  BinopI { op=ne, lhs=v11, rhs_imm=3 }             -> x0
     terminator Bz { cond=v12, target=b2, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
     v13  Imm(1)                                           -> x0

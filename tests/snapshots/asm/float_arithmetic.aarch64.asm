@@ -198,7 +198,8 @@ Disassembly of section .text:
                	sub	x16, x29, #0x18
                	ldr	d0, [x16]
                	fcvtzs	x2, d0
-               	cmp	w2, #0x7
+               	sxtw	x2, w2
+               	cmp	x2, #0x7
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x20
@@ -209,7 +210,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fadd	d0, d0, d17
                	fcvtzs	x0, d0
-               	cmp	w0, #0x8
+               	sxtw	x0, w0
+               	cmp	x0, #0x8
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	add	sp, sp, #0x20
@@ -222,11 +224,12 @@ Disassembly of section .text:
                	sub	x16, x29, #0x18
                	ldr	d0, [x16]
                	fcvtzs	x0, d0
+               	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
                	add	sp, sp, #0x20

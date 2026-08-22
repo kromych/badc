@@ -36,7 +36,7 @@ Disassembly of section .text:
                	movl	$0x7, %ecx
                	movl	%ecx, -0x18(%rbp)
                	movslq	%ecx, %rcx
-               	cmpl	$0x7, %ecx
+               	cmpq	$0x7, %rcx
                	jne	<addr>
                	movq	%rax, -0x18(%rbp)
                	jmp	<addr>
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	movl	$0x2, %ecx
                	movl	%ecx, -0x18(%rbp)
                	movslq	%ecx, %rcx
-               	cmpl	$0x2, %ecx
+               	cmpq	$0x2, %rcx
                	jne	<addr>
                	movq	%rax, -0x18(%rbp)
                	jmp	<addr>

@@ -28,15 +28,15 @@ Disassembly of section .text:
 <classify>:
                	movq	%rdi, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	cmpl	$0xff00, %eax           # imm = 0xFF00
+               	cmpq	$0xff00, %rax           # imm = 0xFF00
                	jb	<addr>
-               	cmpl	$0xff00, %eax           # imm = 0xFF00
+               	cmpq	$0xff00, %rax           # imm = 0xFF00
                	je	<addr>
                	xorq	%rax, %rax
                	retq
                	movl	$0x2, %eax
                	retq
-               	cmpl	$0x3412, %eax           # imm = 0x3412
+               	cmpq	$0x3412, %rax           # imm = 0x3412
                	jne	<addr>
                	movl	$0x1, %eax
                	retq
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	bswapl	%eax
-               	cmpl	$0x78563412, %eax       # imm = 0x78563412
+               	cmpq	$0x78563412, %rax       # imm = 0x78563412
                	je	<addr>
                	movl	$0x8, %eax
                	addq	$0x10, %rsp

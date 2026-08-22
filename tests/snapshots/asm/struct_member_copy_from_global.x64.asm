@@ -27,22 +27,24 @@ Disassembly of section .text:
 
 <new_client>:
                	leaq	<rip>, %rax
-               	movl	(%rax), %edx
-               	movl	$0x9, %ecx
-               	movl	%ecx, (%rax)
                	movl	(%rax), %ecx
+               	movl	$0x9, %edx
+               	movl	%edx, (%rax)
+               	movl	(%rax), %edx
                	movl	$0x1, %eax
                	movq	%rax, %rsi
-               	cmpl	$-0x1, %edx
+               	movslq	%ecx, %rcx
+               	cmpq	$-0x1, %rcx
                	jl	<addr>
-               	movq	%rax, %rdx
-               	movslq	%edx, %rdx
-               	incq	%rdx
-               	cmpl	$-0x1, %ecx
+               	movq	%rax, %rcx
+               	movslq	%ecx, %rcx
+               	incq	%rcx
+               	movslq	%edx, %rsi
+               	cmpq	$-0x1, %rsi
                	jl	<addr>
                	movslq	%eax, %rax
-               	addq	%rdx, %rax
-               	cmpl	$0x9, %ecx
+               	addq	%rcx, %rax
+               	cmpq	$0x9, %rsi
                	jne	<addr>
                	xorq	%rcx, %rcx
                	addq	%rcx, %rax
@@ -52,7 +54,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movabsq	$-0x64, %rax
                	jmp	<addr>
-               	movabsq	$-0x64, %rdx
+               	movabsq	$-0x64, %rcx
                	jmp	<addr>
 
 <main>:
@@ -98,7 +100,7 @@ Disassembly of section .text:
                	popq	%rcx
                	movq	%rax, %rdx
                	movslq	(%rax), %rax
-               	cmpl	$0x9, %eax
+               	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x30, %rsp

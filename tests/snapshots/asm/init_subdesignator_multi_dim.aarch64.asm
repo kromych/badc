@@ -24,38 +24,38 @@ Disassembly of section .text:
                	mov	x17, #0x2               // =2
                	eor	x2, x2, x17
                	mov	w2, w2
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrh	w2, [x0, #0xa]
                	mov	x17, #0x7               // =7
                	eor	x2, x2, x17
                	mov	w2, w2
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrsw	x2, [x0, #0x24]
-               	cmp	w2, #0x5
+               	cmp	x2, #0x5
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrsw	x2, [x0, #0x2c]
-               	cmp	w2, #0x6
+               	cmp	x2, #0x6
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrsw	x2, [x0, #0x98]
-               	cmp	w2, #0x9
+               	cmp	x2, #0x9
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrh	w2, [x0, #0x6]
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrsw	x2, [x0, #0x18]
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	ldrsw	x0, [x0, #0x3c]
-               	cmp	w0, #0x0
+               	cmp	x0, #0x0
                	cset	x1, eq
                	sxtw	x0, w1
                	ret
@@ -249,12 +249,12 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x54]
-               	cmp	w0, #0x4
+               	cmp	x0, #0x4
                	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x6c]
-               	cmp	w0, #0x3
+               	cmp	x0, #0x3
                	cset	x0, eq
                	cbz	x0, <addr>
                	adrp	x0, <page>
@@ -263,14 +263,14 @@ Disassembly of section .text:
                	mov	x17, #0x8               // =8
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	w0, #0x0
+               	cmp	x0, #0x0
                	cset	x21, eq
                	mov	x1, #0x0                // =0
                	cbz	x21, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x98]
-               	cmp	w0, #0x0
+               	cmp	x0, #0x0
                	cset	x0, eq
                	cbnz	x0, <addr>
                	mov	x0, #0x4                // =4

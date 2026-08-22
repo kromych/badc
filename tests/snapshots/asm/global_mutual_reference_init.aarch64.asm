@@ -49,7 +49,7 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	ldr	x0, [x0]
                	ldrsw	x0, [x0, #0x10]
-               	cmp	w0, #0x2a
+               	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret

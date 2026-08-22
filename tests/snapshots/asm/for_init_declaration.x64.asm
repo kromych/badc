@@ -104,7 +104,7 @@ Disassembly of section .text:
                	cmpq	%rdx, %rax
                	jb	<addr>
                	movslq	%ecx, %rax
-               	cmpl	$0x7, %eax
+               	cmpq	$0x7, %rax
                	je	<addr>
                	leaq	<rip>, %rsi
                	leaq	<rip>, %rax

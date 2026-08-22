@@ -57,7 +57,7 @@ Disassembly of section .text:
                	retq
                	movslq	0x18(%rax), %rax
                	andq	$0xf000, %rax           # imm = 0xF000
-               	cmpl	$0x4000, %eax           # imm = 0x4000
+               	cmpq	$0x4000, %rax           # imm = 0x4000
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0xa0, %rsp

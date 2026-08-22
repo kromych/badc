@@ -73,7 +73,7 @@ Disassembly of section .text:
                	testq	%r15, %r15
                	sete	%r14b
                	movzbq	%r14b, %r14
-               	testl	%r14d, %r14d
+               	testq	%r14, %r14
                	sete	%r14b
                	movzbq	%r14b, %r14
                	testq	%r15, %r15

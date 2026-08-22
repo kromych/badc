@@ -19,12 +19,12 @@ Disassembly of section .text:
                	b	<addr>
                	add	x1, x1, #0x1
                	sxtw	x1, w1
-               	sxtw	x0, w0
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x2a
+               	add	x0, x2, #0x1
+               	sxtw	x2, w0
+               	cmp	x2, #0x2a
                	b.lt	<addr>
                	sxtw	x0, w1
-               	cmp	w0, #0x2a
+               	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret

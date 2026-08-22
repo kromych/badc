@@ -30,7 +30,8 @@ Disassembly of section .text:
                	retq
 
 <early_return_void>:
-               	testl	%edi, %edi
+               	movslq	%edi, %rdi
+               	testq	%rdi, %rdi
                	jge	<addr>
                	xorq	%rax, %rax
                	retq

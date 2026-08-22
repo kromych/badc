@@ -60,7 +60,8 @@ Disassembly of section .text:
                	addq	$0xfffff, %rcx          # imm = 0xFFFFF
                	movsbq	(%rcx), %rcx
                	addq	%rcx, %rax
-               	cmpl	$0x3, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x3, %rax
                	jne	<addr>
                	movl	$0x2a, %eax
                	movslq	%eax, %rax

@@ -52,7 +52,7 @@ Disassembly of section .text:
                	mov	x17, #0xf000            // =61440
                	and	x0, x0, x17
                	mov	x17, #0x4000            // =16384
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0xb0]

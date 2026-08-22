@@ -10,11 +10,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v4   Imm(0)                                           -> x2
     v5   Binop { op=eq, lhs=v1, rhs=v3 }                  -> x0
     v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
-    v7   Extend { value=v5, kind=I32 }                    -> x1
-    v8   Imm(0)                                           -> x2
+    v7   Extend { value=v5, kind=I32 }                    -> x0
+    v8   Imm(0)                                           -> x1
     v9   Extend { value=v7, kind=I32 }                    -> x1
-    v10  BinopI { op=eq, lhs=v5, rhs_imm=0 }              -> x1
-    terminator Bnz { cond=v5, target=b2, fall=b1 }   (exit_acc=v10)
+    v10  BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x1
+    terminator Bnz { cond=v7, target=b2, fall=b1 }   (exit_acc=v10)
   block 1  start_pc=0
     v11  Imm(1)                                           -> x0
     terminator Return(v11)   (exit_acc=v11)

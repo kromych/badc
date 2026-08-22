@@ -80,14 +80,14 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %eax
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpl	$0x9, %eax
+               	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x15, %eax
                	popq	%rbp
@@ -102,14 +102,14 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
-               	cmpl	$0x33333333, %eax       # imm = 0x33333333
+               	cmpq	$0x33333333, %rax       # imm = 0x33333333
                	je	<addr>
                	movl	$0x17, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpl	$0x3, %eax
+               	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x28, %eax
                	popq	%rbp
@@ -125,7 +125,7 @@ Disassembly of section .text:
                	movzbq	0x5(%rax), %rax
                	xorq	$0x8, %rax
                	movl	%eax, %eax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -134,7 +134,7 @@ Disassembly of section .text:
                	movzbq	0x6(%rax), %rax
                	xorq	$0x9, %rax
                	movl	%eax, %eax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -144,7 +144,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movl	(%rax), %eax
-               	cmpl	$0x55555555, %eax       # imm = 0x55555555
+               	cmpq	$0x55555555, %rax       # imm = 0x55555555
                	je	<addr>
                	movl	$0x2a, %eax
                	popq	%rbp

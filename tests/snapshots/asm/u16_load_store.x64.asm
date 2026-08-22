@@ -50,13 +50,13 @@ Disassembly of section .text:
                	movw	%ax, 0x2(%rbx)
                	leaq	-0x10(%rbp), %rax
                	movsbq	(%rax), %rdx
-               	testl	%edx, %edx
+               	testq	%rdx, %rdx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rdx, %rdx
                	jne	<addr>
                	movsbq	0x1(%rax), %rcx
-               	testl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -67,13 +67,13 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsbq	0x2(%rax), %rcx
-               	cmpl	$0x41, %ecx
+               	cmpq	$0x41, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movsbq	0x3(%rax), %rcx
-               	cmpl	$0x42, %ecx
+               	cmpq	$0x42, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

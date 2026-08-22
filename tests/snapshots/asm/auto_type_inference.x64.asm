@@ -34,7 +34,7 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x10(%rbp,%riz)
                	leaq	<rip>, %rax
                	movslq	0x4(%rax), %rax
-               	cmpl	$0x2, %eax
+               	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x10, %rsp
@@ -57,7 +57,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpl	$0x2a, %eax
+               	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	addq	$0x10, %rsp

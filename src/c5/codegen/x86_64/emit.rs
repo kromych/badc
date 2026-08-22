@@ -918,17 +918,6 @@ fn fp_compare_cc(op: BinOp) -> Option<(Cc, FpCmpNanFix)> {
     })
 }
 
-/// Operand size in bytes for comparison `v`: 4 when the narrowing
-/// analysis proved the answer is decided by the low words
-/// (`passes::narrow`), 8 otherwise.
-fn cmp_width(alloc: &Allocation, v: super::super::ir::ValueId) -> u8 {
-    if crate::c5::codegen::passes::narrow::is_cmp32(&alloc.cmp32, v) {
-        4
-    } else {
-        8
-    }
-}
-
 /// Map an integer comparison [`BinOp`] to its x86_64 condition code
 /// (signed L / G / LE / GE, unsigned B / A / BE / AE per C99 6.5.8).
 /// `None` for any non-comparison op.
@@ -5260,7 +5249,7 @@ fn emit_binop(
                 return fail("Binop: lhs not int reg / spill");
             };
             if let Some(cc) = cmp_cc {
-                emit_rm(code, Mnem::Cmp, cmp_width(alloc, v), rn, rhs_base, rhs_off);
+                emit_rm(code, Mnem::Cmp, 8, rn, rhs_base, rhs_off);
                 if finish_int_cmp(code, v, cc, rd, alloc) {
                     return true;
                 }
@@ -5452,7 +5441,7 @@ fn emit_binop(
             // fused branch reads the flags. Write setcc into rd's own
             // low byte (rather than cl) so a live SSA value parked in
             // rcx is not destroyed.
-            emit_rr(code, Mnem::Cmp, cmp_width(alloc, v), rn, rm);
+            emit_rr(code, Mnem::Cmp, 8, rn, rm);
             if finish_int_cmp(code, v, int_cmp_cc(op).unwrap(), rd, alloc) {
                 return true;
             }
@@ -5911,11 +5900,10 @@ fn emit_binop_imm(
         // A compare against 0 is the shorter `test rn, rn`; ZF / SF /
         // CF / OF match `cmp rn, 0`, so the dependent setcc / jcc is
         // unchanged.
-        let w = cmp_width(alloc, v);
         if rhs_imm == 0 {
-            super::encode::emit_rr(code, Mnem::Test, w, rn, rn);
+            super::encode::emit_rr(code, Mnem::Test, 8, rn, rn);
         } else {
-            super::encode::emit_ri(code, Mnem::Cmp, w, rn, rhs_imm as i32);
+            super::encode::emit_ri(code, Mnem::Cmp, 8, rn, rhs_imm as i32);
         }
         if finish_int_cmp(code, v, cc, rd, alloc) {
             return true;
@@ -5995,7 +5983,7 @@ fn emit_binop_imm(
         | BinOp::Ugt
         | BinOp::Ule
         | BinOp::Uge => {
-            emit_rr(code, Mnem::Cmp, cmp_width(alloc, v), rn, scratch);
+            emit_rr(code, Mnem::Cmp, 8, rn, scratch);
             if finish_int_cmp(code, v, int_cmp_cc(op).unwrap(), rd, alloc) {
                 return true;
             }

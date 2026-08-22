@@ -67,8 +67,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v37  Imm(30)                                          -> x1
     v38  AtomicRmw { op=Xchg, addr=v3, value=v37, width=4 } -> x0
     v39  BinopI { op=shl, lhs=v38, rhs_imm=32 }           -> x1
-    v40  Extend { value=v38, kind=I32 }                   -> x1
-    v41  BinopI { op=eq, lhs=v38, rhs_imm=20 }            -> x1
+    v40  Extend { value=v38, kind=I32 }                   -> x0
+    v41  BinopI { op=eq, lhs=v40, rhs_imm=20 }            -> x1
     v42  BinopI { op=eq, lhs=v41, rhs_imm=0 }             -> x0
     v43  Imm(0)                                           -> x2
     terminator Bnz { cond=v41, target=b223, fall=b13 }   (exit_acc=v42)
@@ -123,8 +123,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v71  Imm(5)                                           -> x6
     v72  AtomicRmw { op=Add, addr=v70, value=v71, width=4 } -> x0
     v73  BinopI { op=shl, lhs=v72, rhs_imm=32 }           -> x1
-    v74  Extend { value=v72, kind=I32 }                   -> x1
-    v75  BinopI { op=eq, lhs=v72, rhs_imm=100 }           -> x1
+    v74  Extend { value=v72, kind=I32 }                   -> x0
+    v75  BinopI { op=eq, lhs=v74, rhs_imm=100 }           -> x1
     v76  Imm(0)                                           -> x0
     v77  Imm(0)                                           -> x7
     terminator Bz { cond=v75, target=b221, fall=b24 }   (exit_acc=v75)
@@ -163,8 +163,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v97  Imm(5)                                           -> x1
     v98  AtomicRmw { op=Sub, addr=v70, value=v71, width=4 } -> x1
     v99  BinopI { op=shl, lhs=v98, rhs_imm=32 }           -> x6
-    v100 Extend { value=v98, kind=I32 }                   -> x6
-    v101 BinopI { op=eq, lhs=v98, rhs_imm=105 }           -> x1
+    v100 Extend { value=v98, kind=I32 }                   -> x1
+    v101 BinopI { op=eq, lhs=v100, rhs_imm=105 }          -> x1
     v102 Imm(0)                                           -> x6
     v103 Imm(0)                                           -> x6
     terminator Bz { cond=v101, target=b219, fall=b31 }   (exit_acc=v101)
@@ -207,8 +207,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v125 Imm(60)                                          -> x1
     v126 AtomicRmw { op=And, addr=v70, value=v125, width=4 } -> x1
     v127 BinopI { op=shl, lhs=v126, rhs_imm=32 }          -> x2
-    v128 Extend { value=v126, kind=I32 }                  -> x2
-    v129 BinopI { op=eq, lhs=v126, rhs_imm=240 }          -> x1
+    v128 Extend { value=v126, kind=I32 }                  -> x1
+    v129 BinopI { op=eq, lhs=v128, rhs_imm=240 }          -> x1
     v130 Imm(0)                                           -> x2
     v131 Imm(0)                                           -> x2
     terminator Bz { cond=v129, target=b217, fall=b39 }   (exit_acc=v129)
@@ -247,8 +247,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v151 Imm(15)                                          -> x0
     v152 AtomicRmw { op=Or, addr=v150, value=v151, width=4 } -> x0
     v153 BinopI { op=shl, lhs=v152, rhs_imm=32 }          -> x1
-    v154 Extend { value=v152, kind=I32 }                  -> x1
-    v155 BinopI { op=eq, lhs=v152, rhs_imm=48 }           -> x1
+    v154 Extend { value=v152, kind=I32 }                  -> x0
+    v155 BinopI { op=eq, lhs=v154, rhs_imm=48 }           -> x1
     v156 Imm(0)                                           -> x0
     v157 Imm(0)                                           -> x6
     terminator Bz { cond=v155, target=b215, fall=b46 }   (exit_acc=v155)
@@ -287,8 +287,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v177 Imm(255)                                         -> x1
     v178 AtomicRmw { op=Xor, addr=v150, value=v177, width=4 } -> x1
     v179 BinopI { op=shl, lhs=v178, rhs_imm=32 }          -> x6
-    v180 Extend { value=v178, kind=I32 }                  -> x6
-    v181 BinopI { op=eq, lhs=v178, rhs_imm=63 }           -> x1
+    v180 Extend { value=v178, kind=I32 }                  -> x1
+    v181 BinopI { op=eq, lhs=v180, rhs_imm=63 }           -> x1
     v182 Imm(0)                                           -> x6
     v183 Imm(0)                                           -> x6
     terminator Bz { cond=v181, target=b213, fall=b53 }   (exit_acc=v181)
@@ -430,8 +430,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v268 Imm(7)                                           -> x7
     v269 AtomicRmw { op=Add, addr=v232, value=v268, width=4 } -> x1
     v270 BinopI { op=shl, lhs=v269, rhs_imm=32 }          -> x6
-    v271 Extend { value=v269, kind=I32 }                  -> x6
-    v272 BinopI { op=eq, lhs=v269, rhs_imm=100 }          -> x1
+    v271 Extend { value=v269, kind=I32 }                  -> x1
+    v272 BinopI { op=eq, lhs=v271, rhs_imm=100 }          -> x1
     v273 Imm(0)                                           -> x6
     v274 Imm(0)                                           -> x6
     terminator Bz { cond=v272, target=b206, fall=b79 }   (exit_acc=v272)
@@ -473,8 +473,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v297 Extend { value=v295, kind=I32 }                  -> x2
     v298 BinopI { op=sub, lhs=v295, rhs_imm=7 }           -> x1
     v299 BinopI { op=shl, lhs=v298, rhs_imm=32 }          -> x2
-    v300 Extend { value=v298, kind=I32 }                  -> x2
-    v301 BinopI { op=eq, lhs=v298, rhs_imm=100 }          -> x1
+    v300 Extend { value=v298, kind=I32 }                  -> x1
+    v301 BinopI { op=eq, lhs=v300, rhs_imm=100 }          -> x1
     v302 Imm(0)                                           -> x2
     v303 Imm(0)                                           -> x2
     terminator Bz { cond=v301, target=b204, fall=b86 }   (exit_acc=v301)
@@ -516,8 +516,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v326 Extend { value=v324, kind=I32 }                  -> x1
     v327 BinopI { op=add, lhs=v324, rhs_imm=1 }           -> x0
     v328 BinopI { op=shl, lhs=v327, rhs_imm=32 }          -> x1
-    v329 Extend { value=v327, kind=I32 }                  -> x1
-    v330 BinopI { op=eq, lhs=v327, rhs_imm=101 }          -> x1
+    v329 Extend { value=v327, kind=I32 }                  -> x0
+    v330 BinopI { op=eq, lhs=v329, rhs_imm=101 }          -> x1
     v331 Imm(0)                                           -> x0
     v332 Imm(0)                                           -> x6
     terminator Bz { cond=v330, target=b202, fall=b93 }   (exit_acc=v330)
@@ -560,8 +560,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v354 Imm(51)                                          -> x1
     v355 AtomicRmw { op=Or, addr=v322, value=v354, width=4 } -> x1
     v356 BinopI { op=shl, lhs=v355, rhs_imm=32 }          -> x6
-    v357 Extend { value=v355, kind=I32 }                  -> x6
-    v358 BinopI { op=eq, lhs=v355, rhs_imm=204 }          -> x1
+    v357 Extend { value=v355, kind=I32 }                  -> x1
+    v358 BinopI { op=eq, lhs=v357, rhs_imm=204 }          -> x1
     v359 Imm(0)                                           -> x6
     v360 Imm(0)                                           -> x6
     terminator Bz { cond=v358, target=b200, fall=b101 }   (exit_acc=v358)
@@ -603,8 +603,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v383 Extend { value=v381, kind=I32 }                  -> x2
     v384 Binop { op=and, lhs=v381, rhs=v380 }             -> x1
     v385 BinopI { op=shl, lhs=v384, rhs_imm=32 }          -> x2
-    v386 Extend { value=v384, kind=I32 }                  -> x2
-    v387 BinopI { op=eq, lhs=v384, rhs_imm=15 }           -> x1
+    v386 Extend { value=v384, kind=I32 }                  -> x1
+    v387 BinopI { op=eq, lhs=v386, rhs_imm=15 }           -> x1
     v388 Imm(0)                                           -> x2
     v389 Imm(0)                                           -> x2
     terminator Bz { cond=v387, target=b198, fall=b108 }   (exit_acc=v387)
@@ -646,8 +646,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v412 Extend { value=v410, kind=I32 }                  -> x6
     v413 Binop { op=xor, lhs=v410, rhs=v409 }             -> x0
     v414 BinopI { op=shl, lhs=v413, rhs_imm=32 }          -> x1
-    v415 Extend { value=v413, kind=I32 }                  -> x1
-    v416 BinopI { op=eq, lhs=v413, rhs_imm=240 }          -> x1
+    v415 Extend { value=v413, kind=I32 }                  -> x0
+    v416 BinopI { op=eq, lhs=v415, rhs_imm=240 }          -> x1
     v417 Imm(0)                                           -> x0
     v418 Imm(0)                                           -> x6
     terminator Bz { cond=v416, target=b196, fall=b115 }   (exit_acc=v416)
@@ -860,8 +860,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v552 Imm(2)                                           -> x0
     v553 AtomicRmw { op=Xchg, addr=v495, value=v552, width=4 } -> x0
     v554 BinopI { op=shl, lhs=v553, rhs_imm=32 }          -> x1
-    v555 Extend { value=v553, kind=I32 }                  -> x1
-    v556 BinopI { op=eq, lhs=v553, rhs_imm=1 }            -> x1
+    v555 Extend { value=v553, kind=I32 }                  -> x0
+    v556 BinopI { op=eq, lhs=v555, rhs_imm=1 }            -> x1
     v557 Imm(0)                                           -> x0
     v558 Imm(0)                                           -> x2
     terminator Bz { cond=v556, target=b186, fall=b152 }   (exit_acc=v556)

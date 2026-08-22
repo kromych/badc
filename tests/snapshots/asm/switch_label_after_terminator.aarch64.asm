@@ -14,11 +14,12 @@ Disassembly of section .text:
                	brk	#0x1
 
 <outer>:
-               	cmp	w0, #0x2
+               	sxtw	x0, w0
+               	cmp	x0, #0x2
                	b.lt	<addr>
-               	cmp	w0, #0x3
+               	cmp	x0, #0x3
                	b.lt	<addr>
-               	cmp	w0, #0x3
+               	cmp	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
@@ -31,7 +32,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	cmp	w0, #0x1
+               	cmp	x0, #0x1
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
                	b	<addr>

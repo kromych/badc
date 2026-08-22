@@ -21,8 +21,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v11  Imm(10)                                          -> x6
     v12  AtomicRmw { op=Add, addr=v3, value=v11, width=4 } -> x6
     v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x7
-    v14  Extend { value=v12, kind=I32 }                   -> x7
-    v15  BinopI { op=ne, lhs=v12, rhs_imm=5 }             -> x6
+    v14  Extend { value=v12, kind=I32 }                   -> x6
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=5 }             -> x6
     terminator Bz { cond=v15, target=b4, fall=b3 }   (exit_acc=v15)
   block 3  start_pc=0
     v16  Imm(2)                                           -> x0

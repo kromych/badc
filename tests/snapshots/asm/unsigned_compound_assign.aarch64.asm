@@ -134,7 +134,7 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x20]
                	ldur	x0, [x29, #-0x20]
                	ldrsw	x2, [x0, #0xc]
-               	cmp	w2, #0x1e
+               	cmp	x2, #0x1e
                	b.eq	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

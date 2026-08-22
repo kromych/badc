@@ -90,11 +90,11 @@ Disassembly of section .text:
                	b	<addr>
                	mov	w2, w1
                	mov	w2, w2
-               	cmp	w2, w1
+               	cmp	x2, x1
                	b.ne	<addr>
                	add	x0, x1, #0x1
                	mov	w1, w0
-               	cmp	w1, #0x4
+               	cmp	x1, #0x4
                	b.lo	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

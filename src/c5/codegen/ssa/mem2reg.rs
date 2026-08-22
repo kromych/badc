@@ -1444,7 +1444,6 @@ mod tests {
             const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
-            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),

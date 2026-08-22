@@ -30,6 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
+               	movq	%r12, 0x8(%rsp)
                	xorq	%rbx, %rbx
                	jmp	<addr>
                	leaq	-0x10(%rbp), %rdi
@@ -57,27 +58,31 @@ Disassembly of section .text:
                	jg	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movslq	%ebx, %rax
-               	leaq	0x1(%rax), %rbx
-               	cmpl	$0x64, %ebx
+               	leaq	0x1(%r12), %rbx
+               	movslq	%ebx, %r12
+               	cmpq	$0x64, %r12
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq

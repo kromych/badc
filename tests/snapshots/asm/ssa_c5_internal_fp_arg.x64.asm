@@ -47,7 +47,8 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rcx
-               	cmpl	$0x1, %ecx
+               	movslq	%ecx, %rcx
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
@@ -72,7 +73,8 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rcx
-               	cmpl	$0x1, %ecx
+               	movslq	%ecx, %rcx
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

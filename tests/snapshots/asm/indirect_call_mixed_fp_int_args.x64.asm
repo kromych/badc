@@ -59,7 +59,8 @@ Disassembly of section .text:
                	cvttss2si	%xmm2, %rbx
                	addq	%rbx, %rsi
                	addq	$0x7, %rsi
-               	cmpl	$0x40, %esi
+               	movslq	%esi, %rsi
+               	cmpq	$0x40, %rsi
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -83,7 +84,8 @@ Disassembly of section .text:
                	cvttss2si	%xmm0, %rcx
                	addq	%rcx, %rax
                	addq	$0x7, %rax
-               	cmpl	%eax, %esi
+               	movslq	%eax, %rax
+               	cmpq	%rax, %rsi
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx

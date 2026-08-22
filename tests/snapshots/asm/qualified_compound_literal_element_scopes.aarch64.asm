@@ -29,7 +29,7 @@ Disassembly of section .text:
                	mov	x17, #0x6b              // =107
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	w0, #0x0
+               	cmp	x0, #0x0
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0xd                // =13

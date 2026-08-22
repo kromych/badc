@@ -65,7 +65,7 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	mov	x17, #0xff              // =255
                	and	x2, x2, x17
-               	cmp	w1, w2
+               	cmp	x1, x2
                	b.ne	<addr>
                	mov	x17, #0x1000            // =4096
                	add	x20, x20, x17

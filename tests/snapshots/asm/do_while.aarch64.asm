@@ -17,7 +17,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	cmp	w0, #0x5
+               	cmp	x0, #0x5
                	b.ge	<addr>
                	b	<addr>
                	ret

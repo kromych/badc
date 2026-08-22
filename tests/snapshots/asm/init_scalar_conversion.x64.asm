@@ -216,7 +216,8 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x50(%rbp,%riz)
                	movsd	-0x50(%rbp,%riz), %xmm0
                	cvttsd2si	%xmm0, %rax
-               	cmpl	$0x3, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x3, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

@@ -47,21 +47,21 @@ Disassembly of section .text:
                	movq	%rdx, %rsp
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movslq	%eax, %rcx
                	movq	%rcx, %rsi
                	shlq	%rsi
                	movl	%esi, (%rdx,%rcx,4)
                	leaq	0x1(%rcx), %rax
-               	cmpl	%edi, %eax
+               	movslq	%eax, %rcx
+               	cmpq	%rdi, %rcx
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
-               	movslq	%eax, %rsi
                	movslq	(%rdx,%rsi,4), %r8
                	addq	%r8, %rcx
                	leaq	0x1(%rsi), %rax
-               	cmpl	%edi, %eax
+               	movslq	%eax, %rsi
+               	cmpq	%rdi, %rsi
                	jl	<addr>
                	movslq	%ecx, %rax
                	leaq	-0x10(%rbp), %rsp

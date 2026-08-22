@@ -215,7 +215,7 @@ Disassembly of section .text:
                	xchgl	%r10d, (%r11)
                	movq	%r10, %rdi
                	movl	%edi, %edi
-               	cmpl	$0xc2, %edi
+               	cmpq	$0xc2, %rdi
                	je	<addr>
                	movl	$0xd, %eax
                	addq	$0x30, %rsp
@@ -327,7 +327,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movzbq	-0x20(%rbp), %rax
-               	cmpl	$0x2c, %eax
+               	cmpq	$0x2c, %rax
                	je	<addr>
                	movl	$0x15, %eax
                	addq	$0x30, %rsp
@@ -356,7 +356,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movzwq	-0x28(%rbp), %rax
-               	cmpl	$0x1170, %eax           # imm = 0x1170
+               	cmpq	$0x1170, %rax           # imm = 0x1170
                	je	<addr>
                	movl	$0x17, %eax
                	addq	$0x30, %rsp

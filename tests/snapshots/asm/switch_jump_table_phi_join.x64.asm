@@ -97,7 +97,8 @@ Disassembly of section .text:
                	jl	<addr>
                	movslq	%r12d, %rcx
                	leaq	0x1(%rcx), %r12
-               	cmpl	$0xe, %r12d
+               	movslq	%r12d, %rcx
+               	cmpq	$0xe, %rcx
                	jl	<addr>
                	movabsq	$-0x2eb506b7b9cbd8a0, %r11 # imm = 0xD14AF94846342760
                	cmpq	%r11, %rax

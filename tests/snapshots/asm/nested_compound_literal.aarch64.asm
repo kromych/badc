@@ -22,19 +22,19 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	w0, #0x1
+               	cmp	x0, #0x1
                	mov	x0, #0x1                // =1
                	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x4]
-               	cmp	w0, #0x2
+               	cmp	x0, #0x2
                	cset	x0, ne
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x8]
-               	cmp	w0, #0x9
+               	cmp	x0, #0x9
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
-               	cmp	w0, #0x5
+               	cmp	x0, #0x5
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x5                // =5

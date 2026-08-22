@@ -89,8 +89,9 @@ Disassembly of section .text:
                	add	x1, x1, x3
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	ldursw	x3, [x29, #0x10]
-               	cmp	w0, w3
+               	sxtw	x3, w0
+               	ldursw	x4, [x29, #0x10]
+               	cmp	x3, x4
                	b.lt	<addr>
                	sub	x0, x29, #0x20
                	sub	x0, x29, #0x40

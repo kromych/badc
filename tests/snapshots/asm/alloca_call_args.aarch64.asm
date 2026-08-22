@@ -96,7 +96,7 @@ Disassembly of section .text:
                	mov	x1, x21
                	blr	x9
                	add	sp, sp, #0x10
-               	cmp	w22, #0xf
+               	cmp	x22, #0xf
                	b.eq	<addr>
                	mov	x0, x20
                	sub	sp, x29, #0x40

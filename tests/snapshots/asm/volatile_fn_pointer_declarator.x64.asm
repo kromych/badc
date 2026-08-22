@@ -49,7 +49,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movq	(%rbx), %rax
                	callq	*%rax
-               	cmpl	$0x2a, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -58,7 +59,8 @@ Disassembly of section .text:
                	retq
                	movq	(%rbx), %rax
                	callq	*%rax
-               	cmpl	$0x2a, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
@@ -69,7 +71,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	callq	*%rax
                	movslq	(%rax), %rax
-               	cmpl	$0x29, %eax
+               	cmpq	$0x29, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx
@@ -80,7 +82,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	callq	*%rax
                	movslq	(%rax), %rax
-               	cmpl	$0x29, %eax
+               	cmpq	$0x29, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	(%rsp), %rbx
@@ -91,7 +93,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	callq	*%rax
                	movslq	(%rax), %rax
-               	cmpl	$0x29, %eax
+               	cmpq	$0x29, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -101,7 +103,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	callq	*%rax
                	movslq	(%rax), %rax
-               	cmpl	$0x2a, %eax
+               	cmpq	$0x2a, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -115,7 +117,8 @@ Disassembly of section .text:
                	movq	%rax, (%rbx)
                	movq	(%rbx), %rax
                	callq	*%rax
-               	cmpl	$0x29, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x29, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	movq	(%rsp), %rbx

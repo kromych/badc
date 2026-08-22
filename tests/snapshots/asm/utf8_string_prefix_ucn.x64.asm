@@ -38,11 +38,11 @@ Disassembly of section .text:
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8
                	andq	$0xff, %r8
-               	cmpl	%r8d, %edi
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpl	$0x2, %ecx
+               	cmpq	$0x2, %rcx
                	jb	<addr>
                	xorq	%rax, %rax
                	testq	%rax, %rax
@@ -59,11 +59,11 @@ Disassembly of section .text:
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8
                	andq	$0xff, %r8
-               	cmpl	%r8d, %edi
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpl	$0x4, %ecx
+               	cmpq	$0x4, %rcx
                	jb	<addr>
                	xorq	%rax, %rax
                	testq	%rax, %rax
@@ -80,11 +80,11 @@ Disassembly of section .text:
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8
                	andq	$0xff, %r8
-               	cmpl	%r8d, %edi
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpl	$0x3, %ecx
+               	cmpq	$0x3, %rcx
                	jb	<addr>
                	xorq	%rax, %rax
                	testq	%rax, %rax
@@ -101,11 +101,11 @@ Disassembly of section .text:
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8
                	andq	$0xff, %r8
-               	cmpl	%r8d, %edi
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpl	$0x5, %ecx
+               	cmpq	$0x5, %rcx
                	jb	<addr>
                	xorq	%rax, %rax
                	testq	%rax, %rax
@@ -122,11 +122,11 @@ Disassembly of section .text:
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8
                	andq	$0xff, %r8
-               	cmpl	%r8d, %edi
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpl	$0x5, %ecx
+               	cmpq	$0x5, %rcx
                	jb	<addr>
                	xorq	%rax, %rax
                	testq	%rax, %rax
@@ -143,11 +143,11 @@ Disassembly of section .text:
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8
                	andq	$0xff, %r8
-               	cmpl	%r8d, %edi
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpl	$0x5, %ecx
+               	cmpq	$0x5, %rcx
                	jb	<addr>
                	xorq	%rax, %rax
                	testq	%rax, %rax
@@ -170,11 +170,11 @@ Disassembly of section .text:
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8
                	andq	$0xff, %r8
-               	cmpl	%r8d, %edi
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpl	$0x4, %ecx
+               	cmpq	$0x4, %rcx
                	jb	<addr>
                	xorq	%rax, %rax
                	testq	%rax, %rax
@@ -191,11 +191,11 @@ Disassembly of section .text:
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8
                	andq	$0xff, %r8
-               	cmpl	%r8d, %edi
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpl	$0x2, %ecx
+               	cmpq	$0x2, %rcx
                	jb	<addr>
                	xorq	%rax, %rax
                	testq	%rax, %rax
@@ -212,11 +212,11 @@ Disassembly of section .text:
                	leaq	(%rsi,%rcx), %r8
                	movsbq	(%r8), %r8
                	andq	$0xff, %r8
-               	cmpl	%r8d, %edi
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx
-               	cmpl	$0x4, %ecx
+               	cmpq	$0x4, %rcx
                	jb	<addr>
                	xorq	%rax, %rax
                	testq	%rax, %rax

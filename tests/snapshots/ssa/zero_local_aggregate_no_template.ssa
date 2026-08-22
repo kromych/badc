@@ -235,20 +235,20 @@ fn ent_pc=9 n_params=0 variadic=false locals=65
     v162 Imm(0)                                           -> x1
     terminator Jmp(b30)   (exit_acc=v134)
   block 28  start_pc=0
-    v169 LocalAddr(-64)                                   -> x1
-    v170 Extend { value=v163, kind=I32 }                  -> x1
-    v171 Binop { op=add, lhs=v158, rhs=v170 }             -> x6
+    v169 LocalAddr(-64)                                   -> x6
+    v170 Extend { value=v163, kind=I32 }                  -> x6
+    v171 Binop { op=add, lhs=v158, rhs=v164 }             -> x6
     v172 Load { addr=v171, disp=0, kind=I8 }              -> x6
     terminator Bnz { cond=v172, target=b54, fall=b29 }   (exit_acc=v172)
   block 29  start_pc=0
     v166 Extend { value=v163, kind=I32 }                  -> x0
-    v167 BinopI { op=add, lhs=v170, rhs_imm=1 }           -> x0
+    v167 BinopI { op=add, lhs=v164, rhs_imm=1 }           -> x0
     v168 Imm(0)                                           -> x1
     terminator Jmp(b30)   (exit_acc=v167)
   block 30  start_pc=0
     v163 Phi { incoming=[b27:v134, b29:v167], kind=I64 }  -> x0
     v164 Extend { value=v163, kind=I32 }                  -> x1
-    v165 BinopI { op=lt, lhs=v163, rhs_imm=512 }          -> x1
+    v165 BinopI { op=lt, lhs=v164, rhs_imm=512 }          -> x6
     terminator Bnz { cond=v165, target=b28, fall=b31 }   (exit_acc=v165)
   block 31  start_pc=0
     v173 Imm(1)                                           -> x0
@@ -344,8 +344,8 @@ fn ent_pc=9 n_params=0 variadic=false locals=65
     v237 Load { addr=v176, disp=0, kind=I64 }             -> x0
     v238 Call { target_pc=6, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v239 BinopI { op=shl, lhs=v238, rhs_imm=32 }          -> x1
-    v240 Extend { value=v238, kind=I32 }                  -> x1
-    v241 BinopI { op=eq, lhs=v238, rhs_imm=7 }            -> x0
+    v240 Extend { value=v238, kind=I32 }                  -> x0
+    v241 BinopI { op=eq, lhs=v240, rhs_imm=7 }            -> x0
     v242 Imm(0)                                           -> x1
     terminator Bz { cond=v241, target=b53, fall=b44 }   (exit_acc=v241)
   block 44  start_pc=0

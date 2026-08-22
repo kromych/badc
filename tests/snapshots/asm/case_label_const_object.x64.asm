@@ -50,27 +50,27 @@ Disassembly of section .text:
                	movl	%esi, (%rdi)
                	movl	$0x1, %esi
                	movslq	(%rax), %rax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movslq	0x8(%rdx), %rax
-               	cmpl	$0x7, %eax
+               	cmpq	$0x7, %rax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpl	$0x3e8, %eax            # imm = 0x3E8
+               	cmpq	$0x3e8, %rax            # imm = 0x3E8
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorq	%rax, %rax
                	testq	%rcx, %rcx
                	je	<addr>
                	movslq	(%rdi), %rax
-               	cmpl	$0x9, %eax
+               	cmpq	$0x9, %rax
                	sete	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
@@ -110,7 +110,7 @@ Disassembly of section .text:
                	movl	$0x3, %ecx
                	movl	%ecx, 0xc(%rax)
                	movslq	0xc(%rax), %rax
-               	cmpl	$0x3, %eax
+               	cmpq	$0x3, %rax
                	sete	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax

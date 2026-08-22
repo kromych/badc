@@ -45,23 +45,23 @@ Disassembly of section .text:
                	movq	%rsi, %rsp
                	xorq	%rax, %rax
                	jmp	<addr>
-               	movslq	%eax, %rcx
                	leaq	(%rsi,%rcx), %r9
                	leaq	0x1(%rcx), %rdx
                	movslq	%edx, %r8
                	movb	%r8b, (%r9)
                	leaq	0x1(%rcx), %rax
-               	cmpl	%edi, %eax
+               	movslq	%eax, %rcx
+               	cmpq	%rdi, %rcx
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	jmp	<addr>
-               	movslq	%eax, %rdx
                	leaq	(%rsi,%rdx), %r8
                	movsbq	(%r8), %r8
                	addq	%r8, %rcx
                	leaq	0x1(%rdx), %rax
-               	cmpl	%edi, %eax
+               	movslq	%eax, %rdx
+               	cmpq	%rdi, %rdx
                	jl	<addr>
                	movslq	%ecx, %rax
                	leaq	-0x10(%rbp), %rsp

@@ -44,7 +44,8 @@ Disassembly of section .text:
                	movq	(%rax), %rdx
                	testq	%rdx, %rdx
                	jne	<addr>
-               	testl	%ecx, %ecx
+               	movslq	%ecx, %rax
+               	testq	%rax, %rax
                	jle	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

@@ -28,14 +28,14 @@ Disassembly of section .text:
 <main>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	cmpl	$0x3, %ecx
+               	cmpq	$0x3, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movzbq	0x5(%rax), %rcx
                	xorq	$0x7, %rcx
                	movl	%ecx, %edx
-               	testl	%edx, %edx
+               	testq	%rdx, %rdx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rdx, %rdx
@@ -43,7 +43,7 @@ Disassembly of section .text:
                	movzbq	0x7(%rax), %rcx
                	xorq	$0xc, %rcx
                	movl	%ecx, %ecx
-               	testl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	movzbq	0xa(%rax), %rcx
                	xorq	$0x1, %rcx
                	movl	%ecx, %edx
-               	testl	%edx, %edx
+               	testq	%rdx, %rdx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rdx, %rdx
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	movzbq	0xb(%rax), %rcx
                	xorq	$0x16, %rcx
                	movl	%ecx, %ecx
-               	testl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	movzbq	0xc(%rax), %rcx
                	xorq	$0x1, %rcx
                	movl	%ecx, %edx
-               	testl	%edx, %edx
+               	testq	%rdx, %rdx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rdx, %rdx
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	movzbq	0xd(%rax), %rcx
                	xorq	$0x5, %rcx
                	movl	%ecx, %ecx
-               	testl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

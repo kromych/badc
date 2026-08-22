@@ -18,19 +18,19 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
                	ldrsw	x1, [x1]
-               	cmp	w1, #0x1e
+               	cmp	x1, #0x1e
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	ldr	x1, [x0, #0x8]
                	ldrsw	x1, [x1]
-               	cmp	w1, #0x28
+               	cmp	x1, #0x28
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	ldr	x0, [x0, #0x10]
                	ldrsw	x0, [x0]
-               	cmp	w0, #0x14
+               	cmp	x0, #0x14
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret

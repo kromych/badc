@@ -69,28 +69,28 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rbx, %rbx
                	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	movslq	%r12d, %rax
-               	shlq	$0x4, %rax
-               	leaq	(%rcx,%rax), %rsi
-               	movslq	%ebx, %rcx
-               	movq	%rcx, %rdx
+               	leaq	<rip>, %rdx
+               	movq	%rsi, %rcx
+               	shlq	$0x4, %rcx
+               	leaq	(%rdx,%rcx), %rdi
+               	movq	%rax, %rdx
                	shlq	$0x2, %rdx
-               	addq	%rdx, %rsi
-               	movss	(%rsi,%riz), %xmm0
-               	leaq	<rip>, %rsi
-               	addq	%rsi, %rax
-               	addq	%rdx, %rax
-               	movss	(%rax,%riz), %xmm1
+               	addq	%rdx, %rdi
+               	movss	(%rdi,%riz), %xmm0
+               	leaq	<rip>, %rdi
+               	addq	%rdi, %rcx
+               	addq	%rdx, %rcx
+               	movss	(%rcx,%riz), %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	leaq	0x1(%rcx), %rbx
-               	cmpl	$0x4, %ebx
+               	leaq	0x1(%rax), %rbx
+               	movslq	%ebx, %rax
+               	cmpq	$0x4, %rax
                	jl	<addr>
-               	movslq	%r12d, %rax
-               	leaq	0x1(%rax), %r12
-               	cmpl	$0xc, %r12d
+               	leaq	0x1(%rsi), %r12
+               	movslq	%r12d, %rsi
+               	cmpq	$0xc, %rsi
                	jl	<addr>
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm14

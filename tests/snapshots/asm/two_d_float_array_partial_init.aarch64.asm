@@ -58,28 +58,27 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x20, #0x0               // =0
                	b	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	sxtw	x0, w21
-               	lsl	x0, x0, #4
-               	add	x3, x1, x0
-               	sxtw	x1, w20
-               	lsl	x2, x1, #2
-               	add	x3, x3, x2
-               	ldr	s0, [x3]
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	add	x0, x3, x0
-               	add	x0, x0, x2
-               	ldr	s1, [x0]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	lsl	x1, x3, #4
+               	add	x4, x2, x1
+               	lsl	x2, x0, #2
+               	add	x4, x4, x2
+               	ldr	s0, [x4]
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	add	x1, x4, x1
+               	add	x1, x1, x2
+               	ldr	s1, [x1]
                	fcmp	s0, s1
                	b.ne	<addr>
-               	add	x20, x1, #0x1
-               	cmp	w20, #0x4
+               	add	x20, x0, #0x1
+               	sxtw	x0, w20
+               	cmp	x0, #0x4
                	b.lt	<addr>
-               	sxtw	x0, w21
-               	add	x21, x0, #0x1
-               	cmp	w21, #0xc
+               	add	x21, x3, #0x1
+               	sxtw	x3, w21
+               	cmp	x3, #0xc
                	b.lt	<addr>
                	mov	x1, #0x0                // =0
                	fmov	s16, w1

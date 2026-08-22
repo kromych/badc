@@ -202,7 +202,7 @@ Disassembly of section .text:
                	ldp	x9, x10, [sp], #0x20
                	mov	x5, x16
                	mov	w5, w5
-               	cmp	w5, #0xc2
+               	cmp	x5, #0xc2
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x30
@@ -322,7 +322,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w0, [x29, #-0x20]
-               	cmp	w0, #0x2c
+               	cmp	x0, #0x2c
                	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	add	sp, sp, #0x30
@@ -355,7 +355,7 @@ Disassembly of section .text:
                	ret
                	ldurh	w0, [x29, #-0x28]
                	mov	x17, #0x1170            // =4464
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x30

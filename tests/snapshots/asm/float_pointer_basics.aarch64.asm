@@ -34,7 +34,7 @@ Disassembly of section .text:
                	str	x0, [x21, #0x8]
                	ldrsw	x0, [x20]
                	mov	x17, #0x3f800000        // =1065353216
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x20]
@@ -43,7 +43,7 @@ Disassembly of section .text:
                	ret
                	ldrsw	x0, [x20, #0x4]
                	mov	x17, #0x40000000        // =1073741824
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x20]

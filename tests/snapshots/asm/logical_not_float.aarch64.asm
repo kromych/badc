@@ -22,7 +22,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d16, d17
                	cset	x1, eq
-               	cmp	w1, #0x1
+               	sxtw	x1, w1
+               	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
@@ -44,7 +45,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x1, eq
-               	cmp	w1, #0x1
+               	sxtw	x1, w1
+               	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
@@ -70,7 +72,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x1, eq
-               	cmp	w1, #0x1
+               	sxtw	x1, w1
+               	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10

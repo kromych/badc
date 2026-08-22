@@ -32,7 +32,7 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
-               	cmp	w2, w3
+               	cmp	x2, x3
                	cset	x2, eq
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
                	cbnz	x0, <addr>

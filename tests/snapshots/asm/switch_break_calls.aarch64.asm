@@ -31,11 +31,11 @@ Disassembly of section .text:
 
 <driver>:
                	sxtw	x0, w0
-               	cmp	w0, #0x1
+               	cmp	x0, #0x1
                	b.lt	<addr>
-               	cmp	w0, #0x2
+               	cmp	x0, #0x2
                	b.lt	<addr>
-               	cmp	w0, #0x2
+               	cmp	x0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x190              // =400
                	sxtw	x0, w0

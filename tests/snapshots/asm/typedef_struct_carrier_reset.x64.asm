@@ -113,7 +113,8 @@ Disassembly of section .text:
                	subq	$0xb0, %rsp
                	leaq	-0xa8(%rbp), %rdi
                	callq	<addr>
-               	cmpl	$0x64, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x64, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0xb0, %rsp
@@ -121,21 +122,21 @@ Disassembly of section .text:
                	retq
                	leaq	-0xa8(%rbp), %rax
                	movslq	0x14(%rax), %rcx
-               	cmpl	$0x5, %ecx
+               	cmpq	$0x5, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
                	movslq	0x3c(%rax), %rcx
-               	cmpl	$0x6, %ecx
+               	cmpq	$0x6, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
                	movslq	0xa0(%rax), %rax
-               	cmpl	$0x64, %eax
+               	cmpq	$0x64, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0xb0, %rsp

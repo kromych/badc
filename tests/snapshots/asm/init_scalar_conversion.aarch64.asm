@@ -156,7 +156,8 @@ Disassembly of section .text:
                	sub	x16, x29, #0x50
                	ldr	d0, [x16]
                	fcvtzs	x1, d0
-               	cmp	w1, #0x3
+               	sxtw	x1, w1
+               	cmp	x1, #0x3
                	cset	x1, ne
                	cbnz	x1, <addr>
                	mov	x1, x0

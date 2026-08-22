@@ -589,28 +589,28 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	xorq	%rcx, %rcx
-               	movq	%rcx, %rax
+               	xorq	%rdx, %rdx
+               	movq	%rdx, %rcx
                	jmp	<addr>
                	leaq	<rip>, %rsi
-               	movslq	%eax, %rdx
-               	movq	%rdx, (%rsi,%rdx,8)
-               	leaq	0x1(%rdx), %rax
-               	cmpl	$0xb4, %eax
+               	movq	%rax, (%rsi,%rax,8)
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0xb4, %rax
                	jl	<addr>
                	xorq	%rax, %rax
                	jmp	<addr>
                	leaq	<rip>, %rsi
-               	movslq	%eax, %rdx
-               	movq	(%rsi,%rdx,8), %rdi
-               	leaq	0x1(%rdx), %rsi
+               	movq	(%rsi,%rcx,8), %rdi
+               	leaq	0x1(%rcx), %rsi
                	movslq	%esi, %rsi
                	imulq	%rdi, %rsi
-               	addq	%rsi, %rcx
-               	leaq	0x1(%rdx), %rax
-               	cmpl	$0xb4, %eax
+               	addq	%rsi, %rdx
+               	leaq	0x1(%rcx), %rax
+               	movslq	%eax, %rcx
+               	cmpq	$0xb4, %rcx
                	jl	<addr>
-               	leaq	0xa(%rcx), %rbx
+               	leaq	0xa(%rdx), %rbx
                	movl	$0x7, %edi
                	movl	$0x3, %esi
                	callq	<addr>

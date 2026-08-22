@@ -118,7 +118,7 @@ Disassembly of section .text:
                	movq	(%rcx), %rcx
                	andq	$0x3, %rcx
                	movslq	%ecx, %rcx
-               	cmpl	$0x1, %ecx
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq

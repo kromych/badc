@@ -89,9 +89,9 @@ Disassembly of section .text:
                	movslq	-0x28(%rbp), %rcx
                	incq	%rcx
                	movl	%ecx, -0x28(%rbp)
-               	movslq	%eax, %rax
-               	incq	%rax
-               	cmpl	$0xf4240, %eax          # imm = 0xF4240
+               	leaq	0x1(%rdx), %rax
+               	movslq	%eax, %rdx
+               	cmpq	$0xf4240, %rdx          # imm = 0xF4240
                	jl	<addr>
                	movl	$0x1, %edi
                	leaq	-0x10(%rbp), %rsi

@@ -32,11 +32,11 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x3, x0
                	b	<addr>
-               	sxtw	x1, w0
                	ldr	x4, [x2, x1, lsl #3]
                	add	x3, x3, x4
                	add	x0, x1, #0x1
-               	cmp	w0, #0x5
+               	sxtw	x1, w0
+               	cmp	x1, #0x5
                	b.lt	<addr>
                	cmp	x3, #0x5dc
                	b.ne	<addr>

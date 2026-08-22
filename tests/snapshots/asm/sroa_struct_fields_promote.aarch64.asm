@@ -67,7 +67,7 @@ Disassembly of section .text:
                	mov	x5, x3
                	b	<addr>
                	add	x5, x5, x0
-               	cmp	w4, #0x2
+               	cmp	x4, #0x2
                	b.lo	<addr>
                	mov	x1, x3
                	mov	x4, x3
@@ -138,7 +138,7 @@ Disassembly of section .text:
                	mov	x5, x3
                	b	<addr>
                	add	x5, x5, x0
-               	cmp	w4, #0x2
+               	cmp	x4, #0x2
                	b.lo	<addr>
                	mov	x1, x3
                	mov	x4, x3

@@ -26,16 +26,17 @@ Disassembly of section .text:
                	int3
 
 <driver>:
+               	movslq	%edi, %rdi
                	xorq	%rax, %rax
-               	cmpl	$0x2, %edi
+               	cmpq	$0x2, %rdi
                	jl	<addr>
-               	cmpl	$0x2, %edi
+               	cmpq	$0x2, %rdi
                	je	<addr>
                	movslq	%eax, %rax
                	retq
                	movabsq	$-0x1, %rax
                	jmp	<addr>
-               	cmpl	$0x1, %edi
+               	cmpq	$0x1, %rdi
                	je	<addr>
                	jmp	<addr>
                	movl	$0x2a, %eax

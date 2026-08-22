@@ -25,7 +25,7 @@ Disassembly of section .text:
                	mov	x2, #0x9                // =9
                	strb	w2, [x0, #0x7]
                	sxtw	x1, w1
-               	cmp	w1, #0x2
+               	cmp	x1, #0x2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x60

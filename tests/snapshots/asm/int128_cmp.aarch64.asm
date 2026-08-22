@@ -47,7 +47,7 @@ Disassembly of section .text:
                	orr	x11, x13, x14
                	cmp	x11, #0x0
                	cset	x12, eq
-               	cmp	w12, #0x0
+               	cmp	x12, #0x0
                	cset	x12, eq
                	cbnz	x11, <addr>
                	cmp	x11, #0x0

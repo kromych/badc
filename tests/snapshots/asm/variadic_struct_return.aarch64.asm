@@ -123,9 +123,10 @@ Disassembly of section .text:
                	str	x0, [x1]
                	str	x0, [x1, #0x8]
                	b	<addr>
-               	ldr	x2, [x1]
-               	sub	x3, x29, #0x30
-               	mov	x17, x3
+               	sub	x2, x29, #0x10
+               	ldr	x3, [x2]
+               	sub	x4, x29, #0x30
+               	mov	x17, x4
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x18]
                	cmp	x16, #0x0
@@ -142,14 +143,14 @@ Disassembly of section .text:
                	add	x9, x16, #0x8
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
-               	mov	x3, x16
-               	ldrsw	x3, [x3]
-               	add	x2, x2, x3
-               	str	x2, [x1]
-               	sxtw	x0, w0
-               	add	x0, x0, #0x1
+               	mov	x4, x16
+               	ldrsw	x4, [x4]
+               	add	x3, x3, x4
+               	str	x3, [x2]
+               	add	x0, x1, #0x1
+               	sxtw	x1, w0
                	ldursw	x2, [x29, #0x10]
-               	cmp	w0, w2
+               	cmp	x1, x2
                	b.lt	<addr>
                	sub	x0, x29, #0x30
                	sub	x0, x29, #0x10

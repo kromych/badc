@@ -42,7 +42,7 @@ Disassembly of section .text:
                	rev	w0, w0
                	mov	x17, #0x2211            // =8721
                	movk	x17, #0x4433, lsl #16
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
@@ -75,7 +75,7 @@ Disassembly of section .text:
                	rev	w0, w0
                	mov	x17, #0x605             // =1541
                	movk	x17, #0x807, lsl #16
-               	cmp	w0, w17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20
@@ -87,7 +87,7 @@ Disassembly of section .text:
                	rev	w0, w0
                	lsr	w0, w0, #16
                	ldurh	w1, [x29, #-0x18]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x20
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	rev	w0, w0
                	rev	w0, w0
                	ldur	w1, [x29, #-0x10]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x20
@@ -119,7 +119,7 @@ Disassembly of section .text:
                	ldurh	w1, [x29, #-0x18]
                	rev	w1, w1
                	lsr	w1, w1, #16
-               	cmp	w0, w1
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x20
@@ -129,7 +129,7 @@ Disassembly of section .text:
                	rev	w0, w0
                	ldur	w1, [x29, #-0x10]
                	rev	w1, w1
-               	cmp	w0, w1
+               	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x20

@@ -233,7 +233,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=4
     v48  Binop { op=mul, lhs=v1, rhs=v3 }                 -> x1
     v49  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x1
     v50  Extend { value=v27, kind=I32 }                   -> x1
-    v51  BinopI { op=and, lhs=v27, rhs_imm=255 }          -> x1
+    v51  BinopI { op=and, lhs=v50, rhs_imm=255 }          -> x1
     v52  Binop { op=ne, lhs=v45, rhs=v51 }                -> x0
     v53  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v52)

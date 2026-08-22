@@ -101,7 +101,7 @@ Disassembly of section .text:
                	ldr	w1, [x1]
                	mov	x17, #0xbeef            // =48879
                	movk	x17, #0xdead, lsl #16
-               	cmp	w1, w17
+               	cmp	x1, x17
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
@@ -110,13 +110,13 @@ Disassembly of section .text:
                	ldr	w1, [x0]
                	mov	x17, #0x3344            // =13124
                	movk	x17, #0x1122, lsl #16
-               	cmp	w1, w17
+               	cmp	x1, x17
                	cset	x1, ne
                	cbnz	x1, <addr>
                	ldr	w0, [x0, #0x4]
                	mov	x17, #0x7788            // =30600
                	movk	x17, #0x5566, lsl #16
-               	cmp	w0, w17
+               	cmp	x0, x17
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5

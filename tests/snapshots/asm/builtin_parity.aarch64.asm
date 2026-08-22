@@ -44,7 +44,7 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	mov	x17, #0x1               // =1
                	and	x0, x0, x17
-               	cmp	w0, #0x1
+               	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x10

@@ -77,13 +77,13 @@ Disassembly of section .text:
                	movq	%r10, %rcx
                	movslq	(%rcx), %rcx
                	leaq	-0x18(%rbp), %rdx
-               	cmpl	$0x2a, %eax
+               	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
-               	cmpl	$0x7, %ecx
+               	cmpq	$0x7, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0xd0, %rsp

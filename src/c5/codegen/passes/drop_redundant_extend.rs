@@ -49,10 +49,6 @@ use alloc::vec::Vec;
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
-        // Decide the comparison operand widths first: a comparison
-        // read at 32 bits stops observing its operands' upper half,
-        // which is what makes the renormalizations feeding it dead.
-        super::narrow::mark_compares(func);
         run_one(func);
     }
     drop_call_arg_reextends(funcs);
@@ -96,8 +92,7 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
     let mut hi = alloc::vec![false; n];
     let mut work: Vec<ValueId> = Vec::new();
 
-    for (i, inst) in func.insts.iter().enumerate() {
-        let cmp32 = super::narrow::is_cmp32(&func.cmp32, i as ValueId);
+    for inst in &func.insts {
         match inst {
             Inst::Imm(_)
             | Inst::ImmData(_)
@@ -155,7 +150,6 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             Inst::Binop { op, lhs, rhs } => match op {
                 BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor => {}
                 BinOp::Shl => observe(&mut hi, &mut work, *rhs),
-                _ if cmp32 => {}
                 _ => {
                     observe(&mut hi, &mut work, *lhs);
                     observe(&mut hi, &mut work, *rhs);
@@ -169,7 +163,6 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 | BinOp::Or
                 | BinOp::Xor
                 | BinOp::Shl => {}
-                _ if cmp32 => {}
                 _ => observe(&mut hi, &mut work, *lhs),
             },
             // The 2- and 4-byte reversals read only the low bytes they
@@ -781,7 +774,6 @@ mod tests {
             const_params: 0,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
-            cmp32: Vec::new(),
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),

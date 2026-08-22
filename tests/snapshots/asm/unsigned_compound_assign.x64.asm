@@ -144,7 +144,7 @@ Disassembly of section .text:
                	movq	%rax, -0x20(%rbp)
                	movq	-0x20(%rbp), %rax
                	movslq	0xc(%rax), %rdx
-               	cmpl	$0x1e, %edx
+               	cmpq	$0x1e, %rdx
                	je	<addr>
                	leaq	<rip>, %rdi
                	movslq	0xc(%rax), %rsi

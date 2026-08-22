@@ -28,7 +28,7 @@ Disassembly of section .text:
                	mov	x17, #0x6f              // =111
                	eor	x1, x1, x17
                	mov	w2, w1
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x1, ne
                	cbnz	x2, <addr>
                	adrp	x1, <page>
@@ -38,7 +38,7 @@ Disassembly of section .text:
                	mov	x17, #0x74              // =116
                	eor	x1, x1, x17
                	mov	w1, w1
-               	cmp	w1, #0x0
+               	cmp	x1, #0x0
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, #0x5                // =5
@@ -63,6 +63,7 @@ Disassembly of section .text:
                	add	x29, sp, #0x40
                	mov	x20, x0
                	mov	x22, x1
+               	sxtw	x20, w20
                	sub	x0, x29, #0x18
                	mov	x23, #0x0               // =0
                	str	x23, [x0]
@@ -78,13 +79,14 @@ Disassembly of section .text:
                	ldrb	w0, [x1]
                	mov	x17, #0xff              // =255
                	and	x2, x20, x17
-               	cmp	w0, w2
+               	cmp	x0, x2
                	cset	x0, ne
                	cbnz	x0, <addr>
                	ldrb	w0, [x1, #0x3]
+               	sxtw	x1, w21
                	mov	x17, #0xff              // =255
-               	and	x1, x21, x17
-               	cmp	w0, w1
+               	and	x1, x1, x17
+               	cmp	x0, x1
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0xa                // =10
@@ -115,11 +117,11 @@ Disassembly of section .text:
                	mov	x17, #0x6               // =6
                	eor	x0, x0, x17
                	mov	w0, w0
-               	cmp	w0, #0x0
+               	cmp	x0, #0x0
                	cset	x0, ne
                	cbnz	x0, <addr>
                	ldrsw	x0, [x1, #0x4]
-               	cmp	w0, w20
+               	cmp	x0, x20
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0xb                // =11

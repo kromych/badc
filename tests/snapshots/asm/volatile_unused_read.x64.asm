@@ -35,13 +35,13 @@ Disassembly of section .text:
                	movl	%ecx, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rcx
                	movslq	(%rax), %rax
-               	cmpl	$0x5, %eax
+               	cmpq	$0x5, %rax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movslq	-0x8(%rbp), %rax
-               	cmpl	$0x7, %eax
+               	cmpq	$0x7, %rax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

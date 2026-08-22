@@ -27,7 +27,7 @@ Disassembly of section .text:
                	add	x1, x1, x1
                	sxtw	x1, w1
                	sxtw	x1, w1
-               	cmp	w1, #0x2a
+               	cmp	x1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x400              // =1024
                	sxtw	x0, w0

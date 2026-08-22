@@ -21,7 +21,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0]
-               	cmp	w0, #0x2a
+               	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x17               // =23
                	ldp	x29, x30, [sp, #0x20]

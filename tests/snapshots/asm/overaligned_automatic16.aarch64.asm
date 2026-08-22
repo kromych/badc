@@ -208,7 +208,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, x20
                	bl	<addr>
-               	cmp	w20, #0x0
+               	cmp	x20, #0x0
                	b.le	<addr>
                	sub	x0, x20, #0x1
                	bl	<addr>

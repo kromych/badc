@@ -17,16 +17,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x210
-               	sub	x2, x29, #0x208
+               	sub	x3, x29, #0x208
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	b	<addr>
-               	sxtw	x3, w0
-               	add	x3, x2, x3
-               	strb	w1, [x3]
+               	add	x2, x3, x2
+               	strb	w1, [x2]
                	add	x0, x0, #0x1
                	sxtw	x0, w0
-               	cmp	w0, #0x80
+               	sxtw	x2, w0
+               	cmp	x2, #0x80
                	b.lt	<addr>
                	sub	x0, x29, #0x208
                	add	x1, x0, #0x0
@@ -41,13 +41,13 @@ Disassembly of section .text:
                	ldrb	w2, [x1]
                	mov	x17, #0x8               // =8
                	and	x3, x2, x17
-               	cmp	w3, #0x0
+               	cmp	x3, #0x0
                	cset	x2, eq
                	cbz	x3, <addr>
                	ldrb	w2, [x0, #0x5]
                	mov	x17, #0x1               // =1
                	and	x2, x2, x17
-               	cmp	w2, #0x0
+               	cmp	x2, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>
                	mov	x0, #0x2                // =2

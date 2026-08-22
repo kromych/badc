@@ -37,15 +37,17 @@ Disassembly of section .text:
                	add	x6, x6, x0
                	str	x6, [x5]
                	add	x4, x4, #0x1
-               	cmp	w3, #0x2
+               	cmp	x3, #0x2
                	b.lo	<addr>
-               	cmp	w3, #0x3
+               	cmp	x3, #0x3
                	b.lo	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
                	cmp	x0, x2
-               	b.ne	<addr>
+               	cset	x2, ne
+               	sxtw	x2, w2
+               	cbnz	x2, <addr>
                	mov	x2, x1
                	mov	x3, x1
                	b	<addr>

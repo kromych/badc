@@ -43,11 +43,11 @@ Disassembly of section .text:
 
 <driver>:
                	movslq	%edi, %rdi
-               	cmpl	$0x1, %edi
+               	cmpq	$0x1, %rdi
                	jl	<addr>
-               	cmpl	$0x2, %edi
+               	cmpq	$0x2, %rdi
                	jl	<addr>
-               	cmpl	$0x2, %edi
+               	cmpq	$0x2, %rdi
                	je	<addr>
                	movl	$0x190, %eax            # imm = 0x190
                	movslq	%eax, %rax

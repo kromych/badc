@@ -39,7 +39,7 @@ Disassembly of section .text:
                	movl	$0x63, %ecx
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rcx
-               	cmpl	$0x63, %ecx
+               	cmpq	$0x63, %rcx
                	je	<addr>
                	movl	$0xbad2, %eax           # imm = 0xBAD2
                	popq	%rbp
@@ -98,7 +98,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movslq	(%r12), %rax
-               	cmpl	$0x1, %eax
+               	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx

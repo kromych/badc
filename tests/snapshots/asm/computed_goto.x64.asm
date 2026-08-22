@@ -145,7 +145,7 @@ Disassembly of section .text:
                	movl	%ecx, -0x18(%rbp)
                	movslq	%ecx, %rcx
                	movslq	0x10(%rbp), %rsi
-               	cmpl	%esi, %ecx
+               	cmpq	%rsi, %rcx
                	jge	<addr>
                	jmp	<addr>
                	movslq	-0x18(%rbp), %rax

@@ -53,14 +53,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v47  Extend { value=v45, kind=I32 }                   -> x3
     v48  BinopI { op=add, lhs=v45, rhs_imm=7 }            -> x6
     v49  BinopI { op=shl, lhs=v48, rhs_imm=32 }           -> x3
-    v50  Extend { value=v48, kind=I32 }                   -> x3
-    v51  BinopI { op=shl, lhs=v48, rhs_imm=32 }           -> x12
+    v50  Extend { value=v48, kind=I32 }                   -> x6
+    v51  BinopI { op=shl, lhs=v50, rhs_imm=32 }           -> x3
     v52  Extend { value=v50, kind=I32 }                   -> x3
-    v53  BinopI { op=shl, lhs=v48, rhs_imm=32 }           -> x12
+    v53  BinopI { op=shl, lhs=v50, rhs_imm=32 }           -> x12
     v54  Extend { value=v52, kind=I32 }                   -> x3
     v55  Imm(0)                                           -> x3
     v56  LoadLocal { off=-1, kind=I32 }                   -> x3
-    v57  BinopI { op=ne, lhs=v48, rhs_imm=64 }            -> x3
+    v57  BinopI { op=ne, lhs=v50, rhs_imm=64 }            -> x3
     terminator Bz { cond=v57, target=b2, fall=b1 }   (exit_acc=v57)
   block 1  start_pc=0
     v58  Imm(1)                                           -> x0
@@ -107,10 +107,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v97  Extend { value=v95, kind=I32 }                   -> x1
     v98  BinopI { op=add, lhs=v95, rhs_imm=7 }            -> x0
     v99  BinopI { op=shl, lhs=v98, rhs_imm=32 }           -> x1
-    v100 Extend { value=v98, kind=I32 }                   -> x1
-    v101 BinopI { op=shl, lhs=v98, rhs_imm=32 }           -> x2
+    v100 Extend { value=v98, kind=I32 }                   -> x0
+    v101 BinopI { op=shl, lhs=v100, rhs_imm=32 }          -> x1
     v102 Extend { value=v100, kind=I32 }                  -> x1
-    v103 Binop { op=ne, lhs=v48, rhs=v98 }                -> x0
+    v103 Binop { op=ne, lhs=v50, rhs=v100 }               -> x0
     terminator Bz { cond=v103, target=b4, fall=b3 }   (exit_acc=v103)
   block 3  start_pc=0
     v104 Imm(2)                                           -> x0

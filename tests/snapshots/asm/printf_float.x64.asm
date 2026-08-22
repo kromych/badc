@@ -34,7 +34,8 @@ Disassembly of section .text:
                	movb	$0x1, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	cmpl	$0x9, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp

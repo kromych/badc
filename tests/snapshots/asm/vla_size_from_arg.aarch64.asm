@@ -32,24 +32,24 @@ Disassembly of section .text:
                	mov	sp, x4
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sxtw	x1, w0
                	add	x5, x4, x1
                	add	x2, x1, #0x1
                	mov	x17, #0xff              // =255
                	and	x2, x2, x17
                	strb	w2, [x5]
                	add	x0, x1, #0x1
-               	cmp	w0, w3
+               	sxtw	x1, w0
+               	cmp	x1, x3
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
-               	sxtw	x2, w0
                	add	x5, x4, x2
                	ldrb	w5, [x5]
                	add	x1, x1, x5
                	add	x0, x2, #0x1
-               	cmp	w0, w3
+               	sxtw	x2, w0
+               	cmp	x2, x3
                	b.lt	<addr>
                	sxtw	x0, w1
                	sub	sp, x29, #0x20

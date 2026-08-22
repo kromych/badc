@@ -53,7 +53,7 @@ Disassembly of section .text:
                	movb	%sil, 0xc(%rax)
                	movl	(%rax), %eax
                	andq	$0x7fffffff, %rax       # imm = 0x7FFFFFFF
-               	cmpl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
+               	cmpq	$0x7fffffff, %rax       # imm = 0x7FFFFFFF
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	sarq	$0x7, %rax
                	andq	$0x1, %rax
-               	cmpl	$0x1, %eax
+               	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movl	0x4(%rax), %edx
                	andq	$0x3fffffff, %rdx       # imm = 0x3FFFFFFF
-               	cmpl	$0x3fffffff, %edx       # imm = 0x3FFFFFFF
+               	cmpq	$0x3fffffff, %rdx       # imm = 0x3FFFFFFF
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x20, %rsp
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	movq	%rsi, %rdx
                	sarq	$0x6, %rdx
                	andq	$0x3, %rdx
-               	cmpl	$0x3, %edx
+               	cmpq	$0x3, %rdx
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x20, %rsp
@@ -110,7 +110,7 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	andq	$0x1ff, %rax            # imm = 0x1FF
-               	cmpl	$0x1ff, %eax            # imm = 0x1FF
+               	cmpq	$0x1ff, %rax            # imm = 0x1FF
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -118,7 +118,7 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	andq	$0x1ff, %rax            # imm = 0x1FF
-               	cmpl	$0x123, %eax            # imm = 0x123
+               	cmpq	$0x123, %rax            # imm = 0x123
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

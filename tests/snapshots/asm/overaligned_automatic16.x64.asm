@@ -231,7 +231,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
-               	testl	%ebx, %ebx
+               	testq	%rbx, %rbx
                	jle	<addr>
                	leaq	-0x1(%rbx), %rdi
                	callq	<addr>

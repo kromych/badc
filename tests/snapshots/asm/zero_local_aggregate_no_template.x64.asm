@@ -103,10 +103,10 @@ Disassembly of section .text:
                	movl	%ecx, 0x8(%rax)
                	movl	%ecx, 0xc(%rax)
                	movslq	%edx, %rdx
-               	cmpl	$0x9, %edx
+               	cmpq	$0x9, %rdx
                	jne	<addr>
                	movslq	0x4(%rax), %rax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorq	%rax, %rax
@@ -114,14 +114,14 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	-0x10(%rbp), %rcx
                	movslq	0x8(%rcx), %rcx
-               	testl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	leaq	-0x10(%rbp), %rcx
                	movslq	0xc(%rcx), %rcx
-               	testl	%ecx, %ecx
+               	testq	%rcx, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rcx
@@ -266,13 +266,13 @@ Disassembly of section .text:
                	popq	%rax
                	movq	%rdx, %rcx
                	jmp	<addr>
-               	movslq	%eax, %rcx
                	leaq	(%rdx,%rcx), %rsi
                	movsbq	(%rsi), %rsi
                	testq	%rsi, %rsi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
-               	cmpl	$0x200, %eax            # imm = 0x200
+               	movslq	%eax, %rcx
+               	cmpq	$0x200, %rcx            # imm = 0x200
                	jl	<addr>
                	movl	$0x1, %eax
                	testq	%rax, %rax
@@ -301,11 +301,12 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movl	%ebx, 0x8(%rax)
                	callq	<addr>
-               	cmpl	$0x7, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x7, %rax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movslq	0x8(%rax), %rax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	sete	%bl
                	movzbq	%bl, %rbx
                	movslq	%ebx, %rax

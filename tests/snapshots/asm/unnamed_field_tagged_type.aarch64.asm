@@ -33,7 +33,7 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
-               	cmp	w2, w3
+               	cmp	x2, x3
                	cset	x2, eq
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x70
                	ldrsw	x1, [x0, #0x8]
-               	cmp	w1, #0x3
+               	cmp	x1, #0x3
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0xa0
@@ -65,7 +65,7 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
-               	cmp	w2, w3
+               	cmp	x2, x3
                	cset	x2, eq
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
@@ -74,7 +74,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	mov	w1, w0
                	mov	x17, #0x7               // =7
                	and	x2, x1, x17
-               	cmp	w2, #0x5
+               	cmp	x2, #0x5
                	b.eq	<addr>
                	mov	x0, #0x28               // =40
                	add	sp, sp, #0xa0
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	asr	x0, x1, #3
                	mov	x17, #0x1f              // =31
                	and	x0, x0, x17
-               	cmp	w0, #0x15
+               	cmp	x0, #0x15
                	b.eq	<addr>
                	mov	x0, #0x29               // =41
                	add	sp, sp, #0xa0
@@ -129,7 +129,7 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
-               	cmp	w2, w3
+               	cmp	x2, x3
                	cset	x2, eq
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
@@ -138,7 +138,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -149,7 +149,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x8]
-               	cmp	w0, #0xb
+               	cmp	x0, #0xb
                	b.eq	<addr>
                	mov	x0, #0x33               // =51
                	add	sp, sp, #0xa0
@@ -164,7 +164,7 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
-               	cmp	w2, w3
+               	cmp	x2, x3
                	cset	x2, eq
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
@@ -173,7 +173,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -184,7 +184,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0, #0x8]
-               	cmp	w0, #0x16
+               	cmp	x0, #0x16
                	b.eq	<addr>
                	mov	x0, #0x35               // =53
                	add	sp, sp, #0xa0
@@ -199,7 +199,7 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
-               	cmp	w2, w3
+               	cmp	x2, x3
                	cset	x2, eq
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
@@ -208,7 +208,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -254,7 +254,7 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
-               	cmp	w2, w3
+               	cmp	x2, x3
                	cset	x2, eq
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
@@ -263,7 +263,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -273,7 +273,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x30
                	ldrsw	x1, [x0, #0x8]
-               	cmp	w1, #0xd
+               	cmp	x1, #0xd
                	b.eq	<addr>
                	mov	x0, #0x39               // =57
                	add	sp, sp, #0xa0
@@ -286,7 +286,7 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
-               	cmp	w2, w3
+               	cmp	x2, x3
                	cset	x2, eq
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
@@ -295,7 +295,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -305,7 +305,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x18
                	ldrsw	x1, [x0, #0x8]
-               	cmp	w1, #0x18
+               	cmp	x1, #0x18
                	b.eq	<addr>
                	mov	x0, #0x3b               // =59
                	add	sp, sp, #0xa0
@@ -318,7 +318,7 @@ Disassembly of section .text:
                	cbz	x2, <addr>
                	ldrb	w2, [x0]
                	ldrb	w3, [x1]
-               	cmp	w2, w3
+               	cmp	x2, x3
                	cset	x2, eq
                	cbz	x2, <addr>
                	add	x0, x0, #0x1
@@ -327,7 +327,7 @@ Disassembly of section .text:
                	b	<addr>
                	ldrb	w0, [x0]
                	ldrb	w1, [x1]
-               	cmp	w0, w1
+               	cmp	x0, x1
                	cset	x0, eq
                	sxtw	x0, w0
                	cbnz	x0, <addr>

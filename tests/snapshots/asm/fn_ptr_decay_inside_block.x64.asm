@@ -51,7 +51,8 @@ Disassembly of section .text:
                	movl	$0x4, %edi
                	callq	*%rax
                	addq	%rbx, %rax
-               	cmpl	$0x19a, %eax            # imm = 0x19A
+               	movslq	%eax, %rax
+               	cmpq	$0x19a, %rax            # imm = 0x19A
                	jne	<addr>
                	xorq	%rax, %rax
                	movslq	%eax, %rax

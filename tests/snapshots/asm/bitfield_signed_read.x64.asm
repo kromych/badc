@@ -104,7 +104,7 @@ Disassembly of section .text:
                	sarq	$0x3, %rsi
                	andq	$0xff, %rsi
                	movsbq	%sil, %rsi
-               	cmpl	$-0x80, %esi
+               	cmpq	$-0x80, %rsi
                	je	<addr>
                	movl	$0x16, %eax
                	addq	$0x10, %rsp
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	movw	%cx, (%rax)
                	movl	(%rax), %eax
                	andq	$0xfff, %rax            # imm = 0xFFF
-               	cmpl	$0x7, %eax
+               	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x1f, %eax
                	addq	$0x10, %rsp

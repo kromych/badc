@@ -30,12 +30,12 @@ Disassembly of section .text:
                	movzwq	0x4(%rax), %rcx
                	leaq	<rip>, %rax
                	movslq	0xc(%rax), %rdx
-               	cmpl	$0x21, %ecx
+               	cmpq	$0x21, %rcx
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	cmpl	$-0x7, %edx
+               	cmpq	$-0x7, %rdx
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

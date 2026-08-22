@@ -23,7 +23,8 @@ Disassembly of section .text:
                	fmov	d0, x1
                	bl	<addr>
                	sxtw	x0, w0
-               	cmp	w0, #0x9
+               	sxtw	x0, w0
+               	cmp	x0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]

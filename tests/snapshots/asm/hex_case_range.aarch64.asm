@@ -14,17 +14,18 @@ Disassembly of section .text:
                	brk	#0x1
 
 <classify>:
-               	cmp	w0, #0x10
+               	sxtw	x0, w0
+               	cmp	x0, #0x10
                	b.ge	<addr>
-               	cmp	w0, #0x30
+               	cmp	x0, #0x30
                	b.ge	<addr>
                	mov	x0, #0x0                // =0
                	ret
-               	cmp	w0, #0x40
+               	cmp	x0, #0x40
                	b.gt	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	cmp	w0, #0x20
+               	cmp	x0, #0x20
                	b.gt	<addr>
                	mov	x0, #0x1                // =1
                	ret

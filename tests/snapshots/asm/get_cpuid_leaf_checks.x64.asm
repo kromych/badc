@@ -39,7 +39,7 @@ Disassembly of section .text:
                	movl	-0x8(%rbp), %ecx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
                	movq	%rcx, %rdx
-               	cmpl	%r11d, %ecx
+               	cmpq	%r11, %rcx
                	sete	%dl
                	movzbq	%dl, %rdx
                	xorq	%rcx, %rcx
@@ -47,21 +47,21 @@ Disassembly of section .text:
                	je	<addr>
                	movl	-0x10(%rbp), %edx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %edx
+               	cmpq	%r11, %rdx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	-0x18(%rbp), %edx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %edx
+               	cmpq	%r11, %rdx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	-0x20(%rbp), %edx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %edx
+               	cmpq	%r11, %rdx
                	sete	%dl
                	movzbq	%dl, %rdx
                	movslq	%edx, %rdx
@@ -77,11 +77,11 @@ Disassembly of section .text:
                	movl	%eax, -0x80(%rbp)
                	movl	-0x68(%rbp), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %eax
+               	cmpq	%r11, %rax
                	jne	<addr>
                	movl	-0x70(%rbp), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %eax
+               	cmpq	%r11, %rax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	movl	-0x78(%rbp), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
                	movq	%rax, %rcx
-               	cmpl	%r11d, %eax
+               	cmpq	%r11, %rax
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorq	%rdx, %rdx
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	-0x80(%rbp), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %eax
+               	cmpq	%r11, %rax
                	sete	%al
                	movzbq	%al, %rax
                	movslq	%eax, %rax
@@ -116,18 +116,18 @@ Disassembly of section .text:
                	movq	%rsi, %rcx
                	movl	-0xc8(%rbp), %ecx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %ecx
+               	cmpq	%r11, %rcx
                	jne	<addr>
                	movl	-0xd0(%rbp), %ecx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %ecx
+               	cmpq	%r11, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	-0xd8(%rbp), %ecx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %ecx
+               	cmpq	%r11, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	movl	-0xe0(%rbp), %ecx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
                	movq	%rcx, %rdx
-               	cmpl	%r11d, %ecx
+               	cmpq	%r11, %rcx
                	sete	%dl
                	movzbq	%dl, %rdx
                	movslq	%edx, %rcx
@@ -156,26 +156,26 @@ Disassembly of section .text:
                	movl	-0x128(%rbp), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
                	movq	%rax, %rcx
-               	cmpl	%r11d, %eax
+               	cmpq	%r11, %rax
                	movl	$0x1, %eax
                	jne	<addr>
                	movl	-0x130(%rbp), %ecx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %ecx
+               	cmpq	%r11, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	-0x138(%rbp), %ecx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %ecx
+               	cmpq	%r11, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	-0x140(%rbp), %ecx
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %ecx
+               	cmpq	%r11, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

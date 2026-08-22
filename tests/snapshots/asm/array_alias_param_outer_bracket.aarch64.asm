@@ -44,7 +44,7 @@ Disassembly of section .text:
                	add	x3, x3, x2
                	add	x0, x1, #0x1
                	mov	w1, w0
-               	cmp	w1, #0x3
+               	cmp	x1, #0x3
                	b.lo	<addr>
                	cmp	x3, #0x45
                	b.eq	<addr>
@@ -87,7 +87,7 @@ Disassembly of section .text:
                	add	x3, x3, x2
                	add	x0, x1, #0x1
                	mov	w1, w0
-               	cmp	w1, #0x3
+               	cmp	x1, #0x3
                	b.lo	<addr>
                	cmp	x3, #0x2e
                	b.eq	<addr>

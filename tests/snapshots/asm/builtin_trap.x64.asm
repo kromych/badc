@@ -32,7 +32,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	movl	%eax, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	jl	<addr>
                	cmpq	$0x7, %rax
                	je	<addr>
@@ -43,7 +43,7 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movl	%ecx, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	jl	<addr>
                	testq	%rax, %rax
                	je	<addr>

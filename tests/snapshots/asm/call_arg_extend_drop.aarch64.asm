@@ -19,7 +19,7 @@ Disassembly of section .text:
                	add	x29, sp, #0x10
                	mov	x20, x0
                	sxtw	x20, w20
-               	cmp	w20, #0x2
+               	cmp	x20, #0x2
                	b.ge	<addr>
                	sxtw	x0, w20
                	ldp	x29, x30, [sp, #0x10]

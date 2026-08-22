@@ -59,7 +59,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movq	(%rax), %rax
                	movslq	0x10(%rax), %rax
-               	cmpl	$0x2a, %eax
+               	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	retq

@@ -65,7 +65,7 @@ Disassembly of section .text:
                	mov	x4, #0x2000             // =8192
                	str	x4, [x0, #0x40]
                	ldrsw	x4, [x2]
-               	cmp	w4, #0xa
+               	cmp	x4, #0xa
                	b.eq	<addr>
                	mov	x0, x5
                	add	sp, sp, #0xb0
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x2, [x3]
-               	cmp	w2, #0x1e
+               	cmp	x2, #0x1e
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0xb0

@@ -287,7 +287,7 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	ldr	x0, [x0]
                	ldrsw	x0, [x0]
-               	cmp	w0, #0x1
+               	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp, #0x10]
@@ -300,7 +300,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	ldr	x0, [x1]
                	ldrsw	x0, [x0]
-               	cmp	w0, #0x2
+               	cmp	x0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x10]

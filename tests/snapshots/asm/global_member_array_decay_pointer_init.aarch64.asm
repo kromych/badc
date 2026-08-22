@@ -29,12 +29,12 @@ Disassembly of section .text:
                	ret
                	ldr	x0, [x1]
                	ldrsw	x0, [x0]
-               	cmp	w0, #0xb
+               	cmp	x0, #0xb
                	cset	x0, ne
                	cbnz	x0, <addr>
                	ldr	x0, [x1]
                	ldrsw	x0, [x0, #0xc]
-               	cmp	w0, #0x16
+               	cmp	x0, #0x16
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	ldrsw	x0, [x0]
-               	cmp	w0, #0x21
+               	cmp	x0, #0x21
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3

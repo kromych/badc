@@ -27,7 +27,9 @@ Disassembly of section .text:
                	mov	x3, x4
                	mov	x4, x5
                	mov	x5, x6
-               	cmp	w0, w2
+               	sxtw	x0, w0
+               	sxtw	x2, w2
+               	cmp	x0, x2
                	b.eq	<addr>
                	sxtw	x0, w5
                	add	sp, sp, #0x20

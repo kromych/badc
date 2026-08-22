@@ -19,25 +19,25 @@ Disassembly of section .text:
                	sub	sp, sp, #0xb0
                	mov	x0, #0x0                // =0
                	b	<addr>
-               	sub	x1, x29, #0x90
-               	sxtw	x2, w0
-               	lsl	x3, x2, #4
-               	add	x4, x1, x3
+               	sub	x2, x29, #0x90
+               	lsl	x3, x1, #4
+               	add	x4, x2, x3
                	mov	x17, #0xa               // =10
-               	mul	x3, x2, x17
-               	sub	x1, x29, #0xa0
-               	str	w3, [x1]
+               	mul	x3, x1, x17
+               	sub	x2, x29, #0xa0
+               	str	w3, [x2]
                	mov	x3, #0x1                // =1
-               	str	x3, [x1, #0x8]
+               	str	x3, [x2, #0x8]
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x1]
+               	ldr	x10, [x2]
                	str	x10, [x4]
-               	ldr	x10, [x1, #0x8]
+               	ldr	x10, [x2, #0x8]
                	str	x10, [x4, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x1, x4
-               	add	x0, x2, #0x1
-               	cmp	w0, #0x8
+               	mov	x2, x4
+               	add	x0, x1, #0x1
+               	sxtw	x1, w0
+               	cmp	x1, #0x8
                	b.lt	<addr>
                	sub	x0, x29, #0x90
                	add	x1, x0, #0x0

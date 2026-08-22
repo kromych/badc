@@ -85,7 +85,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     terminator Jmp(b7)   (exit_acc=v78)
   block 7  start_pc=0
     v31  Extend { value=v74, kind=I32 }                   -> x2
-    v32  BinopI { op=lt, lhs=v74, rhs_imm=4 }             -> x2
+    v32  BinopI { op=lt, lhs=v31, rhs_imm=4 }             -> x2
     terminator Bz { cond=v32, target=b9, fall=b8 }   (exit_acc=v32)
   block 8  start_pc=0
     terminator Jmp(b1)
@@ -101,7 +101,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     terminator Return(v79)   (exit_acc=v79)
   block 12  start_pc=0
     v80  Extend { value=v33, kind=I32 }                   -> x0
-    v81  BinopI { op=ne, lhs=v33, rhs_imm=4 }             -> x0
+    v81  BinopI { op=ne, lhs=v80, rhs_imm=4 }             -> x0
     terminator Bz { cond=v81, target=b14, fall=b13 }   (exit_acc=v81)
   block 13  start_pc=0
     v82  Imm(9)                                           -> x0

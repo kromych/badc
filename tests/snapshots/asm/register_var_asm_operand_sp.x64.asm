@@ -103,7 +103,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpl	$0x2, %eax
+               	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx

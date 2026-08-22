@@ -135,7 +135,7 @@ Disassembly of section .text:
                	jne	<addr>
                	incq	%rax
                	movslq	%eax, %rax
-               	cmpl	$0x4, %eax
+               	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp

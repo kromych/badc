@@ -38,7 +38,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	xorq	%r8, %r8
                	jmp	<addr>
-               	movslq	%r8d, %r9
                	movq	%r9, %rax
                	shlq	$0x4, %rax
                	addq	%r12, %rax
@@ -49,7 +48,7 @@ Disassembly of section .text:
                	je	<addr>
                	movsbq	(%rax), %rcx
                	movsbq	(%rdx), %rdi
-               	cmpl	%edi, %ecx
+               	cmpq	%rdi, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -60,10 +59,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movsbq	(%rax), %rax
                	movsbq	(%rdx), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	je	<addr>
                	leaq	0x1(%r9), %r8
-               	cmpl	$0x2, %r8d
+               	movslq	%r8d, %r9
+               	cmpq	$0x2, %r9
                	jl	<addr>
                	movabsq	$-0x1, %rax
                	cmpq	$0x7, %rax
@@ -78,7 +78,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	xorq	%r8, %r8
                	jmp	<addr>
-               	movslq	%r8d, %r9
                	movq	%r9, %rax
                	shlq	$0x4, %rax
                	addq	%rbx, %rax
@@ -89,7 +88,7 @@ Disassembly of section .text:
                	je	<addr>
                	movsbq	(%rax), %rcx
                	movsbq	(%rdx), %rdi
-               	cmpl	%edi, %ecx
+               	cmpq	%rdi, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -100,10 +99,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movsbq	(%rax), %rax
                	movsbq	(%rdx), %rcx
-               	cmpl	%ecx, %eax
+               	cmpq	%rcx, %rax
                	je	<addr>
                	leaq	0x1(%r9), %r8
-               	cmpl	$0x2, %r8d
+               	movslq	%r8d, %r9
+               	cmpq	$0x2, %r9
                	jl	<addr>
                	movabsq	$-0x1, %rax
                	cmpq	$0x3, %rax

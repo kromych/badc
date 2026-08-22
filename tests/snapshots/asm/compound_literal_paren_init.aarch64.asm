@@ -52,21 +52,21 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	w2, w17
+               	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x1, [x1, #0x18]
-               	cmp	w1, #0x7
+               	cmp	x1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x1, [x0, #0x18]
-               	cmp	w1, #0x9
+               	cmp	x1, #0x9
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x40

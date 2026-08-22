@@ -172,8 +172,9 @@ Disassembly of section .text:
                	cmp	x1, x17
                	b.eq	<addr>
                	mov	x0, #0x1e               // =30
-               	cbz	x0, <addr>
-               	sxtw	x0, w0
+               	sxtw	x1, w0
+               	cbz	x1, <addr>
+               	mov	x0, x1
                	ret
                	mov	x0, #0x0                // =0
                	ret

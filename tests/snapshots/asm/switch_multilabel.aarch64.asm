@@ -14,15 +14,16 @@ Disassembly of section .text:
                	brk	#0x1
 
 <classify>:
-               	cmp	w0, #0x42
+               	sxtw	x0, w0
+               	cmp	x0, #0x42
                	b.lt	<addr>
-               	cmp	w0, #0x62
+               	cmp	x0, #0x62
                	b.lt	<addr>
-               	cmp	w0, #0x63
+               	cmp	x0, #0x63
                	b.lt	<addr>
-               	cmp	w0, #0x64
+               	cmp	x0, #0x64
                	b.lt	<addr>
-               	cmp	w0, #0x64
+               	cmp	x0, #0x64
                	b.eq	<addr>
                	mov	x0, #0x0                // =0
                	ret
@@ -30,29 +31,29 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
-               	cmp	w0, #0x61
+               	cmp	x0, #0x61
                	b.lt	<addr>
                	b	<addr>
-               	cmp	w0, #0x42
+               	cmp	x0, #0x42
                	b.ne	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	cmp	w0, #0x32
+               	cmp	x0, #0x32
                	b.lt	<addr>
-               	cmp	w0, #0x33
+               	cmp	x0, #0x33
                	b.lt	<addr>
-               	cmp	w0, #0x41
+               	cmp	x0, #0x41
                	b.lt	<addr>
                	b	<addr>
-               	cmp	w0, #0x33
+               	cmp	x0, #0x33
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	b	<addr>
-               	cmp	w0, #0x31
+               	cmp	x0, #0x31
                	b.lt	<addr>
                	b	<addr>
-               	cmp	w0, #0x30
+               	cmp	x0, #0x30
                	b.eq	<addr>
                	b	<addr>
 

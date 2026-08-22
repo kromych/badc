@@ -115,7 +115,7 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x18]
                	sxtw	x1, w1
                	ldursw	x3, [x29, #0x10]
-               	cmp	w1, w3
+               	cmp	x1, x3
                	b.ge	<addr>
                	b	<addr>
                	ldursw	x0, [x29, #-0x18]

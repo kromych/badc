@@ -37,11 +37,13 @@ Disassembly of section .text:
                	retq
 
 <do_cmp>:
-               	cmpl	%esi, %edi
+               	movslq	%edi, %rdi
+               	movslq	%esi, %rsi
+               	cmpq	%rsi, %rdi
                	jge	<addr>
                	movabsq	$-0x1, %rax
                	retq
-               	cmpl	%esi, %edi
+               	cmpq	%rsi, %rdi
                	jle	<addr>
                	movl	$0x1, %eax
                	retq
@@ -57,7 +59,8 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	movl	$0x3, %esi
                	callq	<addr>
-               	cmpl	$0x5, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
@@ -65,7 +68,8 @@ Disassembly of section .text:
                	movl	$0xa, %edi
                	movl	$0x4, %esi
                	callq	<addr>
-               	cmpl	$0x6, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
@@ -73,7 +77,8 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	callq	<addr>
-               	cmpl	$-0x1, %eax
+               	movslq	%eax, %rax
+               	cmpq	$-0x1, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp

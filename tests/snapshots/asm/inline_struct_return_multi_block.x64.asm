@@ -57,12 +57,12 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	shrq	$0x5, %rax
                	movl	%eax, %edx
-               	cmpl	$0x9, %edx
+               	cmpq	$0x9, %rdx
                	jne	<addr>
                	leaq	<rip>, %rsi
                	movl	$0x1, %r8d
                	movl	%r8d, (%rsi)
-               	cmpl	$0x4, %edx
+               	cmpq	$0x4, %rdx
                	jb	<addr>
                	leaq	<rip>, %rsi
                	movl	$0x1, %r8d
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movabsq	$-0x1, %rax
                	movslq	%eax, %rax
-               	testl	%eax, %eax
+               	testq	%rax, %rax
                	jge	<addr>
                	movabsq	$-0x1, %rax
                	cmpq	$0x100f1, %rax          # imm = 0x100F1

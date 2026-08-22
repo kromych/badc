@@ -42,7 +42,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movsbq	(%rax), %rax
-               	cmpl	$0x6c, %eax
+               	cmpq	$0x6c, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	movq	(%rsp), %rbx
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movsbq	0x2(%rbx), %rax
-               	cmpl	$0x30, %eax
+               	cmpq	$0x30, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	movq	(%rsp), %rbx
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x80(%rbp), %rbx
                	movsbq	0x6(%rbx), %rax
-               	cmpl	$0x34, %eax
+               	cmpq	$0x34, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	movq	(%rsp), %rbx

@@ -29,7 +29,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	0x8(%rax), %rcx
                	movsbq	(%rcx), %rcx
-               	cmpl	$0x6f, %ecx
+               	cmpq	$0x6f, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
@@ -38,7 +38,7 @@ Disassembly of section .text:
                	retq
                	movq	0x28(%rax), %rax
                	movsbq	(%rax), %rax
-               	cmpl	$0x66, %eax
+               	cmpq	$0x66, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	0x8(%rax), %rax
                	movsbq	(%rax), %rax
-               	cmpl	$0x74, %eax
+               	cmpq	$0x74, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movq	0x18(%rax), %rax
                	movsbq	(%rax), %rax
-               	cmpl	$0x74, %eax
+               	cmpq	$0x74, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	0x18(%rcx), %rcx
                	movsbq	(%rcx), %rcx
-               	cmpl	$0x62, %ecx
+               	cmpq	$0x62, %rcx
                	setne	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

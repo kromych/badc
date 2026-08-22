@@ -15,19 +15,19 @@ Disassembly of section .text:
 
 <pick>:
                	ldrb	w0, [x0]
-               	cmp	w0, #0x80
+               	cmp	x0, #0x80
                	b.lo	<addr>
-               	cmp	w0, #0xff
+               	cmp	x0, #0xff
                	b.lo	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	cmp	w0, #0x80
+               	cmp	x0, #0x80
                	b.eq	<addr>
                	mov	x0, #0x0                // =0
                	ret
                	mov	x0, #0x1                // =1
                	ret
-               	cmp	w0, #0x28
+               	cmp	x0, #0x28
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
@@ -81,7 +81,8 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x20
                	blr	x9
-               	cmp	w0, #0x1
+               	sxtw	x0, w0
+               	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x30]
@@ -99,7 +100,8 @@ Disassembly of section .text:
                	mov	x9, x0
                	mov	x0, x20
                	blr	x9
-               	cmp	w0, #0x2
+               	sxtw	x0, w0
+               	cmp	x0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x30]

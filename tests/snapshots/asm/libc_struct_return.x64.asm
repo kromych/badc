@@ -45,7 +45,8 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
-               	cmpl	$0x5, %ecx
+               	movslq	%ecx, %rcx
+               	cmpq	$0x5, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx
@@ -55,7 +56,8 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rax
                	imulq	%rcx, %rax
-               	cmpl	$0x6, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx
@@ -76,7 +78,8 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rax
                	addq	%rcx, %rax
-               	cmpl	$0x10, %eax
+               	movslq	%eax, %rax
+               	cmpq	$0x10, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	(%rsp), %rbx

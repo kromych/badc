@@ -71,11 +71,11 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	cbnz	x1, <addr>
                	ldrsw	x1, [x0, #0x4]
-               	cmp	w1, #0x2
+               	cmp	x1, #0x2
                	cset	x1, ne
                	cbnz	x1, <addr>
                	ldrsw	x0, [x0, #0x10]
-               	cmp	w0, #0x5
+               	cmp	x0, #0x5
                	cset	x1, ne
                	cbz	x1, <addr>
                	mov	x0, x2
@@ -90,7 +90,8 @@ Disassembly of section .text:
                	ldrsw	x0, [x20, #0x10]
                	add	x0, x21, x0
                	mov	w0, w0
-               	cmp	w0, #0x6
+               	sxtw	x0, w0
+               	cmp	x0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x50]

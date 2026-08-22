@@ -152,7 +152,7 @@ Disassembly of section .text:
                	movl	%ecx, %eax
                	leaq	0x1(%rax), %rcx
                	movl	%ecx, %eax
-               	cmpl	$0x64, %eax
+               	cmpq	$0x64, %rax
                	jb	<addr>
                	movq	%rdx, %rax
                	xorq	%rsi, %rax

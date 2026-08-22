@@ -62,7 +62,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpl	$0x1, %eax
+               	cmpq	$0x1, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

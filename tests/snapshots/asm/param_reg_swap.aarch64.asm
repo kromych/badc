@@ -80,13 +80,13 @@ Disassembly of section .text:
                	strb	w2, [x1, #0xf]
                	b	<addr>
                	sub	x2, x29, #0x20
-               	sxtw	x1, w0
                	add	x2, x2, x1
                	mov	x17, #0xff              // =255
                	and	x3, x1, x17
                	strb	w3, [x2]
                	add	x0, x1, #0x1
-               	cmp	w0, #0x20
+               	sxtw	x1, w0
+               	cmp	x1, #0x20
                	b.lt	<addr>
                	sub	x20, x29, #0x38
                	sub	x1, x29, #0x30

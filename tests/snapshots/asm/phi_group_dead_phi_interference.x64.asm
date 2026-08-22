@@ -29,13 +29,13 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %rdx
                	movq	%rax, %rcx
-               	movq	%rax, %rdi
+               	movq	%rax, %rsi
                	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	incq	%rcx
+               	leaq	0x1(%rdx), %rcx
                	movq	%rax, %rdx
-               	movq	%rax, %rdi
-               	cmpl	$0x5, %ecx
+               	movq	%rax, %rsi
+               	movslq	%ecx, %rdx
+               	cmpq	$0x5, %rdx
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx

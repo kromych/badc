@@ -20,7 +20,7 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
-               	cmp	w0, #0x0
+               	cmp	x0, #0x0
                	b.lt	<addr>
                	cmp	x0, #0x7
                	b.eq	<addr>
@@ -31,7 +31,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	stur	w1, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
-               	cmp	w0, #0x0
+               	cmp	x0, #0x0
                	b.lt	<addr>
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2

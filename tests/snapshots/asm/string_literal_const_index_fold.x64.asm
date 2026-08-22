@@ -27,37 +27,37 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rsi, %rsi
-               	movq	%rsi, %rax
-               	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	movslq	%eax, %rdx
-               	addq	%rdx, %rcx
-               	movsbq	(%rcx), %rdi
-               	cmpl	$0x2, %eax
-               	jl	<addr>
-               	cmpl	$0x3, %eax
-               	jl	<addr>
-               	cmpl	$0x3, %eax
-               	je	<addr>
                	movq	%rsi, %rcx
-               	movsbq	%cl, %rcx
-               	cmpl	%ecx, %edi
+               	jmp	<addr>
+               	leaq	<rip>, %rdx
+               	addq	%rax, %rdx
+               	movsbq	(%rdx), %rdi
+               	cmpq	$0x2, %rax
+               	jl	<addr>
+               	cmpq	$0x3, %rax
+               	jl	<addr>
+               	cmpq	$0x3, %rax
+               	je	<addr>
+               	movq	%rsi, %rdx
+               	movsbq	%dl, %rdx
+               	cmpq	%rdx, %rdi
                	je	<addr>
                	jmp	<addr>
-               	movl	$0xa, %ecx
+               	movl	$0xa, %edx
                	jmp	<addr>
-               	movl	$0x63, %ecx
+               	movl	$0x63, %edx
                	jmp	<addr>
-               	cmpl	$0x1, %eax
+               	cmpq	$0x1, %rax
                	jl	<addr>
-               	movl	$0x62, %ecx
+               	movl	$0x62, %edx
                	jmp	<addr>
                	testq	%rax, %rax
                	jne	<addr>
-               	movl	$0x61, %ecx
+               	movl	$0x61, %edx
                	jmp	<addr>
-               	leaq	0x1(%rdx), %rax
-               	cmpl	$0x5, %eax
+               	leaq	0x1(%rax), %rcx
+               	movslq	%ecx, %rax
+               	cmpq	$0x5, %rax
                	jl	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx

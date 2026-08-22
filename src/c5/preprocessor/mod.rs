@@ -153,7 +153,7 @@ pub struct Binding {
 
 /// One function-like macro entry: parameter list + body. Object-like
 /// macros are stored separately in `macros` as plain strings.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct FnMacro {
     /// Named parameters in source order, *not* including the `...` of
     /// a variadic macro -- variadics are flagged by `is_variadic` and
@@ -361,6 +361,119 @@ pub(crate) struct Preprocessor {
     /// variant in `op.rs` and a one-line entry in
     /// [`Self::parse_pragma_intrinsic`].
     pub intrinsics: alloc::collections::BTreeMap<String, i64>,
+    /// Recording state for the source pass of a compile that may retry
+    /// with an extended force-include list; see [`Self::process_recording`].
+    /// `None` outside that pass.
+    reuse: Option<Box<ReuseRecorder>>,
+}
+
+/// Identifier-membership filter for the pass-reuse check. A bit set
+/// keyed on a fixed hash, safe in one direction: a hit may be a false
+/// positive (the retry then falls back to a full run), a miss is exact.
+/// `Cell` bits, since the expansion sites record through `&Preprocessor`.
+pub(crate) struct ObsFilter {
+    mask: usize,
+    bits: alloc::boxed::Box<[Cell<u64>]>,
+}
+
+impl ObsFilter {
+    /// One bit per source byte keeps distinct identifiers sparse;
+    /// clamped so tiny units stay accurate and huge ones stay cheap.
+    fn sized_for(source_len: usize) -> Self {
+        let bits = source_len.next_power_of_two().clamp(1 << 17, 1 << 24);
+        ObsFilter {
+            mask: bits - 1,
+            bits: alloc::vec![Cell::new(0u64); bits / 64].into_boxed_slice(),
+        }
+    }
+
+    #[inline]
+    fn probes(&self, h: u64) -> [usize; 2] {
+        [h as usize & self.mask, (h >> 32) as usize & self.mask]
+    }
+
+    #[inline]
+    fn set(&self, h: u64) {
+        for i in self.probes(h) {
+            let w = &self.bits[i / 64];
+            w.set(w.get() | 1u64 << (i % 64));
+        }
+    }
+
+    #[inline]
+    fn hit(&self, h: u64) -> bool {
+        self.probes(h)
+            .into_iter()
+            .all(|i| self.bits[i / 64].get() & (1u64 << (i % 64)) != 0)
+    }
+}
+
+/// Eight-bytes-at-a-time multiplicative hash with a mixing finalizer,
+/// so both probe indices draw on well-spread bits. The filter must
+/// hash identically in the recording run and the retry run, so the
+/// macro map's per-instance-seeded hasher cannot key it; this runs
+/// once per identifier occurrence, hence the chunked walk.
+#[inline]
+fn obs_hash(name: &str) -> u64 {
+    const K: u64 = 0x517c_c1b7_2722_0a95;
+    let bytes = name.as_bytes();
+    let mut h = bytes.len() as u64;
+    let mut chunks = bytes.chunks_exact(8);
+    for c in &mut chunks {
+        let c = u64::from_le_bytes(c.try_into().expect("eight-byte chunk"));
+        h = (h.rotate_left(5) ^ c).wrapping_mul(K);
+    }
+    let mut tail = 0u64;
+    for &b in chunks.remainder() {
+        tail = tail << 8 | b as u64;
+    }
+    h = (h.rotate_left(5) ^ tail).wrapping_mul(K);
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xff51_afd7_ed55_8ccd);
+    h ^ (h >> 33)
+}
+
+/// Live recording for the source pass; drained into [`PpReuse`].
+struct ReuseRecorder {
+    /// Names the pass looked up, tested in a conditional, or
+    /// defined / undefined.
+    filter: ObsFilter,
+    /// The pass expanded `__COUNTER__`.
+    counter_used: Cell<bool>,
+    /// Resolution keys the pass checked against the `#pragma once` /
+    /// include-guard registries.
+    consulted_includes: BTreeSet<String>,
+    /// `#pragma` directives feeding the side outputs the compile
+    /// consumes, in source order: (args, line, filename).
+    pragma_events: Vec<(String, usize, String)>,
+}
+
+/// One completed run's source pass, reusable by a re-run whose
+/// force-include list extends this run's: the state at source entry,
+/// what the pass observed of it, and what the pass produced.
+pub(crate) struct PpReuse {
+    source_text: String,
+    macros: HashMap<String, String>,
+    fn_macros: HashMap<String, FnMacro>,
+    once_files: BTreeSet<String>,
+    include_guards: HashMap<String, String>,
+    counter: i64,
+    warning_disabled: BTreeSet<u32>,
+    warning_stack: Vec<BTreeSet<u32>>,
+    warn_disabled: BTreeSet<String>,
+    filter: ObsFilter,
+    counter_used: bool,
+    consulted_includes: BTreeSet<String>,
+    pragma_events: Vec<(String, usize, String)>,
+    warnings: Vec<String>,
+    include_records: Vec<IncludeRecord>,
+}
+
+/// Test hook: how many times the source (as opposed to the preamble or
+/// a reused pass) has been fully preprocessed on this thread.
+#[cfg(any(test, feature = "codegen_test"))]
+std::thread_local! {
+    pub(crate) static FULL_SOURCE_PASSES: Cell<usize> = const { Cell::new(0) };
 }
 
 /// Windows PE subsystem selector; mirrors the `IMAGE_SUBSYSTEM_*`
@@ -863,6 +976,7 @@ impl Preprocessor {
             warning_stack: Vec::new(),
             warn_disabled: BTreeSet::new(),
             intrinsics,
+            reuse: None,
         }
     }
 
@@ -1089,29 +1203,205 @@ impl Preprocessor {
     /// lines, which shifts user-source line numbers downstream of
     /// the include but keeps lines *within* a file aligned.
     pub fn process(&mut self, source: &str) -> Result<String, C5Error> {
-        // -include FILE plumbing: synthesize an `#include "name"`
-        // line per registered force-include and process them as a
-        // preamble before the user's source. Each force-include
-        // header runs with the same line-counter / `__FILE__` /
-        // search-path machinery as a regular `#include`, so a
-        // failure inside the header (say a typo'd `#pragma`) gets
-        // a diagnostic naming that header rather than the user's
-        // source. The synthesized preamble itself uses
-        // `<force-include>` as its filename label so any
-        // diagnostic targeting one of the synthesized lines
-        // points at that label and the line in the original
-        // source isn't shifted from the user's perspective.
         let mut out = String::with_capacity(source.len());
-        if !self.force_includes.is_empty() {
-            let mut preamble = String::new();
-            for name in &self.force_includes.clone() {
-                preamble.push_str(&format!("#include \"{name}\"\n"));
-            }
-            self.process_named(&preamble, "<force-include>", &mut out)?;
-        }
-        let label = self.source_label.clone();
-        self.process_named(source, &label, &mut out)?;
+        self.process_preamble(&mut out)?;
+        self.process_source(source, &mut out)?;
         Ok(out)
+    }
+
+    /// -include FILE plumbing: synthesize an `#include "name"`
+    /// line per registered force-include and process them as a
+    /// preamble before the user's source. Each force-include
+    /// header runs with the same line-counter / `__FILE__` /
+    /// search-path machinery as a regular `#include`, so a
+    /// failure inside the header (say a typo'd `#pragma`) gets
+    /// a diagnostic naming that header rather than the user's
+    /// source. The synthesized preamble itself uses
+    /// `<force-include>` as its filename label so any
+    /// diagnostic targeting one of the synthesized lines
+    /// points at that label and the line in the original
+    /// source isn't shifted from the user's perspective.
+    fn process_preamble(&mut self, out: &mut String) -> Result<(), C5Error> {
+        if self.force_includes.is_empty() {
+            return Ok(());
+        }
+        let mut preamble = String::new();
+        for name in &self.force_includes.clone() {
+            preamble.push_str(&format!("#include \"{name}\"\n"));
+        }
+        self.process_named(&preamble, "<force-include>", out)
+    }
+
+    fn process_source(&mut self, source: &str, out: &mut String) -> Result<(), C5Error> {
+        #[cfg(any(test, feature = "codegen_test"))]
+        FULL_SOURCE_PASSES.with(|c| c.set(c.get() + 1));
+        let label = self.source_label.clone();
+        self.process_named(source, &label, out)
+    }
+
+    /// As [`Self::process`], additionally recording what the source pass
+    /// read of the state the preamble left, so a later run whose
+    /// force-include list extends this one can prove the pass reusable
+    /// ([`Self::process_reusing`]).
+    pub(crate) fn process_recording(&mut self, source: &str) -> Result<(String, PpReuse), C5Error> {
+        let mut out = String::with_capacity(source.len());
+        self.process_preamble(&mut out)?;
+        let source_start = out.len();
+        let n_warnings = self.warnings.len();
+        let n_records = self.include_records.len();
+        let entry_macros = self.macros.clone();
+        let entry_fn_macros = self.fn_macros.clone();
+        let entry_once = self.pragma_once_files.clone();
+        let entry_guards = self.include_guards.clone();
+        let entry_counter = self.counter.get();
+        let entry_warning_disabled = self.warning_disabled.clone();
+        let entry_warning_stack = self.warning_stack.clone();
+        let entry_warn_disabled = self.warn_disabled.clone();
+        self.reuse = Some(Box::new(ReuseRecorder {
+            filter: ObsFilter::sized_for(source.len()),
+            counter_used: Cell::new(false),
+            consulted_includes: BTreeSet::new(),
+            pragma_events: Vec::new(),
+        }));
+        let result = self.process_source(source, &mut out);
+        let rec = *self.reuse.take().expect("recorder installed above");
+        result?;
+        let cache = PpReuse {
+            source_text: out[source_start..].to_string(),
+            macros: entry_macros,
+            fn_macros: entry_fn_macros,
+            once_files: entry_once,
+            include_guards: entry_guards,
+            counter: entry_counter,
+            warning_disabled: entry_warning_disabled,
+            warning_stack: entry_warning_stack,
+            warn_disabled: entry_warn_disabled,
+            filter: rec.filter,
+            counter_used: rec.counter_used.get(),
+            consulted_includes: rec.consulted_includes,
+            pragma_events: rec.pragma_events,
+            warnings: self.warnings[n_warnings..].to_vec(),
+            include_records: self.include_records[n_records..].to_vec(),
+        };
+        Ok((out, cache))
+    }
+
+    /// Run `process` for a force-include list extending the one `prior`
+    /// was recorded under, reusing `prior`'s source pass when the
+    /// extension provably cannot change it. `None` when reuse cannot be
+    /// shown sound; the caller then runs a full pass on a fresh
+    /// preprocessor. On `Some`, this preprocessor's side outputs are
+    /// what the full run would leave.
+    ///
+    /// Beyond its own text and the filesystem (stable across a retry by
+    /// the same assumption the full re-run makes), the source pass reads
+    /// the macro tables, the once / include-guard registries, the
+    /// `__COUNTER__` position and the pragma-warning state, and appends
+    /// to the side outputs. Each read is checked below against what the
+    /// recorded pass observed; the appends are replayed.
+    pub(crate) fn process_reusing(&mut self, prior: &PpReuse) -> Option<String> {
+        let mut out = String::new();
+        self.process_preamble(&mut out).ok()?;
+        if self.counter.get() != prior.counter && prior.counter_used {
+            return None;
+        }
+        if self.warning_disabled != prior.warning_disabled
+            || self.warning_stack != prior.warning_stack
+            || self.warn_disabled != prior.warn_disabled
+        {
+            return None;
+        }
+        // Names the extension defines, redefines or undefines must be
+        // ones the recorded pass never looked up, tested or (un)defined:
+        // an identifier that was no macro then and is one now (or the
+        // reverse, or a changed body) expands differently.
+        if self.macro_delta_observed(prior) {
+            return None;
+        }
+        // A once / guard registration for a file the pass resolved flips
+        // that resolution between open and skip.
+        if self
+            .pragma_once_files
+            .symmetric_difference(&prior.once_files)
+            .any(|f| prior.consulted_includes.contains(f))
+        {
+            return None;
+        }
+        let guards_changed = self
+            .include_guards
+            .iter()
+            .filter(|(k, v)| prior.include_guards.get(*k) != Some(*v))
+            .map(|(k, _)| k)
+            .chain(
+                prior
+                    .include_guards
+                    .keys()
+                    .filter(|k| !self.include_guards.contains_key(*k)),
+            );
+        if guards_changed
+            .into_iter()
+            .any(|f| prior.consulted_includes.contains(f))
+        {
+            return None;
+        }
+        // Replay the pass's side-output contributions onto this run's
+        // state through the regular appliers, so ordering and conflict
+        // rules hold as in a full run; a conflict the full run would
+        // diagnose falls back to it.
+        for (args, line, file) in &prior.pragma_events {
+            self.parse_pragma(args, *line, file).ok()?;
+        }
+        self.warnings.extend(prior.warnings.iter().cloned());
+        self.include_records
+            .extend(prior.include_records.iter().cloned());
+        out.push_str(&prior.source_text);
+        Some(out)
+    }
+
+    /// Whether any macro-table difference against `prior`'s source-entry
+    /// snapshot touches a name the recorded pass observed.
+    fn macro_delta_observed(&self, prior: &PpReuse) -> bool {
+        let obj = self
+            .macros
+            .iter()
+            .filter(|(k, v)| prior.macros.get(*k) != Some(*v))
+            .map(|(k, _)| k)
+            .chain(
+                prior
+                    .macros
+                    .keys()
+                    .filter(|k| !self.macros.contains_key(*k)),
+            );
+        let func = self
+            .fn_macros
+            .iter()
+            .filter(|(k, v)| prior.fn_macros.get(*k) != Some(*v))
+            .map(|(k, _)| k)
+            .chain(
+                prior
+                    .fn_macros
+                    .keys()
+                    .filter(|k| !self.fn_macros.contains_key(*k)),
+            );
+        obj.chain(func).any(|name| prior.filter.hit(obs_hash(name)))
+    }
+
+    /// Record `name` as observed by the source pass. Called wherever
+    /// expansion, a conditional, a guard probe or a define / undef
+    /// consults the macro tables.
+    #[inline]
+    pub(super) fn obs_note(&self, name: &str) {
+        if let Some(r) = self.reuse.as_deref() {
+            r.filter.set(obs_hash(name));
+        }
+    }
+
+    /// Record that the source pass consumed a `__COUNTER__` value.
+    #[inline]
+    pub(super) fn obs_note_counter(&self) {
+        if let Some(r) = self.reuse.as_deref() {
+            r.counter_used.set(true);
+        }
     }
 
     /// Recursive entry point. `filename` labels the buffer so error
@@ -1485,7 +1775,7 @@ impl Preprocessor {
                 // re-scanning the grown buffer per joined line is
                 // quadratic in the invocation length.
                 let mut join = JoinScan::new();
-                join.feed(&buffer, &self.fn_macros, &self.macros);
+                join.feed(&buffer, self);
                 while idx + consumed < lines.len()
                     && (join.unclosed()
                         // A function-like macro name at the end of a line with
@@ -1520,7 +1810,7 @@ impl Preprocessor {
                         let appended = buffer.len();
                         buffer.push('\n');
                         buffer.push_str(cont);
-                        join.feed(&buffer[appended..], &self.fn_macros, &self.macros);
+                        join.feed(&buffer[appended..], self);
                     }
                 }
                 // `__LINE__` reflects the presumed line (`source_line`),
@@ -1568,6 +1858,7 @@ impl Preprocessor {
 
     /// Install an object-like macro definition.
     fn apply_define(&mut self, name: &str, body: &str) {
+        self.obs_note(name);
         self.macros.insert(name.to_string(), body.to_string());
         self.fn_macros.remove(name);
     }
@@ -1669,6 +1960,7 @@ impl Preprocessor {
     /// `#ifdef __FILE__` and the `#ifdef __COUNTER__` feature probe
     /// must see them.
     pub(super) fn is_defined_name(&self, name: &str) -> bool {
+        self.obs_note(name);
         self.macros.contains_key(name)
             || self.fn_macros.contains_key(name)
             || is_operator_name(name)
@@ -1680,6 +1972,7 @@ impl Preprocessor {
     /// macro variadic; the named form additionally binds the trailing
     /// arguments to `name`.
     fn apply_define_fn(&mut self, name: &str, params: &[&str], body: &str) {
+        self.obs_note(name);
         let mut is_variadic = false;
         let mut va_name = None;
         let mut params = params;
@@ -1710,6 +2003,7 @@ impl Preprocessor {
 
     /// Remove a macro definition of either kind.
     fn apply_undef(&mut self, name: &str) {
+        self.obs_note(name);
         self.macros.remove(name);
         self.fn_macros.remove(name);
     }

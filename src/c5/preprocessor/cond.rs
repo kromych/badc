@@ -995,6 +995,7 @@ impl<'a> IfExprParser<'a> {
         // macros are skipped (they need an argument list which the
         // preprocessor evaluator doesn't simulate). Undefined names
         // are 0 per c99 sec 6.10.1p4.
+        self.pp.obs_note(name);
         if let Some(value) = self.pp.macros.get(name) {
             // Strip a leading/trailing quote pair to detect strings.
             if value.starts_with('"') && value.ends_with('"') {

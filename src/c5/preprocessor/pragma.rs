@@ -135,6 +135,24 @@ impl Preprocessor {
             }
             _ => args,
         };
+        // Record the directives feeding the side outputs the compile
+        // consumes, so a reused pass can replay them in order.
+        if self.reuse.is_some()
+            && [
+                "dylib(",
+                "binding(",
+                "export(",
+                "intrinsic(",
+                "entrypoint(",
+                "subsystem(",
+            ]
+            .iter()
+            .any(|p| args.starts_with(p))
+        {
+            let rec = self.reuse.as_deref_mut().expect("checked above");
+            rec.pragma_events
+                .push((args.to_string(), line_no, filename.to_string()));
+        }
         if let Some(inner) = args
             .strip_prefix("dylib(")
             .and_then(|s| s.strip_suffix(')'))

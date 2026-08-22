@@ -6,7 +6,7 @@ use super::CODE_BASE;
 use super::codegen::Target;
 use super::error::C5Error;
 use super::lexer::{self, Lexer};
-use super::preprocessor::{DylibSpec, IncludeRecord, Preprocessor};
+use super::preprocessor::{DylibSpec, IncludeRecord, PpReuse, Preprocessor};
 use super::program::Program;
 use super::symbol::Symbol;
 use super::token::Token;
@@ -2056,6 +2056,11 @@ pub struct Compiler {
     /// rely on it. `None` after the first retry attempt, so the
     /// recursion bottoms out at one level.
     retry_state: Option<(String, CompileOptions)>,
+
+    /// The first pass's recorded preprocessor state, letting a retry
+    /// reuse that pass instead of re-preprocessing when the appended
+    /// force-include provably cannot change it.
+    pp_reuse: Option<PpReuse>,
 }
 
 /// Header of `__builtin_*` thunks every translation unit is given; see
@@ -2252,14 +2257,23 @@ impl Compiler {
     pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
         // The retry re-runs the compile from this source, so it is kept
         // rather than copied; only the options, which the retry extends
-        // with a force-include, need a copy.
+        // with a force-include, need a copy. Recording for pass reuse is
+        // skipped when the retry itself is off (mirroring `compile`).
         let retry_opts = opts.clone();
-        let mut this = Self::build(&source, target, opts);
+        let record = !(opts.nostdinc || opts.no_builtin);
+        let mut this = Self::build_recording(&source, target, opts, record);
         this.retry_state = Some((source, retry_opts));
         this
     }
 
     fn build(source: &str, target: Target, opts: CompileOptions) -> Self {
+        Self::build_recording(source, target, opts, false)
+    }
+
+    /// Run the preprocessor and construct the compiler. With `record`,
+    /// the run additionally captures the reuse state the auto-include
+    /// retry consults ([`Self::build_retry`]).
+    fn build_recording(source: &str, target: Target, opts: CompileOptions, record: bool) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -2271,14 +2285,61 @@ impl Compiler {
         let mut pp = Self::configure_preprocessor(target, &opts);
         #[cfg(feature = "codegen_test")]
         let pp_start = std::time::Instant::now();
-        let (preprocessed, deferred_error) = match pp.process(source) {
-            Ok(s) => (s, None),
-            Err(e) => (String::new(), Some(e)),
+        let (preprocessed, pp_reuse, deferred_error) = if record {
+            match pp.process_recording(source) {
+                Ok((s, cache)) => (s, Some(cache), None),
+                Err(e) => (String::new(), None, Some(e)),
+            }
+        } else {
+            match pp.process(source) {
+                Ok(s) => (s, None, None),
+                Err(e) => (String::new(), None, Some(e)),
+            }
         };
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!("pass: preprocess -- {}us", pp_start.elapsed().as_micros());
         }
+        let mut this = Self::finish_build(pp, preprocessed, deferred_error, target, opts);
+        this.pp_reuse = pp_reuse;
+        this
+    }
+
+    /// One auto-include retry pass: reuse the recorded first pass when
+    /// the appended force-include provably cannot change it, else run a
+    /// full build from source.
+    fn build_retry(
+        source: &str,
+        target: Target,
+        opts: CompileOptions,
+        prior: Option<&PpReuse>,
+    ) -> Self {
+        if let Some(prior) = prior {
+            let mut pp = Self::configure_preprocessor(target, &opts);
+            #[cfg(feature = "codegen_test")]
+            let pp_start = std::time::Instant::now();
+            if let Some(text) = pp.process_reusing(prior) {
+                #[cfg(feature = "codegen_test")]
+                if std::env::var("BADC_TIME_PASSES").is_ok() {
+                    eprintln!(
+                        "pass: preprocess (source pass reused) -- {}us",
+                        pp_start.elapsed().as_micros()
+                    );
+                }
+                return Self::finish_build(pp, text, None, target, opts);
+            }
+        }
+        Self::build(source, target, opts)
+    }
+
+    /// Construct the compiler from a finished preprocessor run.
+    fn finish_build(
+        pp: Preprocessor,
+        preprocessed: String,
+        deferred_error: Option<C5Error>,
+        target: Target,
+        opts: CompileOptions,
+    ) -> Self {
         // Debug knob: when BADC_DUMP_PP is set, write the post-
         // preprocessor source to /tmp/badc-pp.c so the exact token
         // stream the lexer is about to see can be inspected. Read
@@ -2453,6 +2514,7 @@ impl Compiler {
             pending_block_static_syms: Vec::new(),
             next_block_static_id: 0,
             retry_state: None,
+            pp_reuse: None,
         }
     }
 
@@ -2619,6 +2681,7 @@ impl Compiler {
     /// propagates the original error.
     pub fn compile(mut self) -> Result<Program, C5Error> {
         let retry_state = self.retry_state.take();
+        let pp_reuse = self.pp_reuse.take();
         let target = self.target;
         let mut result = self.compile_one_pass();
         let Some((source, mut opts)) = retry_state else {
@@ -2672,7 +2735,8 @@ impl Compiler {
                 "info: auto-including <{header}> for undeclared `{name}`"
             ));
             auto_names.push(name);
-            result = Self::build(&source, target, opts.clone()).compile_one_pass();
+            result = Self::build_retry(&source, target, opts.clone(), pp_reuse.as_ref())
+                .compile_one_pass();
         }
     }
 

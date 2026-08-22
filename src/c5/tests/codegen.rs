@@ -6446,6 +6446,123 @@ fn auto_include_retry_emits_what_the_force_include_would() {
     );
 }
 
+/// Full source-pass count of `f`'s compile, from the preprocessor's
+/// per-thread hook. A reused pass re-runs only the preamble and does
+/// not count.
+#[cfg(feature = "full")]
+fn counting_source_passes<T>(f: impl FnOnce() -> T) -> (T, usize) {
+    use crate::c5::preprocessor::FULL_SOURCE_PASSES;
+    let before = FULL_SOURCE_PASSES.with(|c| c.get());
+    let value = f();
+    (value, FULL_SOURCE_PASSES.with(|c| c.get()) - before)
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn auto_include_retry_reuses_the_first_preprocessor_pass() {
+    // Nothing this unit observed overlaps what <string.h> installs, so
+    // the retry must reuse the recorded first pass (one full source
+    // pass, not two) and still emit exactly what naming the header up
+    // front emits.
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    let src = "
+        int probe(const void *a, const void *b, unsigned long n)
+        {
+            return memcmp(a, b, n);
+        }
+        int main(void)
+        {
+            char x[2];
+            x[0] = 1;
+            x[1] = 2;
+            return probe(x, x, 2);
+        }
+    ";
+    let target = Target::LinuxX64;
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+
+    let (retried, passes) = counting_source_passes(|| {
+        Compiler::with_options(src.to_string(), target, CompileOptions::default())
+            .compile()
+            .expect("auto-include retry recovers the undeclared call")
+    });
+    assert!(
+        retried.auto_includes.iter().any(|n| n == "memcmp"),
+        "expected a retry, got {:?}",
+        retried.auto_includes
+    );
+    assert_eq!(passes, 1, "the retry re-preprocessed instead of reusing");
+
+    let forced = CompileOptions::default().with_force_includes(vec!["string.h".to_string()]);
+    let (direct, direct_passes) = counting_source_passes(|| {
+        Compiler::with_options(src.to_string(), target, forced)
+            .compile()
+            .expect("the same unit compiles with the header named up front")
+    });
+    assert_eq!(direct_passes, 1);
+
+    let a = emit_native_with_options(&retried, target, opts).expect("emit retried object");
+    let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
+    assert_eq!(a, b, "the reused pass changed the emitted object");
+    // Same diagnostics too, below the retry's own info line.
+    let tail = &retried.warnings[retried.warnings.len() - direct.warnings.len()..];
+    assert_eq!(tail, &direct.warnings[..]);
+}
+
+#[test]
+#[cfg(feature = "full")]
+fn auto_include_retry_falls_back_when_the_header_touches_observed_names() {
+    // The unit tested `NULL` before the retry adds <string.h>, which
+    // defines it: the recorded pass is not reusable, so the retry must
+    // re-preprocess from source -- and still match the up-front
+    // force-include compile.
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
+    };
+    let src = "
+        #ifndef NULL
+        #define NULL 0
+        #endif
+        int probe(const void *a, const void *b, unsigned long n)
+        {
+            return memcmp(a, b, n) == NULL;
+        }
+        int main(void)
+        {
+            return probe(\"x\", \"x\", 1);
+        }
+    ";
+    let target = Target::LinuxX64;
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+
+    let (retried, passes) = counting_source_passes(|| {
+        Compiler::with_options(src.to_string(), target, CompileOptions::default())
+            .compile()
+            .expect("auto-include retry recovers the undeclared call")
+    });
+    assert!(retried.auto_includes.iter().any(|n| n == "memcmp"));
+    assert_eq!(
+        passes, 2,
+        "an observed-name collision must fall back to a full pass"
+    );
+
+    let forced = CompileOptions::default().with_force_includes(vec!["string.h".to_string()]);
+    let direct = Compiler::with_options(src.to_string(), target, forced)
+        .compile()
+        .expect("the same unit compiles with the header named up front");
+    let a = emit_native_with_options(&retried, target, opts).expect("emit retried object");
+    let b = emit_native_with_options(&direct, target, opts).expect("emit direct object");
+    assert_eq!(a, b, "the fallback path changed the emitted object");
+}
+
 /// `.text`'s `sh_addralign` and every `STT_FUNC` symbol's
 /// `(name, st_value, st_size)` from a relocatable ELF64 object.
 #[cfg(feature = "full")]

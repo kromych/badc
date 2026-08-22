@@ -17,7 +17,6 @@ use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use hashbrown::HashMap;
 
 use super::text::{
     MAX_LITERAL_PREFIX, is_ident_byte, literal_prefix_len, pp_number_len, skip_literal,
@@ -631,6 +630,7 @@ impl<'a> Exp<'a> {
             }
             let (is_fn, is_obj) = {
                 let name = self.text(tok);
+                pp.obs_note(name);
                 (
                     pp.fn_macros.contains_key(name),
                     pp.macros.contains_key(name),
@@ -715,6 +715,7 @@ impl<'a> Exp<'a> {
             }
             // Extension: each use expands to the next integer.
             "__COUNTER__" => {
+                self.pp.obs_note_counter();
                 let n = self.pp.counter.get();
                 self.pp.counter.set(n + 1);
                 let t = self.synth(format!("{n}"), TokKind::Number, tok.space);
@@ -1156,6 +1157,7 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &line[start..i];
+                self.obs_note(ident);
                 if is_dynamic_predefine(ident)
                     || matches!(ident, "__has_builtin" | "__has_attribute")
                     || self.macros.contains_key(ident)
@@ -1250,6 +1252,7 @@ impl Preprocessor {
     /// `expand` plus the chain of intermediate macro names the walk
     /// passed through. A revisited name ends the walk.
     pub(super) fn expand_chain(&self, name: &str) -> Option<(String, Vec<String>)> {
+        self.obs_note(name);
         let first = self.macros.get(name)?;
         let mut chain: Vec<String> = Vec::new();
         let mut current = first.clone();
@@ -1257,6 +1260,7 @@ impl Preprocessor {
             if current == name || chain.iter().any(|c| c == &current) {
                 break;
             }
+            self.obs_note(&current);
             match self.macros.get(&current) {
                 Some(next) => {
                     chain.push(core::mem::replace(&mut current, next.clone()));
@@ -1369,12 +1373,7 @@ impl JoinScan {
     }
 
     /// Advance the scan over newly appended text.
-    pub(super) fn feed(
-        &mut self,
-        text: &str,
-        fn_macros: &HashMap<String, FnMacro>,
-        obj_macros: &HashMap<String, String>,
-    ) {
+    pub(super) fn feed(&mut self, text: &str, pp: &Preprocessor) {
         let bytes = text.as_bytes();
         let mut i = 0;
         loop {
@@ -1453,7 +1452,7 @@ impl JoinScan {
                     while i < bytes.len() && is_ident_byte(bytes[i]) {
                         i += 1;
                     }
-                    if !join_head(&text[start..i], fn_macros, obj_macros) {
+                    if !join_head(&text[start..i], pp) {
                         continue;
                     }
                     let mut j = i;
@@ -1485,17 +1484,14 @@ impl JoinScan {
 /// rescans the replacement list together with the tokens that follow, so
 /// it is the name ending the list that meets the `(` -- which may be on a
 /// later line (`#define dprintk if (debug) printk`).
-fn join_head(
-    name: &str,
-    fn_macros: &HashMap<String, FnMacro>,
-    obj_macros: &HashMap<String, String>,
-) -> bool {
+fn join_head(name: &str, pp: &Preprocessor) -> bool {
     let mut name = name;
     for _ in 0..MAX_MACRO_DEPTH {
-        if fn_macros.contains_key(name) {
+        pp.obs_note(name);
+        if pp.fn_macros.contains_key(name) {
             return true;
         }
-        let Some(tail) = obj_macros.get(name).and_then(|b| trailing_identifier(b)) else {
+        let Some(tail) = pp.macros.get(name).and_then(|b| trailing_identifier(b)) else {
             return false;
         };
         if tail == name {

@@ -3257,3 +3257,119 @@ fn va_opt_expands_on_a_non_empty_variadic_tail() {
         assert_eq!(got, *want, "{def} / {call}");
     }
 }
+
+/// A fresh preprocessor of the fixed test target.
+fn reuse_pp() -> Preprocessor {
+    Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0")
+}
+
+#[test]
+fn retry_reuses_the_source_pass_when_the_extension_is_disjoint() {
+    // The source's observations (its macros, conditionals, an embedded
+    // include, dylib/binding/export pragmas) share nothing with what
+    // <string.h> installs, so a re-run that only appends that
+    // force-include must reuse the recorded pass -- and match a full
+    // re-run in text and side outputs exactly.
+    let src = "#include <stdbool.h>\n\
+               #define W 3\n\
+               #ifdef W\n\
+               int picked = W;\n\
+               #endif\n\
+               #pragma dylib(mylib, \"libmy.so\")\n\
+               #pragma binding(mylib::hook, \"hook_impl\")\n\
+               #pragma export(picked_up)\n\
+               #pragma intrinsic(\"alloca\")\n\
+               bool flag = true;\n\
+               int untouched_name;\n";
+    let (_, cache) = reuse_pp()
+        .process_recording(src)
+        .expect("recording run succeeds");
+
+    let mut reused = reuse_pp();
+    reused.add_force_include("string.h");
+    let out_reused = reused
+        .process_reusing(&cache)
+        .expect("a disjoint extension reuses the pass");
+
+    let mut full = reuse_pp();
+    full.add_force_include("string.h");
+    let out_full = full.process(src).expect("full run succeeds");
+
+    assert_eq!(out_reused, out_full, "spliced text differs from a full run");
+    assert_eq!(reused.warnings, full.warnings);
+    assert_eq!(format!("{:?}", reused.dylibs), format!("{:?}", full.dylibs));
+    assert_eq!(reused.exports, full.exports);
+    assert_eq!(reused.intrinsics, full.intrinsics);
+    assert_eq!(reused.entrypoint, full.entrypoint);
+    assert_eq!(reused.subsystem, full.subsystem);
+}
+
+#[test]
+fn retry_reuse_declines_when_the_extension_defines_an_observed_name() {
+    // The recorded pass expanded the conditional with `NULL` undefined;
+    // <string.h> defines it, so the pass is not reusable.
+    let src = "#ifndef NULL\n#define NULL 0\n#endif\nchar *p = NULL;\n";
+    let (_, cache) = reuse_pp()
+        .process_recording(src)
+        .expect("recording run succeeds");
+    let mut reused = reuse_pp();
+    reused.add_force_include("string.h");
+    assert!(
+        reused.process_reusing(&cache).is_none(),
+        "an observed-name redefinition must fall back to a full run"
+    );
+}
+
+#[test]
+fn retry_reuse_declines_when_the_extension_covers_a_source_include() {
+    // The extension once-registers (and pre-defines) what the source's
+    // own `#include` supplied, flipping that include from open to skip.
+    let src = "#include <stdbool.h>\nbool ok = true;\n";
+    let (_, cache) = reuse_pp()
+        .process_recording(src)
+        .expect("recording run succeeds");
+    let mut reused = reuse_pp();
+    reused.add_force_include("stdbool.h");
+    assert!(
+        reused.process_reusing(&cache).is_none(),
+        "overlap with the source's own reading must fall back"
+    );
+}
+
+#[test]
+fn retry_reuse_follows_the_counter_position() {
+    // A preamble that consumes `__COUNTER__` values shifts every later
+    // expansion: reuse must decline for a source that used the counter
+    // and engage for one that did not.
+    let dir = std::env::temp_dir().join(format!("badc_pp_reuse_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let hdr = dir.join("ctr.h");
+    std::fs::write(&hdr, "int consumed = __COUNTER__;\n").unwrap();
+
+    for (src, engages) in [
+        ("int uses = __COUNTER__;\n", false),
+        ("int plain = 1;\n", true),
+    ] {
+        let (_, cache) = reuse_pp()
+            .process_recording(src)
+            .expect("recording run succeeds");
+        let mut reused = reuse_pp();
+        reused.add_search_path(dir.to_str().unwrap());
+        reused.add_force_include("ctr.h");
+        let got = reused.process_reusing(&cache);
+        if engages {
+            let mut full = reuse_pp();
+            full.add_search_path(dir.to_str().unwrap());
+            full.add_force_include("ctr.h");
+            let out_full = full.process(src).expect("full run succeeds");
+            assert_eq!(got.expect("counter unused: pass reusable"), out_full);
+        } else {
+            assert!(
+                got.is_none(),
+                "a shifted counter the source read must fall back"
+            );
+        }
+    }
+    std::fs::remove_file(&hdr).ok();
+    std::fs::remove_dir(&dir).ok();
+}

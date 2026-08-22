@@ -260,6 +260,49 @@ fn archive_members_are_pulled_on_demand() {
     );
 }
 
+// The embedded on-demand sources join the member pool only when
+// selection over the real archives stalls with a symbol still
+// undefined. Host-independent: cross-links windows-x64 PEs, where
+// the pool is never preprocessed away, and reads the `rtlib` phase
+// of the BADC_LINK_STATS report -- present iff the pool compiled.
+#[test]
+fn on_demand_runtime_sources_compile_only_when_a_symbol_needs_them() {
+    let dir = tempdir("lazy-rtlib");
+    write_source(&dir, "plain.c", "int main(void) { return 0; }\n");
+    // fnmatch has no msvcrt definition; the bundled pattern.c
+    // supplies it, so this link stalls until the pool joins.
+    write_source(
+        &dir,
+        "match.c",
+        "#include <fnmatch.h>\nint main(void) { return fnmatch(\"a*\", \"abc\", 0); }\n",
+    );
+    let stats = |src: &str| -> String {
+        let out = run(
+            Command::new(badc())
+                .env("BADC_LINK_STATS", "1")
+                .arg("--target=windows-x64")
+                .arg("-o")
+                .arg(dir.join(src).with_extension("exe"))
+                .arg(dir.join(src))
+                .current_dir(&dir),
+            "link windows-x64",
+        );
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(err.contains("link stats"), "no stats line: {err}");
+        err
+    };
+    let plain = stats("plain.c");
+    assert!(
+        !plain.contains(" rtlib="),
+        "a fully resolved link compiled the on-demand sources: {plain}"
+    );
+    let matched = stats("match.c");
+    assert!(
+        matched.contains(" rtlib="),
+        "the stalled link did not compile the on-demand sources: {matched}"
+    );
+}
+
 // An archive-only invocation is a valid link: the members supply the
 // objects and `main` is pulled by the runtime's reference to it. The
 // input-emptiness check must count archives, not just sources/objects.

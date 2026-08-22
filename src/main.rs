@@ -2615,38 +2615,50 @@ fn run() {
             }
         }
         stats.mark("archives");
-        // Compiler-runtime helpers (a libgcc / compiler-rt subset) join the
-        // pool on demand, after the user's archives so a real libgcc on the
-        // link line wins. Source-level target gating leaves the object empty
-        // for a target that references none of them, so it is never pulled.
-        // The bundled C-library sources join on the same terms: a header
-        // that declares an entry point the platform library does not
-        // define resolves it here.
-        let on_demand = badc::embedded_compiler_rt()
-            .iter()
-            .map(|e| ("compiler-rt", e))
-            .chain(badc::embedded_libc().iter().map(|e| ("libc", e)));
-        for (dir, (name, body)) in on_demand {
-            let label = format!("<{dir}/{name}>");
-            let bytes = compile_in_memory(&label, body.to_string(), &[]);
-            match badc::parse_native_elf(&bytes) {
-                Ok(mut o) => {
-                    o.source = label;
-                    pending.push(Some(o));
-                }
-                Err(e) => {
-                    eprint_diagnostic(format!("badc: {label}: {e}"));
-                    std::process::exit(1);
+        // Compiler-runtime helpers (a libgcc / compiler-rt subset) and the
+        // bundled C-library sources join the pool on demand, after the
+        // user's archives so a real libgcc on the link line wins.
+        // Source-level target gating leaves the object empty for a target
+        // that references none of them, so it is never pulled. They are
+        // compiled only when the selection over the real archives stalls
+        // with symbols still undefined (or when the rebinding scan below
+        // needs the pool's definitions), so a link that resolves
+        // everything compiles none of them.
+        let mut on_demand_loaded = false;
+        let load_on_demand = |pending: &mut Vec<Option<badc::NativeObject>>,
+                              stats: &mut LinkStats| {
+            let on_demand = badc::embedded_compiler_rt()
+                .iter()
+                .map(|e| ("compiler-rt", e))
+                .chain(badc::embedded_libc().iter().map(|e| ("libc", e)));
+            for (dir, (name, body)) in on_demand {
+                let label = format!("<{dir}/{name}>");
+                let bytes = compile_in_memory(&label, body.to_string(), &[]);
+                match badc::parse_native_elf(&bytes) {
+                    Ok(mut o) => {
+                        o.source = label;
+                        pending.push(Some(o));
+                    }
+                    Err(e) => {
+                        eprint_diagnostic(format!("badc: {label}: {e}"));
+                        std::process::exit(1);
+                    }
                 }
             }
-        }
-        stats.mark("rtlib");
+            stats.mark("rtlib");
+        };
         // C89 6.3.2.2 link semantics: a definition anywhere in the
         // link set satisfies an implicitly declared call, so a name
         // the auto-include retry bound to a header's library binding
         // is recompiled as an implicit extern when an input defines
         // it -- the user's definition wins over the binding.
         if source_auto_includes.iter().any(|a| !a.is_empty()) {
+            // The scan folds unpulled pool members into `defined_fns`, so
+            // the on-demand sources must be in the pool here.
+            if !on_demand_loaded {
+                on_demand_loaded = true;
+                load_on_demand(&mut pending, &mut stats);
+            }
             let mut defined_fns = std::collections::HashSet::<String>::new();
             for o in native_objs.iter().chain(pending.iter().flatten()) {
                 for s in &o.symbols {
@@ -2693,7 +2705,7 @@ fn run() {
             }
         }
         let mut archive_inclusions: Vec<badc::ArchiveInclusion> = Vec::new();
-        if !pending.is_empty() {
+        if !pending.is_empty() || !on_demand_loaded {
             let mut defined = hashbrown::HashSet::<String>::new();
             // Unresolved strong references, each keyed to the first
             // input that made it (the link map's "referenced by" file).
@@ -2740,32 +2752,42 @@ fn run() {
             // the pool: an object is large, and compacting the pool per
             // pull would move every later member's record again.
             let mut progress = true;
-            while progress {
-                progress = false;
-                for slot in pending.iter_mut() {
-                    let wanted = slot.as_ref().and_then(|o| {
-                        o.symbols.iter().find_map(|s| {
-                            (s.binding == 1
-                                && !matches!(
-                                    s.section,
-                                    badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
-                                )
-                                && undefined.contains_key(&s.name))
-                            .then(|| s.name.clone())
-                        })
-                    });
-                    if let Some(symbol) = wanted {
-                        let o = slot.take().expect("a wanted slot is occupied");
-                        archive_inclusions.push(badc::ArchiveInclusion {
-                            member: o.source.clone(),
-                            referenced_by: undefined.get(&symbol).cloned().unwrap_or_default(),
-                            symbol,
+            loop {
+                while progress {
+                    progress = false;
+                    for slot in pending.iter_mut() {
+                        let wanted = slot.as_ref().and_then(|o| {
+                            o.symbols.iter().find_map(|s| {
+                                (s.binding == 1
+                                    && !matches!(
+                                        s.section,
+                                        badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
+                                    )
+                                    && undefined.contains_key(&s.name))
+                                .then(|| s.name.clone())
+                            })
                         });
-                        account(&o, &mut defined, &mut undefined);
-                        native_objs.push(o);
-                        progress = true;
+                        if let Some(symbol) = wanted {
+                            let o = slot.take().expect("a wanted slot is occupied");
+                            archive_inclusions.push(badc::ArchiveInclusion {
+                                member: o.source.clone(),
+                                referenced_by: undefined.get(&symbol).cloned().unwrap_or_default(),
+                                symbol,
+                            });
+                            account(&o, &mut defined, &mut undefined);
+                            native_objs.push(o);
+                            progress = true;
+                        }
                     }
                 }
+                // The real archives stalled; offer the on-demand
+                // sources once and resume.
+                if on_demand_loaded || undefined.keys().all(|n| badc::link_synthesized_symbol(n)) {
+                    break;
+                }
+                on_demand_loaded = true;
+                load_on_demand(&mut pending, &mut stats);
+                progress = true;
             }
         }
         stats.mark("select");

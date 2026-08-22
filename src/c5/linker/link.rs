@@ -662,6 +662,20 @@ fn group_named_zerofill(
     }
 }
 
+/// Whether the link itself defines `name` once layout is known: the
+/// init/fini array bounds, the `__start_` / `__stop_` pair of a named
+/// section, and the GOT base. Archive selection runs before layout,
+/// so a reference left undefined by one of these names is not one an
+/// archive member is still needed for.
+pub fn link_synthesized_symbol(name: &str) -> bool {
+    matches!(
+        name,
+        "__init_array_start" | "__init_array_end" | "__fini_array_start" | "__fini_array_end"
+    ) || name == GOT_BASE_SYMBOL
+        || name.starts_with("__start_")
+        || name.starts_with("__stop_")
+}
+
 /// Merge `objs` into a single [`MergedNative`]. Per-unit
 /// section bases stack in the order the caller supplies; a
 /// future linker can pick a different layout (sorted by

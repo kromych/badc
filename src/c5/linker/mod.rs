@@ -84,7 +84,7 @@ pub use lds_link::{
 pub use link::{
     MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
     emit_aarch64_plt, emit_x86_64_plt, link_native_objects, link_native_objects_with_options,
-    link_native_objects_with_shared_libs,
+    link_native_objects_with_shared_libs, link_synthesized_symbol,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

@@ -480,6 +480,7 @@ fn store_width(kind: StoreKind) -> i64 {
         StoreKind::I16 => 2,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
+        StoreKind::F80 | StoreKind::F128 => 16,
     }
 }
 
@@ -2935,7 +2936,9 @@ fn splice_param_ref(
                 _ => 0xffff_ffff,
             },
         },
-        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 => return arg,
+        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => {
+            return arg;
+        }
     };
     let id = new_insts.len() as u32;
     new_insts.push(inst);

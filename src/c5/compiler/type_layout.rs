@@ -17,7 +17,8 @@ use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_pointer_ty, is_struct_ty,
+    UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_long_double_scalar, is_pointer_ty,
+    is_struct_ty,
     is_struct_value_ty, is_type_start_token, pointee_size_no_struct, strip_unsigned, struct_id_of,
     struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
@@ -39,6 +40,13 @@ impl Compiler {
         let stripped = strip_unsigned(ptr_ty);
         if stripped == (Ty::Long as i64) + (Ty::Ptr as i64) && self.target.is_windows() {
             return 4;
+        }
+        // `long double *` strides by the storage size (16 on the wide
+        // targets); deeper pointer levels stride by the pointer size.
+        if super::types::is_long_double_ty(ptr_ty)
+            && stripped == (Ty::Double as i64) + (Ty::Ptr as i64)
+        {
+            return self.target.long_double().size() as i64;
         }
         pointee_size_no_struct(ptr_ty)
     }
@@ -595,6 +603,11 @@ impl Compiler {
     ///   * scalar `double`           -> 8
     ///   * struct values             -> recorded in the struct table
     pub(super) fn size_of_type(&self, ty: i64) -> usize {
+        // A scalar `long double` takes the target ABI's storage size
+        // (16 on both Linux targets); pointers to one stay 8 bytes.
+        if is_long_double_scalar(ty) {
+            return self.target.long_double().size();
+        }
         // Unsigned bit is orthogonal to width: `unsigned char` is
         // still 1 byte, `unsigned int` is still 4 bytes. Strip it
         // before consulting the band identity.
@@ -639,6 +652,9 @@ impl Compiler {
     /// `long` / pointer = 8). Struct values inherit the max
     /// alignment of their fields, capped at `MAX_STATIC_ALIGN`.
     pub(super) fn align_of_type(&self, ty: i64) -> usize {
+        if is_long_double_scalar(ty) {
+            return self.target.long_double().align();
+        }
         let ty = strip_unsigned(ty);
         if ty == Ty::Float as i64 {
             // `float` is 4 bytes; its natural alignment matches.
@@ -712,10 +728,8 @@ impl Compiler {
     }
 
     /// Number of c5 stack slots required to hold a value of `ty`.
-    /// Each c5 slot is 8 bytes; struct values may span several. The
-    /// existing scalar / pointer paths always return 1, so existing
-    /// `loc_offs += 1` patterns map to `loc_offs += slots_of(ty)`
-    /// without changing emit semantics.
+    /// Each c5 slot is 8 bytes; struct values and a wide-format
+    /// `long double` may span several.
     pub(super) fn slots_of_type(&self, ty: i64) -> i64 {
         if is_struct_value_ty(ty) {
             // Struct fields are 8-byte aligned (see parse_struct_body),
@@ -724,10 +738,11 @@ impl Compiler {
             // packing.
             ((self.structs[struct_id_of(ty)].size as i64) + 7) / 8
         } else {
-            1
+            (self.size_of_type(ty) as i64 + 7) / 8
         }
     }
 }
+
 
 /// Byte width of a non-struct scalar / pointer `ty`, used when
 /// flattening an aggregate's array fields into per-element leaves.
@@ -736,6 +751,9 @@ impl Compiler {
 fn flat_scalar_size(ty: i64, target: Target) -> u32 {
     if is_pointer_ty(ty) {
         return 8;
+    }
+    if is_long_double_scalar(ty) {
+        return target.long_double().size() as u32;
     }
     let bare = strip_unsigned(ty);
     if bare == Ty::Bool as i64 || bare == Ty::Char as i64 {
@@ -789,6 +807,12 @@ pub(crate) fn flatten_struct_fields(
                 let bare = strip_unsigned(elem_ty);
                 let kind = if is_pointer_ty(elem_ty) {
                     ScalarKind::Int
+                } else if is_long_double_scalar(elem_ty) {
+                    match target.long_double() {
+                        crate::c5::codegen::LongDoubleKind::F64 => ScalarKind::F64,
+                        crate::c5::codegen::LongDoubleKind::X87 => ScalarKind::F80,
+                        crate::c5::codegen::LongDoubleKind::Binary128 => ScalarKind::F128,
+                    }
                 } else if bare == Ty::Float as i64 {
                     ScalarKind::F32
                 } else if bare == Ty::Double as i64 {
@@ -844,6 +868,17 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
     // all the same FP type) passes in the FP argument bank, up to four
     // registers -- a four-`double` HFA is 32 bytes, past the by-reference
     // threshold. Admit it on AArch64 ahead of the size / FP-class gates.
+    // TODO: extended-precision long double -- an AAPCS64 binary128
+    // member rides a full vector register; until a 16-byte FP slot
+    // exists such an aggregate keeps the by-address convention. The
+    // System V x87 member stays: its classes are memory-only.
+    if aarch64
+        && fields
+            .iter()
+            .any(|f| f.kind == crate::c5::codegen::abi_classify::ScalarKind::F128)
+    {
+        return None;
+    }
     let is_hfa = aarch64 && crate::c5::codegen::abi_classify::hfa_member_layout(&fields).is_some();
     if !is_hfa {
         if matches!(target, Target::WindowsX64) {
@@ -927,6 +962,20 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
     let align = (structs[id].align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
+    // TODO: extended-precision long double -- a sole x87 member returns
+    // in st(0) and a binary128 member in a vector register; until those
+    // return slots exist the aggregate keeps the out-pointer path (the
+    // AAPCS64 > 16-byte x8 case below is already the memory convention).
+    if fields.iter().any(|f| {
+        matches!(
+            f.kind,
+            crate::c5::codegen::abi_classify::ScalarKind::F80
+                | crate::c5::codegen::abi_classify::ScalarKind::F128
+        )
+    }) && (size <= 16 || !aarch64)
+    {
+        return StructReturnAbi::OutPtr;
+    }
     // AAPCS64 6.9: a homogeneous floating-point aggregate returns in up to
     // four consecutive FP registers (v0..v3), independent of the 16-byte
     // integer-register threshold -- a four-`double` HFA is 32 bytes. The

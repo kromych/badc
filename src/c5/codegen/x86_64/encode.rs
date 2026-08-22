@@ -1599,6 +1599,47 @@ pub(crate) fn emit_mov_sib_r8(code: &mut Vec<u8>, base: Reg, index: Reg, scale: 
     );
 }
 
+/// `FLD tbyte [base+disp]` (DB /5) -- push the x87 80-bit extended
+/// value onto the x87 register stack.
+pub(crate) fn emit_fld_m80(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xDB);
+    emit_modrm_mem(code, Reg(5), base, disp);
+}
+
+/// `FSTP tbyte [base+disp]` (DB /7) -- pop st(0) into an 80-bit
+/// extended object, writing 10 bytes.
+pub(crate) fn emit_fstp_m80(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xDB);
+    emit_modrm_mem(code, Reg(7), base, disp);
+}
+
+/// `FLD qword [base+disp]` (DD /0) -- push a binary64 value, widened
+/// exactly to the x87 extended format.
+pub(crate) fn emit_fld_m64(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xDD);
+    emit_modrm_mem(code, Reg(0), base, disp);
+}
+
+/// `FSTP qword [base+disp]` (DD /3) -- pop st(0) rounded to binary64
+/// (round to nearest, ties to even; the conversion ignores the x87
+/// precision-control field).
+pub(crate) fn emit_fstp_m64(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xDD);
+    emit_modrm_mem(code, Reg(3), base, disp);
+}
+
 fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
     let needs_sib = base.lo() == 4; // rsp or r12
     let bp_form = base.lo() == 5; // rbp or r13 -- mod=00 is RIP-rel, must use mod=01

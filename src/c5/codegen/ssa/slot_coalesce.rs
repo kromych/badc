@@ -1142,6 +1142,9 @@ fn coalesce(f: &mut FunctionSsa, compact: bool) -> BTreeMap<i64, Option<i64>> {
         .collect()
 }
 
+// An extended-precision access covers 10 bytes of the 16 its ABI object
+// reserves; the reserved size is the figure here, since a wider extent
+// only adds interference and the pass lets no store kill a group.
 fn load_width(kind: crate::c5::ir::LoadKind) -> i64 {
     use crate::c5::ir::LoadKind::*;
     match kind {
@@ -1149,6 +1152,7 @@ fn load_width(kind: crate::c5::ir::LoadKind) -> i64 {
         I16 | U16 => 2,
         I32 | U32 | F32 => 4,
         I64 | F64 => 8,
+        F80 | F128 => 16,
     }
 }
 
@@ -1159,6 +1163,7 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
         I16 => 2,
         I32 | F32 => 4,
         I64 | F64 => 8,
+        F80 | F128 => 16,
     }
 }
 #[cfg(all(test, feature = "std"))]

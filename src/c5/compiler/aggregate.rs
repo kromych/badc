@@ -274,7 +274,11 @@ impl Compiler {
                 Ty::Float as i64
             } else if self.lex.tk == Token::Double {
                 self.next()?;
-                Ty::Double as i64
+                if mods.saw_long() {
+                    Ty::Double as i64 | super::types::LONG_DOUBLE_BIT
+                } else {
+                    Ty::Double as i64
+                }
             } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
                 let nested_is_union = self.lex.tk == Token::Union;
                 self.next()?;
@@ -406,6 +410,9 @@ impl Compiler {
                     field_base = mods.int_base();
                 } else if field_base_tok == Token::Char {
                     field_base = mods.char_tag(self.lex.char_signed);
+                } else if field_base_tok == Token::Double && mods.saw_long() {
+                    // `double long m;` -- the trailing-modifier spelling.
+                    field_base |= super::types::LONG_DOUBLE_BIT;
                 }
             }
             field_base = super::types::apply_qual_bits(field_base, leading_quals | trailing_quals);

@@ -14,9 +14,10 @@ use super::super::codegen::Target;
 use super::super::codegen::offset_align;
 use super::super::codegen::ssa::build::SsaBuilder;
 use super::super::compiler::types::{
-    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_volatile_object_ty, is_volatile_ty,
-    load_kind, segment_of_object_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
+    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_long_double_scalar, is_pointer_ty,
+    is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_volatile_object_ty,
+    is_volatile_ty, load_kind, segment_of_object_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth,
 };
 use super::super::ir::{
     AsmSeg, AtomicRmwOp, BinOp, FpCastKind, FunctionSsa, LoadKind, StoreKind, ValueId,
@@ -6973,6 +6974,7 @@ fn load_kind_width(kind: LoadKind) -> u32 {
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I64 | LoadKind::F64 => 8,
+        LoadKind::F80 | LoadKind::F128 => 16,
     }
 }
 
@@ -6983,6 +6985,7 @@ fn store_kind_width(kind: StoreKind) -> u32 {
         StoreKind::I16 => 2,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
+        StoreKind::F80 | StoreKind::F128 => 16,
     }
 }
 
@@ -7050,6 +7053,15 @@ fn store_kind_for_width(width: u32) -> StoreKind {
 /// Map a c5 type tag to the matching `LoadKind`. Mirrors
 /// `compiler::types::load_op_for`.
 fn load_kind_for(ty: i64, target: Target) -> LoadKind {
+    // A wide-format `long double` object narrows to the f64 the
+    // compute path carries as it loads.
+    if is_long_double_scalar(ty) {
+        match target.long_double() {
+            super::super::codegen::LongDoubleKind::X87 => return LoadKind::F80,
+            super::super::codegen::LongDoubleKind::Binary128 => return LoadKind::F128,
+            super::super::codegen::LongDoubleKind::F64 => {}
+        }
+    }
     // The SSA backend loads a `double` into an FP register.
     load_kind(ty, target, LoadKind::F64)
 }
@@ -7102,6 +7114,15 @@ fn store_place(
 
 /// Mirror of [`load_kind_for`] for stores.
 fn store_kind_for(ty: i64, target: Target) -> StoreKind {
+    // A wide-format `long double` store widens the f64 exactly into
+    // the storage format.
+    if is_long_double_scalar(ty) {
+        match target.long_double() {
+            super::super::codegen::LongDoubleKind::X87 => return StoreKind::F80,
+            super::super::codegen::LongDoubleKind::Binary128 => return StoreKind::F128,
+            super::super::codegen::LongDoubleKind::F64 => {}
+        }
+    }
     // A store width carries no signedness, so the bare band type is enough;
     // `strip_unsigned` also clears the segment bits so a `__seg_gs` /
     // `__seg_fs`-qualified type classifies by its underlying width.

@@ -369,6 +369,8 @@ fn fmt_load_kind(k: LoadKind) -> &'static str {
         LoadKind::U16 => "U16",
         LoadKind::F32 => "F32",
         LoadKind::F64 => "F64",
+        LoadKind::F80 => "F80",
+        LoadKind::F128 => "F128",
     }
 }
 
@@ -380,6 +382,8 @@ fn fmt_store_kind(k: StoreKind) -> &'static str {
         StoreKind::I16 => "I16",
         StoreKind::F32 => "F32",
         StoreKind::F64 => "F64",
+        StoreKind::F80 => "F80",
+        StoreKind::F128 => "F128",
     }
 }
 

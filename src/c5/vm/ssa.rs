@@ -2980,6 +2980,10 @@ fn run_intrinsic(
 /// pointer doesn't read uninitialised state.
 fn load_width(kind: LoadKind) -> usize {
     match kind {
+        // The x87 read covers the 10 significant bytes; the binary128
+        // read covers all 16.
+        LoadKind::F80 => 10,
+        LoadKind::F128 => 16,
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
@@ -2989,6 +2993,10 @@ fn load_width(kind: LoadKind) -> usize {
 
 fn store_width(kind: StoreKind) -> usize {
     match kind {
+        // The x87 store writes 10 bytes and leaves the 6 padding
+        // bytes untouched, as gcc's FSTP does; binary128 writes 16.
+        StoreKind::F80 => 10,
+        StoreKind::F128 => 16,
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I16 => 2,
@@ -3014,6 +3022,18 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
         // `double` is already 8 bytes; the c5 accumulator carries
         // f64 bit patterns, so the load returns the raw 64-bit value.
         LoadKind::F64 => i64::from_le_bytes(slice.try_into().unwrap()),
+        // The wide `long double` formats narrow to the f64 the
+        // compute path carries (round to nearest, ties to even).
+        LoadKind::F80 => {
+            let frac = u64::from_le_bytes(slice[..8].try_into().unwrap());
+            let se = u16::from_le_bytes(slice[8..10].try_into().unwrap());
+            crate::c5::softfp::f80_to_f64(frac, se) as i64
+        }
+        LoadKind::F128 => {
+            let lo = u64::from_le_bytes(slice[..8].try_into().unwrap());
+            let hi = u64::from_le_bytes(slice[8..16].try_into().unwrap());
+            crate::c5::softfp::f128_to_f64(lo, hi) as i64
+        }
         LoadKind::I16 => i16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::U16 => u16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::I8 => slice[0] as i8 as i64,
@@ -3046,6 +3066,21 @@ fn store_to_memory(
         }
         // `double` is 8 bytes; write the raw f64 bit pattern.
         StoreKind::F64 => mem.write_bytes(addr, &value.to_le_bytes()),
+        // The wide `long double` formats widen the f64 exactly.
+        StoreKind::F80 => {
+            let (frac, se) = crate::c5::softfp::f64_to_f80(value as u64);
+            let mut b = [0u8; 10];
+            b[..8].copy_from_slice(&frac.to_le_bytes());
+            b[8..].copy_from_slice(&se.to_le_bytes());
+            mem.write_bytes(addr, &b)
+        }
+        StoreKind::F128 => {
+            let (lo, hi) = crate::c5::softfp::f64_to_f128(value as u64);
+            let mut b = [0u8; 16];
+            b[..8].copy_from_slice(&lo.to_le_bytes());
+            b[8..].copy_from_slice(&hi.to_le_bytes());
+            mem.write_bytes(addr, &b)
+        }
     }
 }
 
@@ -3084,7 +3119,7 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
         StoreKind::I32 => (value as i32) as i64,
         StoreKind::I16 => (value as i16) as i64,
         StoreKind::I8 => (value as i8) as i64,
-        StoreKind::F32 | StoreKind::F64 => value,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => value,
     }
 }
 

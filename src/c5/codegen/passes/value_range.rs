@@ -257,6 +257,8 @@ fn load_kind_code(k: LoadKind) -> u32 {
         LoadKind::U16 => 6,
         LoadKind::F32 => 7,
         LoadKind::F64 => 8,
+        LoadKind::F80 => 9,
+        LoadKind::F128 => 10,
     }
 }
 
@@ -340,7 +342,7 @@ fn extend_range(kind: LoadKind) -> Option<Range> {
             lo: i32::MIN as i128,
             hi: i32::MAX as i128,
         },
-        LoadKind::F32 | LoadKind::F64 => return None,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => return None,
     })
 }
 

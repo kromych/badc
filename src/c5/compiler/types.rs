@@ -198,6 +198,11 @@ pub(crate) fn is_long_double_ty(ty: i64) -> bool {
     (ty & LONG_DOUBLE_BIT) != 0
 }
 
+/// True for a scalar `long double` -- not a pointer to one.
+pub(crate) fn is_long_double_scalar(ty: i64) -> bool {
+    is_long_double_ty(ty) && strip_unsigned(ty) == Ty::Double as i64
+}
+
 /// The x86 named address space a type tag carries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Segment {

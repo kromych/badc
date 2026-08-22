@@ -5474,15 +5474,14 @@ fn bound_import_arg_narrowing() {
 }
 
 #[test]
-fn long_double_advertised_as_fp64() {
-    // c5 stores `long double` as 8-byte IEEE binary64 on every target, so
-    // float.h must advertise the binary64 characteristics. The previous
-    // x86_64-ELF 80-bit row let LDBL_MAX overflow to +inf and LDBL_EPSILON
-    // drop below the real machine epsilon.
+fn long_double_characteristics_track_the_target() {
+    // <float.h> advertises the target ABI's `long double` storage
+    // format; `sizeof` and the predefines agree on whichever host this
+    // runs on, and the MANT_DIG value is one of the three formats.
     let src = "#include <float.h>\n\
-               int main(void){ return (sizeof(long double)==8 && LDBL_MANT_DIG==53\n\
-               && LDBL_MAX==DBL_MAX && LDBL_EPSILON==DBL_EPSILON\n\
-               && LDBL_MIN==DBL_MIN) ? 0 : 1; }";
+               int main(void){ return (sizeof(long double)==__SIZEOF_LONG_DOUBLE__\n\
+               && (LDBL_MANT_DIG==53 || LDBL_MANT_DIG==64 || LDBL_MANT_DIG==113)\n\
+               && (LDBL_MANT_DIG!=53 || (LDBL_MAX==DBL_MAX && LDBL_MIN==DBL_MIN))) ? 0 : 1; }";
     assert_eq!(super::run_str(src), 0);
     // <float.h> derives every name from the predefines, so the header
     // and `__LDBL_*` / `__DBL_*` / `__FLT_*` cannot drift apart.

@@ -522,15 +522,15 @@ pub enum Subsystem {
 /// C99 5.2.4.2.2 floating-point characteristics, in the `__FLT_*` /
 /// `__DBL_*` / `__LDBL_*` spellings gcc and clang predefine and that
 /// third-party headers test directly. badc's `float` is IEEE binary32
-/// and both `double` and `long double` are IEEE binary64 on every
-/// target, so the `__LDBL_*` row repeats the `__DBL_*` row with an `L`
-/// suffix on the value macros; the set is target-independent.
-/// `<float.h>` derives its `FLT_*` / `DBL_*` / `LDBL_*` names from
-/// these, which keeps one source of truth.
-fn install_float_characteristics(macros: &mut HashMap<String, String>) {
+/// and `double` is IEEE binary64 on every target; the `__LDBL_*` row
+/// describes the target ABI's `long double` storage format (x87
+/// 80-bit on System V x86-64, binary128 on AAPCS64 ELF, binary64
+/// elsewhere), values matching gcc's per target. `<float.h>` derives
+/// its `FLT_*` / `DBL_*` / `LDBL_*` names from these, which keeps one
+/// source of truth.
+fn install_float_characteristics(macros: &mut HashMap<String, String>, target: Target) {
     const COMMON: &[(&str, &str)] = &[
         ("__FLT_RADIX__", "2"),
-        ("__DECIMAL_DIG__", "17"),
         ("__FLT_MANT_DIG__", "24"),
         ("__FLT_DIG__", "6"),
         ("__FLT_MIN_EXP__", "(-125)"),
@@ -555,20 +555,73 @@ fn install_float_characteristics(macros: &mut HashMap<String, String>) {
         ("__DBL_MAX__", "1.7976931348623157e+308"),
         ("__DBL_NORM_MAX__", "1.7976931348623157e+308"),
         ("__DBL_DENORM_MIN__", "4.9406564584124654e-324"),
-        ("__LDBL_MANT_DIG__", "53"),
-        ("__LDBL_DIG__", "15"),
-        ("__LDBL_MIN_EXP__", "(-1021)"),
-        ("__LDBL_MIN_10_EXP__", "(-307)"),
-        ("__LDBL_MAX_EXP__", "1024"),
-        ("__LDBL_MAX_10_EXP__", "308"),
-        ("__LDBL_DECIMAL_DIG__", "17"),
-        ("__LDBL_EPSILON__", "2.2204460492503131e-16L"),
-        ("__LDBL_MIN__", "2.2250738585072014e-308L"),
-        ("__LDBL_MAX__", "1.7976931348623157e+308L"),
-        ("__LDBL_NORM_MAX__", "1.7976931348623157e+308L"),
-        ("__LDBL_DENORM_MIN__", "4.9406564584124654e-324L"),
     ];
-    for (name, value) in COMMON {
+    // (MANT_DIG, DIG, MIN_EXP, MIN_10_EXP, MAX_EXP, MAX_10_EXP,
+    //  DECIMAL_DIG, EPSILON, MIN, MAX, DENORM_MIN); MAX doubles as
+    //  NORM_MAX and DECIMAL_DIG as the C99 5.2.4.2.2 __DECIMAL_DIG__.
+    const LDBL_F64: (&str, &str, &str, &str, &str, &str, &str, &str, &str, &str, &str) = (
+        "53",
+        "15",
+        "(-1021)",
+        "(-307)",
+        "1024",
+        "308",
+        "17",
+        "2.2204460492503131e-16L",
+        "2.2250738585072014e-308L",
+        "1.7976931348623157e+308L",
+        "4.9406564584124654e-324L",
+    );
+    const LDBL_X87: (&str, &str, &str, &str, &str, &str, &str, &str, &str, &str, &str) = (
+        "64",
+        "18",
+        "(-16381)",
+        "(-4931)",
+        "16384",
+        "4932",
+        "21",
+        "1.08420217248550443400745280086994171e-19L",
+        "3.36210314311209350626267781732175260e-4932L",
+        "1.18973149535723176502126385303097021e+4932L",
+        "3.64519953188247460252840593361941982e-4951L",
+    );
+    const LDBL_BIN128: (&str, &str, &str, &str, &str, &str, &str, &str, &str, &str, &str) = (
+        "113",
+        "33",
+        "(-16381)",
+        "(-4931)",
+        "16384",
+        "4932",
+        "36",
+        "1.92592994438723585305597794258492732e-34L",
+        "3.36210314311209350626267781732175260e-4932L",
+        "1.18973149535723176508575932662800702e+4932L",
+        "6.47517511943802511092443895822764655e-4966L",
+    );
+    let (mant, dig, min_exp, min_10, max_exp, max_10, dec_dig, eps, min, max, denorm) =
+        match target.long_double() {
+            crate::c5::codegen::LongDoubleKind::F64 => LDBL_F64,
+            crate::c5::codegen::LongDoubleKind::X87 => LDBL_X87,
+            crate::c5::codegen::LongDoubleKind::Binary128 => LDBL_BIN128,
+        };
+    let ldbl: &[(&str, &str)] = &[
+        ("__LDBL_MANT_DIG__", mant),
+        ("__LDBL_DIG__", dig),
+        ("__LDBL_MIN_EXP__", min_exp),
+        ("__LDBL_MIN_10_EXP__", min_10),
+        ("__LDBL_MAX_EXP__", max_exp),
+        ("__LDBL_MAX_10_EXP__", max_10),
+        ("__LDBL_DECIMAL_DIG__", dec_dig),
+        ("__LDBL_EPSILON__", eps),
+        ("__LDBL_MIN__", min),
+        ("__LDBL_MAX__", max),
+        ("__LDBL_NORM_MAX__", max),
+        ("__LDBL_DENORM_MIN__", denorm),
+        // C99 5.2.4.2.2p11: decimal digits for the widest supported
+        // format, i.e. the long double row's.
+        ("__DECIMAL_DIG__", dec_dig),
+    ];
+    for (name, value) in COMMON.iter().chain(ldbl) {
         macros.insert((*name).to_string(), (*value).to_string());
     }
     for prefix in ["__FLT", "__DBL", "__LDBL"] {
@@ -864,13 +917,14 @@ impl Preprocessor {
         macros.insert("__SIZEOF_LONG_LONG__".to_string(), "8".to_string());
         macros.insert("__SIZEOF_FLOAT__".to_string(), "4".to_string());
         macros.insert("__SIZEOF_DOUBLE__".to_string(), "8".to_string());
-        // badc lays out `long double` as `double` on every target, so
-        // the size is 8, not the 16 both Linux ABIs use;
-        // `__SIZEOF_FLOAT80__` and `__SIZEOF_FLOAT128__` stay undefined
-        // with the types absent. doc/std-conformance.md records the
-        // divergence and what it costs at a platform-libc boundary.
-        macros.insert("__SIZEOF_LONG_DOUBLE__".to_string(), "8".to_string());
-        install_float_characteristics(&mut macros);
+        // `long double` takes the target ABI's storage size: 16 on
+        // both Linux targets, 8 elsewhere. `__SIZEOF_FLOAT80__` and
+        // `__SIZEOF_FLOAT128__` stay undefined with the types absent.
+        macros.insert(
+            "__SIZEOF_LONG_DOUBLE__".to_string(),
+            target.long_double().size().to_string(),
+        );
+        install_float_characteristics(&mut macros, target);
         // `wint_t` is the bundled <wchar.h>'s `int` on every target.
         macros.insert("__WINT_TYPE__".to_string(), "int".to_string());
         macros.insert("__SIZEOF_WINT_T__".to_string(), "4".to_string());

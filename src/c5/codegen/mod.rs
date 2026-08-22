@@ -142,6 +142,36 @@ impl BinaryFormat {
     }
 }
 
+/// In-memory format of `long double`, fixed per target by the platform
+/// ABI. The compute path holds every `long double` value as binary64
+/// (see doc/std-conformance.md); this kind names the storage format a
+/// declared object uses and the format the call ABI moves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LongDoubleKind {
+    /// IEEE binary64 -- identical to `double` (macOS/arm64, Windows).
+    F64,
+    /// x87 80-bit extended, stored in a 16-byte object (System V
+    /// x86-64). Bytes 10..16 are padding.
+    X87,
+    /// IEEE binary128 (AAPCS64 ELF).
+    Binary128,
+}
+
+impl LongDoubleKind {
+    /// Object size in bytes.
+    pub fn size(self) -> usize {
+        match self {
+            LongDoubleKind::F64 => 8,
+            LongDoubleKind::X87 | LongDoubleKind::Binary128 => 16,
+        }
+    }
+
+    /// Object alignment in bytes.
+    pub fn align(self) -> usize {
+        self.size()
+    }
+}
+
 /// The integer type `wchar_t` denotes. C99 7.17 leaves both the width
 /// and the signedness to the implementation and each platform ABI fixes
 /// them independently, so the width does not imply the sign: AAPCS64
@@ -303,17 +333,44 @@ impl Target {
         }
     }
 
-    /// The `long double` format the target's platform ABI defines, when
-    /// it is wider than the binary64 badc gives the type; `None` when
-    /// the platform agrees with badc. System V x86-64 passes the x87
-    /// 80-bit type in a 16-byte stack slot and returns it in `st(0)`;
-    /// AArch64 Linux passes and returns IEEE binary128 in a vector
-    /// register. macOS/arm64 and Windows x64 define it as binary64.
-    pub fn wider_platform_long_double(self) -> Option<&'static str> {
+    /// The `long double` storage format badc gives the type. System V
+    /// x86-64 gives it the x87 80-bit format in a 16-byte object;
+    /// macOS/arm64 and both Windows targets define it as binary64.
+    ///
+    /// AArch64 Linux defines it as IEEE binary128, which badc does not
+    /// yet store: the format has no hardware support there, so a load
+    /// and a store are open-coded conversions the aarch64 emitter does
+    /// not implement. Reporting 16 bytes while storing a binary64 would
+    /// make every foreign reader misdecode the object, so the type
+    /// stays binary64 there -- a uniform divergence
+    /// doc/std-conformance.md records, with the call-site diagnostic
+    /// naming the platform format.
+    /// The `long double` format the target's platform ABI moves across
+    /// a call, when badc does not move it the same way; `None` when the
+    /// two agree. System V x86-64 passes the type in a 16-byte stack
+    /// slot and returns it in `st(0)`, and AAPCS64 passes binary128 in
+    /// a vector register, while badc passes the binary64 it computes
+    /// with in the FP argument bank. Read by the libc-argument
+    /// diagnostic; independent of [`Self::long_double`], which answers
+    /// what a declared object stores.
+    /// TODO: extended-precision long double -- the SysV x87 and AAPCS64
+    /// binary128 argument / return conventions.
+    pub fn platform_long_double_abi(self) -> Option<&'static str> {
         match self {
             Target::LinuxX64 => Some("x87 80-bit"),
             Target::LinuxAarch64 => Some("IEEE binary128"),
             Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => None,
+        }
+    }
+
+    /// TODO: extended-precision long double -- binary128 on AAPCS64.
+    pub fn long_double(self) -> LongDoubleKind {
+        match self {
+            Target::LinuxX64 => LongDoubleKind::X87,
+            Target::LinuxAarch64
+            | Target::MacOSAarch64
+            | Target::WindowsX64
+            | Target::WindowsAarch64 => LongDoubleKind::F64,
         }
     }
 

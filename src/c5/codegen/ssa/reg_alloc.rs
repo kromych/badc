@@ -1584,32 +1584,32 @@ fn result_kind(inst: &Inst) -> ResultKind {
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
         ParamRef { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Phi { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Load { kind, .. } | LoadLocal { kind, .. } | SegLoad { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Store {
-            kind: StoreKind::F32 | StoreKind::F64,
+            kind: StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128,
             ..
         }
         | StoreLocal {
-            kind: StoreKind::F32 | StoreKind::F64,
+            kind: StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128,
             ..
         }
         | SegStore {
-            kind: StoreKind::F32 | StoreKind::F64,
+            kind: StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128,
             ..
         } => ResultKind::Fp,
         Store { .. } | StoreLocal { .. } | StoreIndexed { .. } | SegStore { .. } => ResultKind::Int,
         LoadIndexed { kind, .. } => match kind {
-            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Binop { op, .. } | BinopI { op, .. } => match op {

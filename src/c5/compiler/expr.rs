@@ -1712,7 +1712,7 @@ impl Compiler {
                             };
                         if is_sys_call
                             && reaches_callee_as_long_double
-                            && let Some(platform_fmt) = self.target.wider_platform_long_double()
+                            && let Some(platform_fmt) = self.target.platform_long_double_abi()
                         {
                             self.warn_at(
                                 arg_line,

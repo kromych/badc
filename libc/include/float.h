@@ -2,12 +2,12 @@
 //
 // Every name derives from the compiler's `__FLT_*` / `__DBL_*` /
 // `__LDBL_*` predefines, so the header and the predefines cannot
-// disagree. badc's `float` is IEEE binary32; `double` and `long double`
-// are both IEEE binary64 (doc/std-conformance.md), which is why the
-// LDBL row equals the DBL row. Advertising the System V x86_64 80-bit
-// or the AArch64 Linux binary128 row here would let a program load
-// LDBL_MAX (1.19e4932, unrepresentable in binary64 -> +inf) or iterate
-// to an LDBL_EPSILON below the real binary64 epsilon.
+// disagree. `float` is IEEE binary32, `double` IEEE binary64, and the
+// LDBL row describes the target ABI's `long double` storage format
+// (x87 80-bit on System V x86-64, binary128 on AArch64 Linux, binary64
+// elsewhere). Arithmetic on the type is carried out at binary64
+// precision (doc/std-conformance.md), so a constant past binary64's
+// range (LDBL_MAX on the wide targets) evaluates to +inf.
 
 #pragma once
 

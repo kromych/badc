@@ -1790,6 +1790,7 @@ impl Compiler {
                 bt = m.char_tag(self.lex.char_signed);
             } else if base_tok == Token::Double && m.saw_long() {
                 self.pending.base_was_long_double = true;
+                bt |= super::types::LONG_DOUBLE_BIT;
             } else if m.saw_unsigned && self.is_int128_ty(bt) {
                 // Trailing modifier form `__int128 unsigned`.
                 bt |= UNSIGNED_BIT;

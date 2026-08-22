@@ -7218,7 +7218,7 @@ fn int_load_shape(kind: LoadKind) -> (u32, bool) {
         LoadKind::U16 => (2, false),
         LoadKind::I8 => (1, true),
         LoadKind::U8 => (1, false),
-        LoadKind::F32 | LoadKind::F64 => (0, false),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => (0, false),
     }
 }
 
@@ -7229,7 +7229,7 @@ fn int_store_width(kind: StoreKind) -> u32 {
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 => 0,
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => 0,
     }
 }
 
@@ -8318,7 +8318,7 @@ fn emit_load(
         LoadKind::U16 => emit(code, enc_ldrh_imm(rd, rn, disp)),
         LoadKind::I8 => emit(code, enc_ldrsb_imm(rd, rn, disp)),
         LoadKind::U8 => emit(code, enc_ldrb_imm(rd, rn, disp)),
-        LoadKind::F32 | LoadKind::F64 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
     }
     if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
@@ -8433,7 +8433,7 @@ fn emit_load_local(
             LoadKind::U16 => super::encode::enc_ldurh(rd, Reg(29), disp),
             LoadKind::I8 => super::encode::enc_ldursb(rd, Reg(29), disp),
             LoadKind::U8 => super::encode::enc_ldurb(rd, Reg(29), disp),
-            LoadKind::F32 | LoadKind::F64 => unreachable!(),
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
         };
         emit(code, word);
         if let Place::Spill(slot) = dst {
@@ -8456,7 +8456,7 @@ fn emit_load_local(
         LoadKind::U16 => super::encode::enc_ldrh_imm(rd, scratch.primary, 0),
         LoadKind::I8 => super::encode::enc_ldrsb_imm(rd, scratch.primary, 0),
         LoadKind::U8 => super::encode::enc_ldrb_imm(rd, scratch.primary, 0),
-        LoadKind::F32 | LoadKind::F64 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
     };
     emit(code, word);
     if let Place::Spill(slot) = dst {
@@ -8639,7 +8639,7 @@ fn emit_store_local(
                 StoreKind::I32 => super::encode::enc_stur32(rv, Reg(29), disp),
                 StoreKind::I16 => super::encode::enc_sturh(rv, Reg(29), disp),
                 StoreKind::I8 => super::encode::enc_sturb(rv, Reg(29), disp),
-                StoreKind::F32 | StoreKind::F64 => unreachable!(),
+                StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => unreachable!(),
             };
             emit(code, enc);
         } else if !emit_store_local_large_disp(code, off, rv, kind, func, scratch, frame) {
@@ -8686,7 +8686,7 @@ fn emit_store_local_large_disp(
         StoreKind::I32 => super::encode::enc_str32_imm(rv, scratch.secondary, 0),
         StoreKind::I16 => super::encode::enc_strh_imm(rv, scratch.secondary, 0),
         StoreKind::I8 => super::encode::enc_strb_imm(rv, scratch.secondary, 0),
-        StoreKind::F32 | StoreKind::F64 => unreachable!(),
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => unreachable!(),
     };
     emit(code, enc);
     true
@@ -8742,7 +8742,7 @@ fn emit_load_indexed(
         LoadKind::I32 | LoadKind::U32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
-        LoadKind::F32 | LoadKind::F64 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
     };
     if scale != expected_scale {
         bail_msg("LoadIndexed: scale doesn't match access width");
@@ -8756,7 +8756,7 @@ fn emit_load_indexed(
         LoadKind::U16 => super::encode::enc_ldrh_reg_lsl1(rd, rn, rm),
         LoadKind::I8 => super::encode::enc_ldrsb_reg(rd, rn, rm),
         LoadKind::U8 => super::encode::enc_ldrb_reg(rd, rn, rm),
-        LoadKind::F32 | LoadKind::F64 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => unreachable!(),
     };
     emit(code, word);
     if let Place::Spill(slot) = dst {
@@ -8812,7 +8812,7 @@ fn emit_store_indexed(
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 | StoreKind::F64 => unreachable!(),
+        StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => unreachable!(),
     };
     if scale != expected_scale {
         bail_msg("StoreIndexed: scale doesn't match access width");
@@ -8862,7 +8862,7 @@ fn emit_store_indexed(
         (StoreKind::I32, Some(a)) => super::encode::enc_str32_imm(rv, a, 0),
         (StoreKind::I16, Some(a)) => super::encode::enc_strh_imm(rv, a, 0),
         (StoreKind::I8, Some(a)) => super::encode::enc_strb_imm(rv, a, 0),
-        (StoreKind::F32 | StoreKind::F64, _) => unreachable!(),
+        (StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128, _) => unreachable!(),
     };
     emit(code, word);
     // c5 store-op leaves the stored value in the accumulator.
@@ -9034,7 +9034,7 @@ fn emit_store(
             StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, disp)),
             StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, disp)),
             StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, disp)),
-            StoreKind::F32 | StoreKind::F64 => {
+            StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128 => {
                 unreachable!("FP store handled in the FP branch above")
             }
         },

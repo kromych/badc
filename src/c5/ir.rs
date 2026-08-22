@@ -735,6 +735,13 @@ pub(crate) enum LoadKind {
     /// 8-byte double held in an FP register; loaded with a single
     /// FP move (no widen/narrow).
     F64,
+    /// x87 80-bit `long double` read from a 16-byte object and
+    /// narrowed to the f64 the compute path carries (round to
+    /// nearest, ties to even). Bytes 10..16 are padding.
+    F80,
+    /// IEEE binary128 `long double` read from a 16-byte object and
+    /// narrowed to f64 like [`Self::F80`].
+    F128,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -752,6 +759,12 @@ pub(crate) enum StoreKind {
     /// 8-byte double held in an FP register; stored with a single
     /// FP move (no widen/narrow).
     F64,
+    /// f64 widened exactly to the x87 80-bit format and stored as 10
+    /// bytes; the 6 padding bytes of the 16-byte object are left
+    /// untouched, as gcc's stores do.
+    F80,
+    /// f64 widened exactly to IEEE binary128 and stored as 16 bytes.
+    F128,
 }
 
 /// Integer / FP binary opcode. The planner's choice between

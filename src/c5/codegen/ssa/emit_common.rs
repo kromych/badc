@@ -631,7 +631,10 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
                 .get(*src_v as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            let phi_is_fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
+            let phi_is_fp = matches!(
+                kind,
+                LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128
+            );
             if matches!(dst_place, Place::None) {
                 continue;
             }
@@ -5436,7 +5439,7 @@ fn load_int_kind(kind: crate::c5::ir::LoadKind) -> Option<(u8, bool)> {
         K::I32 => (4, true),
         K::U32 => (4, false),
         K::I64 => (8, true),
-        K::F32 | K::F64 => return None,
+        K::F32 | K::F64 | K::F80 | K::F128 => return None,
     })
 }
 
@@ -5558,7 +5561,10 @@ fn asm_operand_const_rec(func: &crate::c5::ir::FunctionSsa, arg: u32, depth: u32
                                 StoreKind::I16 => 2,
                                 StoreKind::I32 => 4,
                                 StoreKind::I64 => 8,
-                                StoreKind::F32 | StoreKind::F64 => return None,
+                                StoreKind::F32
+                                | StoreKind::F64
+                                | StoreKind::F80
+                                | StoreKind::F128 => return None,
                             };
                             if sw != lw {
                                 return None;

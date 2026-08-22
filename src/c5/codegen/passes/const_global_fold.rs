@@ -185,7 +185,7 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
             LoadKind::I64 => 8,
             // The FP kinds keep their register class through the load;
             // an integer immediate would misclassify them.
-            LoadKind::F32 | LoadKind::F64 => continue,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => continue,
         };
         let Some(off) = data_addr(func, &ext, addr, disp as i64) else {
             continue;
@@ -242,6 +242,7 @@ fn access_width(kind: LoadKind) -> i64 {
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I64 | LoadKind::F64 => 8,
+        LoadKind::F80 | LoadKind::F128 => 16,
     }
 }
 
@@ -252,6 +253,7 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
         StoreKind::I16 => 2,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I64 | StoreKind::F64 => 8,
+        StoreKind::F80 | StoreKind::F128 => 16,
     }
 }
 

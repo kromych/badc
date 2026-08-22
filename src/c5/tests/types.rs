@@ -915,13 +915,13 @@ fn a_named_address_space_on_the_pointee_is_named_in_the_diagnostic() {
     );
 }
 
-/// All five targets: `long double` is laid out exactly as `double`
-/// (C99 6.2.5p10 permits any FP type at least as wide as `double`), so
-/// `sizeof` / `_Alignof` / struct offsets match `double`'s on every one.
-/// Both Linux ABIs give the platform type 16 bytes at 16-byte alignment;
-/// doc/std-conformance.md records that divergence.
+/// `long double`'s layout follows the target ABI: System V x86-64
+/// gives it the x87 80-bit format in a 16-byte object at 16-byte
+/// alignment; macOS/arm64 and both Windows targets define it as
+/// binary64. AArch64 Linux defines binary128, which badc does not yet
+/// store (doc/std-conformance.md records the divergence).
 #[test]
-fn long_double_is_laid_out_as_double_on_every_target() {
+fn long_double_layout_follows_the_target_abi() {
     use super::Vm;
     use crate::Compiler;
     use crate::Target;
@@ -930,24 +930,72 @@ fn long_double_is_laid_out_as_double_on_every_target() {
             .run()
             .unwrap()
     };
+    // sizeof, _Alignof, the offset a preceding `char` pads to, the
+    // whole-struct size, an array's stride, and the pointer stride.
     let probe = "struct S { char c; long double l; };\n\
-                 int main(void){ return (sizeof(long double)==8 && _Alignof(long double)==8\n\
-                 && sizeof(long double)==sizeof(double)\n\
-                 && sizeof(struct S)==16 && __builtin_offsetof(struct S, l)==8\n\
-                 && sizeof(long double[3])==24) ? 7 : 0; }";
-    for t in [
-        Target::LinuxX64,
-        Target::LinuxAarch64,
-        Target::MacOSAarch64,
-        Target::WindowsX64,
-        Target::WindowsAarch64,
+                 int main(void){ long double a[3]; long double *p = &a[0];\n\
+                 return sizeof(long double) + 100 * _Alignof(long double)\n\
+                 + 10000 * __builtin_offsetof(struct S, l)\n\
+                 + 1000000 * (sizeof(a) / 3) + 100000000 * (int)(&a[1] - &a[0])\n\
+                 + 1000000000 * (int)(sizeof(struct S) / 16); }";
+    for (t, width) in [
+        (Target::LinuxX64, 16),
+        (Target::LinuxAarch64, 8),
+        (Target::MacOSAarch64, 8),
+        (Target::WindowsX64, 8),
+        (Target::WindowsAarch64, 8),
     ] {
-        assert_eq!(
-            run(probe, t),
-            7,
-            "{t:?}: long double must be laid out as double"
-        );
+        let want = width + 100 * width + 10000 * width + 1000000 * width
+            + 100000000
+            + 1000000000 * (if width == 16 { 2 } else { 1 });
+        assert_eq!(run(probe, t), want, "{t:?}: long double layout");
     }
+    // `long double *` is a pointer: 8 bytes on every target.
+    let ptr = "int main(void){ return sizeof(long double *); }";
+    for t in [Target::LinuxX64, Target::MacOSAarch64] {
+        assert_eq!(run(ptr, t), 8, "{t:?}: pointer width");
+    }
+}
+
+/// The wide storage format round-trips through memory: a value stored
+/// into a `long double` object and read back is unchanged, and the
+/// object's bytes carry the platform's encoding rather than a binary64
+/// in the low half (which every foreign reader would misdecode).
+#[test]
+fn long_double_storage_round_trips_through_its_abi_format() {
+    use super::Vm;
+    use crate::Compiler;
+    use crate::Target;
+    let run = |src: &str, t: Target| -> i64 {
+        Vm::new(Compiler::with_target(src.to_string(), t).compile().unwrap())
+            .run()
+            .unwrap()
+    };
+    let round_trip = "int main(void){ long double x = 2.5L; double d = (double)x;\n\
+                      long double y = (long double)(d + 1.0);\n\
+                      return (d == 2.5 && (double)y == 3.5) ? 7 : 0; }";
+    for t in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        assert_eq!(run(round_trip, t), 7, "{t:?}: round trip");
+    }
+    // x87 stores 1.0 as an explicit integer bit (0x8000...) with
+    // exponent 0x3FFF; a binary64 in the low half would read 0 there.
+    let image = "int main(void){ long double x = 1.0L;\n\
+                 unsigned char *b = (unsigned char *)&x;\n\
+                 return b[7] + b[8] + b[9]; }";
+    assert_eq!(
+        run(image, Target::LinuxX64),
+        0x80 + 0xff + 0x3f,
+        "linux-x64 stores the x87 encoding"
+    );
+    // A file-scope initializer lands in the same format.
+    let global = "long double g = 1.0L;\n\
+                  int main(void){ unsigned char *b = (unsigned char *)&g;\n\
+                  return b[7] + b[8] + b[9]; }";
+    assert_eq!(
+        run(global, Target::LinuxX64),
+        0x80 + 0xff + 0x3f,
+        "a static initializer stores the x87 encoding"
+    );
 }
 
 /// `long double` keeps `double`'s 53-bit significand, so a value needing

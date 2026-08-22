@@ -474,6 +474,15 @@ impl Compiler {
             let f = f64::from_bits(f64_bits as u64) as f32;
             return f.to_bits() as i128;
         }
+        // A wide-format `long double` object stores the widened image;
+        // the caller writes `size_of_type` bytes of it.
+        if super::types::is_long_double_scalar(elem_ty) {
+            let kind = self.target.long_double();
+            if kind.size() > 8 {
+                let img = crate::c5::softfp::long_double_image(f64_bits as u64, kind);
+                return i128::from_le_bytes(img);
+            }
+        }
         f64_bits
     }
 

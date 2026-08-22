@@ -52,7 +52,7 @@ fn narrow_to_kind(k: i64, kind: LoadKind) -> Option<i64> {
         LoadKind::U16 => Some(k as u16 as i64),
         LoadKind::I8 => Some(k as i8 as i64),
         LoadKind::U8 => Some(k as u8 as i64),
-        LoadKind::F32 | LoadKind::F64 => None,
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => None,
     }
 }
 

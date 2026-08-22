@@ -16,6 +16,7 @@ mod preprocessor;
 mod program;
 #[cfg(feature = "full")]
 mod runtime;
+mod softfp;
 mod symbol;
 mod token;
 mod vm;

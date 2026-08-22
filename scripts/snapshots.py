@@ -26,6 +26,9 @@ form, etc.) are logged but don't fail the run.
 
 `--check` follows the regeneration with a git comparison against the
 commit, failing on added, removed and modified snapshots alike.
+
+`--frame-sizes` reports the static stack bytes the corpus reserves, and
+with `--against REV` diffs that against the snapshots committed at REV.
 """
 
 from __future__ import annotations
@@ -416,6 +419,123 @@ def check_clean(root: Path) -> int:
     return 0
 
 
+# The static SP decrements a prologue or a call-site adjustment emits.
+# The aarch64 immediate is 12 bits with an optional `lsl #12`, so a
+# reservation over 4095 bytes is a shifted instruction plus a remainder
+# and a reader that drops the shift undercounts it 4096-fold. A
+# variable adjustment (alloca, over-alignment) has no static size and
+# matches neither form.
+FRAME_DECREMENTS: dict[str, re.Pattern[str]] = {
+    "aarch64": re.compile(
+        r"\bsub\s+sp,\s*sp,\s*#(0x[0-9a-fA-F]+|\d+)(?:\s*,\s*lsl\s*#(\d+))?"
+    ),
+    "x64": re.compile(r"\bsubq?\s+\$(0x[0-9a-fA-F]+|\d+),\s*%rsp\b"),
+}
+
+
+def snapshot_arch(name: str) -> str:
+    for suffix, _ in TARGETS:
+        if name.endswith(f".{suffix}.asm"):
+            return suffix
+    raise ValueError(f"not an asm snapshot name: {name}")
+
+
+def frame_bytes(text: str, arch: str) -> int:
+    """Total static stack bytes reserved across a snapshot's functions."""
+    total = 0
+    for m in FRAME_DECREMENTS[arch].finditer(text):
+        imm = m.group(1)
+        value = int(imm, 16) if imm.startswith("0x") else int(imm)
+        if arch == "aarch64" and m.group(2):
+            value <<= int(m.group(2))
+        total += value
+    return total
+
+
+def tree_frames(root: Path) -> dict[str, int]:
+    asm = root / "tests" / "snapshots" / "asm"
+    return {
+        p.name: frame_bytes(p.read_text(errors="replace"), snapshot_arch(p.name))
+        for p in sorted(asm.glob("*.asm"))
+    }
+
+
+def revision_frames(root: Path, rev: str) -> dict[str, int]:
+    """The same accounting over the snapshots committed at `rev`."""
+    listing = subprocess.run(
+        ["git", "ls-tree", "-r", "-z", rev, "--", "tests/snapshots/asm"],
+        cwd=root,
+        capture_output=True,
+        check=True,
+    ).stdout.split(b"\0")
+    entries = []
+    for row in listing:
+        if not row:
+            continue
+        meta, _, path = row.partition(b"\t")
+        entries.append((meta.split()[2], Path(path.decode()).name))
+    blobs = subprocess.run(
+        ["git", "cat-file", "--batch"],
+        cwd=root,
+        input=b"".join(sha + b"\n" for sha, _ in entries),
+        capture_output=True,
+        check=True,
+    ).stdout
+    out: dict[str, int] = {}
+    pos = 0
+    for _, name in entries:
+        head = blobs.index(b"\n", pos)
+        size = int(blobs[pos:head].split()[-1])
+        body = blobs[head + 1 : head + 1 + size].decode("utf-8", errors="replace")
+        pos = head + 1 + size + 1
+        out[name] = frame_bytes(body, snapshot_arch(name))
+    return out
+
+
+FRAME_MOVERS_SHOWN = 40
+
+
+def frame_report(root: Path, against: str | None) -> int:
+    """Print the corpus frame total, and against a revision the movers.
+
+    The comparison covers the snapshots both sides carry: a fixture added
+    since `against` has no earlier size and would otherwise read as growth.
+    """
+    cur = tree_frames(root)
+    per_arch = {
+        suffix: sum(v for k, v in cur.items() if snapshot_arch(k) == suffix)
+        for suffix, _ in TARGETS
+    }
+    parts = " ".join(f"{a}={b}" for a, b in sorted(per_arch.items()))
+    print(f"[frames] {len(cur)} snapshots, {sum(cur.values())} bytes ({parts})")
+    if against is None:
+        return 0
+    old = revision_frames(root, against)
+    shared = sorted(set(cur) & set(old))
+    was, now = sum(old[k] for k in shared), sum(cur[k] for k in shared)
+
+    # Growth first, then the largest shrinks: the cap trims the small
+    # middle rather than either extreme.
+    def rank(entry: tuple[str, int, int]) -> tuple[int, int, str]:
+        delta = entry[2] - entry[1]
+        return (0, -delta, entry[0]) if delta > 0 else (1, delta, entry[0])
+
+    moved = sorted(
+        ((k, old[k], cur[k]) for k in shared if old[k] != cur[k]), key=rank
+    )
+    grew = sum(1 for _, a, b in moved if b > a)
+    pct = (now - was) / was * 100 if was else 0.0
+    print(
+        f"[frames] against {against}: {was} -> {now} ({now - was:+d}, {pct:+.1f}%), "
+        f"{len(moved) - grew} shrink, {grew} grow, {len(shared) - len(moved)} same"
+    )
+    for name, a, b in moved[:FRAME_MOVERS_SHOWN]:
+        print(f"  {b - a:+8d}  {name}  {a} -> {b}")
+    if len(moved) > FRAME_MOVERS_SHOWN:
+        print(f"  ... {len(moved) - FRAME_MOVERS_SHOWN} more")
+    return 0
+
+
 def self_test() -> int:
     """Exercise `check_clean` over the three states it separates, in a
     throwaway repository: the added case is the one `git diff` misses."""
@@ -447,6 +567,23 @@ def self_test() -> int:
         assert state() == 1, "a modified snapshot must fail"
         (snap / "a.ssa").write_text("a\n")
         assert state() == 0, "the restored corpus must read clean again"
+
+    # A frame past the aarch64 12-bit immediate is a shifted instruction
+    # plus a remainder, and the page-wise probe splits it further; the
+    # shift carries the bulk of the size.
+    cases = [
+        ("aarch64", "\tsub\tsp, sp, #0x1, lsl #12\n\tstr\txzr, [sp]\n"
+                    "\tsub\tsp, sp, #0x700\n", 5888),
+        ("aarch64", "\tsub\tsp, sp, #0xf10\n", 3856),
+        ("aarch64", "\tsub\tx0, x29, #0x1, lsl #12\n", 0),
+        ("x64", "\tsubq\t$0x1000, %rsp\n\tsubq\t$0x750, %rsp\n", 5968),
+        ("x64", "\tsubq\t0x38(%rsp), %rdx\n", 0),
+    ]
+    for arch, text, want in cases:
+        got = frame_bytes(text, arch)
+        assert got == want, f"{arch} frame decode: {got} != {want}"
+    assert snapshot_arch("f.aarch64.asm") == "aarch64"
+    assert snapshot_arch("f.x64.asm") == "x64"
     print("[snapshots] self-test OK")
     return 0
 
@@ -469,10 +606,24 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="check the --check comparison itself and exit; no regeneration",
     )
+    p.add_argument(
+        "--frame-sizes",
+        action="store_true",
+        help="report the static stack bytes the committed corpus reserves "
+        "and exit; no regeneration",
+    )
+    p.add_argument(
+        "--against",
+        metavar="REV",
+        help="with --frame-sizes, diff the totals against the snapshots "
+        "committed at REV",
+    )
     args = p.parse_args(argv)
     if args.self_test:
         return self_test()
     root = repo_root()
+    if args.frame_sizes:
+        return frame_report(root, args.against)
     rc = regenerate(root, args.only)
     if rc != 0 or not args.check:
         return rc

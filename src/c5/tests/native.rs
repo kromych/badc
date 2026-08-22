@@ -360,6 +360,38 @@ fn string_literal_store_faults() {
     assert_eq!(code, -1, "linked-image literal store must die on a signal");
 }
 
+/// The read-only prefix of the data image maps without write
+/// permission on Mach-O: `__TEXT,__const` rides the segment's R+X
+/// mapping, so a store through a cast-away `const` faults while a read
+/// of the same object succeeds.
+#[test]
+fn const_object_store_faults() {
+    let src = "static const int table[4] = {1,2,3,4}; \
+               int main(void) { int *p = (int *)table; *p = 9; return 0; }";
+    match build_and_run_outcome(src, "const_store") {
+        RunOutcome::Signal(_) => {}
+        other => panic!("store into const storage must fault, got {other:?}"),
+    }
+    let src = "static const int table[4] = {1,2,3,4}; \
+               int main(void) { return table[3] == 4 ? 0 : 1; }";
+    assert_eq!(build_and_run(src, "const_read"), 0);
+    // A named section in the read-only family maps the same way.
+    let src = "static const int t __attribute__((section(\"myro\"), used)) = 5; \
+               int main(void) { int *p = (int *)&t; *p = 9; return 0; }";
+    match build_and_run_outcome(src, "named_const_store") {
+        RunOutcome::Signal(_) => {}
+        other => panic!("store into a read-only named section must fault, got {other:?}"),
+    }
+    // The multi-TU link path enforces it too; a signal surfaces as a
+    // `None` exit code, which `link_run_capture` reports as -1.
+    let (code, _) = link_run_capture(
+        "static const int table[4] = {1,2,3,4}; \
+         int main(void) { int *p = (int *)table; *p = 9; return 0; }",
+        "const_store_linked",
+    );
+    assert_eq!(code, -1, "linked-image const store must die on a signal");
+}
+
 #[test]
 fn bss_segregation_maps_and_zero_fills() {
     // With segregation on, wholly-zero globals leave `__data` for the

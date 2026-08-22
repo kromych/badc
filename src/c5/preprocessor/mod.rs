@@ -469,8 +469,8 @@ pub(crate) struct PpReuse {
     include_records: Vec<IncludeRecord>,
 }
 
-/// Test hook: how many times the source (as opposed to the preamble or
-/// a reused pass) has been fully preprocessed on this thread.
+// Test hook: how many times the source (as opposed to the preamble or
+// a reused pass) has been fully preprocessed on this thread.
 #[cfg(any(test, feature = "codegen_test"))]
 std::thread_local! {
     pub(crate) static FULL_SOURCE_PASSES: Cell<usize> = const { Cell::new(0) };

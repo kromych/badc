@@ -1837,6 +1837,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_movnti.c", 42),
     ("inline_asm_x64_clflush.c", 42),
     ("inline_asm_x64_setjmp_label.c", 42),
+    ("inline_asm_x64_stream_branches.c", 42),
     ("inline_asm_x64_sp_callee_regions.c", 0),
     ("inline_asm_x64_mem_disp.c", 42),
     ("inline_asm_x64_m_global_call.c", 42),

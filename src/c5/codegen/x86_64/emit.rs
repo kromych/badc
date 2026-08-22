@@ -7852,6 +7852,13 @@ fn differing_run(a: &[u8], b: &[u8]) -> Option<(usize, usize)> {
 /// register-tied intrinsics above use, generalised over the constraints.
 /// `goto_ctx` is present for the `asm goto` form (the statement is the
 /// last instruction of a `Terminator::AsmGoto` block).
+///
+/// A template branch to a label of its own stream starts on the rel8 form
+/// and is lengthened, permanently, when the settled layout leaves its
+/// displacement outside the byte's reach: the attempt grows the set and
+/// this driver rolls the outputs back and lays the template out again.
+/// Each round either grows the set or is final, the rule
+/// `measure_asm_section_offsets` applies to a pushed section's branches.
 fn emit_inline_asm(
     code: &mut Vec<u8>,
     asm: &super::super::ir::AsmBlock,
@@ -7874,6 +7881,94 @@ fn emit_inline_asm(
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     text_align: &mut usize,
     mut goto_ctx: Option<AsmGotoCtx<'_>>,
+) -> bool {
+    let mut long_sites: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
+    let base = (
+        code.len(),
+        fixups.len(),
+        asm_extern_call_sites.len(),
+        asm_sym_fixups.len(),
+        data_fixups.len(),
+        pending_func_fixups.len(),
+        user_extern_data_refs.len(),
+        *text_align,
+    );
+    let sink_base = asm_sections.snapshot();
+    loop {
+        let known = long_sites.len();
+        let round_ctx = goto_ctx.as_mut().map(|c| AsmGotoCtx {
+            row: c.row,
+            branch_fixups: &mut *c.branch_fixups,
+            branch_short: c.branch_short,
+        });
+        if !emit_inline_asm_once(
+            code,
+            asm,
+            args,
+            func,
+            alloc,
+            frame,
+            fixups,
+            name2entpc,
+            extern_data_names,
+            extern_code_names,
+            asm_sections,
+            asm_extern_call_sites,
+            asm_sym_fixups,
+            data_fixups,
+            pending_func_fixups,
+            user_extern_data_refs,
+            asm_section_text_refs,
+            asm_text_abs_refs,
+            asm_text_labels,
+            text_align,
+            round_ctx,
+            &mut long_sites,
+        ) {
+            return false;
+        }
+        if long_sites.len() == known {
+            return true;
+        }
+        code.truncate(base.0);
+        fixups.truncate(base.1);
+        asm_extern_call_sites.truncate(base.2);
+        asm_sym_fixups.truncate(base.3);
+        data_fixups.truncate(base.4);
+        pending_func_fixups.truncate(base.5);
+        user_extern_data_refs.truncate(base.6);
+        *text_align = base.7;
+        asm_sections.restore(&sink_base);
+    }
+}
+
+/// One layout attempt under the branch forms `long_sites` fixes. Returns
+/// with the set grown, ahead of any patching or section materialization,
+/// when a short branch does not reach; the driver above rolls back what
+/// the attempt emitted.
+fn emit_inline_asm_once(
+    code: &mut Vec<u8>,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    fixups: &mut Vec<super::encode::Fixup>,
+    name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    asm_sections: &mut super::ssa::emit_common::AsmSectionSink,
+    asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
+    asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
+    data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
+    user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
+    asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
+    asm_text_labels: &mut Vec<super::AsmTextLabel>,
+    text_align: &mut usize,
+    mut goto_ctx: Option<AsmGotoCtx<'_>>,
+    long_sites: &mut alloc::collections::BTreeSet<usize>,
 ) -> bool {
     use super::super::ir::{AsmConstraint, AsmRegSize, AsmSeg, Inst};
     use super::asm::{AsmOpnd, Concrete};
@@ -8033,6 +8128,14 @@ fn emit_inline_asm(
             .contains(name)
             .then(|| alloc::string::String::from(name))
     };
+    // Label numbers the code stream defines, by instruction index, so a
+    // branch knows before layout whether its target lands in this stream
+    // and on which side of the reference.
+    let stream_defs: alloc::vec::Vec<(u32, usize)> = insns
+        .iter()
+        .enumerate()
+        .filter_map(|(ii, insn)| insn.label_def.map(|n| (n, ii)))
+        .collect();
     // Registers the asm overwrites: the operand registers plus the explicit
     // clobber list (a bound operand's register is the one the asm was asked
     // to see and affect, so it is not saved around the block). GP registers
@@ -8137,10 +8240,12 @@ fn emit_inline_asm(
         }
     }
     // Local labels: definitions record the code offset they stand at; a
-    // jmp / jcc / lea referencing a label records the position of its rel32
-    // field, patched once every definition's offset is known.
+    // jmp / jcc / lea referencing a label records its displacement field as
+    // `(field, label, forward, field_width, instruction_index)`, patched
+    // once every definition's offset is known. A relaxable branch's field
+    // is one byte wide until `long_sites` holds its instruction.
     let mut label_defs: alloc::vec::Vec<(u32, usize)> = alloc::vec::Vec::new();
-    let mut label_fixups: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
+    let mut label_fixups: alloc::vec::Vec<(usize, u32, bool, u8, usize)> = alloc::vec::Vec::new();
     // `$LABEL` address immediates: `(imm32_field, label_number, forward)`,
     // resolved to an absolute `.text` relocation once every definition's
     // offset is known.
@@ -8194,7 +8299,7 @@ fn emit_inline_asm(
     let mut prefix_run: Option<usize> = None;
     // Encode each template instruction with its operands resolved to the
     // assigned registers, explicit registers, and immediates.
-    for insn in &insns {
+    for (ii, insn) in insns.iter().enumerate() {
         let pending_at = if matches!(insn.mnemonic, super::asm::Mnemonic::Prefix(_)) {
             prefix_run.get_or_insert(code.len());
             None
@@ -8375,10 +8480,11 @@ fn emit_inline_asm(
         {
             return fail("inline asm: a `rex` prefix on a direct branch");
         }
-        // A jmp / jcc to a local label: emit the rel32 form now and record the
-        // site; the displacement is patched below against the label offset. A
-        // target the unit binds weak is not satisfied by its in-stream
-        // definition: the field relocates against the name instead.
+        // A jmp / jcc to a local label. A target the unit binds weak is not
+        // satisfied by its in-stream definition: the field keeps the rel32
+        // form and relocates against the name. A target this stream defines
+        // relaxes to the rel8 form unless a round below lengthened it; a
+        // target outside the stream keeps rel32 for the section pass.
         if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
             let super::asm::Mnemonic::Table(name) = insn.mnemonic else {
                 return fail("inline asm: label operand on a non-jump");
@@ -8387,19 +8493,39 @@ fn emit_inline_asm(
             if cc.is_none() && !matches!(name, "jmp" | "jmpq") {
                 return fail("inline asm: label operand on a non-jump");
             }
-            match cc {
-                Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
-                None => super::encode::emit_jmp_rel32(code, 0),
-            }
-            match weak_target_name(num) {
-                Some(n) => asm_sym_fixups.push(super::AsmSymFixup {
+            if let Some(n) = weak_target_name(num) {
+                match cc {
+                    Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
+                    None => super::encode::emit_jmp_rel32(code, 0),
+                }
+                asm_sym_fixups.push(super::AsmSymFixup {
                     instr_offset: code.len() - 4,
                     kind: super::ssa::emit_common::AsmRelocKind::JumpRel,
                     target: super::ssa::emit_common::AsmSectionTarget::Symbol(n),
                     addend: -4,
-                }),
-                None => label_fixups.push((code.len() - 4, num, forward)),
+                });
+                after_insn = true;
+                continue;
             }
+            let in_stream = stream_defs.iter().any(|&(n, di)| {
+                n == num
+                    && (num >= super::asm::NAMED_LABEL_BASE
+                        || if forward { di > ii } else { di < ii })
+            });
+            let width: u8 = if in_stream && !long_sites.contains(&ii) {
+                match cc {
+                    Some(cc) => super::encode::emit_jcc_rel8(code, cc, 0),
+                    None => super::encode::emit_jmp_rel8(code, 0),
+                }
+                1
+            } else {
+                match cc {
+                    Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
+                    None => super::encode::emit_jmp_rel32(code, 0),
+                }
+                4
+            };
+            label_fixups.push((code.len() - width as usize, num, forward, width, ii));
             after_insn = true;
             continue;
         }
@@ -8456,7 +8582,7 @@ fn emit_inline_asm(
                     return false;
                 }
             }
-            label_fixups.push((code.len() - 4, num, forward));
+            label_fixups.push((code.len() - 4, num, forward, 4, ii));
             after_insn = true;
             continue;
         }
@@ -9112,9 +9238,10 @@ fn emit_inline_asm(
     // known. A forward `Nf` takes the nearest matching definition after the
     // reference; a backward `Nb`, the nearest at or before it (GNU as
     // local-label rule). A named label has exactly one definition, so the
-    // direction is ignored. The rel32 is measured from the end of its field.
-    // A reference with no main-stream definition may name a label placed in
-    // one of the template's pushed sections; defer it to the section pass.
+    // direction is ignored. The displacement is measured from the end of
+    // its field. A reference with no main-stream definition may name a
+    // label placed in one of the template's pushed sections; defer it to
+    // the section pass.
     let mut pending_xsec: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
     // The same, for `$LABEL` address immediates, whose field is absolute.
     let mut pending_abs_xsec: alloc::vec::Vec<(usize, u32, bool)> = alloc::vec::Vec::new();
@@ -9138,13 +9265,30 @@ fn emit_inline_asm(
                 .max()
         }
     };
-    for &(at, num, forward) in &label_fixups {
+    // Lengthen every short branch this layout leaves outside the byte's
+    // reach and hand the grown set back for the next round.
+    let known_long = long_sites.len();
+    for &(at, num, forward, width, ii) in &label_fixups {
+        if width == 1
+            && let Some(target) = resolve_label(at, num, forward)
+            && !(-128..=127).contains(&(target as i64 - (at as i64 + 1)))
+        {
+            long_sites.insert(ii);
+        }
+    }
+    if long_sites.len() != known_long {
+        return true;
+    }
+    for &(at, num, forward, width, _) in &label_fixups {
         match resolve_label(at, num, forward) {
             Some(target) => {
-                let rel = target as i64 - (at as i64 + 4);
-                code[at..at + 4].copy_from_slice(&(rel as i32).to_le_bytes());
+                let w = width as usize;
+                let rel = target as i64 - (at + w) as i64;
+                code[at..at + w].copy_from_slice(&rel.to_le_bytes()[..w]);
             }
-            None => pending_xsec.push((at, num, forward)),
+            // Only a target this stream defines takes the short form.
+            None if width == 4 => pending_xsec.push((at, num, forward)),
+            None => return fail("inline asm: undefined local label"),
         }
     }
     // A `$LABEL` immediate binds to the same main-stream definition, but the

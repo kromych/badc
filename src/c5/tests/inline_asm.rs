@@ -1345,6 +1345,62 @@ fn x86_branch_to_a_weak_template_label_keeps_its_relocation() {
     assert_eq!(s.binding, STB_WEAK, "the definition stays weak");
 }
 
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_template_stream_branches_relax_to_rel8() {
+    let text_of = |src: &str| {
+        let o = asm_obj(src, crate::Target::LinuxX64);
+        let t = o
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        assert!(t.relocs.is_empty(), "in-stream targets resolve in place");
+        t.bytes.clone()
+    };
+    // GNU as 2.46.1 for the stream this template pastes settles the
+    // in-reach pair on the rel8 forms -- `eb 01` over the nop, `75 fc`
+    // back over the `inc` -- and holds the branch whose 130-byte `.skip`
+    // pushes the target out of the byte's reach on `e9 82 00 00 00`.
+    let t = text_of(
+        "void f(void) { __asm__ volatile(\
+         \"jmp 1f\\n\\tnop\\n1:\\n\\tinc %eax\\n\\tjne 1b\\n\\t\" \
+         \"jmp 2f\\n\\t.skip 130\\n2:\\n\\tnop\" ::: \"eax\", \"cc\"); }\n\
+         int main(void) { return 0; }",
+    );
+    let seq = [
+        0xeb, 0x01, 0x90, 0xff, 0xc0, 0x75, 0xfc, 0xe9, 0x82, 0x00, 0x00, 0x00,
+    ];
+    assert!(
+        t.windows(seq.len()).any(|w| w == seq),
+        "expected the relaxed pair and the held long form in {t:x?}"
+    );
+    // Lengthening cascades: the first branch reaches only while the second
+    // stays short, so one round lengthens the second and the next round the
+    // first. GNU as 2.46.1 settles the same stream on both long forms,
+    // `e9 81 00 00 00` then `e9 80 00 00 00`.
+    let t = text_of(
+        "void g(void) { __asm__ volatile(\
+         \"jmp 2f\\n\\tjmp 3f\\n\\t.skip 124\\n2:\\n\\t.skip 4\\n3:\\n\\tnop\"); }\n\
+         int main(void) { return 0; }",
+    );
+    let seq = [0xe9, 0x81, 0, 0, 0, 0xe9, 0x80, 0, 0, 0];
+    assert!(
+        t.windows(seq.len()).any(|w| w == seq),
+        "expected both long forms in {t:x?}"
+    );
+    // The byte's exact reach: a 127-byte gap still takes `eb 7f`.
+    let t = text_of(
+        "void h(void) { __asm__ volatile(\"jmp 1f\\n\\t.skip 127\\n1:\\n\\tnop\"); }\n\
+         int main(void) { return 0; }",
+    );
+    assert!(
+        t.windows(2).any(|w| w == [0xeb, 0x7f]),
+        "expected `eb 7f` in {t:x?}"
+    );
+}
+
 // Emits a native image, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]

@@ -1839,6 +1839,31 @@ fn a_template_branch_to_a_weak_label_keeps_its_relocation() {
     );
 }
 
+/// A template branch to a label of its own stream settles on the rel8 form
+/// where the layout reaches, as the section path settles one. GNU as 2.46.1
+/// for the stream this template pastes gives `eb 01` over the nop and
+/// `75 fc` back over the `inc`, and holds the branch over the 130-byte
+/// `.skip` on the rel32 form; nothing here relocates.
+#[test]
+fn a_template_stream_branch_takes_the_short_form() {
+    let bytes = object_of_c(
+        "tmpl-branch-relax",
+        "int f(void) {\n\
+         __asm__ volatile(\"jmp 1f\\n\\tnop\\n1:\\n\\tinc %eax\\n\\tjne 1b\\n\\t\" \
+         \"jmp 2f\\n\\t.skip 130\\n2:\\n\\tnop\" ::: \"eax\", \"cc\");\n\
+         return 0;\n}\n",
+    );
+    let t = section64(&bytes, ".text");
+    let seq = [
+        0xeb, 0x01, 0x90, 0xff, 0xc0, 0x75, 0xfc, 0xe9, 0x82, 0x00, 0x00, 0x00,
+    ];
+    assert!(t.windows(seq.len()).any(|w| w == seq), "{t:x?}");
+    assert!(
+        named_relocs(&bytes, ".rela.text").is_empty(),
+        "no relocation rows"
+    );
+}
+
 /// A branch relaxes across `.align` and a label-valued `.skip`, whose
 /// padding absorbs the branch's own width. The kernel's `clear_bhb_loop` is
 /// this shape; the bytes are GNU as 2.46.1's for the same source, which

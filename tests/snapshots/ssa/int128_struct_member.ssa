@@ -15,7 +15,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=35
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(72)                                      -> x0
+    v1   ImmData(64)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I64, volatile }     -> x1
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
@@ -31,7 +31,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=35
     v14  Imm(0)                                           -> x2
     v15  LoadLocal { off=-34, kind=I64 }                  -> x2
     v16  LoadLocal { off=-33, kind=I64 }                  -> x2
-    v17  ImmData(80)                                      -> x2
+    v17  ImmData(72)                                      -> x2
     v18  Load { addr=v17, disp=0, kind=I64, volatile }    -> x2
     v19  Binop { op=or, lhs=v5, rhs=v18 }                 -> x3
     v20  Binop { op=or, lhs=v2, rhs=v5 }                  -> x12
@@ -152,7 +152,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=35
     terminator Return(v112)   (exit_acc=v112)
   block 12  start_pc=0
     v113 LocalAddr(-30)                                   -> x0
-    v114 ImmData(16)                                      -> x1
+    v114 ImmData(8)                                       -> x1
     v115 Mcpy { dst=v113, src=v114, size=48, align=8 }    -> x0
     v116 LocalAddr(-24)                                   -> x0
     v117 Imm(0)                                           -> x1
@@ -712,7 +712,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v15  Imm(8)                                           -> x0
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v17  Imm(0)                                           -> x0
-    v18  ImmData(24)                                      -> x0
+    v18  ImmData(16)                                      -> x0
     v19  LoadLocal { off=-1, kind=I64 }                   -> x1
     v20  LoadLocal { off=-1, kind=I32 }                   -> x1
     v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1

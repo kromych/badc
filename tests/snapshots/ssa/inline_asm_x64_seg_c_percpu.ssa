@@ -4,18 +4,18 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(40)                                      -> x0
+    v1   ImmData(32)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I32, volatile }     -> x0
     terminator Bz { cond=v2, target=b10, fall=b1 }   (exit_acc=v2)
   block 1  start_pc=0
     v8   LocalAddr(-4)                                    -> x0
-    v9   ImmData(24)                                      -> x1
+    v9   ImmData(16)                                      -> x1
     v10  InlineAsm { template="movq %%gs:%P1, %0", ops=2, args=[v8, v9] } -> -
     v11  LoadLocal { off=-4, kind=I64 }                   -> x0
     terminator Jmp(b2)   (exit_acc=v11)
   block 2  start_pc=0
     v12  LocalAddr(-4)                                    -> x1
-    v13  ImmData(32)                                      -> x2
+    v13  ImmData(24)                                      -> x2
     v14  InlineAsm { template="movq %%gs:%c1, %0", ops=2, args=[v12, v13] } -> -
     v15  LoadLocal { off=-4, kind=I64 }                   -> x1
     terminator Jmp(b3)   (exit_acc=v15)
@@ -75,7 +75,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=4
     terminator Jmp(b9)   (exit_acc=v53)
   block 9  start_pc=0
     v54  Imm(64)                                          -> x0
-    v55  ImmData(24)                                      -> x1
+    v55  ImmData(16)                                      -> x1
     v56  InlineAsm { template="nop\n\t.pushsection .altinstr_replacement,\"ax\"\n771:\n\tmovq %%gs:%c0, %%rax\n\tmovq %%gs:%P1, %%rdx\n\t.popsection\n", ops=2, args=[v54, v55] } -> -
     v57  Imm(0)                                           -> x0
     terminator Jmp(b10)   (exit_acc=v57)
@@ -200,7 +200,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v15  Imm(8)                                           -> x0
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v17  Imm(0)                                           -> x0
-    v18  ImmData(24)                                      -> x0
+    v18  ImmData(16)                                      -> x0
     v19  LoadLocal { off=-1, kind=I64 }                   -> x1
     v20  LoadLocal { off=-1, kind=I32 }                   -> x1
     v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1

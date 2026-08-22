@@ -110,7 +110,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     terminator Jmp(b15)   (exit_acc=v75)
   block 15  start_pc=0
     v77  LocalAddr(-2)                                    -> x0
-    v78  ImmData(16)                                      -> x1
+    v78  ImmData(8)                                       -> x1
     v79  Mcpy { dst=v77, src=v78, size=12, align=8 }      -> x0
     v80  LocalAddr(-2)                                    -> x0
     v81  Imm(0)                                           -> x1
@@ -250,7 +250,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v15  Imm(8)                                           -> x0
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v17  Imm(0)                                           -> x0
-    v18  ImmData(24)                                      -> x0
+    v18  ImmData(16)                                      -> x0
     v19  LoadLocal { off=-1, kind=I64 }                   -> x1
     v20  LoadLocal { off=-1, kind=I32 }                   -> x1
     v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1

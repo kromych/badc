@@ -20,7 +20,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v14  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v13)
   block 1  start_pc=0
-    v22  ImmData(1160)                                    -> x12
+    v22  ImmData(1152)                                    -> x12
     v23  Extend { value=v15, kind=I32 }                   -> x0
     v24  BinopI { op=mul, lhs=v23, rhs_imm=24 }           -> x0
     v25  Binop { op=add, lhs=v22, rhs=v24 }               -> x0
@@ -57,7 +57,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     terminator Jmp(b25)   (exit_acc=v41)
   block 5  start_pc=0
     v57  LocalAddr(-10)                                   -> x7
-    v58  ImmData(2480)                                    -> x0
+    v58  ImmData(2472)                                    -> x0
     v59  Extend { value=v50, kind=I32 }                   -> x1
     v60  BinopI { op=mul, lhs=v59, rhs_imm=48 }           -> x1
     v61  Binop { op=add, lhs=v58, rhs=v60 }               -> x0
@@ -84,7 +84,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v92  BinopI { op=add, lhs=v90, rhs_imm=12 }           -> x2
     v93  Store { addr=v90, disp=12, value=v81, kind=I32 } -> -
     v94  LocalAddr(-10)                                   -> x7
-    v95  ImmData(2480)                                    -> x0
+    v95  ImmData(2472)                                    -> x0
     v96  Extend { value=v50, kind=I32 }                   -> x1
     v97  BinopI { op=mul, lhs=v96, rhs_imm=48 }           -> x1
     v98  Binop { op=add, lhs=v95, rhs=v97 }               -> x1
@@ -109,7 +109,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v115 LoadLocal { off=-11, kind=I64 }                  -> x1
     v116 Imm(0)                                           -> x1
     v117 Extend { value=v114, kind=I32 }                  -> x2
-    v118 ImmData(2480)                                    -> x1
+    v118 ImmData(2472)                                    -> x1
     v119 Extend { value=v50, kind=I32 }                   -> x6
     v120 BinopI { op=mul, lhs=v119, rhs_imm=48 }          -> x6
     v121 Binop { op=add, lhs=v118, rhs=v120 }             -> x1
@@ -126,7 +126,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v141 LocalAddr(-2)                                    -> x0
     v142 Imm(0)                                           -> x1
     v143 Load { addr=v141, disp=0, kind=I32 }             -> x1
-    v144 ImmData(2480)                                    -> x0
+    v144 ImmData(2472)                                    -> x0
     v145 Extend { value=v50, kind=I32 }                   -> x2
     v146 BinopI { op=mul, lhs=v145, rhs_imm=48 }          -> x2
     v147 Binop { op=add, lhs=v144, rhs=v146 }             -> x0
@@ -141,7 +141,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v156 Imm(0)                                           -> x1
     v157 BinopI { op=add, lhs=v155, rhs_imm=4 }           -> x1
     v158 Load { addr=v155, disp=4, kind=I32 }             -> x1
-    v159 ImmData(2480)                                    -> x0
+    v159 ImmData(2472)                                    -> x0
     v160 Extend { value=v50, kind=I32 }                   -> x2
     v161 BinopI { op=mul, lhs=v160, rhs_imm=48 }          -> x2
     v162 Binop { op=add, lhs=v159, rhs=v161 }             -> x0
@@ -162,7 +162,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v173 Imm(8)                                           -> x1
     v174 BinopI { op=add, lhs=v172, rhs_imm=8 }           -> x1
     v175 Load { addr=v172, disp=8, kind=I32 }             -> x1
-    v176 ImmData(2480)                                    -> x0
+    v176 ImmData(2472)                                    -> x0
     v177 Extend { value=v50, kind=I32 }                   -> x2
     v178 BinopI { op=mul, lhs=v177, rhs_imm=48 }          -> x2
     v179 Binop { op=add, lhs=v176, rhs=v178 }             -> x0
@@ -184,7 +184,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v191 BinopI { op=add, lhs=v189, rhs_imm=8 }           -> x1
     v192 BinopI { op=add, lhs=v189, rhs_imm=12 }          -> x1
     v193 Load { addr=v189, disp=12, kind=I32 }            -> x1
-    v194 ImmData(2480)                                    -> x0
+    v194 ImmData(2472)                                    -> x0
     v195 Extend { value=v50, kind=I32 }                   -> x2
     v196 BinopI { op=mul, lhs=v195, rhs_imm=48 }          -> x2
     v197 Binop { op=add, lhs=v194, rhs=v196 }             -> x0
@@ -403,7 +403,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v15  Imm(8)                                           -> x0
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v17  Imm(0)                                           -> x0
-    v18  ImmData(24)                                      -> x0
+    v18  ImmData(16)                                      -> x0
     v19  LoadLocal { off=-1, kind=I64 }                   -> x1
     v20  LoadLocal { off=-1, kind=I32 }                   -> x1
     v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1

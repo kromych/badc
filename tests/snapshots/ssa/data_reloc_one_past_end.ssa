@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x1
     v2   Imm(0)                                           -> x0
-    v3   ImmData(24)                                      -> x0
+    v3   ImmData(16)                                      -> x0
     v4   Imm(0)                                           -> x2
     terminator Jmp(b2)   (exit_acc=v3)
   block 1  start_pc=0
@@ -28,7 +28,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     terminator Bnz { cond=v10, target=b1, fall=b3 }   (exit_acc=v10)
   block 3  start_pc=0
     v18  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v19  ImmData(72)                                      -> x0
+    v19  ImmData(48)                                      -> x0
     v20  Imm(24)                                          -> x2
     v21  BinopI { op=add, lhs=v19, rhs_imm=24 }           -> x2
     v22  Load { addr=v19, disp=24, kind=I64 }             -> x0
@@ -158,7 +158,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v15  Imm(8)                                           -> x0
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v17  Imm(0)                                           -> x0
-    v18  ImmData(24)                                      -> x0
+    v18  ImmData(16)                                      -> x0
     v19  LoadLocal { off=-1, kind=I64 }                   -> x1
     v20  LoadLocal { off=-1, kind=I32 }                   -> x1
     v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1

@@ -136,7 +136,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     terminator Return(v95)   (exit_acc=v95)
   block 18  start_pc=0
     v96  LocalAddr(-2)                                    -> x0
-    v97  ImmData(16)                                      -> x1
+    v97  ImmData(8)                                       -> x1
     v98  Mcpy { dst=v96, src=v97, size=16, align=8 }      -> x0
     v99  LocalAddr(-2)                                    -> x0
     v100 Load { addr=v99, disp=0, kind=F32 }              -> d0 [f32]
@@ -173,7 +173,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v125 Imm(6)                                           -> x0
     terminator Return(v125)   (exit_acc=v125)
   block 22  start_pc=0
-    v126 ImmData(72)                                      -> x0
+    v126 ImmData(48)                                      -> x0
     v127 Load { addr=v126, disp=0, kind=F64 }             -> d0
     v128 Imm(4607182418800017408)                         -> x1
     v129 Binop { op=fadd, lhs=v127, rhs=v128 }            -> d0
@@ -190,7 +190,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     terminator Return(v137)   (exit_acc=v137)
   block 24  start_pc=0
     v138 LocalAddr(-3)                                    -> x0
-    v139 ImmData(32)                                      -> x1
+    v139 ImmData(24)                                      -> x1
     v140 Mcpy { dst=v138, src=v139, size=24, align=8 }    -> x0
     v141 LocalAddr(-3)                                    -> x0
     v142 Imm(8)                                           -> x1
@@ -377,7 +377,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v15  Imm(8)                                           -> x0
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v17  Imm(0)                                           -> x0
-    v18  ImmData(24)                                      -> x0
+    v18  ImmData(16)                                      -> x0
     v19  LoadLocal { off=-1, kind=I64 }                   -> x1
     v20  LoadLocal { off=-1, kind=I32 }                   -> x1
     v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1

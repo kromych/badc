@@ -4,9 +4,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[3, 12, 13] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(72)                                      -> x3
+    v1   ImmData(64)                                      -> x3
     v2   Imm(0)                                           -> x0
-    v3   ImmData(104)                                     -> x13
+    v3   ImmData(96)                                      -> x13
     v4   BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x0
     v5   Load { addr=v3, disp=8, kind=I64 }               -> x12
     v6   ImmData(36)                                      -> x6
@@ -175,10 +175,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v22  Imm(0)                                           -> x0
     terminator Jmp(b32)   (exit_acc=v22)
   block 32  start_pc=0
-    v23  ImmData(104)                                     -> x0
+    v23  ImmData(96)                                      -> x0
     v24  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x0
     v25  Load { addr=v3, disp=8, kind=I64 }               -> x0
-    v26  ImmData(72)                                      -> x1
+    v26  ImmData(64)                                      -> x1
     v27  Imm(0)                                           -> x1
     v28  Binop { op=ne, lhs=v25, rhs=v1 }                 -> x0
     terminator Bz { cond=v28, target=b34, fall=b33 }   (exit_acc=v28)
@@ -322,7 +322,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=1
     v15  Imm(8)                                           -> x0
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v17  Imm(0)                                           -> x0
-    v18  ImmData(24)                                      -> x0
+    v18  ImmData(16)                                      -> x0
     v19  LoadLocal { off=-1, kind=I64 }                   -> x1
     v20  LoadLocal { off=-1, kind=I32 }                   -> x1
     v21  BinopI { op=shl, lhs=v13, rhs_imm=3 }            -> x1

@@ -974,15 +974,25 @@ pub(crate) fn apply_data_liveness(
     let n = starts.len();
 
     // Each kept object moves to a new base congruent to its old start
-    // modulo `ALIGN`, so every byte keeps its original alignment residue.
-    // This holds even when adjacent objects share an interval (an object
-    // whose start the parser did not record glues onto its predecessor):
-    // the relative layout inside the copied span is preserved, and a
-    // congruent base preserves the absolute alignment of every object in
-    // it. `ALIGN` is the section's own alignment, which the writers place
-    // `.data` and `.bss` at, so preserving residues modulo it preserves
-    // each object's absolute alignment up to that of the whole section.
-    let align: i64 = crate::c5::layout::bss_image_align(program.data_align) as i64;
+    // modulo its own placement alignment, so every byte of it keeps its
+    // original alignment residue. This holds even when adjacent objects
+    // share an interval (an object whose start the parser did not record
+    // glues onto its predecessor): the relative layout inside the copied
+    // span is preserved, and the interval's alignment is the strictest
+    // one recorded anywhere inside it. The section is placed at the
+    // maximum over the objects it keeps, so an object needing A <= that
+    // keeps its absolute alignment.
+    let cap = crate::c5::layout::bss_image_align(program.data_align);
+    let obj_align = crate::c5::layout::data_object_aligns(program, starts, cap);
+    // Region boundaries sit on the strictest alignment any kept object
+    // needs, so every packed residue past one holds wherever the writers
+    // place that region.
+    let img_align: i64 = (0..n)
+        .filter(|&i| live[i])
+        .map(|i| obj_align[i])
+        .max()
+        .unwrap_or(0)
+        .max(crate::c5::layout::BSS_ALIGN_MIN as i64);
     let obj_end = |i: usize| -> i64 { if i + 1 < n { starts[i + 1] } else { data_len } };
     // A relocation writes a (generally non-zero) value into its slot at
     // link/write time, so the slot's object is initialised data even when
@@ -1128,9 +1138,10 @@ pub(crate) fn apply_data_liveness(
             if !live[i] || is_bss(i) || region_of(i) != pass {
                 continue;
             }
-            let want = starts[i].rem_euclid(align);
+            let a = obj_align[i];
+            let want = starts[i].rem_euclid(a);
             let pad_start = new_data.len() as i64;
-            while (new_data.len() as i64).rem_euclid(align) != want {
+            while (new_data.len() as i64).rem_euclid(a) != want {
                 new_data.push(0);
             }
             if (new_data.len() as i64) > pad_start {
@@ -1139,11 +1150,11 @@ pub(crate) fn apply_data_liveness(
             new_base[i] = new_data.len() as i64;
             new_data.extend_from_slice(&program.data[starts[i] as usize..obj_end(i) as usize]);
         }
-        // Each region ends on an `ALIGN` boundary so the next one's
-        // packed residues hold at any `ALIGN`-multiple placement of it.
+        // Each region ends on an `img_align` boundary so the next one's
+        // packed residues hold at any aligned placement of it.
         if pass != REGION_RW && !new_data.is_empty() {
             let pad_start = new_data.len() as i64;
-            while (new_data.len() as i64).rem_euclid(align) != 0 {
+            while (new_data.len() as i64).rem_euclid(img_align) != 0 {
                 new_data.push(0);
             }
             if (new_data.len() as i64) > pad_start {
@@ -1158,13 +1169,20 @@ pub(crate) fn apply_data_liveness(
     // The `.bss` region begins immediately past the file image; an offset
     // into it is `>= new_data.len()`, which each writer maps to a vaddr the
     // loader zero-fills (p_memsz > p_filesz / VirtualSize > SizeOfRawData /
-    // vmsize > filesize). Align its base to `ALIGN`: the linker and the
-    // per-format writers address `.bss` relative to its own base, so each
-    // object's bss-relative offset must carry the same alignment residue
-    // as its `.data` offset, which only holds when the base is aligned.
+    // vmsize > filesize). Its base carries the strictest alignment the
+    // zero-fill objects need: the linker and the per-format writers
+    // address `.bss` relative to its own base, so each object's
+    // bss-relative offset must carry the same alignment residue as its
+    // `.data` offset, which only holds when the base is aligned.
     if (0..n).any(&is_bss) {
+        let bss_align = (0..n)
+            .filter(|&i| is_bss(i))
+            .map(|i| obj_align[i])
+            .max()
+            .unwrap_or(0)
+            .max(crate::c5::layout::BSS_ALIGN_MIN as i64);
         let pad_start = new_data.len() as i64;
-        while (new_data.len() as i64).rem_euclid(align) != 0 {
+        while (new_data.len() as i64).rem_euclid(bss_align) != 0 {
             new_data.push(0);
         }
         if (new_data.len() as i64) > pad_start {
@@ -1175,9 +1193,10 @@ pub(crate) fn apply_data_liveness(
     let mut bss_cursor = bss_base;
     for i in 0..n {
         if is_bss(i) {
-            let want = starts[i].rem_euclid(align);
+            let a = obj_align[i];
+            let want = starts[i].rem_euclid(a);
             let pad_start = bss_cursor;
-            while bss_cursor.rem_euclid(align) != want {
+            while bss_cursor.rem_euclid(a) != want {
                 bss_cursor += 1;
             }
             if bss_cursor > pad_start {
@@ -1217,6 +1236,13 @@ pub(crate) fn apply_data_liveness(
         .retain(|f| live_func_pcs.contains(&f.ent_pc));
     crate::c5::layout::DataOffsets::remap_data_offsets(&mut out, &map_to);
     out.data = new_data;
+    // The section's alignment is the maximum over the objects it keeps;
+    // one the prune dropped no longer holds the section on its boundary.
+    out.data_align = (0..n)
+        .filter(|&i| live[i])
+        .map(|i| obj_align[i] as usize)
+        .max()
+        .unwrap_or(crate::c5::layout::DATA_ALIGN_MIN);
     out.data_ro_len = data_ro_len as usize;
     out.data_relro_len = data_relro_len.max(data_ro_len) as usize;
     // The gaps this pass opened join the parse-recorded padding the remap
@@ -1501,5 +1527,159 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Offsets of the defined `.data` objects, keyed by name.
+    fn data_syms(program: &Program) -> alloc::vec::Vec<(&str, i64, i64)> {
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.is_thread_local
+                    && !s.name.is_empty()
+            })
+            .map(|s| (s.name.as_str(), s.val, s.data_align.max(1)))
+            .collect()
+    }
+
+    // Every kept object sits on its own boundary, and no object pays the
+    // section's alignment as padding: a unit whose strictest object is
+    // page-aligned packs the rest at 8 and 64 (C99 6.2.8, and the
+    // placement every toolchain emits).
+    #[test]
+    fn packing_uses_each_object_own_alignment() {
+        let target = Target::LinuxX64;
+        let mut src = alloc::string::String::from(
+            "_Alignas(4096) char page[4096] = {1};\n\
+             _Alignas(64) long cache[8] = {2};\n\
+             long plain[3] = {3};\n",
+        );
+        for i in 0..200 {
+            src += &alloc::format!("static long dead{i}[8] = {{{i}}};\n");
+        }
+        src += "int main(void) { return page[0] + (int)cache[0] + (int)plain[0]; }\n";
+        let program = compile(&src, target);
+        let c = compact_program_data(&program, target, true, false).expect("compact");
+        let compacted = &c.program;
+
+        for (name, val, align) in data_syms(compacted) {
+            assert_eq!(
+                val % align,
+                0,
+                "`{name}` at {val:#x} is not {align}-aligned"
+            );
+        }
+        for &(off, align) in &compacted.data_align_marks {
+            assert_eq!(off % align, 0, "align mark {off:#x} not on its {align}");
+        }
+        assert_eq!(
+            compacted.data_align, 4096,
+            "the section keeps the maximum over the objects it holds"
+        );
+        // Live content is 4096 + 64 + 24 bytes plus the NULL guard; one
+        // gap ahead of the page-aligned object is the only padding a
+        // per-object rule can owe. Padding every object to 4096 instead
+        // packs the same set into more than five pages.
+        let total = compacted.data.len() as i64 + c.bss_size;
+        assert!(
+            total <= 2 * 4096 + 512,
+            "packed image {total} exceeds the per-object bound"
+        );
+        assert!(
+            total < program.data.len() as i64,
+            "packing must not grow the image"
+        );
+    }
+
+    // The section's alignment is the maximum over the objects that
+    // survive: dropping the only over-aligned one drops the requirement
+    // with it, so the writers stop placing the section at a page.
+    #[test]
+    fn dropping_the_strictest_object_lowers_the_section_alignment() {
+        let target = Target::LinuxX64;
+        let src = "_Alignas(4096) static char page[4096] = {1};\n\
+                   _Alignas(64) long cache[8] = {2};\n\
+                   int main(void) { return (int)cache[0]; }\n";
+        let program = compile(src, target);
+        assert_eq!(program.data_align, 4096, "the parse records the page");
+        let c = compact_program_data(&program, target, true, false).expect("compact");
+        assert_eq!(c.program.data_align, 64, "kept objects need 64, not 4096");
+        let total = c.program.data.len() as i64 + c.bss_size;
+        assert!(total <= 256, "packed image {total} still carries the page");
+        for (name, val, align) in data_syms(&c.program) {
+            assert_eq!(val % align, 0, "`{name}` at {val:#x} lost its {align}");
+        }
+    }
+
+    // Zero-fill objects pack in the `.bss` region under the same rule,
+    // and the region base carries the strictest alignment they need so
+    // each bss-relative offset keeps its residue.
+    #[test]
+    fn bss_objects_pack_at_their_own_alignment() {
+        let target = Target::LinuxX64;
+        let mut src = alloc::string::String::from(
+            "_Alignas(4096) char page[4096] = {1};\n\
+             long live_a[4];\n\
+             _Alignas(64) long live_b[4];\n",
+        );
+        for i in 0..64 {
+            src += &alloc::format!("static long dead{i}[8];\n");
+        }
+        src += "int main(void) { return page[0] + (int)live_a[0] + (int)live_b[0]; }\n";
+        let program = compile(&src, target);
+        let c = compact_program_data(&program, target, true, false).expect("compact");
+        let compacted = &c.program;
+        let file_len = compacted.data.len() as i64;
+        assert!(c.bss_size > 0, "the zero-init globals must reach .bss");
+        assert!(
+            c.bss_size <= 64 + 32 + 64,
+            "bss region {} exceeds the per-object bound",
+            c.bss_size
+        );
+        for (name, val, align) in data_syms(compacted) {
+            assert_eq!(val % align, 0, "`{name}` at {val:#x} lost its {align}");
+            if val >= file_len {
+                assert_eq!(
+                    (val - file_len) % align,
+                    0,
+                    "`{name}` is misaligned within .bss"
+                );
+            }
+        }
+    }
+
+    // The packed offsets themselves, for a unit whose objects span three
+    // alignments. A narrower live set must not move a kept object further
+    // out than its own boundary requires.
+    #[test]
+    fn packed_layout_offsets_are_stable() {
+        let target = Target::LinuxX64;
+        let src = "long a8 = 1;\n\
+                   _Alignas(64) long a64 = 2;\n\
+                   _Alignas(4096) long a4k = 3;\n\
+                   static long dead[64] = {9};\n\
+                   int main(void) { return (int)(a8 + a64 + a4k); }\n";
+        let program = compile(src, target);
+        let c = compact_program_data(&program, target, true, false).expect("compact");
+        let at = |name: &str| -> i64 {
+            data_syms(&c.program)
+                .iter()
+                .find(|(n, ..)| *n == name)
+                .unwrap_or_else(|| panic!("symbol {name}"))
+                .1
+        };
+        assert_eq!(at("a8"), 8, "the first object follows the NULL guard");
+        // Each base is the first one past the preceding object that meets
+        // the object's own alignment; the interval the pass copies carries
+        // the parse-recorded padding that followed the object.
+        assert_eq!(at("a64"), 128);
+        assert_eq!(at("a4k"), 4096);
+        // The image ends with the last object, not on the 4096 the
+        // section is placed at.
+        assert_eq!(c.program.data.len(), 4104);
+        assert_eq!(c.bss_size, 0);
     }
 }

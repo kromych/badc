@@ -9,7 +9,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v3   LoadLocal { off=-2, kind=I32 }                   -> x0
     v4   Imm(56)                                          -> x0
     v5   Imm(0)                                           -> x1
-    v6   Intrinsic { kind=1, args=[v4] }                  -> x0
+    v6   Intrinsic { kind=Alloca, args=[v4] }             -> x0
     v7   Imm(0)                                           -> x0
     v8   LoadLocal { off=-2, kind=I64 }                   -> x0
     v9   Imm(0)                                           -> x0

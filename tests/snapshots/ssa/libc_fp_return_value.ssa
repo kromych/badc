@@ -7,7 +7,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v1   Imm(1)                                           -> x3
     v2   Imm(0)                                           -> x0
     v3   Imm(4616189618054758400)                         -> x0
-    v4   Intrinsic { kind=11, args=[v3] }                 -> d0
+    v4   Intrinsic { kind=Sqrt, args=[v3] }               -> d0
     v5   Imm(0)                                           -> x0
     v6   LoadLocal { off=-1, kind=F64 }                   -> d1
     v7   Imm(4611686018427387904)                         -> x0
@@ -20,7 +20,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
   block 2  start_pc=0
     v11  Phi { incoming=[b36:v1, b1:v9], kind=I64 }       -> x3
     v12  Imm(4613262278296967578)                         -> x0
-    v13  Intrinsic { kind=15, args=[v12] }                -> d0
+    v13  Intrinsic { kind=Floor, args=[v12] }             -> d0
     v14  Imm(0)                                           -> x0
     v15  LoadLocal { off=-1, kind=F64 }                   -> d1
     v16  Imm(4611686018427387904)                         -> x0
@@ -33,7 +33,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
   block 4  start_pc=0
     v20  Phi { incoming=[b35:v11, b3:v18], kind=I64 }     -> x3
     v21  Imm(4612361558371493478)                         -> x0
-    v22  Intrinsic { kind=17, args=[v21] }                -> d0
+    v22  Intrinsic { kind=Ceil, args=[v21] }              -> d0
     v23  Imm(0)                                           -> x0
     v24  LoadLocal { off=-1, kind=F64 }                   -> d1
     v25  Imm(4613937818241073152)                         -> x0
@@ -47,7 +47,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v29  Phi { incoming=[b34:v20, b5:v27], kind=I64 }     -> x3
     v30  Imm(4615063718147915776)                         -> x0
     v31  Fneg(v30)                                        -> d0
-    v32  Intrinsic { kind=13, args=[v31] }                -> d0
+    v32  Intrinsic { kind=Fabs, args=[v31] }              -> d0
     v33  Imm(0)                                           -> x1
     v34  LoadLocal { off=-1, kind=F64 }                   -> d1
     v35  Binop { op=fne, lhs=v32, rhs=v30 }               -> x0
@@ -73,7 +73,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
   block 10  start_pc=0
     v48  Phi { incoming=[b32:v38, b9:v46], kind=I64 }     -> x3
     v49  Imm(1082130432)                                  -> x0 [f32]
-    v50  Intrinsic { kind=12, args=[v49] }                -> d0 [f32]
+    v50  Intrinsic { kind=Sqrtf, args=[v49] }             -> d0 [f32]
     v51  Imm(0)                                           -> x0
     v52  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
     v53  Imm(1073741824)                                  -> x0 [f32]
@@ -87,7 +87,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v57  Phi { incoming=[b31:v48, b11:v55], kind=I64 }    -> x3
     v58  Imm(1080033280)                                  -> x0 [f32]
     v59  Fneg(v58)                                        -> d0 [f32]
-    v60  Intrinsic { kind=14, args=[v59] }                -> d0 [f32]
+    v60  Intrinsic { kind=Fabsf, args=[v59] }             -> d0 [f32]
     v61  Imm(0)                                           -> x1
     v62  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
     v63  Binop { op=fne, lhs=v60, rhs=v58 }               -> x0
@@ -99,7 +99,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
   block 14  start_pc=0
     v66  Phi { incoming=[b30:v57, b13:v64], kind=I64 }    -> x3
     v67  Imm(1098907648)                                  -> x0 [f32]
-    v68  Intrinsic { kind=12, args=[v67] }                -> d0 [f32]
+    v68  Intrinsic { kind=Sqrtf, args=[v67] }             -> d0 [f32]
     v69  FpCast { kind=F32ToF64, value=v68 }              -> d0
     v70  Imm(0)                                           -> x0
     v71  LoadLocal { off=-1, kind=F64 }                   -> d1
@@ -113,7 +113,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
   block 16  start_pc=0
     v76  Phi { incoming=[b29:v66, b15:v74], kind=I64 }    -> x3
     v77  Imm(1076677837)                                  -> x0 [f32]
-    v78  Intrinsic { kind=16, args=[v77] }                -> d0 [f32]
+    v78  Intrinsic { kind=Floorf, args=[v77] }            -> d0 [f32]
     v79  Imm(0)                                           -> x0
     v80  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
     v81  Imm(1073741824)                                  -> x0 [f32]
@@ -126,7 +126,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
   block 18  start_pc=0
     v85  Phi { incoming=[b28:v76, b17:v83], kind=I64 }    -> x3
     v86  Imm(1075000115)                                  -> x0 [f32]
-    v87  Intrinsic { kind=18, args=[v86] }                -> d0 [f32]
+    v87  Intrinsic { kind=Ceilf, args=[v86] }             -> d0 [f32]
     v88  Imm(0)                                           -> x0
     v89  LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
     v90  Imm(1077936128)                                  -> x0 [f32]

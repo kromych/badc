@@ -107,7 +107,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=4
   block 16  start_pc=0
     v70  Imm(4619567317775286272)                         -> x0
     v71  Fneg(v70)                                        -> d0
-    v72  Intrinsic { kind=13, args=[v71] }                -> d0
+    v72  Intrinsic { kind=Fabs, args=[v71] }              -> d0
     v73  Binop { op=fne, lhs=v72, rhs=v70 }               -> x0
     terminator Bz { cond=v73, target=b18, fall=b17 }   (exit_acc=v73)
   block 17  start_pc=0
@@ -115,7 +115,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=4
     terminator Return(v74)   (exit_acc=v74)
   block 18  start_pc=0
     v75  Imm(4632092954238910464)                         -> x0
-    v76  Intrinsic { kind=11, args=[v75] }                -> d0
+    v76  Intrinsic { kind=Sqrt, args=[v75] }              -> d0
     v77  Imm(4619567317775286272)                         -> x0
     v78  Binop { op=fne, lhs=v76, rhs=v77 }               -> x0
     terminator Bz { cond=v78, target=b20, fall=b19 }   (exit_acc=v78)

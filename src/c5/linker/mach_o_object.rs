@@ -122,6 +122,23 @@ pub fn is_mach_o_fat(bytes: &[u8]) -> bool {
     matches!(u32be(bytes, 0), Some(FAT_MAGIC | FAT_MAGIC_64))
 }
 
+/// `cputype` spelled as `<mach/machine.h>` names it, for diagnostics.
+/// Covers the values a message is likely to carry, not the whole set.
+pub(crate) fn mach_o_cputype_desc(cputype: u32) -> String {
+    let name = match cputype {
+        CPU_TYPE_ARM64 => Some("CPU_TYPE_ARM64"),
+        CPU_TYPE_X86_64 => Some("CPU_TYPE_X86_64"),
+        7 => Some("CPU_TYPE_X86"),
+        12 => Some("CPU_TYPE_ARM"),
+        0x0100_0000 | 18 => Some("CPU_TYPE_POWERPC"),
+        _ => None,
+    };
+    match name {
+        Some(n) => format!("{n} ({cputype:#x})"),
+        None => format!("{cputype:#x}"),
+    }
+}
+
 /// The architecture a Mach-O `cputype` names.
 pub(crate) fn mach_o_machine(cputype: u32) -> Option<NativeMachine> {
     match cputype {
@@ -439,7 +456,8 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
         None => {
             return Err(err(&format!(
-                "Mach-O object has unhandled cputype {cputype:#x}",
+                "Mach-O object has unhandled cputype {}",
+                mach_o_cputype_desc(cputype)
             )));
         }
     };

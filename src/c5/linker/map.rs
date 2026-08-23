@@ -366,7 +366,10 @@ fn parse_image_sections(image: &[u8]) -> Result<(Vec<OutSec>, &'static str), C5E
         (_, EM_AARCH64) => "elf64-littleaarch64",
         (_, EM_386) => "elf32-i386",
         (_, other) => {
-            return Err(map_err(&format!("unsupported e_machine {other}")));
+            return Err(map_err(&format!(
+                "unsupported e_machine {}",
+                super::relocatable::elf_machine_desc(other)
+            )));
         }
     };
     let shoff = ehdr.e_shoff as usize;

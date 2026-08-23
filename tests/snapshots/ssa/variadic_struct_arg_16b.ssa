@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-3)                                    -> x0
     v2   LocalAddr(2)                                     -> x1
-    v3   Intrinsic { kind=4, args=[v1, v2] }              -> x0
+    v3   Intrinsic { kind=VaStart, args=[v1, v2] }        -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x1
     v6   Imm(0)                                           -> x1
@@ -14,7 +14,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
   block 1  start_pc=0
     v15  LocalAddr(-3)                                    -> x1
     v16  Imm(16)                                          -> x6
-    v17  Intrinsic { kind=5, args=[v15, v16] }            -> x6
+    v17  Intrinsic { kind=VaArg, args=[v15, v16] }        -> x6
     v18  LocalAddr(-5)                                    -> x1
     v19  Mcpy { dst=v18, src=v17, size=16, align=8 }      -> x6
     v20  LoadLocal { off=-6, kind=I64 }                   -> x6
@@ -42,7 +42,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=6
     terminator Bnz { cond=v11, target=b1, fall=b4 }   (exit_acc=v11)
   block 4  start_pc=0
     v30  LocalAddr(-3)                                    -> x0
-    v31  Intrinsic { kind=6, args=[v30] }                 -> x0
+    v31  Intrinsic { kind=VaEnd, args=[v30] }             -> x0
     v32  LoadLocal { off=-6, kind=I64 }                   -> x0
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=1 ---

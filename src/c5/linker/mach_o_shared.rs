@@ -77,8 +77,12 @@ pub fn parse_mach_o_dylib(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         u32le(bytes, off).ok_or_else(|| err(&format!("{what} runs past end of file")))
     };
     let cputype = need(4, "header")?;
-    let machine = mach_o_machine(cputype)
-        .ok_or_else(|| err(&format!("dylib has unhandled cputype {cputype:#x}")))?;
+    let machine = mach_o_machine(cputype).ok_or_else(|| {
+        err(&format!(
+            "dylib has unhandled cputype {}",
+            super::mach_o_object::mach_o_cputype_desc(cputype)
+        ))
+    })?;
     let ncmds = need(16, "header")? as usize;
     let sizeofcmds = need(20, "header")? as usize;
     let cmds_end = MACH_HEADER_64_SIZE

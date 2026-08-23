@@ -6,14 +6,14 @@ fn ent_pc=0 n_params=1 variadic=true locals=5
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-3)                                    -> x0
     v2   LocalAddr(2)                                     -> x1
-    v3   Intrinsic { kind=4, args=[v1, v2] }              -> x1
+    v3   Intrinsic { kind=VaStart, args=[v1, v2] }        -> x1
     v4   LocalAddr(-3)                                    -> x1
     v5   Imm(16)                                          -> x1
-    v6   Intrinsic { kind=5, args=[v1, v5] }              -> x1
+    v6   Intrinsic { kind=VaArg, args=[v1, v5] }          -> x1
     v7   LocalAddr(-5)                                    -> x0
     v8   Mcpy { dst=v7, src=v6, size=16, align=8 }        -> x1
     v9   LocalAddr(-3)                                    -> x1
-    v10  Intrinsic { kind=6, args=[v9] }                  -> x1
+    v10  Intrinsic { kind=VaEnd, args=[v9] }              -> x1
     v11  LocalAddr(-5)                                    -> x1
     v12  Load { addr=v7, disp=0, kind=F64 }               -> d0
     v13  LocalAddr(-5)                                    -> x0

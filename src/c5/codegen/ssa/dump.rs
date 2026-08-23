@@ -273,7 +273,9 @@ fn fmt_inst(inst: &Inst) -> String {
             "AtomicCas {{ addr=v{addr}, expected_addr=v{expected_addr}, desired=v{desired}, width={width} }}"
         ),
         Intrinsic { kind, args } => format!(
-            "Intrinsic {{ kind={kind}, args=[{}] }}",
+            "Intrinsic {{ kind={}, args=[{}] }}",
+            super::super::op::Intrinsic::from_i64(*kind)
+                .map_or_else(|| format!("{kind}"), |i| format!("{i:?}")),
             fmt_value_list(args),
         ),
         InlineAsm { asm, args } => format!(

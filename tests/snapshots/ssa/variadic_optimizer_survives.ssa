@@ -6,18 +6,18 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-3)                                    -> x0
     v2   LocalAddr(2)                                     -> x1
-    v3   Intrinsic { kind=4, args=[v1, v2] }              -> x1
+    v3   Intrinsic { kind=VaStart, args=[v1, v2] }        -> x1
     v4   LocalAddr(-3)                                    -> x1
     v5   Imm(4)                                           -> x1
-    v6   Intrinsic { kind=5, args=[v1, v5] }              -> x0
+    v6   Intrinsic { kind=VaArg, args=[v1, v5] }          -> x0
     v7   Load { addr=v6, disp=0, kind=I32 }               -> x0
     v8   Imm(0)                                           -> x1
     v9   LocalAddr(-3)                                    -> x1
-    v10  Intrinsic { kind=5, args=[v9, v5] }              -> x1
+    v10  Intrinsic { kind=VaArg, args=[v9, v5] }          -> x1
     v11  Load { addr=v10, disp=0, kind=I32 }              -> x1
     v12  Imm(0)                                           -> x2
     v13  LocalAddr(-3)                                    -> x2
-    v14  Intrinsic { kind=6, args=[v13] }                 -> x2
+    v14  Intrinsic { kind=VaEnd, args=[v13] }             -> x2
     v15  Extend { value=v7, kind=I32 }                    -> x2
     v16  BinopI { op=ne, lhs=v7, rhs_imm=42 }             -> x0
     terminator Bz { cond=v16, target=b2, fall=b1 }   (exit_acc=v16)

@@ -8,14 +8,14 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     v2   Imm(0)                                           -> x1
     v3   LocalAddr(-3)                                    -> x1
     v4   LocalAddr(2)                                     -> x2
-    v5   Intrinsic { kind=4, args=[v3, v4] }              -> x1
+    v5   Intrinsic { kind=VaStart, args=[v3, v4] }        -> x1
     v6   Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v1)
   block 1  start_pc=0
     v15  Extend { value=v8, kind=I32 }                    -> x2
     v16  LocalAddr(-3)                                    -> x2
     v17  Imm(4)                                           -> x6
-    v18  Intrinsic { kind=5, args=[v16, v17] }            -> x2
+    v18  Intrinsic { kind=VaArg, args=[v16, v17] }        -> x2
     v19  Load { addr=v18, disp=0, kind=I32 }              -> x2
     v20  Binop { op=add, lhs=v8, rhs=v19 }                -> x1
     v21  Imm(0)                                           -> x2
@@ -35,7 +35,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     terminator Bnz { cond=v11, target=b1, fall=b4 }   (exit_acc=v11)
   block 4  start_pc=0
     v23  LocalAddr(-3)                                    -> x0
-    v24  Intrinsic { kind=6, args=[v23] }                 -> x0
+    v24  Intrinsic { kind=VaEnd, args=[v23] }             -> x0
     v25  Extend { value=v8, kind=I32 }                    -> x0
     v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x1
     v27  Extend { value=v25, kind=I32 }                   -> x1

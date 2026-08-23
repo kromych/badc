@@ -32,7 +32,7 @@ fn ent_pc=2 n_params=1 variadic=true locals=5
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-5)                                    -> x0
     v2   LocalAddr(2)                                     -> x1
-    v3   Intrinsic { kind=4, args=[v1, v2] }              -> x0
+    v3   Intrinsic { kind=VaStart, args=[v1, v2] }        -> x0
     v4   LocalAddr(-2)                                    -> x1
     v5   Imm(0)                                           -> x0
     v6   Store { addr=v4, disp=0, value=v5, kind=I64 }    -> -
@@ -46,7 +46,7 @@ fn ent_pc=2 n_params=1 variadic=true locals=5
     v19  Load { addr=v18, disp=0, kind=I64 }              -> x2
     v20  LocalAddr(-5)                                    -> x6
     v21  Imm(4)                                           -> x7
-    v22  Intrinsic { kind=5, args=[v20, v21] }            -> x6
+    v22  Intrinsic { kind=VaArg, args=[v20, v21] }        -> x6
     v23  Load { addr=v22, disp=0, kind=I32 }              -> x6
     v24  Binop { op=add, lhs=v19, rhs=v23 }               -> x2
     v25  Store { addr=v18, disp=0, value=v24, kind=I64 }  -> -
@@ -64,7 +64,7 @@ fn ent_pc=2 n_params=1 variadic=true locals=5
     terminator Bnz { cond=v14, target=b1, fall=b4 }   (exit_acc=v14)
   block 4  start_pc=0
     v26  LocalAddr(-5)                                    -> x0
-    v27  Intrinsic { kind=6, args=[v26] }                 -> x0
+    v27  Intrinsic { kind=VaEnd, args=[v26] }             -> x0
     v28  LocalAddr(-2)                                    -> x0
     v29  BinopI { op=add, lhs=v28, rhs_imm=8 }            -> x1
     v30  LoadLocal { off=2, kind=I32 }                    -> x1

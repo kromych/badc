@@ -49,7 +49,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=26
     v43  Imm(116)                                         -> x0
     v44  Imm(0)                                           -> x0
     v45  Imm(64)                                          -> x0
-    v46  Intrinsic { kind=1, args=[v45] }                 -> x2
+    v46  Intrinsic { kind=Alloca, args=[v45] }            -> x2
     v47  Imm(0)                                           -> x0
     v48  Imm(0)                                           -> x0
     v49  Imm(0)                                           -> x1

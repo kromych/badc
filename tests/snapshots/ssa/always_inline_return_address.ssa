@@ -4,8 +4,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Intrinsic { kind=66, args=[] }                   -> x0
-    v2   Intrinsic { kind=66, args=[] }                   -> x1
+    v1   Intrinsic { kind=ReturnAddress, args=[] }        -> x0
+    v2   Intrinsic { kind=ReturnAddress, args=[] }        -> x1
     v3   Binop { op=eq, lhs=v1, rhs=v2 }                  -> x0
     v4   Extend { value=v3, kind=I32 }                    -> x1
     v5   Imm(0)                                           -> x2
@@ -16,7 +16,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v8   Imm(1)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
   block 2  start_pc=0
-    v9   Intrinsic { kind=66, args=[] }                   -> x0
+    v9   Intrinsic { kind=ReturnAddress, args=[] }        -> x0
     v10  BinopI { op=eq, lhs=v9, rhs_imm=0 }              -> x1
     terminator Bnz { cond=v9, target=b4, fall=b3 }   (exit_acc=v10)
   block 3  start_pc=0

@@ -28,7 +28,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=2
     v2   Imm(0)                                           -> x1
     v3   LoadLocal { off=2, kind=I32 }                    -> x1
     v4   Imm(0)                                           -> x1
-    v5   Intrinsic { kind=1, args=[v1] }                  -> x0
+    v5   Intrinsic { kind=Alloca, args=[v1] }             -> x0
     v6   Imm(0)                                           -> x1
     v7   LoadLocal { off=-2, kind=I64 }                   -> x1
     v8   Imm(0)                                           -> x1

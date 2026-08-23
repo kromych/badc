@@ -1181,14 +1181,19 @@ fn is_inline_candidate(
             // constant-expression (C99 6.6) only after the constant argument
             // substitutes folds at the call site rather than failing an
             // out-of-line emit.
-            Inst::Intrinsic { kind, .. } => {
-                let frame_bound =
-                    crate::c5::op::Intrinsic::from_i64(*kind).is_none_or(|i| i.is_frame_bound());
-                if frame_bound {
-                    say(format_args!("frame-bound intrinsic {kind}"));
+            Inst::Intrinsic { kind, .. } => match crate::c5::op::Intrinsic::from_i64(*kind) {
+                Some(i) if i.is_frame_bound() => {
+                    say(format_args!("frame-bound intrinsic {i:?}"));
                     return false;
                 }
-            }
+                // An unrecognised opcode is declined for the same reason,
+                // but it is a different fact and reads as one.
+                None => {
+                    say(format_args!("unrecognised intrinsic opcode {kind}"));
+                    return false;
+                }
+                Some(_) => {}
+            },
             // A segment base is per-CPU state, not frame state, so a spliced
             // access has nothing frame-bound to relocate; `remap_inst_operands`
             // routes both variants' operands.
@@ -5129,6 +5134,59 @@ mod tests {
         let (idx, reason) = &hits[0];
         assert_eq!(funcs[*idx].name, "va");
         assert_eq!(reason, "variadic");
+    }
+
+    /// The decline names the intrinsic rather than its opcode, and an
+    /// unrecognised opcode reads as that rather than as frame-bound.
+    #[test]
+    fn unhonoured_names_the_intrinsic() {
+        let abi = Target::LinuxX64.abi();
+        let call = |target_pc| Inst::Call {
+            target_pc,
+            args: Vec::new(),
+            fixed_args: 0,
+            fp_return: false,
+            fp_arg_mask: 0,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        let reason_for = |kind: i64| {
+            let caller = FunctionSsa {
+                ent_pc: 1,
+                name: "use".into(),
+                insts: vec![call(5)],
+                ..Default::default()
+            };
+            let callee = FunctionSsa {
+                ent_pc: 5,
+                name: "sp".into(),
+                is_always_inline: true,
+                insts: vec![Inst::Intrinsic {
+                    kind,
+                    args: Vec::new(),
+                }],
+                blocks: vec![crate::c5::ir::Block {
+                    start_pc: 5,
+                    inst_range: 0..1,
+                    terminator: crate::c5::ir::Terminator::Return(0),
+                    exit_acc: 0,
+                }],
+                ..Default::default()
+            };
+            let funcs = [caller, callee];
+            let hits = unhonoured_always_inline(&funcs, 32, abi);
+            assert_eq!(hits.len(), 1);
+            hits[0].1.clone()
+        };
+        assert_eq!(
+            reason_for(crate::c5::op::Intrinsic::StackPointer as i64),
+            "frame-bound intrinsic StackPointer"
+        );
+        assert_eq!(
+            reason_for(1_000_000),
+            "unrecognised intrinsic opcode 1000000"
+        );
     }
     /// A parameter past the ABI's argument registers has no prologue
     /// spill, so its cell read is resolved to the call-site argument

@@ -5,7 +5,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
   block 0  start_pc=0
     v0   AllocaInit(5)                                    -> -
     v1   Imm(8000)                                        -> x2
-    v2   Intrinsic { kind=1, args=[v1] }                  -> x3
+    v2   Intrinsic { kind=Alloca, args=[v1] }             -> x3
     v3   Imm(0)                                           -> x0
     v4   LoadLocal { off=-2, kind=I64 }                   -> x0
     v5   Imm(3)                                           -> x6

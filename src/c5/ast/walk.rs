@@ -55,7 +55,26 @@ impl core::fmt::Display for WalkError {
                 write!(f, "ast::walk: statement #{id} ({kind}) not handled")
             }
             WalkError::UnknownSymbolClass { sym, class } => {
-                write!(f, "ast::walk: symbol #{sym} class {class} not recognised",)
+                let named = [
+                    (Token::Loc, "Loc"),
+                    (Token::Glo, "Glo"),
+                    (Token::Fun, "Fun"),
+                    (Token::Sys, "Sys"),
+                ]
+                .iter()
+                .find(|(t, _)| *t as i64 == *class)
+                .map(|(_, n)| *n);
+                match named {
+                    Some(n) => write!(
+                        f,
+                        "ast::walk: symbol #{sym} has class {n}, which takes no address here"
+                    ),
+                    None => write!(
+                        f,
+                        "ast::walk: symbol #{sym} class {class} not recognised \
+                         (expected one of Loc, Glo, Fun, Sys)"
+                    ),
+                }
             }
         }
     }

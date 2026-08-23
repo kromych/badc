@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=4
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-3)                                    -> x0
     v2   LocalAddr(2)                                     -> x1
-    v3   Intrinsic { kind=4, args=[v1, v2] }              -> x0
+    v3   Intrinsic { kind=VaStart, args=[v1, v2] }        -> x0
     v4   Imm(0)                                           -> x0
     v5   StoreLocal { off=-4, value=v4, kind=F64 }        -> -
     v6   Imm(0)                                           -> x1
@@ -15,7 +15,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=4
     v14  LoadLocal { off=-4, kind=F64 }                   -> d0
     v15  LocalAddr(-3)                                    -> x1
     v16  Imm(65544)                                       -> x2
-    v17  Intrinsic { kind=5, args=[v15, v16] }            -> x1
+    v17  Intrinsic { kind=VaArg, args=[v15, v16] }        -> x1
     v18  Load { addr=v17, disp=0, kind=F64 }              -> d1
     v19  Binop { op=fadd, lhs=v14, rhs=v18 }              -> d0
     v20  StoreLocal { off=-4, value=v19, kind=F64 }       -> -
@@ -34,7 +34,7 @@ fn ent_pc=0 n_params=1 variadic=true locals=4
     terminator Bnz { cond=v10, target=b1, fall=b4 }   (exit_acc=v10)
   block 4  start_pc=0
     v22  LocalAddr(-3)                                    -> x0
-    v23  Intrinsic { kind=6, args=[v22] }                 -> x0
+    v23  Intrinsic { kind=VaEnd, args=[v22] }             -> x0
     v24  LoadLocal { off=-4, kind=F64 }                   -> d0
     terminator Return(v24)   (exit_acc=v24)
 ; --- SSA dump (ok=true) ent_pc=1 ---

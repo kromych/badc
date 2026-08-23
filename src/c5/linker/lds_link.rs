@@ -1200,8 +1200,9 @@ impl<'a> LdsLinker<'a> {
         for o in &objects {
             if o.class != class_for_machine(machine) {
                 return Err(err(&format!(
-                    "{}: ELF class does not match machine {machine}",
-                    o.source
+                    "{}: ELF class does not match machine {}",
+                    o.source,
+                    super::relocatable::elf_machine_desc(machine)
                 )));
             }
         }
@@ -5353,7 +5354,10 @@ impl<'a> LdsLinker<'a> {
             },
             EM_386 => self.apply_i386(buf, site, p, sa, r, errors, oi),
             EM_AARCH64 => self.apply_aarch64(buf, site, p, sa, r, alloc, relr_set, errors, oi),
-            _ => errors.push(format!("unsupported machine {machine}")),
+            _ => errors.push(format!(
+                "unsupported machine {}",
+                super::relocatable::elf_machine_desc(machine)
+            )),
         }
     }
 

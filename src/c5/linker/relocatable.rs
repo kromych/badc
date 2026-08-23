@@ -39,6 +39,31 @@ pub const EM_386: u16 = 3;
 pub const EM_X86_64: u16 = 62;
 pub const EM_AARCH64: u16 = 183;
 
+/// `e_machine` spelled as the psABI names it, for diagnostics. Covers the
+/// values a message is likely to carry, not the whole registry.
+pub fn elf_machine_name(e_machine: u16) -> Option<&'static str> {
+    match e_machine {
+        EM_386 => Some("EM_386"),
+        EM_X86_64 => Some("EM_X86_64"),
+        EM_AARCH64 => Some("EM_AARCH64"),
+        2 => Some("EM_SPARC"),
+        8 => Some("EM_MIPS"),
+        20 => Some("EM_PPC"),
+        21 => Some("EM_PPC64"),
+        40 => Some("EM_ARM"),
+        243 => Some("EM_RISCV"),
+        _ => None,
+    }
+}
+
+/// `EM_NAME (n)` when the value is known, `n` alone when it is not.
+pub fn elf_machine_desc(e_machine: u16) -> String {
+    match elf_machine_name(e_machine) {
+        Some(n) => format!("{n} ({e_machine})"),
+        None => format!("{e_machine}"),
+    }
+}
+
 const ET_REL: u16 = 1;
 const SHT_PROGBITS: u32 = 1;
 const SHT_SYMTAB: u32 = 2;

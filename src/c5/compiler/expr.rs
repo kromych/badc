@@ -343,10 +343,14 @@ impl Compiler {
     /// value is the `int` overflow flag.
     fn parse_overflow_builtin(&mut self, name: &str) -> Result<(), C5Error> {
         use super::super::ast::{Expr, ExprId};
-        let op = match name {
-            "__builtin_add_overflow" => 0i64,
-            "__builtin_sub_overflow" => 1,
-            _ => 2,
+        let typed = typed_overflow_builtin(name);
+        let op = match typed {
+            Some((op, _, _)) => op,
+            None => match name {
+                "__builtin_add_overflow" => 0i64,
+                "__builtin_sub_overflow" => 1,
+                _ => 2,
+            },
         };
         let mut args: Vec<ExprId> = Vec::new();
         let mut dst_ty = 0i64;
@@ -374,6 +378,22 @@ impl Compiler {
             );
         }
         let elem_ty = dst_ty - Ty::Ptr as i64;
+        // A type-specific form names the operand and result type, so the
+        // pointee must be that type rather than any integer type.
+        if let Some((_, unsigned, rank)) = typed {
+            let want = self.overflow_rank_width(rank);
+            if self.size_of_type(elem_ty) != want || is_unsigned_ty(elem_ty) != unsigned {
+                return Err(self.compile_err(format!(
+                    "`{name}` result pointer must be `{}{} *`",
+                    if unsigned { "unsigned " } else { "" },
+                    match rank {
+                        b'l' => "long",
+                        b'q' => "long long",
+                        _ => "int",
+                    }
+                )));
+            }
+        }
         self.mark_emit_other();
         let ty = Ty::Int as i64;
         let pos = self.ast_src_pos();
@@ -391,6 +411,16 @@ impl Compiler {
         self.ty = ty;
         self.ast_acc = Some(id);
         Ok(())
+    }
+
+    /// Byte width of the integer rank a type-specific checked-arithmetic
+    /// builtin names.
+    fn overflow_rank_width(&self, rank: u8) -> usize {
+        match rank {
+            b'l' => self.target.long_width_bytes(),
+            b'q' => 8,
+            _ => 4,
+        }
     }
 
     /// Parse an x86 SIMD builtin call (`__builtin_ia32_*`), the opening
@@ -1256,12 +1286,12 @@ impl Compiler {
                 // GCC checked-arithmetic builtins, lowered at the call
                 // site to a wrapped store plus an overflow test.
                 let is_overflow = not_real_fn
-                    && matches!(
+                    && (matches!(
                         self.symbols[id_idx].name.as_str(),
                         "__builtin_add_overflow"
                             | "__builtin_sub_overflow"
                             | "__builtin_mul_overflow"
-                    );
+                    ) || typed_overflow_builtin(&self.symbols[id_idx].name).is_some());
                 // GCC `__builtin_object_size`, folded to a constant at
                 // the call site (the pointer operand is unevaluated).
                 let is_object_size =
@@ -5865,6 +5895,33 @@ fn atomic_kind_from_intrinsic(id: i64) -> Option<super::super::ast::AtomicKind> 
 
 /// Map a GCC memory-transfer builtin name to its transfer kind;
 /// `None` for any other name.
+/// A type-specific checked-arithmetic builtin
+/// (`__builtin_{s,u}{add,sub,mul}{,l,ll}_overflow`), as
+/// `(op, unsigned, rank)`; `op` matches [`Expr::CheckedArith`] and `rank`
+/// is `i` / `l` / `q` for int / long / long long. gcc documents the
+/// family from 5.1; the generic three take any integer type instead.
+fn typed_overflow_builtin(name: &str) -> Option<(i64, bool, u8)> {
+    let rest = name.strip_prefix("__builtin_")?;
+    let (unsigned, rest) = match rest.strip_prefix('s') {
+        Some(r) => (false, r),
+        None => (true, rest.strip_prefix('u')?),
+    };
+    let (op, rest) = if let Some(r) = rest.strip_prefix("add") {
+        (0i64, r)
+    } else if let Some(r) = rest.strip_prefix("sub") {
+        (1, r)
+    } else {
+        (2, rest.strip_prefix("mul")?)
+    };
+    let rank = match rest {
+        "_overflow" => b'i',
+        "l_overflow" => b'l',
+        "ll_overflow" => b'q',
+        _ => return None,
+    };
+    Some((op, unsigned, rank))
+}
+
 fn mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
     use super::super::ast::MemTransferOp;
     Some(match name {

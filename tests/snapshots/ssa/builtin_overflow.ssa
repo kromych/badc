@@ -412,29 +412,447 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v293 LocalAddr(-1)                                    -> x2
     v294 Imm(121932631112635269)                          -> x2
     v295 Store { addr=v262, disp=0, value=v294, kind=I64 } -> -
-    v296 Imm(0)                                           -> x0
-    v297 Imm(0)                                           -> x0
-    v298 Imm(123456789)                                   -> x0
-    v299 Imm(987654321)                                   -> x0
-    v300 Imm(1)                                           -> x0
-    v301 Imm(0)                                           -> x0
-    v302 Imm(0)                                           -> x0
-    v303 Imm(0)                                           -> x2
+    v296 Imm(0)                                           -> x2
+    v297 Imm(0)                                           -> x2
+    v298 Imm(123456789)                                   -> x2
+    v299 Imm(987654321)                                   -> x2
+    v300 Imm(1)                                           -> x2
+    v301 Imm(0)                                           -> x2
+    v302 Imm(0)                                           -> x2
+    v303 Imm(0)                                           -> x6
     terminator Jmp(b60)   (exit_acc=v302)
   block 60  start_pc=0
-    v304 LoadLocal { off=-1, kind=I64 }                   -> x0
-    v305 BinopI { op=ne, lhs=v304, rhs_imm=121932631112635269 } -> x0
-    v306 Imm(0)                                           -> x2
+    v304 LoadLocal { off=-1, kind=I64 }                   -> x2
+    v305 BinopI { op=ne, lhs=v304, rhs_imm=121932631112635269 } -> x2
+    v306 Imm(0)                                           -> x6
     terminator Jmp(b61)   (exit_acc=v305)
   block 61  start_pc=0
-    v307 LoadLocal { off=-3, kind=I64 }                   -> x2
+    v307 LoadLocal { off=-3, kind=I64 }                   -> x6
     terminator Bz { cond=v305, target=b63, fall=b62 }   (exit_acc=v305)
   block 62  start_pc=0
     v308 Imm(17)                                          -> x0
     terminator Return(v308)   (exit_acc=v308)
   block 63  start_pc=0
-    v309 Imm(0)                                           -> x0
-    terminator Return(v275)   (exit_acc=v275)
+    v309 Imm(2147483647)                                  -> x2
+    v310 Imm(1)                                           -> x2
+    v311 LocalAddr(-1)                                    -> x2
+    v312 Imm(2147483648)                                  -> x2
+    v313 Imm(-9223372036854775808)                        -> x2
+    v314 Imm(-2147483648)                                 -> x2
+    v315 Store { addr=v262, disp=0, value=v314, kind=I32 } -> -
+    v316 Imm(1)                                           -> x2
+    v317 Imm(0)                                           -> x2
+    v318 Imm(0)                                           -> x6
+    terminator Jmp(b64)   (exit_acc=v317)
+  block 64  start_pc=0
+    v319 LoadLocal { off=-1, kind=I32 }                   -> x2
+    v320 Imm(-2147483648)                                 -> x6
+    v321 Imm(-9223372036854775808)                        -> x6
+    v322 BinopI { op=ne, lhs=v319, rhs_imm=-2147483648 }  -> x2
+    v323 Imm(0)                                           -> x6
+    terminator Jmp(b65)   (exit_acc=v322)
+  block 65  start_pc=0
+    v324 LoadLocal { off=-3, kind=I64 }                   -> x6
+    terminator Bz { cond=v322, target=b67, fall=b66 }   (exit_acc=v322)
+  block 66  start_pc=0
+    v325 Imm(18)                                          -> x0
+    terminator Return(v325)   (exit_acc=v325)
+  block 67  start_pc=0
+    v326 Imm(100)                                         -> x2
+    v327 Imm(23)                                          -> x2
+    v328 LocalAddr(-1)                                    -> x2
+    v329 Imm(123)                                         -> x2
+    v330 Imm(528280977408)                                -> x2
+    v331 Imm(123)                                         -> x2
+    v332 Store { addr=v262, disp=0, value=v331, kind=I32 } -> -
+    v333 Imm(0)                                           -> x2
+    v334 Imm(0)                                           -> x6
+    terminator Jmp(b68)   (exit_acc=v333)
+  block 68  start_pc=0
+    v335 LoadLocal { off=-1, kind=I32 }                   -> x2
+    v336 BinopI { op=ne, lhs=v335, rhs_imm=123 }          -> x2
+    v337 Imm(0)                                           -> x6
+    terminator Jmp(b69)   (exit_acc=v336)
+  block 69  start_pc=0
+    v338 LoadLocal { off=-3, kind=I64 }                   -> x6
+    terminator Bz { cond=v336, target=b71, fall=b70 }   (exit_acc=v336)
+  block 70  start_pc=0
+    v339 Imm(19)                                          -> x0
+    terminator Return(v339)   (exit_acc=v339)
+  block 71  start_pc=0
+    v340 Imm(-2147483648)                                 -> x2
+    v341 Imm(-9223372036854775808)                        -> x2
+    v342 Imm(1)                                           -> x2
+    v343 LocalAddr(-1)                                    -> x2
+    v344 Imm(-2147483649)                                 -> x2
+    v345 Imm(9223372032559808512)                         -> x2
+    v346 Imm(2147483647)                                  -> x2
+    v347 Store { addr=v262, disp=0, value=v346, kind=I32 } -> -
+    v348 Imm(1)                                           -> x2
+    v349 Imm(0)                                           -> x2
+    v350 Imm(0)                                           -> x6
+    terminator Jmp(b72)   (exit_acc=v349)
+  block 72  start_pc=0
+    v351 LoadLocal { off=-1, kind=I32 }                   -> x2
+    v352 BinopI { op=ne, lhs=v351, rhs_imm=2147483647 }   -> x2
+    v353 Imm(0)                                           -> x6
+    terminator Jmp(b73)   (exit_acc=v352)
+  block 73  start_pc=0
+    v354 LoadLocal { off=-3, kind=I64 }                   -> x6
+    terminator Bz { cond=v352, target=b75, fall=b74 }   (exit_acc=v352)
+  block 74  start_pc=0
+    v355 Imm(20)                                          -> x0
+    terminator Return(v355)   (exit_acc=v355)
+  block 75  start_pc=0
+    v356 Imm(65536)                                       -> x2
+    v357 LocalAddr(-1)                                    -> x2
+    v358 Imm(4294967296)                                  -> x2
+    v359 Imm(0)                                           -> x2
+    v360 Imm(0)                                           -> x2
+    v361 Store { addr=v262, disp=0, value=v275, kind=I32 } -> -
+    v362 Imm(1)                                           -> x0
+    v363 Imm(0)                                           -> x0
+    v364 Imm(0)                                           -> x1
+    terminator Jmp(b76)   (exit_acc=v363)
+  block 76  start_pc=0
+    v365 Imm(0)                                           -> x0
+    v366 Imm(0)                                           -> x0
+    v367 Imm(0)                                           -> x1
+    terminator Jmp(b77)   (exit_acc=v366)
+  block 77  start_pc=0
+    v368 LoadLocal { off=-3, kind=I64 }                   -> x1
+    terminator Jmp(b78)   (exit_acc=v366)
+  block 78  start_pc=0
+    v370 Imm(4294967295)                                  -> x0
+    v371 Imm(1)                                           -> x0
+    v372 LocalAddr(-1)                                    -> x0
+    v373 Imm(4294967296)                                  -> x1
+    v374 Imm(0)                                           -> x1
+    v375 Store { addr=v372, disp=0, value=v374, kind=I32 } -> -
+    v376 Imm(1)                                           -> x2
+    v377 Imm(0)                                           -> x2
+    v378 Imm(0)                                           -> x6
+    terminator Jmp(b79)   (exit_acc=v377)
+  block 79  start_pc=0
+    v379 Imm(0)                                           -> x2
+    v380 Imm(0)                                           -> x2
+    v381 Imm(0)                                           -> x6
+    terminator Jmp(b80)   (exit_acc=v380)
+  block 80  start_pc=0
+    v382 LoadLocal { off=-3, kind=I64 }                   -> x6
+    terminator Jmp(b81)   (exit_acc=v380)
+  block 81  start_pc=0
+    v384 Imm(3)                                           -> x2
+    v385 Imm(5)                                           -> x2
+    v386 LocalAddr(-1)                                    -> x2
+    v387 Imm(-2)                                          -> x2
+    v388 Imm(4294967294)                                  -> x2
+    v389 Store { addr=v372, disp=0, value=v388, kind=I32 } -> -
+    v390 Imm(1)                                           -> x2
+    v391 Imm(0)                                           -> x2
+    v392 Imm(0)                                           -> x6
+    terminator Jmp(b82)   (exit_acc=v391)
+  block 82  start_pc=0
+    v393 LoadLocal { off=-1, kind=U32 }                   -> x2
+    v394 BinopI { op=ne, lhs=v393, rhs_imm=4294967294 }   -> x2
+    v395 Imm(0)                                           -> x6
+    terminator Jmp(b83)   (exit_acc=v394)
+  block 83  start_pc=0
+    v396 LoadLocal { off=-3, kind=I64 }                   -> x6
+    terminator Bz { cond=v394, target=b85, fall=b84 }   (exit_acc=v394)
+  block 84  start_pc=0
+    v397 Imm(23)                                          -> x0
+    terminator Return(v397)   (exit_acc=v397)
+  block 85  start_pc=0
+    v398 Imm(65536)                                       -> x2
+    v399 LocalAddr(-1)                                    -> x2
+    v400 Imm(4294967296)                                  -> x2
+    v401 Imm(0)                                           -> x2
+    v402 Store { addr=v372, disp=0, value=v374, kind=I32 } -> -
+    v403 Imm(1)                                           -> x1
+    v404 Imm(0)                                           -> x1
+    v405 Imm(0)                                           -> x2
+    terminator Jmp(b86)   (exit_acc=v404)
+  block 86  start_pc=0
+    v406 Imm(0)                                           -> x1
+    v407 Imm(0)                                           -> x1
+    v408 Imm(0)                                           -> x2
+    terminator Jmp(b87)   (exit_acc=v407)
+  block 87  start_pc=0
+    v409 LoadLocal { off=-3, kind=I64 }                   -> x2
+    terminator Jmp(b88)   (exit_acc=v407)
+  block 88  start_pc=0
+    v411 Imm(1)                                           -> x1
+    v412 Imm(2)                                           -> x1
+    v413 LocalAddr(-1)                                    -> x1
+    v414 Imm(3)                                           -> x1
+    v415 Store { addr=v372, disp=0, value=v414, kind=I64 } -> -
+    v416 Imm(2)                                           -> x2
+    v417 Imm(1)                                           -> x2
+    v418 Imm(0)                                           -> x2
+    v419 Imm(0)                                           -> x2
+    v420 Imm(0)                                           -> x2
+    v421 Imm(0)                                           -> x6
+    terminator Jmp(b89)   (exit_acc=v420)
+  block 89  start_pc=0
+    v422 LoadLocal { off=-1, kind=I64 }                   -> x2
+    v423 BinopI { op=ne, lhs=v422, rhs_imm=3 }            -> x2
+    v424 Imm(0)                                           -> x6
+    terminator Jmp(b90)   (exit_acc=v423)
+  block 90  start_pc=0
+    v425 LoadLocal { off=-3, kind=I64 }                   -> x6
+    terminator Bz { cond=v423, target=b92, fall=b91 }   (exit_acc=v423)
+  block 91  start_pc=0
+    v426 Imm(25)                                          -> x0
+    terminator Return(v426)   (exit_acc=v426)
+  block 92  start_pc=0
+    v427 Imm(5)                                           -> x2
+    v428 Imm(3)                                           -> x2
+    v429 LocalAddr(-1)                                    -> x2
+    v430 Imm(2)                                           -> x2
+    v431 Store { addr=v372, disp=0, value=v430, kind=I64 } -> -
+    v432 Imm(6)                                           -> x2
+    v433 Imm(7)                                           -> x2
+    v434 Imm(6)                                           -> x2
+    v435 Imm(0)                                           -> x2
+    v436 Imm(0)                                           -> x2
+    v437 Imm(0)                                           -> x6
+    terminator Jmp(b93)   (exit_acc=v436)
+  block 93  start_pc=0
+    v438 LoadLocal { off=-1, kind=I64 }                   -> x2
+    v439 BinopI { op=ne, lhs=v438, rhs_imm=2 }            -> x2
+    v440 Imm(0)                                           -> x6
+    terminator Jmp(b94)   (exit_acc=v439)
+  block 94  start_pc=0
+    v441 LoadLocal { off=-3, kind=I64 }                   -> x6
+    terminator Bz { cond=v439, target=b96, fall=b95 }   (exit_acc=v439)
+  block 95  start_pc=0
+    v442 Imm(26)                                          -> x0
+    terminator Return(v442)   (exit_acc=v442)
+  block 96  start_pc=0
+    v443 Imm(6)                                           -> x2
+    v444 Imm(7)                                           -> x2
+    v445 LocalAddr(-1)                                    -> x2
+    v446 Imm(42)                                          -> x2
+    v447 Store { addr=v372, disp=0, value=v446, kind=I64 } -> -
+    v448 Imm(0)                                           -> x0
+    v449 Imm(-1)                                          -> x0
+    v450 Imm(1)                                           -> x0
+    v451 Imm(0)                                           -> x0
+    v452 Imm(0)                                           -> x0
+    v453 Imm(0)                                           -> x0
+    v454 Imm(1)                                           -> x0
+    v455 Imm(6)                                           -> x0
+    v456 Imm(6)                                           -> x0
+    v457 Imm(7)                                           -> x0
+    v458 Imm(0)                                           -> x0
+    v459 Imm(0)                                           -> x0
+    v460 Imm(-9223372036854775808)                        -> x0
+    v461 Imm(0)                                           -> x0
+    v462 Imm(0)                                           -> x0
+    v463 Imm(0)                                           -> x0
+    v464 Imm(0)                                           -> x2
+    terminator Jmp(b97)   (exit_acc=v463)
+  block 97  start_pc=0
+    v465 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v466 BinopI { op=ne, lhs=v465, rhs_imm=42 }           -> x0
+    v467 Imm(0)                                           -> x2
+    terminator Jmp(b98)   (exit_acc=v466)
+  block 98  start_pc=0
+    v468 LoadLocal { off=-3, kind=I64 }                   -> x2
+    terminator Bz { cond=v466, target=b100, fall=b99 }   (exit_acc=v466)
+  block 99  start_pc=0
+    v469 Imm(27)                                          -> x0
+    terminator Return(v469)   (exit_acc=v469)
+  block 100  start_pc=0
+    v470 Imm(1)                                           -> x0
+    v471 Imm(2)                                           -> x0
+    v472 LocalAddr(-1)                                    -> x0
+    v473 Imm(3)                                           -> x2
+    v474 Store { addr=v472, disp=0, value=v414, kind=I64 } -> -
+    v475 Imm(0)                                           -> x1
+    v476 Imm(0)                                           -> x2
+    terminator Jmp(b101)   (exit_acc=v475)
+  block 101  start_pc=0
+    v477 LoadLocal { off=-1, kind=I64 }                   -> x1
+    v478 BinopI { op=ne, lhs=v477, rhs_imm=3 }            -> x1
+    v479 Imm(0)                                           -> x2
+    terminator Jmp(b102)   (exit_acc=v478)
+  block 102  start_pc=0
+    v480 LoadLocal { off=-3, kind=I64 }                   -> x2
+    terminator Bz { cond=v478, target=b104, fall=b103 }   (exit_acc=v478)
+  block 103  start_pc=0
+    v481 Imm(28)                                          -> x0
+    terminator Return(v481)   (exit_acc=v481)
+  block 104  start_pc=0
+    v482 Imm(0)                                           -> x1
+    v483 Imm(1)                                           -> x1
+    v484 LocalAddr(-1)                                    -> x1
+    v485 Imm(-1)                                          -> x2
+    v486 Store { addr=v472, disp=0, value=v485, kind=I64 } -> -
+    v487 Imm(1)                                           -> x1
+    v488 Imm(0)                                           -> x1
+    v489 Imm(0)                                           -> x6
+    terminator Jmp(b105)   (exit_acc=v488)
+  block 105  start_pc=0
+    v490 LoadLocal { off=-1, kind=I64 }                   -> x1
+    v491 Imm(-1)                                          -> x6
+    v492 BinopI { op=ne, lhs=v490, rhs_imm=-1 }           -> x1
+    v493 Imm(0)                                           -> x6
+    terminator Jmp(b106)   (exit_acc=v492)
+  block 106  start_pc=0
+    v494 LoadLocal { off=-3, kind=I64 }                   -> x6
+    terminator Bz { cond=v492, target=b108, fall=b107 }   (exit_acc=v492)
+  block 107  start_pc=0
+    v495 Imm(29)                                          -> x0
+    terminator Return(v495)   (exit_acc=v495)
+  block 108  start_pc=0
+    v496 Imm(9223372036854775807)                         -> x1
+    v497 Imm(1)                                           -> x1
+    v498 LocalAddr(-2)                                    -> x6
+    v499 Imm(-9223372036854775808)                        -> x1
+    v500 Store { addr=v498, disp=0, value=v499, kind=I64 } -> -
+    v501 Imm(-1)                                          -> x1
+    v502 Imm(-9223372036854775807)                        -> x1
+    v503 Imm(-9223372036854775807)                        -> x1
+    v504 Imm(0)                                           -> x1
+    v505 Imm(1)                                           -> x1
+    v506 Imm(0)                                           -> x1
+    v507 Imm(0)                                           -> x7
+    terminator Jmp(b109)   (exit_acc=v506)
+  block 109  start_pc=0
+    v508 LoadLocal { off=-2, kind=I64 }                   -> x1
+    v509 Imm(-9223372036854775808)                        -> x7
+    v510 BinopI { op=ne, lhs=v508, rhs_imm=-9223372036854775808 } -> x1
+    v511 Imm(0)                                           -> x7
+    terminator Jmp(b110)   (exit_acc=v510)
+  block 110  start_pc=0
+    v512 LoadLocal { off=-3, kind=I64 }                   -> x7
+    terminator Bz { cond=v510, target=b112, fall=b111 }   (exit_acc=v510)
+  block 111  start_pc=0
+    v513 Imm(30)                                          -> x0
+    terminator Return(v513)   (exit_acc=v513)
+  block 112  start_pc=0
+    v514 Imm(4294967296)                                  -> x1
+    v515 LocalAddr(-2)                                    -> x1
+    v516 Imm(0)                                           -> x1
+    v517 Store { addr=v498, disp=0, value=v516, kind=I64 } -> -
+    v518 Imm(0)                                           -> x6
+    v519 Imm(-1)                                          -> x6
+    v520 Imm(1)                                           -> x6
+    v521 Imm(0)                                           -> x6
+    v522 Imm(0)                                           -> x6
+    v523 Imm(0)                                           -> x6
+    v524 Imm(1)                                           -> x6
+    v525 Imm(4294967296)                                  -> x6
+    v526 Imm(4294967296)                                  -> x6
+    v527 Imm(0)                                           -> x6
+    v528 Imm(1)                                           -> x6
+    v529 Imm(1)                                           -> x6
+    v530 Imm(-9223372036854775808)                        -> x6
+    v531 Imm(0)                                           -> x6
+    v532 Imm(0)                                           -> x6
+    v533 Imm(1)                                           -> x6
+    v534 Imm(0)                                           -> x6
+    v535 Imm(0)                                           -> x7
+    terminator Jmp(b113)   (exit_acc=v534)
+  block 113  start_pc=0
+    v536 Imm(0)                                           -> x6
+    v537 Imm(0)                                           -> x6
+    v538 Imm(0)                                           -> x7
+    terminator Jmp(b114)   (exit_acc=v537)
+  block 114  start_pc=0
+    v539 LoadLocal { off=-3, kind=I64 }                   -> x7
+    terminator Jmp(b115)   (exit_acc=v537)
+  block 115  start_pc=0
+    v541 Imm(-1)                                          -> x6
+    v542 Imm(1)                                           -> x6
+    v543 LocalAddr(-1)                                    -> x6
+    v544 Imm(0)                                           -> x6
+    v545 Store { addr=v472, disp=0, value=v516, kind=I64 } -> -
+    v546 Imm(1)                                           -> x6
+    v547 Imm(0)                                           -> x6
+    v548 Imm(0)                                           -> x7
+    terminator Jmp(b116)   (exit_acc=v547)
+  block 116  start_pc=0
+    v549 Imm(0)                                           -> x6
+    v550 Imm(0)                                           -> x6
+    v551 Imm(0)                                           -> x7
+    terminator Jmp(b117)   (exit_acc=v550)
+  block 117  start_pc=0
+    v552 LoadLocal { off=-3, kind=I64 }                   -> x7
+    terminator Jmp(b118)   (exit_acc=v550)
+  block 118  start_pc=0
+    v554 Imm(0)                                           -> x6
+    v555 Imm(1)                                           -> x6
+    v556 LocalAddr(-1)                                    -> x6
+    v557 Imm(-1)                                          -> x6
+    v558 Store { addr=v472, disp=0, value=v485, kind=I64 } -> -
+    v559 Imm(1)                                           -> x2
+    v560 Imm(0)                                           -> x2
+    v561 Imm(0)                                           -> x6
+    terminator Jmp(b119)   (exit_acc=v560)
+  block 119  start_pc=0
+    v562 LoadLocal { off=-1, kind=I64 }                   -> x2
+    v563 BinopI { op=ne, lhs=v562, rhs_imm=-1 }           -> x2
+    v564 Imm(0)                                           -> x6
+    terminator Jmp(b120)   (exit_acc=v563)
+  block 120  start_pc=0
+    v565 LoadLocal { off=-3, kind=I64 }                   -> x6
+    terminator Bz { cond=v563, target=b122, fall=b121 }   (exit_acc=v563)
+  block 121  start_pc=0
+    v566 Imm(33)                                          -> x0
+    terminator Return(v566)   (exit_acc=v566)
+  block 122  start_pc=0
+    v567 Imm(4294967296)                                  -> x2
+    v568 LocalAddr(-1)                                    -> x2
+    v569 Imm(0)                                           -> x2
+    v570 Store { addr=v472, disp=0, value=v516, kind=I64 } -> -
+    v571 Imm(0)                                           -> x0
+    v572 Imm(0)                                           -> x0
+    v573 Imm(4294967296)                                  -> x0
+    v574 Imm(0)                                           -> x0
+    v575 Imm(1)                                           -> x0
+    v576 Imm(1)                                           -> x0
+    v577 Imm(1)                                           -> x0
+    v578 Imm(0)                                           -> x0
+    v579 Imm(0)                                           -> x1
+    terminator Jmp(b123)   (exit_acc=v578)
+  block 123  start_pc=0
+    v580 Imm(0)                                           -> x0
+    v581 Imm(0)                                           -> x0
+    v582 Imm(0)                                           -> x1
+    terminator Jmp(b124)   (exit_acc=v581)
+  block 124  start_pc=0
+    v583 LoadLocal { off=-3, kind=I64 }                   -> x1
+    terminator Jmp(b125)   (exit_acc=v581)
+  block 125  start_pc=0
+    v585 Imm(5)                                           -> x0
+    v586 Imm(3)                                           -> x0
+    v587 LocalAddr(-2)                                    -> x0
+    v588 Imm(2)                                           -> x1
+    v589 Store { addr=v587, disp=0, value=v588, kind=I64 } -> -
+    v590 Imm(6)                                           -> x0
+    v591 Imm(7)                                           -> x0
+    v592 Imm(6)                                           -> x0
+    v593 Imm(0)                                           -> x0
+    v594 Imm(0)                                           -> x0
+    v595 Imm(0)                                           -> x1
+    terminator Jmp(b126)   (exit_acc=v594)
+  block 126  start_pc=0
+    v596 LoadLocal { off=-2, kind=I64 }                   -> x0
+    v597 BinopI { op=ne, lhs=v596, rhs_imm=2 }            -> x0
+    v598 Imm(0)                                           -> x1
+    terminator Jmp(b127)   (exit_acc=v597)
+  block 127  start_pc=0
+    v599 LoadLocal { off=-3, kind=I64 }                   -> x1
+    terminator Bz { cond=v597, target=b129, fall=b128 }   (exit_acc=v597)
+  block 128  start_pc=0
+    v600 Imm(35)                                          -> x0
+    terminator Return(v600)   (exit_acc=v600)
+  block 129  start_pc=0
+    v601 Imm(0)                                           -> x0
+    terminator Return(v601)   (exit_acc=v601)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -2693,6 +2693,40 @@ fn atomic128_is_rejected_not_miscompiled() {
     }
 }
 
+/// The type-specific checked-arithmetic builtins name their operand and
+/// result type, so the result pointer's pointee must be that type; the
+/// generic three take any integer type.
+#[test]
+fn typed_overflow_builtins_check_their_result_pointer() {
+    crate::Compiler::new(
+        "int main(void) { int s; unsigned long ul; long long sll;          return __builtin_sadd_overflow(1, 2, &s)              + __builtin_uaddl_overflow(1UL, 2UL, &ul)              + __builtin_smulll_overflow(1LL, 2LL, &sll); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("the type-specific overflow builtins must compile over their own types");
+    let Err(err) = crate::Compiler::new(
+        "int main(void) { long x; return __builtin_sadd_overflow(1, 2, &x); }".to_string(),
+    )
+    .compile() else {
+        panic!("a mismatched result pointer must be rejected");
+    };
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("must be `int *`"),
+        "names the required pointee type: {msg}"
+    );
+    let Err(err) = crate::Compiler::new(
+        "int main(void) { int x; return __builtin_uadd_overflow(1u, 2u, &x); }".to_string(),
+    )
+    .compile() else {
+        panic!("a signedness mismatch must be rejected");
+    };
+    assert!(
+        format!("{err:?}").contains("must be `unsigned int *`"),
+        "names the required pointee type: {err:?}"
+    );
+}
+
 /// `__builtin_*_overflow` with a 128-bit operand or result lowers over
 /// the two halves on every target: the walk must produce the wrapped
 /// value and the flag inline, with no call to a runtime helper. The

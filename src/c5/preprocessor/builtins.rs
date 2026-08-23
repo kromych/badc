@@ -129,6 +129,26 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__builtin_add_overflow"),
     direct("__builtin_sub_overflow"),
     direct("__builtin_mul_overflow"),
+    // The type-specific forms of the same family: the name fixes the
+    // operand and result type instead of the result pointer's pointee.
+    direct("__builtin_sadd_overflow"),
+    direct("__builtin_saddl_overflow"),
+    direct("__builtin_saddll_overflow"),
+    direct("__builtin_uadd_overflow"),
+    direct("__builtin_uaddl_overflow"),
+    direct("__builtin_uaddll_overflow"),
+    direct("__builtin_ssub_overflow"),
+    direct("__builtin_ssubl_overflow"),
+    direct("__builtin_ssubll_overflow"),
+    direct("__builtin_usub_overflow"),
+    direct("__builtin_usubl_overflow"),
+    direct("__builtin_usubll_overflow"),
+    direct("__builtin_smul_overflow"),
+    direct("__builtin_smull_overflow"),
+    direct("__builtin_smulll_overflow"),
+    direct("__builtin_umul_overflow"),
+    direct("__builtin_umull_overflow"),
+    direct("__builtin_umulll_overflow"),
     // Memory transfers with an integer-constant-expression byte count,
     // expanded inline at the call site. A count the expansion declines
     // is emitted as a call to the library function of the same name.

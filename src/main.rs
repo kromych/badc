@@ -235,6 +235,39 @@ Compile knobs:
                            function against its predecessor. A symbol's
                            size covers its instructions only; the fill
                            belongs to no function.
+  -fstack-protector        Give a stack canary to every function holding
+                           a character array of at least --param
+                           ssp-buffer-size= bytes (default 8), or calling
+                           alloca / declaring a variable-length array.
+                           The canary sits between the locals and the
+                           saved return address; a mismatch on return
+                           calls __stack_chk_fail.
+  -fstack-protector-strong Also protect a function holding an array of
+                           any element type, an aggregate with an array
+                           member, or an automatic object whose address
+                           the body takes.
+  -fstack-protector-all    Protect every function.
+  -fno-stack-protector     Protect none (the default).
+  --param ssp-buffer-size=N
+                           Least character-array size, in bytes, that
+                           -fstack-protector protects a function for.
+  -mstack-protector-guard=global|tls|sysreg
+                           Where the guard value is read from. The
+                           default follows the target: %fs:0x28 on
+                           Linux/x86-64, the __stack_chk_guard object
+                           elsewhere. `tls` is x86-64 only, `sysreg`
+                           aarch64 only.
+  -mstack-protector-guard-reg=R
+                           Segment register (fs, gs) under =tls, or the
+                           AArch64 system register name under =sysreg.
+  -mstack-protector-guard-offset=N
+                           Byte offset of the guard within the thread
+                           block (=tls) or above the system register's
+                           value (=sysreg).
+  -mstack-protector-guard-symbol=NAME
+                           Read the guard from NAME instead of
+                           __stack_chk_guard. Not combinable with
+                           -mstack-protector-guard-offset=.
   -fshort-wchar            Give wchar_t an unsigned 16-bit type instead
                            of the target's default, narrowing the
                            elements of L-prefixed string and character
@@ -629,6 +662,13 @@ fn run() {
     let mut code_model = badc::CodeModel::Small;
     let mut code_model_tiny = false;
     let mut hardening = badc::Hardening::NONE;
+    let mut stack_protect = badc::StackProtect::OFF;
+    // `-mstack-protector-guard-reg=` on aarch64 names a system register the
+    // guard offset applies to; the `sysreg` form needs both, so the operands
+    // are collected as they arrive and combined once the loop ends.
+    let mut ssp_guard_kind: Option<&'static str> = None;
+    let mut ssp_guard_reg: Option<String> = None;
+    let mut ssp_guard_offset: Option<i32> = None;
     // `--export-all` exports every non-static function in the dynamic
     // symbol table / export trie of native output, so a runtime
     // `dlopen` consumer can `dlsym` it without a source-level `#pragma
@@ -1122,6 +1162,104 @@ fn run() {
             // configurations must not take.
             "-fjump-tables" => jump_tables = true,
             "-fno-jump-tables" => jump_tables = false,
+            // gcc `-fstack-protector*`: which functions carry a stack
+            // canary. The per-function rule is gcc's, applied to the
+            // declared automatic objects; see `StackProtector`.
+            "-fno-stack-protector" => stack_protect.mode = badc::StackProtector::Off,
+            "-fstack-protector" => stack_protect.mode = badc::StackProtector::Basic,
+            "-fstack-protector-strong" => stack_protect.mode = badc::StackProtector::Strong,
+            "-fstack-protector-all" => stack_protect.mode = badc::StackProtector::All,
+            // gcc `--param <name>=<value>`, in both the separate-argument
+            // and joined spellings. `ssp-buffer-size` is the only name with
+            // an effect here; an unrecognized one is rejected rather than
+            // dropped, so a tuning request cannot pass silently.
+            s if s == "--param" || s.starts_with("--param=") => {
+                let spec = if s == "--param" {
+                    match iter.next() {
+                        Some(v) => v,
+                        None => {
+                            eprint_diagnostic("badc: error: `--param` takes an argument");
+                            std::process::exit(1);
+                        }
+                    }
+                } else {
+                    s["--param=".len()..].to_string()
+                };
+                let (name, value) = match spec.split_once('=') {
+                    Some(p) => p,
+                    None => {
+                        eprint_diagnostic(format!(
+                            "badc: error: `--param` takes `<name>=<value>`, got `{spec}`"
+                        ));
+                        std::process::exit(1);
+                    }
+                };
+                if name != "ssp-buffer-size" {
+                    eprint_diagnostic(format!(
+                        "badc: error: unsupported `--param` name `{name}` \
+                         (supported: ssp-buffer-size)"
+                    ));
+                    std::process::exit(1);
+                }
+                match value.parse::<u32>() {
+                    Ok(n) if n > 0 => stack_protect.buffer_size = n,
+                    _ => {
+                        eprint_diagnostic(format!(
+                            "badc: error: `ssp-buffer-size` takes a positive \
+                             integer, got `{value}`"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
+            // gcc `-mstack-protector-guard=`: where the guard value lives.
+            // `tls` is the x86-64 segment-relative form, `sysreg` the
+            // aarch64 system-register form, `global` the `__stack_chk_guard`
+            // object. Validated against the target once the loop ends.
+            s if s.starts_with("-mstack-protector-guard=") => {
+                ssp_guard_kind = match &s["-mstack-protector-guard=".len()..] {
+                    "global" => Some("global"),
+                    "tls" => Some("tls"),
+                    "sysreg" => Some("sysreg"),
+                    other => {
+                        eprint_diagnostic(format!(
+                            "badc: error: unsupported argument `{other}` to \
+                             `-mstack-protector-guard=` (supported: global, tls, sysreg)"
+                        ));
+                        std::process::exit(1);
+                    }
+                };
+            }
+            s if s.starts_with("-mstack-protector-guard-reg=") => {
+                ssp_guard_reg = Some(s["-mstack-protector-guard-reg=".len()..].to_string());
+            }
+            s if s.starts_with("-mstack-protector-guard-offset=") => {
+                let spec = &s["-mstack-protector-guard-offset=".len()..];
+                match parse_c_integer(spec) {
+                    Some(n) => ssp_guard_offset = Some(n),
+                    None => {
+                        eprint_diagnostic(format!(
+                            "badc: error: `-mstack-protector-guard-offset=` takes \
+                             an integer, got `{spec}`"
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
+            s if s.starts_with("-mstack-protector-guard-symbol=") => {
+                let spec = &s["-mstack-protector-guard-symbol=".len()..];
+                match badc::GuardSymbol::new(spec) {
+                    Some(g) => stack_protect.guard_symbol = g,
+                    None => {
+                        eprint_diagnostic(format!(
+                            "badc: error: `-mstack-protector-guard-symbol=` takes \
+                             a symbol name of 1 to {} bytes, got `{spec}`",
+                            badc::GuardSymbol::CAP
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
             // gcc `-fmin-function-alignment=N`: every function entry lands
             // on a multiple of N, which is how a kernel states
             // CONFIG_FUNCTION_ALIGNMENT. Unlike `-falign-functions` gcc
@@ -1561,6 +1699,114 @@ fn run() {
     // the combination).
     // `tiny` is an aarch64 model (gcc: tiny/small/large there,
     // small/kernel/medium/large on x86-64).
+    // `--jit` and `--interp` execute in this process: the JIT resolves no
+    // undefined symbol and the interpreter has no machine frame at all, so
+    // neither can carry a canary.
+    if stack_protect.mode != badc::StackProtector::Off && matches!(mode, Mode::Jit | Mode::Interp) {
+        eprint_diagnostic(
+            "badc: error: `-fstack-protector*` needs a compiled output: \
+             `--jit` and `--interp` execute in this process and reach no \
+             `__stack_chk_fail`",
+        );
+        std::process::exit(1);
+    }
+    // The canary sequences name the System V handler and guard object.
+    // Windows targets link against msvcrt, which exports neither (the
+    // Microsoft scheme is `__security_cookie` / `__security_check_cookie`,
+    // which badc does not emit), so an object built here would reference
+    // symbols nothing defines.
+    // TODO: emit the Microsoft cookie sequence for the Windows targets.
+    if stack_protect.mode != badc::StackProtector::Off && target.is_windows() {
+        eprint_diagnostic(
+            "badc: error: `-fstack-protector*` is not implemented for the Windows \
+             targets: their C library exports neither `__stack_chk_guard` nor \
+             `__stack_chk_fail`",
+        );
+        std::process::exit(1);
+    }
+    // `-mstack-protector-guard*`: the operands only make sense together and
+    // only on the architecture whose form they name, so the combination is
+    // checked once the target is known. An unusable one is an error rather
+    // than a default, since a guard read from the wrong place would leave
+    // the image claiming a protection it does not have.
+    if let Some(kind) = ssp_guard_kind {
+        stack_protect.guard = match kind {
+            "global" => badc::StackGuard::Global,
+            "tls" => {
+                if !target.is_x86_64() {
+                    eprint_diagnostic(
+                        "badc: error: `-mstack-protector-guard=tls` is an x86-64 form; \
+                         use `global` or `sysreg`",
+                    );
+                    std::process::exit(1);
+                }
+                let seg = match ssp_guard_reg.as_deref() {
+                    None | Some("fs") => badc::GuardSeg::Fs,
+                    Some("gs") => badc::GuardSeg::Gs,
+                    Some(other) => {
+                        eprint_diagnostic(format!(
+                            "badc: error: unsupported argument `{other}` to \
+                             `-mstack-protector-guard-reg=` under `=tls` (supported: fs, gs)"
+                        ));
+                        std::process::exit(1);
+                    }
+                };
+                badc::StackGuard::Tls {
+                    seg,
+                    offset: ssp_guard_offset.unwrap_or(badc::SYSV_TLS_GUARD_OFFSET),
+                }
+            }
+            _ => {
+                if !target.is_aarch64() {
+                    eprint_diagnostic(
+                        "badc: error: `-mstack-protector-guard=sysreg` is an aarch64 form; \
+                         use `global` or `tls`",
+                    );
+                    std::process::exit(1);
+                }
+                let (Some(reg), Some(offset)) = (ssp_guard_reg.as_deref(), ssp_guard_offset) else {
+                    eprint_diagnostic(
+                        "badc: error: `-mstack-protector-guard=sysreg` needs both \
+                         `-mstack-protector-guard-reg=` and `-mstack-protector-guard-offset=`",
+                    );
+                    std::process::exit(1);
+                };
+                let Some(sysreg) = badc::stack_guard_sysreg(reg) else {
+                    eprint_diagnostic(format!(
+                        "badc: error: `-mstack-protector-guard-reg={reg}` names no \
+                         AArch64 system register"
+                    ));
+                    std::process::exit(1);
+                };
+                badc::StackGuard::Sysreg { sysreg, offset }
+            }
+        };
+    } else if ssp_guard_reg.is_some() || ssp_guard_offset.is_some() {
+        eprint_diagnostic(
+            "badc: error: `-mstack-protector-guard-reg=` / \
+             `-mstack-protector-guard-offset=` need `-mstack-protector-guard=`",
+        );
+        std::process::exit(1);
+    }
+    if !stack_protect.guard_symbol.is_empty() && ssp_guard_offset.is_some() {
+        eprint_diagnostic(
+            "badc: error: `-mstack-protector-guard-symbol=` and \
+             `-mstack-protector-guard-offset=` are mutually exclusive",
+        );
+        std::process::exit(1);
+    }
+    if !stack_protect.guard_symbol.is_empty()
+        && !matches!(
+            stack_protect.guard,
+            badc::StackGuard::Global | badc::StackGuard::Tls { .. }
+        )
+    {
+        eprint_diagnostic(
+            "badc: error: `-mstack-protector-guard-symbol=` applies to the \
+             `global` and `tls` guard forms only",
+        );
+        std::process::exit(1);
+    }
     if code_model_tiny && target != badc::Target::LinuxAarch64 {
         eprint_diagnostic(
             "badc: error: `-mcmodel=tiny` requires an aarch64 ELF target \
@@ -2304,6 +2550,7 @@ fn run() {
         reloc_opts.pic_link = true;
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
+        reloc_opts.stack_protect = stack_protect;
         reloc_opts.elf_class = object_elf_class;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
@@ -2393,6 +2640,11 @@ fn run() {
             };
             let mut opts = reloc_opts;
             opts.dump_ssa &= dump;
+            // The runtime and the on-demand pool carry the stack-protector
+            // handler and the entry stub the canary check would otherwise
+            // guard; every toolchain builds them unprotected, and a canary
+            // inside the handler would recurse on a real check failure.
+            opts.stack_protect = badc::StackProtect::OFF;
             match badc::emit_native_with_options_owned(program, target, opts) {
                 Ok(b) => b,
                 Err(e) => {
@@ -3022,6 +3274,7 @@ fn run() {
         reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
+        reloc_opts.stack_protect = stack_protect;
         reloc_opts.elf_class = object_elf_class;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
@@ -3159,6 +3412,7 @@ fn run() {
         reloc_opts.pic_link = pic_link_default(fno_pic, code_model);
         reloc_opts.code_model = code_model;
         reloc_opts.hardening = hardening;
+        reloc_opts.stack_protect = stack_protect;
         reloc_opts.elf_class = object_elf_class;
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
@@ -4179,6 +4433,20 @@ fn native_defined_globals_logged(
             Err(())
         }
     }
+}
+
+/// Parse an option operand written as a C integer: optional sign, then
+/// decimal or `0x`-prefixed hexadecimal.
+fn parse_c_integer(spec: &str) -> Option<i32> {
+    let (neg, body) = match spec.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, spec.strip_prefix('+').unwrap_or(spec)),
+    };
+    let magnitude = match body.strip_prefix("0x").or_else(|| body.strip_prefix("0X")) {
+        Some(hex) => i64::from_str_radix(hex, 16).ok()?,
+        None => body.parse::<i64>().ok()?,
+    };
+    i32::try_from(if neg { -magnitude } else { magnitude }).ok()
 }
 
 fn eprint_diagnostic(msg: impl core::fmt::Display) {

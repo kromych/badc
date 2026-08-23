@@ -3707,20 +3707,32 @@ fn a_c_library_on_the_search_path_does_not_change_the_image() {
         std::fs::write(decoy.join(name), b"").expect("write decoy library");
     }
     let search = format!("-L{}", decoy.display());
-    let mut images: Vec<Vec<u8>> = Vec::new();
-    for (tag, extra) in [("plain", None), ("decoy", Some(search.as_str()))] {
-        let out_dir = dir.join(tag);
-        std::fs::create_dir_all(&out_dir).expect("create output dir");
-        let exe = out_dir.join("m");
-        let mut cmd = Command::new(badc());
-        cmd.args(extra).arg("-o").arg(&exe).arg(&src);
-        run(&mut cmd, &format!("link with the {tag} search path"));
-        images.push(std::fs::read(&exe).expect("read image"));
+    // Named targets rather than the host's: the implicit C library is
+    // described by the target, and PE has no entry, so a Windows host
+    // would otherwise link a header-less name it cannot resolve.
+    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+        let mut images: Vec<Vec<u8>> = Vec::new();
+        for (tag, extra) in [("plain", None), ("decoy", Some(search.as_str()))] {
+            let out_dir = dir.join(format!("{tag}-{target}"));
+            std::fs::create_dir_all(&out_dir).expect("create output dir");
+            let exe = out_dir.join("m");
+            let mut cmd = Command::new(badc());
+            cmd.arg(format!("--target={target}"))
+                .args(extra)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src);
+            run(
+                &mut cmd,
+                &format!("{target}: link with the {tag} search path"),
+            );
+            images.push(std::fs::read(&exe).expect("read image"));
+        }
+        assert_eq!(
+            images[0], images[1],
+            "{target}: a C library on the search path must not change the image"
+        );
     }
-    assert_eq!(
-        images[0], images[1],
-        "a C library on the search path must not change the image"
-    );
 }
 
 // A load through an extern data symbol must not fold against this unit's

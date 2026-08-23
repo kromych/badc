@@ -248,13 +248,15 @@ fn asm_operand_const_rec(func: &crate::c5::ir::FunctionSsa, arg: u32, depth: u32
 /// alone. A cast that narrows lowers to a mask or an `Extend`, neither of
 /// which the walk crosses -- the truncated value is not the address.
 ///
-/// SSA operands precede their defs, so the walk strictly decreases the
-/// value-id and terminates. The base's own payload stays with the caller:
-/// `ImmData` carries a data-byte offset, `ImmCode` an entry PC.
+/// A value id is not a program-order index -- a block's instruction range is
+/// not ordered by block id -- so a definition can carry a higher id than its
+/// use. The walk steps at most once per instruction, which bounds any acyclic
+/// chain and stops a malformed cyclic one. The base's own payload stays with
+/// the caller: `ImmData` carries a data-byte offset, `ImmCode` an entry PC.
 fn asm_operand_addr_base(insts: &[crate::c5::ir::Inst], arg: u32) -> Option<(u32, i64)> {
     use crate::c5::ir::{BinOp, Inst};
     let (mut vid, mut off) = (arg, 0i64);
-    loop {
+    for _ in 0..insts.len() {
         let (next, add) = match insts.get(vid as usize)? {
             Inst::ImmData(_) | Inst::ImmCode(_) => return Some((vid, off)),
             Inst::BinopI {
@@ -273,12 +275,10 @@ fn asm_operand_addr_base(insts: &[crate::c5::ir::Inst], arg: u32) -> Option<(u32
             },
             _ => return None,
         };
-        if next >= vid {
-            return None;
-        }
-        off += add;
+        off = off.checked_add(add)?;
         vid = next;
     }
+    None
 }
 
 /// [`asm_operand_addr_base`] restricted to a data object: the base `ImmData`
@@ -301,5 +301,58 @@ pub(crate) fn asm_operand_code_base(
     match insts.get(vid as usize)? {
         crate::c5::ir::Inst::ImmCode(pc) => Some((vid, *pc, off)),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{asm_operand_code_base, asm_operand_data_target};
+    use crate::c5::asm::AsmSectionTarget;
+    use crate::c5::ir::{BinOp, Inst};
+
+    fn add(lhs: u32, rhs_imm: i64) -> Inst {
+        Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm,
+        }
+    }
+
+    /// An address operand's constant-add chain reaches a definition whose id
+    /// may be above the use's: `ssa::licm` leaves that shape when it hoists a
+    /// materialization into a dominating block whose instruction range sits
+    /// later in the tape. A walk that stops at a rising id reports a
+    /// link-time address as naming none, and the section field referencing it
+    /// (`.quad %c0 + %c1 - .`, the static-key jump entry) is rejected.
+    #[test]
+    fn address_operand_resolves_through_a_forward_reference() {
+        let fwd = alloc::vec![add(1, 8), Inst::ImmData(64)];
+        let back = alloc::vec![Inst::ImmData(64), add(0, 8)];
+        for (insts, arg) in [(&fwd, 0u32), (&back, 1)] {
+            assert_eq!(
+                asm_operand_data_target(insts, arg, &|_| None),
+                Some((AsmSectionTarget::Data(72), 0))
+            );
+        }
+        // The same for a cross-TU base, whose offset rides the addend, and
+        // for a function address.
+        let name = |_| Some(alloc::string::String::from("extkey"));
+        assert_eq!(
+            asm_operand_data_target(&fwd, 0, &name),
+            Some((
+                AsmSectionTarget::Symbol(alloc::string::String::from("extkey")),
+                72
+            ))
+        );
+        let code = alloc::vec![add(1, 4), Inst::ImmCode(900)];
+        assert_eq!(asm_operand_code_base(&code, 0), Some((1, 900, 4)));
+    }
+
+    /// A chain that closes on itself is malformed IR; the walk must end
+    /// rather than run on it.
+    #[test]
+    fn cyclic_address_chain_terminates() {
+        let insts = alloc::vec![add(1, 8), add(0, 8)];
+        assert_eq!(asm_operand_data_target(&insts, 0, &|_| None), None);
     }
 }

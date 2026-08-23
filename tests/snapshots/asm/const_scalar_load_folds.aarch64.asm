@@ -13,13 +13,26 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
+<scoped_cond_guard>:
+               	mov	x0, #0x3                // =3
+               	ret
+
 <main>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	bl	<addr>
+               	cmp	x0, #0x3
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	cmp	x0, #0xb
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -27,6 +40,7 @@ Disassembly of section .text:
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -38,6 +52,8 @@ Disassembly of section .text:
                	cmp	x0, #0x63
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp], #0x10
                	ret

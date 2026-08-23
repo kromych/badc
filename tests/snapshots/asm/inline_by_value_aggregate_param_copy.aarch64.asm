@@ -120,16 +120,16 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	strb	w0, [x20]
                	sub	x0, x29, #0x10
-               	ldrb	w2, [x0]
-               	mov	x1, #0x37               // =55
-               	strb	w1, [x0]
+               	ldrb	w1, [x0]
+               	mov	x2, #0x37               // =55
+               	strb	w2, [x0]
                	mov	x17, #0xff              // =255
-               	and	x1, x2, x17
+               	and	x2, x1, x17
                	mov	x17, #0xa               // =10
-               	mul	x1, x1, x17
+               	mul	x2, x2, x17
                	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	add	x1, x1, x2
+               	and	x1, x1, x17
+               	add	x1, x2, x1
                	sxtw	x1, w1
                	cmp	x1, #0x21
                	b.eq	<addr>

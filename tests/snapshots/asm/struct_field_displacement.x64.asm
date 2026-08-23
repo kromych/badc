@@ -32,33 +32,32 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rax
                	movq	%rax, -0x20(%rbp)
                	movq	-0x20(%rbp), %rax
-               	movl	$0x1, %edx
-               	movl	%edx, (%rax)
-               	movl	$0x16, %ecx
-               	movl	%ecx, 0x4(%rax)
-               	movl	$0x14d, %ecx            # imm = 0x14D
-               	movq	%rcx, 0x8(%rax)
-               	movl	$0x2c, %ecx
-               	movw	%cx, 0x10(%rax)
-               	movl	$0x5, %ecx
-               	movb	%cl, 0x12(%rax)
-               	movl	$0x63, %ecx
-               	movl	%ecx, 0x4(%rax)
+               	movl	$0x1, %ecx
+               	movl	%ecx, (%rax)
+               	movl	$0x16, %edx
+               	movl	%edx, 0x4(%rax)
+               	movl	$0x14d, %edx            # imm = 0x14D
+               	movq	%rdx, 0x8(%rax)
+               	movl	$0x2c, %edx
+               	movw	%dx, 0x10(%rax)
+               	movl	$0x5, %edx
+               	movb	%dl, 0x12(%rax)
+               	movl	$0x63, %edx
+               	movl	%edx, 0x4(%rax)
                	movl	$0x309, %esi            # imm = 0x309
                	movq	%rsi, 0x8(%rax)
-               	movslq	%ecx, %rcx
-               	incq	%rcx
-               	movl	%ecx, 0x4(%rax)
-               	movq	0x8(%rax), %rcx
-               	addq	$0xa, %rcx
-               	movq	%rcx, 0x8(%rax)
-               	movsbq	0x12(%rax), %rcx
-               	incq	%rcx
-               	movb	%cl, 0x12(%rax)
-               	movslq	0x4(%rax), %rcx
-               	cmpq	$0x64, %rcx
+               	movslq	%edx, %rdx
+               	incq	%rdx
+               	movl	%edx, 0x4(%rax)
+               	leaq	0xa(%rsi), %rdx
+               	movq	%rdx, 0x8(%rax)
+               	movsbq	0x12(%rax), %rdx
+               	incq	%rdx
+               	movb	%dl, 0x12(%rax)
+               	movslq	0x4(%rax), %rdx
+               	cmpq	$0x64, %rdx
                	je	<addr>
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq

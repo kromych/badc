@@ -162,54 +162,34 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x0, eq
                	sxtw	x0, w0
-               	mov	x1, #0x1                // =1
+               	mov	x2, #0x1                // =1
                	cbnz	x0, <addr>
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d16, x0
                	sub	x17, x29, #0x8
                	str	d16, [x17]
                	ldur	x0, [x29, #-0x8]
-               	lsr	x2, x0, #52
+               	lsr	x1, x0, #52
                	mov	x17, #0x7ff             // =2047
-               	and	x2, x2, x17
+               	and	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xf, lsl #48
                	and	x0, x0, x17
-               	cbnz	x2, <addr>
+               	cbnz	x1, <addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	cset	x0, eq
-               	sxtw	x2, w0
+               	sxtw	x1, w0
                	mov	x0, #0x0                // =0
-               	cbz	x2, <addr>
-               	mov	x2, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d16, x2
+               	cbz	x1, <addr>
+               	mov	x1, #0x3ff0000000000000 // =4607182418800017408
+               	fmov	d16, x1
                	sub	x17, x29, #0x8
                	str	d16, [x17]
-               	ldur	x2, [x29, #-0x8]
-               	lsr	x3, x2, #52
-               	mov	x17, #0x7ff             // =2047
-               	and	x3, x3, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xf, lsl #48
-               	and	x2, x2, x17
-               	cbnz	x3, <addr>
-               	cbnz	x2, <addr>
-               	mov	x1, #0x2                // =2
-               	sxtw	x1, w1
-               	cmp	x1, #0x0
-               	cset	x1, eq
-               	sxtw	x1, w1
-               	mov	x2, #0x1                // =1
-               	cbnz	x1, <addr>
-               	sub	x17, x29, #0x8
-               	str	d0, [x17]
                	ldur	x1, [x29, #-0x8]
                	lsr	x3, x1, #52
                	mov	x17, #0x7ff             // =2047
@@ -220,6 +200,26 @@ Disassembly of section .text:
                	movk	x17, #0xf, lsl #48
                	and	x1, x1, x17
                	cbnz	x3, <addr>
+               	cbnz	x1, <addr>
+               	mov	x1, #0x2                // =2
+               	sxtw	x1, w1
+               	cmp	x1, #0x0
+               	cset	x1, eq
+               	sxtw	x1, w1
+               	mov	x3, #0x1                // =1
+               	cbnz	x1, <addr>
+               	sub	x17, x29, #0x8
+               	str	d0, [x17]
+               	ldur	x1, [x29, #-0x8]
+               	lsr	x2, x1, #52
+               	mov	x17, #0x7ff             // =2047
+               	and	x2, x2, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xf, lsl #48
+               	and	x1, x1, x17
+               	cbnz	x2, <addr>
                	cbnz	x1, <addr>
                	mov	x0, #0x2                // =2
                	sxtw	x0, w0
@@ -308,42 +308,42 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	x3, #0x7ff
+               	cmp	x2, #0x7ff
                	b.ne	<addr>
                	cbnz	x1, <addr>
-               	sxtw	x0, w2
+               	sxtw	x0, w3
                	b	<addr>
-               	mov	x2, x0
+               	mov	x3, x0
                	b	<addr>
                	mov	x0, #0x4                // =4
                	b	<addr>
-               	mov	x0, x2
+               	mov	x0, x3
                	b	<addr>
                	mov	x1, #0x3                // =3
                	b	<addr>
                	cmp	x3, #0x7ff
                	b.ne	<addr>
-               	cbnz	x2, <addr>
-               	sxtw	x1, w1
+               	cbnz	x1, <addr>
+               	sxtw	x1, w2
                	b	<addr>
-               	mov	x1, x0
+               	mov	x2, x0
                	b	<addr>
                	mov	x1, #0x4                // =4
                	b	<addr>
                	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	x2, #0x7ff
+               	cmp	x1, #0x7ff
                	b.ne	<addr>
                	cbnz	x0, <addr>
-               	mov	x0, x1
+               	mov	x0, x2
                	sxtw	x0, w0
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
                	mov	x0, #0x4                // =4
                	b	<addr>
-               	mov	x2, x1
+               	mov	x1, x2
                	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>

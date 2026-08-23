@@ -17,15 +17,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	mov	x0, #0x7                // =7
+               	mov	x1, #0x7                // =7
                	mov	x2, #0x2a               // =42
-               	sub	x1, x29, #0x8
+               	sub	x0, x29, #0x8
                	str	x0, [sp, #0x18]
                	str	x1, [sp, #0x20]
                	str	x2, [sp, #0x28]
                	str	d0, [sp, #0x30]
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
+               	str	x0, [sp]
+               	str	x1, [sp, #0x8]
                	str	x2, [sp, #0x10]
                	ldr	x1, [sp, #0x8]
                	ldr	x2, [sp, #0x10]
@@ -38,19 +38,19 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x20]
                	ldr	x2, [sp, #0x28]
                	ldr	d0, [sp, #0x30]
-               	ldursw	x0, [x29, #-0x8]
-               	cmp	x0, #0x2a
+               	ldursw	x1, [x29, #-0x8]
+               	cmp	x1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xee               // =238
+               	mov	x1, #0xee               // =238
                	str	x0, [sp, #0x10]
                	str	x1, [sp, #0x18]
                	str	d0, [sp, #0x20]
-               	str	x1, [sp]
-               	str	x0, [sp, #0x8]
+               	str	x0, [sp]
+               	str	x1, [sp, #0x8]
                	ldr	x1, [sp, #0x8]
                	dup	v0.16b, w1
                	smov	w0, v0.b[0]

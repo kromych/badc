@@ -72,12 +72,12 @@ Disassembly of section .text:
                	add	x4, x24, x22
                	mul	x3, x3, x1
                	add	x4, x4, x25
-               	add	x4, x4, x3
+               	add	x3, x4, x3
                	mov	x17, #0x3a3b            // =14907
                	movk	x17, #0x9b83, lsl #16
                	movk	x17, #0x6474, lsl #32
                	movk	x17, #0xddbf, lsl #48
-               	cmp	x4, x17
+               	cmp	x3, x17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]

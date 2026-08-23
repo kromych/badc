@@ -60,13 +60,13 @@ Disassembly of section .text:
                	add	x6, x5, x4
                	ldrsw	x7, [x6]
                	add	x7, x7, #0x3
-               	add	x9, x2, x4
-               	ldrsw	x8, [x9]
-               	sub	x8, x8, #0x3
-               	str	w8, [x6]
+               	add	x8, x2, x4
+               	ldrsw	x9, [x8]
+               	sub	x9, x9, #0x3
+               	str	w9, [x6]
                	str	w7, [x2, x1, lsl #2]
                	ldrsw	x6, [x6]
-               	ldrsw	x4, [x9]
+               	ldrsw	x4, [x8]
                	mul	x4, x6, x4
                	add	x3, x3, x4
                	sxtw	x3, w3

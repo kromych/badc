@@ -31,8 +31,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x7, %eax
                	movl	%eax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
-               	movslq	(%rcx), %rax
+               	leaq	-0x8(%rbp), %rax
+               	movslq	(%rax), %rax
                	imulq	$0x64, %rax, %rax
                	addq	$0x1e078, %rax          # imm = 0x1E078
                	addq	$0x28, %rax

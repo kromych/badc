@@ -123,9 +123,9 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
-               	str	x20, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	mov	x0, #0x3f800000         // =1065353216
                	mov	x1, #0x40400000         // =1077936128
                	fmov	s16, w0
@@ -134,9 +134,9 @@ Disassembly of section .text:
                	mov	x0, #0xaaab             // =43691
                	movk	x0, #0x3eaa, lsl #16
                	fmov	s16, w0
-               	sub	x17, x29, #0x10
+               	sub	x17, x29, #0x8
                	str	s16, [x17]
-               	sub	x16, x29, #0x10
+               	sub	x16, x29, #0x8
                	ldr	s1, [x16]
                	fsub	s0, s0, s1
                	mov	x20, #0x0               // =0
@@ -152,21 +152,21 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
                	bl	<addr>
                	cbz	x0, <addr>
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x0, #0xcccd             // =52429
                	movk	x0, #0x3f8c, lsl #16
                	fmov	s16, w0
-               	sub	x17, x29, #0x18
+               	sub	x17, x29, #0x8
                	str	s16, [x17]
-               	sub	x16, x29, #0x18
+               	sub	x16, x29, #0x8
                	ldr	s0, [x16]
                	fmul	s1, s0, s0
                	fmul	s1, s1, s0
@@ -186,12 +186,12 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	cbz	x0, <addr>
                	sxtw	x0, w0
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x0, #0x0                // =0
                	b	<addr>

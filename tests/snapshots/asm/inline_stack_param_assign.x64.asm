@@ -105,18 +105,18 @@ Disassembly of section .text:
                	movq	%rcx, -0x10(%rbp)
                	movq	%rsi, -0x18(%rbp)
                	movq	%rdi, -0x8(%rbp)
-               	leaq	0x9(%rax), %rdx
-               	leaq	-0x18(%rbp), %rsi
-               	movq	(%rsi), %rdi
+               	leaq	0x9(%rax), %rsi
+               	leaq	-0x18(%rbp), %rdx
+               	movq	(%rdx), %rdi
                	subq	$0x12c, %rdi            # imm = 0x12C
-               	movq	%rdi, (%rsi)
-               	movq	-0x18(%rbp), %rsi
+               	movq	%rdi, (%rdx)
+               	movq	-0x18(%rbp), %rdx
                	movsbq	-0x10(%rbp), %rdi
-               	addq	%rdi, %rsi
-               	movq	%rsi, -0x18(%rbp)
+               	addq	%rdi, %rdx
+               	movq	%rdx, -0x18(%rbp)
                	movl	-0x8(%rbp), %edi
-               	movslq	%edx, %rdx
-               	addq	$0x64b, %rdx            # imm = 0x64B
+               	movslq	%esi, %rsi
+               	addq	$0x64b, %rsi            # imm = 0x64B
                	addq	%rsi, %rdx
                	movl	%edi, %esi
                	addq	%rsi, %rdx

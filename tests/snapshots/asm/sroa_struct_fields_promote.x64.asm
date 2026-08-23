@@ -36,24 +36,24 @@ Disassembly of section .text:
                	leaq	0x1(%rdx), %rax
                	movq	%rdx, %rsi
                	shlq	%rsi
-               	leaq	(%rcx,%rsi), %r9
+               	leaq	(%rcx,%rsi), %rdi
                	leaq	0x7(%rdx), %rcx
                	movswq	%cx, %rcx
                	movsbq	%dl, %r8
                	movq	%r8, %rsi
                	xorq	$0x7a, %rsi
                	movsbq	%sil, %rsi
-               	leaq	(%rax,%rax), %rdi
+               	leaq	(%rax,%rax), %r9
                	movq	%rax, %rbx
                	shlq	%rbx
-               	addq	%rbx, %r9
+               	addq	%rbx, %rdi
                	addq	%rax, %rcx
                	movswq	%cx, %rcx
                	movsbq	%al, %rax
                	xorq	%rsi, %rax
                	movsbq	%al, %rax
-               	movslq	%edi, %rsi
-               	addq	%r9, %rsi
+               	movslq	%r9d, %rsi
+               	addq	%rdi, %rsi
                	addq	%rsi, %rcx
                	addq	%rax, %rcx
                	movq	%rdx, %rax
@@ -91,23 +91,23 @@ Disassembly of section .text:
                	leaq	0x1(%rdx), %rax
                	movq	%rdx, %rsi
                	shlq	%rsi
-               	leaq	(%rcx,%rsi), %rbx
+               	leaq	(%rcx,%rsi), %rdi
                	leaq	0x7(%rdx), %rcx
                	movswq	%cx, %rcx
                	movq	%r8, %rsi
                	xorq	$0x7a, %rsi
                	movsbq	%sil, %rsi
-               	leaq	(%rax,%rax), %rdi
-               	movq	%rax, %r8
-               	shlq	%r8
-               	addq	%rbx, %r8
+               	leaq	(%rax,%rax), %r8
+               	movq	%rax, %rbx
+               	shlq	%rbx
+               	addq	%rbx, %rdi
                	addq	%rax, %rcx
                	movswq	%cx, %rcx
                	movsbq	%al, %rax
                	xorq	%rsi, %rax
                	movsbq	%al, %rax
-               	movslq	%edi, %rsi
-               	addq	%r8, %rsi
+               	movslq	%r8d, %rsi
+               	addq	%rdi, %rsi
                	addq	%rsi, %rcx
                	addq	%rcx, %rax
                	cmpq	$0xb0, %rax

@@ -38,7 +38,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x1b0, %rsp            # imm = 0x1B0
+               	subq	$0x190, %rsp            # imm = 0x190
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r13, 0x10(%rsp)
@@ -49,19 +49,15 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	movl	$0x1, %edi
                	callq	<addr>
-               	leaq	(%rbx,%rax), %rcx
-               	cmpq	%rbx, %rcx
+               	leaq	(%rbx,%rax), %r12
+               	cmpq	%rbx, %r12
                	setb	%al
                	movzbq	%al, %rax
-               	leaq	(%rax), %rsi
-               	leaq	-0x20(%rbp), %rax
-               	xorq	%rdx, %rdx
-               	movq	%rdx, (%rax)
-               	movq	%rdx, 0x8(%rax)
-               	movq	%rcx, (%rax)
-               	movq	%rsi, 0x8(%rax)
-               	movq	(%rax), %r12
-               	movq	0x8(%rax), %r13
+               	addq	$0x0, %rax
+               	xorq	%rcx, %rcx
+               	movq	%rcx, -0x18(%rbp)
+               	movq	%rax, -0x18(%rbp)
+               	movq	-0x18(%rbp), %r13
                	testq	%r12, %r12
                	setne	%al
                	movzbq	%al, %rax
@@ -78,7 +74,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x1b0, %rsp            # imm = 0x1B0
+               	addq	$0x190, %rsp            # imm = 0x190
                	popq	%rbp
                	retq
                	xorq	%rdi, %rdi
@@ -123,7 +119,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x1b0, %rsp            # imm = 0x1B0
+               	addq	$0x190, %rsp            # imm = 0x190
                	popq	%rbp
                	retq
                	movl	$0x1, %edi
@@ -150,7 +146,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x1b0, %rsp            # imm = 0x1B0
+               	addq	$0x190, %rsp            # imm = 0x190
                	popq	%rbp
                	retq
                	movl	$0x1, %edi
@@ -182,7 +178,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x1b0, %rsp            # imm = 0x1B0
+               	addq	$0x190, %rsp            # imm = 0x190
                	popq	%rbp
                	retq
                	movl	$0x1, %edi
@@ -216,7 +212,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x1b0, %rsp            # imm = 0x1B0
+               	addq	$0x190, %rsp            # imm = 0x190
                	popq	%rbp
                	retq
                	xorq	%rdi, %rdi
@@ -248,7 +244,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x1b0, %rsp            # imm = 0x1B0
+               	addq	$0x190, %rsp            # imm = 0x190
                	popq	%rbp
                	retq
                	xorq	%rdi, %rdi
@@ -298,7 +294,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x1b0, %rsp            # imm = 0x1B0
+               	addq	$0x190, %rsp            # imm = 0x190
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
@@ -307,7 +303,7 @@ Disassembly of section .text:
                	movq	0x10(%rsp), %r13
                	movq	0x18(%rsp), %r14
                	movq	0x20(%rsp), %r15
-               	addq	$0x1b0, %rsp            # imm = 0x1B0
+               	addq	$0x190, %rsp            # imm = 0x190
                	popq	%rbp
                	retq
                	jmp	<addr>

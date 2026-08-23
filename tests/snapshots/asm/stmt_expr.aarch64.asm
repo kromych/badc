@@ -37,15 +37,15 @@ Disassembly of section .text:
                	ldrsw	x2, [x0]
                	add	x2, x2, #0x1
                	str	w2, [x0]
-               	sxtw	x0, w2
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsw	x3, [x2]
+               	sxtw	x2, w2
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x3, [x0]
                	add	x3, x3, #0x1
-               	str	w3, [x2]
-               	sxtw	x2, w3
-               	lsl	x2, x2, #1
-               	add	x0, x0, x2
+               	str	w3, [x0]
+               	sxtw	x0, w3
+               	lsl	x0, x0, #1
+               	add	x0, x2, x0
                	sxtw	x0, w0
                	cmp	x0, #0x8
                	cset	x0, ne

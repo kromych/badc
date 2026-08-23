@@ -105,19 +105,19 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	movk	x0, #0x8000, lsl #48
                	str	x0, [x21]
-               	sub	x20, x29, #0x18
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	mov	x9, x0
                	mov	x0, x20
                	blr	x9
-               	ldr	x0, [x20, #0x8]
+               	sub	x0, x29, #0x18
+               	ldr	x1, [x0, #0x8]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0x7fff, lsl #48
-               	cmp	x0, x17
+               	cmp	x1, x17
                	b.lo	<addr>
                	mov	x0, #0xffea             // =65514
                	movk	x0, #0xffff, lsl #16
@@ -141,46 +141,45 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x90
                	ret
-               	ldr	x0, [x20, #0x8]
-               	ldr	w1, [x20, #0x10]
-               	mov	x2, #0xffff             // =65535
-               	movk	x2, #0xffff, lsl #16
-               	movk	x2, #0xffff, lsl #32
-               	movk	x2, #0x7fff, lsl #48
-               	sub	x2, x2, x0
-               	mov	x0, #0x1                // =1
-               	mov	w0, w1
-               	cmp	x0, x2
-               	b.hs	<addr>
-               	mov	w0, w0
-               	sxtw	x0, w0
-               	b	<addr>
-               	mov	w0, w2
-               	b	<addr>
-               	ldr	x0, [x20, #0x8]
-               	ldr	w1, [x20, #0x10]
-               	mov	x2, #0xffff             // =65535
-               	movk	x2, #0xffff, lsl #16
-               	movk	x2, #0xffff, lsl #32
-               	movk	x2, #0x7fff, lsl #48
-               	sub	x2, x2, x0
-               	mov	x0, #0x1                // =1
-               	mov	w0, w1
-               	cmp	x0, x2
-               	b.hs	<addr>
-               	mov	w0, w0
-               	sxtw	x0, w0
-               	b	<addr>
-               	mov	w0, w2
-               	b	<addr>
-               	ldr	x2, [x20, #0x8]
-               	sub	x0, x29, #0x18
+               	ldr	x2, [x0, #0x8]
                	ldr	w1, [x0, #0x10]
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0x7fff, lsl #48
                	sub	x2, x0, x2
+               	mov	x0, #0x1                // =1
+               	mov	w0, w1
+               	cmp	x0, x2
+               	b.hs	<addr>
+               	mov	w0, w0
+               	sxtw	x0, w0
+               	b	<addr>
+               	mov	w0, w2
+               	b	<addr>
+               	ldr	x0, [x20, #0x8]
+               	ldr	w1, [x20, #0x10]
+               	mov	x2, #0xffff             // =65535
+               	movk	x2, #0xffff, lsl #16
+               	movk	x2, #0xffff, lsl #32
+               	movk	x2, #0x7fff, lsl #48
+               	sub	x2, x2, x0
+               	mov	x0, #0x1                // =1
+               	mov	w0, w1
+               	cmp	x0, x2
+               	b.hs	<addr>
+               	mov	w0, w0
+               	sxtw	x0, w0
+               	b	<addr>
+               	mov	w0, w2
+               	b	<addr>
+               	ldr	x0, [x20, #0x8]
+               	ldr	w1, [x20, #0x10]
+               	mov	x2, #0xffff             // =65535
+               	movk	x2, #0xffff, lsl #16
+               	movk	x2, #0xffff, lsl #32
+               	movk	x2, #0x7fff, lsl #48
+               	sub	x2, x2, x0
                	mov	x0, #0x1                // =1
                	mov	w0, w1
                	cmp	x0, x2

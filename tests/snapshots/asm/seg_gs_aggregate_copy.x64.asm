@@ -505,9 +505,9 @@ Disassembly of section .text:
                	movq	%gs:(%rdi), %rdi
                	movq	%rdi, 0x10(%rcx)
                	addq	$0x18, %rdx
-               	movq	%gs:(%rdx), %rdi
-               	movq	%rdi, 0x18(%rcx)
-               	movl	0x8(%rcx), %edx
+               	movq	%gs:(%rdx), %rdx
+               	movq	%rdx, 0x18(%rcx)
+               	movl	0x8(%rcx), %edi
                	movl	0x10(%rcx), %r8d
                	movabsq	$-0x112053135014111, %r11 # imm = 0xFEEDFACECAFEBEEF
                	cmpq	%r11, %rsi
@@ -516,21 +516,21 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	testq	%rsi, %rsi
                	je	<addr>
-               	movl	%edx, %edx
-               	cmpq	$0x11223344, %rdx       # imm = 0x11223344
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	movl	%edi, %esi
+               	cmpq	$0x11223344, %rsi       # imm = 0x11223344
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
-               	movl	%r8d, %edx
-               	cmpq	$0x55667788, %rdx       # imm = 0x55667788
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	testq	%rdx, %rdx
+               	movl	%r8d, %esi
+               	cmpq	$0x55667788, %rsi       # imm = 0x55667788
+               	sete	%sil
+               	movzbq	%sil, %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
                	movabsq	$0x123456789abcdef, %r11 # imm = 0x123456789ABCDEF
-               	movq	%rdi, %rcx
-               	cmpq	%r11, %rdi
+               	movq	%rdx, %rcx
+               	cmpq	%r11, %rdx
                	sete	%cl
                	movzbq	%cl, %rcx
                	movslq	%ecx, %rcx
@@ -1068,9 +1068,9 @@ Disassembly of section .text:
                	movq	%rbx, %rcx
                	jmp	<addr>
                	jmp	<addr>
-               	movq	%rcx, %rdx
+               	movq	%rcx, %rsi
                	jmp	<addr>
-               	movq	%rcx, %rdx
+               	movq	%rcx, %rsi
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>

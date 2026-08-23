@@ -177,15 +177,15 @@ Disassembly of section .text:
                	stp	x20, x21, [sp, #-0x50]!
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
-               	mov	x20, #0x0               // =0
-               	stur	w20, [x29, #-0x18]
+               	mov	x21, #0x0               // =0
+               	stur	w21, [x29, #-0x18]
                	sub	x0, x29, #0x18
                	stur	x0, [x29, #-0x28]
                	mov	x0, #0x10               // =16
                	stur	x0, [x29, #-0x20]
-               	ldur	x21, [x29, #-0x28]
+               	ldur	x20, [x29, #-0x28]
                	ldur	x1, [x29, #-0x20]
-               	mov	x0, x21
+               	mov	x0, x20
                	bl	<addr>
                	cbz	x0, <addr>
                	sxtw	x0, w0
@@ -193,11 +193,11 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x50
                	ret
                	sub	x0, x29, #0x10
-               	str	x20, [x0]
-               	str	x20, [x0, #0x8]
-               	mov	x20, #0x3               // =3
-               	str	w20, [x0]
+               	str	x21, [x0]
                	str	x21, [x0, #0x8]
+               	mov	x21, #0x3               // =3
+               	str	w21, [x0]
+               	str	x20, [x0, #0x8]
                	bl	<addr>
                	mov	x1, x0
                	ldrsw	x0, [x1]
@@ -205,11 +205,11 @@ Disassembly of section .text:
                	cset	x0, eq
                	cbz	x0, <addr>
                	ldr	x0, [x1, #0x8]
-               	cmp	x0, x21
+               	cmp	x0, x20
                	cset	x0, eq
                	cbz	x0, <addr>
-               	mov	x20, #0x0               // =0
-               	sxtw	x0, w20
+               	mov	x21, #0x0               // =0
+               	sxtw	x0, w21
                	cbz	x0, <addr>
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp], #0x50
@@ -217,7 +217,7 @@ Disassembly of section .text:
                	mov	x0, #0x18               // =24
                	stur	x0, [x29, #-0x20]
                	ldur	x1, [x29, #-0x20]
-               	mov	x0, x21
+               	mov	x0, x20
                	bl	<addr>
                	cbz	x0, <addr>
                	sxtw	x0, w0

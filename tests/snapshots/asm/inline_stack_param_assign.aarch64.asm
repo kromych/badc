@@ -93,19 +93,19 @@ Disassembly of section .text:
                	movk	x3, #0xffff, lsl #32
                	movk	x3, #0xffff, lsl #48
                	sturb	w3, [x29, #-0x10]
-               	add	x3, x0, #0x9
-               	sub	x4, x29, #0x18
-               	ldr	x5, [x4]
+               	add	x4, x0, #0x9
+               	sub	x3, x29, #0x18
+               	ldr	x5, [x3]
                	sub	x5, x5, #0x12c
-               	str	x5, [x4]
-               	ldur	x4, [x29, #-0x18]
+               	str	x5, [x3]
+               	ldur	x3, [x29, #-0x18]
                	ldursb	x5, [x29, #-0x10]
-               	add	x4, x4, x5
-               	stur	x4, [x29, #-0x18]
+               	add	x3, x3, x5
+               	stur	x3, [x29, #-0x18]
                	ldur	w5, [x29, #-0x8]
-               	sxtw	x3, w3
-               	add	x3, x3, #0x64b
-               	add	x3, x3, x4
+               	sxtw	x4, w4
+               	add	x4, x4, #0x64b
+               	add	x3, x4, x3
                	mov	w4, w5
                	add	x3, x3, x4
                	mov	x17, #0x9c40            // =40000

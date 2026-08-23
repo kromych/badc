@@ -111,10 +111,9 @@ Disassembly of section .text:
                	imulq	%r8, %r9
                	imulq	%rcx, %r8
                	addq	%r9, %rsi
-               	addq	%rsi, %r8
+               	addq	%r8, %rsi
                	movabsq	$-0x22409b8b647cc5c5, %r11 # imm = 0xDDBF64749B833A3B
-               	movq	%r8, %rsi
-               	cmpq	%r11, %r8
+               	cmpq	%r11, %rsi
                	je	<addr>
                	movl	$0x2, %eax
                	movq	(%rsp), %rbx

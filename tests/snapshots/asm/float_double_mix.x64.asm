@@ -28,15 +28,15 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	movl	$0x3dcccccd, %edx       # imm = 0x3DCCCCCD
                	movq	%rdx, %xmm14
-               	movss	%xmm14, -0x20(%rbp,%riz)
+               	movss	%xmm14, -0x10(%rbp,%riz)
                	movabsq	$0x3fc999999999999a, %rax # imm = 0x3FC999999999999A
                	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x18(%rbp,%riz)
-               	movss	-0x20(%rbp,%riz), %xmm0
-               	movsd	-0x18(%rbp,%riz), %xmm1
+               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
+               	movsd	-0x8(%rbp,%riz), %xmm1
                	cvtss2sd	%xmm0, %xmm0
                	addsd	%xmm1, %xmm0
                	movabsq	$0x3fd3333334cccccd, %rax # imm = 0x3FD3333334CCCCCD
@@ -57,12 +57,12 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movslq	%ecx, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movq	%rdx, %xmm14
-               	movss	%xmm14, -0x20(%rbp,%riz)
-               	movss	-0x20(%rbp,%riz), %xmm0
+               	movss	%xmm14, -0x10(%rbp,%riz)
+               	movss	-0x10(%rbp,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movabsq	$0x3fb99999a0000000, %rcx # imm = 0x3FB99999A0000000
                	movq	%rcx, %xmm15
@@ -81,18 +81,18 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movslq	%ecx, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x3fbf9add3746f62e, %rcx # imm = 0x3FBF9ADD3746F62E
                	movq	%rcx, %xmm14
-               	movsd	%xmm14, -0x20(%rbp,%riz)
-               	movsd	-0x20(%rbp,%riz), %xmm0
+               	movsd	%xmm14, -0x10(%rbp,%riz)
+               	movsd	-0x10(%rbp,%riz), %xmm0
                	cvtsd2ss	%xmm0, %xmm1
                	movl	$0x3dfcd6ea, %ecx       # imm = 0x3DFCD6EA
                	movq	%rcx, %xmm14
-               	movss	%xmm14, -0x10(%rbp,%riz)
-               	movss	-0x10(%rbp,%riz), %xmm0
+               	movss	%xmm14, -0x8(%rbp,%riz)
+               	movss	-0x8(%rbp,%riz), %xmm0
                	movapd	%xmm0, %xmm15
                	movapd	%xmm1, %xmm0
                	subss	%xmm15, %xmm0
@@ -111,7 +111,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
@@ -122,8 +122,8 @@ Disassembly of section .text:
                	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x3eaaaaab, %eax       # imm = 0x3EAAAAAB
                	movq	%rax, %xmm14
-               	movss	%xmm14, -0x10(%rbp,%riz)
-               	movss	-0x10(%rbp,%riz), %xmm1
+               	movss	%xmm14, -0x8(%rbp,%riz)
+               	movss	-0x8(%rbp,%riz), %xmm1
                	subss	%xmm1, %xmm0
                	movq	%rcx, %xmm15
                	ucomiss	%xmm0, %xmm15
@@ -139,18 +139,18 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	jmp	<addr>
                	jmp	<addr>
                	cvtss2sd	%xmm1, %xmm0
-               	movsd	-0x20(%rbp,%riz), %xmm1
+               	movsd	-0x10(%rbp,%riz), %xmm1
                	subsd	%xmm1, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15

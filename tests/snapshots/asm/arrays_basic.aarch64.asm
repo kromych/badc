@@ -29,17 +29,17 @@ Disassembly of section .text:
                	str	w0, [x3, #0xc]
                	mov	x0, #0x5                // =5
                	str	w0, [x3, #0x10]
-               	mov	x1, #0x0                // =0
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
+               	mov	x1, x0
                	b	<addr>
-               	ldrsw	x1, [x3, x2, lsl #2]
-               	add	x0, x0, x1
-               	add	x1, x2, #0x1
-               	sxtw	x1, w1
-               	sxtw	x2, w1
+               	ldrsw	x0, [x3, x2, lsl #2]
+               	add	x1, x1, x0
+               	add	x0, x2, #0x1
+               	sxtw	x0, w0
+               	sxtw	x2, w0
                	cmp	x2, #0x5
                	b.lt	<addr>
-               	sxtw	x0, w0
+               	sxtw	x0, w1
                	cmp	x0, #0xf
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

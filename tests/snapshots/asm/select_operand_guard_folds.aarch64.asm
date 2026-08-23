@@ -32,37 +32,37 @@ Disassembly of section .text:
                	b	<addr>
 
 <main>:
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x0, #0x0                // =0
+               	str	x0, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x0, #0x0                // =0
-               	str	x0, [x2]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
-               	ldr	x1, [x1]
+               	ldr	x2, [x2]
+               	ldr	x2, [x2]
                	mov	x17, #0x400000          // =4194304
-               	and	x1, x1, x17
-               	cbz	x1, <addr>
-               	mov	x1, #0x4                // =4
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
-               	ldr	x1, [x1]
+               	and	x2, x2, x17
+               	cbz	x2, <addr>
+               	mov	x2, #0x4                // =4
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x2, [x2]
+               	ldr	x2, [x2]
                	mov	x17, #0x400000          // =4194304
-               	and	x1, x1, x17
-               	cbz	x1, <addr>
-               	mov	x1, #0x4                // =4
+               	and	x2, x2, x17
+               	cbz	x2, <addr>
+               	mov	x2, #0x4                // =4
                	mov	x17, #0x173             // =371
                	movk	x17, #0x10, lsl #16
-               	orr	x1, x1, x17
+               	orr	x2, x2, x17
                	mov	x17, #0x173             // =371
                	movk	x17, #0x10, lsl #16
-               	cmp	x1, x17
+               	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x1, #0x400000           // =4194304
-               	str	x1, [x2]
+               	mov	x2, #0x400000           // =4194304
+               	str	x2, [x1]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
@@ -211,7 +211,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x1, x0
                	b	<addr>
-               	mov	x1, x0
+               	mov	x2, x0
                	b	<addr>
-               	mov	x1, x0
+               	mov	x2, x0
                	b	<addr>

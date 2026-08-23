@@ -24,12 +24,12 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ret
-               	lsl	x1, x1, #1
+               	lsl	x0, x1, #1
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	add	x0, x1, #0x1
-               	str	w0, [x5]
-               	add	x0, x1, x2
+               	add	x1, x0, #0x1
+               	str	w1, [x5]
+               	add	x0, x0, x2
                	add	x0, x0, x3
                	ret
                	mov	x0, #0xfffe             // =65534

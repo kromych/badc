@@ -32,17 +32,17 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rsi
-               	movslq	%esi, %rax
-               	movsbq	%al, %rbx
-               	movswq	%ax, %r12
-               	imulq	$0x186a0, %rbx, %rax    # imm = 0x186A0
-               	imulq	$0xa, %r12, %rcx
-               	leaq	(%rax,%rcx), %rdx
-               	leaq	(%rdx,%rsi), %rdi
-               	movslq	%edi, %r8
-               	movslq	%edi, %rax
-               	cmpq	%rax, %r8
+               	movslq	(%rax), %rax
+               	movslq	%eax, %rcx
+               	movsbq	%cl, %r8
+               	movswq	%cx, %r9
+               	imulq	$0x186a0, %r8, %rcx     # imm = 0x186A0
+               	imulq	$0xa, %r9, %rdx
+               	leaq	(%rcx,%rdx), %rsi
+               	leaq	(%rsi,%rax), %rbx
+               	movslq	%ebx, %r12
+               	movslq	%ebx, %rax
+               	cmpq	%rax, %r12
                	je	<addr>
                	movl	$0x1, %eax
                	movq	(%rsp), %rbx

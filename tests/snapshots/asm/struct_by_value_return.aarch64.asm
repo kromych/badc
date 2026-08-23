@@ -189,20 +189,19 @@ Disassembly of section .text:
                	mov	x22, x0
                	mov	x0, #0x4                // =4
                	bl	<addr>
-               	mov	x1, x0
-               	add	x0, x20, x22
-               	add	x1, x21, x1
-               	mov	w0, w0
+               	add	x1, x20, x22
+               	add	x0, x21, x0
                	mov	w1, w1
-               	sxtw	x0, w0
-               	cmp	x0, #0x4
+               	mov	w0, w0
+               	sxtw	x1, w1
+               	cmp	x1, #0x4
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x30
                	ret
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	cmp	x0, #0x6
                	b.eq	<addr>
                	mov	x0, #0xa                // =10

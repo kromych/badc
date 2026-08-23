@@ -60,7 +60,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
+               	sub	sp, sp, #0x40
                	mov	x1, #0x14               // =20
                	mov	x2, #0x1                // =1
                	sub	x0, x29, #0x10
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldur	x0, [x29, #-0x10]
                	sxtw	x0, w0
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0

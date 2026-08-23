@@ -1729,6 +1729,12 @@ fn run() {
     // checked once the target is known. An unusable one is an error rather
     // than a default, since a guard read from the wrong place would leave
     // the image claiming a protection it does not have.
+    // gcc's x86 default for `-mstack-protector-guard=` is `tls`, so the
+    // kernel names only the register and the symbol on SMP builds.
+    let ssp_guard_kind = ssp_guard_kind.or_else(|| {
+        let named = ssp_guard_reg.is_some() || ssp_guard_offset.is_some();
+        (named && target.is_x86_64()).then_some("tls")
+    });
     if let Some(kind) = ssp_guard_kind {
         stack_protect.guard = match kind {
             "global" => badc::StackGuard::Global,

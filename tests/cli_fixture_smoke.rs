@@ -1333,6 +1333,59 @@ fn host_native_target() -> Option<&'static str> {
     }
 }
 
+/// The x86 kernel names the guard's register and symbol without naming
+/// the form, because gcc's x86 default for `-mstack-protector-guard=` is
+/// `tls`. Requiring the form stopped the defconfig build at the first
+/// unit. aarch64 has no such default and still requires it.
+#[test]
+fn the_x86_guard_form_defaults_the_way_gcc_does() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = std::env::temp_dir().join(format!("badc-ssp-guard-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("create dir");
+    let src = root.join("g.c");
+    std::fs::write(
+        &src,
+        "int f(int i){ char b[24]; b[0]=(char)i; return b[0]; }\n",
+    )
+    .expect("write source");
+    let obj = root.join("g.o");
+    let compile = |args: &[&str]| {
+        std::process::Command::new(badc)
+            .args(args)
+            .arg("-fstack-protector-strong")
+            .arg("-c")
+            .arg("-o")
+            .arg(&obj)
+            .arg(&src)
+            .output()
+            .expect("run badc")
+    };
+    // The SMP kernel's own pair, with no `-mstack-protector-guard=`.
+    let out = compile(&[
+        "--target=linux-x64",
+        "-mstack-protector-guard-reg=gs",
+        "-mstack-protector-guard-symbol=__ref_stack_chk_guard",
+    ]);
+    assert!(
+        out.status.success(),
+        "the x86 guard register alone must select the tls form: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // The uniprocessor branch of the same Makefile still names its form.
+    let out = compile(&["--target=linux-x64", "-mstack-protector-guard=global"]);
+    assert!(out.status.success(), "`global` must stay accepted");
+    // aarch64 has no default form, so naming only the register is an error.
+    let out = compile(&[
+        "--target=linux-aarch64",
+        "-mstack-protector-guard-reg=sp_el0",
+    ]);
+    assert!(
+        !out.status.success(),
+        "aarch64 must still require the guard form"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A protected image has to behave two ways: unchanged when nothing
 /// overflows, and stopped at `__stack_chk_fail` when a frame is smashed.
 /// The first is the fixture, run under every mode at both optimization

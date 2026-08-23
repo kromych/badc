@@ -24,9 +24,11 @@ Each lane:
      lane's kind selects runs, `--demo-jobs` bounds only how many at once.
   6. On Linux lanes, regenerate `tests/snapshots/` and fail on drift, as
      CI's `snapshots clean` job does. Skip with `--no-snapshots`.
-  7. On Linux lanes, compile and link the pinned `defconfig` kernel with
-     badc -- CI's kernel corpus, not the vendored minimal configs. Skip
-     with `--no-kernel`.
+  7. On Linux lanes, compile, link and boot the pinned `defconfig` kernel
+     with badc -- CI's kernel corpus, not the vendored minimal configs --
+     under the box's own emulator, the same four boots plus displacement
+     probes CI runs. A box without that emulator keeps the compile + link
+     cover and says so in its summary line. Skip with `--no-kernel`.
 
 Usage (one `--box` flag per lane):
 
@@ -170,6 +172,11 @@ KERNEL_CACHE = "~/.cache/badc-kernel-gate"
 # the build. Update both together.
 KERNEL_FLOORS = {"aarch64": 4400, "x86_64": 2900}
 
+# Seconds a single boot may take before it is abandoned, the same cap CI's
+# kernel job passes. It bounds the phase when the image does not boot at all:
+# an image that boots reaches the marker and ends the emulator well inside it.
+KERNEL_BOOT_TIMEOUT = 90
+
 
 @dataclass
 class Box:
@@ -231,6 +238,12 @@ def parse_box(spec: str) -> Box:
 LANE_STEP: dict[str, str] = {}
 STEP_MARK = "--- lane step"
 
+# What a lane covered less of than this script describes -- a step that found
+# no emulator, say. Announced by the lane and repeated in the closing summary,
+# because a green board is read there and not in the middle of a lane's log.
+LANE_NOTES: dict[str, list[str]] = {}
+NOTE_MARK = "--- lane note"
+
 
 def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
     """Run `cmd`, prefixing every output line with `prefix` so
@@ -258,6 +271,10 @@ def stream(prefix: str, cmd: list[str], stdin_text: str | None = None) -> int:
     for line in proc.stdout:
         if line.startswith(STEP_MARK):
             LANE_STEP[prefix] = line.strip()
+        elif line.startswith(NOTE_MARK):
+            LANE_NOTES.setdefault(prefix, []).append(
+                line[len(NOTE_MARK) :].strip()
+            )
         sys.stdout.write(f"[{prefix}] {line}")
         sys.stdout.flush()
     return proc.wait()
@@ -299,27 +316,42 @@ STEP_FN = (
 
 
 def kernel_steps() -> list[str]:
-    """Compile and link the pinned defconfig kernel with badc.
+    """Compile, link and boot the pinned defconfig kernel with badc.
 
     The architecture is the box's own: setup.py and verify.py both default to
-    the host. No boot phase -- this covers what is decided at the vmlinux link
-    (a unit badc cannot compile, one that fell back, a link badc could not
-    make, an undefined reference, a unit count below the floor), and a boot
-    would add the emulator to the gate's dependencies for a class CI already
-    covers. setup.py is idempotent: it re-verifies the cached tarball's sha256
-    and reconfigures, so only the first run on a box pays the download."""
+    the host. The link decides one set of failures -- a unit badc cannot
+    compile, one that fell back, a link badc could not make, an undefined
+    reference, a unit count below the floor -- and whether the image runs is
+    another, which has failed CI with this board green on every lane. So the
+    boots run here too, the four CI runs plus its displacement probes, under
+    the box's own `qemu-system-<arch>`; both machines take the emulator's
+    `-kernel` loader and no firmware from elsewhere. Without that emulator the
+    step keeps the compile and the link and records a lane note. setup.py is
+    idempotent: it re-verifies the cached tarball's sha256 and reconfigures,
+    so only the first run on a box pays the download."""
     floors = " ".join(f"{a}) floor={n};;" for a, n in KERNEL_FLOORS.items())
+    initramfs = f"{KERNEL_CACHE}/initramfs.cpio.gz"
     return [
         f"step python3 demos/linux/setup.py --cache {KERNEL_CACHE}",
         f'ktree=$(find {KERNEL_CACHE} -maxdepth 1 -type d -name "linux-*" | head -1)',
         f'test -n "$ktree" || {{ echo "--- no kernel tree under {KERNEL_CACHE}"; exit 1; }}',
         f"case $(uname -m) in {floors} *) floor=0;; esac",
+        'emu=$(command -v "qemu-system-$(uname -m)" || true)',
+        # The boot arguments as positional parameters: `--qemu-args` carries a
+        # space and would not survive an unquoted expansion of a plain string.
+        f'if [ -n "$emu" ]; then '
+        f"step python3 demos/linux/initramfs.py -o {initramfs}; "
+        f'set -- --initramfs {initramfs} --qemu "$emu" --qemu-args "-nic none" '
+        f"--boot-timeout {KERNEL_BOOT_TIMEOUT}; "
+        f'else echo "{NOTE_MARK} kernel step did not boot: no '
+        f'qemu-system-$(uname -m) on this box; compile and link only"; '
+        f"set -- --no-boot; fi",
         # The boxes' reference compiler is not the one the pinned release was
         # released against; its warnings are not this step's subject, same as
         # in CI.
         "step env KCFLAGS=-Wno-error python3 demos/linux/verify.py "
-        '--kernel-dir "$ktree" --linker badc --no-boot '
-        f'--expect-units "$floor" --workdir {KERNEL_CACHE}/verify-out',
+        '--kernel-dir "$ktree" --linker badc '
+        f'--expect-units "$floor" --workdir {KERNEL_CACHE}/verify-out "$@"',
     ]
 
 
@@ -545,9 +577,10 @@ def run_box(
 
 
 def self_test() -> int:
-    """Check the two properties a lane's transport has to hold: the token
-    reaches the box without ever entering a command line, and a failing
-    step still fails the lane and is still named in the summary."""
+    """Check the properties a lane has to hold: the token reaches the box
+    without ever entering a command line, the step script parses, a failing
+    step still fails the lane and is still named in the summary, and the
+    kernel step boots what it built or says it did not."""
     token = "canary-Tok3n-VALUE"
     boxes = [
         Box("lin", "h", "~/src/compilers/badc/", "linux"),
@@ -559,6 +592,24 @@ def self_test() -> int:
             argv, stdin_text = lane_invocation(box, token, True, demos, True, DEMO_JOBS)
             assert not any(token in a for a in argv), f"{box.kind}: token in {argv}"
             assert token in stdin_text, f"{box.kind}: token not delivered"
+            # The POSIX lanes' script is a single `&&` chain carrying compound
+            # commands and nested quoting, and it is read by a shell an hour
+            # into a remote run. Parse it here instead.
+            if box.kind != "windows":
+                parse = subprocess.run(
+                    ["bash", "-n"], input=stdin_text, text=True,
+                    capture_output=True,
+                )
+                assert parse.returncode == 0, f"{box.kind}: {parse.stderr}"
+
+    # The kernel step boots by default; only the no-emulator branch may say
+    # --no-boot, and that branch has to announce itself as a lane note.
+    kernel = kernel_steps()
+    verify = [s for s in kernel if "verify.py" in s]
+    assert len(verify) == 1 and "--no-boot" not in verify[0], verify
+    assert "--initramfs" in " ".join(kernel), kernel
+    skip = [s for s in kernel if "--no-boot" in s]
+    assert len(skip) == 1 and NOTE_MARK in skip[0], skip
 
     win = Box("win", "h", "R:/src/compilers/badc/", "windows")
     inner = windows_inner(win, True, DEMO_JOBS)
@@ -574,15 +625,19 @@ def self_test() -> int:
     assert "run_demos.py" not in windows_inner(win, False, DEMO_JOBS)
 
     # A failing step has to leave the lane red with the failing step's own
-    # status, and to leave its announcement in LANE_STEP for the summary.
+    # status, and to leave its announcement in LANE_STEP for the summary. A
+    # note has to reach LANE_NOTES without being taken for a step.
     LANE_STEP.pop("selftest", None)
+    LANE_NOTES.pop("selftest", None)
     rc = stream(
         "selftest",
         ["bash", "-s"],
-        stdin_text=f"echo '{STEP_MARK} cargo build'\necho '{STEP_MARK} cargo test'\nexit 3\n",
+        stdin_text=f"echo '{STEP_MARK} cargo build'\necho '{NOTE_MARK} no emulator'\n"
+        f"echo '{STEP_MARK} cargo test'\nexit 3\n",
     )
     assert rc == 3, f"a failing step must fail the lane, got {rc}"
     assert LANE_STEP.get("selftest") == f"{STEP_MARK} cargo test", LANE_STEP
+    assert LANE_NOTES.get("selftest") == ["no emulator"], LANE_NOTES
     print("[validate_local_boxes] self-test OK")
     return 0
 
@@ -609,7 +664,8 @@ def main() -> int:
     p.add_argument(
         "--no-kernel",
         action="store_true",
-        help="skip the defconfig kernel step on Linux lanes",
+        help="skip the defconfig kernel step -- compile, link and boot -- on "
+        "Linux lanes",
     )
     p.add_argument(
         "--no-snapshots",
@@ -669,14 +725,19 @@ def main() -> int:
     if any(b.kind == "linux" for b in selected):
         if args.no_kernel:
             print("kernel step: SKIPPED (--no-kernel); the defconfig corpus is "
-                  "where CI's kernel gate finds link-visible regressions")
+                  "where CI's kernel gate finds regressions that compile and "
+                  "link clean, boot or not")
         else:
-            print("kernel step: 7.1.6 defconfig, compile + link, no boot; "
-                  "adds 4.5-11 min per Linux lane (measured on an idle box and "
-                  "on one shared with five other jobs). Lanes run in parallel, "
+            print("kernel step: 7.1.6 defconfig, compile + link + boot; adds "
+                  "4.5-11 min per Linux lane for the build (measured on an idle "
+                  "box and on one shared with five other jobs) and 12 s "
+                  "(aarch64, 8 emulator starts) to 26 s (x86_64, 5) for the "
+                  "boots, an image that does not boot ending each at the "
+                  f"{KERNEL_BOOT_TIMEOUT} s cap instead. Lanes run in parallel, "
                   "so the gate grows by the slowest lane, not the sum. First "
-                  "run on a box also downloads the release (~150 MB). "
-                  "Skip with --no-kernel.")
+                  "run on a box also downloads the release (~150 MB). A box "
+                  "with no qemu-system-<arch> keeps the compile + link and "
+                  "says so. Skip with --no-kernel.")
 
     if any(b.kind == "linux" for b in selected):
         if args.no_snapshots:
@@ -724,6 +785,8 @@ def main() -> int:
         if where.startswith(STEP_MARK):
             where = where[len(STEP_MARK) :].strip()
         print(f"  {box.short:<6} {marker}{'  ' + where if where else ''}")
+        for note in LANE_NOTES.get(box.short, ()):
+            print(f"  {'':<6} note: {note}")
     return 0 if all(rc == 0 for rc in results.values()) else 1
 
 

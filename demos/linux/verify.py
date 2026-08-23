@@ -140,6 +140,27 @@ def read_manifest(path: Path,
     return out
 
 
+# What a failed build is read from. make -j interleaves, so the recipe that
+# stopped it is not necessarily the last line; the diagnostics are.
+BUILD_ERROR_RE = r"error:|undefined reference|\*\*\*"
+# A console log carries the firmware's terminal escapes and a build log can
+# carry a compiler's color codes. Neither may reach the terminal a gate run is
+# printing to, so the C0 controls go and the printable residue stays.
+CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def excerpt(text: str, limit: int, pattern: str | None = None) -> list[str]:
+    """The lines a failure states itself in: those matching `pattern` when it
+    is given and matches anything, otherwise the tail. A run on a remote box
+    is read through its own output, not through the log paths it names."""
+    lines = [CONTROLS.sub("", l) for l in text.splitlines()]
+    if pattern:
+        hits = [l for l in lines if re.search(pattern, l)]
+        if hits:
+            return hits[-limit:]
+    return lines[-limit:]
+
+
 def cc_version_text(tree: Path) -> str:
     """The tree's configured CONFIG_CC_VERSION_TEXT, or ""."""
     cfg = tree / ".config"
@@ -351,6 +372,23 @@ def _self_test() -> int:
                           cc, True) == "does not identify badc as the compiler"
     assert banner_failure("", cc, True), "a log with no banner cannot pass"
 
+    # A failed build states its cause in the run's own output: the gate runs
+    # on remote boxes, where the log path it names is another trip away.
+    build = ("  GEN     net/wireless/shipped-certs.c\n"
+             "  CC      net/wireless/shipped-certs.o\n"
+             "badc: error: cannot read `net/wireless/shipped-certs.c`: "
+             "No such file or directory (os error 2)\n"
+             "make[4]: *** [scripts/Makefile.build:289: "
+             "net/wireless/shipped-certs.o] Error 1\n"
+             "  CC      net/wireless/util.o\n")
+    lines = excerpt(build, 20, BUILD_ERROR_RE)
+    assert len(lines) == 2 and "cannot read" in lines[0], lines
+    assert "Error 1" in lines[1], lines
+    # Nothing matched: the tail is what there is to report, and the firmware's
+    # escapes do not reach the terminal the run prints to.
+    assert excerpt("a\nb\nc\n", 2, BUILD_ERROR_RE) == ["b", "c"]
+    assert excerpt("\x1b[2JSeaBIOS\x1b[0m\n", 1) == ["[2JSeaBIOS[0m"]
+
     diags.self_test()
     # The compile shim's flag classification, which decides what reaches
     # badc; nothing else runs it, and a kernel unit is an hour into a run.
@@ -523,6 +561,8 @@ def main() -> int:
 
         if rc != 0:
             failures.append(f"make exited {rc} (see {build_log})")
+            for line in excerpt(text, 20, BUILD_ERROR_RE):
+                log(f"build: {line}")
         if units["fail"]:
             named = ", ".join(u.split("\t")[0] for u in units["fail"][:5])
             failures.append(f"units badc could not compile: {len(units['fail'])} "
@@ -597,6 +637,8 @@ def main() -> int:
                 want = args.marker if not booted else args.check_marker
                 failures.append(f"boot {i} did not reach {want!r}"
                                 f"{last_step(text)} (see {out}){replay}")
+                for line in excerpt(text, 12):
+                    log(f"boot {i} console: {line}")
         failures.extend(kaslr.displacement_failures(
             kaslr_configured(tree), plan, offsets))
 

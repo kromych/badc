@@ -50,8 +50,18 @@ boxes using `./scripts/validate_local_boxes.py`:
     absent rather than downgrading the check. The macOS host regenerates after
     every commit through the post-commit hook, so it carries no lane step.
     Skip with `--no-snapshots`.
-  * the kernel step: `demos/linux/verify.py --linker badc --no-boot` over the
-    pinned `defconfig` release, on each Linux lane
+  * the kernel step: `demos/linux/verify.py --linker badc` over the pinned
+    `defconfig` release, on each Linux lane -- compile, link and boot. The
+    boots are the ones CI runs, four plus a displacement probe per distinct
+    displacement, under the box's own `qemu-system-<arch>`; nothing else is
+    needed to reach them, since both machines take the emulator's `-kernel`
+    loader and no firmware from elsewhere. Without them the step covers only
+    what is decided at the vmlinux link, and an image that compiles and links
+    clean and then prints nothing on the console has reached CI while this
+    board was green on all five lanes. A box with no emulator for its own
+    architecture keeps the compile + link cover and reports it as a note in
+    the closing summary, so a lane that did not boot does not read as one
+    that did.
 
 The macOS lane runs in the working tree with no transport, and runs the build,
 the release test suite and the POSIX demo set. It skips the kernel step (that
@@ -68,8 +78,11 @@ The script is the contract; this list describes it and has to be updated with it
 The kernel step's corpus is `defconfig` on the pinned release -- the tree CI's
 `kernel` job builds. The vendored minimal configs under `demos/linux/configs/`
 are not a substitute: they compile a third to a half as many units and have passed
-while defconfig-only regressions reached the branch. `--no-kernel` skips the
-step; a push whose local run skipped it has no kernel cover.
+while defconfig-only regressions reached the branch. The build costs 4.5-11 min
+per Linux lane and the boots 12 s (aarch64, eight emulator starts) to 26 s
+(x86_64, five) on top of it, measured on the boxes over an image that boots; an
+image that does not boot ends each boot at the 90 s cap instead. `--no-kernel`
+skips the step; a push whose local run skipped it has no kernel cover.
 
 ## Debugging
 

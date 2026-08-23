@@ -9,9 +9,11 @@
 //! surface, so callers name `crate::c5::asm::<item>` throughout.
 
 mod expr;
+mod gas;
 mod template;
 mod text;
 
 pub(crate) use expr::*;
+pub(crate) use gas::*;
 pub(crate) use template::*;
 pub(crate) use text::*;

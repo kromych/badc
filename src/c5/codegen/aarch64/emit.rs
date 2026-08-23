@@ -3347,7 +3347,7 @@ fn emit_inline_asm_aarch64(
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = crate::c5::asm::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
-    let reduced = match super::ssa::emit_common::strip_asm_conditionals(text) {
+    let reduced = match crate::c5::asm::strip_asm_conditionals(text) {
         Ok(r) => r,
         Err(m) => {
             bail_msg(&m);
@@ -3408,7 +3408,7 @@ fn emit_inline_asm_aarch64(
             r
         ))
     };
-    let gas = match super::ssa::emit_common::expand_asm_gas_macros(text, 4, &gas_subst) {
+    let gas = match crate::c5::asm::expand_asm_gas_macros(text, 4, &gas_subst) {
         Ok(e) => e,
         Err(m) => {
             bail_msg(&m);
@@ -3419,7 +3419,7 @@ fn emit_inline_asm_aarch64(
     // Lift any ALTERNATIVE `.subsection` replacement out of the main stream;
     // it is encoded into a deferred region appended after the function body
     // (below), out of the main sequence's fall-through path.
-    let (main_text, deferred_text) = super::ssa::emit_common::split_asm_subsections(text);
+    let (main_text, deferred_text) = crate::c5::asm::split_asm_subsections(text);
     let text = main_text.as_str();
     let extracted = match super::ssa::emit_common::extract_asm_sections(text, true) {
         Ok(e) => e,

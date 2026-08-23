@@ -8473,7 +8473,7 @@ fn emit_inline_asm_once(
         };
         super::asm::gpr_att_name(r, width).map(|n| alloc::format!("%{n}"))
     };
-    let gas = match super::ssa::emit_common::expand_asm_gas_macros(text, 4, &gas_subst) {
+    let gas = match crate::c5::asm::expand_asm_gas_macros(text, 4, &gas_subst) {
         Ok(e) => e,
         Err(m) => {
             bail_msg(&m);

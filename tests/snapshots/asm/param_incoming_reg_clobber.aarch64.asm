@@ -53,14 +53,14 @@ Disassembly of section .text:
                	stur	w5, [x29, #-0x18]
                	cbnz	x2, <addr>
                	mov	x0, #0x0                // =0
+               	mov	x5, #0xff               // =255
                	b	<addr>
                	add	x2, x4, x1
-               	ldrb	w5, [x2]
+               	ldrb	w6, [x2]
                	sub	x2, x3, x1
                	sxtw	x2, w2
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	cmp	x5, x2
+               	and	x2, x2, x5
+               	cmp	x6, x2
                	b.ne	<addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0
@@ -85,14 +85,14 @@ Disassembly of section .text:
                	sub	x5, x2, #0x1
                	stur	w5, [x29, #-0x18]
                	cbnz	x2, <addr>
+               	mov	x4, #0xff               // =255
                	b	<addr>
                	add	x2, x3, x1
-               	ldrb	w4, [x2]
+               	ldrb	w5, [x2]
                	add	x2, x1, #0x1
                	sxtw	x2, w2
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	cmp	x4, x2
+               	and	x2, x2, x4
+               	cmp	x5, x2
                	b.ne	<addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0

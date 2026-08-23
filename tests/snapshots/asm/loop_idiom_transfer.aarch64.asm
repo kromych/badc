@@ -294,39 +294,40 @@ Disassembly of section .text:
                	str	w1, [x0, #0x3c]
                	mov	x1, #0xa                // =10
                	bl	<addr>
-               	mov	x1, x20
-               	b	<addr>
+               	mov	x3, #0xffff             // =65535
+               	movk	x3, #0xffff, lsl #16
+               	movk	x3, #0xffff, lsl #32
+               	movk	x3, #0xffff, lsl #48
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	ldrsw	x3, [x2, x0, lsl #2]
+               	mov	x1, x20
+               	b	<addr>
+               	ldrsw	x4, [x2, x0, lsl #2]
                	cmp	x0, #0xa
                	b.ge	<addr>
-               	mov	x2, x20
-               	cmp	x3, x2
+               	mov	x5, x20
+               	cmp	x4, x5
                	b.eq	<addr>
                	b	<addr>
-               	mov	x2, #0xffff             // =65535
-               	movk	x2, #0xffff, lsl #16
-               	movk	x2, #0xffff, lsl #32
-               	movk	x2, #0xffff, lsl #48
+               	mov	x5, x3
                	b	<addr>
                	add	x1, x0, #0x1
                	sxtw	x0, w1
                	cmp	x0, #0x10
                	b.lt	<addr>
                	mov	x3, #0x0                // =0
+               	mov	x4, #0xff               // =255
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
+               	adrp	x6, <page>
+               	add	x6, x6, <lo12>
                	mov	x0, x3
                	b	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	add	x4, x2, x1
+               	add	x7, x6, x1
                	add	x2, x1, #0x1
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	strb	w2, [x4]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	add	x2, x2, x1
+               	and	x2, x2, x4
+               	strb	w2, [x7]
+               	add	x2, x5, x1
                	strb	w3, [x2]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
@@ -335,19 +336,19 @@ Disassembly of section .text:
                	mov	x0, #0x28               // =40
                	bl	<addr>
                	mov	x2, #0x0                // =0
+               	mov	x4, #0xff               // =255
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
                	mov	x0, x2
                	b	<addr>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	add	x3, x3, x1
-               	ldrb	w4, [x3]
+               	add	x3, x5, x1
+               	ldrb	w6, [x3]
                	cmp	x1, #0x28
                	b.ge	<addr>
                	add	x3, x0, #0x1
                	sxtw	x3, w3
-               	mov	x17, #0xff              // =255
-               	and	x3, x3, x17
-               	eor	x3, x4, x3
+               	and	x3, x3, x4
+               	eor	x3, x6, x3
                	mov	w3, w3
                	cbz	x3, <addr>
                	b	<addr>

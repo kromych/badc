@@ -20,15 +20,15 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	mov	x1, x0
+               	mov	x2, #0xffff             // =65535
+               	movk	x2, #0xffff, lsl #16
+               	movk	x2, #0xffff, lsl #32
+               	movk	x2, #0xffff, lsl #48
                	b	<addr>
-               	sub	x2, x29, #0x80
-               	lsl	x3, x1, #3
-               	add	x2, x2, x3
-               	mov	x3, #0xffff             // =65535
-               	movk	x3, #0xffff, lsl #16
-               	movk	x3, #0xffff, lsl #32
-               	movk	x3, #0xffff, lsl #48
-               	str	x3, [x2]
+               	sub	x3, x29, #0x80
+               	lsl	x4, x1, #3
+               	add	x3, x3, x4
+               	str	x2, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x10

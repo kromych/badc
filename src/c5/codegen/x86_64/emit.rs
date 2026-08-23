@@ -5683,6 +5683,29 @@ fn emit_shift_by_count_reg(
     true
 }
 
+/// Whether lowering `Inst::BinopI { op, rhs_imm: imm }` builds the
+/// immediate into a register at the site -- the `mov r, imm64` the
+/// peepholes in [`emit_binop_imm`] exist to avoid. True means the
+/// loop-invariant hoist can lift that materialization into a preheader
+/// by rewriting the site to the register form; false means the
+/// immediate rides the instruction's own imm8 / imm32 field and the
+/// rewrite would add work. Mirrors the arm order below.
+pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
+    let fits_i32 = i32::try_from(imm).is_ok();
+    match op {
+        // imm8 form in range, and the cl path for a count C99 6.5.7p3
+        // leaves undefined; neither materializes the immediate.
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror => false,
+        BinOp::Mod | BinOp::Modu => false,
+        BinOp::Mul => !(fits_i32 || (imm > 0 && (imm as u64).is_power_of_two())),
+        BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::Xor => !fits_i32,
+        BinOp::And => !(fits_i32 || imm as u64 == 0xffff_ffff),
+        _ if int_cmp_cc(op).is_some() => !fits_i32,
+        // Mulh / Mulhu / Div / Divu reach the r11-scratch path below.
+        _ => true,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_binop_imm(
     code: &mut Vec<u8>,

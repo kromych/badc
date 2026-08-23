@@ -74,14 +74,14 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdx
                	xorq	%rax, %rax
-               	jmp	<addr>
                	leaq	<rip>, %rsi
-               	addq	$0x4, %rsi
-               	addq	%rcx, %rsi
-               	movsbq	(%rsi), %rsi
-               	leaq	(%rdx,%rcx), %rdi
+               	jmp	<addr>
+               	leaq	0x4(%rsi), %rdi
+               	addq	%rcx, %rdi
                	movsbq	(%rdi), %rdi
-               	cmpq	%rdi, %rsi
+               	leaq	(%rdx,%rcx), %r8
+               	movsbq	(%r8), %r8
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx

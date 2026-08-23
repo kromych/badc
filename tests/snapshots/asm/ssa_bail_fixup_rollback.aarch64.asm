@@ -121,12 +121,12 @@ Disassembly of section .text:
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
+               	mov	x2, #0xff               // =255
                	b	<addr>
-               	sub	x2, x29, #0x20
-               	add	x2, x2, x1
-               	mov	x17, #0xff              // =255
-               	and	x3, x1, x17
-               	strb	w3, [x2]
+               	sub	x3, x29, #0x20
+               	add	x3, x3, x1
+               	and	x4, x1, x2
+               	strb	w4, [x3]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x20

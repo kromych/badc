@@ -18,29 +18,25 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	b	<addr>
+               	mov	x6, #0x3                // =3
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	ldr	x4, [x3]
-               	mov	x17, #0x3               // =3
-               	mul	x3, x2, x17
-               	add	x4, x4, x3
-               	add	x4, x4, #0x0
-               	ldrsb	x4, [x4]
+               	mov	x1, x0
+               	b	<addr>
+               	ldr	x5, [x3]
+               	mul	x4, x2, x6
+               	add	x5, x5, x4
+               	add	x5, x5, #0x0
+               	ldrsb	x5, [x5]
+               	add	x0, x0, x5
+               	ldr	x5, [x3]
+               	add	x5, x5, x4
+               	ldrsb	x5, [x5, #0x1]
+               	add	x0, x0, x5
+               	ldr	x5, [x3]
+               	add	x4, x5, x4
+               	ldrsb	x4, [x4, #0x2]
                	add	x0, x0, x4
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	ldr	x4, [x4]
-               	add	x4, x4, x3
-               	ldrsb	x4, [x4, #0x1]
-               	add	x0, x0, x4
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	ldr	x4, [x4]
-               	add	x3, x4, x3
-               	ldrsb	x3, [x3, #0x2]
-               	add	x0, x0, x3
                	add	x1, x2, #0x1
                	sxtw	x2, w1
                	cmp	x2, #0x2

@@ -116,29 +116,27 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x2, #0x32               // =50
                	stur	w2, [x29, #-0x10]
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	b	<addr>
                	stur	w2, [x29, #-0x8]
                	cmp	x2, #0x1
                	b.ne	<addr>
-               	sub	x3, x29, #0x8
-               	ldrsw	x4, [x3]
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	ldrsw	x3, [x0]
-               	add	x6, x3, #0x1
+               	sub	x4, x29, #0x8
+               	ldrsw	x5, [x4]
+               	ldrsw	x4, [x0]
+               	add	x6, x4, #0x1
                	str	w6, [x0]
-               	str	w4, [x5, x3, lsl #2]
+               	str	w5, [x3, x4, lsl #2]
                	b	<addr>
                	cmp	x2, #0x2
                	b.eq	<addr>
-               	sub	x3, x29, #0x8
-               	ldrsw	x4, [x3]
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	ldrsw	x3, [x0]
-               	add	x6, x3, #0x1
+               	sub	x4, x29, #0x8
+               	ldrsw	x5, [x4]
+               	ldrsw	x4, [x0]
+               	add	x6, x4, #0x1
                	str	w6, [x0]
-               	str	w4, [x5, x3, lsl #2]
+               	str	w5, [x3, x4, lsl #2]
                	add	x1, x2, #0x1
                	sxtw	x2, w1
                	cmp	x2, #0x3

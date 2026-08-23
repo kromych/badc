@@ -66,15 +66,15 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
-               	b	<addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	add	x3, x3, #0x4
-               	add	x3, x3, x1
-               	ldrb	w3, [x3]
-               	add	x4, x2, x1
+               	b	<addr>
+               	add	x4, x3, #0x4
+               	add	x4, x4, x1
                	ldrb	w4, [x4]
-               	cmp	x3, x4
+               	add	x5, x2, x1
+               	ldrb	w5, [x5]
+               	cmp	x4, x5
                	b.ne	<addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0

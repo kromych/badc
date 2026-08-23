@@ -311,13 +311,13 @@ Disassembly of section .text:
                	movl	%eax, 0x3c(%rdi)
                	movl	$0xa, %esi
                	callq	<addr>
+               	leaq	<rip>, %rdx
                	jmp	<addr>
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx,%rax,4), %rdx
+               	movslq	(%rdx,%rax,4), %rsi
                	cmpq	$0xa, %rax
                	jge	<addr>
                	xorq	%rcx, %rcx
-               	cmpq	%rcx, %rdx
+               	cmpq	%rcx, %rsi
                	je	<addr>
                	jmp	<addr>
                	movabsq	$-0x1, %rcx
@@ -327,15 +327,15 @@ Disassembly of section .text:
                	cmpq	$0x10, %rax
                	jl	<addr>
                	xorq	%rsi, %rsi
+               	leaq	<rip>, %r8
+               	leaq	<rip>, %r9
                	movq	%rsi, %rax
                	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	leaq	(%rdx,%rcx), %r8
+               	leaq	(%r9,%rcx), %rbx
                	leaq	0x1(%rcx), %rdx
                	movslq	%edx, %rdi
-               	movb	%dil, (%r8)
-               	leaq	<rip>, %rdx
-               	addq	%rcx, %rdx
+               	movb	%dil, (%rbx)
+               	leaq	(%r8,%rcx), %rdx
                	movb	%sil, (%rdx)
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
@@ -344,17 +344,17 @@ Disassembly of section .text:
                	movl	$0x28, %edi
                	callq	<addr>
                	xorq	%rsi, %rsi
+               	leaq	<rip>, %rdi
                	movq	%rsi, %rax
                	jmp	<addr>
-               	leaq	<rip>, %rdx
-               	addq	%rcx, %rdx
-               	movsbq	(%rdx), %rdi
+               	leaq	(%rdi,%rcx), %rdx
+               	movsbq	(%rdx), %r8
                	cmpq	$0x28, %rcx
                	jge	<addr>
                	leaq	0x1(%rax), %rdx
-               	movslq	%edx, %r8
-               	movsbq	%r8b, %rdx
-               	cmpq	%rdx, %rdi
+               	movslq	%edx, %r9
+               	movsbq	%r9b, %rdx
+               	cmpq	%rdx, %r8
                	je	<addr>
                	jmp	<addr>
                	movq	%rsi, %rdx

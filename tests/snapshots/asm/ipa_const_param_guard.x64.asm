@@ -590,22 +590,22 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	xorq	%rdx, %rdx
+               	leaq	<rip>, %rsi
                	movq	%rdx, %rcx
                	jmp	<addr>
-               	leaq	<rip>, %rsi
                	movq	%rax, (%rsi,%rax,8)
                	leaq	0x1(%rax), %rcx
                	movslq	%ecx, %rax
                	cmpq	$0xb4, %rax
                	jl	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
                	leaq	<rip>, %rsi
-               	movq	(%rsi,%rcx,8), %rdi
-               	leaq	0x1(%rcx), %rsi
-               	movslq	%esi, %rsi
-               	imulq	%rdi, %rsi
-               	addq	%rsi, %rdx
+               	jmp	<addr>
+               	movq	(%rsi,%rcx,8), %r8
+               	leaq	0x1(%rcx), %rdi
+               	movslq	%edi, %rdi
+               	imulq	%r8, %rdi
+               	addq	%rdi, %rdx
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0xb4, %rcx

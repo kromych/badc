@@ -80,20 +80,20 @@ Disassembly of section .text:
                	str	x20, [sp]
                	mov	x1, #0x3039             // =12345
                	mov	x0, #0x0                // =0
+               	mov	x5, #0x3039             // =12345
+               	mov	x6, #0x4000             // =16384
+               	mov	x7, #0x4e6d             // =20077
+               	movk	x7, #0x41c6, lsl #16
                	b	<addr>
                	mov	w1, w1
-               	mov	x17, #0x4e6d            // =20077
-               	movk	x17, #0x41c6, lsl #16
-               	mul	x1, x1, x17
+               	mul	x1, x1, x7
                	mov	w1, w1
-               	mov	x17, #0x3039            // =12345
-               	add	x1, x1, x17
+               	add	x1, x1, x5
                	mov	w1, w1
                	sub	x4, x29, #0x100
                	mov	w3, w1
                	lsr	x3, x3, #16
-               	mov	x17, #0x4000            // =16384
-               	sub	x3, x3, x17
+               	sub	x3, x3, x6
                	str	w3, [x4, x2, lsl #2]
                	add	x0, x2, #0x1
                	sxtw	x2, w0

@@ -27,8 +27,8 @@ Disassembly of section .text:
 
 <main>:
                	xorq	%rax, %rax
-               	jmp	<addr>
                	leaq	<rip>, %rcx
+               	jmp	<addr>
                	movq	(%rcx), %rdx
                	incq	%rdx
                	movq	%rdx, (%rcx)

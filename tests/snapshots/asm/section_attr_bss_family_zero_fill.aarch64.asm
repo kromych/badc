@@ -53,23 +53,23 @@ Disassembly of section .text:
                	cmp	x1, #0x200
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
+               	mov	x3, #0x4000             // =16384
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
                	b	<addr>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	add	x3, x3, x1
-               	ldrb	w3, [x3]
-               	cbnz	x3, <addr>
+               	add	x5, x4, x1
+               	ldrb	w5, [x5]
+               	cbnz	x5, <addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0
-               	mov	x17, #0x4000            // =16384
-               	cmp	x1, x17
+               	cmp	x1, x3
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
-               	b	<addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	ldr	x3, [x3, x1, lsl #3]
-               	cbnz	x3, <addr>
+               	b	<addr>
+               	ldr	x4, [x3, x1, lsl #3]
+               	cbnz	x4, <addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x8

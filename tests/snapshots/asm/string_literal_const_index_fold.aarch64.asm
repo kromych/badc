@@ -15,12 +15,13 @@ Disassembly of section .text:
 
 <main>:
                	mov	x3, #0x0                // =0
+               	mov	x4, #0xff               // =255
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
                	mov	x1, x3
                	b	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	add	x2, x2, x0
-               	ldrsb	x4, [x2]
+               	add	x2, x5, x0
+               	ldrsb	x6, [x2]
                	cmp	x0, #0x2
                	b.lt	<addr>
                	cmp	x0, #0x3
@@ -28,11 +29,9 @@ Disassembly of section .text:
                	cmp	x0, #0x3
                	b.eq	<addr>
                	mov	x2, x3
-               	mov	x17, #0xff              // =255
-               	and	x4, x4, x17
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	cmp	x4, x2
+               	and	x6, x6, x4
+               	and	x2, x2, x4
+               	cmp	x6, x2
                	b.eq	<addr>
                	b	<addr>
                	mov	x2, #0xa                // =10

@@ -4355,17 +4355,17 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	ldr	x10, [sp], #0x10
                	mov	x0, #0x0                // =0
+               	mov	x2, #0x7f               // =127
+               	mov	x3, #0x2328             // =9000
                	b	<addr>
-               	sub	x2, x29, #0x4, lsl #12  // =0x4000
-               	sub	x2, x2, #0x660
-               	add	x2, x2, x1
-               	mov	x17, #0x7f              // =127
-               	and	x3, x1, x17
-               	strb	w3, [x2]
+               	sub	x4, x29, #0x4, lsl #12  // =0x4000
+               	sub	x4, x4, #0x660
+               	add	x4, x4, x1
+               	and	x5, x1, x2
+               	strb	w5, [x4]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
-               	mov	x17, #0x2328            // =9000
-               	cmp	x1, x17
+               	cmp	x1, x3
                	b.lt	<addr>
                	sub	x0, x29, #0x4, lsl #12  // =0x4000
                	sub	x0, x0, #0x660

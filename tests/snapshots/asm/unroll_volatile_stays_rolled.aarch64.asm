@@ -15,9 +15,9 @@ Disassembly of section .text:
 
 <main>:
                	mov	x0, #0x0                // =0
-               	b	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	b	<addr>
                	ldr	x2, [x1]
                	add	x2, x2, #0x1
                	str	x2, [x1]

@@ -55,18 +55,18 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
                	mov	x21, #0x0               // =0
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
                	b	<addr>
                	mov	x20, #0x0               // =0
                	b	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	lsl	x1, x3, #4
-               	add	x4, x2, x1
+               	add	x6, x5, x1
                	lsl	x2, x0, #2
-               	add	x4, x4, x2
-               	ldr	s0, [x4]
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
+               	add	x6, x6, x2
+               	ldr	s0, [x6]
                	add	x1, x4, x1
                	add	x1, x1, x2
                	ldr	s1, [x1]

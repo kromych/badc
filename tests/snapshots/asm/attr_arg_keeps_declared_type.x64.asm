@@ -36,13 +36,13 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	leaq	<rip>, %rdx
                	xorq	%rax, %rax
+               	leaq	<rip>, %rsi
                	jmp	<addr>
-               	leaq	(%rdx,%rcx), %rsi
-               	movzbq	(%rsi), %rsi
-               	leaq	<rip>, %rdi
-               	addq	%rcx, %rdi
+               	leaq	(%rdx,%rcx), %rdi
                	movzbq	(%rdi), %rdi
-               	cmpq	%rdi, %rsi
+               	leaq	(%rsi,%rcx), %r8
+               	movzbq	(%r8), %r8
+               	cmpq	%r8, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movl	%eax, %ecx

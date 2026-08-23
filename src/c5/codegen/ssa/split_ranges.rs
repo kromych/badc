@@ -38,9 +38,10 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::ir::{Block, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use super::super::ir::{FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 use super::Target;
 use super::reg_alloc::{Allocation, Place};
+use super::tape::{Insertion, Undo};
 
 /// A run of uses of one value over a contiguous stretch of the
 /// instruction tape, with no barrier between the first and the last.
@@ -178,142 +179,55 @@ fn close_run(
     touched.clear();
 }
 
-/// The parts of a [`FunctionSsa`] the rewrite replaces, kept so a split
-/// that does not pay can be undone exactly.
-struct Undo {
-    insts: Vec<Inst>,
-    inst_src: Vec<(u32, u32)>,
-    f32_values: Vec<bool>,
-    blocks: Vec<Block>,
-    extern_call_refs: Vec<(u32, u32)>,
-    extern_imm_code_refs: Vec<(u32, u32)>,
-    extern_imm_data_refs: Vec<(u32, u32)>,
-    extern_tls_refs: Vec<(u32, u32)>,
-}
-
-impl Undo {
-    fn restore(self, func: &mut FunctionSsa) {
-        func.insts = self.insts;
-        func.inst_src = self.inst_src;
-        func.f32_values = self.f32_values;
-        func.blocks = self.blocks;
-        func.extern_call_refs = self.extern_call_refs;
-        func.extern_imm_code_refs = self.extern_imm_code_refs;
-        func.extern_imm_data_refs = self.extern_imm_data_refs;
-        func.extern_tls_refs = self.extern_tls_refs;
-    }
-}
-
 /// Insert one `Inst::Copy` per run ahead of the run's first use and
-/// point the run's uses at it. Rewrites the instruction tape, the
-/// parallel per-value tables, every block range, and every value
-/// reference through a single old-to-new id map, as
-/// [`super::mem2reg::insert_phis`] does for phis.
+/// point the run's uses at it. [`super::tape::insert`] carries the
+/// renumbering the copies force.
 fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
-    let n_old = func.insts.len();
-    let mut undo = Undo {
-        insts: Vec::new(),
-        inst_src: Vec::new(),
-        f32_values: Vec::new(),
-        blocks: func.blocks.clone(),
-        extern_call_refs: func.extern_call_refs.clone(),
-        extern_imm_code_refs: func.extern_imm_code_refs.clone(),
-        extern_imm_data_refs: func.extern_imm_data_refs.clone(),
-        extern_tls_refs: func.extern_tls_refs.clone(),
-    };
     // Runs by insertion point, so the copies of one point go in in a
     // fixed order and the output does not depend on plan order.
     let mut order: Vec<u32> = (0..runs.len() as u32).collect();
     order.sort_by_key(|&k| (runs[k as usize].first, k));
-    let mut insts: Vec<Inst> = Vec::with_capacity(n_old + runs.len());
-    let mut inst_src: Vec<(u32, u32)> = Vec::with_capacity(n_old + runs.len());
-    let mut f32_values: Vec<bool> = Vec::with_capacity(n_old + runs.len());
-    let mut remap: Vec<ValueId> = vec![NO_VALUE; n_old];
-    let mut copy_id: Vec<ValueId> = vec![NO_VALUE; runs.len()];
-    // Copies inserted strictly before each original index, so a block's
-    // new bounds follow from its old ones. Index `n_old` closes the last
-    // block's range. The tape order is otherwise preserved: instructions
-    // covered by no block (`prune_unreachable` leaves them behind) keep
-    // their slots, and blocks stay laid out as the pipeline left them.
-    let mut before: Vec<u32> = vec![0; n_old + 1];
-    for r in runs {
-        before[r.first as usize + 1] += 1;
-    }
-    for old in 0..n_old {
-        before[old + 1] += before[old];
-    }
-    let mut cur = 0usize;
-    for (old, slot) in remap.iter_mut().enumerate() {
-        while cur < order.len() && runs[order[cur] as usize].first as usize == old {
-            let k = order[cur] as usize;
-            copy_id[k] = insts.len() as ValueId;
-            insts.push(Inst::Copy {
-                value: runs[k].src,
-                is_fp: runs[k].is_fp,
-            });
-            inst_src.push(func.inst_src.get(old).copied().unwrap_or((0, 0)));
-            f32_values.push(
-                func.f32_values
-                    .get(runs[k].src as usize)
+    let ins: Vec<Insertion> = order
+        .iter()
+        .map(|&k| {
+            let r = &runs[k as usize];
+            Insertion {
+                at: r.first,
+                inst: Inst::Copy {
+                    value: r.src,
+                    is_fp: r.is_fp,
+                },
+                is_f32: func
+                    .f32_values
+                    .get(r.src as usize)
                     .copied()
                     .unwrap_or(false),
-            );
-            cur += 1;
-        }
-        *slot = insts.len() as ValueId;
-        insts.push(func.insts[old].clone());
-        inst_src.push(func.inst_src.get(old).copied().unwrap_or((0, 0)));
-        f32_values.push(func.f32_values.get(old).copied().unwrap_or(false));
-    }
-    for block in func.blocks.iter_mut() {
-        let (s, e) = (block.inst_range.start, block.inst_range.end);
-        block.inst_range = (s + before[s as usize])..(e + before[e as usize]);
-    }
-    let map = |op: &mut ValueId| {
-        if *op != NO_VALUE && (*op as usize) < n_old {
-            *op = remap[*op as usize];
-        }
-    };
-    for inst in insts.iter_mut() {
-        inst.for_each_operand_mut(map);
-    }
-    for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE && (block.exit_acc as usize) < n_old {
-            block.exit_acc = remap[block.exit_acc as usize];
-        }
-        block.terminator.for_each_operand_mut(map);
-    }
-    for table in [
-        &mut func.extern_call_refs,
-        &mut func.extern_imm_code_refs,
-        &mut func.extern_imm_data_refs,
-        &mut func.extern_tls_refs,
-    ] {
-        for (v, _) in table.iter_mut() {
-            map(v);
-        }
+            }
+        })
+        .collect();
+    let (rewrite, undo) = super::tape::insert(func, &ins);
+    let mut copy_id: Vec<ValueId> = vec![NO_VALUE; runs.len()];
+    for (pos, &k) in order.iter().enumerate() {
+        copy_id[k as usize] = rewrite.ids[pos];
     }
     // Point each run's uses at its copy. The window opens after the
     // copy, so the copy keeps reading the original value even when a
     // later run of the same value shares the block.
     for (k, r) in runs.iter().enumerate() {
-        let new_src = remap[r.src as usize];
+        let new_src = rewrite.remap[r.src as usize];
         let from = copy_id[k] + 1;
-        let to = remap[r.last as usize];
+        let to = rewrite.remap[r.last as usize];
         for i in from..=to {
-            if matches!(insts[i as usize], Inst::Phi { .. }) {
+            if matches!(func.insts[i as usize], Inst::Phi { .. }) {
                 continue;
             }
-            insts[i as usize].for_each_operand_mut(|op| {
+            func.insts[i as usize].for_each_operand_mut(|op| {
                 if *op == new_src {
                     *op = copy_id[k];
                 }
             });
         }
     }
-    undo.insts = core::mem::replace(&mut func.insts, insts);
-    undo.inst_src = core::mem::replace(&mut func.inst_src, inst_src);
-    undo.f32_values = core::mem::replace(&mut func.f32_values, f32_values);
     undo
 }
 
@@ -322,7 +236,7 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
 /// reference naming a spilled value, and one per inserted copy. Charging
 /// the copies is what keeps a split that only renames a value the second
 /// allocation would have given a register anyway from looking free.
-fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
+pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
     let weights = super::reg_alloc::block_weights(func);
     let spilled = |v: ValueId| -> bool {
         v != NO_VALUE && matches!(alloc.places.get(v as usize), Some(Place::Spill(_)))
@@ -366,6 +280,17 @@ fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
 /// spill traffic, leaving `func` matching the returned allocation.
 pub(crate) fn allocate_split(func: &mut FunctionSsa, target: Target) -> Allocation {
     let base = super::reg_alloc::allocate(func, target);
+    allocate_split_with(func, target, base)
+}
+
+/// [`allocate_split`] over an allocation of `func` the caller already
+/// has, so a pass that allocated to measure its own decision does not
+/// pay for a repeat.
+pub(super) fn allocate_split_with(
+    func: &mut FunctionSsa,
+    target: Target,
+    base: Allocation,
+) -> Allocation {
     let runs = plan(func, &base);
     if runs.is_empty() {
         return base;

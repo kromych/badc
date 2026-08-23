@@ -105,16 +105,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x60]
                	add	x29, sp, #0x60
                	mov	x2, #0x0                // =0
+               	mov	x3, #0xff               // =255
                	mov	x0, x2
                	b	<addr>
-               	sub	x3, x29, #0x50
-               	add	x3, x3, x1
-               	mov	x17, #0xff              // =255
-               	and	x4, x1, x17
-               	strb	w4, [x3]
-               	sub	x3, x29, #0x28
-               	add	x3, x3, x1
-               	strb	w2, [x3]
+               	sub	x4, x29, #0x50
+               	add	x4, x4, x1
+               	and	x5, x1, x3
+               	strb	w5, [x4]
+               	sub	x4, x29, #0x28
+               	add	x4, x4, x1
+               	strb	w2, [x4]
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x27

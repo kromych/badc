@@ -58,17 +58,17 @@ Disassembly of section .text:
                	add	x1, x0, x17
                	mov	x2, #0x4                // =4
                	strb	w2, [x1]
+               	mov	x1, #0xff               // =255
+               	mov	x2, #0x1000             // =4096
                	b	<addr>
-               	add	x1, x0, x20
-               	ldrb	w1, [x1]
-               	lsr	x2, x20, #12
-               	add	x2, x2, #0x1
-               	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	cmp	x1, x2
+               	add	x3, x0, x20
+               	ldrb	w3, [x3]
+               	lsr	x4, x20, #12
+               	add	x4, x4, #0x1
+               	and	x4, x4, x1
+               	cmp	x3, x4
                	b.ne	<addr>
-               	mov	x17, #0x1000            // =4096
-               	add	x20, x20, x17
+               	add	x20, x20, x2
                	cmp	x20, x21
                	b.lo	<addr>
                	mov	x1, x21

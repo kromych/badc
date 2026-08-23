@@ -30,12 +30,12 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	mov	x1, x0
+               	mov	x3, #0xff               // =255
                	b	<addr>
-               	add	x3, x2, x1
-               	ldrb	w3, [x3]
-               	mov	x17, #0xff              // =255
-               	and	x4, x1, x17
-               	cmp	x3, x4
+               	add	x4, x2, x1
+               	ldrb	w4, [x4]
+               	and	x5, x1, x3
+               	cmp	x4, x5
                	b.ne	<addr>
                	add	x0, x1, #0x1
                	mov	w1, w0

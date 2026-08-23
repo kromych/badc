@@ -67,21 +67,21 @@ Disassembly of section .text:
                	cmpq	$0x200, %rcx            # imm = 0x200
                	jl	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
                	leaq	<rip>, %rsi
-               	addq	%rcx, %rsi
-               	movsbq	(%rsi), %rsi
-               	testq	%rsi, %rsi
+               	jmp	<addr>
+               	leaq	(%rsi,%rcx), %rdi
+               	movsbq	(%rdi), %rdi
+               	testq	%rdi, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx
                	cmpq	$0x4000, %rcx           # imm = 0x4000
                	jl	<addr>
                	xorq	%rax, %rax
-               	jmp	<addr>
                	leaq	<rip>, %rsi
-               	movq	(%rsi,%rcx,8), %rsi
-               	testq	%rsi, %rsi
+               	jmp	<addr>
+               	movq	(%rsi,%rcx,8), %rdi
+               	testq	%rdi, %rdi
                	jne	<addr>
                	leaq	0x1(%rcx), %rax
                	movslq	%eax, %rcx

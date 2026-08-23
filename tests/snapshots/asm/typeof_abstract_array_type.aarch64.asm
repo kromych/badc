@@ -20,16 +20,16 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	mov	x0, x2
                	mov	x0, x2
+               	mov	x7, #0xa                // =10
+               	mov	x8, #0xc                // =12
                	b	<addr>
                	sub	x4, x29, #0x18
-               	mov	x17, #0xc               // =12
-               	mul	x5, x1, x17
+               	mul	x5, x1, x8
                	add	x3, x4, x5
-               	add	x7, x3, #0x0
-               	mov	x17, #0xa               // =10
-               	mul	x0, x1, x17
+               	add	x9, x3, #0x0
+               	mul	x0, x1, x7
                	add	x6, x0, #0x0
-               	str	w6, [x7]
+               	str	w6, [x9]
                	add	x6, x0, #0x1
                	str	w6, [x3, #0x4]
                	add	x0, x0, #0x2

@@ -117,26 +117,23 @@ Disassembly of section .text:
                	mov	x0, #0x14               // =20
                	ret
                	mov	x0, #0x0                // =0
+               	mov	x2, #0x3f               // =63
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	b	<addr>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	lsl	x2, x1, #6
-               	add	x3, x3, x2
-               	mov	x17, #0x3f              // =63
-               	and	x3, x3, x17
-               	cmp	x3, #0x0
-               	cset	x3, ne
-               	sxtw	x3, w3
-               	cbnz	x3, <addr>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	add	x2, x3, x2
-               	mov	x17, #0x3f              // =63
-               	and	x2, x2, x17
-               	cmp	x2, #0x0
-               	cset	x2, ne
-               	sxtw	x2, w2
-               	cbnz	x2, <addr>
+               	lsl	x4, x1, #6
+               	add	x5, x3, x4
+               	and	x5, x5, x2
+               	cmp	x5, #0x0
+               	cset	x5, ne
+               	sxtw	x5, w5
+               	cbnz	x5, <addr>
+               	add	x4, x3, x4
+               	and	x4, x4, x2
+               	cmp	x4, #0x0
+               	cset	x4, ne
+               	sxtw	x4, w4
+               	cbnz	x4, <addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0
                	cmp	x1, #0x4

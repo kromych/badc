@@ -16,9 +16,9 @@ Disassembly of section .text:
 <run>:
                	mov	x2, #0x0                // =0
                	mov	x1, #0x1                // =1
+               	mov	x5, #0x64               // =100
                	b	<addr>
-               	mov	x17, #0x64              // =100
-               	mul	x0, x1, x17
+               	mul	x0, x1, x5
                	add	x3, x0, #0x0
                	add	x2, x2, x3
                	add	x3, x0, #0x1

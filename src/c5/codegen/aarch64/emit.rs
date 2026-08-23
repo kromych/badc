@@ -9483,6 +9483,84 @@ fn compare_cond(op: BinOp) -> Option<Cond> {
     })
 }
 
+/// Unsigned 12-bit immediate field of `cmp Xn, #imm`, when `imm` fits.
+fn cmp_imm12(imm: i64) -> Option<u32> {
+    u32::try_from(imm).ok().filter(|v| *v < (1u32 << 12))
+}
+
+/// Single-instruction encoding of `rd = rn op imm`, when one exists.
+/// Avoids the `load_imm64 -> reg-form op` pair the caller falls back to.
+///   * Shl / Shr / Shru / Ror by 0..63 -> LSL / ASR / LSR / ROR by
+///     immediate (UBFM / SBFM aliases).
+///   * Mul by a power of two -> LSL by log2.
+///   * Add / Sub with a 12-bit magnitude -> enc_add_imm / enc_sub_imm;
+///     `x + (-k) == x - k` in two's complement, so a small negative
+///     immediate swaps to the other form instead of materializing the
+///     sign-extended constant.
+///   * `x ^ -1` -> mvn, `x & 0xffffffff` -> a 32-bit move (the mask has
+///     no logical-immediate AND short form here).
+///
+/// Whether a form exists depends on `(op, imm)` alone, so
+/// [`binop_imm_materializes`] reads the answer off this function.
+fn binop_imm_peephole(op: BinOp, imm: i64, rd: Reg, rn: Reg) -> Option<u32> {
+    let imm_u64 = imm as u64;
+    let pow2_shift = if imm > 0 && imm_u64.is_power_of_two() {
+        let s = imm_u64.trailing_zeros();
+        if s < 64 { Some(s as u8) } else { None }
+    } else {
+        None
+    };
+    let shift_amount = if (0..64).contains(&imm) {
+        Some(imm as u8)
+    } else {
+        None
+    };
+    let imm12 = cmp_imm12(imm);
+    let imm12_neg = if imm < 0 {
+        let m = imm.unsigned_abs();
+        if m < (1u64 << 12) {
+            u32::try_from(m).ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    match op {
+        BinOp::Shl => shift_amount.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
+        BinOp::Shr => shift_amount.map(|s| super::encode::enc_asr_imm(rd, rn, s)),
+        BinOp::Shru => shift_amount.map(|s| super::encode::enc_lsr_imm(rd, rn, s)),
+        BinOp::Ror => shift_amount.map(|s| super::encode::enc_ror_imm(rd, rn, s)),
+        BinOp::Mul => pow2_shift.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
+        BinOp::Add => imm12
+            .map(|v| enc_add_imm(rd, rn, v))
+            .or_else(|| imm12_neg.map(|v| enc_sub_imm(rd, rn, v))),
+        BinOp::Sub => imm12
+            .map(|v| enc_sub_imm(rd, rn, v))
+            .or_else(|| imm12_neg.map(|v| enc_add_imm(rd, rn, v))),
+        BinOp::Xor if imm == -1 => Some(super::encode::enc_mvn(rd, rn)),
+        BinOp::And if imm as u64 == 0xffff_ffff => Some(super::encode::enc_mov_w_w(rd, rn)),
+        _ => None,
+    }
+}
+
+/// Whether lowering `Inst::BinopI { op, rhs_imm: imm }` builds the
+/// immediate into a register at the site. True means the site pays a
+/// `load_imm64` the loop-invariant hoist can lift into a preheader by
+/// rewriting the site to the register form; false means the immediate
+/// rides the instruction's own encoding and the rewrite would add work.
+/// Mod / Modu never reach the immediate path (the walker does not emit
+/// them under `BinopI`, and the lowering below declines them).
+pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
+    if matches!(op, BinOp::Mod | BinOp::Modu) {
+        return false;
+    }
+    if binop_imm_peephole(op, imm, Reg(0), Reg(0)).is_some() {
+        return false;
+    }
+    !(compare_cond(op).is_some() && cmp_imm12(imm).is_some())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_binop_imm(
     code: &mut Vec<u8>,
@@ -9542,67 +9620,7 @@ fn emit_binop_imm(
         Some(r) => r,
         None => return false,
     };
-    // Per-op peepholes for immediate-form binops. Avoid the
-    // `load_imm64 -> reg-form op` pair when the immediate fits a
-    // direct encoding.
-    //   * Shl / Shr / Shru by 0..63 -> single-op LSL / ASR / LSR
-    //     by immediate (UBFM / SBFM aliases).
-    //   * Mul by a power of two in 0..63 -> LSL by log2.
-    //   * Add / Sub with 12-bit imm -> direct enc_add_imm /
-    //     enc_sub_imm.
-    let imm_u64 = rhs_imm as u64;
-    let imm_pow2_shift = if rhs_imm > 0 && imm_u64.is_power_of_two() {
-        let s = imm_u64.trailing_zeros();
-        if s < 64 { Some(s as u8) } else { None }
-    } else {
-        None
-    };
-    let shift_amount = if (0..64).contains(&rhs_imm) {
-        Some(rhs_imm as u8)
-    } else {
-        None
-    };
-    let imm12 = u32::try_from(rhs_imm).ok().filter(|v| *v < (1u32 << 12));
-    // Magnitude of a negative immediate that fits the 12-bit field.
-    // `x + (-k) == x - k` and `x - (-k) == x + k` in two's complement,
-    // so an Add / Sub with a small negative immediate swaps to the
-    // other form's direct encoding instead of materialising the
-    // sign-extended constant (movz + 3x movk) into a scratch register.
-    let imm12_neg = if rhs_imm < 0 {
-        let m = rhs_imm.unsigned_abs();
-        if m < (1u64 << 12) {
-            u32::try_from(m).ok()
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-    let used_peephole = match op {
-        BinOp::Shl => shift_amount.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
-        BinOp::Shr => shift_amount.map(|s| super::encode::enc_asr_imm(rd, rn, s)),
-        BinOp::Shru => shift_amount.map(|s| super::encode::enc_lsr_imm(rd, rn, s)),
-        BinOp::Ror => shift_amount.map(|s| super::encode::enc_ror_imm(rd, rn, s)),
-        BinOp::Mul => imm_pow2_shift.map(|s| super::encode::enc_lsl_imm(rd, rn, s)),
-        BinOp::Add => imm12
-            .map(|v| enc_add_imm(rd, rn, v))
-            .or_else(|| imm12_neg.map(|v| enc_sub_imm(rd, rn, v))),
-        BinOp::Sub => imm12
-            .map(|v| enc_sub_imm(rd, rn, v))
-            .or_else(|| imm12_neg.map(|v| enc_add_imm(rd, rn, v))),
-        // `x ^ -1` is bitwise NOT -> `mvn`, one instruction instead of
-        // materialising the all-ones constant (movz + 3x movk) into a
-        // scratch and xoring. `mvn` reads the same operand, so the
-        // allocator's liveness is unchanged.
-        BinOp::Xor if rhs_imm == -1 => Some(super::encode::enc_mvn(rd, rn)),
-        // `x & 0xffffffff` zero-extends the low word; a 32-bit move does
-        // it in one instruction, avoiding the load-imm64 + and-register
-        // pair (the immediate has no logical-immediate-AND short form
-        // the rest of this path would otherwise use).
-        BinOp::And if rhs_imm as u64 == 0xffff_ffff => Some(super::encode::enc_mov_w_w(rd, rn)),
-        _ => None,
-    };
-    if let Some(word) = used_peephole {
+    if let Some(word) = binop_imm_peephole(op, rhs_imm, rd, rn) {
         emit(code, word);
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
@@ -9615,7 +9633,7 @@ fn emit_binop_imm(
     // The 12-bit unsigned-immediate form covers 0..4095; outside
     // that range we fall through to the load-imm64 + cmp-reg path.
     if compare_cond(op).is_some()
-        && let Some(imm) = imm12
+        && let Some(imm) = cmp_imm12(rhs_imm)
     {
         emit(code, enc_subs_imm(Reg::SP, rn, imm));
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {

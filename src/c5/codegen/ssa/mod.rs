@@ -7,6 +7,7 @@ pub(crate) mod cfi;
 #[cfg(feature = "std")]
 pub(crate) mod dump;
 pub(crate) mod emit_common;
+pub(crate) mod licm;
 pub(crate) mod liveness;
 pub(crate) mod mem2reg;
 pub(crate) mod native;
@@ -15,6 +16,7 @@ pub(crate) mod reg_alloc;
 pub(crate) mod shadow;
 pub(crate) mod slot_coalesce;
 pub(crate) mod split_ranges;
+pub(crate) mod tape;
 
 // Resolve the codegen-level paths the moved files reference relative to their
 // original location, now that they sit one level deeper.

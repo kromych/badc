@@ -46,17 +46,17 @@ Disassembly of section .text:
                	str	x0, [x3, #0x30]
                	mov	x0, #0x7b               // =123
                	str	x0, [x3, #0x38]
+               	mov	x4, #0x74               // =116
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	b	<addr>
-               	sub	x4, x29, #0xc0
-               	lsl	x5, x2, #3
-               	add	x4, x4, x5
-               	add	x5, x2, #0x1
-               	sxtw	x5, w5
-               	mov	x17, #0x74              // =116
-               	mul	x5, x5, x17
-               	str	x5, [x4]
+               	sub	x5, x29, #0xc0
+               	lsl	x6, x2, #3
+               	add	x5, x5, x6
+               	add	x6, x2, #0x1
+               	sxtw	x6, w6
+               	mul	x6, x6, x4
+               	str	x6, [x5]
                	add	x0, x2, #0x1
                	sxtw	x2, w0
                	cmp	x2, #0x18

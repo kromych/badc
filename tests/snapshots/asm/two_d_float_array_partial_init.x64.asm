@@ -66,18 +66,18 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	xorq	%r12, %r12
+               	leaq	<rip>, %rdi
+               	leaq	<rip>, %r8
                	jmp	<addr>
                	xorq	%rbx, %rbx
                	jmp	<addr>
-               	leaq	<rip>, %rdx
                	movq	%rsi, %rcx
                	shlq	$0x4, %rcx
-               	leaq	(%rdx,%rcx), %rdi
+               	leaq	(%r8,%rcx), %r9
                	movq	%rax, %rdx
                	shlq	$0x2, %rdx
-               	addq	%rdx, %rdi
-               	movss	(%rdi,%riz), %xmm0
-               	leaq	<rip>, %rdi
+               	addq	%rdx, %r9
+               	movss	(%r9,%riz), %xmm0
                	addq	%rdi, %rcx
                	addq	%rdx, %rcx
                	movss	(%rcx,%riz), %xmm1

@@ -160,13 +160,82 @@ fn runtime_copy_between_distinct_arrays_becomes_a_call() {
     assert_eq!(calls(&f), 1, "one memcpy call: {:?}", f.insts);
 }
 
-/// Pointers prove nothing about overlap, so the copy stays a loop --
-/// an ascending element loop replicates where `memcpy` would not.
+/// Pointers prove nothing about overlap, so the copy is versioned: the
+/// transfer under a runtime disjointness test, the loop under its
+/// negation.
 #[test]
-fn copy_through_pointers_is_left_alone() {
+fn copy_through_pointers_versions_on_a_runtime_test() {
     let f = ssa(
         "void f(char *d, const char *s, int n) { for (int i = 0; i < n; i++) d[i] = s[i]; }",
         "f",
+    );
+    assert_eq!(calls(&f), 1, "one memmove call: {:?}", f.insts);
+    assert!(stores(&f) > 0, "the loop is kept: {:?}", f.insts);
+}
+
+/// The version is a `memmove`: the single compare admits a destination
+/// below an overlapping source, which `memcpy` does not take. A unit
+/// that declares only the wrong one has no transfer to call.
+const VERSIONED_COPY: &str =
+    "void f(char *d, const char *s, int n) { for (int i = 0; i < n; i++) d[i] = s[i]; }\n";
+
+#[test]
+fn the_versioned_copy_binds_to_memmove() {
+    let src =
+        alloc::format!("void *memmove(void *, const void *, unsigned long);\n{VERSIONED_COPY}");
+    assert_eq!(calls(&ssa_bare(&src, "f")), 1);
+}
+
+#[test]
+fn the_versioned_copy_does_not_bind_to_memcpy() {
+    let src =
+        alloc::format!("void *memcpy(void *, const void *, unsigned long);\n{VERSIONED_COPY}");
+    assert_eq!(calls(&ssa_bare(&src, "f")), 0);
+}
+
+/// One pointer read twice is not disjoint from itself at any distance.
+#[test]
+fn copy_through_one_pointer_is_left_alone() {
+    let f = ssa(
+        "void f(char *d, int n) { for (int i = 0; i < n; i++) d[i] = d[i]; }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+/// A constant count is not worth a version: the loop it would keep is
+/// what the unroller already reduces.
+#[test]
+fn constant_copy_through_pointers_is_left_alone() {
+    let f = ssa(
+        "void f(char *d, const char *s) { for (int i = 0; i < 8; i++) d[i] = s[i]; }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no call: {:?}", f.insts);
+    assert!(mcpys(&f) == 0, "no inline transfer: {:?}", f.insts);
+}
+
+/// The same shape into a local array, where the transfer would also bar
+/// the array's promotion.
+#[test]
+fn constant_copy_into_a_local_array_is_left_alone() {
+    let f = ssa(
+        "long f(const long *s) { long a[8]; for (int i = 0; i < 8; i++) a[i] = s[i]; return a[3]; }",
+        "f",
+    );
+    assert_eq!(mcpys(&f), 0, "no inline transfer: {:?}", f.insts);
+}
+
+/// `-fno-builtin` bars the library spelling, and the versioned copy has
+/// no inline form at a runtime count.
+#[test]
+fn no_builtin_keeps_the_versioned_copy_a_loop() {
+    let f = ssa_with(
+        "void f(char *d, const char *s, int n) { for (int i = 0; i < n; i++) d[i] = s[i]; }",
+        "f",
+        CompileOptions::default()
+            .with_optimize(true)
+            .with_no_builtin(true),
     );
     assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
 }
@@ -410,14 +479,241 @@ fn byte_fill_of_a_floating_value_is_left_alone() {
 }
 
 /// An array-shaped parameter is a pointer (C99 6.7.5.3p7), so two of
-/// them may alias.
+/// them may alias and the copy takes the runtime test.
 #[test]
-fn copy_between_array_shaped_parameters_is_left_alone() {
+fn copy_between_array_shaped_parameters_versions() {
     let f = ssa(
         "void f(char a[16], const char b[16], int n) { for (int i = 0; i < n; i++) a[i] = b[i]; }",
         "f",
     );
+    assert_eq!(calls(&f), 1, "one memmove call: {:?}", f.insts);
+}
+
+/// The pointer-walking loops: a block of `k` element copies, the two
+/// pointers advanced by `k`, and the counter reduced by `k`.
+#[test]
+fn blocked_pointer_walk_becomes_a_call() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         while (n > 2) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d += 3; s += 3; n -= 3; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 1, "one memmove call: {:?}", f.insts);
+}
+
+#[test]
+fn blocked_pointer_walk_takes_the_ge_spelling() {
+    let f = ssa(
+        "void f(int *d, const int *s, unsigned n) {\n\
+         while (n >= 4) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];\n\
+         d += 4; s += 4; n -= 4; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 1, "one memmove call: {:?}", f.insts);
+}
+
+/// One element per iteration, through the dereference spelling.
+#[test]
+fn single_element_pointer_walk_becomes_a_call() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         while (n > 0) { *d = *s; d++; s++; n--; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 1, "one memmove call: {:?}", f.insts);
+}
+
+/// A `for` with neither init nor post is the same loop.
+#[test]
+fn pointer_walk_in_a_for_header_becomes_a_call() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         for (; n > 1;) { d[0] = s[0]; d[1] = s[1]; d += 2; s += 2; n -= 2; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 1, "one memmove call: {:?}", f.insts);
+}
+
+/// The three steps may come in any order after the copies.
+#[test]
+fn pointer_walk_steps_may_be_reordered() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         while (n > 1) { d[0] = s[0]; d[1] = s[1]; n -= 2; s += 2; d += 2; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 1, "one memmove call: {:?}", f.insts);
+}
+
+/// The block has to cover the range the steps advance past: a repeated
+/// offset leaves an element the transfer would copy and the loop would
+/// not.
+#[test]
+fn pointer_walk_with_a_repeated_offset_is_left_alone() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         while (n > 2) { d[0] = s[0]; d[1] = s[1]; d[1] = s[1]; d += 3; s += 3; n -= 3; } }",
+        "f",
+    );
     assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+#[test]
+fn pointer_walk_with_an_offset_past_the_block_is_left_alone() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         while (n > 2) { d[0] = s[0]; d[1] = s[1]; d[3] = s[3]; d += 3; s += 3; n -= 3; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+/// A pointer step past the block leaves elements untouched.
+#[test]
+fn pointer_walk_with_a_mismatched_pointer_step_is_left_alone() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         while (n > 2) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d += 4; s += 4; n -= 3; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+/// A counter step past the block changes the trip count.
+#[test]
+fn pointer_walk_with_a_mismatched_counter_step_is_left_alone() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         while (n > 2) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d += 3; s += 3; n -= 2; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+/// The pointers must move together: a source left in place replicates.
+#[test]
+fn pointer_walk_without_a_source_step_is_left_alone() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         while (n > 2) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d += 3; n -= 3; n -= 0; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+#[test]
+fn pointer_walk_with_an_extra_statement_is_left_alone() {
+    let f = ssa(
+        "void f(char *d, const char *s, char *o, unsigned n) {\n\
+         while (n > 1) { d[0] = s[0]; d[1] = s[1]; o[0] = 1; d += 2; s += 2; n -= 2; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+/// Unequal element types convert rather than move bytes.
+#[test]
+fn pointer_walk_over_unequal_element_types_is_left_alone() {
+    let f = ssa(
+        "void f(int *d, const char *s, unsigned n) {\n\
+         while (n > 1) { d[0] = s[0]; d[1] = s[1]; d += 2; s += 2; n -= 2; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+#[test]
+fn pointer_walk_over_a_volatile_element_is_left_alone() {
+    let f = ssa(
+        "void f(volatile char *d, const char *s, unsigned n) {\n\
+         while (n > 1) { d[0] = s[0]; d[1] = s[1]; d += 2; s += 2; n -= 2; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+/// The transfer reads the counter once; a store the loop makes must not
+/// be able to reach it.
+#[test]
+fn pointer_walk_with_an_address_taken_counter_is_left_alone() {
+    let f = ssa(
+        "void g(unsigned *);\n\
+         void f(char *d, const char *s, unsigned n) { g(&n);\n\
+         while (n > 1) { d[0] = s[0]; d[1] = s[1]; d += 2; s += 2; n -= 2; } }",
+        "f",
+    );
+    assert_eq!(
+        calls(&f),
+        1,
+        "only the call the source wrote: {:?}",
+        f.insts
+    );
+}
+
+#[test]
+fn pointer_walk_with_an_address_taken_destination_is_left_alone() {
+    let f = ssa(
+        "void g(char **);\n\
+         void f(char *d, const char *s, unsigned n) { g(&d);\n\
+         while (n > 1) { d[0] = s[0]; d[1] = s[1]; d += 2; s += 2; n -= 2; } }",
+        "f",
+    );
+    assert_eq!(
+        calls(&f),
+        1,
+        "only the call the source wrote: {:?}",
+        f.insts
+    );
+}
+
+/// The counter's bound has to be a constant: nothing else fixes the
+/// block size the body copies.
+#[test]
+fn pointer_walk_against_a_runtime_bound_is_left_alone() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n, unsigned m) {\n\
+         while (n > m) { d[0] = s[0]; d[1] = s[1]; d += 2; s += 2; n -= 2; } }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+/// The body runs before the test, so the block is copied whether or not
+/// the counter admits it.
+#[test]
+fn do_while_pointer_walk_is_left_alone() {
+    let f = ssa(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         do { d[0] = s[0]; d[1] = s[1]; d += 2; s += 2; n -= 2; } while (n > 1); }",
+        "f",
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+#[test]
+fn no_builtin_keeps_the_pointer_walk_a_loop() {
+    let f = ssa_with(
+        "void f(char *d, const char *s, unsigned n) {\n\
+         while (n > 2) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d += 3; s += 3; n -= 3; } }",
+        "f",
+        CompileOptions::default()
+            .with_optimize(true)
+            .with_no_builtin(true),
+    );
+    assert_eq!(calls(&f), 0, "no transform: {:?}", f.insts);
+}
+
+/// The definition of `memmove` must not call itself.
+#[test]
+fn the_move_functions_own_body_is_left_alone() {
+    let f = ssa_bare(
+        "void *memmove(void *d, const void *s, unsigned long n) {\n\
+         char *p = d; const char *q = s;\n\
+         while (n > 0) { *p = *q; p++; q++; n--; }\n\
+         return d; }",
+        "memmove",
+    );
+    assert_eq!(calls(&f), 0, "no self-call: {:?}", f.insts);
 }
 
 /// The runnable fixtures, compiled the way the CLI's `-O` does -- the
@@ -449,5 +745,10 @@ mod run {
     #[test]
     fn overlap_fixture_runs() {
         assert_eq!(fixture_exit("loop_idiom_overlap.c"), 0);
+    }
+
+    #[test]
+    fn version_fixture_runs() {
+        assert_eq!(fixture_exit("loop_idiom_version.c"), 0);
     }
 }

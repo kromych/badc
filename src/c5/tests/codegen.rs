@@ -2705,7 +2705,7 @@ fn typed_overflow_builtins_check_their_result_pointer() {
     .compile()
     .expect("the type-specific overflow builtins must compile over their own types");
     let Err(err) = crate::Compiler::new(
-        "int main(void) { long x; return __builtin_sadd_overflow(1, 2, &x); }".to_string(),
+        "int main(void) { long long x; return __builtin_sadd_overflow(1, 2, &x); }".to_string(),
     )
     .compile() else {
         panic!("a mismatched result pointer must be rejected");

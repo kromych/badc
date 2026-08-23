@@ -172,6 +172,12 @@ fn shuffles_carry_their_immediate() {
 #[cfg(feature = "full")]
 #[test]
 fn element_access_uses_the_extract_and_insert_instructions() {
+    // Alone in this file, these encodings name a general register, which
+    // the `codegen_test` pressure knobs reallocate. The rest stage through
+    // the fixed xmm14/xmm15 pair and hold under them.
+    if std::env::var_os("BADC_MAX_GPR").is_some() || std::env::var_os("BADC_MAX_FPR").is_some() {
+        return;
+    }
     // pextrw $0x3, %xmm14, %r11d        66 45 0f c5 de 03
     // pextrd $0x2, %xmm14, %r11d        66 45 0f 3a 16 f3 02
     // pinsrd $0x1, %edx, %xmm15         66 44 0f 3a 22 fa 01

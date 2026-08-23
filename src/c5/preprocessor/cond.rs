@@ -1252,5 +1252,9 @@ pub(super) fn is_known_attribute(name: &str) -> bool {
             | "error"
             | "warning"
             | "unavailable"
+            // Accepted and validated for its feature names; badc emits
+            // every instruction its intrinsic surface carries on x86-64,
+            // so the attribute selects nothing further.
+            | "target"
     )
 }

@@ -489,6 +489,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }
+                | Inst::X86Simd { .. }
                 | Inst::InlineAsm { .. }
                 | Inst::TailExt(_) => {
                     table.clear();

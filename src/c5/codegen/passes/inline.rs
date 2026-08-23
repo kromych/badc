@@ -1756,7 +1756,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
                     .zip(args)
                     .any(|(o, &a)| o.is_output && !own(a))
         }
-        Inst::Intrinsic { .. } => true,
+        Inst::Intrinsic { .. } | Inst::X86Simd { .. } => true,
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)

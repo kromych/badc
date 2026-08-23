@@ -46,7 +46,17 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 /// and leaves the compiler's own facilities in place. Ordinary headers keep
 /// the usual order (`-I` shadows the embedded set, as it does in gcc and
 /// clang).
-pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &["_builtins.h", "arm_neon.h", "x86intrin.h"];
+pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &[
+    "_builtins.h",
+    "arm_neon.h",
+    "x86intrin.h",
+    "immintrin.h",
+    "xmmintrin.h",
+    "emmintrin.h",
+    "tmmintrin.h",
+    "smmintrin.h",
+    "wmmintrin.h",
+];
 
 /// Whether `name` is a compiler-owned intrinsic header.
 pub(super) fn compiler_owned_header(name: &str) -> bool {
@@ -74,6 +84,30 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     (
         "x86intrin.h",
         include_str!("../../libc/include/x86intrin.h"),
+    ),
+    (
+        "immintrin.h",
+        include_str!("../../libc/include/immintrin.h"),
+    ),
+    (
+        "xmmintrin.h",
+        include_str!("../../libc/include/xmmintrin.h"),
+    ),
+    (
+        "emmintrin.h",
+        include_str!("../../libc/include/emmintrin.h"),
+    ),
+    (
+        "tmmintrin.h",
+        include_str!("../../libc/include/tmmintrin.h"),
+    ),
+    (
+        "smmintrin.h",
+        include_str!("../../libc/include/smmintrin.h"),
+    ),
+    (
+        "wmmintrin.h",
+        include_str!("../../libc/include/wmmintrin.h"),
     ),
     ("stdalign.h", include_str!("../../libc/include/stdalign.h")),
     ("stddef.h", include_str!("../../libc/include/stddef.h")),

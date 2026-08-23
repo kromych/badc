@@ -21,6 +21,7 @@ mod softfp;
 mod symbol;
 mod token;
 mod vm;
+mod x86_simd;
 
 #[cfg(test)]
 mod tests;

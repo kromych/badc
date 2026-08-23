@@ -92,6 +92,7 @@ fn fmt_inst(inst: &Inst) -> String {
     use Inst::*;
     match inst {
         Imm(v) => format!("Imm({v})"),
+
         ImmData(v) => format!("ImmData({v})"),
         ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
         ImmExtCode(binding) => format!("ImmExtCode(binding={binding})"),
@@ -271,6 +272,11 @@ fn fmt_inst(inst: &Inst) -> String {
             width,
         } => format!(
             "AtomicCas {{ addr=v{addr}, expected_addr=v{expected_addr}, desired=v{desired}, width={width} }}"
+        ),
+        X86Simd { op, imm, args } => format!(
+            "X86Simd {{ op={}, imm={imm:?}, args=[{}] }}",
+            crate::c5::x86_simd::get(*op).name,
+            fmt_value_list(args),
         ),
         Intrinsic { kind, args } => format!(
             "Intrinsic {{ kind={}, args=[{}] }}",

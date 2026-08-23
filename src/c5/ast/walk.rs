@@ -1203,6 +1203,44 @@ impl<'a> Walker<'a> {
     /// rvalues (their address lands on the accumulator); the result is a fresh
     /// synthetic aggregate whose address is returned, matching how a struct
     /// rvalue is produced.
+    /// Lower an x86 SIMD builtin to its instruction. A 128-bit operand is
+    /// passed by address; the result lands in a synthetic slot whose
+    /// address the expression yields, which is the protocol every other
+    /// vector-valued expression uses.
+    fn walk_x86_simd(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: u32,
+        args: &[ExprId],
+        imm: Option<u8>,
+    ) -> Result<ValueId, WalkError> {
+        use crate::c5::x86_simd::{self, Form};
+        let form = x86_simd::get(op).form;
+        let mut ops: alloc::vec::Vec<ValueId> = alloc::vec::Vec::with_capacity(args.len() + 1);
+        for &a in args {
+            let v = if self.expr_is_vector(a) {
+                self.walk_copy_operand(b, a)?
+            } else {
+                self.walk_expr_rvalue(b, a)?
+            };
+            ops.push(v);
+        }
+        if form == Form::Store {
+            b.x86_simd(op, imm, ops);
+            return Ok(b.imm(0));
+        }
+        let result_bytes = if form.returns_vector() { 16 } else { 8 };
+        let slot = b.alloc_synthetic_struct(result_bytes);
+        let dst = b.local_addr(slot);
+        ops.insert(0, dst);
+        b.x86_simd(op, imm, ops);
+        if form.returns_vector() {
+            Ok(dst)
+        } else {
+            Ok(b.load(dst, LoadKind::I32))
+        }
+    }
+
     fn walk_vector_chunked(
         &mut self,
         b: &mut super::super::codegen::ssa::build::SsaBuilder,
@@ -5286,6 +5324,7 @@ impl<'a> Walker<'a> {
                     Expr::VlaSizeof { .. } => Ty::Int as i64,
                     Expr::StmtExpr { ty, .. } => *ty,
                     Expr::CheckedArith { ty, .. } => *ty,
+                    Expr::X86Simd { ty, .. } => *ty,
                     Expr::MemTransfer { ty, .. } => *ty,
                     // `&&label` is a `void *` (char-pointer encoding).
                     Expr::LabelAddr(_) => {
@@ -5568,6 +5607,11 @@ impl<'a> Walker<'a> {
             } => {
                 let (op, a, rhs, dst, elem_ty) = (*op, *a, *rhs, *dst, *elem_ty);
                 self.walk_checked_arith(b, op, a, rhs, dst, elem_ty)
+            }
+            Expr::X86Simd { op, args, imm, .. } => {
+                let (op, imm) = (*op, *imm);
+                let args = args.clone();
+                self.walk_x86_simd(b, op, &args, imm)
             }
             // A short-circuit in value position: the result is used, so
             // normalize it to 0/1.
@@ -7416,6 +7460,7 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
         | Expr::VlaBase { ty, .. }
         | Expr::StmtExpr { ty, .. }
         | Expr::CheckedArith { ty, .. }
+        | Expr::X86Simd { ty, .. }
         | Expr::MemTransfer { ty, .. } => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
@@ -7619,6 +7664,7 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::VlaSizeof { .. } => "VlaSizeof",
         Expr::StmtExpr { .. } => "StmtExpr",
         Expr::CheckedArith { .. } => "CheckedArith",
+        Expr::X86Simd { .. } => "X86Simd",
         Expr::MemTransfer { .. } => "MemTransfer",
         Expr::InlineAsm(_) => "InlineAsm",
     }

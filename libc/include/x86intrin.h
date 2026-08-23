@@ -1,15 +1,16 @@
-/* GCC <x86intrin.h> umbrella. This build carries the scalar ia32
-** subset only: byte swaps and bit scans over the compiler builtins,
-** rotates, and the rdtsc / rdpmc / pause instructions as inline asm.
-** The SIMD family headers (mmintrin.h .. immintrin.h) are not
-** provided; code selecting a vector intrinsic path fails at the
-** undeclared intrinsic. TODO: lower the x86 SIMD intrinsic surface
-** and complete the umbrella. */
+/* GCC <x86intrin.h> umbrella: the scalar ia32 subset (byte swaps and
+** bit scans over the compiler builtins, rotates, and the rdtsc / rdpmc
+** / pause instructions as inline asm) plus the SIMD family headers.
+** Those carry the SSE2 / SSSE3 / SSE4.1 / AES / PCLMUL / RDRAND subset
+** this build lowers; an operation outside it is absent rather than
+** emulated. TODO: extend the subset to the rest of the family. */
 #pragma once
 
 #if !defined(__x86_64__) && !defined(__i386__)
 #error "x86intrin.h is only available when targeting x86"
 #endif
+
+#include <immintrin.h>
 
 static inline int __bsfd(int __x) {
     return __builtin_ctz((unsigned int)__x);

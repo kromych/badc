@@ -59,6 +59,7 @@ mod relocatable;
 mod stack_guard;
 mod types;
 mod vla;
+mod x86_simd;
 
 /// Absolute path of `tests/fixtures/c/<name>` relative to the crate root.
 fn fixture_path(name: &str) -> PathBuf {

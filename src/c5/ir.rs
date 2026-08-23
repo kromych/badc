@@ -403,6 +403,18 @@ pub(crate) enum Inst {
     /// setjmp's 0-on-initial-call); longjmp does not return at
     /// all.
     Intrinsic { kind: i64, args: Vec<ValueId> },
+    /// One x86 SIMD instruction. `op` indexes
+    /// [`crate::c5::x86_simd::OPS`]; `imm` is the encoded immediate, or
+    /// `None` for a shift whose count is not a constant. `args` start with
+    /// the destination address (the pointer operand for a store) and
+    /// continue with the sources: an address for a 128-bit operand, the
+    /// value itself for a pointer or integer one. Defines no SSA value --
+    /// the result is written through the destination address.
+    X86Simd {
+        op: u32,
+        imm: Option<u8>,
+        args: Vec<ValueId>,
+    },
     /// GCC extended inline asm with operands (`asm(template : outputs :
     /// inputs : clobbers)`). `asm` carries the template, per-operand
     /// constraints, and clobbers; `args` is parallel to `asm.operands`
@@ -541,6 +553,7 @@ impl Inst {
             Inst::AtomicRmw { .. } => "AtomicRmw",
             Inst::AtomicCas { .. } => "AtomicCas",
             Inst::Intrinsic { .. } => "Intrinsic",
+            Inst::X86Simd { .. } => "X86Simd",
             Inst::InlineAsm { .. } => "InlineAsm",
             Inst::AllocaInit(_) => "AllocaInit",
             Inst::ParamRef { .. } => "ParamRef",
@@ -608,6 +621,7 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
+            | Inst::X86Simd { args, .. }
             | Inst::InlineAsm { args, .. } => {
                 for &a in args {
                     f(a);
@@ -701,6 +715,7 @@ impl Inst {
             Inst::Call { args, .. }
             | Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
+            | Inst::X86Simd { args, .. }
             | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     f(a);
@@ -1593,6 +1608,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
             | Inst::Intrinsic { .. }
+            | Inst::X86Simd { .. }
             | Inst::InlineAsm { .. }
             | Inst::AllocaInit { .. }
             | Inst::ParamRef { .. }

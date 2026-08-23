@@ -341,6 +341,15 @@ header takes its standard-C path for the GNU features badc lacks.
 - On Windows targets, `__int8` / `__int16` / `__int32` / `__int64`. The
   wider MSVC / MinGW mimicry surface (`_MSC_VER`, `__MINGW32__`, ...) is
   opt-in per translation unit with `-include msvc_compat.h`.
+- On x86 targets, the SIMD intrinsic headers `<xmmintrin.h>`,
+  `<emmintrin.h>`, `<tmmintrin.h>`, `<smmintrin.h>`, `<wmmintrin.h>` and
+  `<immintrin.h>`, reached through `<x86intrin.h>`. They are
+  compiler-owned and carry a subset of SSE2 / SSSE3 / SSE4.1 / AES-NI /
+  PCLMUL / RDRAND: each operation lowers to the instruction the SDM
+  documents for it, over `__builtin_ia32_*` builtins with gcc's names. An
+  operation outside the subset is absent rather than emulated, so a unit
+  needing one fails at the undeclared name. The forms whose last operand
+  the instruction encodes as `imm8` are macros, as gcc's are without `-O`.
 
 ### c5-specific
 

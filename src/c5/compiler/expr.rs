@@ -393,6 +393,116 @@ impl Compiler {
         Ok(())
     }
 
+    /// Parse an x86 SIMD builtin call (`__builtin_ia32_*`), the opening
+    /// `(` already consumed. Operand count and kinds come from the table
+    /// row; the immediate operand of the forms that take one must be an
+    /// integer constant expression, as it does in gcc.
+    fn parse_x86_simd_builtin(&mut self, op: u32, name: &str) -> Result<(), C5Error> {
+        use super::super::ast::{Expr, ExprId};
+        use super::super::x86_simd::{self, Form, Sem};
+        let row = x86_simd::get(op);
+        if !self.target.is_x86_64() {
+            return Err(self.compile_err(format!("`{name}` requires an x86 target")));
+        }
+        let mut args: Vec<ExprId> = Vec::new();
+        let mut arg_tys: Vec<i64> = Vec::new();
+        if self.lex.tk != ')' {
+            loop {
+                self.expr(Token::Assign as i64)?;
+                if let Some(a) = self.ast_acc {
+                    args.push(a);
+                    arg_tys.push(self.ty);
+                }
+                if self.lex.tk == ',' {
+                    self.next()?;
+                    continue;
+                }
+                break;
+            }
+        }
+        if self.lex.tk != ')' || args.len() != row.form.arity() {
+            return Err(
+                self.compile_err(format!("`{name}` expects {} arguments", row.form.arity()))
+            );
+        }
+        self.next()?; // consume ')'
+        let v128 = self.make_vector_type(Ty::LongLong as i64, 16);
+        // Operand kinds: a 128-bit vector where the row wants one, a
+        // pointer for the transfer and rdrand forms, an integer otherwise.
+        for (i, &ty) in arg_tys.iter().enumerate() {
+            let wants_vector = match row.form {
+                Form::V | Form::VI | Form::Shift | Form::Extract | Form::Insert => i == 0,
+                Form::Vv | Form::VvI => i < 2,
+                Form::Store => i == 1,
+                Form::Load | Form::RdRand => false,
+            };
+            let wants_pointer = matches!(row.form, Form::Load | Form::RdRand)
+                || (row.form == Form::Store && i == 0);
+            if wants_vector && !(is_vector_ty(&self.structs, ty) && self.size_of_type(ty) == 16) {
+                return Err(self.compile_err(format!(
+                    "`{name}` argument {} must be a 16-byte vector",
+                    i + 1
+                )));
+            }
+            if wants_pointer && !is_pointer_ty(ty) {
+                return Err(
+                    self.compile_err(format!("`{name}` argument {} must be a pointer", i + 1))
+                );
+            }
+        }
+        // The immediate is the last operand; it leaves the argument list
+        // and rides the node, as the instruction encodes it in place. A
+        // shift count folds the same way when it is a constant that the
+        // 8-bit field can hold, and stays an operand otherwise.
+        let mut imm = None;
+        if row.form.takes_imm() {
+            let last = args.len() - 1;
+            let Some(n) = self.expr_const_int(args[last]) else {
+                return Err(self.compile_err(format!(
+                    "`{name}` last argument must be an integer constant expression"
+                )));
+            };
+            imm = Some(n as u8);
+            args.truncate(last);
+        } else if row.form == Form::Shift {
+            // The byte-granular shift encodes a byte count while its
+            // builtin takes bits, as gcc's does; it has no register-count
+            // form, so the operand must be constant.
+            let bits_per_unit = if row.sem == Sem::ShlBytes { 8 } else { 1 };
+            match self.expr_const_int(args[1]) {
+                Some(n) if (0..=255 * bits_per_unit).contains(&n) => {
+                    imm = Some((n / bits_per_unit) as u8);
+                    args.truncate(1);
+                }
+                // Any count at or past the lane width yields zero, which
+                // the widest encodable immediate also produces.
+                Some(_) => {
+                    imm = Some(255);
+                    args.truncate(1);
+                }
+                None if bits_per_unit != 1 => {
+                    return Err(self.compile_err(format!(
+                        "`{name}` count must be an integer constant expression"
+                    )));
+                }
+                None => {}
+            }
+        }
+        self.mark_emit_other();
+        let ty = if row.form.returns_vector() {
+            v128
+        } else if row.form == Form::Store {
+            super::types::void_ty()
+        } else {
+            Ty::Int as i64
+        };
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::X86Simd { op, args, imm, ty }, pos);
+        self.ty = ty;
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
     /// Parse a GCC memory-transfer builtin (`__builtin_memcpy`,
     /// `__builtin_memmove`, `__builtin_memset`) with the opening `(`
     /// already consumed. A byte count that is an integer constant
@@ -1168,6 +1278,13 @@ impl Compiler {
                 // operands (badc does not model the queried attributes).
                 let is_has_attribute =
                     not_real_fn && self.symbols[id_idx].name == "__builtin_has_attribute";
+                // x86 SIMD builtins, expanded at the call site to the
+                // instruction the table row names.
+                let simd_op = if not_real_fn {
+                    super::super::x86_simd::lookup(self.symbols[id_idx].name.as_str())
+                } else {
+                    None
+                };
                 // GCC memory transfers, expanded inline when the byte
                 // count is an integer constant expression.
                 let mem_transfer = if not_real_fn {
@@ -1175,7 +1292,10 @@ impl Compiler {
                 } else {
                     None
                 };
-                if let Some(mop) = mem_transfer {
+                if let Some(sop) = simd_op {
+                    let name = self.symbols[id_idx].name.clone();
+                    self.parse_x86_simd_builtin(sop, &name)?;
+                } else if let Some(mop) = mem_transfer {
                     let name = self.symbols[id_idx].name.clone();
                     self.parse_mem_transfer_builtin(mop, &name)?;
                 } else if is_choose_expr {

@@ -389,7 +389,8 @@ fn function_clobbers_xmm_scratch(func: &FunctionSsa) -> Vec<u8> {
     {
         return Vec::new();
     }
-    if !func.insts.iter().any(produces_fp_result) {
+    let simd = func.insts.iter().any(|i| matches!(i, Inst::X86Simd { .. }));
+    if !simd && !func.insts.iter().any(produces_fp_result) {
         return Vec::new();
     }
     let mut regs = alloc::vec![14u8, 15u8];
@@ -1665,6 +1666,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
             kind: StoreKind::F32 | StoreKind::F64 | StoreKind::F80 | StoreKind::F128,
             ..
         } => ResultKind::Fp,
+        X86Simd { .. } => ResultKind::None,
         Store { .. } | StoreLocal { .. } | StoreIndexed { .. } | SegStore { .. } => ResultKind::Int,
         LoadIndexed { kind, .. } => match kind {
             LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 => ResultKind::Fp,

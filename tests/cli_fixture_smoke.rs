@@ -84,16 +84,17 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
 /// lower these recognized asm intrinsics on the foreign target so the
 /// fixtures compile everywhere.)
 const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
+    ("x86_simd_intrinsics.c", "linux-aarch64"), // x86 SIMD intrinsic surface
     ("file_scope_asm_a64_relocs.c", "linux-x64"), // aarch64 stp/adrp file-scope section
     ("file_scope_asm_a64_label_diff_operand.c", "linux-x64"), // aarch64 prfm/adr file-scope section
-    ("cacheflush_asm.c", "linux-x64"),            // aarch64 cache-ops / barriers
-    ("atomic128_ldaxp_stlxp.c", "linux-x64"),     // aarch64 128-bit ldaxp/stlxp
-    ("atomic128_ldst.c", "linux-x64"),            // aarch64 128-bit ldp/stp, ldxp/stxp
-    ("atomic128_cmpxchg_llsc.c", "linux-x64"),    // aarch64 128-bit ldxp/stxp CAS (generic encoder)
-    ("inline_asm_a64_dp.c", "linux-x64"),         // aarch64 mul/csel (x86 mul is 1-operand)
-    ("inline_asm_a64_sym_reloc.c", "linux-x64"),  // aarch64 adrp/:lo12: symbol operands
+    ("cacheflush_asm.c", "linux-x64"),          // aarch64 cache-ops / barriers
+    ("atomic128_ldaxp_stlxp.c", "linux-x64"),   // aarch64 128-bit ldaxp/stlxp
+    ("atomic128_ldst.c", "linux-x64"),          // aarch64 128-bit ldp/stp, ldxp/stxp
+    ("atomic128_cmpxchg_llsc.c", "linux-x64"),  // aarch64 128-bit ldxp/stxp CAS (generic encoder)
+    ("inline_asm_a64_dp.c", "linux-x64"),       // aarch64 mul/csel (x86 mul is 1-operand)
+    ("inline_asm_a64_sym_reloc.c", "linux-x64"), // aarch64 adrp/:lo12: symbol operands
     ("inline_asm_a64_sp_operand.c", "linux-x64"), // aarch64 sp-operand add/sub
-    ("inline_asm_a64_labels.c", "linux-x64"),     // aarch64 local-label branches
+    ("inline_asm_a64_labels.c", "linux-x64"),   // aarch64 local-label branches
     ("inline_asm_a64_section_branches.c", "linux-x64"), // aarch64 branches into a pushed section
     ("inline_asm_a64_label_directive.c", "linux-x64"), // aarch64 label sharing a directive statement
     ("asm_goto_immediate_operand_no_frame.c", "linux-x64"), // aarch64 asm goto + .align 3

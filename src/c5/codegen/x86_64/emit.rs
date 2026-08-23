@@ -3731,6 +3731,7 @@ fn emit_inst(
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }
+        Inst::X86Simd { op, imm, args } => emit_x86_simd(code, *op, *imm, args, alloc, frame),
         Inst::InlineAsm { asm, args } => emit_inline_asm(
             code,
             asm,
@@ -10018,6 +10019,243 @@ fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, src: Reg, width: u8) {
         2 => super::encode::emit_mov_mem_r16(code, base, 0, src),
         4 => super::encode::emit_mov_mem_r32(code, base, 0, src),
         _ => super::encode::emit_mov_mem_r(code, base, 0, src),
+    }
+}
+
+/// `Inst::X86Simd`: load the 128-bit operands into the FP scratches, run
+/// the instruction the table row names, and write the result through the
+/// destination address. The operands are memory-resident and only 8-byte
+/// aligned, so every transfer is an unaligned `movdqu`.
+fn emit_x86_simd(
+    code: &mut Vec<u8>,
+    op: u32,
+    imm: Option<u8>,
+    args: &[super::super::ir::ValueId],
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use super::asm::{Concrete, XMM_BASE};
+    use crate::c5::ir::AsmRegSize;
+    use crate::c5::x86_simd::{self, Form};
+    const DST: u8 = SCRATCH_XMM15.0;
+    const SRC: u8 = SCRATCH_XMM14.0;
+    let row = x86_simd::get(op);
+    // An operand's value (an address for the 128-bit and pointer operands),
+    // in its own register or loaded into `scratch`.
+    let operand = |code: &mut Vec<u8>, i: usize, scratch: Reg| -> Option<Reg> {
+        let place = alloc.places.get(args[i] as usize).copied()?;
+        materialize_int(code, place, scratch, frame)
+    };
+    let xmm = |n: u8| Concrete::Reg {
+        reg: XMM_BASE + n,
+        size: AsmRegSize::Quad,
+    };
+    let gpr = |r: Reg, size: AsmRegSize| Concrete::Reg { reg: r.0, size };
+    let at = |r: Reg, size: AsmRegSize| Concrete::Mem {
+        base: r.0,
+        index: None,
+        scale: 1,
+        disp: 0,
+        size,
+    };
+    // The x86 assembler's own tables encode every form; a name it does
+    // not special-case resolves in the generated catalogue.
+    let insn = |code: &mut Vec<u8>, mnem: &'static str, ops: &[Concrete]| -> bool {
+        let m = super::asm::mnemonic_by_name(mnem).unwrap_or(super::asm::Mnemonic::Table(mnem));
+        if let Err(e) = super::asm::encode(code, 8, m, None, ops) {
+            bail_msg(&alloc::format!("x86 simd: {e}"));
+            return false;
+        }
+        true
+    };
+    // 128-bit transfers between an address in `addr` and xmm `n`.
+    let load128 = |code: &mut Vec<u8>, n: u8, addr: Reg| -> bool {
+        insn(code, "movdqu", &[at(addr, AsmRegSize::Quad), xmm(n)])
+    };
+    let store128 = |code: &mut Vec<u8>, addr: Reg, n: u8| -> bool {
+        insn(code, "movdqu", &[xmm(n), at(addr, AsmRegSize::Quad)])
+    };
+    let int_size = |w: u8| match w {
+        1 => AsmRegSize::Byte,
+        2 => AsmRegSize::Word,
+        8 => AsmRegSize::Quad,
+        _ => AsmRegSize::Long,
+    };
+    // Operand count: the destination address plus the sources, less the
+    // immediate the node carries. A store writes through its pointer
+    // operand, so it has no destination of its own.
+    let need = if row.form == Form::Store {
+        2
+    } else {
+        row.form.arity() + 1
+            - usize::from(row.form.takes_imm())
+            - usize::from(row.form == Form::Shift && imm.is_some())
+    };
+    if args.len() != need {
+        return fail("x86 simd: wrong operand count");
+    }
+    let imm8 = Concrete::Imm(imm.unwrap_or(0) as i64);
+    match row.form {
+        Form::Vv | Form::VvI => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, DST, a) {
+                return false;
+            }
+            let Some(b) = operand(code, 2, SCRATCH_R10) else {
+                return fail("x86 simd: operand 2 has no place");
+            };
+            if !load128(code, SRC, b) {
+                return false;
+            }
+            let ok = if row.form == Form::Vv {
+                insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+            } else {
+                insn(code, row.mnem, &[imm8, xmm(SRC), xmm(DST)])
+            };
+            if !ok {
+                return false;
+            }
+        }
+        Form::V | Form::VI => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, SRC, a) {
+                return false;
+            }
+            let ok = if row.form == Form::V {
+                insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+            } else {
+                insn(code, row.mnem, &[imm8, xmm(SRC), xmm(DST)])
+            };
+            if !ok {
+                return false;
+            }
+        }
+        Form::Shift => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, DST, a) {
+                return false;
+            }
+            let ok = match imm {
+                Some(_) => insn(code, row.mnem, &[imm8, xmm(DST)]),
+                None => {
+                    let Some(c) = operand(code, 2, SCRATCH_R10) else {
+                        return fail("x86 simd: shift count has no place");
+                    };
+                    super::encode::emit_movq_xmm_r(code, Reg(SRC), c);
+                    insn(code, row.mnem, &[xmm(SRC), xmm(DST)])
+                }
+            };
+            if !ok {
+                return false;
+            }
+        }
+        Form::Load => {
+            let Some(p) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: pointer operand has no place");
+            };
+            if !load128(code, DST, p) {
+                return false;
+            }
+        }
+        Form::Store => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: source operand has no place");
+            };
+            if !load128(code, DST, a) {
+                return false;
+            }
+            let Some(p) = operand(code, 0, SCRATCH_R10) else {
+                return fail("x86 simd: pointer operand has no place");
+            };
+            return store128(code, p, DST);
+        }
+        Form::Extract => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, SRC, a) {
+                return false;
+            }
+            // `pextrw` zero-extends into the 32-bit register; `pextrd`
+            // writes all 32 bits. Both leave a zero-extended `int`.
+            if !insn(
+                code,
+                row.mnem,
+                &[imm8, xmm(SRC), gpr(SCRATCH_R11, AsmRegSize::Long)],
+            ) {
+                return false;
+            }
+            let Some(d) = operand(code, 0, SCRATCH_R10) else {
+                return fail("x86 simd: destination has no place");
+            };
+            return insn(
+                code,
+                "mov",
+                &[gpr(SCRATCH_R11, AsmRegSize::Long), at(d, AsmRegSize::Long)],
+            );
+        }
+        Form::Insert => {
+            let Some(a) = operand(code, 1, SCRATCH_R10) else {
+                return fail("x86 simd: operand 1 has no place");
+            };
+            if !load128(code, DST, a) {
+                return false;
+            }
+            let Some(x) = operand(code, 2, SCRATCH_R10) else {
+                return fail("x86 simd: value operand has no place");
+            };
+            if !insn(
+                code,
+                row.mnem,
+                &[imm8, gpr(x, int_size(row.int_width)), xmm(DST)],
+            ) {
+                return false;
+            }
+        }
+        Form::RdRand => {
+            let size = int_size(row.int_width);
+            let Some(p) = operand(code, 1, SCRATCH_R11) else {
+                return fail("x86 simd: pointer operand has no place");
+            };
+            // `rdrand` sets the carry flag when the value is valid; the
+            // stores in between leave the flags alone.
+            if !insn(code, "rdrand", &[gpr(SCRATCH_R10, size)])
+                || !insn(code, "mov", &[gpr(SCRATCH_R10, size), at(p, size)])
+                || !insn(code, "setc", &[gpr(SCRATCH_R10, AsmRegSize::Byte)])
+                || !insn(
+                    code,
+                    "movzx",
+                    &[
+                        gpr(SCRATCH_R10, AsmRegSize::Byte),
+                        gpr(SCRATCH_R10, AsmRegSize::Long),
+                    ],
+                )
+            {
+                return false;
+            }
+            let Some(d) = operand(code, 0, SCRATCH_R11) else {
+                return fail("x86 simd: destination has no place");
+            };
+            return insn(
+                code,
+                "mov",
+                &[gpr(SCRATCH_R10, AsmRegSize::Long), at(d, AsmRegSize::Long)],
+            );
+        }
+    }
+    let Some(d) = operand(code, 0, SCRATCH_R10) else {
+        return fail("x86 simd: destination has no place");
+    };
+    if row.form.returns_vector() {
+        store128(code, d, DST)
+    } else {
+        true
     }
 }
 

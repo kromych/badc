@@ -1298,6 +1298,10 @@ fn run_inst<H: Host>(
             run_intrinsic(mem, frame, v, *kind, args)?;
             return Ok(());
         }
+        Inst::X86Simd { op, imm, args } => {
+            run_x86_simd(mem, frame, *op, *imm, args)?;
+            return Ok(());
+        }
         Inst::InlineAsm { asm, args } => {
             run_inline_asm(mem, frame, asm, args)?;
             return Ok(());
@@ -2635,6 +2639,89 @@ fn width_store_kind(width: u8) -> StoreKind {
         4 => StoreKind::I32,
         _ => StoreKind::I64,
     }
+}
+
+/// Evaluate one x86 SIMD instruction on the interpreter's memory. The
+/// operand images are read from and written back to the addresses the
+/// walker passed, so the result placement matches the native lowering.
+fn run_x86_simd(
+    mem: &mut Memory,
+    frame: &mut Frame<'_>,
+    op: u32,
+    imm: Option<u8>,
+    args: &[ValueId],
+) -> Result<(), C5Error> {
+    use crate::c5::x86_simd::{self, Form};
+    let row = x86_simd::get(op);
+    let reg = |i: usize| frame.regs[args[i] as usize] as usize;
+    let read = |mem: &Memory, addr: usize| -> Result<[u8; 16], C5Error> {
+        let mut v = [0u8; 16];
+        v.copy_from_slice(mem.read_bytes(addr, 16)?);
+        Ok(v)
+    };
+    let want = if row.form == Form::Store {
+        2
+    } else {
+        row.form.arity() + 1 - usize::from(row.form.takes_imm())
+    };
+    if args.len() < want {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: {} expects {want} operands",
+            row.name
+        )));
+    }
+    let imm8 = imm.unwrap_or(0);
+    match row.form {
+        Form::Vv | Form::VvI => {
+            let (a, b) = (read(mem, reg(1))?, read(mem, reg(2))?);
+            let out = x86_simd::eval(row.sem, &a, &b, imm8, 0);
+            mem.write_bytes(reg(0), &out)?;
+        }
+        Form::V | Form::VI => {
+            let a = read(mem, reg(1))?;
+            let out = x86_simd::eval(row.sem, &a, &[0u8; 16], imm8, 0);
+            mem.write_bytes(reg(0), &out)?;
+        }
+        Form::Shift => {
+            let a = read(mem, reg(1))?;
+            // A non-constant count arrives as a value; the instruction
+            // reads it as an unsigned 64-bit quantity.
+            let count = match imm {
+                Some(n) => n as u64,
+                None => frame.regs[args[2] as usize] as u64,
+            };
+            let out = x86_simd::eval(row.sem, &a, &[0u8; 16], 0, count);
+            mem.write_bytes(reg(0), &out)?;
+        }
+        Form::Load => {
+            let a = read(mem, reg(1))?;
+            mem.write_bytes(reg(0), &a)?;
+        }
+        Form::Store => {
+            let a = read(mem, reg(1))?;
+            mem.write_bytes(reg(0), &a)?;
+        }
+        Form::Extract => {
+            let a = read(mem, reg(1))?;
+            let x = x86_simd::eval_extract(&a, row.int_width, imm8);
+            mem.write_bytes(reg(0), &(x as i64).to_le_bytes())?;
+        }
+        Form::Insert => {
+            let a = read(mem, reg(1))?;
+            let x = frame.regs[args[2] as usize] as u64;
+            let out = x86_simd::eval_insert(&a, row.int_width, imm8, x);
+            mem.write_bytes(reg(0), &out)?;
+        }
+        Form::RdRand => {
+            // The interpreter has no entropy source. `rdrand` reports the
+            // failure the ISA defines for that state -- a zero destination
+            // and a clear carry -- which callers must already handle.
+            let n = row.int_width as usize;
+            mem.write_bytes(reg(1), &0u64.to_le_bytes()[..n])?;
+            mem.write_bytes(reg(0), &0i64.to_le_bytes())?;
+        }
+    }
+    Ok(())
 }
 
 fn run_intrinsic(

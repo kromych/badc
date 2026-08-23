@@ -486,6 +486,17 @@ pub(crate) enum Expr {
         elem_ty: i64,
         ty: i64,
     },
+    /// x86 SIMD intrinsic (`__builtin_ia32_*`). `op` indexes
+    /// [`crate::c5::x86_simd::OPS`]; `args` are the operand expressions in
+    /// source order, with a constant immediate or shift count already
+    /// removed and folded into `imm`. `ty` is the result type -- a 16-byte
+    /// vector or `int`.
+    X86Simd {
+        op: u32,
+        args: Vec<ExprId>,
+        imm: Option<u8>,
+        ty: i64,
+    },
     /// GCC `__builtin_memcpy` / `__builtin_memmove` / `__builtin_memset`
     /// with an integer-constant-expression byte count. `src` is the
     /// source address for the copies and the fill byte for the set.
@@ -955,6 +966,7 @@ impl Ast {
                 | Expr::VlaSizeof { .. }
                 | Expr::StmtExpr { .. }
                 | Expr::CheckedArith { .. }
+                | Expr::X86Simd { .. }
                 | Expr::MemTransfer { .. } => {}
             }
         }
@@ -1150,6 +1162,7 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         | Expr::VlaBase { ty, .. }
         | Expr::StmtExpr { ty, .. }
         | Expr::CheckedArith { ty, .. }
+        | Expr::X86Simd { ty, .. }
         | Expr::MemTransfer { ty, .. } => f(ty),
         Expr::VlaSizeof { .. } => {}
         Expr::Cast { to_ty, .. } => f(to_ty),

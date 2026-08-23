@@ -958,7 +958,7 @@ fn string_op(name: &str) -> Option<Mnemonic> {
     Some(Mnemonic::StringOp { opcode, opw })
 }
 
-fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
+pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
     // The flag / general-register stack pushes and the interrupt / far return
     // spell their operand size in the mnemonic and take no operands; the
     // catalogue is generated for long mode and carries only some of the
